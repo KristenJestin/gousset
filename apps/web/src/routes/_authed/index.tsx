@@ -59,7 +59,8 @@ function Home() {
   const navigate = useNavigate();
   const { user, viewer } = Route.useRouteContext();
   const { month } = Route.useLoaderData();
-  // Changing month keeps the month on screen until the next one has its data.
+  // Changing month keeps the month on screen until the next one has its data; the header and its
+  // links follow the month shown, so that they never disagree.
   const shown = useDeferredValue(month);
 
   const monthName = monthNames[viewer.locale].format(new Date(`${shown}-01T00:00:00Z`));
@@ -80,27 +81,33 @@ function Home() {
           </Button>
         </Actions>
         <Actions>
-          <AppLink to="/" search={{ month: addMonths(month, -1) }}>
+          <AppLink to="/" search={{ month: addMonths(shown, -1) }}>
             {messages.review.previousMonth}
           </AppLink>
           <span>{monthName}</span>
-          <AppLink to="/" search={{ month: addMonths(month, 1) }}>
+          <AppLink to="/" search={{ month: addMonths(shown, 1) }}>
             {messages.review.nextMonth}
           </AppLink>
         </Actions>
       </Card>
-      <DataBlock title={messages.review.summary.title} skeleton={<BreakdownSkeleton rows={4} />}>
+      <DataBlock
+        title={messages.review.summary.title}
+        skeleton={<BreakdownSkeleton rows={4} />}
+        resetKey={shown}
+      >
         <Summary month={shown} />
       </DataBlock>
       <DataBlock
         title={messages.review.spending.title}
         skeleton={<BreakdownSkeleton rows={SPENDING_ROWS} more />}
+        resetKey={shown}
       >
         <Spending month={shown} />
       </DataBlock>
       <DataBlock
         title={messages.review.toReview.title}
         skeleton={<BreakdownSkeleton rows={LINES_TO_REVIEW} more />}
+        resetKey={shown}
       >
         <ToReview month={shown} />
       </DataBlock>
