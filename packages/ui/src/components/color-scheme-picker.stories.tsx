@@ -61,6 +61,16 @@ export const Picker: Story = {};
 /** Disabled: the current choice shows, nothing can be picked (half opacity, no hover). */
 export const Disabled: Story = { args: { disabled: true } };
 
+/** Disabled, on dark whatever the page's scheme: the faint items stay readable on `--muted`. */
+export const DisabledOnDark: Story = {
+  args: { disabled: true },
+  render: (args) => (
+    <div data-color-scheme="dark" className="w-fit rounded-lg bg-background p-6">
+      <ColorSchemePicker {...args} />
+    </div>
+  ),
+};
+
 /** On a phone: the picker keeps its own width; the chart fills the screen. */
 export const Phone: Story = {
   globals: { viewport: { value: "mobile1", isRotated: false } },
