@@ -32,16 +32,17 @@ file is how to work.
 
 ## Layout
 
-| Path               | What                                                                 |
-| ------------------ | -------------------------------------------------------------------- |
-| `apps/web`         | The app: TanStack Start (pages, server functions, API, jobs, `/mcp`) |
-| `packages/ui`      | Every component and the theme, each described in Storybook           |
-| `packages/db`      | The Drizzle schema and migrations                                    |
-| `packages/auth`    | better-auth, wired to the database                                   |
-| `packages/fixture` | The shared made-up data                                              |
-| `packages/config`  | The shared TypeScript configuration                                  |
-| `tools/oxlint`     | Lint rules vendored from upstream (see [Lint](#lint))                |
-| `.agents/skills`   | Skills for agents, vendored from upstream                            |
+| Path                                | What                                                                  |
+| ----------------------------------- | --------------------------------------------------------------------- |
+| `apps/web`                          | The app: TanStack Start (pages, server functions, API, jobs, `/mcp`)  |
+| `packages/ui`                       | Every component and the theme, each described in Storybook            |
+| `packages/db`                       | The Drizzle schema and migrations                                     |
+| `packages/auth`                     | better-auth, wired to the database                                    |
+| `packages/fixture`                  | The shared made-up data                                               |
+| `packages/config`                   | The shared TypeScript configuration                                   |
+| `tools/oxlint`                      | Lint rules vendored from upstream (see [Lint](#lint))                 |
+| `.agents/skills`                    | Skills for agents, vendored from upstream                             |
+| `packages/ui/src/components/charts` | Bklit's charts, vendored from its shadcn registry (see [Lint](#lint)) |
 
 ## Commands
 
@@ -158,6 +159,13 @@ components of `packages/ui/src/components` set their own style.
 The vendored rules are updated with the `install-anti-slop` skill
 (`.agents/skills/install-anti-slop/`), which merges upstream into the local copies and keeps
 local changes; each folder's `UPSTREAM.md` records the commit it comes from.
+
+**Vendored code is out of `vp lint` and `vp fmt`** (`VENDORED` in `vite.config.ts`): the lint
+rules above, and Bklit's charts (`packages/ui/src/components/charts/`, with
+`shimmering-text.tsx`) as `shadcn add @bklit/...` installs them, their `cn` import pointed to the
+repository's. They keep their upstream form so that the next update stays a readable diff; the
+type checker still reads them. Gousset's own code never goes there, and a chart's Gousset-specific
+wrapper lives beside them, linted like the rest.
 
 ## MCP
 
