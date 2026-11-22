@@ -28,7 +28,10 @@ const ConsentSearch = Schema.Struct({
 const hostOf = (uri: string | undefined) =>
   uri !== undefined && URL.canParse(uri) ? new URL(uri).host : undefined;
 
-/** Where better-auth sends the browser once the user answered: back to the client. */
+/**
+ * Where better-auth sends the browser once the user answered: back to the client. Its auth client
+ * follows it by itself (`redirect` and `url` in the answer); the page only checks it came.
+ */
 const ConsentAnswer = Schema.Struct({ url: Schema.String });
 
 const answerOf = Schema.decodeUnknownOption(ConsentAnswer);
@@ -62,11 +65,7 @@ function Consent() {
 
     if (refusal || Option.isNone(next)) {
       setError(errorMessage(messages, undefined));
-
-      return;
     }
-
-    window.location.assign(next.value.url);
   }
 
   // Read only keeps what was asked but the write scope (the server adds read to a request for

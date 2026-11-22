@@ -55,9 +55,8 @@ function SignIn() {
     setError(undefined);
 
     // Signing in for an MCP client's authorization: on to its consent page, or back to the client.
+    // The auth client follows that redirect by itself: navigating here too would cut it short.
     if (data.redirect && data.url !== undefined) {
-      window.location.assign(data.url);
-
       return;
     }
 
