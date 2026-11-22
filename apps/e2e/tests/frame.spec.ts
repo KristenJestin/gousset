@@ -257,7 +257,11 @@ test("the brand: favicons, the iOS icon and a web manifest with its icons", asyn
     "href",
     "/manifest.webmanifest",
   );
-  await expect(userPage.getByRole("img", { name: "Gousset" }).first()).toBeAttached();
+
+  // The mark tops the sidebar; a phone has neither (the `mobile` wireframe).
+  if (!onPhone(userPage)) {
+    await expect(userPage.getByRole("img", { name: "Gousset" }).first()).toBeVisible();
+  }
 
   const manifest = await request.get("/manifest.webmanifest");
 
