@@ -4,14 +4,14 @@ import { fileURLToPath } from "node:url";
 
 import { expect, test } from "@playwright/test";
 
+import { probePath } from "./lint-probe";
+
 // The theme is only worth something if a page cannot leave it. Each page is written where the
-// app's pages live (apps/web/src), so it gets the app's own lint and TypeScript configuration,
-// linted alone with `vp lint`, then removed.
+// app's pages live (`lint-probe.ts`), linted alone with `vp lint`, then removed.
 const repository = fileURLToPath(new URL("../../../", import.meta.url));
-const pages = fileURLToPath(new URL("../../../apps/web/src/", import.meta.url));
 
 function lintPage(className: string) {
-  const file = `${pages}lint-probe-${process.pid}-${Date.now()}.tsx`;
+  const file = probePath();
 
   writeFileSync(file, `export function Page() {\n  return <div className="${className}" />;\n}\n`);
 

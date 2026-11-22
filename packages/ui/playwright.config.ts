@@ -15,6 +15,7 @@ export default defineConfig({
   forbidOnly: true,
   reporter: "list",
   outputDir: "test-results",
+  globalSetup: "./e2e/global-setup.ts",
   // Reference screenshots, one set per browser and platform: font rendering differs between them.
   snapshotPathTemplate: "{testDir}/__screenshots__/{projectName}-{platform}/{arg}{ext}",
   expect: {

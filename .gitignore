@@ -52,6 +52,8 @@ coverage
 .nyc_output
 test-results
 playwright-report
+# Pages the lint scenario writes and removes (packages/ui/e2e/lint-probe.ts)
+apps/web/src/lint-probe-*
 
 # Misc
 *.tgz
