@@ -91,6 +91,10 @@ jobs:
       - name: Playwright's browsers
         if: steps.harness.outputs.present == 'true'
         run: pnpm --dir apps/e2e exec playwright install --with-deps chromium firefox
+      # The suite runs the built app.
+      - name: Build
+        if: steps.harness.outputs.present == 'true'
+        run: pnpm run build
       - name: End-to-end tests, shard ${{ matrix.shard }} of 2
         if: steps.harness.outputs.present == 'true'
         run: pnpm e2e --shard=${{ matrix.shard }}/2
