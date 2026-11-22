@@ -44,24 +44,32 @@ export function Shortcuts() {
   useHotkey(appHotkeys["shortcuts.show"], () => setOpen("shortcuts"));
   useHotkey(appHotkeys["search.open"], () => setOpen("search"));
 
-  const close = () => setOpen(null);
+  // A dialog closing closes only itself: a late close of one must not close the other, opened
+  // since by its own shortcut.
+  const follow = (dialog: Exclude<Open, null>) => (next: boolean) => {
+    setOpen((current) => {
+      if (next) {
+        return dialog;
+      }
+
+      return current === dialog ? null : current;
+    });
+  };
 
   return (
     <>
       <Dialog
         open={open === "shortcuts"}
-        onClose={close}
+        onOpenChange={follow("shortcuts")}
         title={messages.shortcuts.title}
-        closeLabel={messages.dialog.close}
       >
         <ShortcutList shortcuts={shortcuts} />
       </Dialog>
       <Dialog
         open={open === "search"}
-        onClose={close}
+        onOpenChange={follow("search")}
         title={messages.search.title}
         description={messages.search.empty}
-        closeLabel={messages.dialog.close}
       />
     </>
   );

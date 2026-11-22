@@ -1,12 +1,12 @@
 import { addMonths, Month } from "@gousset/core/values";
+import { Amount } from "@gousset/ui/components/amount";
 import { Button } from "@gousset/ui/components/button";
 import { Card } from "@gousset/ui/components/card";
 import {
-  BreakdownSkeleton,
   FigureList,
+  FigureListSkeleton,
   FigureMore,
   FigureRow,
-  PlainAmount,
 } from "@gousset/ui/components/data-block";
 import { Actions, Screen } from "@gousset/ui/components/screen";
 import { noop, useSuspenseQuery } from "@tanstack/react-query";
@@ -93,21 +93,21 @@ function Home() {
       </Card>
       <DataBlock
         title={messages.review.summary.title}
-        skeleton={<BreakdownSkeleton rows={4} />}
+        skeleton={<FigureListSkeleton rows={4} />}
         resetKey={shown}
       >
         <Summary month={shown} />
       </DataBlock>
       <DataBlock
         title={messages.review.spending.title}
-        skeleton={<BreakdownSkeleton rows={SPENDING_ROWS} more />}
+        skeleton={<FigureListSkeleton rows={SPENDING_ROWS} more />}
         resetKey={shown}
       >
         <Spending month={shown} />
       </DataBlock>
       <DataBlock
         title={messages.review.toReview.title}
-        skeleton={<BreakdownSkeleton rows={LINES_TO_REVIEW} more />}
+        skeleton={<FigureListSkeleton rows={LINES_TO_REVIEW} more />}
         resetKey={shown}
       >
         <ToReview month={shown} />
@@ -138,7 +138,7 @@ function Summary({ month }: { month: string }) {
         <FigureRow
           key={label}
           label={label}
-          figure={<PlainAmount minor={amount.minor} currency={amount.currency} locale={locale} />}
+          figure={<Amount value={amount} locale={locale} size="sm" />}
         />
       ))}
     </FigureList>
@@ -157,9 +157,7 @@ function Spending({ month }: { month: string }) {
         <FigureRow
           key={row.name}
           label={row.name}
-          figure={
-            <PlainAmount minor={row.amount.minor} currency={row.amount.currency} locale={locale} />
-          }
+          figure={<Amount value={row.amount} locale={locale} size="sm" />}
         />
       ))}
       {hidden > 0 ? <FigureMore>{messages.review.spending.more(hidden)}</FigureMore> : null}
@@ -189,13 +187,7 @@ function ToReview({ month }: { month: string }) {
           key={line.id}
           label={line.label}
           detail={[line.merchant, line.category].filter((part) => part !== null).join(" · ")}
-          figure={
-            <PlainAmount
-              minor={line.amount.minor}
-              currency={line.amount.currency}
-              locale={locale}
-            />
-          }
+          figure={<Amount value={line.amount} locale={locale} size="sm" />}
           action={
             <Button
               variant="secondary"

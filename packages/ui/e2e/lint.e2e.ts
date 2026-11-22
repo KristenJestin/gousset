@@ -11,9 +11,13 @@ import { probePath } from "./lint-probe";
 const repository = fileURLToPath(new URL("../../../", import.meta.url));
 
 function lintPage(className: string) {
+  return lintSource(`export function Page() {\n  return <div className="${className}" />;\n}\n`);
+}
+
+function lintSource(source: string) {
   const file = probePath();
 
-  writeFileSync(file, `export function Page() {\n  return <div className="${className}" />;\n}\n`);
+  writeFileSync(file, source);
 
   try {
     const run = spawnSync("pnpm", ["exec", "vp", "lint", file], {
@@ -42,6 +46,25 @@ test("a page with bg-pink-500 or p-[13px] fails vp lint", () => {
   expect(arbitraryValue.status).not.toBe(0);
   expect(arbitraryValue.output).toContain("shadcn(no-arbitrary-values)");
   expect(arbitraryValue.output).toContain('"p-[13px]"');
+});
+
+test("a page importing Tabler fails vp lint, and Icon passes", () => {
+  const tabler = lintSource(
+    'import { IconHome } from "@tabler/icons-react";\n\nexport function Page() {\n  return <IconHome />;\n}\n',
+  );
+
+  expect(tabler.status).not.toBe(0);
+  // The rule's own message ("use <Icon name=…>") is left out of CI's annotation format: the
+  // rule's name is what both formats print.
+  expect(tabler.output).toContain("no-restricted-imports");
+  expect(tabler.output).toContain("@tabler/icons-react");
+
+  const icon = lintSource(
+    'import { Icon } from "@gousset/ui/components/icon";\n\nexport function Page() {\n  return <Icon name="housing" />;\n}\n',
+  );
+
+  expect(icon.output).not.toContain("no-restricted-imports");
+  expect(icon.status).toBe(0);
 });
 
 test("a page on the theme's tokens passes vp lint", () => {

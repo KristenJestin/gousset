@@ -5,9 +5,26 @@ import type { Page } from "@playwright/test";
 /** WCAG 2.2 A and AA, the level Gousset holds (docs/architecture.md, "Quality"). */
 const WCAG_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"];
 
+/**
+ * Rules left out in Firefox only, each for a crash of the browser under test, not of the app:
+ * Chromium runs them on every screen, so the suite still covers them.
+ *
+ * `label`: after axe-core 4.14.1 runs it in Playwright 1.65.1's Firefox (build 1572), the next
+ * focus of a ui-sdk text field (a `<label>` and its `<input>` in a `Field`) kills the content
+ * process (signal 11). The same pages, focused and typed into without axe, stay alive; every
+ * other rule alone leaves them alive too.
+ */
+const FIREFOX_CRASHING_RULES = ["label"];
+
 /** Runs axe on the screen as it is now; any violation fails the test, listed by rule. */
 export async function expectAccessible(page: Page): Promise<void> {
-  const results = await new AxeBuilder({ page }).withTags(WCAG_TAGS).analyze();
+  const builder = new AxeBuilder({ page }).withTags(WCAG_TAGS);
+
+  if (page.context().browser()?.browserType().name() === "firefox") {
+    builder.disableRules(FIREFOX_CRASHING_RULES);
+  }
+
+  const results = await builder.analyze();
 
   const violations = results.violations.map(
     (violation) =>

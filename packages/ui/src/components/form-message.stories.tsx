@@ -5,9 +5,12 @@ import { Button } from "./button";
 import { FormMessage } from "./form-message";
 
 /**
- * A form's error. It fades in and out in 200 ms, and does not move under reduced motion. Its line
- * is always reserved, so the form does not jump; don't hide it with a condition in the page, pass
- * `undefined` instead.
+ * A form's error, announced (`role="alert"`).
+ *
+ * Motion: it fades in and out in 200 ms, easing out; cut under reduced motion.
+ *
+ * Don't: hide it with a condition in the page (its line is always reserved, so the form does not
+ * jump; pass `undefined` instead), or use it for a confirmation (that is `StatusMessage`).
  */
 const meta = {
   title: "Forms/FormMessage",
@@ -38,3 +41,5 @@ export const Fading: Story = {
     );
   },
 };
+
+export const Phone: Story = { globals: { viewport: { value: "mobile1", isRotated: false } } };

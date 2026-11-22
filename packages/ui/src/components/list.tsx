@@ -1,5 +1,7 @@
 import type { ReactNode } from "react";
 
+import { Skeleton, SkeletonFrame } from "./skeleton";
+
 /** A list of people or things, one per row. */
 export function List({ label, children }: { label: string; children: ReactNode }) {
   return (
@@ -39,5 +41,42 @@ export function ListItem({
         {action}
       </div>
     </li>
+  );
+}
+
+/**
+ * A `List` on its way: rows of the same height as `ListItem`'s (a name, a second line unless
+ * `description` is false, a tag), so nothing moves when the data comes.
+ */
+export function ListSkeleton({
+  rows = 3,
+  description = true,
+  label,
+}: {
+  rows?: number;
+  description?: boolean;
+  /** What is loading, said to screen readers; "Loading" otherwise. */
+  label?: string;
+}) {
+  return (
+    <SkeletonFrame label={label}>
+      <ul className="flex flex-col divide-y" data-slot="list-skeleton">
+        {Array.from({ length: rows }, (_, row) => (
+          <li key={row} className="flex items-center justify-between gap-3 py-3">
+            <div className="flex min-w-0 flex-1 flex-col">
+              <span className="flex h-5 items-center">
+                <Skeleton className="h-3.5 w-32" />
+              </span>
+              {description ? (
+                <span className="flex h-5 items-center">
+                  <Skeleton className="h-3.5 w-48 max-w-full" />
+                </span>
+              ) : null}
+            </div>
+            <Skeleton className="h-5 w-16 shrink-0" />
+          </li>
+        ))}
+      </ul>
+    </SkeletonFrame>
   );
 }

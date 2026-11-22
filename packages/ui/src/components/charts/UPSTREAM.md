@@ -7,6 +7,11 @@ the same registry under the same licence.
 - Installed with `shadcn add @bklit/line-chart` from the registry `https://ui.bklit.com/r/{name}.json`
   on 2026-11-22. The registry has no version of its own; upstream `main` was then at
   `76299da6981e2494836be5ce842720a7fb057891`.
+- `shadcn add @bklit/bar-chart` on 2026-11-22 added the bar chart's own files (`bar-chart.tsx`,
+  `bar.tsx`, `bar-*.ts(x)`); every file it shares with the line chart was identical, so the
+  registry had not moved. What it also wrote and was undone: `clsx` and `tailwind-merge` in
+  `package.json`, its `lib/utils.ts`, and its own `--chart-*` values in `globals.css` (the theme
+  defines them).
 - Local changes: none. The registry's `lib/utils.ts` (clsx and tailwind-merge) was not taken: the
   files import `cn` from `@gousset/ui/lib/utils`, which re-exports the repository's `cn`.
 - Kept out of `vp lint` and `vp fmt` (`AGENTS.md`, "Lint"); update by running `shadcn add` again

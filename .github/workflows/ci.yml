@@ -54,12 +54,37 @@ jobs:
           REACT_DOCTOR_NO_TELEMETRY: "1"
         run: pnpm exec react-doctor --no-telemetry --yes --blocking error
 
+  # Whether the browser checks cover every browser and width: always off a pull request; on a pull
+  # request only when its head commit carries the trailer line `E2E-Matrix: full` (AGENTS.md,
+  # "Testing"), as a pull request must before it merges when it touches what other browsers draw.
+  scope:
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-latest
+    outputs:
+      full: ${{ steps.read.outputs.full }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Read the head commit's trailer
+        id: read
+        env:
+          EVENT: ${{ github.event_name }}
+        run: |
+          if [ "$EVENT" != pull_request ] || git log -1 --format=%B | grep -qx 'E2E-Matrix: full'; then
+            echo "full=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "full=false" >> "$GITHUB_OUTPUT"
+          fi
+
   # packages/ui's browser checks on Storybook (`pnpm test:ui`): Chromium, Firefox and a phone,
   # screenshots compared, and the lint scenario. They run in the official Playwright image, the
   # one tools/playwright-docker.sh renders the reference screenshots in, so both draw alike. Its
   # version is @playwright/test's in packages/ui/package.json: they move together.
   ui:
     if: github.event_name == 'pull_request' || github.ref == 'refs/heads/dev'
+    needs: scope
     runs-on: ubuntu-latest
     container:
       image: mcr.microsoft.com/playwright:v1.65.1-noble
@@ -78,10 +103,11 @@ jobs:
           cache: pnpm
       - name: Install
         run: pnpm install --frozen-lockfile
-      # A pull request runs Chromium and the lint scenario; dev every project.
+      # A pull request runs Chromium and the lint scenario; dev, and a pull request whose head
+      # commit asks for it (`scope`), every project.
       - name: Browser checks of packages/ui (Storybook)
         env:
-          PROJECTS: ${{ github.event_name == 'pull_request' && '--project=chromium --project=lint' || '' }}
+          PROJECTS: ${{ needs.scope.outputs.full != 'true' && '--project=chromium --project=lint' || '' }}
         run: pnpm --filter @gousset/ui test:e2e $PROJECTS
       - name: Keep the report and the screenshots
         if: failure()
@@ -94,10 +120,12 @@ jobs:
 
   # The end-to-end suite (apps/e2e), sharded. Until the harness lands there is no `e2e` script,
   # and each shard passes saying so. A pull request runs the chromium-desktop project only, dev
-  # every project (apps/e2e/playwright.config.ts).
+  # (and a pull request whose head commit asks for it, `scope`) every project
+  # (apps/e2e/playwright.config.ts).
   e2e-shard:
     name: e2e shard ${{ matrix.shard }}
     if: github.event_name == 'pull_request' || github.ref == 'refs/heads/dev'
+    needs: scope
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -118,8 +146,8 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     env:
-      E2E_BROWSERS: ${{ github.event_name == 'pull_request' && 'chromium' || 'chromium firefox' }}
-      E2E_PROJECTS: ${{ github.event_name == 'pull_request' && '--project=chromium-desktop' || '' }}
+      E2E_BROWSERS: ${{ needs.scope.outputs.full == 'true' && 'chromium firefox' || 'chromium' }}
+      E2E_PROJECTS: ${{ needs.scope.outputs.full != 'true' && '--project=chromium-desktop' || '' }}
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/gousset
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
