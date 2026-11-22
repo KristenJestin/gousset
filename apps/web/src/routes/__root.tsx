@@ -3,9 +3,13 @@ import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
 
 import { ThemeProvider } from "@gousset/ui/components/theme-provider";
 
+import { getViewer } from "@/functions/viewer";
+
 import appCss from "../index.css?url";
 
 export const Route = createRootRoute({
+  // Every navigation asks the server who is looking: the guards of the routes below read it.
+  beforeLoad: async () => ({ viewer: await getViewer() }),
   head: () => ({
     meta: [
       {
@@ -32,9 +36,11 @@ export const Route = createRootRoute({
 });
 
 function RootDocument() {
+  const locale = Route.useRouteContext({ select: (context) => context.viewer.locale });
+
   return (
     // The saved colour scheme lands on <html> before hydration (ThemeProvider).
-    <html lang="en" suppressHydrationWarning>
+    <html lang={locale} suppressHydrationWarning>
       <head>
         <HeadContent />
       </head>

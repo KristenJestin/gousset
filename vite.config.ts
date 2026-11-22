@@ -9,6 +9,9 @@ const GENERATED = [
   "**/.nitro/**",
   "**/.tanstack/**",
   "**/storybook-static/**",
+  "**/test-results/**",
+  "**/playwright-report/**",
+  "**/blob-report/**",
   "apps/web/src/routeTree.gen.ts",
   "apps/web/src/env.ts",
   "packages/db/src/env.ts",
@@ -119,9 +122,10 @@ export default defineConfig({
     sortPackageJson: true,
   },
   test: {
-    // Unit tests only; end-to-end tests come with their harness (docs/architecture.md, "Quality"),
-    // and the theme's browser checks run on Storybook (`pnpm test:ui`).
     passWithNoTests: true,
+    // The end-to-end specs (`pnpm e2e`) and the theme's browser checks on Storybook
+    // (`pnpm test:ui`, packages/ui/e2e/*.e2e.ts, outside Vitest's pattern) belong to Playwright.
+    exclude: ["**/node_modules/**", "**/.git/**", "apps/e2e/**"],
   },
   staged: {
     "*.{js,ts,jsx,tsx,json,jsonc,css,md}": "vp check --fix",

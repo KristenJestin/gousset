@@ -1,6 +1,6 @@
-import { account, authRelations, session, user, verification } from "./auth";
+import { authAccount, authRelations, authSession, authUser, authVerification } from "./auth";
 
 /** Every table, named once for Drizzle's relations and better-auth's adapter. */
-export const tables = { account, session, user, verification };
+export const tables = { authAccount, authSession, authUser, authVerification };
 
 export { authRelations };

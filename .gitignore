@@ -13,9 +13,10 @@ local.db
 local.db-*
 storybook-static
 
-# Environment variables
+# Environment variables, and the secrets of docker-compose.yml
 .env
 .env*.local
+/secrets/
 
 # IDEs and editors
 .vscode/*
