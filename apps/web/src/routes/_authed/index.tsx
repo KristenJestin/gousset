@@ -60,16 +60,37 @@ const FLAG_ICONS = {
 
 const dateOf = (day: string) => new Date(`${day}T00:00:00Z`);
 
-/** "24 Oct", "24 oct.": a day in the page's language. */
-const shortDay = (day: string, locale: string) =>
-  new Intl.DateTimeFormat(locale === "en" ? "en-GB" : locale, {
-    day: "numeric",
-    month: "short",
-    timeZone: "UTC",
-  }).format(dateOf(day));
+/** One formatter per language, built once: building one is slow, and a render may need many. */
+function perLocale<Made>(make: (locale: string) => Made) {
+  const made = new Map<string, Made>();
 
-const isOne = (count: number, locale: string) =>
-  new Intl.PluralRules(locale).select(count) === "one";
+  return (locale: string) => {
+    const known = made.get(locale) ?? make(locale);
+
+    made.set(locale, known);
+
+    return known;
+  };
+}
+
+const shortDays = perLocale(
+  (locale) =>
+    new Intl.DateTimeFormat(locale === "en" ? "en-GB" : locale, {
+      day: "numeric",
+      month: "short",
+      timeZone: "UTC",
+    }),
+);
+const plurals = perLocale((locale) => new Intl.PluralRules(locale));
+const lists = perLocale((locale) => new Intl.ListFormat(locale, { type: "conjunction" }));
+const monthNames = perLocale(
+  (locale) => new Intl.DateTimeFormat(locale, { month: "long", timeZone: "UTC" }),
+);
+
+/** "24 Oct", "24 oct.": a day in the page's language. */
+const shortDay = (day: string, locale: string) => shortDays(locale).format(dateOf(day));
+
+const isOne = (count: number, locale: string) => plurals(locale).select(count) === "one";
 
 export const Route = createFileRoute("/_authed/")({
   validateSearch: monthSearch,
@@ -244,7 +265,7 @@ function Summary({ month }: { month: string }) {
       saved={data.setAside}
       left={data.left}
       restricted={data.restricted}
-      note={new Intl.ListFormat(locale, { type: "conjunction" }).format(data.receivedFrom)}
+      note={lists(locale).format(data.receivedFrom)}
       comparison={
         data.averageSpent === null ? undefined : (
           <>
@@ -339,9 +360,7 @@ function RowChart({ month, by, name }: { month: string; by: SpendingGroup; name:
   const { data } = useSuspenseQuery(monthQueries.spendingDays(month, by, name));
 
   const monthName = (offset: number) =>
-    new Intl.DateTimeFormat(locale, { month: "long", timeZone: "UTC" }).format(
-      dateOf(`${addMonths(month, offset)}-01`),
-    );
+    monthNames(locale).format(dateOf(`${addMonths(month, offset)}-01`));
 
   return (
     <SpendingChart
