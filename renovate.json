@@ -1,0 +1,18 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended"],
+  "semanticCommits": "enabled",
+  "semanticCommitType": "chore",
+  "semanticCommitScope": "repo",
+  "rangeStrategy": "bump",
+  "prHourlyLimit": 0,
+  "prConcurrentLimit": 0,
+  "packageRules": [
+    {
+      "description": "Followed on release candidates while their major version is under way",
+      "matchPackageNames": ["drizzle-orm", "drizzle-kit", "nitro"],
+      "ignoreUnstable": false,
+      "respectLatest": false
+    }
+  ]
+}

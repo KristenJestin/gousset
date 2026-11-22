@@ -1,0 +1,23 @@
+{
+  "name": "@gousset/auth",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "check-types": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@better-auth/core": "1.7.27",
+    "@better-auth/drizzle-adapter": "1.7.27",
+    "@gousset/db": "workspace:*",
+    "better-auth": "catalog:",
+    "drizzle-orm": "catalog:",
+    "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@gousset/config": "workspace:*",
+    "typescript": "catalog:"
+  }
+}

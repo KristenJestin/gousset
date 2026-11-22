@@ -1,0 +1,3 @@
+{
+  "extends": "@gousset/config/tsconfig.base.json"
+}
