@@ -21,6 +21,8 @@ catalog:
   varlock: 1.25.0
   vite: npm:@voidzero-dev/vite-plus-core@8.3.8000
   vite-plus: 1.7.0
+# Exact versions only: the latest of each on 2026-11-22, newer than pnpm's minimum release age.
+# Each line can go once its version is older than that age.
 minimumReleaseAgeExclude:
   - "@tanstack/hotkeys@0.33.1"
   - "@tanstack/react-hotkeys@0.27.2"
