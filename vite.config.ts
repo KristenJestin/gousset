@@ -9,6 +9,9 @@ const GENERATED = [
   "**/.nitro/**",
   "**/.tanstack/**",
   "**/storybook-static/**",
+  "**/test-results/**",
+  "**/playwright-report/**",
+  "**/blob-report/**",
   "apps/web/src/routeTree.gen.ts",
   "apps/web/src/env.ts",
   "packages/db/src/env.ts",
@@ -111,8 +114,9 @@ export default defineConfig({
     sortPackageJson: true,
   },
   test: {
-    // No test yet: end-to-end tests come with their harness (docs/architecture.md, "Quality").
     passWithNoTests: true,
+    // The end-to-end specs belong to Playwright (`pnpm e2e`), not to Vitest.
+    exclude: ["**/node_modules/**", "**/.git/**", "apps/e2e/**"],
   },
   staged: {
     "*.{js,ts,jsx,tsx,json,jsonc,css,md}": "vp check --fix",
