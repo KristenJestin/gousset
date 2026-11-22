@@ -13,7 +13,10 @@ pnpm e2e smoke.spec.ts         # one spec, headless: how to run it locally
 pnpm e2e --shard=1/4           # CI: the whole suite, one shard
 ```
 
-Every test runs in four projects: Chromium and Firefox, at 1440 px and at 390 px. There are no
+Every test runs in four projects: Chromium and Firefox, at 1440 px and at 390 px. A local run runs
+them all. In CI a pull request runs `chromium-desktop` only (`--project=chromium-desktop`, passed by
+the workflow), and each push to `dev` runs all four: a failure seen only on `dev` is fixed at once.
+There are no
 retries: a test that passes only on retry is a bug. On failure the trace, the video and the
 screenshots are kept in `test-results/`, with each worker's app log (`app-<project>-worker-<n>.log`).
 

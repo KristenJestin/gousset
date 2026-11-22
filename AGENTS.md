@@ -213,6 +213,8 @@ The lead reviews every change to the tools against `docs/mcp.md` before merging.
   trailer line `Update-Snapshots: missing`, and the `ui-snapshots` workflow draws the missing
   ones in that image and commits them to the branch (`test(ui): …`); then fetch, check them, and
   push a commit of your own so that CI runs again. To redraw a reference, delete it first.
+- **CI on a pull request runs Chromium on a desktop only**, in `e2e` and `ui`; each push to `dev`
+  runs every browser and width. A failure seen only on `dev` is fixed at once.
 - **Required checks** on `dev` and `main`: `verify`, `ui`, `e2e`, `react-doctor` and `privacy`.
 
 ## How the work is organised
