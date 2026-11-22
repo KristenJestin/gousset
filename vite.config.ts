@@ -15,6 +15,8 @@ const GENERATED = [
   "apps/web/src/routeTree.gen.ts",
   "apps/web/src/env.ts",
   "packages/db/src/env.ts",
+  // Paraglide's messages and runtime, compiled from packages/i18n/messages at install.
+  "packages/i18n/src/paraglide/**",
 ];
 
 /**
@@ -44,6 +46,7 @@ export default defineConfig({
       "@shadcn/lint",
       { name: "anti-slop", specifier: "./tools/oxlint/anti-slop/index.ts" },
       { name: "anti-slop-effect", specifier: "./tools/oxlint/anti-slop-effect/index.ts" },
+      { name: "gousset", specifier: "./tools/lint/gousset/index.ts" },
     ],
     settings: {
       ...cloudflare.settings,
@@ -102,6 +105,16 @@ export default defineConfig({
       ...(cloudflare.overrides ?? []),
       // Inside a component of packages/ui, a class of its own is the design decision.
       { files: ["packages/ui/src/components/**"], rules: { "shadcn/no-restyle": "off" } },
+      // Every text a person reads comes from the messages (packages/i18n), in the app and in the
+      // shared components; stories and the harness's probe pages hold made-up text of their own.
+      {
+        files: ["apps/web/src/**/*.tsx", "packages/ui/src/components/**/*.tsx"],
+        rules: { "gousset/no-text-outside-messages": "error" },
+      },
+      {
+        files: ["**/*.stories.tsx", "apps/web/src/routes/e2e/**"],
+        rules: { "gousset/no-text-outside-messages": "off" },
+      },
     ],
     ignorePatterns: [
       ...(cloudflare.ignorePatterns ?? []),
