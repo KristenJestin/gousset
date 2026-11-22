@@ -1,0 +1,23 @@
+{
+  "name": "@gousset/mcp",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./*": "./src/*.ts"
+  },
+  "scripts": {
+    "check-types": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@gousset/core": "workspace:*",
+    "@modelcontextprotocol/server": "2.4.0",
+    "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@gousset/config": "workspace:*",
+    "@modelcontextprotocol/client": "2.4.0",
+    "typescript": "catalog:"
+  }
+}

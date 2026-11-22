@@ -9,8 +9,12 @@ import { createFileRoute } from "@tanstack/react-router";
 import { getRequestIP } from "@tanstack/react-start/server";
 import { Effect, Option, Schema } from "effect";
 
+import { forgetUnallowedClients } from "@gousset/auth/mcp-door";
+import { createRequestLimit } from "@gousset/auth/mcp-guards";
+
 import { ENV } from "../../../env.server";
-import { auth } from "../../../services";
+import { isDoorOpen, notFound } from "../../../lib/mcp-door";
+import { auth, db } from "../../../services";
 
 const trustedProxies = (ENV.TRUSTED_PROXIES ?? "")
   .split(",")
@@ -21,6 +25,31 @@ const shouldWarnIgnoredForward = createIgnoredForwardWarning();
 
 /** Attempts at a password, signing in or changing it, counted in this process. */
 const passwordAttempts = createSignInLimits();
+
+const AUTHORIZE_PATH = "/api/auth/oauth2/authorize";
+const MINUTE = 60_000;
+const HOUR = 60 * MINUTE;
+
+/**
+ * Authorization requests per client address: each may make the server fetch a client's metadata
+ * document and write a client, before anyone signs in. A person connecting agents makes a few.
+ */
+const authorizeRequests = createRequestLimit(30, MINUTE);
+
+let lastClientCleanup = 0;
+
+/**
+ * Forgets, at most once an hour, the clients that came by their metadata document a day ago or
+ * more and that nobody allowed: anyone can make one exist by starting an authorization.
+ */
+async function forgetUnallowedClientsNow(now: number) {
+  if (now - lastClientCleanup < HOUR) {
+    return;
+  }
+
+  lastClientCleanup = now;
+  await forgetUnallowedClients(db, new Date(now - 24 * HOUR));
+}
 
 const emailOf = Schema.decodeUnknownOption(
   Schema.fromJsonString(Schema.Struct({ email: Schema.String })),
@@ -65,6 +94,26 @@ async function handle(request: Request) {
   const address = resolveClientAddress(getRequestIP(), forwardedFor, trustedProxies);
   const authRequest = await withClientAddress(request, address);
   const path = new URL(request.url).pathname;
+
+  // The OAuth endpoints exist for the MCP door only: they close with it.
+  if (path.startsWith("/api/auth/oauth2/") && !(await isDoorOpen())) {
+    return notFound();
+  }
+
+  if (path === AUTHORIZE_PATH) {
+    const now = Date.now();
+
+    // An address the app could not read counts with every other one like it.
+    if (!authorizeRequests.admit(address ?? "unknown", now)) {
+      return new Response("Too many authorization requests: try again in a minute.", {
+        status: 429,
+        headers: { "Retry-After": "60" },
+      });
+    }
+
+    await forgetUnallowedClientsNow(now);
+  }
+
   const run = () => auth.handler(authRequest);
   const attempt = { address, now: Date.now, sleep };
 

@@ -11,10 +11,14 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as AuthedRouteImport } from './routes/_authed'
 import { Route as HealthRouteImport } from './routes/health'
+import { Route as McpRouteImport } from './routes/mcp'
 import { Route as SetupRouteImport } from './routes/setup'
 import { Route as SignInRouteImport } from './routes/sign-in'
+import { Route as DotwellKnownSplatRouteImport } from './routes/[.]well-known/$'
 import { Route as AuthedIndexRouteImport } from './routes/_authed/index'
 import { Route as AuthedChangePasswordRouteImport } from './routes/_authed/change-password'
+import { Route as AuthedConsentRouteImport } from './routes/_authed/consent'
+import { Route as AuthedSettingsRouteImport } from './routes/_authed/settings'
 import { Route as AuthedUsersRouteImport } from './routes/_authed/users'
 import { Route as E2eTodayRouteImport } from './routes/e2e/today'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
@@ -28,6 +32,11 @@ const HealthRoute = HealthRouteImport.update({
   path: '/health',
   getParentRoute: () => rootRouteImport,
 } as any)
+const McpRoute = McpRouteImport.update({
+  id: '/mcp',
+  path: '/mcp',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SetupRoute = SetupRouteImport.update({
   id: '/setup',
   path: '/setup',
@@ -38,6 +47,11 @@ const SignInRoute = SignInRouteImport.update({
   path: '/sign-in',
   getParentRoute: () => rootRouteImport,
 } as any)
+const DotwellKnownSplatRoute = DotwellKnownSplatRouteImport.update({
+  id: '/.well-known/$',
+  path: '/.well-known/$',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AuthedIndexRoute = AuthedIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -46,6 +60,16 @@ const AuthedIndexRoute = AuthedIndexRouteImport.update({
 const AuthedChangePasswordRoute = AuthedChangePasswordRouteImport.update({
   id: '/change-password',
   path: '/change-password',
+  getParentRoute: () => AuthedRoute,
+} as any)
+const AuthedConsentRoute = AuthedConsentRouteImport.update({
+  id: '/consent',
+  path: '/consent',
+  getParentRoute: () => AuthedRoute,
+} as any)
+const AuthedSettingsRoute = AuthedSettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
   getParentRoute: () => AuthedRoute,
 } as any)
 const AuthedUsersRoute = AuthedUsersRouteImport.update({
@@ -67,18 +91,26 @@ const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof AuthedIndexRoute
   '/health': typeof HealthRoute
+  '/mcp': typeof McpRoute
   '/setup': typeof SetupRoute
   '/sign-in': typeof SignInRoute
+  '/.well-known/$': typeof DotwellKnownSplatRoute
   '/change-password': typeof AuthedChangePasswordRoute
+  '/consent': typeof AuthedConsentRoute
+  '/settings': typeof AuthedSettingsRoute
   '/users': typeof AuthedUsersRoute
   '/e2e/today': typeof E2eTodayRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
 }
 export interface FileRoutesByTo {
   '/health': typeof HealthRoute
+  '/mcp': typeof McpRoute
   '/setup': typeof SetupRoute
   '/sign-in': typeof SignInRoute
+  '/.well-known/$': typeof DotwellKnownSplatRoute
   '/change-password': typeof AuthedChangePasswordRoute
+  '/consent': typeof AuthedConsentRoute
+  '/settings': typeof AuthedSettingsRoute
   '/users': typeof AuthedUsersRoute
   '/e2e/today': typeof E2eTodayRoute
   '/': typeof AuthedIndexRoute
@@ -88,9 +120,13 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_authed': typeof AuthedRouteWithChildren
   '/health': typeof HealthRoute
+  '/mcp': typeof McpRoute
   '/setup': typeof SetupRoute
   '/sign-in': typeof SignInRoute
+  '/.well-known/$': typeof DotwellKnownSplatRoute
   '/_authed/change-password': typeof AuthedChangePasswordRoute
+  '/_authed/consent': typeof AuthedConsentRoute
+  '/_authed/settings': typeof AuthedSettingsRoute
   '/_authed/users': typeof AuthedUsersRoute
   '/e2e/today': typeof E2eTodayRoute
   '/_authed/': typeof AuthedIndexRoute
@@ -101,18 +137,26 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/health'
+    | '/mcp'
     | '/setup'
     | '/sign-in'
+    | '/.well-known/$'
     | '/change-password'
+    | '/consent'
+    | '/settings'
     | '/users'
     | '/e2e/today'
     | '/api/auth/$'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/health'
+    | '/mcp'
     | '/setup'
     | '/sign-in'
+    | '/.well-known/$'
     | '/change-password'
+    | '/consent'
+    | '/settings'
     | '/users'
     | '/e2e/today'
     | '/'
@@ -121,9 +165,13 @@ export interface FileRouteTypes {
     | '__root__'
     | '/_authed'
     | '/health'
+    | '/mcp'
     | '/setup'
     | '/sign-in'
+    | '/.well-known/$'
     | '/_authed/change-password'
+    | '/_authed/consent'
+    | '/_authed/settings'
     | '/_authed/users'
     | '/e2e/today'
     | '/_authed/'
@@ -133,8 +181,10 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   AuthedRoute: typeof AuthedRouteWithChildren
   HealthRoute: typeof HealthRoute
+  McpRoute: typeof McpRoute
   SetupRoute: typeof SetupRoute
   SignInRoute: typeof SignInRoute
+  DotwellKnownSplatRoute: typeof DotwellKnownSplatRoute
   E2eTodayRoute: typeof E2eTodayRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
 }
@@ -155,6 +205,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof HealthRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/mcp': {
+      id: '/mcp'
+      path: '/mcp'
+      fullPath: '/mcp'
+      preLoaderRoute: typeof McpRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/setup': {
       id: '/setup'
       path: '/setup'
@@ -169,6 +226,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SignInRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/.well-known/$': {
+      id: '/.well-known/$'
+      path: '/.well-known/$'
+      fullPath: '/.well-known/$'
+      preLoaderRoute: typeof DotwellKnownSplatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_authed/': {
       id: '/_authed/'
       path: '/'
@@ -181,6 +245,20 @@ declare module '@tanstack/react-router' {
       path: '/change-password'
       fullPath: '/change-password'
       preLoaderRoute: typeof AuthedChangePasswordRouteImport
+      parentRoute: typeof AuthedRoute
+    }
+    '/_authed/consent': {
+      id: '/_authed/consent'
+      path: '/consent'
+      fullPath: '/consent'
+      preLoaderRoute: typeof AuthedConsentRouteImport
+      parentRoute: typeof AuthedRoute
+    }
+    '/_authed/settings': {
+      id: '/_authed/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof AuthedSettingsRouteImport
       parentRoute: typeof AuthedRoute
     }
     '/_authed/users': {
@@ -209,12 +287,16 @@ declare module '@tanstack/react-router' {
 
 interface AuthedRouteChildren {
   AuthedChangePasswordRoute: typeof AuthedChangePasswordRoute
+  AuthedConsentRoute: typeof AuthedConsentRoute
+  AuthedSettingsRoute: typeof AuthedSettingsRoute
   AuthedUsersRoute: typeof AuthedUsersRoute
   AuthedIndexRoute: typeof AuthedIndexRoute
 }
 
 const AuthedRouteChildren: AuthedRouteChildren = {
   AuthedChangePasswordRoute: AuthedChangePasswordRoute,
+  AuthedConsentRoute: AuthedConsentRoute,
+  AuthedSettingsRoute: AuthedSettingsRoute,
   AuthedUsersRoute: AuthedUsersRoute,
   AuthedIndexRoute: AuthedIndexRoute,
 }
@@ -225,8 +307,10 @@ const AuthedRouteWithChildren =
 const rootRouteChildren: RootRouteChildren = {
   AuthedRoute: AuthedRouteWithChildren,
   HealthRoute: HealthRoute,
+  McpRoute: McpRoute,
   SetupRoute: SetupRoute,
   SignInRoute: SignInRoute,
+  DotwellKnownSplatRoute: DotwellKnownSplatRoute,
   E2eTodayRoute: E2eTodayRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
 }
