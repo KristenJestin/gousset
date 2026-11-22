@@ -1,0 +1,503 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Wireframes · Gousset</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#ececec;font:13px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif;color:#2b2b2b;padding:24px}
+.screen{width:1280px;margin:0 auto 48px}
+.screen>h1{font-size:18px;margin:0 0 10px}
+.frame{background:#fff;border:1px solid #9a9a9a;display:grid;grid-template-columns:180px 1fr;min-height:720px;position:relative}
+.nav{border-right:1px solid #ccc;padding:16px 12px;display:flex;flex-direction:column;gap:2px;background:#fafafa}
+.nav b{display:block;padding:0 8px 14px;font-size:13px}
+.nav span{padding:7px 8px;border-radius:3px;color:#555}
+.nav .n{padding:0;border-radius:50%;color:#fff;background:#e8590c}
+.nav span.on{background:#dcdcdc;color:#111;font-weight:600}
+.main{padding:18px 22px;display:flex;flex-direction:column;gap:14px;min-width:0}
+.row{display:flex;gap:12px;align-items:center}
+.cols{display:grid;gap:14px;align-items:start}
+.box{border:1px solid #bdbdbd;border-radius:3px;padding:12px;position:relative;background:#fff}
+.box>h3{margin:0 0 8px;font-size:13px;display:flex;gap:8px;align-items:center}
+.box>h3 small{margin-left:auto;font-weight:400;color:#888}
+.muted{color:#888}.small{font-size:11.5px}.mono{font-family:ui-monospace,monospace;font-size:11px;color:#888}
+.btn{border:1px solid #888;border-radius:3px;padding:4px 10px;background:#fff;font-size:12px;white-space:nowrap}
+.btn.p{background:#3a3a3a;color:#fff;border-color:#3a3a3a}
+.chip{display:inline-block;border:1px solid #c8c8c8;border-radius:10px;padding:0 7px;font-size:11.5px;color:#555;background:#f4f4f4}
+.sel{border:1px solid #aaa;border-radius:3px;padding:4px 8px;font-size:12px;background:#fff}
+.sel:after{content:" ▾";color:#888}
+.grow{flex:1}
+.num{font-variant-numeric:tabular-nums;text-align:right;white-space:nowrap}
+.list>div{display:flex;gap:10px;align-items:center;padding:7px 0;border-top:1px solid #e3e3e3}
+.list>div:first-child{border-top:0}
+.bar{height:8px;background:#e6e6e6;border-radius:4px;position:relative;flex:1}
+.bar i{position:absolute;left:0;top:0;bottom:0;background:#8c8c8c;border-radius:4px}
+.bar u{position:absolute;top:-3px;bottom:-3px;width:2px;background:#111}
+.ph{background:#e9e9e9;border:1px dashed #bbb;border-radius:3px;display:grid;place-items:center;color:#888;font-size:12px}
+table{border-collapse:collapse;width:100%}
+th{font-weight:600;text-align:left;color:#666;font-size:11.5px;border-bottom:1px solid #bbb;padding:6px 8px}
+td{border-bottom:1px solid #e6e6e6;padding:7px 8px;vertical-align:middle}
+tr.sub td{background:#f7f7f7;font-size:12px;padding-top:4px;padding-bottom:4px}
+tr.dim td{color:#999}
+tr.open td{background:#efefef}
+.n{position:absolute;width:20px;height:20px;border-radius:50%;background:#e8590c;color:#fff;font-size:11px;font-weight:700;display:grid;place-items:center;z-index:2}
+.notes{background:#fff;border:1px solid #c9c9c9;border-top:0;padding:12px 16px;columns:2;column-gap:32px}
+.notes p{margin:0 0 8px;break-inside:avoid}
+.notes p b.k{display:inline-grid;place-items:center;width:18px;height:18px;border-radius:50%;background:#e8590c;color:#fff;font-size:10.5px;margin-right:6px}
+.eq{display:flex;align-items:center;gap:10px}
+.eq .t{border:1px solid #bdbdbd;border-radius:3px;padding:8px 14px}
+.eq .t strong{font-size:22px;display:block}
+.eq .o{font-size:20px;color:#888}
+.drawer{border-left:1px solid #9a9a9a;background:#fcfcfc;padding:16px;display:flex;flex-direction:column;gap:12px}
+.kv{display:grid;grid-template-columns:120px 1fr;gap:6px 10px}
+.kv dt{color:#888}.kv dd{margin:0}
+.steps{display:flex;gap:0;border:1px solid #bdbdbd;border-radius:3px;overflow:hidden}
+.steps span{flex:1;padding:8px 12px;border-right:1px solid #bdbdbd;color:#888}
+.steps span:last-child{border-right:0}
+.steps span.on{background:#3a3a3a;color:#fff}
+.tree div{padding:7px 8px;border-radius:3px;display:flex;gap:8px}
+.tree div.on{background:#e4e4e4;font-weight:600}
+.tree .in{padding-left:26px}
+.big{font-size:22px;font-weight:600}
+.solo .screen:not(.show){display:none}
+.solo{padding:0;background:#fff}.solo .screen{margin:0}
+</style>
+</head>
+<body>
+
+<!-- Every name, label and amount on these screens is invented. -->
+
+<!-- ============ 1. MONTHLY REVIEW ============ -->
+<section class="screen" id="review">
+<h1>1 · Monthly review (home)</h1>
+<div class="frame">
+  <div class="nav"><b>Gousset</b><span class="on">Monthly review</span><span>Operations</span><span>Accounts</span><span>Investments</span><span>Subjects</span><span>Import</span><span style="margin-top:auto">Settings</span></div>
+  <div class="main">
+    <div class="row">
+      <span class="btn">‹</span><span class="big">October 2026</span><span class="btn">›</span>
+      <span class="muted" style="margin-left:12px">4 of 5 accounts imported · MealCard up to 24 Oct. · <u>6 lines to review ↓</u></span>
+      <span class="grow"></span><span class="btn p">Import statements</span>
+    </div>
+    <div class="box" style="position:relative"><span class="n" style="left:-10px;top:-10px">1</span>
+      <div class="row" style="margin-bottom:8px"><b>€3,120 received</b><span class="muted small">salary and meal vouchers</span><span class="grow"></span><span class="muted small">spending +5% compared with your 6-month average</span></div>
+      <div style="display:flex;height:22px;border-radius:3px;overflow:hidden;border:1px solid #999">
+        <div style="width:65%;background:#7a7a7a"></div><div style="width:19%;background:#b5b5b5;border-left:1px solid #fff"></div><div style="width:16%;background:#e2e2e2;border-left:1px solid #fff"></div>
+      </div>
+      <div style="display:flex;margin-top:6px" class="small">
+        <div style="width:65%"><b>€2,030</b> spent</div><div style="width:19%"><b>€600</b> set aside</div><div style="width:16%"><b>€490</b> left</div>
+      </div>
+    </div>
+    <div class="cols" style="grid-template-columns:1.2fr 1fr">
+      <div class="box"><span class="n" style="left:-10px;top:-10px">2</span>
+        <h3>Where the money goes</h3>
+        <div class="row" style="margin-bottom:8px"><span class="chip" style="background:#3a3a3a;color:#fff">Categories</span><span class="chip">Merchants</span><span class="chip">Subjects</span></div>
+          <div class="list">
+            <div><span style="width:90px">Housing</span><span class="bar"><i style="width:91%"></i><u style="left:91%"></u></span><span class="num" style="width:60px">€690</span></div>
+            <div><span style="width:90px">Groceries</span><span class="bar"><i style="width:57%"></i><u style="left:52%"></u></span><span class="num" style="width:60px">€430</span></div>
+            <div><span style="width:90px"><b>Leisure ⚠</b></span><span class="bar"><i style="width:30%"></i><u style="left:21%"></u></span><span class="num" style="width:60px">€230</span></div>
+            <div><span style="width:90px">Transport</span><span class="bar"><i style="width:23%"></i><u style="left:22%"></u></span><span class="num" style="width:60px">€170</span></div>
+            <div><span style="width:90px">Restaurants</span><span class="bar"><i style="width:20%"></i><u style="left:21%"></u></span><span class="num" style="width:60px">€145</span></div>
+            <div class="muted">+ 3 categories</div>
+          </div>
+      </div>
+      <div class="cols">
+        <div class="box"><span class="n" style="left:-10px;top:-10px">3</span>
+          <h3>Movements between your accounts<small>neither spending nor income</small></h3>
+          <div class="list">
+            <div><span class="grow">Employer → <b>Current account</b> <span class="muted">(salary)</span></span><span class="num">€2,900</span></div>
+            <div><span class="grow">Employer → <b>MealCard</b> <span class="muted">(meal vouchers)</span></span><span class="num">€220</span></div>
+            <div><span class="grow"><b>Current account</b> → <b>Livret A</b></span><span class="num">€250</span></div>
+            <div><span class="grow"><b>Current account</b> → <b>Northbank PEA</b> → buy World index ETF</span><span class="num">€350 → €335</span></div>
+          </div>
+        </div>
+        <div class="box"><span class="n" style="left:-10px;top:-10px">4</span>
+          <h3>Investments<small>See all</small></h3>
+          <div class="list"><div><span class="grow">Northbank PEA</span><span class="num">€4,180</span><span class="num muted">+€280 · 8.1%/yr</span></div></div>
+        </div>
+      </div>
+      <div class="box"><span class="n" style="left:-10px;top:-10px">5</span>
+        <h3>To review <span class="chip">6</span><small>91 lines classified by your rules</small></h3>
+        <div class="list">
+            <div><div class="grow"><div class="mono">CB GREENMARKET 2110 RIVERTON + MEALCARD GREENMARKET</div>One expense at Greenmarket: €28 MealCard + €52 card <span class="chip">Groceries</span></div><span class="num">€80.00</span><span class="btn p">Match</span><span class="btn">No</span></div>
+            <div><div class="grow"><div class="mono">PAYLINK *PIXELPLAY</div>Pixelplay <span class="chip">Video games</span> <span class="chip">via PayLink</span></div><span class="num">€14.99</span><span class="btn p">Approve</span><span class="btn">Edit</span></div>
+            <div><div class="grow"><div class="mono">SEPA TRF PERKSHUB REFUND</div>Refund of Riverside Gym from 21 June</div><span class="num">+€26.50</span><span class="btn p">Link</span><span class="btn">Edit</span></div>
+            <div class="muted">+ 3 more</div>
+          </div>
+      </div>
+      <div class="box"><span class="n" style="left:-10px;top:-10px">6</span>
+        <h3>Flagged</h3>
+        <div class="list">
+            <div>Streamly goes from €8.99 to €9.49</div>
+            <div>€312.40 on PerksHub expire on 31 Dec.</div>
+            <div>Riverside Gym not charged since August</div>
+          </div>
+      </div>
+    </div>
+  </div>
+</div>
+<div class="notes">
+  <p><b class="k">1</b><b>The month in one bar</b>: what came in, cut into spent, set aside and left. Each part is clickable and opens the operations filtered on it.</p>
+  <p><b class="k">2</b><b>Where the money goes</b>: three tabs (categories, merchants, subjects). The black mark is your benchmark, ⚠ when it is passed.</p>
+  <p><b class="k">3</b><b>Movements</b>: a "from → to" list. A transfer followed by a purchase fits on one line.</p>
+  <p><b class="k">4</b><b>Investments</b>: one line per account; the detail is in Investments.</p>
+  <p><b class="k">5</b><b>To review</b> at the bottom: the month is read first. At the top, only a "6 lines to review" link goes down to it. When empty, the block disappears.</p>
+  <p><b class="k">6</b><b>Flagged</b>: subscriptions that change or stop, credits that expire, accounts not imported.</p>
+</div>
+</section>
+
+<!-- ============ 2. OPERATIONS ============ -->
+<section class="screen" id="operations">
+<h1>2 · Operations, with the detail of an expense open</h1>
+<div class="frame" style="grid-template-columns:180px 1fr 340px">
+  <div class="nav"><b>Gousset</b><span>Monthly review</span><span class="on">Operations</span><span>Accounts</span><span>Investments</span><span>Subjects</span><span>Import</span></div>
+  <div class="main">
+    <div class="row" style="position:relative"><span class="n" style="left:-28px;top:2px">1</span>
+      <span class="sel">October 2026</span><span class="sel">All accounts</span><span class="sel">Category</span><span class="sel">Subject</span><span class="sel">Kind: all</span>
+      <span class="grow"></span><span class="sel" style="width:200px">🔍 Search</span>
+    </div>
+    <div class="box" style="padding:0"><span class="n" style="left:-10px;top:-10px">2</span>
+      <table>
+        <tr><th>Date</th><th>Merchant</th><th>Category</th><th>Subjects</th><th>Paid with</th><th class="num">Amount</th></tr>
+        <tr class="open"><td>21 Oct.</td><td><b>Greenmarket</b> <span class="chip">2 payments</span></td><td>Groceries</td><td></td><td>MealCard + Card</td><td class="num">€80.00</td></tr>
+        <tr class="sub"><td></td><td class="mono">MEALCARD GREENMARKET RIVERTON</td><td></td><td></td><td>MealCard</td><td class="num">€28.00</td></tr>
+        <tr class="sub"><td></td><td class="mono">CB GREENMARKET 2110 RIVERTON</td><td></td><td></td><td>Current account</td><td class="num">€52.00</td></tr>
+        <tr><td>20 Oct.</td><td><b>Pixelplay</b> <span class="chip">via PayLink</span></td><td>Video games</td><td></td><td>Current account</td><td class="num">€14.99</td></tr>
+        <tr><td>19 Oct.</td><td><b>Fuelstop</b></td><td>Fuel</td><td><span class="chip">Van</span></td><td>Current account</td><td class="num">€58.70</td></tr>
+        <tr class="dim"><td>18 Oct.</td><td>Current account → Northbank PEA</td><td><i>Transfer</i></td><td></td><td></td><td class="num">€350.00</td></tr>
+        <tr><td>12 Oct.</td><td><b>Corner Bistro</b> <span class="chip">refunded €28</span></td><td>Restaurants</td><td></td><td>Current account</td><td class="num">€56.00 <span class="muted">→ 28.00</span></td></tr>
+        <tr><td>8 Oct.</td><td><b>Streamly</b> <span class="chip">subscription</span></td><td>Subscriptions</td><td></td><td>Current account</td><td class="num">€9.49</td></tr>
+        <tr><td>5 Oct.</td><td><b>Harbor Savings</b> <span class="chip">loan</span></td><td>Housing</td><td><span class="chip">House</span></td><td>Current account</td><td class="num">€610.00</td></tr>
+      </table>
+    </div>
+    <div class="muted">96 operations · €2,030 of net spending</div>
+  </div>
+  <div class="drawer" style="position:relative"><span class="n" style="left:-10px;top:12px">3</span>
+    <div class="row"><span class="big">Greenmarket</span><span class="grow"></span><span class="btn">✕</span></div>
+    <div class="muted">21 October 2026 · expense</div>
+    <dl class="kv"><dt>Category</dt><dd><span class="sel">Groceries</span></dd><dt>Subjects</dt><dd><span class="btn">+ Add</span></dd></dl>
+    <div class="box"><h3>Payments</h3><div class="list">
+      <div><span class="grow">MealCard</span><span class="num">€28.00</span></div>
+      <div><span class="grow">Current account · card</span><span class="num">€52.00</span></div></div></div>
+    <div class="box"><h3>Refunds</h3><div class="muted">None</div><div style="margin-top:6px"><span class="btn">Link a refund</span></div></div>
+    <div class="row"><b>Net cost</b><span class="grow"></span><b class="num">€80.00</b></div>
+    <div class="box"><h3>Rule</h3><div class="small">"GREENMARKET" → Greenmarket, Groceries</div><div style="margin-top:6px"><span class="btn">Edit the rule</span></div></div>
+    <div class="row"><span class="btn">Split</span><span class="btn">Separate the payments</span></div>
+  </div>
+</div>
+<div class="notes">
+  <p><b class="k">1</b><b>Filters</b> at the top, always the same: month, account, category, subject, kind (expense, income, transfer, refund).</p>
+  <p><b class="k">2</b><b>One row = one expense</b>, not one statement line. An expense with several payments unfolds. Transfers are greyed, since they do not count. A refund shows the net cost.</p>
+  <p><b class="k">3</b><b>Detail panel</b> on the right, without leaving the list: category, subjects, payments, refunds, net cost, the rule that classified it, split.</p>
+</div>
+</section>
+
+<!-- ============ 3. ACCOUNTS ============ -->
+<section class="screen" id="accounts">
+<h1>3 · Accounts</h1>
+<div class="frame">
+  <div class="nav"><b>Gousset</b><span>Monthly review</span><span>Operations</span><span class="on">Accounts</span><span>Investments</span><span>Subjects</span><span>Import</span></div>
+  <div class="main">
+    <div class="row" style="position:relative"><span class="n" style="left:-28px;top:6px">1</span>
+      <div class="eq"><div class="t"><span class="muted small">available</span><strong>€1,860</strong></div><div class="t"><span class="muted small">savings and investments</span><strong>€13,410</strong></div><div class="t"><span class="muted small">restricted use</span><strong>€452</strong></div><div class="t"><span class="muted small">loans</span><strong>−€68,900</strong></div></div>
+      <span class="grow"></span><span class="btn p">Add an account</span>
+    </div>
+    <div class="box" style="padding:0"><span class="n" style="left:-10px;top:-10px">2</span>
+      <table>
+        <tr><th>Account</th><th>Institution</th><th>Tracking</th><th>Last import</th><th class="num">Balance</th></tr>
+        <tr><td colspan="5"><b>Available</b></td></tr>
+        <tr><td>Current account</td><td>Northbank</td><td>lines</td><td>31 Oct.</td><td class="num">€1,860</td></tr>
+        <tr><td colspan="5"><b>Savings and investments</b></td></tr>
+        <tr><td>Livret A <span class="chip">Livret A envelope</span></td><td>Northbank</td><td>lines</td><td>31 Oct.</td><td class="num">€9,230</td></tr>
+        <tr><td>PEA <span class="chip">PEA envelope</span></td><td>Northbank</td><td>lines</td><td>31 Oct.</td><td class="num">€4,180</td></tr>
+        <tr><td colspan="5"><b>Restricted use</b> <span class="muted">· does not count in available</span></td></tr>
+        <tr><td>MealCard</td><td>MealCard</td><td>lines</td><td><b>24 Oct. ⚠</b></td><td class="num">€140</td></tr>
+        <tr><td>PerksHub <span class="chip">expires on 31 Dec.</span></td><td>Works council</td><td>balance</td><td>noted on 26 Oct.</td><td class="num">€312.40</td></tr>
+        <tr><td colspan="5"><b>Loans</b></td></tr>
+        <tr><td>Home loan <span class="chip">House</span></td><td>Harbor Savings</td><td>balance</td><td>5 Oct.</td><td class="num">−€68,900</td></tr>
+      </table>
+    </div>
+  </div>
+</div>
+<div class="notes">
+  <p><b class="k">1</b><b>Four totals</b>, never mixed: available, savings and investments, restricted, loans. Net worth is computed further down, or on a screen of its own later.</p>
+  <p><b class="k">2</b><b>Accounts grouped by kind.</b> The "Tracking" column says whether lines are imported or only the balance is noted; ⚠ when the import is behind the month.</p>
+</div>
+</section>
+
+<!-- ============ 4. INVESTMENTS ============ -->
+<section class="screen" id="investments">
+<h1>4 · Investments: the PEA</h1>
+<div class="frame">
+  <div class="nav"><b>Gousset</b><span>Monthly review</span><span>Operations</span><span>Accounts</span><span class="on">Investments</span><span>Subjects</span><span>Import</span></div>
+  <div class="main">
+    <div class="row"><span class="big">Northbank PEA</span><span class="chip">PEA envelope</span><span class="grow"></span><span class="btn">Add an operation</span></div>
+    <div class="eq" style="position:relative"><span class="n" style="left:-28px;top:14px">1</span>
+      <div class="t"><span class="muted small">value</span><strong>€4,180</strong></div><div class="t"><span class="muted small">net contributions</span><strong>€3,900</strong></div><div class="t"><span class="muted small">gain</span><strong>+€280</strong></div><div class="t"><span class="muted small">annualised return</span><strong>8.1%</strong></div>
+    </div>
+    <div class="cols" style="grid-template-columns:1.6fr 1fr">
+      <div class="box"><span class="n" style="left:-10px;top:-10px">2</span><h3>Value and contributions<small>1 m · 6 m · 1 yr · all</small></h3><div class="ph" style="height:190px">value curve above the staircase of contributions</div></div>
+      <div class="box"><span class="n" style="left:-10px;top:-10px">3</span><h3>Envelope rules</h3>
+        <div class="small muted">Contributions</div><div class="row"><span class="bar"><i style="width:3%"></i></span><span class="num small">€3,900 of the PEA cap</span></div>
+        <div class="small muted" style="margin-top:12px">Age</div><div class="row"><span class="bar"><i style="width:15%"></i></span><span class="num small">5 years on 3 Feb. 2031</span></div>
+        <div class="small" style="margin-top:12px">Opened on 3 Feb. 2026. Before 5 years, a withdrawal closes the plan.</div>
+      </div>
+    </div>
+    <div class="box" style="padding:0"><span class="n" style="left:-10px;top:-10px">4</span>
+      <table><tr><th>Position</th><th>ISIN</th><th class="num">Units</th><th class="num">Cost price</th><th class="num">Price</th><th class="num">Value</th><th class="num">+/−</th></tr>
+      <tr><td>World index ETF</td><td class="mono">XX0000000001</td><td class="num">27.4</td><td class="num">€142.27</td><td class="num">€152.50</td><td class="num">€4,179</td><td class="num">+€280</td></tr>
+      <tr><td>Cash</td><td></td><td></td><td></td><td></td><td class="num">€1</td><td></td></tr></table>
+    </div>
+    <div class="box"><span class="n" style="left:-10px;top:-10px">5</span><h3>Operations</h3><div class="list">
+      <div><span class="muted" style="width:60px">18 Oct.</span><span class="grow">Purchase · 2.2 units World index ETF</span><span class="num">€335</span></div>
+      <div><span class="muted" style="width:60px">18 Oct.</span><span class="grow">Contribution from the current account</span><span class="num">€350</span></div>
+      <div><span class="muted" style="width:60px">18 Sept.</span><span class="grow">Purchase · 2.6 units World index ETF</span><span class="num">€395</span></div></div></div>
+  </div>
+</div>
+<div class="notes">
+  <p><b class="k">1</b><b>Four figures</b> that answer "how much did I put in, how much did it earn".</p>
+  <p><b class="k">2</b><b>One curve</b>: the value above the staircase of contributions. The gap between the two is the gain.</p>
+  <p><b class="k">3</b><b>The envelope</b> and its rules: cap, age, what it implies. Another envelope (life insurance) shows its own rules here.</p>
+  <p><b class="k">4</b><b>Positions</b> by ISIN, in a table.</p>
+  <p><b class="k">5</b><b>Operations</b> of the account, with purchases and contributions apart.</p>
+</div>
+</section>
+
+<!-- ============ 5. SUBJECTS ============ -->
+<section class="screen" id="subjects">
+<h1>5 · Subjects: the van</h1>
+<div class="frame" style="grid-template-columns:180px 260px 1fr">
+  <div class="nav"><b>Gousset</b><span>Monthly review</span><span>Operations</span><span>Accounts</span><span>Investments</span><span class="on">Subjects</span><span>Import</span></div>
+  <div class="main" style="border-right:1px solid #ccc;position:relative"><span class="n" style="left:6px;top:6px">1</span>
+    <div class="row"><b>Subjects</b><span class="grow"></span><span class="btn">+ New</span></div>
+    <div class="tree">
+      <div><span class="grow">House</span><span class="num muted">€740/month</span></div>
+      <div class="in"><span class="grow">Kitchen renovation</span><span class="num muted">€2,150</span></div>
+      <div class="on"><span class="grow">Van</span><span class="num muted">€165/month</span></div>
+      <div><span class="grow">Alps 2028</span><span class="num muted">3–17 Jul.</span></div>
+      <div><span class="grow">Dog</span><span class="num muted">€42/month</span></div>
+    </div>
+  </div>
+  <div class="main">
+    <div class="row"><span class="big">Van</span><span class="chip">has a value</span><span class="grow"></span><span class="sel">2026</span><span class="btn">Edit</span></div>
+    <div class="eq" style="position:relative"><span class="n" style="left:-28px;top:14px">2</span>
+      <div class="t"><span class="muted small">cost in 2026</span><strong>€1,980</strong></div><div class="t"><span class="muted small">per month</span><strong>€165</strong></div><div class="t"><span class="muted small">estimated value</span><strong>€12,000</strong></div><div class="t"><span class="muted small">loan</span><strong>none</strong></div>
+    </div>
+    <div class="cols" style="grid-template-columns:1fr 1fr">
+      <div class="box"><span class="n" style="left:-10px;top:-10px">3</span><h3>By category</h3><div class="list">
+        <div><span style="width:90px">Fuel</span><span class="bar"><i style="width:60%"></i></span><span class="num" style="width:60px">€990</span></div>
+        <div><span style="width:90px">Insurance</span><span class="bar"><i style="width:34%"></i></span><span class="num" style="width:60px">€560</span></div>
+        <div><span style="width:90px">Servicing</span><span class="bar"><i style="width:21%"></i></span><span class="num" style="width:60px">€350</span></div>
+        <div><span style="width:90px">Tolls</span><span class="bar"><i style="width:5%"></i></span><span class="num" style="width:60px">€80</span></div></div></div>
+      <div class="box"><span class="n" style="left:-10px;top:-10px">4</span><h3>Attached automatically</h3><div class="list">
+        <div>Fuelstop, Hypermart fuel</div><div>Shieldline · van policy</div><div>Northway tolls</div></div>
+        <h3 style="margin-top:12px">Documents</h3><div class="list"><div>Registration.pdf</div><div>Shieldline policy 2026.pdf</div></div></div>
+    </div>
+    <div class="box"><span class="n" style="left:-10px;top:-10px">5</span><h3>Expenses<small>28 in 2026</small></h3><div class="list">
+      <div><span class="muted" style="width:60px">19 Oct.</span><span class="grow">Fuelstop · Fuel</span><span class="num">€58.70</span></div>
+      <div><span class="muted" style="width:60px">2 Oct.</span><span class="grow">Quickfit Garage · Servicing</span><span class="num">€174.00</span></div>
+      <div class="muted">See all 28 in Operations</div></div></div>
+  </div>
+</div>
+<div class="notes">
+  <p><b class="k">1</b><b>The tree of subjects</b>: anything you want, nestable. Each subject shows its cost per month, or its dates for a trip.</p>
+  <p><b class="k">2</b><b>The subject's figures.</b> Value and loan appear only for an asset.</p>
+  <p><b class="k">3</b><b>Breakdown</b> by category: where the van's money goes.</p>
+  <p><b class="k">4</b><b>Rules and documents</b>: the merchants that attach an expense here automatically, and the receipts.</p>
+  <p><b class="k">5</b><b>The latest expenses</b>, and a link to Operations filtered on the subject.</p>
+</div>
+</section>
+
+<!-- ============ 6. IMPORT ============ -->
+<section class="screen" id="import">
+<h1>6 · Importing statements</h1>
+<div class="frame">
+  <div class="nav"><b>Gousset</b><span>Monthly review</span><span>Operations</span><span>Accounts</span><span>Investments</span><span>Subjects</span><span class="on">Import</span></div>
+  <div class="main">
+    <div style="position:relative"><span class="n" style="left:-28px;top:8px">1</span><div class="steps"><span>1 · Drop the files</span><span class="on">2 · Check</span><span>3 · Review the month</span></div></div>
+    <div class="ph" style="height:64px">Drop your statements here: OFX, QIF, CAMT.053, MT940 or CSV</div>
+    <div class="box" style="padding:0"><span class="n" style="left:-10px;top:-10px">2</span>
+      <table><tr><th>File</th><th>Format recognised</th><th>Account</th><th>Period</th><th class="num">New</th><th class="num">Already known</th><th>State</th></tr>
+      <tr><td>statement_october.ofx</td><td>OFX</td><td><span class="sel">Current account</span></td><td>1–31 Oct.</td><td class="num">58</td><td class="num">24</td><td>ready</td></tr>
+      <tr><td>savings.qif</td><td>QIF</td><td><span class="sel">Livret A</span></td><td>1–31 Oct.</td><td class="num">2</td><td class="num">0</td><td>ready</td></tr>
+      <tr><td>northbank_pea.csv</td><td>CSV · profile "Northbank PEA"</td><td><span class="sel">Northbank PEA</span></td><td>1–31 Oct.</td><td class="num">3</td><td class="num">0</td><td>ready</td></tr>
+      <tr class="open"><td>export.csv</td><td><b>Unknown CSV</b></td><td><span class="sel">Choose…</span></td><td>—</td><td class="num">—</td><td class="num">—</td><td><b>to map ⚠</b></td></tr></table>
+    </div>
+    <div class="box"><span class="n" style="left:-10px;top:-10px">3</span><h3>export.csv: what does each column hold?</h3>
+      <table><tr><th><span class="sel">Date</span></th><th><span class="sel">Label</span></th><th><span class="sel">Ignore</span></th><th><span class="sel">Amount</span></th></tr>
+      <tr><td class="mono">21/10/2026</td><td class="mono">MEALCARD GREENMARKET RIVERTON</td><td class="mono">CB</td><td class="mono">-28,00</td></tr>
+      <tr><td class="mono">20/10/2026</td><td class="mono">MEALCARD CORNER BISTRO</td><td class="mono">CB</td><td class="mono">-12,50</td></tr></table>
+      <div class="row" style="margin-top:10px"><span class="sel">Separator: ;</span><span class="sel">Date: DD/MM/YYYY</span><span class="grow"></span><label class="small"><input type="checkbox" checked> Save as profile "MealCard"</label></div>
+    </div>
+    <div class="row" style="position:relative"><span class="n" style="left:-28px;top:0">4</span><span class="muted">4 transfers between your accounts recognised · 1 MealCard + card payment to match · 24 duplicates skipped</span><span class="grow"></span><span class="btn p">Continue to the review</span></div>
+  </div>
+</div>
+<div class="notes">
+  <p><b class="k">1</b><b>Three steps</b>: drop, check, review. The third is the monthly review screen.</p>
+  <p><b class="k">2</b><b>One file per row</b>, with what the app recognised: format, account, period, what is new and what it already knows.</p>
+  <p><b class="k">3</b><b>Unknown CSV</b>: the columns are mapped once, on a preview, and saved as a profile for next time.</p>
+  <p><b class="k">4</b><b>The import's summary</b> before moving on to the review.</p>
+</div>
+</section>
+
+<!-- ============ 7. AN ACCOUNT'S PAGE ============ -->
+<section class="screen" id="account">
+<h1>7 · An account's page: the current account</h1>
+<div class="frame">
+  <div class="nav"><b>Gousset</b><span>Monthly review</span><span>Operations</span><span class="on">Accounts</span><span>Investments</span><span>Subjects</span><span>Import</span><span style="margin-top:auto">Settings</span></div>
+  <div class="main">
+    <div class="row"><span class="muted">Accounts ›</span><span class="big">Current account</span><span class="chip">Northbank</span><span class="chip">available</span><span class="grow"></span><span class="btn">Edit</span><span class="btn p">Import a statement</span></div>
+    <div class="eq" style="position:relative"><span class="n" style="left:-28px;top:14px">1</span>
+      <div class="t"><span class="muted small">balance on 31 Oct.</span><strong>€1,860</strong></div><div class="t"><span class="muted small">in, October</span><strong>€2,900</strong></div><div class="t"><span class="muted small">out, October</span><strong>€2,610</strong></div>
+      <div class="box" style="margin-left:12px;position:relative"><span class="n" style="left:-10px;top:-10px">2</span><b>Balance checked ✓</b><div class="small muted">€1,860 in the app = €1,860 on the statement of 31 Oct.</div></div>
+    </div>
+    <div class="cols" style="grid-template-columns:1.6fr 1fr">
+      <div class="box"><span class="n" style="left:-10px;top:-10px">3</span><h3>Balance<small>6 m · 1 yr · all</small></h3><div class="ph" style="height:150px">month-end balance over 12 months</div></div>
+      <div class="box"><span class="n" style="left:-10px;top:-10px">4</span><h3>Account settings</h3>
+        <dl class="kv"><dt>Kind</dt><dd>Available</dd><dt>Tracking</dt><dd>Imported lines</dd><dt>Import format</dt><dd>OFX</dd><dt>Currency</dt><dd>EUR</dd><dt>Opened on</dt><dd>14 May 2018</dd><dt>Holders</dt><dd>Alex</dd></dl></div>
+    </div>
+    <div class="box" style="padding:0"><span class="n" style="left:-10px;top:-10px">5</span>
+      <table><tr><th>Date</th><th>Merchant</th><th>Category</th><th>Subjects</th><th class="num">Amount</th><th class="num">Balance</th></tr>
+      <tr><td>31 Oct.</td><td><b>Wavely Mobile</b></td><td>Subscriptions</td><td></td><td class="num">−€16.00</td><td class="num">€1,860</td></tr>
+      <tr><td>30 Oct.</td><td><b>Greenmarket</b> <span class="chip">+ €28 MealCard</span></td><td>Groceries</td><td></td><td class="num">−€52.00</td><td class="num">€1,876</td></tr>
+      <tr class="dim"><td>28 Oct.</td><td>→ Northbank PEA</td><td><i>Transfer</i></td><td></td><td class="num">−€350.00</td><td class="num">€1,928</td></tr>
+      <tr><td>27 Oct.</td><td><b>Corner Pharmacy</b> <span class="chip">refunded €8</span></td><td>Health</td><td></td><td class="num">−€19.60</td><td class="num">€2,278</td></tr></table></div>
+  </div>
+</div>
+<div class="notes">
+  <p><b class="k">1</b><b>The account's figures</b> for the chosen month.</p>
+  <p><b class="k">2</b><b>The balance check</b>: the app compares its balance with the statement's. If they differ, it says so and offers to look for the gap (a missing line, a duplicate).</p>
+  <p><b class="k">3</b><b>The balance over time</b>, month end by month end.</p>
+  <p><b class="k">4</b><b>The account's settings</b>, read only; "Edit" opens them.</p>
+  <p><b class="k">5</b><b>The account's lines</b>, with the balance after each line. An expense paid partly elsewhere says so ("+ €28 MealCard").</p>
+</div>
+</section>
+
+<!-- ============ 8. NEW SUBJECT ============ -->
+<section class="screen" id="new-subject">
+<h1>8 · Creating a subject</h1>
+<div class="frame" style="grid-template-columns:180px 1fr 420px">
+  <div class="nav"><b>Gousset</b><span>Monthly review</span><span>Operations</span><span>Accounts</span><span>Investments</span><span class="on">Subjects</span><span>Import</span></div>
+  <div class="main" style="opacity:.35"><div class="row"><b>Subjects</b></div><div class="tree"><div>House</div><div class="in">Kitchen renovation</div><div>Van</div><div>Alps 2028</div><div>Dog</div></div></div>
+  <div class="drawer">
+    <div class="row"><span class="big">New subject</span><span class="grow"></span><span class="btn">✕</span></div>
+    <dl class="kv" style="position:relative"><span class="n" style="left:-28px;top:0">1</span>
+      <dt>Name</dt><dd><span class="sel" style="display:block">Bicycle</span></dd>
+      <dt>Inside</dt><dd><span class="sel">None</span></dd></dl>
+    <div class="box" style="position:relative"><span class="n" style="left:-10px;top:-10px">2</span>
+      <label><input type="checkbox" checked> <b>Has a value</b> <span class="muted small">(house, vehicle…)</span></label>
+      <dl class="kv" style="margin:8px 0 10px 22px;grid-template-columns:110px 1fr"><dt>Estimated value</dt><dd><span class="sel" style="display:block">€1,200</span></dd><dt>Linked loan</dt><dd><span class="sel">None</span></dd></dl>
+      <label><input type="checkbox"> <b>Has dates</b> <span class="muted small">(trip, renovation…)</span></label>
+    </div>
+    <div class="box"><span class="n" style="left:-10px;top:-10px">3</span><h3>Attach automatically</h3>
+      <div class="small">Expenses at these merchants:</div><div style="margin-top:6px"><span class="chip">Cycle Hub ✕</span> <span class="chip">Pedal Cover insurance ✕</span> <span class="btn">+ Merchant</span></div></div>
+    <div class="box"><span class="n" style="left:-10px;top:-10px">4</span><h3>Past expenses</h3>
+      <div class="small">9 expenses since January match (€486).</div>
+      <div class="row" style="margin-top:6px"><span class="btn">See the list</span><label class="small"><input type="checkbox" checked> Attach them</label></div></div>
+    <div class="row"><span class="grow"></span><span class="btn">Cancel</span><span class="btn p">Create the subject</span></div>
+  </div>
+</div>
+<div class="notes">
+  <p><b class="k">1</b><b>The name</b> and the parent subject: all a subject requires.</p>
+  <p><b class="k">2</b><b>Two options</b> instead of templates: "has a value" (estimated value and loan, which feed net worth) and "has dates" (the app proposes the expenses of the period).</p>
+  <p><b class="k">3</b><b>The attached merchants</b> become rules: their next expenses land in the subject on their own.</p>
+  <p><b class="k">4</b><b>The past</b>: the app finds the expenses that should have been there and offers to attach them at once.</p>
+</div>
+</section>
+
+<!-- ============ 9. RULES ============ -->
+<section class="screen" id="rules">
+<h1>9 · Settings: rules</h1>
+<div class="frame" style="grid-template-columns:180px 180px 1fr 400px">
+  <div class="nav"><b>Gousset</b><span>Monthly review</span><span>Operations</span><span>Accounts</span><span>Investments</span><span>Subjects</span><span>Import</span><span class="on" style="margin-top:auto">Settings</span></div>
+  <div class="nav" style="background:#fff;position:relative"><span class="n" style="left:6px;top:6px">1</span><b>&nbsp;</b><span>Users</span><span>Categories</span><span>Merchants</span><span class="on">Rules</span><span>Import profiles</span><span>Envelopes</span><span>Investment prices</span><span>Data</span></div>
+  <div class="main">
+    <div class="row"><span class="big">Rules</span><span class="grow"></span><span class="sel" style="width:180px">🔍 Search</span><span class="btn">+ Rule</span></div>
+    <div class="box" style="padding:0"><span class="n" style="left:-10px;top:-10px">2</span>
+      <table><tr><th>If</th><th>Then</th><th class="num">Used</th></tr>
+      <tr class="open"><td>label contains "GREENMARKET"</td><td>Greenmarket · Groceries</td><td class="num">128 times</td></tr>
+      <tr><td>label contains "PAYLINK *PIXELPLAY"</td><td>Pixelplay · Video games</td><td class="num">7 times</td></tr>
+      <tr><td>merchant = Fuelstop</td><td>subject Van</td><td class="num">27 times</td></tr>
+      <tr><td>label contains "TRF NORTHBANK PEA" and account = Current account</td><td>transfer to Northbank PEA</td><td class="num">9 times</td></tr>
+      <tr><td>amount = €610 and day between 3 and 7</td><td>Harbor Savings · Housing · subject House</td><td class="num">36 times</td></tr></table></div>
+  </div>
+  <div class="drawer" style="position:relative"><span class="n" style="left:-10px;top:12px">3</span>
+    <div class="row"><b>Rule "Greenmarket"</b><span class="grow"></span><span class="btn">✕</span></div>
+    <div class="small muted">Created on 4 March while correcting a line</div>
+    <div class="box"><h3>If</h3><div class="row"><span class="sel">Label</span><span class="sel">contains</span><span class="sel" style="flex:1">GREENMARKET</span></div><div style="margin-top:6px"><span class="btn">+ Condition</span></div></div>
+    <div class="box"><h3>Then</h3><dl class="kv" style="grid-template-columns:90px 1fr"><dt>Merchant</dt><dd><span class="sel">Greenmarket</span></dd><dt>Category</dt><dd><span class="sel">Groceries</span></dd><dt>Subjects</dt><dd><span class="btn">+ Add</span></dd><dt>Kind</dt><dd><span class="sel">Expense</span></dd></dl></div>
+    <div class="box" style="position:relative"><span class="n" style="left:-10px;top:-10px">4</span><h3>Effect</h3><div class="small">Applies to 128 existing lines, 3 of which were classified otherwise by hand.</div><div class="row" style="margin-top:6px"><span class="btn">See the 3</span><label class="small"><input type="checkbox"> Reclassify them too</label></div></div>
+    <div class="row"><span class="btn">Delete</span><span class="grow"></span><span class="btn p">Save</span></div>
+  </div>
+</div>
+<div class="notes">
+  <p><b class="k">1</b><b>Settings</b> have their own menu: users, categories, merchants, rules, import profiles, envelopes, investment prices (and turning off the network), data (export, backup).</p>
+  <p><b class="k">2</b><b>Rules as sentences</b> "if… then…", with the number of lines they classified. Most are born from a correction, not from this screen.</p>
+  <p><b class="k">3</b><b>A rule</b>: conditions (label, amount, account, day of the month) and effects (merchant, category, subjects, kind).</p>
+  <p><b class="k">4</b><b>The effect before saving</b>: how many lines it touches, and which ones it contradicts. A correction made by hand is never overwritten without asking.</p>
+</div>
+</section>
+
+<!-- ============ 10. CATEGORIES ============ -->
+<section class="screen" id="categories">
+<h1>10 · Settings: categories and benchmarks</h1>
+<div class="frame" style="grid-template-columns:180px 180px 1fr">
+  <div class="nav"><b>Gousset</b><span>Monthly review</span><span>Operations</span><span>Accounts</span><span>Investments</span><span>Subjects</span><span>Import</span><span class="on" style="margin-top:auto">Settings</span></div>
+  <div class="nav" style="background:#fff"><b>&nbsp;</b><span>Users</span><span class="on">Categories</span><span>Merchants</span><span>Rules</span><span>Import profiles</span><span>Envelopes</span><span>Investment prices</span><span>Data</span></div>
+  <div class="main">
+    <div class="row"><span class="big">Categories</span><span class="grow"></span><span class="btn">+ Category</span></div>
+    <div class="box" style="padding:0"><span class="n" style="left:-10px;top:-10px">1</span>
+      <table><tr><th>Category</th><th class="num">6-month average</th><th>Benchmark</th><th class="num">Lines</th><th></th></tr>
+      <tr><td><b>Housing</b></td><td class="num">€690</td><td>automatic · €690</td><td class="num">24</td><td class="num muted">⋮</td></tr>
+      <tr><td style="padding-left:28px">Loan</td><td class="num">€610</td><td>automatic</td><td class="num">6</td><td class="num muted">⋮</td></tr>
+      <tr><td style="padding-left:28px">Utilities</td><td class="num">€80</td><td>automatic</td><td class="num">18</td><td class="num muted">⋮</td></tr>
+      <tr><td><b>Food</b></td><td class="num">€580</td><td>automatic · €580</td><td class="num">205</td><td class="num muted">⋮</td></tr>
+      <tr><td style="padding-left:28px">Groceries</td><td class="num">€430</td><td>automatic</td><td class="num">135</td><td class="num muted">⋮</td></tr>
+      <tr><td style="padding-left:28px">Restaurants</td><td class="num">€145</td><td><b>set · €130</b></td><td class="num">70</td><td class="num muted">⋮</td></tr>
+      <tr><td><b>Leisure</b></td><td class="num">€160</td><td>none</td><td class="num">41</td><td class="num muted">⋮</td></tr></table></div>
+    <div class="box" style="width:420px;position:relative"><span class="n" style="left:-10px;top:-10px">2</span><h3>A category's ⋮ menu</h3><div class="list"><div>Rename</div><div>Move under…</div><div>Merge with…</div><div>Benchmark: automatic / set / none</div><div>Delete (its lines go to…)</div></div></div>
+  </div>
+</div>
+<div class="notes">
+  <p><b class="k">1</b><b>Categories on two levels</b>, with their average and their benchmark. By default the benchmark follows the average; it can be set or turned off.</p>
+  <p><b class="k">2</b><b>A category's actions</b> in a menu, including merge and delete, saying where its lines go.</p>
+</div>
+</section>
+
+<!-- ============ 11. PHONE ============ -->
+<section class="screen" id="mobile">
+<h1>11 · Monthly review on a phone</h1>
+<div style="display:flex;gap:28px;align-items:flex-start">
+<div style="width:390px;background:#fff;border:1px solid #9a9a9a;display:flex;flex-direction:column;position:relative">
+  <div class="row" style="padding:12px 14px;border-bottom:1px solid #ccc;position:relative"><span class="n" style="left:-28px;top:12px">1</span><span class="btn">‹</span><b class="grow" style="text-align:center">October 2026</b><span class="btn">›</span></div>
+  <div style="padding:12px 14px;display:flex;flex-direction:column;gap:12px">
+    <div class="small muted"><u>6 lines to review ↓</u> · MealCard up to 24 Oct.</div>
+    <div class="box" style="position:relative"><span class="n" style="left:-10px;top:-10px">2</span><b>€3,120 received</b>
+      <div style="display:flex;height:16px;border:1px solid #999;border-radius:3px;overflow:hidden;margin:8px 0 6px"><div style="width:65%;background:#7a7a7a"></div><div style="width:19%;background:#b5b5b5"></div><div style="width:16%;background:#e2e2e2"></div></div>
+      <div class="list small"><div><span class="grow">spent</span><b>€2,030</b></div><div><span class="grow">set aside</span><b>€600</b></div><div><span class="grow">left</span><b>€490</b></div></div></div>
+    <div class="box"><h3>Where the money goes</h3><div class="list small">
+      <div><span style="width:80px">Housing</span><span class="bar"><i style="width:91%"></i></span><span class="num" style="width:50px">€690</span></div>
+      <div><span style="width:80px">Groceries</span><span class="bar"><i style="width:57%"></i></span><span class="num" style="width:50px">€430</span></div>
+      <div><span style="width:80px"><b>Leisure ⚠</b></span><span class="bar"><i style="width:30%"></i></span><span class="num" style="width:50px">€230</span></div>
+      <div class="muted">+ 5 categories</div></div></div>
+    <div class="box" style="position:relative"><span class="n" style="left:-10px;top:-10px">3</span><div class="row"><b class="grow">Movements between your accounts</b><span class="muted">4 ›</span></div></div>
+    <div class="box"><div class="row"><b class="grow">Investments</b><span>€4,180</span><span class="muted">›</span></div></div>
+    <div class="box"><div class="row"><b class="grow">Flagged</b><span class="muted">3 ›</span></div></div>
+    <div class="box"><div class="row"><b class="grow">To review</b><span class="muted">6 ›</span></div></div>
+  </div>
+  <div class="row" style="border-top:1px solid #ccc;padding:10px 14px;justify-content:space-around;position:relative"><span class="n" style="left:-28px;top:10px">4</span><b class="small">Review</b><span class="small muted">Operations</span><span class="small muted">Accounts</span><span class="small muted">More</span></div>
+</div>
+<div class="notes" style="columns:1;border-top:1px solid #c9c9c9;flex:1">
+  <p><b class="k">1</b><b>The month</b> at the top, with its arrows.</p>
+  <p><b class="k">2</b><b>The month bar</b>, with the three amounts listed below it, because the width does not allow writing them under each part.</p>
+  <p><b class="k">3</b><b>Secondary blocks folded</b>: one line each, opening full screen. On a phone, one looks things up; the full review happens at a desk.</p>
+  <p><b class="k">4</b><b>A tab bar</b> at the bottom: Review, Operations, Accounts, and "More" for Investments, Subjects, Import and Settings.</p>
+</div>
+</div>
+</section>
+
+<script>
+const s=new URLSearchParams(location.search).get("s");
+if(s){const el=document.getElementById(s);if(el){document.body.classList.add("solo");el.classList.add("show")}}
+</script>
+</body>
+</html>
