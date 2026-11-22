@@ -1,13 +1,18 @@
-import { HeadContent, Outlet, Scripts, createRootRoute } from "@tanstack/react-router";
+import type { QueryClient } from "@tanstack/react-query";
+import { HeadContent, Outlet, Scripts, createRootRouteWithContext } from "@tanstack/react-router";
 import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
 
+import { Toaster } from "@gousset/ui/components/toaster-stand-in";
 import { ThemeProvider } from "@gousset/ui/components/theme-provider";
 
 import { getViewer } from "@/functions/viewer";
 
 import appCss from "../index.css?url";
 
-export const Route = createRootRoute({
+/** What every route's loader may use: the request's query client. */
+type RouterContext = { queryClient: QueryClient };
+
+export const Route = createRootRouteWithContext<RouterContext>()({
   // Every navigation asks the server who is looking: the guards of the routes below read it.
   beforeLoad: async () => ({ viewer: await getViewer() }),
   head: () => ({
@@ -47,6 +52,7 @@ function RootDocument() {
       <body>
         <ThemeProvider>
           <Outlet />
+          <Toaster />
         </ThemeProvider>
         <TanStackRouterDevtools position="bottom-left" />
         <Scripts />
