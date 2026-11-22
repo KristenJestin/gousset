@@ -1,6 +1,14 @@
 import type { QueryClient } from "@tanstack/react-query";
-import { HeadContent, Outlet, Scripts, createRootRouteWithContext } from "@tanstack/react-router";
-import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
+import { HotkeysProvider } from "@tanstack/react-hotkeys";
+import {
+  ClientOnly,
+  HeadContent,
+  Outlet,
+  Scripts,
+  createRootRouteWithContext,
+  useRouter,
+} from "@tanstack/react-router";
+import { Suspense, lazy } from "react";
 
 import { Toaster } from "@gousset/ui/components/toaster-stand-in";
 import { ThemeProvider } from "@gousset/ui/components/theme-provider";
@@ -8,6 +16,10 @@ import { ThemeProvider } from "@gousset/ui/components/theme-provider";
 import { getViewer } from "@/functions/viewer";
 
 import appCss from "../index.css?url";
+import { Shortcuts, appHotkeys } from "../shortcuts";
+
+// Development only: a production build reads `false` here and drops the import, devtools and all.
+const Devtools = import.meta.env.DEV ? lazy(async () => import("../devtools")) : null;
 
 /** What every route's loader may use: the request's query client. */
 type RouterContext = { queryClient: QueryClient };
@@ -42,6 +54,8 @@ export const Route = createRootRouteWithContext<RouterContext>()({
 
 function RootDocument() {
   const locale = Route.useRouteContext({ select: (context) => context.viewer.locale });
+  // The response's CSP nonce: the request's on the server, read back from the page in the browser.
+  const nonce = useRouter().options.ssr?.nonce;
 
   return (
     // The saved colour scheme lands on <html> before hydration (ThemeProvider).
@@ -50,11 +64,20 @@ function RootDocument() {
         <HeadContent />
       </head>
       <body>
-        <ThemeProvider>
-          <Outlet />
+        <ThemeProvider nonce={nonce}>
+          <HotkeysProvider appHotkeys={appHotkeys}>
+            <Outlet />
+            <Shortcuts />
+          </HotkeysProvider>
           <Toaster />
         </ThemeProvider>
-        <TanStackRouterDevtools position="bottom-left" />
+        {Devtools === null ? null : (
+          <ClientOnly>
+            <Suspense>
+              <Devtools />
+            </Suspense>
+          </ClientOnly>
+        )}
         <Scripts />
       </body>
     </html>

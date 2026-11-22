@@ -70,6 +70,21 @@ const en = {
     approveFailed: "The line could not be approved; it is back in the list.",
     alreadyReviewed: "This line was already reviewed elsewhere.",
   },
+  dialog: {
+    close: "Close",
+  },
+  shortcuts: {
+    title: "Keyboard shortcuts",
+    // By the id of each app hotkey (apps/web/src/shortcuts.tsx).
+    hotkeys: {
+      "shortcuts.show": "Show keyboard shortcuts",
+      "search.open": "Search",
+    },
+  },
+  search: {
+    title: "Search",
+    empty: "Nothing to search yet.",
+  },
   errors: {
     invalidCredentials: "Wrong e-mail or password.",
     tooManyAttempts: "Too many failed attempts. Try again in a few minutes.",
@@ -156,7 +171,20 @@ const fr: Messages = {
     approveFailed: "La ligne n'a pas pu être validée ; elle est de retour dans la liste.",
     alreadyReviewed: "Cette ligne a déjà été revue ailleurs.",
   },
-
+  dialog: {
+    close: "Fermer",
+  },
+  shortcuts: {
+    title: "Raccourcis clavier",
+    hotkeys: {
+      "shortcuts.show": "Afficher les raccourcis clavier",
+      "search.open": "Rechercher",
+    },
+  },
+  search: {
+    title: "Recherche",
+    empty: "Rien à rechercher pour l'instant.",
+  },
   errors: {
     invalidCredentials: "E-mail ou mot de passe incorrect.",
     tooManyAttempts: "Trop de tentatives échouées. Réessayez dans quelques minutes.",
