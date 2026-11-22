@@ -156,8 +156,8 @@ test("every route renders signed in at 1440 px and at 390 px, light and dark, in
   }
 });
 
-// "A test fails when a component holds text outside the messages": a unit test, since it is the
-// lint that refuses it (tools/lint/gousset/no-text-outside-messages.test.ts, run by `vp test`).
+// "A test fails when a component holds text outside the messages": it is the lint that refuses
+// it, so the scenario runs `vp lint` on probes, in packages/ui/e2e/lint.e2e.ts (`lint` project).
 
 test("the sidebar names every screen, the current one marked", async ({ userPage }) => {
   test.skip(onPhone(userPage), "The sidebar is the desktop's; the tab bar has its own test.");
