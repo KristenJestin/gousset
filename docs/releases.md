@@ -19,15 +19,18 @@ One `Dockerfile`, at the root of the repository, makes one image for everything 
   jobs, on port 3001, as the unprivileged user `node`.
 - **`migrate`**: applies Drizzle's migrations (`packages/db/src/migrations`) to `DATABASE_URL`,
   then exits. It is safe to run again: what is applied is not applied twice.
-- **`GET /health`**: the container's health check. It answers 200 once the auth configuration
-  loaded, and 503 otherwise (in production better-auth refuses to start without
-  `BETTER_AUTH_SECRET`): an app whose sign-in is broken is not healthy. It needs no session and
-  reads nothing private; it does not query the database, so that a database restart does not get
-  the app restarted too.
+- **`GET /health`**: the container's health check. It answers 200 only when the app can serve
+  someone: the auth configuration loaded (in production better-auth refuses to start without
+  `BETTER_AUTH_SECRET`) and the database answers `select 1` with the credentials given; 503
+  otherwise. It needs no session and reads nothing private. Compose restarts nothing on an
+  unhealthy check: it reports it (`docker compose ps`).
 
 **Secrets come from files.** For each variable `<NAME>_FILE`, the entry point
 (`tools/docker-entrypoint.sh`) reads the file it names into `<NAME>`, as Compose's `secrets:`
-provide them; setting both is refused. The environment is read when the server starts (Varlock
+provide them; setting both is refused. **`DATABASE_PASSWORD`**, when set, is put into
+`DATABASE_URL` (which then carries no password) percent-encoded: a password pasted raw into a URL
+breaks on `/`, `#`, `@` or `%`, and about half of `openssl rand -base64 32` outputs hold a `/`.
+Any password works this way. The environment is read when the server starts (Varlock
 checks it against `apps/web/.env.schema`), never at build time: the build needs no secret.
 
 To build it and try it as an installation would, in a clone:
@@ -38,9 +41,10 @@ tools/check-image.sh local
 ```
 
 `tools/check-image.sh <tag>` installs that image with `docker-compose.yml` on a fresh project and
-volume, with secrets made for the run, checks that `migrate` succeeded, that `/health` answers 200
-and that the app serves its page, then that the image alone, without `BETTER_AUTH_SECRET`, is not
-healthy; it removes everything it started, whatever happened. The beta workflow runs it on every
+volume, with secrets made for the run (the database password holds `/ # ? @ : % + = &` and a
+space), checks that `migrate` succeeded, that `/health` answers 200 and that the app serves its
+page, then that the image is not healthy without `BETTER_AUTH_SECRET`, nor with a wrong database
+password; it removes everything it started, whatever happened. The beta workflow runs it on every
 beta before publishing it.
 
 ## Installing
@@ -53,11 +57,14 @@ port of the host; only the app is.
 mkdir gousset && cd gousset
 curl -fsSLO https://raw.githubusercontent.com/KristenJestin/gousset/main/docker-compose.yml
 mkdir -p secrets
-openssl rand -hex 32 > secrets/postgres_password
-echo "postgresql://gousset:$(cat secrets/postgres_password)@postgres:5432/gousset" > secrets/database_url
+openssl rand -base64 32 > secrets/postgres_password
 openssl rand -base64 32 > secrets/better_auth_secret
 docker compose up -d
 ```
+
+Both secrets are required: without either file Compose refuses to start, and nothing falls back
+to a default password. `migrate` and the app get the database password from the same file as
+Postgres (`DATABASE_PASSWORD_FILE`), never written into a URL.
 
 Variables, from the shell or a `.env` file beside `docker-compose.yml`:
 
@@ -75,8 +82,23 @@ installation unless its owner wants it to.
 
 **Updating**: `docker compose pull && docker compose up -d`; `migrate` runs again before the app.
 
+**Changing the database password.** Postgres takes `secrets/postgres_password` when its volume is
+first made, and never reads it again: changing the file alone leaves the database on the old
+password, `migrate` fails and `/health` answers 503. Change it in the database first, then in the
+file, then restart:
+
+```sh
+docker compose exec postgres psql -U gousset -d gousset -c "ALTER USER gousset PASSWORD 'the new one'"
+# write the new one into secrets/postgres_password
+docker compose up -d --force-recreate
+```
+
+(or start over on a fresh volume, `docker compose down --volumes`, which deletes all the data).
+
 In a clone, `docker compose up --build` builds the image instead of pulling it. The database of
-development is another file, `docker-compose.dev.yml` (`pnpm db:start`), on `127.0.0.1:5432`.
+development is another file, `docker-compose.dev.yml` (`pnpm db:start`): another Compose project
+(`gousset-dev`) with its own volume, on `127.0.0.1:5432`, so that it never shares a database, and
+so a password, with an installation.
 
 ## The version
 

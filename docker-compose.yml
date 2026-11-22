@@ -1,11 +1,13 @@
 # Gousset at home (docs/releases.md, "Installing"): Postgres 18, the `migrate` one-shot, then the
-# app on http://localhost:3001. The secrets are files of ./secrets, made once:
+# app on http://localhost:3001. The secrets are files of ./secrets, both required, made once:
 #
 #   mkdir -p secrets
-#   openssl rand -hex 32 > secrets/postgres_password
-#   echo "postgresql://gousset:$(cat secrets/postgres_password)@postgres:5432/gousset" > secrets/database_url
+#   openssl rand -base64 32 > secrets/postgres_password
 #   openssl rand -base64 32 > secrets/better_auth_secret
 #   docker compose up -d
+#
+# Postgres takes its password when its volume is first made, and only then: to change it later,
+# change it in the database too (docs/releases.md, "Changing the database password").
 #
 # Variables, from the shell or a .env file beside this one:
 #   GOUSSET_VERSION              the image's tag: latest (the last release), beta, or a version
@@ -43,10 +45,12 @@ services:
   migrate:
     <<: *gousset
     command: migrate
-    environment:
-      DATABASE_URL_FILE: /run/secrets/database_url
+    # The password apart: the image puts it into the URL percent-encoded, whatever it holds.
+    environment: &database
+      DATABASE_URL: postgresql://gousset@postgres:5432/gousset
+      DATABASE_PASSWORD_FILE: /run/secrets/postgres_password
     secrets:
-      - database_url
+      - postgres_password
     depends_on:
       postgres:
         condition: service_healthy
@@ -55,14 +59,14 @@ services:
   web:
     <<: *gousset
     environment:
+      <<: *database
       BETTER_AUTH_URL: ${BETTER_AUTH_URL:-http://localhost:3001}
       BETTER_AUTH_SECRET_FILE: /run/secrets/better_auth_secret
-      DATABASE_URL_FILE: /run/secrets/database_url
       # Passed on only when set: unset, the app sends no telemetry.
       OTEL_EXPORTER_OTLP_ENDPOINT:
     secrets:
       - better_auth_secret
-      - database_url
+      - postgres_password
     ports:
       - "${GOUSSET_PORT:-3001}:3001"
     depends_on:
@@ -73,8 +77,6 @@ services:
 secrets:
   postgres_password:
     file: ./secrets/postgres_password
-  database_url:
-    file: ./secrets/database_url
   better_auth_secret:
     file: ./secrets/better_auth_secret
 
