@@ -74,7 +74,7 @@ From Anthropic's [Writing effective tools for agents](https://www.anthropic.com/
 
 4. **Every user comes in through OAuth**, from any MCP client, and sees only their own data. better-auth serves the authorization: `@better-auth/mcp` (OAuth 2.1, protected resource metadata, resource-bound tokens) with `@better-auth/cimd` (Client ID Metadata Documents). Dynamic client registration stays off.
 5. **Two scopes, chosen on the consent page**: **read**, or **read and write**. A write is refused to a token without the write scope, and the refusal says how to get it.
-6. A user sees and revokes their connected clients in their settings.
+6. A user sees and revokes their connected clients in their settings. A client's access does not depend on the browser session: a revoke, a password change or a ban cuts it at once, signing out does not.
 
 ### Tools
 

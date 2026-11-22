@@ -1,4 +1,4 @@
-import { Outlet, createFileRoute, redirect } from "@tanstack/react-router";
+import { Outlet, createFileRoute, redirect, useLocation } from "@tanstack/react-router";
 
 import { Frame } from "@/components/frame";
 
@@ -30,9 +30,11 @@ export const Route = createFileRoute("/_authed")({
 
 function Authed() {
   const { user } = Route.useRouteContext();
+  const { pathname } = useLocation();
 
-  // A temporary password is changed alone on its page, before the app opens.
-  if (user.mustChangePassword) {
+  // A temporary password is changed alone on its page, before the app opens; an MCP client's
+  // consent stands alone too, a stop on the way back to that client rather than a screen of the app.
+  if (user.mustChangePassword || pathname === "/consent") {
     return <Outlet />;
   }
 

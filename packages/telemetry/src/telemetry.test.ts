@@ -18,6 +18,7 @@ import {
   disallowedAttributes,
   fromPromise,
   layer,
+  mcpToolCall,
   privacyTracer,
   requestSpan,
   serverFunctionSpan,
@@ -105,6 +106,70 @@ describe("span attributes", () => {
       disallowedAttributes(spans.flatMap(({ attributes }) => Array.from(attributes.keys()))),
     ).toEqual(["merchant.name"]);
     expect(ALLOWED_SPAN_ATTRIBUTES).not.toContain("merchant.name");
+  });
+});
+
+describe("an MCP tool call", () => {
+  test("yields one span with exactly its tool, its action and its outcome", async () => {
+    const { spans, tracer } = recording();
+
+    const answer = await Effect.runPromise(
+      mcpToolCall("month", async (report) => {
+        report("summary", "ok");
+
+        return PRIVATE;
+      }).pipe(Effect.provideService(Tracer.Tracer, tracer)),
+    );
+
+    expect(answer).toBe(PRIVATE);
+    expect(spans).toHaveLength(1);
+
+    const [span] = spans;
+
+    expect(span?.name).toBe("mcp tool call");
+    expect(Object.fromEntries(span?.attributes ?? [])).toEqual({
+      "gousset.mcp.tool": "month",
+      "gousset.mcp.action": "summary",
+      "gousset.mcp.outcome": "ok",
+    });
+    expect(span?.status._tag).toBe("Ended");
+  });
+
+  test("reaches the collector under its own name, with nothing else", async () => {
+    const receiver = await startOtlpReceiver();
+
+    try {
+      const runtime = ManagedRuntime.make(
+        configured({ OTEL_EXPORTER_OTLP_ENDPOINT: receiver.url }).pipe(
+          Layer.provide(TestConsole.layer),
+        ),
+      );
+
+      await runtime.runPromise(
+        mcpToolCall("month", async (report) => {
+          report("summary", "refused");
+
+          return PRIVATE;
+        }),
+      );
+      await runtime.dispose();
+
+      const [span, ...others] = receiver.spans();
+
+      expect(others).toEqual([]);
+      expect(span?.name).toBe("mcp tool call");
+      expect(span?.attributes.map(({ key }) => key).toSorted()).toEqual([
+        "gousset.mcp.action",
+        "gousset.mcp.outcome",
+        "gousset.mcp.tool",
+      ]);
+
+      for (const { body } of receiver.received()) {
+        expect(body).not.toContain("Chez Martine");
+      }
+    } finally {
+      await receiver.close();
+    }
   });
 });
 
