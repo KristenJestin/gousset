@@ -18,7 +18,7 @@ export function ShortcutList({ shortcuts }: { readonly shortcuts: ReadonlyArray<
         <div key={id} className="flex items-center justify-between gap-4 py-2">
           <dt className="text-sm">{label}</dt>
           <dd>
-            <kbd className="rounded-md bg-muted px-1.5 py-0.5 font-mono text-xs text-muted-foreground">
+            <kbd className="rounded-md bg-muted px-1.5 py-0.5 font-mono text-xs text-foreground">
               {keys}
             </kbd>
           </dd>
