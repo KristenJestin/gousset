@@ -18,6 +18,24 @@ const en = {
     nextMonth: "Next month",
     remove: (name: string) => `Remove ${name}`,
   },
+  money: {
+    /** After the amount: "€3,120 received". */
+    received: "received",
+    /** Each part of the month bar, after its amount. */
+    roles: { spent: "spent", saved: "set aside", left: "left" },
+    /** In place of "left" when more went out than came in. */
+    overspent: "overspent",
+    /** The month bar's parts, as a group. */
+    parts: "The month's money, by part",
+    /** A change and what it is against ("5%", "your 6-month average"). */
+    deltaMore: (change: string, reference: string) => `${change} more than ${reference}`,
+    deltaLess: (change: string, reference: string) => `${change} less than ${reference}`,
+    deltaSteady: (reference: string) => `About the same as ${reference}`,
+    overBenchmark: "Above the benchmark",
+    benchmark: (amount: string) => `benchmark ${amount}`,
+    moreRows: (count: number) => `+ ${count} more`,
+    empty: "Nothing to show this month.",
+  },
 };
 
 export type UiMessages = typeof en;
@@ -35,6 +53,19 @@ const fr: UiMessages = {
     previousMonth: "Mois précédent",
     nextMonth: "Mois suivant",
     remove: (name: string) => `Retirer ${name}`,
+  },
+  money: {
+    received: "reçus",
+    roles: { spent: "dépensés", saved: "mis de côté", left: "restants" },
+    overspent: "de dépassement",
+    parts: "L’argent du mois, par part",
+    deltaMore: (change: string, reference: string) => `${change} de plus que ${reference}`,
+    deltaLess: (change: string, reference: string) => `${change} de moins que ${reference}`,
+    deltaSteady: (reference: string) => `À peu près comme ${reference}`,
+    overBenchmark: "Au-dessus du repère",
+    benchmark: (amount: string) => `repère ${amount}`,
+    moreRows: (count: number) => `+ ${count} de plus`,
+    empty: "Rien à afficher ce mois-ci.",
   },
 };
 

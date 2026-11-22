@@ -31,6 +31,7 @@ import {
   IconHome,
   IconInbox,
   IconInfoCircle,
+  IconMinus,
   IconMovie,
   IconPaw,
   IconPhone,
@@ -81,6 +82,8 @@ export const interfaceIcons = {
   wallet: IconWallet,
   savings: IconPigMoney,
   merchant: IconReceipt,
+  // Money (Delta): a change too small to count.
+  steady: IconMinus,
 } as const;
 
 /**
