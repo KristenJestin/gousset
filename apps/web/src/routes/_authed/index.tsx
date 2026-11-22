@@ -126,7 +126,8 @@ function Review() {
   // Changing month keeps the month on screen until the next one has its data; then the bars and
   // amounts move to their new values.
   const shown = useDeferredValue(month);
-  const linesToReview = useQuery(monthQueries.toReview(shown)).data?.count ?? 0;
+  // Unknown while it loads: the block is there, with its skeleton, until the month has no line.
+  const linesToReview = useQuery(monthQueries.toReview(shown)).data?.count;
   const locale = getLocale();
 
   // The months a press away are loaded before the press.
@@ -195,9 +196,11 @@ function Review() {
               title={m.reviewToReviewTitle()}
               anchor={TO_REVIEW}
               badge={
-                <CountChip>
-                  <Count value={linesToReview} locale={locale} />
-                </CountChip>
+                linesToReview === undefined ? undefined : (
+                  <CountChip>
+                    <Count value={linesToReview} locale={locale} />
+                  </CountChip>
+                )
               }
               foldOnPhone
               skeleton={<ReviewLinesSkeleton rows={LINES_TO_REVIEW} more />}
