@@ -6,48 +6,54 @@ const story = (name: string) => `/iframe.html?id=actions-button--${name}&viewMod
 /**
  * Clicks the story's button (a real pointer click, as ui-sdk listens to it) and samples, at every
  * frame for `forMs` from the press, when the loader is drawn: the times it first and last
- * showed, or null if it never did.
+ * showed, or null if it never did. The listener is in place before the click, and the result is
+ * written on the button (`data-loader-first`, `data-loader-last`), so a click that came first
+ * cannot leave the test waiting forever.
  */
 async function loaderTimeline(page: Page, forMs: number) {
   const button = page.getByRole("button");
 
-  const timeline = button.evaluate(
-    (element, duration) =>
-      new Promise<{ first: number | null; last: number | null }>((resolve) => {
-        let first: number | null = null;
-        let last: number | null = null;
+  await button.evaluate((element, duration) => {
+    let first: number | null = null;
+    let last: number | null = null;
 
-        element.addEventListener(
-          "pointerdown",
-          () => {
-            const start = performance.now();
+    element.addEventListener(
+      "pointerdown",
+      () => {
+        const start = performance.now();
 
-            const sample = () => {
-              const now = performance.now() - start;
+        const sample = () => {
+          const now = performance.now() - start;
 
-              if (element.querySelector('[data-slot="loader"]') !== null) {
-                first ??= now;
-                last = now;
-              }
+          if (element.querySelector('[data-slot="loader"]') !== null) {
+            first ??= now;
+            last = now;
+          }
 
-              if (now < duration) {
-                requestAnimationFrame(sample);
-              } else {
-                resolve({ first, last });
-              }
-            };
-
+          if (now < duration) {
             requestAnimationFrame(sample);
-          },
-          { once: true },
-        );
-      }),
-    forMs,
-  );
+          } else {
+            element.dataset.loaderFirst = first === null ? "none" : String(first);
+            element.dataset.loaderLast = last === null ? "none" : String(last);
+          }
+        };
+
+        requestAnimationFrame(sample);
+      },
+      { once: true },
+    );
+  }, forMs);
 
   await button.click();
+  await expect(button).toHaveAttribute("data-loader-last", /.+/, { timeout: forMs + 5000 });
 
-  return timeline;
+  const read = async (name: string) => {
+    const value = await button.getAttribute(name);
+
+    return value === null || value === "none" ? null : Number(value);
+  };
+
+  return { first: await read("data-loader-first"), last: await read("data-loader-last") };
 }
 
 test("a loading button is disabled, busy, keeps its width and shows the loader", async ({
