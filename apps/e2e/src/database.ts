@@ -3,7 +3,6 @@ import { randomBytes } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
-import { Schema } from "effect";
 import pg from "pg";
 
 import { harness } from "./config";
@@ -38,7 +37,7 @@ export function templateDatabase(run = currentRunId()): string {
   return `gousset_e2e_${run}_template`;
 }
 
-/** The drizzle-kit configuration that pushes Gousset's schema, reading its URL from the environment. */
+/** The drizzle-kit configuration that applies Gousset's migrations, reading its URL from the environment. */
 const DRIZZLE_CONFIG = fileURLToPath(new URL("../drizzle.config.ts", import.meta.url));
 
 /**
@@ -46,9 +45,6 @@ const DRIZZLE_CONFIG = fileURLToPath(new URL("../drizzle.config.ts", import.meta
  * Postgres refuses to copy a template in use.
  */
 const DRIZZLE_KIT = fileURLToPath(new URL("../node_modules/.bin/drizzle-kit", import.meta.url));
-
-/** The last line drizzle-kit prints with `--output json`. */
-const PushAnswer = Schema.Struct({ status: Schema.String });
 
 /** One database per worker slot: a worker that restarts after a failure gets a fresh clone. */
 export function workerDatabaseName(parallelIndex: number, run = currentRunId()): string {
@@ -119,46 +115,34 @@ export async function dropDatabase(database: string): Promise<void> {
 }
 
 /**
- * Pushes the schema into a database with drizzle-kit, and gives what it printed. The URL goes
- * through the environment, never the command line, where any local user could read its password.
+ * Applies the migrations of `packages/db` to a database with drizzle-kit. They hold more than the
+ * Drizzle schema (the first user's unique index is a migration of its own), so pushing the schema
+ * would not build the same database. The URL goes through the environment, never the command
+ * line, where any local user could read its password.
  */
-async function pushSchema(database: string): Promise<string> {
+async function migrate(database: string): Promise<void> {
   try {
-    const { stdout } = await promisify(execFile)(
-      DRIZZLE_KIT,
-      ["push", `--config=${DRIZZLE_CONFIG}`, "--force", "--output=json"],
-      {
-        // The configuration's paths are relative to apps/e2e.
-        cwd: fileURLToPath(new URL("..", import.meta.url)),
-        env: { ...process.env, E2E_SCHEMA_URL: databaseUrl(database) },
-      },
-    );
-
-    return stdout;
+    await promisify(execFile)(DRIZZLE_KIT, ["migrate", `--config=${DRIZZLE_CONFIG}`], {
+      // The configuration's paths are relative to apps/e2e.
+      cwd: fileURLToPath(new URL("..", import.meta.url)),
+      env: { ...process.env, E2E_SCHEMA_URL: databaseUrl(database) },
+    });
   } catch {
     throw new Error(
-      `drizzle-kit could not push the schema into ${database}: run \`pnpm db:push\` against it to see why.`,
+      `drizzle-kit could not migrate ${database}: run \`pnpm db:migrate\` against it to see why.`,
     );
   }
 }
 
 /**
- * Builds the template: the schema, then the shared made-up data of `packages/fixture`. There are
- * no migrations yet, so the schema is pushed; once `packages/db` has migrations, this applies them
- * instead, the way an installation does.
+ * Builds the template: the migrations of `packages/db`, as an installation applies them, then the
+ * shared made-up data of `packages/fixture`.
  */
 export async function prepareTemplate(): Promise<void> {
   const template = templateDatabase();
 
   await recreateDatabase(template);
-
-  const stdout = await pushSchema(template);
-  const lastLine = stdout.trim().split("\n").at(-1) ?? "";
-  const answer = Schema.decodeUnknownSync(Schema.fromJsonString(PushAnswer))(lastLine);
-
-  if (answer.status !== "ok" && answer.status !== "no_changes") {
-    throw new Error(`The schema could not be pushed into ${template}: ${lastLine}`);
-  }
+  await migrate(template);
 
   // The fixture's seed goes here once Gousset has tables of its own beyond the accounts of
   // better-auth: the template is the one place it is written, every worker gets a copy.
@@ -185,7 +169,25 @@ export async function hasUser(database: string, email: string): Promise<boolean>
   await client.connect();
 
   try {
-    const result = await client.query('SELECT 1 FROM "user" WHERE email = $1', [email]);
+    const result = await client.query('SELECT 1 FROM "auth_user" WHERE email = $1', [email]);
+
+    return result.rowCount === 1;
+  } finally {
+    await client.end();
+  }
+}
+
+/** Whether a unique index of that name exists in a database. */
+export async function hasUniqueIndex(database: string, name: string): Promise<boolean> {
+  const client = new pg.Client({ connectionString: databaseUrl(database) });
+
+  await client.connect();
+
+  try {
+    const result = await client.query(
+      "SELECT 1 FROM pg_indexes WHERE schemaname = 'public' AND indexname = $1 AND indexdef LIKE 'CREATE UNIQUE INDEX%'",
+      [name],
+    );
 
     return result.rowCount === 1;
   } finally {

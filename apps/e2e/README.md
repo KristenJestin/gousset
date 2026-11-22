@@ -28,7 +28,8 @@ screenshots are kept in `test-results/`, with each worker's app log (`app-<proje
 ## How a run is isolated
 
 Global setup draws a run id and builds a template database (`gousset_e2e_<run>_template`): the
-schema of `packages/db`, then the shared made-up data of `packages/fixture`. Each worker clones
+migrations of `packages/db`, as an installation applies them, then the shared made-up data of
+`packages/fixture`. Each worker clones
 it (`gousset_e2e_<run>_worker_<n>`, `CREATE DATABASE … TEMPLATE`) and starts its own app on a
 free port against its clone, so tests run in parallel and never see each other's rows. The run
 id keeps two runs on one Postgres (two worktrees on `pnpm db:start`) apart. Databases are

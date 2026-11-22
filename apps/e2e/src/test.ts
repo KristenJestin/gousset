@@ -6,7 +6,7 @@ import type { Page } from "@playwright/test";
 import { expectAccessible } from "./accessibility";
 import { startWorkerEnvironment } from "./app-server";
 import type { WorkerEnvironment } from "./app-server";
-import { madeUpUser, signUp } from "./auth";
+import { addUser, madeUpUser, signUp } from "./auth";
 import type { TestUser } from "./auth";
 import { writeStatements } from "./statements";
 import type { StatementPaths } from "./statements";
@@ -14,9 +14,12 @@ import type { StatementPaths } from "./statements";
 type WorkerFixtures = {
   /** This worker's app, on its own database cloned from the template. */
   app: WorkerEnvironment;
-  /** A user signed up through the app once per worker. */
+  /** The first user of the worker's app, signed up through the first visit: the administrator. */
   user: TestUser;
-  /** Another user of the same installation, to prove one never sees the other's data. */
+  /**
+   * Another user of the same installation, created by the administrator, temporary password
+   * already changed: to prove one never sees the other's data.
+   */
   secondUser: TestUser;
 };
 
@@ -75,8 +78,8 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
   ],
 
   secondUser: [
-    async ({ app }, provide) => {
-      await provide(await signUp(app.baseURL, madeUpUser("second", app.slot)));
+    async ({ app, user }, provide) => {
+      await provide(await addUser(app.baseURL, user, madeUpUser("second", app.slot)));
     },
     { scope: "worker" },
   ],
@@ -135,7 +138,7 @@ export { expect } from "@playwright/test";
 
 export { expectAccessible, visit } from "./accessibility";
 
-export { SIGN_IN_PATH, SIGN_UP_PATH } from "./auth";
+export { SIGN_IN_PATH, SIGN_UP_PATH, createUser, signInStatus } from "./auth";
 
 export { fixDay } from "./clock";
 
