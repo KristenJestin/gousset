@@ -1,11 +1,16 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { spendingRows, toChartValue } from "./chart-amounts";
+import { monthBars, spendingRows, toChartValue } from "./chart-amounts";
 
 const day = (date: number, current: number | null, previous: number | null) => ({
   date: new Date(2026, 9, date),
   current,
   previous,
+});
+
+const month = (year: number, index: number) => ({
+  date: new Date(year, index, 1),
+  amount: { minor: 1000, currency: "EUR" },
 });
 
 describe("chart amounts", () => {
@@ -28,5 +33,20 @@ describe("chart amounts", () => {
     expect(rows[1]?.currentMinor).toBe(2550);
     expect(rows[1]?.previousMinor).toBe(500);
     expect(spendingRows([day(1, null, 500)], "EUR")).toEqual([]);
+  });
+
+  it("names each bar by its short month, with the year once a month comes back", () => {
+    expect(monthBars([month(2026, 8), month(2026, 9)], "en").map((bar) => bar.name)).toEqual([
+      "Sep",
+      "Oct",
+    ]);
+
+    // Thirteen months, October twice: every name stays unique, so no two bars share a band.
+    const year = Array.from({ length: 13 }, (_, index) => month(2025, 9 + index));
+    const names = monthBars(year, "en").map((bar) => bar.name);
+
+    expect(new Set(names).size).toBe(13);
+    expect(names[0]).toBe("Oct 25");
+    expect(names[12]).toBe("Oct 26");
   });
 });
