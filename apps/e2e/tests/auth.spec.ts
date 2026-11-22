@@ -3,6 +3,7 @@ import { hasUniqueIndex, hasUser } from "../src/database";
 import { openAccountMenu } from "../src/frame";
 import {
   SIGN_UP_PATH,
+  animationsDone,
   createUser,
   expect,
   expectAccessible,
@@ -42,6 +43,8 @@ test("the first visit creates the administrator", async ({ page, app }, testInfo
     await page.keyboard.press("Escape");
     expect(await hasUser(fresh.database, "ada@example.com")).toBe(true);
 
+    // The menu fades out: axe would measure its items' contrast halfway.
+    await animationsDone(page);
     await expectAccessible(page);
 
     // The first setup is gone once the administrator exists.
