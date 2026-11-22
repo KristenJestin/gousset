@@ -25,9 +25,11 @@ export default defineConfig({
     headless: true,
   },
   projects: [
-    { name: "chromium", use: { ...devices["Desktop Chrome"] } },
-    { name: "firefox", use: { ...devices["Desktop Firefox"] } },
-    { name: "phone", use: { ...devices["Pixel 7"] } },
+    { name: "chromium", use: { ...devices["Desktop Chrome"] }, testIgnore: "**/lint.e2e.ts" },
+    { name: "firefox", use: { ...devices["Desktop Firefox"] }, testIgnore: "**/lint.e2e.ts" },
+    { name: "phone", use: { ...devices["Pixel 7"] }, testIgnore: "**/lint.e2e.ts" },
+    // `vp lint` on a page: no browser, run once.
+    { name: "lint", testMatch: "**/lint.e2e.ts" },
   ],
   webServer: {
     command: `storybook build --quiet && vp preview --outDir storybook-static --port ${PORT} --strictPort`,
