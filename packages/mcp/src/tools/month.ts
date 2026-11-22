@@ -98,7 +98,8 @@ function figures(summary: MonthSummary): string {
   return [received, spent, `Set aside: ${amount(summary.setAside)}`, left].join("\n");
 }
 
-function breakdown(title: string, spending: Spending): string {
+/** A grouping's rows, then what still waits in the review; exported for its tests. */
+export function breakdown(title: string, spending: Spending): string {
   const rows = spending.rows.map((row) =>
     row.benchmark === null
       ? `- ${row.name}: ${amount(row.amount)}`
@@ -111,7 +112,9 @@ function breakdown(title: string, spending: Spending): string {
       : [];
 
   if (rows.length === 0) {
-    return [`${title} nothing reviewed yet.`, ...pending].join("\n");
+    return pending.length === 0
+      ? `${title} nothing spent.`
+      : [`${title} nothing reviewed yet.`, ...pending].join("\n");
   }
 
   return [title, ...rows, ...pending].join("\n");
@@ -224,20 +227,19 @@ const reviewText = (
     flagsText(parts[4]),
   ].join("\n\n");
 
-/** A month outside what Gousset reads: refused, saying which months it reads. */
-function refusingOutside<A, R>(
-  answer: Effect.Effect<A, MonthOutOfRange, R>,
-): Effect.Effect<A, ToolRefusal, R> {
-  return answer.pipe(
-    Effect.catchTag("MonthOutOfRange", (outside) =>
-      Effect.fail(
-        new ToolRefusal({
-          message: `Gousset reads months from ${outside.earliest} to ${outside.latest}: ${outside.month} is outside. Ask for a month in that range.`,
-          example: `month ${JSON.stringify({ action: "summary", month: "2026-10" })}`,
-        }),
+/** A month outside what Gousset reads: refused, saying which months it reads, for the same action. */
+function refusingOutside(action: "summary" | "review") {
+  return <A, R>(answer: Effect.Effect<A, MonthOutOfRange, R>): Effect.Effect<A, ToolRefusal, R> =>
+    answer.pipe(
+      Effect.catchTag("MonthOutOfRange", (outside) =>
+        Effect.fail(
+          new ToolRefusal({
+            message: `Gousset reads months from ${outside.earliest} to ${outside.latest}: ${outside.month} is outside. Ask for a month in that range.`,
+            example: `month ${JSON.stringify({ action, month: "2026-10" })}`,
+          }),
+        ),
       ),
-    ),
-  );
+    );
 }
 
 /** The month family (docs/mcp.md, "Tools"): v0.1 reads the made-up month. */
@@ -260,7 +262,7 @@ export const monthTool = defineTool<typeof MonthInput.Type, typeof MonthInput.En
           const month = yield* wanted;
 
           return summaryText(yield* monthOverview(caller.userId, month));
-        }).pipe(refusingOutside);
+        }).pipe(refusingOutside(input.action));
       }
 
       case "review": {
@@ -277,7 +279,7 @@ export const monthTool = defineTool<typeof MonthInput.Type, typeof MonthInput.En
           ]);
 
           return reviewText(summary, parts);
-        }).pipe(refusingOutside);
+        }).pipe(refusingOutside(input.action));
       }
     }
   },

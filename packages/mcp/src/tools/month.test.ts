@@ -14,6 +14,7 @@ import { describe, expect, test } from "vite-plus/test";
 
 import { goussetServer } from "../gousset";
 import { RESULT_LIMIT } from "../results";
+import { breakdown } from "./month";
 import { callText, connectInProcess } from "../test-client";
 import type { Runner } from "../tool";
 
@@ -116,7 +117,14 @@ describe("month summary", () => {
   });
 
   test("every month of the made-up data answers in one part, under the limit", async () => {
-    for (const wanted of ["2025-11", "2026-01", "2026-06", "2026-10", "2026-11"]) {
+    // Every month a user reads in v0.1: the year before today, and today's month.
+    const months = Array.from({ length: 13 }, (_, index) => {
+      const date = new Date(Date.UTC(2025, 10 + index, 1));
+
+      return date.toISOString().slice(0, 7);
+    });
+
+    for (const wanted of months) {
       for (const action of ["summary", "review"]) {
         const { text, isError } = await month({ action, month: wanted });
 
@@ -174,8 +182,35 @@ describe("month summary", () => {
   });
 });
 
+describe("an empty grouping", () => {
+  const empty = {
+    month: "2026-10",
+    by: "subject" as const,
+    rows: [],
+    pending: { minor: 0, currency: "EUR" },
+    total: { minor: 0, currency: "EUR" },
+  };
+
+  test("says nothing was spent when nothing waits either", () => {
+    expect(breakdown("By subject:", empty)).toBe("By subject: nothing spent.");
+  });
+
+  test("says nothing is reviewed yet when something waits", () => {
+    expect(breakdown("By subject:", { ...empty, pending: { minor: 4146, currency: "EUR" } })).toBe(
+      "By subject: nothing reviewed yet.\nNot counted above until its lines are reviewed: 41.46 EUR.",
+    );
+  });
+});
+
 describe("month review", () => {
   const OCTOBER = "2026-10";
+
+  test("refuses a month too far from today with a valid call of the same action", async () => {
+    const { text, isError } = await month({ action: "review", month: "0042-03" });
+
+    expect(isError).toBe(true);
+    expect(text).toContain('A valid call: month {"action":"review","month":"2026-10"}');
+  });
 
   test("tells the imports, the lines to review, the movements, the investments and the flags", async () => {
     const { text, isError } = await month({ action: "review", month: OCTOBER });
