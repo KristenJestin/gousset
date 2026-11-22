@@ -245,6 +245,12 @@ The lead reviews every change to the tools against `docs/mcp.md` before merging.
   requests or commits: no real person's bank, employer, amount, account number, IBAN or address;
   no private path, host, account or token. Examples and fixtures are invented.
 - Secrets are never printed, logged or committed; `.env` files stay out of Git.
+- **`tools/privacy-check.sh`** guards it, before each commit and on every pull request: no e-mail
+  address outside `example.com` and `example.org`, no IBAN but the invented ones of
+  `packages/fixture/src/ibans.ts` (as the base branch has them), no absolute home path, no word
+  of the private list (a file named by `GOUSSET_PRIVATE_WORDS`, kept outside the repository). A
+  commit's author and committer are the public identity their owner chose: they are held to the
+  private list, home paths and IBANs, not to the e-mail rule. Binary files are not read.
 - Nothing is published outside the pull request: no gist, no upload, no paste service.
 - **A permission denial is never worked around**: do what remains, say what was refused.
 
