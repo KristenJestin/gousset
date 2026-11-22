@@ -121,11 +121,16 @@ export default defineConfig({
       // Every text a person reads comes from the messages (packages/i18n), in the app and in the
       // shared components; stories, tests and the harness's probe pages hold made-up text.
       {
-        files: ["apps/web/src/**/*.tsx", "packages/ui/src/components/**/*.tsx"],
+        files: [
+          "apps/web/src/**/*.tsx",
+          "apps/web/src/**/*.ts",
+          "packages/ui/src/components/**/*.tsx",
+          "packages/ui/src/components/**/*.ts",
+        ],
         rules: { "gousset/no-text-outside-messages": "error" },
       },
       {
-        files: ["**/*.stories.tsx", "**/*.test.tsx", "apps/web/src/routes/e2e/**"],
+        files: ["**/*.stories.tsx", "**/*.test.tsx", "**/*.test.ts", "apps/web/src/routes/e2e/**"],
         rules: { "gousset/no-text-outside-messages": "off" },
       },
     ],
