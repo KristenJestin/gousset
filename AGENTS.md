@@ -208,7 +208,9 @@ The lead reviews every change to the tools against `docs/mcp.md` before merging.
 - **`packages/ui`'s browser checks** run on Storybook with `pnpm test:ui` (Chromium, Firefox, a
   phone; screenshots compared). CI runs them in the official Playwright image; refresh the
   reference screenshots in that same image with `tools/playwright-docker.sh
-  --update-snapshots=all`, never with a local browser, which renders fonts differently.
+  --update-snapshots=all`, never with a local browser, which renders fonts differently. Missing
+  references are made by CI: the `ui-snapshots` workflow (by hand with the branch, or the
+  `update-snapshots` label on a pull request) commits them to the branch.
 - **Required checks** on `dev` and `main`: `verify`, `ui`, `e2e`, `react-doctor` and `privacy`.
 
 ## How the work is organised
