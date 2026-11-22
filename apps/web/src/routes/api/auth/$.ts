@@ -10,6 +10,7 @@ import { getRequestIP } from "@tanstack/react-start/server";
 import { Effect, Option, Schema } from "effect";
 
 import { ENV } from "../../../env.server";
+import { isDoorOpen, notFound } from "../../../lib/mcp-door";
 import { auth } from "../../../services";
 
 const trustedProxies = (ENV.TRUSTED_PROXIES ?? "")
@@ -65,6 +66,12 @@ async function handle(request: Request) {
   const address = resolveClientAddress(getRequestIP(), forwardedFor, trustedProxies);
   const authRequest = await withClientAddress(request, address);
   const path = new URL(request.url).pathname;
+
+  // The OAuth endpoints exist for the MCP door only: they close with it.
+  if (path.startsWith("/api/auth/oauth2/") && !(await isDoorOpen())) {
+    return notFound();
+  }
+
   const run = () => auth.handler(authRequest);
   const attempt = { address, now: Date.now, sleep };
 

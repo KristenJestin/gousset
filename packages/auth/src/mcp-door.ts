@@ -41,6 +41,19 @@ export type ConnectedClient = {
   since: Date | null;
 };
 
+/** The name a client gives itself, for the consent page; `undefined` for an unknown client. */
+export async function clientName(
+  database: Database,
+  clientId: string,
+): Promise<string | undefined> {
+  const [row] = await database
+    .select({ name: authOauthClient.name })
+    .from(authOauthClient)
+    .where(eq(authOauthClient.clientId, clientId));
+
+  return row === undefined ? undefined : (row.name ?? clientId);
+}
+
 /** The clients a user allowed on the consent page, oldest first. */
 export async function listConnectedClients(
   database: Database,

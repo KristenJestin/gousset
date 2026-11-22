@@ -27,8 +27,25 @@ export const SIGN_IN_PATH = "/sign-in";
  * plain HTTP on a network address has no door.
  */
 export function mcpResourceOf(appUrl: string): string | undefined {
+  return mcpAddressOf({ BETTER_AUTH_URL: appUrl }).resource;
+}
+
+/**
+ * The app's origin and its MCP resource, read from the environment when the server runs. The
+ * environment is passed whole: written `ENV.BETTER_AUTH_URL` in the app, a public variable is
+ * replaced by its build-time value, and the door must follow the address the app is started with.
+ */
+export type McpAddress = {
+  /** The app's origin, from which the door accepts a browser's calls. */
+  origin: string;
+  /** `/mcp` on it, or none when the address cannot carry the door. */
+  resource: string | undefined;
+};
+
+export function mcpAddressOf(env: { readonly BETTER_AUTH_URL: string }): McpAddress {
+  const appUrl = env.BETTER_AUTH_URL;
   const url = new URL(appUrl);
   const servable = url.protocol === "https:" || isLoopbackHost(url.hostname);
 
-  return servable ? `${url.origin}${MCP_PATH}` : undefined;
+  return { origin: url.origin, resource: servable ? `${url.origin}${MCP_PATH}` : undefined };
 }

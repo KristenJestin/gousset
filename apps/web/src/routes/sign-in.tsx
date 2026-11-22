@@ -39,7 +39,7 @@ function SignIn() {
 
     const form = new FormData(event.currentTarget);
 
-    const { error: refusal } = await whileBusy(setBusy, () =>
+    const { data, error: refusal } = await whileBusy(setBusy, () =>
       authClient.signIn.email({
         email: formText(form, "email"),
         password: formText(form, "password"),
@@ -53,6 +53,14 @@ function SignIn() {
     }
 
     setError(undefined);
+
+    // Signing in for an MCP client's authorization: on to its consent page, or back to the client.
+    if (data.redirect && data.url !== undefined) {
+      window.location.assign(data.url);
+
+      return;
+    }
+
     // Into the app without a reload; its guard sends a temporary password to be changed first.
     await navigate({ to: "/" });
   }

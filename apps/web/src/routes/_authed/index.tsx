@@ -27,6 +27,7 @@ function Home() {
       <Card title={messages.home.greeting(user.name)} description={messages.home.empty}>
         <Actions>
           {user.isAdmin ? <AppLink to="/users">{messages.home.users}</AppLink> : null}
+          <AppLink to="/settings">{messages.home.settings}</AppLink>
           <AppLink to="/change-password">{messages.home.changePassword}</AppLink>
           <Button variant="secondary" onClick={() => void signOut()}>
             {messages.home.signOut}

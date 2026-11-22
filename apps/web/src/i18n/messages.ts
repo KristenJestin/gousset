@@ -30,8 +30,41 @@ const en = {
     greeting: (name: string) => `Hello, ${name}.`,
     empty: "Nothing to show yet.",
     users: "Users",
+    settings: "Settings",
     changePassword: "Change password",
     signOut: "Sign out",
+  },
+  consent: {
+    title: (client: string) => `Allow ${client} to reach your Gousset?`,
+    unknownClient: "An MCP client",
+    description:
+      "It will read your months, accounts and lines from an AI agent, as you. You can revoke it at any time in your settings.",
+    writeDescription:
+      "It asks to change your data too. Allow read only unless you want it to make changes for you.",
+    allowRead: "Allow read only",
+    allowReadWrite: "Allow read and write",
+    allow: "Allow",
+    deny: "Deny",
+  },
+  settings: {
+    title: "Settings",
+    back: "Back",
+    clientsTitle: "Connected clients",
+    clientsDescription: (endpoint: string) =>
+      `The AI agents and apps you allowed to reach your data over MCP, at ${endpoint}. Revoking one cuts it off at once.`,
+    noClients: "No client is connected.",
+    readOnly: "Read only",
+    readWrite: "Read and write",
+    revoke: "Revoke",
+    revokeLabel: (client: string) => `Revoke ${client}`,
+    revoked: (client: string) => `${client} can no longer reach your data.`,
+    doorTitle: "MCP access",
+    doorOpen: "Every user can connect AI agents to their own data.",
+    doorClosed: "MCP access is turned off: no AI agent can reach this installation.",
+    doorUnavailable:
+      "MCP access needs Gousset to be served over HTTPS, or on this machine (localhost). Serve it over HTTPS to turn it on.",
+    turnOff: "Turn off MCP access",
+    turnOn: "Turn on MCP access",
   },
   users: {
     title: "Users",
@@ -90,8 +123,41 @@ const fr: Messages = {
     greeting: (name) => `Bonjour, ${name}.`,
     empty: "Rien à afficher pour l'instant.",
     users: "Utilisateurs",
+    settings: "Paramètres",
     changePassword: "Changer de mot de passe",
     signOut: "Se déconnecter",
+  },
+  consent: {
+    title: (client) => `Autoriser ${client} à accéder à votre Gousset ?`,
+    unknownClient: "Un client MCP",
+    description:
+      "Il lira vos mois, vos comptes et vos lignes depuis un agent IA, en votre nom. Vous pouvez le révoquer à tout moment dans vos paramètres.",
+    writeDescription:
+      "Il demande aussi à modifier vos données. Autorisez la lecture seule, sauf si vous voulez qu'il fasse des changements pour vous.",
+    allowRead: "Autoriser la lecture seule",
+    allowReadWrite: "Autoriser la lecture et l'écriture",
+    allow: "Autoriser",
+    deny: "Refuser",
+  },
+  settings: {
+    title: "Paramètres",
+    back: "Retour",
+    clientsTitle: "Clients connectés",
+    clientsDescription: (endpoint) =>
+      `Les agents IA et applications que vous avez autorisés à accéder à vos données par MCP, à l'adresse ${endpoint}. En révoquer un le coupe aussitôt.`,
+    noClients: "Aucun client n'est connecté.",
+    readOnly: "Lecture seule",
+    readWrite: "Lecture et écriture",
+    revoke: "Révoquer",
+    revokeLabel: (client) => `Révoquer ${client}`,
+    revoked: (client) => `${client} ne peut plus accéder à vos données.`,
+    doorTitle: "Accès MCP",
+    doorOpen: "Chaque utilisateur peut connecter des agents IA à ses propres données.",
+    doorClosed: "L'accès MCP est désactivé : aucun agent IA ne peut joindre cette installation.",
+    doorUnavailable:
+      "L'accès MCP demande que Gousset soit servi en HTTPS, ou sur cette machine (localhost). Servez-le en HTTPS pour l'activer.",
+    turnOff: "Désactiver l'accès MCP",
+    turnOn: "Activer l'accès MCP",
   },
   users: {
     title: "Utilisateurs",

@@ -56,6 +56,10 @@ function mcpPlugins(resource: string) {
       loginPage: SIGN_IN_PATH,
       consentPage: CONSENT_PATH,
       scopes: [McpScope.read, McpScope.write, "offline_access"],
+      // Clients come from their metadata documents (CIMD), never from a user: the endpoints that
+      // create, change or list OAuth clients and resources are closed to everyone.
+      clientPrivileges: () => false,
+      resourcePrivileges: () => false,
       schema: {
         oauthClient: { modelName: "authOauthClient" },
         oauthResource: { modelName: "authOauthResource" },
@@ -102,7 +106,9 @@ export function createAuth(env: AuthConfig, database: Database) {
       updateAge: 24 * 60 * 60,
     },
     account: { modelName: "authAccount" },
-    verification: { modelName: "authVerification" },
+    // `storeInDatabase` is better-auth's default (no secondary storage here): written out so that
+    // the options' type matches what @better-auth/mcp's `requireMcpAuth` reads of them.
+    verification: { modelName: "authVerification", storeInDatabase: false },
     // better-auth's own limit counts every request, successful or not, per address it reads from
     // `X-Forwarded-For`. Gousset counts failed attempts at a password instead, around this handler
     // (attempt-guard.ts), from the address the app resolves from the connection (client-address.ts).

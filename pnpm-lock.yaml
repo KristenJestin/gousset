@@ -301,6 +301,9 @@ importers:
       '@gousset/auth':
         specifier: workspace:*
         version: link:../../packages/auth
+      '@gousset/core':
+        specifier: workspace:*
+        version: link:../../packages/core
       '@gousset/db':
         specifier: workspace:*
         version: link:../../packages/db

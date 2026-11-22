@@ -11,8 +11,11 @@
     "auth:generate": "varlock run -- env NODE_ENV=development auth generate --config src/services.ts --output ../../packages/db/src/schema/auth.ts --yes"
   },
   "dependencies": {
+    "@better-auth/oauth-provider": "1.7.27",
     "@gousset/auth": "workspace:*",
+    "@gousset/core": "workspace:*",
     "@gousset/db": "workspace:*",
+    "@gousset/mcp": "workspace:*",
     "@gousset/ui": "workspace:*",
     "@tailwindcss/vite": "^4.3.5",
     "@tanstack/react-form": "^1.33.5",
