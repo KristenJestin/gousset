@@ -6,7 +6,7 @@ import { describe, expect, test } from "vite-plus/test";
 import { FixtureLedger } from "./ledger";
 import type { Ledger } from "./ledger";
 import { approveLine, linesToReview, monthOverview, monthSummary, spending } from "./month";
-import { currentMonth } from "./today";
+import { Today, currentMonth } from "./today";
 
 /** Runs against a fresh made-up ledger, on a fixed day. */
 function run<A, E>(effect: Effect.Effect<A, E, Ledger>, day = "2026-11-22") {
@@ -126,5 +126,21 @@ describe("approveLine", () => {
 describe("currentMonth", () => {
   test("reads the month from the clock", async () => {
     expect(await run(currentMonth, "2027-03-01")).toBe("2027-03");
+  });
+
+  test("reads the day a caller provides, rather than the clock", async () => {
+    const fixed = { day: Effect.succeed("2026-10-15") };
+
+    const [month, summary] = await run(
+      Effect.all([currentMonth, monthSummary("ada", "2026-10")]).pipe(
+        Effect.provideService(Today, fixed),
+      ),
+    );
+
+    expect(month).toBe("2026-10");
+    // Nothing booked after the 15th: less spent than in the whole month.
+    expect(summary.spent.minor).toBeLessThan(
+      (await run(monthSummary("ada", "2026-10"))).spent.minor,
+    );
   });
 });
