@@ -23,6 +23,10 @@ pnpm db:start   # Postgres 18 in Docker
 pnpm dev        # http://localhost:3001
 ```
 
+The database of development (`docker-compose.dev.yml`) listens on this machine only. To run the
+whole stack from the clone with `pnpm docker:up`, make its two secret files first
+([`docs/releases.md`](docs/releases.md), "Installing").
+
 `vp check`, `vp test` and `pnpm build` are the checks. How to work in this repository, for
 people and agents alike, is in [`AGENTS.md`](AGENTS.md).
 
