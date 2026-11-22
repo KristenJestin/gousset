@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { useState } from "react";
 
+import { InFrench } from "../stories/in-french";
 import { MONTH_FIGURES } from "../stories/made-up";
 import { Button } from "./button";
 import { Delta } from "./delta";
@@ -105,8 +106,15 @@ export const AgainstNothing: Story = {
   },
 };
 
-/** In French: `+5 %`. */
-export const French: Story = { args: { locale: "fr", referenceLabel: "votre moyenne sur 6 mois" } };
+/** On a French page (`<html lang="fr">`): `+5 %`, and the sentence in French. */
+export const French: Story = {
+  args: { referenceLabel: "votre moyenne sur 6 mois" },
+  render: (args) => (
+    <InFrench>
+      <Delta {...args} />
+    </InFrench>
+  ),
+};
 
 /** The month changes: the figure and its colour follow. */
 export const ChangingMonth: Story = { render: () => <SwitchingMonths /> };

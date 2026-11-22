@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { useState } from "react";
 
+import { InFrench } from "../stories/in-french";
 import { MONTH_FIGURES, OVERSPENT_FIGURES } from "../stories/made-up";
 import { Button } from "./button";
 import { Delta } from "./delta";
@@ -107,8 +108,15 @@ export const Empty: Story = {
 /** The month changes: the parts grow to their new widths. */
 export const ChangingMonth: Story = { render: () => <SwitchingMonths /> };
 
-/** In French. */
-export const French: Story = { args: { locale: "fr", note: "salaire et titres-restaurant" } };
+/** On a French page (`<html lang="fr">`): amounts and words in French. */
+export const French: Story = {
+  args: { note: "salaire et titres-restaurant" },
+  render: (args) => (
+    <InFrench>
+      <MonthBar {...args} />
+    </InFrench>
+  ),
+};
 
 /** Loading: the skeleton, shaped like the bar. */
 export const Loading: Story = { render: () => <MonthBarSkeleton /> };

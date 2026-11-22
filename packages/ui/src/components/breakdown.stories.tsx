@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { useState } from "react";
 
+import { InFrench } from "../stories/in-french";
 import { CATEGORIES, MERCHANTS, PREVIOUS_CATEGORIES } from "../stories/made-up";
 import type { MadeUpCategory } from "../stories/made-up";
 import { Breakdown, BreakdownSkeleton } from "./breakdown";
@@ -111,8 +112,15 @@ export const EmptyWithText: Story = {
 /** The month changes: the bars grow to their new lengths. */
 export const ChangingMonth: Story = { render: () => <SwitchingMonths /> };
 
-/** In French. */
-export const French: Story = { args: { locale: "fr", limit: 5 } };
+/** On a French page (`<html lang="fr">`): amounts and words in French. */
+export const French: Story = {
+  args: { limit: 5 },
+  render: (args) => (
+    <InFrench>
+      <Breakdown {...args} />
+    </InFrench>
+  ),
+};
 
 /** Loading: five rows and the "+ N more" line, shaped like `Default`. */
 export const Loading: Story = { render: () => <BreakdownSkeleton rows={5} more /> };
