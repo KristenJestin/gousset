@@ -213,7 +213,7 @@ test("moving between screens fades the screen, the current item slides, empty st
   userPage,
 }) => {
   test.skip(onPhone(userPage), "The sidebar is the desktop's.");
-  await visit(userPage, "/");
+  await visit(userPage, "/accounts");
 
   // The empty state fades in through CSS, 200 ms.
   const block = userPage.locator('[data-slot="screen-block"]');

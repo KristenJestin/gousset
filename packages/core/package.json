@@ -1,0 +1,21 @@
+{
+  "name": "@gousset/core",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./values": "./src/values.ts"
+  },
+  "scripts": {
+    "check-types": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@gousset/fixture": "workspace:*",
+    "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@gousset/config": "workspace:*",
+    "typescript": "catalog:"
+  }
+}
