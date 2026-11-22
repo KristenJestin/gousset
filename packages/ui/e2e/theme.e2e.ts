@@ -1,9 +1,34 @@
+import { readFileSync } from "node:fs";
+
 import type { Page } from "@playwright/test";
 import { expect, test } from "@playwright/test";
+
+import { themeTokens } from "../src/lib/tokens";
+
+const THEME_TOKENS = themeTokens(
+  readFileSync(new URL("../src/styles/globals.css", import.meta.url), "utf8"),
+);
 
 const TOKENS = "/iframe.html?id=theme-tokens--tokens&viewMode=story";
 const WITH_CHART = "/iframe.html?id=theme-colour-scheme--with-chart&viewMode=story";
 const DISABLED = "/iframe.html?id=theme-colour-scheme--disabled&viewMode=story";
+const MOTION = "/iframe.html?id=theme-motion--fade-in&viewMode=story";
+
+/** Replays the fade and reads the block's opacity two frames later, 300 ms before it ends. */
+async function opacityJustAfterReplay(page: Page) {
+  await page.getByRole("button", { name: "Replay" }).click();
+
+  return page.getByTestId("motion-sample").evaluate(
+    (element) =>
+      new Promise<number>((resolve) => {
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            resolve(Number(getComputedStyle(element).opacity));
+          });
+        });
+      }),
+  );
+}
 
 // One fixed day, so nothing on screen depends on when the tests run; timers still run.
 test.beforeEach(async ({ page }) => {
@@ -48,8 +73,12 @@ test("the token page shows every token in both schemes", async ({ page }) => {
   for (const scheme of ["light", "dark"] as const) {
     await page.emulateMedia({ colorScheme: scheme });
     await page.goto(TOKENS);
-    await expect(page.getByText("--money-restricted").first()).toBeVisible();
     await expect(page.getByRole("row")).toHaveCount(28);
+
+    const shown = await page.locator("li code").allTextContents();
+
+    expect(THEME_TOKENS.length).toBeGreaterThan(70);
+    expect(shown.toSorted()).toEqual(THEME_TOKENS.map((token) => token.name).toSorted());
 
     backgrounds.set(scheme, await resolveToken(page, "--background"));
 
@@ -126,6 +155,20 @@ test("transitions run 200 ms, and are cut under reduced motion", async ({ page }
 
   await page.emulateMedia({ reducedMotion: "reduce" });
   await expect(item).toHaveCSS("transition-duration", "0s");
+});
+
+test("Motion is cut as soon as the system asks for reduced motion, without a reload", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await page.goto(MOTION);
+  expect(await opacityJustAfterReplay(page)).toBeLessThan(1);
+
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  expect(await opacityJustAfterReplay(page)).toBe(1);
+
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  expect(await opacityJustAfterReplay(page)).toBeLessThan(1);
 });
 
 test("a disabled picker cannot change the scheme", async ({ page }) => {
