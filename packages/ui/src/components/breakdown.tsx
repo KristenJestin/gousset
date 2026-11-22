@@ -1,5 +1,6 @@
 import { motion } from "motion/react";
 
+import { useAnimatedPercent } from "../hooks/use-animated-percent";
 import { useUiMessages } from "../hooks/use-ui-messages";
 import { usePageLanguage } from "../hooks/use-page-language";
 import { breakdownBars, formatMoney } from "../lib/money";
@@ -36,6 +37,8 @@ export type BreakdownProps = {
 };
 
 function RowBar({ bar }: { bar: BreakdownBar }) {
+  const width = useAnimatedPercent(bar.width);
+
   return (
     <svg
       className="h-3 min-w-0 flex-1 overflow-visible"
@@ -48,9 +51,7 @@ function RowBar({ bar }: { bar: BreakdownBar }) {
         y="2"
         height="8"
         rx="4"
-        initial={false}
-        animate={{ width: `${String(bar.width)}%` }}
-        transition={transition.base}
+        width={width}
         className="fill-money-spent"
       />
       {bar.mark === null ? null : (
