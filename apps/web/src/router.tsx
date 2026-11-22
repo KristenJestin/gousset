@@ -1,3 +1,4 @@
+import { m } from "@gousset/i18n/messages";
 import { createRouter as createTanStackRouter } from "@tanstack/react-router";
 import { createIsomorphicFn, getGlobalStartContext } from "@tanstack/react-start";
 
@@ -21,7 +22,7 @@ export const getRouter = () => {
     // Load before the click: a link preloads its route on hover or focus.
     defaultPreload: "intent",
     defaultPreloadStaleTime: 0,
-    defaultNotFoundComponent: () => <div>Not Found</div>,
+    defaultNotFoundComponent: () => <p>{m.notFoundTitle()}</p>,
   });
 
   return router;

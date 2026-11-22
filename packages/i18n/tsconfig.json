@@ -1,0 +1,7 @@
+{
+  "extends": "@gousset/config/tsconfig.base.json",
+  "include": ["src/**/*.ts"],
+  "compilerOptions": {
+    "lib": ["ESNext", "DOM"]
+  }
+}
