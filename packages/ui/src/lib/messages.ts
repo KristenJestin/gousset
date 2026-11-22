@@ -6,12 +6,36 @@
 
 const en = {
   loading: "Loading",
+  states: {
+    errorTitle: "This could not be loaded",
+    errorMessage: "Something went wrong on the way. The rest of the page still works.",
+    retry: "Retry",
+  },
+  pieces: {
+    uncategorised: "Uncategorised",
+    month: "Month",
+    previousMonth: "Previous month",
+    nextMonth: "Next month",
+    remove: (name: string) => `Remove ${name}`,
+  },
 };
 
 export type UiMessages = typeof en;
 
 const fr: UiMessages = {
   loading: "Chargement",
+  states: {
+    errorTitle: "Impossible de charger ce bloc",
+    errorMessage: "Un problème est survenu en route. Le reste de la page fonctionne toujours.",
+    retry: "Réessayer",
+  },
+  pieces: {
+    uncategorised: "Sans catégorie",
+    month: "Mois",
+    previousMonth: "Mois précédent",
+    nextMonth: "Mois suivant",
+    remove: (name: string) => `Retirer ${name}`,
+  },
 };
 
 export const UI_LOCALES = ["en", "fr"] as const;
