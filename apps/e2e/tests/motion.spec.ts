@@ -13,7 +13,7 @@ const BEAT_MS = 900;
 
 const block = (page: Page, title: string) => page.getByRole("region", { name: title });
 
-const monthSwitcher = (page: Page) => page.getByRole("group", { name: "Month" });
+const monthSwitcher = (page: Page) => page.getByRole("group", { name: "Month", exact: true });
 
 async function beat(page: Page) {
   // A pause for the film, not a wait for a state.
@@ -109,16 +109,25 @@ test("chart hover: the crosshair follows, the value slides", async ({ userPage: 
   await expect(chart).toBeVisible();
   await beat(page);
 
-  const box = await chart.boundingBox();
+  // The plot itself: the last drawing of the figure, under its legend.
+  const box = await chart
+    .locator("svg")
+    .filter({ has: page.locator("g") })
+    .last()
+    .boundingBox();
 
   if (box === null) {
-    throw new Error("The chart has no box to hover.");
+    throw new Error("The chart has no plot to hover.");
   }
 
-  const y = box.y + box.height * 0.6;
+  const y = box.y + box.height / 2;
 
-  await page.mouse.move(box.x + box.width * 0.1, y);
-  await expect(page.locator('[data-slot="spending-tooltip"]')).toBeVisible();
+  // Bklit's line chart listens to the pointer once its lines are drawn.
+  await expect(async () => {
+    await page.mouse.move(box.x + box.width * 0.1, y);
+    await page.mouse.move(box.x + box.width * 0.1 + 2, y);
+    await expect(page.locator('[data-slot="spending-tooltip"]')).toBeVisible({ timeout: 500 });
+  }).toPass({ timeout: 5000 });
 
   for (const share of [0.3, 0.5, 0.7, 0.9, 0.4]) {
     await page.mouse.move(box.x + box.width * share, y, { steps: 20 });

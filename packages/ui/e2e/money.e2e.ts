@@ -219,7 +219,7 @@ test.describe("MonthBar", () => {
     await page.goto(story("month-bar", "default"));
     await expect(spokenAmount(page, "€3,120")).toBeAttached();
 
-    const parts = page.getByRole("group", { name: "The month's money, by part" });
+    const parts = page.getByRole("group", { name: "What came in, by part" });
 
     await expect(parts.getByRole("button")).toHaveCount(3);
     await expect(parts.getByRole("button", { name: "€2,030 spent" })).toBeVisible();

@@ -62,17 +62,15 @@ test("the review of a month shows each of its blocks, labelled as made-up", asyn
     "#to-review",
   );
 
-  // The month bar: what came in, cut into spent, set aside and left; restricted money hatched.
+  // The month bar: what came in, cut into spent, set aside and left. October's meal vouchers were
+  // all spent: nothing restricted, nothing hatched (September's are, below).
   const month = block(page, "The month");
 
   await expect(month).toContainText("received");
   await expect(month).toContainText("Salary and Meal vouchers");
   await expect(month).toContainText("spent");
   await expect(month).toContainText("set aside");
-  await expect(month.locator('[data-slot="month-bar-restricted"]')).toHaveAttribute(
-    "fill",
-    /^url\(#/,
-  );
+  await expect(month.locator('[data-slot="month-bar-restricted"]')).toHaveCount(0);
 
   await expect(block(page, "Where the money goes")).toContainText("Housing");
 
@@ -98,6 +96,21 @@ test("the review of a month shows each of its blocks, labelled as made-up", asyn
   await expect(toReview.getByRole("button", { name: /^Approve / })).toHaveCount(3);
   await expect(toReview).toContainText("Show the other 3");
   await page.keyboard.press("Escape");
+  await animationsDone(page);
+});
+
+test("money left on the meal voucher card is hatched at the end of the part left", async ({
+  userPage: page,
+}) => {
+  await visit(page, "/?month=2026-09");
+
+  const month = block(page, "The month");
+
+  await expect(month.locator('[data-slot="month-bar-restricted"]')).toHaveAttribute(
+    "fill",
+    /^url\(#/,
+  );
+  await expect(month).toContainText("left, €153 restricted");
   await animationsDone(page);
 });
 
@@ -227,20 +240,30 @@ test("hovering the chart moves its crosshair, and the value slides to the day un
   await expect(chart).toBeVisible();
   await animationsDone(page);
 
-  const box = await chart.boundingBox();
+  // The plot itself: the last drawing of the figure, under its legend.
+  const box = await chart
+    .locator("svg")
+    .filter({ has: page.locator("g") })
+    .last()
+    .boundingBox();
 
   if (box === null) {
-    throw new Error("The chart has no box to hover.");
+    throw new Error("The chart has no plot to hover.");
   }
 
   const tooltip = page.locator('[data-slot="spending-tooltip"]');
+  const y = box.y + box.height / 2;
 
-  await page.mouse.move(box.x + box.width * 0.2, box.y + box.height * 0.6);
-  await expect(tooltip).toBeVisible();
+  // Bklit's line chart listens to the pointer once its lines are drawn.
+  await expect(async () => {
+    await page.mouse.move(box.x + box.width * 0.2, y);
+    await page.mouse.move(box.x + box.width * 0.2 + 2, y);
+    await expect(tooltip).toBeVisible({ timeout: 500 });
+  }).toPass({ timeout: 5000 });
 
   const early = await tooltip.textContent();
 
-  await page.mouse.move(box.x + box.width * 0.9, box.y + box.height * 0.6, { steps: 8 });
+  await page.mouse.move(box.x + box.width * 0.9, y, { steps: 8 });
   await expect.poll(async () => tooltip.textContent()).not.toBe(early);
   await page.mouse.move(0, 0);
   await animationsDone(page);
