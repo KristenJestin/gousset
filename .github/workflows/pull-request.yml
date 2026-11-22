@@ -1,6 +1,9 @@
 # What reads a pull request's title and description (issue #3): it runs again when they are
 # edited, which would be too costly for the build and test jobs of ci.yml. privacy is required on
-# dev and main; commit-messages fails on a bad subject; shape only warns.
+# dev and main; commit-messages fails on a bad subject; shape warns, and fails only on a template
+# left unfilled.
+#
+# Actions are pinned by commit, the version beside it: a moved tag runs no new code here.
 name: pull-request
 
 on:
@@ -20,9 +23,10 @@ jobs:
   commit-messages:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          persist-credentials: false
       - name: Commit messages (tools/commit-message.sh)
         env:
           BASE: ${{ github.event.pull_request.base.sha }}
@@ -33,17 +37,19 @@ jobs:
           TITLE: ${{ github.event.pull_request.title }}
         run: |
           printf '%s\n' "$TITLE" > "$RUNNER_TEMP/title"
-          tools/commit-message.sh "$RUNNER_TEMP/title"
+          tools/commit-message.sh --title "$RUNNER_TEMP/title"
 
-  # What the pull request adds, its commit messages, its title and description: no e-mail address
-  # outside example.com and example.org, no IBAN but the invented ones, no home path, no word of the
-  # private list (the GOUSSET_PRIVATE_WORDS secret, one word a line, never printed).
+  # What the pull request adds, commit by commit and as a whole, its file names, its commit
+  # messages, authors and committers, its title and description: no e-mail address outside
+  # example.com and example.org, no IBAN but the invented ones the base lists, no home path, no word
+  # of the private list (the GOUSSET_PRIVATE_WORDS secret, one word a line, never printed).
   privacy:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          persist-credentials: false
       - name: Privacy check (tools/privacy-check.sh)
         env:
           BASE: ${{ github.event.pull_request.base.sha }}
@@ -61,17 +67,28 @@ jobs:
           printf '%s\n%s\n' "$TITLE" "$BODY" > "$RUNNER_TEMP/pull-request"
           status=0
           tools/privacy-check.sh --range "$BASE" "$HEAD" || status=$?
-          tools/privacy-check.sh "$RUNNER_TEMP/pull-request" || status=$?
+          tools/privacy-check.sh --base "$BASE" "$RUNNER_TEMP/pull-request" || status=$?
           exit $status
 
-  # A feat or fix that touches the product (apps/, packages/) tells the user what changed with a
-  # `Note:` line in its description. Without one this warns; it never fails.
+  # The description follows AGENTS.md: a `Note:` line, in the user's words, and `Closes #<n>`.
+  # The template's placeholders left as they are fail. A feat or fix that touches the product
+  # (apps/, packages/) without a `Note:` line warns.
   shape:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
+          persist-credentials: false
+      - name: The template filled in
+        env:
+          BODY: ${{ github.event.pull_request.body }}
+        run: |
+          if grep -qE '^Note: <|Closes #<n>' <<< "$BODY"; then
+            echo "::error::The description still holds a placeholder of the template (Note: <...> or Closes #<n>): write the sentence and the issue's number."
+            exit 1
+          fi
+          echo "No placeholder of the template left."
       - name: A note for the user
         env:
           BASE: ${{ github.event.pull_request.base.sha }}
