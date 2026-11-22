@@ -1,7 +1,9 @@
 import { expect, test, visit } from "../src/test";
 
-test("the starter page loads", async ({ page }) => {
-  await visit(page, "/");
+test("the app loads for a signed-in user", async ({ userPage, user }) => {
+  await visit(userPage, "/");
 
-  await expect(page.getByRole("heading", { level: 1, name: "Gousset" })).toBeVisible();
+  await expect(
+    userPage.getByRole("heading", { level: 1, name: `Hello, ${user.name}.` }),
+  ).toBeVisible();
 });

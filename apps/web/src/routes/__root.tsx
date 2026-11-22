@@ -1,9 +1,13 @@
 import { HeadContent, Outlet, Scripts, createRootRoute } from "@tanstack/react-router";
 import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
 
+import { getViewer } from "@/functions/viewer";
+
 import appCss from "../index.css?url";
 
 export const Route = createRootRoute({
+  // Every navigation asks the server who is looking: the guards of the routes below read it.
+  beforeLoad: async () => ({ viewer: await getViewer() }),
   head: () => ({
     meta: [
       {
@@ -30,8 +34,10 @@ export const Route = createRootRoute({
 });
 
 function RootDocument() {
+  const locale = Route.useRouteContext({ select: (context) => context.viewer.locale });
+
   return (
-    <html lang="en">
+    <html lang={locale}>
       <head>
         <HeadContent />
       </head>
