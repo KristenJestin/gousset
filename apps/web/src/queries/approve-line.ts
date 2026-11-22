@@ -1,6 +1,6 @@
 import type { LineToReview, LinesToReview } from "@gousset/core";
 import { m } from "@gousset/i18n/messages";
-import { notify } from "@gousset/ui/lib/notify-stand-in";
+import { notify } from "@gousset/ui/lib/notify";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 import { approveLine } from "@/functions/month";

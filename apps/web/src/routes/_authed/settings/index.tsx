@@ -2,9 +2,25 @@ import { m } from "@gousset/i18n/messages";
 import { getLocale, locales, setLocale } from "@gousset/i18n/runtime";
 import type { Locale } from "@gousset/i18n/runtime";
 import { Block } from "@gousset/ui/components/app-shell";
+import { Button } from "@gousset/ui/components/button";
 import { ColorSchemePicker } from "@gousset/ui/components/color-scheme-picker";
+import { FormMessage } from "@gousset/ui/components/form-message";
+import { List, ListItem } from "@gousset/ui/components/list";
+import { Actions } from "@gousset/ui/components/screen";
 import { SegmentedChoice } from "@gousset/ui/components/segmented-choice";
-import { createFileRoute } from "@tanstack/react-router";
+import { StatusMessage } from "@gousset/ui/components/status-message";
+import { createFileRoute, useRouter } from "@tanstack/react-router";
+import { useState } from "react";
+
+import {
+  getConnectedClients,
+  getMcpDoor,
+  revokeConnectedClient,
+  setMcpDoor,
+} from "@/functions/mcp";
+import { errorMessage } from "@/i18n/messages";
+import { refusalOf } from "@/lib/refusal";
+import { whileBusy } from "@/lib/while-busy";
 
 /** Each language, in its own words: the same in every language. */
 const LANGUAGE_NAMES = {
@@ -13,11 +29,16 @@ const LANGUAGE_NAMES = {
 } satisfies { [locale in Locale]: () => string };
 
 /**
- * The general settings: how the interface looks and speaks. The blocks to come land here, one
- * under the other: the colour scheme kept on the account (#50), turning off the single-key
- * shortcuts (#54), the AI agents' door (#39).
+ * The general settings: how the interface looks and speaks, the MCP clients the user allowed and,
+ * for the administrator, the MCP door itself. The blocks to come land here, one under the other:
+ * the colour scheme kept on the account (#50), turning off the single-key shortcuts (#54).
  */
 export const Route = createFileRoute("/_authed/settings/")({
+  loader: async () => {
+    const [clients, door] = await Promise.all([getConnectedClients(), getMcpDoor()]);
+
+    return { clients, door };
+  },
   component: GeneralSettings,
 });
 
@@ -42,6 +63,104 @@ function GeneralSettings() {
           }}
         />
       </Block>
+      <McpSettings />
+    </>
+  );
+}
+
+function McpSettings() {
+  const router = useRouter();
+  const { clients, door } = Route.useLoaderData();
+  const [revoked, setRevoked] = useState<string>();
+  const [clientsError, setClientsError] = useState<string>();
+  const [doorError, setDoorError] = useState<string>();
+  const [busy, setBusy] = useState(false);
+
+  async function revoke(clientId: string, name: string) {
+    const refusal = await whileBusy(setBusy, () =>
+      refusalOf(() => revokeConnectedClient({ data: { clientId } })),
+    );
+
+    // A failure says so, and the page stays as it is, the client listed: never a silent
+    // "revoked", and no reload that would take the message away.
+    if (refusal !== undefined) {
+      setRevoked(undefined);
+      setClientsError(errorMessage(refusal));
+
+      return;
+    }
+
+    setClientsError(undefined);
+    setRevoked(m.mcpRevoked({ client: name }));
+    await router.invalidate();
+  }
+
+  async function turn(open: boolean) {
+    const refusal = await whileBusy(setBusy, () => refusalOf(() => setMcpDoor({ data: { open } })));
+
+    if (refusal !== undefined) {
+      setDoorError(errorMessage(refusal));
+
+      return;
+    }
+
+    setDoorError(undefined);
+    await router.invalidate();
+  }
+
+  const doorState = door.servable
+    ? door.open
+      ? m.mcpDoorOpen()
+      : m.mcpDoorClosed()
+    : m.mcpDoorUnavailable();
+
+  return (
+    <>
+      <Block
+        title={m.mcpClientsTitle()}
+        description={m.mcpClientsDescription({ endpoint: door.endpoint })}
+      >
+        {clients.length === 0 ? (
+          <StatusMessage message={m.mcpNoClients()} />
+        ) : (
+          <List label={m.mcpClientsTitle()}>
+            {clients.map((client) => (
+              <ListItem
+                key={client.clientId}
+                title={client.name}
+                description={
+                  client.host === null ? undefined : m.mcpClientFrom({ host: client.host })
+                }
+                tags={[client.canWrite ? m.mcpReadWrite() : m.mcpReadOnly()]}
+                action={
+                  <Button
+                    variant="secondary"
+                    loading={busy}
+                    aria-label={m.mcpRevokeLabel({ client: client.name })}
+                    onClick={() => void revoke(client.clientId, client.name)}
+                  >
+                    {m.mcpRevoke()}
+                  </Button>
+                }
+              />
+            ))}
+          </List>
+        )}
+        <StatusMessage message={revoked} />
+        <FormMessage message={clientsError} />
+      </Block>
+      {door.canManage ? (
+        <Block title={m.mcpDoorTitle()} description={doorState}>
+          {door.servable ? (
+            <Actions>
+              <Button variant="secondary" loading={busy} onClick={() => void turn(!door.open)}>
+                {door.open ? m.mcpTurnOff() : m.mcpTurnOn()}
+              </Button>
+            </Actions>
+          ) : null}
+          <FormMessage message={doorError} />
+        </Block>
+      ) : null}
     </>
   );
 }

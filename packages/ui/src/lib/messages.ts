@@ -6,6 +6,12 @@ import { m } from "@gousset/i18n/messages";
 import { getLocale } from "@gousset/i18n/runtime";
 import type { Locale } from "@gousset/i18n/runtime";
 
+/** Which plural form a count takes, in each language: built once. */
+const pluralRules = {
+  en: new Intl.PluralRules("en"),
+  fr: new Intl.PluralRules("fr"),
+} satisfies { [Language in Locale]: Intl.PluralRules };
+
 function uiMessages(locale: Locale) {
   const options = { locale };
 
@@ -26,7 +32,7 @@ function uiMessages(locale: Locale) {
     forms: {
       noMatch: m.uiNoMatch({}, options),
       results: (count: number) =>
-        new Intl.PluralRules(locale).select(count) === "one"
+        pluralRules[locale].select(count) === "one"
           ? m.uiResultsOne({ count }, options)
           : m.uiResultsOther({ count }, options),
       showOptions: m.uiShowOptions({}, options),

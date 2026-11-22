@@ -23,6 +23,7 @@ export {
 export {
   annotate,
   fromPromise,
+  mcpToolCall,
   requestSpan,
   serverFunctionSpan,
   underActiveSpan,

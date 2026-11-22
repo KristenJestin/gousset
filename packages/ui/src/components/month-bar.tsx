@@ -2,6 +2,7 @@ import { motion } from "motion/react";
 import { useId } from "react";
 import type { ReactNode } from "react";
 
+import { useAnimatedPercent } from "../hooks/use-animated-percent";
 import { usePageLanguage } from "../hooks/use-page-language";
 import { useUiMessages } from "../hooks/use-ui-messages";
 import { formatMoney, monthBarLayout } from "../lib/money";
@@ -38,6 +39,48 @@ export type MonthBarProps = {
   locale?: string;
 };
 
+/** One part of the bar: its start and width move to the new month's (SVG geometry, no reflow). */
+function BarPart({ part }: { part: MonthBarLayout["parts"][number] }) {
+  const width = useAnimatedPercent(part.width);
+
+  return (
+    // `x` alone would be a transform for Motion: `attrX` is the attribute.
+    <motion.rect
+      data-role={part.role}
+      y="0"
+      width={width}
+      height="100%"
+      initial={false}
+      animate={{ attrX: `${String(part.x)}%` }}
+      transition={transition.base}
+      className={cn(
+        "stroke-card stroke-2",
+        part.role === "spent" && "fill-money-spent",
+        part.role === "saved" && "fill-money-saved",
+        part.role === "left" && "fill-money-left",
+      )}
+    />
+  );
+}
+
+/** The restricted end of the part left, hatched: it moves and grows like a part. */
+function Restricted({ hatch, x, width }: { hatch: string; x: number; width: number }) {
+  const animatedWidth = useAnimatedPercent(width);
+
+  return (
+    <motion.rect
+      data-slot="month-bar-restricted"
+      y="0"
+      width={animatedWidth}
+      height="100%"
+      fill={`url(#${hatch})`}
+      initial={false}
+      animate={{ attrX: `${String(x)}%` }}
+      transition={transition.base}
+    />
+  );
+}
+
 function Bar({ layout }: { layout: MonthBarLayout }) {
   // An SVG id without React's punctuation, unique to this bar.
   const hatch = `month-bar-hatch-${useId().replaceAll(/[^a-zA-Z0-9]/g, "")}`;
@@ -54,35 +97,10 @@ function Bar({ layout }: { layout: MonthBarLayout }) {
           className="stroke-money-restricted"
         />
         {layout.parts.map((part) => (
-          <motion.rect
-            key={part.role}
-            data-role={part.role}
-            y="0"
-            height="100%"
-            initial={false}
-            animate={{ attrX: `${String(part.x)}%`, width: `${String(part.width)}%` }}
-            transition={transition.base}
-            className={cn(
-              "stroke-card stroke-2",
-              part.role === "spent" && "fill-money-spent",
-              part.role === "saved" && "fill-money-saved",
-              part.role === "left" && "fill-money-left",
-            )}
-          />
+          <BarPart key={part.role} part={part} />
         ))}
         {layout.restricted === null ? null : (
-          <motion.rect
-            data-slot="month-bar-restricted"
-            y="0"
-            height="100%"
-            fill={`url(#${hatch})`}
-            initial={false}
-            animate={{
-              attrX: `${String(layout.restricted.x)}%`,
-              width: `${String(layout.restricted.width)}%`,
-            }}
-            transition={transition.base}
-          />
+          <Restricted hatch={hatch} x={layout.restricted.x} width={layout.restricted.width} />
         )}
         {layout.receivedMark === null ? null : (
           <motion.rect

@@ -8,7 +8,7 @@ import {
 } from "@ui-sdk/react/toast";
 import type { ToastType } from "@ui-sdk/react/toast";
 import { AnimatePresence, motion } from "motion/react";
-import { useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useSyncExternalStore } from "react";
 import type { ReactNode } from "react";
 
 import { useUiMessages } from "../hooks/use-ui-messages";
@@ -192,36 +192,17 @@ function MarkDrawing({ type }: { type: ToastType }) {
 }
 
 /**
- * Follows its content's height with a spring: a toast that changes in place grows or shrinks
- * smoothly, and a second change mid-flight retargets from where it is. ui-sdk measures the toast
- * as it moves, so the stack follows. Motion sets the height through the CSSOM.
+ * Follows its content's size with a spring: a toast that changes in place grows or shrinks
+ * smoothly, and a second change mid-flight retargets from where it is. Motion's layout animation
+ * moves it with transforms (no height animated, nothing reflows at each frame); the content keeps
+ * its own shape (`layout="position"`). Motion sets the transforms through the CSSOM.
  */
 function SpringHeight({ children }: { children: ReactNode }) {
-  const content = useRef<HTMLDivElement>(null);
-  const [height, setHeight] = useState<number | "auto">("auto");
-
-  useLayoutEffect(() => {
-    const element = content.current;
-
-    if (element === null) {
-      return;
-    }
-
-    const observer = new ResizeObserver(() => setHeight(element.offsetHeight));
-
-    observer.observe(element);
-
-    return () => observer.disconnect();
-  }, []);
-
   return (
-    <motion.div
-      initial={false}
-      animate={{ height }}
-      transition={spring}
-      className="overflow-hidden"
-    >
-      <div ref={content}>{children}</div>
+    <motion.div layout transition={spring} className="overflow-hidden">
+      <motion.div layout="position" transition={spring}>
+        {children}
+      </motion.div>
     </motion.div>
   );
 }

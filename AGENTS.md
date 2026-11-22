@@ -37,7 +37,8 @@ file is how to work.
 | `apps/web`                          | The app: TanStack Start (pages, server functions, API, jobs, `/mcp`)  |
 | `packages/ui`                       | Every component and the theme, each described in Storybook            |
 | `packages/db`                       | The Drizzle schema and migrations                                     |
-| `packages/auth`                     | better-auth, wired to the database                                    |
+| `packages/auth`                     | better-auth, wired to the database; the MCP door's OAuth              |
+| `packages/mcp`                      | The MCP tool framework, its guards, the instructions and the tools    |
 | `packages/fixture`                  | The shared made-up data                                               |
 | `packages/config`                   | The shared TypeScript configuration                                   |
 | `tools/oxlint`                      | Lint rules vendored from upstream (see [Lint](#lint))                 |
@@ -214,7 +215,10 @@ The lead reviews every change to the tools against `docs/mcp.md` before merging.
   ones in that image and commits them to the branch (`test(ui): …`); then fetch, check them, and
   push a commit of your own so that CI runs again. To redraw a reference, delete it first.
 - **CI on a pull request runs Chromium on a desktop only**, in `e2e` and `ui`; each push to `dev`
-  runs every browser and width. A failure seen only on `dev` is fixed at once.
+  runs every browser and width. A failure seen only on `dev` is fixed at once. A pull request
+  whose head commit ends with the trailer line `E2E-Matrix: full` runs every browser and width as
+  `dev` does: use it to reproduce a failure of another browser, and make the last run before
+  merging a full one when the change touches what other browsers draw.
 - **Required checks** on `dev` and `main`: `verify`, `ui`, `e2e`, `react-doctor` and `privacy`.
 
 ## How the work is organised

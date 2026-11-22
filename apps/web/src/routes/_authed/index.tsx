@@ -81,8 +81,10 @@ const shortDays = perLocale(
       timeZone: "UTC",
     }),
 );
+
 const plurals = perLocale((locale) => new Intl.PluralRules(locale));
 const lists = perLocale((locale) => new Intl.ListFormat(locale, { type: "conjunction" }));
+
 const monthNames = perLocale(
   (locale) => new Intl.DateTimeFormat(locale, { month: "long", timeZone: "UTC" }),
 );

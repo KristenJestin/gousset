@@ -82,9 +82,7 @@ export function ReviewLines({
   const [first] = useState(() => new Set(lines.map((line) => line.id)));
 
   const unfolds = (id: string) =>
-    first.has(id)
-      ? {}
-      : { initial: { opacity: 0 }, animate: { opacity: 1 } };
+    first.has(id) ? {} : { initial: { opacity: 0 }, animate: { opacity: 1 } };
 
   return (
     <ul aria-label={label} data-slot="review-lines" className="relative flex flex-col">

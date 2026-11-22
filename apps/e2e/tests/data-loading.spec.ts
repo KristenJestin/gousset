@@ -9,6 +9,7 @@ import {
   animationsDone,
   expect,
   fixDay,
+  signIn,
   slowServerFunctions,
   test,
   visit,
@@ -27,7 +28,12 @@ const SLOW_MONTH_MS = 6000;
 const block = (page: Page, title: string) => page.getByRole("region", { name: title });
 
 /** The month switcher beside the page's title. */
-const monthSwitcher = (page: Page) => page.getByRole("group", { name: "Month" });
+const monthSwitcher = (page: Page) => page.getByRole("group", { name: "Month", exact: true });
+
+const errorToast = (page: Page) =>
+  page
+    .getByRole("region", { name: "Notifications" })
+    .locator('[data-slot="toast"][data-type="error"]');
 
 /** Leaves the review for a page that links back to it, so that the way back is a client navigation. */
 async function openUsersPage(page: Page) {
@@ -139,8 +145,9 @@ test("a refused mutation rolls back", async ({ userPage: page }) => {
   // Folded away at once, before the server answers…
   await expect(line).toHaveCount(0);
 
-  // …then put back, with a message that says so.
-  const toast = page.getByRole("alert");
+  // …then put back, with a message that says so: an error toast in the Notifications landmark
+  // (packages/ui's toaster; ui-sdk announces it assertively through its own live region).
+  const toast = errorToast(page);
 
   await expect(toast).toContainText("Something went wrong");
   await expect(toast).toContainText("The line could not be approved; it is back in the list.");
@@ -258,15 +265,22 @@ test("a line already reviewed elsewhere is refused, and stays reviewed", async (
     .first()
     .click();
 
-  await expect(page.getByRole("alert")).toContainText("This line was already reviewed elsewhere.");
+  await expect(errorToast(page)).toContainText("This line was already reviewed elsewhere.");
   await expect(toReview).toContainText("Show the other 2");
 });
 
 test("a user who signs in after another in the same tab never sees the other's data", async ({
-  userPage: page,
+  page,
   user,
   secondUser,
+  baseURL,
 }) => {
+  // The first user signs out below: in a session of their own, never the worker's shared one,
+  // which every later test of the worker uses.
+  const own = await signIn(baseURL ?? "", user);
+
+  await page.context().addCookies([...own.cookies]);
+
   // July is this test's own month: the review opens on it.
   await fixDay(page, "2026-07-31");
   await visit(page, "/");
@@ -300,7 +314,6 @@ test("a user who signs in after another in the same tab never sees the other's d
   await page.getByRole("button", { name: "Sign in" }).click();
 
   await expect(page.getByRole("heading", { level: 1, name: "Monthly review" })).toBeVisible();
-  await expect(page.getByRole("button", { name: secondUser.name })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.dataset.e2eNoReload)).toBe("yes");
 
   // Their own July: every line still to review, not the first user's list.
@@ -335,9 +348,8 @@ test("changing month keeps the current data on screen while the next one loads",
   expect((await counts()).skeletons).toBe(0);
 });
 
-test("the months either side are loaded before the switcher is pressed", async ({
-  userPage: page,
-}) => {
+/** Records the server functions a page asks for from now on. */
+function recordAsked(page: Page) {
   const asked: Array<string> = [];
 
   page.on("request", (request) => {
@@ -346,6 +358,14 @@ test("the months either side are loaded before the switcher is pressed", async (
     }
   });
 
+  return asked;
+}
+
+test("the months either side are loaded before the switcher is pressed", async ({
+  userPage: page,
+}) => {
+  const asked = recordAsked(page);
+
   await visit(page, MONTH);
 
   await expect.poll(() => asked.some((url) => url.includes("2026-09"))).toBe(true);
@@ -353,4 +373,37 @@ test("the months either side are loaded before the switcher is pressed", async (
 
   // Nothing was pressed: still October.
   await expect(page).toHaveURL(/month=2026-10/);
+});
+
+/** Opens a screen without the review's data, and records the server functions asked after. */
+async function fromAccounts(page: Page) {
+  await visit(page, "/accounts");
+
+  return recordAsked(page);
+}
+
+test("a link preloads its route on hover and on focus", async ({ userPage: page }) => {
+  // The review opens on today's month, October.
+  await fixDay(page, "2026-10-31");
+
+  const hovered = await fromAccounts(page);
+
+  await page.getByRole("link", { name: "Review" }).hover();
+  await expect.poll(() => hovered.some((url) => url.includes("2026-10"))).toBe(true);
+
+  const other = await page.context().newPage();
+
+  try {
+    await fixDay(other, "2026-10-31");
+
+    const focused = await fromAccounts(other);
+
+    await other.getByRole("link", { name: "Review" }).focus();
+    await expect.poll(() => focused.some((url) => url.includes("2026-10"))).toBe(true);
+  } finally {
+    await other.close();
+  }
+
+  // Nothing was clicked: still on the accounts.
+  await expect(page).toHaveURL(/\/accounts$/);
 });

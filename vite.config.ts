@@ -119,13 +119,13 @@ export default defineConfig({
         rules: { "no-restricted-imports": ["error", NO_ZOD] },
       },
       // Every text a person reads comes from the messages (packages/i18n), in the app and in the
-      // shared components; stories and the harness's probe pages hold made-up text of their own.
+      // shared components; stories, tests and the harness's probe pages hold made-up text.
       {
         files: ["apps/web/src/**/*.tsx", "packages/ui/src/components/**/*.tsx"],
         rules: { "gousset/no-text-outside-messages": "error" },
       },
       {
-        files: ["**/*.stories.tsx", "apps/web/src/routes/e2e/**"],
+        files: ["**/*.stories.tsx", "**/*.test.tsx", "apps/web/src/routes/e2e/**"],
         rules: { "gousset/no-text-outside-messages": "off" },
       },
     ],

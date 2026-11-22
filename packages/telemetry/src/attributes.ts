@@ -17,6 +17,12 @@ export const ALLOWED_SPAN_ATTRIBUTES = [
   "gousset.request.handler",
   // A server function's name in the code, never its arguments.
   "gousset.server_function",
+  // A call to an MCP tool (`mcpToolCall`): the tool's name and its action, both Gousset's own
+  // (an action that did not decode is "unknown"), and how the call ended, from a closed set.
+  // Never the call's arguments nor its result.
+  "gousset.mcp.tool",
+  "gousset.mcp.action",
+  "gousset.mcp.outcome",
   // Added by Effect's OTLP exporter to a span whose fiber was interrupted.
   "effect.fiber.interrupted",
 ] as const;
@@ -54,6 +60,8 @@ export const SPAN_NAMES = [
   "_OTHER",
   // A server function (`serverFunctionSpan`), its name in an attribute.
   "server function",
+  // A call to an MCP tool (`mcpToolCall`), its tool and action in attributes.
+  "mcp tool call",
 ] as const;
 
 export type SpanName = (typeof SPAN_NAMES)[number];

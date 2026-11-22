@@ -20,6 +20,10 @@ export function errorMessage(code: string | undefined): string {
       return m.errorEmailTaken();
     case "INVALID_EMAIL":
       return m.errorInvalidEmail();
+    case "SIGN_IN_REQUIRED":
+      return m.errorSignInRequired();
+    case "ADMIN_ONLY":
+      return m.errorAdminOnly();
     default:
       return m.errorUnknown();
   }

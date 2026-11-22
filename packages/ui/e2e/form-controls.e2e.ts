@@ -23,13 +23,16 @@ test.describe("TextField", () => {
     await expect(input).toHaveValue("ada@example.com");
   });
 
-  test("a required text field keeps its name without the star", async ({ page }) => {
+  test("a required text field is required, and its label is exactly its words", async ({
+    page,
+  }) => {
     await page.goto(story("textfield", "required"));
 
     const input = page.getByRole("textbox", { name: "E-mail", exact: true });
 
     await expect(input).toHaveAttribute("required", "");
-    await expect(page.locator('[data-slot="field-label"]')).toHaveText("E-mail*");
+    await expect(page.getByLabel("E-mail", { exact: true })).toBeEditable();
+    await expect(page.locator('[data-slot="field-label"]')).toHaveText("E-mail");
   });
 
   test("an error is announced: the input is invalid and the message describes it", async ({

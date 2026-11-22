@@ -81,7 +81,11 @@ export function FormField({
   );
 }
 
-/** The label; a required control's shows a star, hidden from screen readers. */
+/**
+ * The label, exactly the words given: no star for a required control (the control's own
+ * `required` is announced, and a star would change the label's text, which tests and agents
+ * find controls by).
+ */
 function FieldLabelPart({
   label,
   hidden,
@@ -99,16 +103,7 @@ function FieldLabelPart({
         pressable && "cursor-pointer data-disabled:cursor-not-allowed",
       )}
     >
-      {(state) => (
-        <>
-          {label}
-          {state.required ? (
-            <span aria-hidden="true" className="ms-0.5 text-muted-foreground">
-              *
-            </span>
-          ) : null}
-        </>
-      )}
+      {label}
     </FieldLabel>
   );
 }

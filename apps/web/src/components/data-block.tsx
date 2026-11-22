@@ -1,5 +1,6 @@
-import { Block, ErrorState, FadeIn } from "@gousset/ui/components/data-block";
+import { Block, FadeIn } from "@gousset/ui/components/data-block";
 import type { BlockProps } from "@gousset/ui/components/data-block";
+import { ErrorState } from "@gousset/ui/components/error-state";
 import { useQueryErrorResetBoundary } from "@tanstack/react-query";
 import { Component, Suspense } from "react";
 import type { ReactNode } from "react";

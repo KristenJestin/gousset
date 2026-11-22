@@ -1,5 +1,5 @@
 import { motion } from "motion/react";
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
 import type { AnchorHTMLAttributes, ButtonHTMLAttributes, ReactNode, Ref } from "react";
 
 import { transition } from "../lib/motion";
@@ -84,18 +84,45 @@ export function NavLink({ icon, label, ...props }: NavLinkProps) {
       {...props}
       className="relative flex h-9 items-center gap-3 rounded-md px-2.5 text-sm text-muted-foreground transition-colors hover:text-foreground aria-[current=page]:font-medium aria-[current=page]:text-foreground"
     >
-      {current ? (
-        <motion.span
-          layoutId="nav-current"
-          transition={transition.base}
-          className="absolute inset-0 rounded-md bg-muted"
-        />
-      ) : null}
+      {current ? <CurrentMark layoutId="nav-current" place="nav" /> : null}
       <span className="relative flex">
         <Icon name={icon} size="lg" />
       </span>
       <span className="relative sr-only lg:not-sr-only">{label}</span>
     </a>
+  );
+}
+
+const subscribeToNothing = () => () => undefined;
+
+/**
+ * The current item's mark, which slides to the item reached (Motion's shared layout). On the
+ * server and while hydrating it is a plain element: Motion writes a `style` attribute, which the
+ * Content Security Policy refuses in the server's markup.
+ */
+function CurrentMark({ layoutId, place }: { layoutId: string; place: "nav" | "tab" }) {
+  const inBrowser = useSyncExternalStore(
+    subscribeToNothing,
+    () => true,
+    () => false,
+  );
+
+  const className =
+    place === "nav"
+      ? "absolute inset-0 rounded-md bg-muted"
+      : "absolute inset-x-4 top-0 h-0.5 rounded-full bg-primary";
+
+  if (!inBrowser) {
+    return <span data-slot="current-mark" className={className} />;
+  }
+
+  return (
+    <motion.span
+      data-slot="current-mark"
+      layoutId={layoutId}
+      transition={transition.base}
+      className={className}
+    />
   );
 }
 
@@ -135,13 +162,7 @@ export function TabLink({ icon, label, ...props }: NavLinkProps) {
       {...props}
       className="relative flex flex-1 flex-col items-center justify-center gap-1 text-xs text-muted-foreground aria-[current=page]:font-medium aria-[current=page]:text-foreground"
     >
-      {current ? (
-        <motion.span
-          layoutId="tab-current"
-          transition={transition.base}
-          className="absolute inset-x-4 top-0 h-0.5 rounded-full bg-primary"
-        />
-      ) : null}
+      {current ? <CurrentMark layoutId="tab-current" place="tab" /> : null}
       <Icon name={icon} size="lg" />
       <span>{label}</span>
     </a>
@@ -175,11 +196,11 @@ export function ScreenTransition({ id, children }: { id: string; children: React
     setFirst(null);
   }
 
-  // The first screen carries no Motion values, so the server's markup has no `style` attribute
-  // (the Content Security Policy forbids them).
+  // The first screen is a plain element: Motion would write `style="opacity:1"` into the server's
+  // markup, which the Content Security Policy refuses.
   if (first === id) {
     return (
-      <div key={id} data-slot="screen" className="flex min-w-0 flex-1 flex-col">
+      <div data-slot="screen" className="flex min-w-0 flex-1 flex-col">
         {children}
       </div>
     );

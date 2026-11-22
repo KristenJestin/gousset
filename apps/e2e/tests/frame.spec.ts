@@ -3,7 +3,7 @@ import { Schema } from "effect";
 
 import { APP_HOST } from "../src/app-server";
 import { onPhone, openAccountMenu } from "../src/frame";
-import { expect, expectAccessible, fixDay, test, visit } from "../src/test";
+import { animationsDone, expect, expectAccessible, fixDay, test, visit } from "../src/test";
 
 // The scenarios of issue #8 (the app's frame and navigation), "How to verify", one test each,
 // plus the issue's motion and its other points: the month in the URL, the language, the brand.
@@ -141,6 +141,8 @@ test("on a phone, a tab bar holds review, operations, accounts and more", async 
   await menu.getByRole("menuitem", { name: "Subjects" }).click();
   await expect(userPage).toHaveURL(/\/subjects$/);
   await expect(userPage.getByRole("heading", { level: 1, name: "Subjects" })).toBeVisible();
+  // The menu fades out and the screen in: axe checks the screen once they are drawn.
+  await animationsDone(userPage);
 });
 
 test("the month is kept in the url and moves with the switcher", async ({ userPage }) => {
@@ -213,7 +215,7 @@ test("moving between screens fades the screen, the current item slides, empty st
   userPage,
 }) => {
   test.skip(onPhone(userPage), "The sidebar is the desktop's.");
-  await visit(userPage, "/");
+  await visit(userPage, "/accounts");
 
   // The empty state fades in through CSS, 200 ms.
   const block = userPage.locator('[data-slot="screen-block"]');

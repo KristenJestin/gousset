@@ -55,6 +55,10 @@ const SHOTS: ReadonlyArray<Shot> = [
   { id: "money-breakdown--loading" },
   { id: "charts-spending-chart--default" },
   { id: "charts-bar-chart--default" },
+  { id: "brand-brand--with-wordmark" },
+  { id: "layout-app-shell--desktop" },
+  { id: "layout-user-menu--default", open: "click" },
+  { id: "inputs-segmented-choice--default" },
 ];
 
 async function openPopup(page: Page, open: Shot["open"]) {
@@ -85,11 +89,13 @@ for (const scheme of ["light", "dark"] as const) {
 
       if (shot.open !== undefined) {
         await openPopup(page, shot.open);
+        // The visible popup: a trigger's own tooltip sits closed and hidden in the page too.
         await expect(
           page
             .locator(
               '[role="dialog"], [role="menu"], [role="tooltip"], [data-slot$="-content"][data-open]',
             )
+            .filter({ visible: true })
             .first(),
         ).toBeVisible();
       }

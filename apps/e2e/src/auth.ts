@@ -132,6 +132,47 @@ export async function createUser(baseURL: string, admin: TestUser, person: Perso
 }
 
 /**
+ * A session of its own for a user already created: for a test that ends its session (signs out),
+ * which must never end the worker's shared one (`userPage`, `secondUserPage`).
+ */
+export async function signIn(baseURL: string, person: TestUser): Promise<TestUser> {
+  const context = await appRequest(baseURL);
+
+  try {
+    await ensureOk(
+      context.post(SIGN_IN_PATH, { data: { email: person.email, password: person.password } }),
+      `Signing in ${person.email}`,
+    );
+
+    const { cookies } = await context.storageState();
+
+    return { ...person, cookies };
+  } finally {
+    await context.dispose();
+  }
+}
+
+const LiveSession = Schema.Struct({ session: Schema.Struct({ id: Schema.String }) });
+
+/** Whether the session these cookies carry is still alive on the app. */
+export async function hasLiveSession(baseURL: string, person: TestUser): Promise<boolean> {
+  const context = await request.newContext({
+    baseURL,
+    extraHTTPHeaders: { Origin: baseURL },
+    storageState: { cookies: [...person.cookies], origins: [] },
+  });
+
+  try {
+    const answer = await context.get("/api/auth/get-session");
+
+    // better-auth answers `null` for a session it no longer knows.
+    return answer.ok() && Schema.is(LiveSession)(await answer.json());
+  } finally {
+    await context.dispose();
+  }
+}
+
+/**
  * Another user of the installation: created by the administrator with a temporary password, then
  * signed in once to change it, as the app asks at the first sign-in.
  */
