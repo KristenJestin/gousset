@@ -318,6 +318,8 @@ test("signing in goes to the app in one transition, with a session of 30 days", 
   expect(session?.sameSite).toBe("Lax");
   expect(days).toBeGreaterThan(29.9);
   expect(days).toBeLessThanOrEqual(30);
+  // The review's blocks fade in: axe, at the end, would measure their contrast halfway.
+  await animationsDone(page);
 });
 
 test("form errors fade in and out, and do not move under reduced motion", async ({
