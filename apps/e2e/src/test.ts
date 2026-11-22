@@ -8,6 +8,7 @@ import { startWorkerEnvironment } from "./app-server";
 import type { WorkerEnvironment } from "./app-server";
 import { addUser, madeUpUser, signUp } from "./auth";
 import type { TestUser } from "./auth";
+import { TEST_CLIENT_ID, registerTestClient } from "./oauth-client";
 import { writeStatements } from "./statements";
 import type { StatementPaths } from "./statements";
 
@@ -32,6 +33,11 @@ type TestFixtures = {
   statements: StatementPaths;
   /** axe on the screen each page ends on, once the test has passed. */
   accessibilityAtTheEnd: void;
+  /**
+   * The harness's MCP client, registered with the worker's app, nothing allowed yet: every test
+   * goes through the consent page (`registerTestClient`).
+   */
+  mcpClientId: string;
 };
 
 async function expectAccessibleIfOpen(page: Page): Promise<void> {
@@ -83,6 +89,11 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
     },
     { scope: "worker" },
   ],
+
+  mcpClientId: async ({ app }, provide) => {
+    await registerTestClient(app.database, app.baseURL);
+    await provide(TEST_CLIENT_ID);
+  },
 
   userPage: async ({ page, user }, provide) => {
     await page.context().addCookies([...user.cookies]);
@@ -145,3 +156,5 @@ export { fixDay } from "./clock";
 export { slowServerFunctions } from "./latency";
 
 export { connectMcp } from "./mcp";
+
+export type { McpSession, Revision } from "./mcp";
