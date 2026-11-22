@@ -5,11 +5,13 @@ whoever installs it. Two branches publish, each with a version that says where i
 
 | Branch | Image tags (example)           | Made by                                                    |
 | ------ | ------------------------------ | ---------------------------------------------------------- |
-| `dev`  | `0.1.3-beta.12`, `beta`        | each push, once its `verify` passed (`beta.yml`)           |
+| `dev`  | `0.1.3-beta.12`, `sha-<commit>`, `beta` | each push, once its `verify` passed (`beta.yml`)  |
 | `main` | `0.1.3`, `latest`, tag `v0.1.3` | the `Release` workflow, started by hand (`release.yml`)   |
 
 The image is `ghcr.io/kristenjestin/gousset`. A published version is never replaced: a run again
-publishes only what is missing. `beta` and `latest` move; a version stays.
+publishes only what is missing. `beta` and `latest` move; a version stays. `sha-<commit>` (the
+full SHA) records the image of each commit of `dev`: the release takes the image by it, never by a
+name computed again.
 
 ## The image
 
@@ -104,8 +106,9 @@ so a password, with an installation.
 
 Computed, never typed: `tools/version.sh stable|beta|base [--at <commit>]`, for HEAD by default.
 
-- **It counts from the last release**: the highest tag `vX.Y.Z`, compared as versions.
-  Pre-release tags do not count. Without a release, from `0.0.0` and the first commit.
+- **It counts from the last release the commit holds**: the highest tag `vX.Y.Z` of its history,
+  compared as versions. Pre-release tags do not count. Without a release, from `0.0.0` and the
+  first commit.
 - **The next version** follows the Angular commits counted (`AGENTS.md`, "Git and pull requests"),
   first parents only and merges left out: `feat` bumps the minor, `fix` and `perf` the patch, a `!`
   after the type or a `BREAKING CHANGE:` footer the major. Nothing that bumps is the next patch.
@@ -116,15 +119,19 @@ Computed, never typed: `tools/version.sh stable|beta|base [--at <commit>]`, for 
 - **`Release-As: X.Y.Z` sets the version by hand.** A footer of that form in a commit message since
   the last release (a squash's body) sets the next version, and the betas after it, when it is
   above the computed one; with several, the highest wins. It is forgotten once released. A value
-  below the computed version, or not `X.Y.Z`, is refused: `tools/version.sh` exits 1 naming the
-  commit, which fails the beta until it is fixed. Example: the pull request that ends v0.2 is
+  below the computed version (a breaking change merged after it, say), or not `X.Y.Z`, is ignored:
+  `tools/version.sh` warns naming the commit, and never fails, since a commit of `dev` cannot be
+  changed and would otherwise block every beta and release after it. Example: the pull request that ends v0.2 is
   squashed into `dev` with `Release-As: 0.2.0` in its body; its betas are `0.2.0-beta.N`, its
   release `0.2.0`, and the next feature after it `0.2.1`.
 - **The beta's number** `N` counts the commits of `dev` since the last release (first parents
   only): each squash into `dev` makes the next beta, and the first after a release is `-beta.1`.
-- **The stable version is the one its beta had**, without the pre-release: `0.1.3-beta.12`
-  releases `0.1.3`. `tools/version.sh stable` exits 3 when nothing was committed since the last
-  release.
+  A commit that is a release itself has no beta and no release of its own: `tools/version.sh`
+  exits 3 for it, on both channels, and never prints a `-beta.0`.
+- **The stable version is computed when it is released**, from the releases the commit holds: it
+  is the one its beta had, without the pre-release (`0.1.3-beta.12` releases `0.1.3`), unless a
+  release of an earlier commit was made since its push, in which case it is the next one (the
+  image stays its beta's, found by its commit).
 
 The first release is `0.0.1` unless a commit says otherwise: the one that closes milestone
 v0.1 carries `Release-As: 0.1.0`.
@@ -135,8 +142,13 @@ v0.1 carries `Release-As: 0.1.0`.
 It reads that run's `verify` job: if it did not pass, nothing is published (a notice says so).
 Otherwise it checks out the pushed commit, computes its beta version, builds the image, runs
 `tools/check-image.sh` on it, and only then signs in to the registry and pushes
-`X.Y.Z-beta.N`. `beta` moves to it only while the commit is still `dev`'s head: a push made since
-publishes its own. Betas run one at a time, in order.
+`X.Y.Z-beta.N`. Two jobs: `build` runs the branch's code (the version, the build, the check) with a
+token that can only read, and saves the image; `publish` holds the token that writes images, checks
+nothing out and runs no code of the branch: it loads the saved image and pushes it as
+`sha-<commit>` and `X.Y.Z-beta.N`. A version already published is reused only when it is that
+commit's image (`sha-<commit>`, same digest); another commit's under that name fails the run. `beta`
+moves only while the commit is still `dev`'s head: a push made since publishes its own. There is no
+concurrency group, which would cancel a waiting run: every push gets its beta.
 
 ## Releasing
 
@@ -154,12 +166,13 @@ review; it is never merged with the button, and GitHub shows it merged once `mai
 
 - **What it checks first**, reading only: it runs from `dev`; the commit is a full SHA or `dev`,
   and a commit of `dev`; `main`, when it exists, is its ancestor; something was committed since the
-  last release. Then, before writing anything, that **the beta of that commit was published**: a
-  beta exists only once `verify` passed on its push, so a release is never a commit no `verify`
-  passed on, and is never built again. Any of these refused, nothing moves and the run fails,
+  last release. Then, before writing anything, that `RELEASE_TOKEN` is set and that **the beta of
+  that commit was published** (`sha-<commit>`): a beta exists only once `verify` passed on its
+  push, so a release is never a commit no `verify` passed on, and is never built again. Any of these refused, nothing moves and the run fails,
   saying why.
-- **Then**, in this order: `main` moves forward to the commit through GitHub's API, not forced
-  (GitHub refuses anything but a fast-forward; before the first release, `main` is made there);
+- **Then**, in this order: `main` moves forward to the commit through GitHub's API with
+  `RELEASE_TOKEN`, not forced (GitHub refuses anything but a fast-forward; before the first
+  release, `main` is made there);
   the beta image is published again, unchanged, as `X.Y.Z` and `latest`; last, the GitHub release
   `vX.Y.Z`, marked latest, which makes the tag on that commit. Run again after a failure, it does
   what is left: the tag comes last, so the version is still the same.
@@ -185,8 +198,12 @@ In the repository's settings, never in the repository:
 
 1. **The package is public.** The first beta creates `ghcr.io/kristenjestin/gousset` as a private
    package: in its settings, make it public, so that an installation pulls it without signing in.
-2. **`main` lets the workflow move it.** If `main` has a ruleset or a branch protection, it allows
-   the `Release` workflow (GitHub Actions) to update it, by fast-forward only; nobody else pushes
-   to it.
+2. **The secret `RELEASE_TOKEN`** (Settings, Secrets and variables, Actions): a fine-grained
+   personal access token for this repository only, with the permissions **Contents: read and
+   write** and **Workflows: read and write**. `main` moves with it: GitHub refuses the workflow's
+   own token any push that changes `.github/workflows`, and its documentation does not say a ref
+   moved through the API is spared. Without the secret, the release fails at once, saying so,
+   before anything is written. If `main` has a ruleset or a branch protection, it lets this token
+   update it, by fast-forward only; nobody else pushes to it.
 3. The beta follows the workflow named `ci` and its job named `verify`: renaming either means
    changing `beta.yml` with it.

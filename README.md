@@ -27,6 +27,12 @@ The database of development (`docker-compose.dev.yml`) listens on this machine o
 whole stack from the clone with `pnpm docker:up`, make its two secret files first
 ([`docs/releases.md`](docs/releases.md), "Installing").
 
+The database of development moved to `docker-compose.dev.yml` (project `gousset-dev`). If you ran
+`pnpm db:start` before, its old container still holds port 5432: remove it with
+`docker rm --force gousset-postgres` (its volume `gousset_gousset_postgres_data` stays). The new one starts empty: `pnpm db:push` fills its schema; to keep old data, dump it from
+the old container before removing it (`docker exec gousset-postgres pg_dump -U postgres gousset`)
+and load it into the new one.
+
 `vp check`, `vp test` and `pnpm build` are the checks. How to work in this repository, for
 people and agents alike, is in [`AGENTS.md`](AGENTS.md).
 
