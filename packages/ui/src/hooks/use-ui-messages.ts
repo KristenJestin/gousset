@@ -1,3 +1,4 @@
+import { getLocale } from "@gousset/i18n/runtime";
 import { useSyncExternalStore } from "react";
 
 import { uiMessagesFor } from "../lib/messages";
@@ -11,12 +12,15 @@ function subscribe(onChange: () => void) {
   return () => observer.disconnect();
 }
 
-/** The ui's texts in the page's language (`<html lang>`), following a change of it. */
+/**
+ * The ui's texts in the page's language (`<html lang>`), following a change of it; on the server,
+ * the request's language, so that the first paint and the hydration say the same.
+ */
 export function useUiMessages(): UiMessages {
   const lang = useSyncExternalStore(
     subscribe,
     () => document.documentElement.lang,
-    () => "en",
+    () => getLocale(),
   );
 
   return uiMessagesFor(lang);
