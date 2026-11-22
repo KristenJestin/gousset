@@ -212,6 +212,61 @@
 @theme {
   --default-transition-duration: 200ms;
   --default-transition-timing-function: cubic-bezier(0, 0, 0.2, 1);
+
+  /* `Loader` (docs/design.md, "Loading"): the coin falls into the pocket and fades, in a loop;
+     under reduced motion it stays in place and pulses softly. */
+  --animate-coin-fall: coin-fall 1.3s cubic-bezier(0.5, 0, 0.75, 0) infinite;
+  --animate-coin-pulse: coin-pulse 1.6s ease-in-out infinite;
+  /* Skeletons breathe while their data comes; reduced motion keeps them still. */
+  --animate-skeleton: skeleton 1.6s ease-in-out infinite;
+
+  @keyframes coin-fall {
+    0% {
+      opacity: 0;
+      transform: translateY(-2px);
+    }
+
+    20% {
+      opacity: 1;
+    }
+
+    70% {
+      opacity: 1;
+    }
+
+    100% {
+      opacity: 0;
+      transform: translateY(9px);
+    }
+  }
+
+  @keyframes coin-pulse {
+    0%,
+    100% {
+      opacity: 1;
+    }
+
+    50% {
+      opacity: 0.35;
+    }
+  }
+
+  @keyframes skeleton {
+    0%,
+    100% {
+      opacity: 1;
+    }
+
+    50% {
+      opacity: 0.55;
+    }
+  }
+}
+
+/* A square of the text's size: the loader and inline marks follow the text they sit in. */
+@utility size-em {
+  width: 1em;
+  height: 1em;
 }
 
 @layer base {

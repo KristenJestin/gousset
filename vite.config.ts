@@ -33,6 +33,14 @@ const AGENT_TOOLING = [".agents/**", ".claude/**"];
 
 const ZOD = 'No zod in Gousset: validate with Effect `Schema` (`import { Schema } from "effect"`).';
 
+const TABLER =
+  'Icons come from packages/ui: `<Icon name="..." />`, named in `packages/ui/src/components/icons.ts` (docs/design.md, "Icons").';
+
+const NO_ZOD = {
+  paths: [{ name: "zod", message: ZOD }],
+  patterns: [{ group: ["zod/*"], message: ZOD }],
+};
+
 export default defineConfig({
   lint: {
     // The Cloudflare preset (on @nkzw/oxlint-config), type-aware: no `any`, no unsafe
@@ -54,12 +62,12 @@ export default defineConfig({
     },
     rules: {
       ...cloudflare.rules,
-      // Effect `Schema` validates every value.
+      // Effect `Schema` validates every value; Tabler is reached only through `Icon`.
       "no-restricted-imports": [
         "error",
         {
-          paths: [{ name: "zod", message: ZOD }],
-          patterns: [{ group: ["zod/*"], message: ZOD }],
+          paths: NO_ZOD.paths,
+          patterns: [...NO_ZOD.patterns, { group: ["@tabler/*"], message: TABLER }],
         },
       ],
       // The design system: only the theme's values, and a page never restyles a component.
@@ -102,6 +110,11 @@ export default defineConfig({
       ...(cloudflare.overrides ?? []),
       // Inside a component of packages/ui, a class of its own is the design decision.
       { files: ["packages/ui/src/components/**"], rules: { "shadcn/no-restyle": "off" } },
+      // The one file that names Tabler's drawings.
+      {
+        files: ["packages/ui/src/components/icons.ts"],
+        rules: { "no-restricted-imports": ["error", NO_ZOD] },
+      },
     ],
     ignorePatterns: [
       ...(cloudflare.ignorePatterns ?? []),
