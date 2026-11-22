@@ -119,6 +119,9 @@ jobs:
   release:
     needs: prepare
     runs-on: ubuntu-latest
+    # RELEASE_TOKEN is a secret of this environment, which only dev may deploy to: no workflow of
+    # another branch reads it (docs/releases.md, "What the maintainer sets once").
+    environment: release
     permissions:
       contents: write
       packages: write
@@ -135,7 +138,7 @@ jobs:
           RELEASE_TOKEN: ${{ secrets.RELEASE_TOKEN }}
         run: |
           if [ -z "$RELEASE_TOKEN" ]; then
-            echo "::error::The secret RELEASE_TOKEN is not set: a fine-grained token of this repository only, with Contents and Workflows read and write (docs/releases.md, \"What the maintainer sets once\"). Nothing was released."
+            echo "::error::The secret RELEASE_TOKEN of the environment release is not set: a fine-grained token of this repository only, with Contents and Workflows read and write (docs/releases.md, \"What the maintainer sets once\"). Nothing was released."
             exit 1
           fi
 
@@ -152,10 +155,33 @@ jobs:
 
       # Published by beta.yml once verify passed on that commit, under its commit: a release is
       # never built anew, nor taken by a name computed again.
-      - name: The image of the commit is published
+      - name: The image of the commit is published, and the version is not another's
         run: |
-          if ! docker buildx imagetools inspect "$IMAGE:sha-$SHA" > /dev/null; then
+          # The digest of a published image; exits 1 when it is not published, 2 when the registry
+          # cannot be read.
+          digest() {
+            local out
+            if out=$(docker buildx imagetools inspect "$1" --format '{{.Manifest.Digest}}' 2>&1); then
+              echo "$out"
+            elif [[ $out == *": not found"* ]]; then
+              return 1
+            else
+              echo "::error::$1 could not be read: $out" >&2
+              return 2
+            fi
+          }
+          status=0
+          recorded=$(digest "$IMAGE:sha-$SHA") || status=$?
+          if [ "$status" -eq 1 ]; then
             echo "::error::$IMAGE:sha-$SHA, the beta of $SHA, is not published (did verify pass on its push, and its beta run?): nothing was released."
+          fi
+          [ "$status" -eq 0 ] || exit 1
+          # A published version is never replaced: a run again releases the same image or nothing.
+          status=0
+          named=$(digest "$IMAGE:$VERSION") || status=$?
+          [ "$status" -ne 2 ] || exit 1
+          if [ "$status" -eq 0 ] && [ "$named" != "$recorded" ]; then
+            echo "::error::$IMAGE:$VERSION is published already, as another commit's image than $SHA's: nothing was released."
             exit 1
           fi
 
@@ -178,7 +204,8 @@ jobs:
 
       - name: Publish the image as X.Y.Z and latest
         run: |
-          docker buildx imagetools create --tag "$IMAGE:$VERSION" --tag "$IMAGE:latest" "$IMAGE:sha-$SHA"
+          # A carbon copy, not an index: the same digest as sha-<commit>.
+          docker buildx imagetools create --prefer-index=false --tag "$IMAGE:$VERSION" --tag "$IMAGE:latest" "$IMAGE:sha-$SHA"
           echo "::notice::$IMAGE:$VERSION and latest are the image of $SHA."
 
       # Last: the release makes the tag, after which the version counts from it.

@@ -135,19 +135,44 @@ jobs:
 
       - name: Publish the beta
         run: |
-          digest() { docker buildx imagetools inspect "$1" --format '{{.Manifest.Digest}}' 2> /dev/null; }
+          # The name comes from the branch's code: only a beta's name is ever written here.
+          if ! [[ $VERSION =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)-beta\.[1-9][0-9]*$ ]]; then
+            echo "::error::'$VERSION' is not a beta's version X.Y.Z-beta.N: nothing was published."
+            exit 1
+          fi
+          # The digest of a published image; exits 1 when it is not published, 2 when the registry
+          # cannot be read (never taken for "absent").
+          digest() {
+            local out
+            if out=$(docker buildx imagetools inspect "$1" --format '{{.Manifest.Digest}}' 2>&1); then
+              echo "$out"
+            elif [[ $out == *": not found"* ]]; then
+              return 1
+            else
+              echo "::error::$1 could not be read: $out" >&2
+              return 2
+            fi
+          }
+          # A carbon copy, not an index: the same digest as its source.
+          copy() { docker buildx imagetools create --prefer-index=false --tag "$2" "$1"; }
+          status=0
+          recorded=$(digest "$IMAGE:sha-$SHA") || status=$?
+          [ "$status" -ne 2 ] || exit 1
+          named_status=0
+          named=$(digest "$IMAGE:$VERSION") || named_status=$?
+          [ "$named_status" -ne 2 ] || exit 1
           # sha-<commit> records the image of each commit: the release takes it by that name, and a
           # version is reused only when it is that commit's image. A published version is never
           # replaced.
-          if recorded=$(digest "$IMAGE:sha-$SHA"); then
-            if ! named=$(digest "$IMAGE:$VERSION"); then
-              docker buildx imagetools create --tag "$IMAGE:$VERSION" "$IMAGE:sha-$SHA"
+          if [ "$status" -eq 0 ]; then
+            if [ "$named_status" -eq 1 ]; then
+              copy "$IMAGE:sha-$SHA" "$IMAGE:$VERSION"
             elif [ "$named" != "$recorded" ]; then
               echo "::error::$IMAGE:$VERSION is another image than the one of $SHA: nothing was published."
               exit 1
             fi
             echo "::notice::The image of $SHA is published already, as $VERSION."
-          elif digest "$IMAGE:$VERSION" > /dev/null; then
+          elif [ "$named_status" -eq 0 ]; then
             echo "::error::$IMAGE:$VERSION is published already, for another commit than $SHA: nothing was published."
             exit 1
           else
@@ -158,7 +183,7 @@ jobs:
           # `beta` follows dev's head: a push made since publishes its own.
           head=$(gh api "repos/$GH_REPO/git/ref/heads/dev" --jq .object.sha)
           if [ "$head" = "$SHA" ]; then
-            docker buildx imagetools create --tag "$IMAGE:beta" "$IMAGE:sha-$SHA"
+            copy "$IMAGE:sha-$SHA" "$IMAGE:beta"
             echo "::notice::$IMAGE:beta is $VERSION."
           else
             echo "::notice::dev moved on to $head: beta is left to its run."

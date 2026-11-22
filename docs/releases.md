@@ -124,9 +124,11 @@ Computed, never typed: `tools/version.sh stable|beta|base [--at <commit>]`, for 
   changed and would otherwise block every beta and release after it. Example: the pull request that ends v0.2 is
   squashed into `dev` with `Release-As: 0.2.0` in its body; its betas are `0.2.0-beta.N`, its
   release `0.2.0`, and the next feature after it `0.2.1`.
-- **The beta's number** `N` counts the commits of `dev` since the last release (first parents
-  only): each squash into `dev` makes the next beta, and the first after a release is `-beta.1`.
-  A commit that is a release itself has no beta and no release of its own: `tools/version.sh`
+- **The beta's number** `N` is the commit's place on `dev`'s first-parent line, counted from the
+  first commit: each squash into `dev` makes the next number, and it never restarts, so no two
+  commits of `dev` share a beta's name, whichever commit is released when (releasing a commit
+  behind `dev`'s head leaves the version of the later ones as it was, `X.Y.Z` included, and a
+  number that restarted would name them again). A commit that is a release itself has no beta and no release of its own: `tools/version.sh`
   exits 3 for it, on both channels, and never prints a `-beta.0`.
 - **The stable version is computed when it is released**, from the releases the commit holds: it
   is the one its beta had, without the pre-release (`0.1.3-beta.12` releases `0.1.3`), unless a
@@ -175,7 +177,9 @@ review; it is never merged with the button, and GitHub shows it merged once `mai
   release, `main` is made there);
   the beta image is published again, unchanged, as `X.Y.Z` and `latest`; last, the GitHub release
   `vX.Y.Z`, marked latest, which makes the tag on that commit. Run again after a failure, it does
-  what is left: the tag comes last, so the version is still the same.
+  what is left: the tag comes last, so the version is still the same. A version already published
+  as another commit's image is refused, never replaced: a run again with `commit=dev` after `dev`
+  moved on fails there, and is started again with the SHA of the commit first released.
 - The job that holds the tokens writing `main`, the tags and the images runs no code of any
   branch: no checkout, only `gh` and `docker` on what the reading job decided.
 
@@ -198,9 +202,13 @@ In the repository's settings, never in the repository:
 
 1. **The package is public.** The first beta creates `ghcr.io/kristenjestin/gousset` as a private
    package: in its settings, make it public, so that an installation pulls it without signing in.
-2. **The secret `RELEASE_TOKEN`** (Settings, Secrets and variables, Actions): a fine-grained
-   personal access token for this repository only, with the permissions **Contents: read and
-   write** and **Workflows: read and write**. `main` moves with it: GitHub refuses the workflow's
+2. **The environment `release` and its secret `RELEASE_TOKEN`.** Create the environment before
+   the first release (Settings, Environments, New environment: `release`; a job naming one that
+   does not exist creates it unprotected). In it, *Deployment branches and tags*, *Selected
+   branches and tags*, and only `dev`. Then, as an *environment secret* (not a repository secret,
+   which any branch's workflow can read), `RELEASE_TOKEN`: a fine-grained personal access token
+   for this repository only, with the permissions **Contents: read and write** and **Workflows:
+   read and write**. Optionally, *Required reviewers* on the environment, to approve each release. `main` moves with it: GitHub refuses the workflow's
    own token any push that changes `.github/workflows`, and its documentation does not say a ref
    moved through the API is spared. Without the secret, the release fails at once, saying so,
    before anything is written. If `main` has a ruleset or a branch protection, it lets this token
