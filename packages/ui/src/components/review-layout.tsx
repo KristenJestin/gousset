@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 
 import { cn } from "../lib/utils";
 import { Icon } from "./icon";
+import { Skeleton } from "./skeleton";
 
 // The monthly review's pieces (docs/wireframes, screens 1 and 11): the state line under the
 // page's title, then its blocks on a grid, in the order the screen reads them. The page itself is
@@ -87,6 +88,11 @@ export function ReviewCell({ column, lastOnPhone = false, children }: ReviewCell
       {children}
     </div>
   );
+}
+
+/** `CountChip` while its count loads: the same size, so the block's title line keeps its height. */
+export function CountChipSkeleton() {
+  return <Skeleton className="h-5 w-5 rounded-full" />;
 }
 
 /** A small rounded count after a block's title: the lines to review. */

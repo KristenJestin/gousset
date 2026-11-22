@@ -194,6 +194,7 @@
   "reviewSpendingEmpty": "Rien de dépensé ce mois-ci pour l'instant.",
   "reviewSubjectsEmpty": "Aucune dépense du mois n'est rattachée à un sujet.",
   "reviewSpendingPending": "{amount} de plus attendent dans les lignes à revoir.",
+  "reviewSpendingAllReviewed": "Toutes les lignes du mois sont vérifiées.",
   "reviewSpendingChart": "{name} : dépenses en {month}, face à {previous}",
   "reviewMovementsTitle": "Mouvements entre vos comptes",
   "reviewMovementsAside": "ni dépenses ni revenus",

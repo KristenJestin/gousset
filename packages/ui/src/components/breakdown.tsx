@@ -169,7 +169,7 @@ function DetailPanel({
       role="group"
       aria-label={row.name}
       data-slot="breakdown-detail"
-      className="flex flex-col gap-3 rounded-lg bg-muted p-3 outline-none"
+      className="flex flex-col gap-3 rounded-lg border bg-card p-3 outline-none"
       onKeyDown={onKeyDown}
     >
       <div className="flex h-8 items-center gap-3">
@@ -372,9 +372,17 @@ function RowSkeleton() {
 
 /**
  * `Breakdown` on its way: as many rows as the block will show (five by default) and, with
- * `more`, the "+ N more" line, at the same heights.
+ * `more`, the "+ N more" line, and with `footnote` the grey last line, at the same heights.
  */
-export function BreakdownSkeleton({ rows = 5, more = false }: { rows?: number; more?: boolean }) {
+export function BreakdownSkeleton({
+  rows = 5,
+  more = false,
+  footnote = false,
+}: {
+  rows?: number;
+  more?: boolean;
+  footnote?: boolean;
+}) {
   return (
     <SkeletonFrame>
       <ul className="flex flex-col divide-y">
@@ -384,6 +392,11 @@ export function BreakdownSkeleton({ rows = 5, more = false }: { rows?: number; m
         {more ? (
           <li className="flex h-10 items-center">
             <Skeleton className="h-4 w-24" />
+          </li>
+        ) : null}
+        {footnote ? (
+          <li className="flex h-10 items-center">
+            <Skeleton className="h-3 w-48" />
           </li>
         ) : null}
       </ul>

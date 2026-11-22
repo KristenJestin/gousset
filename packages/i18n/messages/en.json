@@ -194,6 +194,7 @@
   "reviewSpendingEmpty": "Nothing spent yet this month.",
   "reviewSubjectsEmpty": "No expense of the month is attached to a subject.",
   "reviewSpendingPending": "{amount} more waits in the lines to review.",
+  "reviewSpendingAllReviewed": "Every line of the month is reviewed.",
   "reviewSpendingChart": "{name}: spending in {month}, against {previous}",
   "reviewMovementsTitle": "Movements between your accounts",
   "reviewMovementsAside": "neither spending nor income",

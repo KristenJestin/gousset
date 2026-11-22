@@ -14,6 +14,7 @@ import { MonthBar, MonthBarSkeleton } from "@gousset/ui/components/month-bar";
 import { MovementList, MovementListSkeleton } from "@gousset/ui/components/movement-list";
 import {
   CountChip,
+  CountChipSkeleton,
   JumpLink,
   ReviewCell,
   ReviewGrid,
@@ -165,7 +166,7 @@ function Review() {
         <ReviewCell column="main">
           <DataBlock
             title={m.reviewSpendingTitle()}
-            skeleton={<BreakdownSkeleton rows={SPENDING_ROWS} more />}
+            skeleton={<BreakdownSkeleton rows={SPENDING_ROWS} more footnote />}
             resetKey={shown}
           >
             <Spending month={shown} />
@@ -196,7 +197,9 @@ function Review() {
               title={m.reviewToReviewTitle()}
               anchor={TO_REVIEW}
               badge={
-                linesToReview === undefined ? undefined : (
+                linesToReview === undefined ? (
+                  <CountChipSkeleton />
+                ) : (
                   <CountChip>
                     <Count value={linesToReview} locale={locale} />
                   </CountChip>
@@ -312,7 +315,7 @@ function Spending({ month }: { month: string }) {
       </TabsList>
       {GROUPS.map((group) => (
         <TabsPanel key={group} value={group}>
-          <Suspense fallback={<BreakdownSkeleton rows={SPENDING_ROWS} more />}>
+          <Suspense fallback={<BreakdownSkeleton rows={SPENDING_ROWS} more footnote />}>
             <SpendingRows month={month} by={group} />
           </Suspense>
         </TabsPanel>
@@ -350,10 +353,11 @@ function SpendingRows({ month, by }: { month: string; by: SpendingGroup }) {
         )
       }
       emptyText={EMPTY_LABELS[by]()}
+      // Always a last line, so that the block keeps its skeleton's height.
       footnote={
         data.pending.minor > 0
           ? m.reviewSpendingPending({ amount: formatMoney(data.pending, { locale, whole: true }) })
-          : undefined
+          : m.reviewSpendingAllReviewed()
       }
       locale={locale}
     />
