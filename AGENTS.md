@@ -163,7 +163,8 @@ local changes; each folder's `UPSTREAM.md` records the commit it comes from.
 **Vendored code is out of `vp lint` and `vp fmt`** (`VENDORED` in `vite.config.ts`): the lint
 rules above, and Bklit's charts (`packages/ui/src/components/charts/`, with
 `shimmering-text.tsx`) as `shadcn add @bklit/...` installs them, their `cn` import pointed to the
-repository's. They keep their upstream form so that the next update stays a readable diff; the
+repository's; the charts are out of React Doctor too (`ignore.files` in `doctor.config.ts`), and
+their `UPSTREAM.md` records where they come from. They keep their upstream form so that the next update stays a readable diff; the
 type checker still reads them. Gousset's own code never goes there, and a chart's Gousset-specific
 wrapper lives beside them, linted like the rest.
 
