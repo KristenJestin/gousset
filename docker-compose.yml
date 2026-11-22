@@ -1,12 +1,13 @@
 name: gousset
 
+# Self-hosting: set POSTGRES_PASSWORD (and BETTER_AUTH_SECRET, BETTER_AUTH_URL in apps/web/.env)
+# before `pnpm docker:up`. `pnpm db:start` alone (local development) falls back to `password`,
+# reachable from this machine only.
 services:
   web:
     build:
       context: .
       dockerfile: apps/web/Dockerfile
-      secrets:
-        - web_env
     init: true
     ports:
       - "3001:3001"
@@ -14,19 +15,19 @@ services:
       - path: apps/web/.env
         required: false
     environment:
-      BETTER_AUTH_URL: http://localhost:3001
-      CORS_ORIGIN: http://localhost:3001
+      # Container networking only: the database is the `postgres` service.
       DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-password}@postgres:5432/gousset
     depends_on:
       postgres:
         condition: service_healthy
     healthcheck:
+      # Through better-auth, so that a server unable to start auth (no secret) is unhealthy.
       test:
         [
           "CMD",
           "node",
           "-e",
-          "fetch('http://localhost:3001/').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))",
+          "fetch('http://localhost:3001/api/auth/ok').then((r) => process.exit(r.ok ? 0 : 1)).catch(() => process.exit(1))",
         ]
       interval: 10s
       timeout: 5s
@@ -42,7 +43,8 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-password}
     ports:
-      - "5432:5432"
+      # This machine only: the database is never published on the network.
+      - "127.0.0.1:5432:5432"
     volumes:
       - gousset_postgres_data:/var/lib/postgresql
     healthcheck:
@@ -54,8 +56,3 @@ services:
 
 volumes:
   gousset_postgres_data:
-
-# BuildKit makes these available only while install/build commands run.
-secrets:
-  web_env:
-    file: apps/web/.env

@@ -17,6 +17,9 @@ pnpm db:start   # Postgres 18 in Docker
 pnpm dev        # http://localhost:3001
 ```
 
+The database listens on this machine only. To run the whole stack with `pnpm docker:up`, set
+`POSTGRES_PASSWORD` first, and `BETTER_AUTH_SECRET` and `BETTER_AUTH_URL` in `apps/web/.env`.
+
 `vp check`, `vp test` and `pnpm build` are the checks. How to work in this repository, for
 people and agents alike, is in [`AGENTS.md`](AGENTS.md).
 
