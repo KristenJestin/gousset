@@ -11,7 +11,7 @@ export function Card({
   children: ReactNode;
 }) {
   return (
-    <section className="bg-card text-card-foreground flex w-full flex-col gap-6 rounded-xl border p-6">
+    <section className="bg-card text-card-foreground flex w-full flex-col gap-6 rounded-lg border p-6">
       <header className="flex flex-col gap-1.5">
         <h1 className="text-lg font-semibold">{title}</h1>
         {description === undefined ? null : (

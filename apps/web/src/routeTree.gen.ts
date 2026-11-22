@@ -16,6 +16,7 @@ import { Route as SignInRouteImport } from './routes/sign-in'
 import { Route as AuthedIndexRouteImport } from './routes/_authed/index'
 import { Route as AuthedChangePasswordRouteImport } from './routes/_authed/change-password'
 import { Route as AuthedUsersRouteImport } from './routes/_authed/users'
+import { Route as E2eTodayRouteImport } from './routes/e2e/today'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 
 const AuthedRoute = AuthedRouteImport.update({
@@ -52,6 +53,11 @@ const AuthedUsersRoute = AuthedUsersRouteImport.update({
   path: '/users',
   getParentRoute: () => AuthedRoute,
 } as any)
+const E2eTodayRoute = E2eTodayRouteImport.update({
+  id: '/e2e/today',
+  path: '/e2e/today',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
   id: '/api/auth/$',
   path: '/api/auth/$',
@@ -65,6 +71,7 @@ export interface FileRoutesByFullPath {
   '/sign-in': typeof SignInRoute
   '/change-password': typeof AuthedChangePasswordRoute
   '/users': typeof AuthedUsersRoute
+  '/e2e/today': typeof E2eTodayRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
 }
 export interface FileRoutesByTo {
@@ -73,6 +80,7 @@ export interface FileRoutesByTo {
   '/sign-in': typeof SignInRoute
   '/change-password': typeof AuthedChangePasswordRoute
   '/users': typeof AuthedUsersRoute
+  '/e2e/today': typeof E2eTodayRoute
   '/': typeof AuthedIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
 }
@@ -84,6 +92,7 @@ export interface FileRoutesById {
   '/sign-in': typeof SignInRoute
   '/_authed/change-password': typeof AuthedChangePasswordRoute
   '/_authed/users': typeof AuthedUsersRoute
+  '/e2e/today': typeof E2eTodayRoute
   '/_authed/': typeof AuthedIndexRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
 }
@@ -96,6 +105,7 @@ export interface FileRouteTypes {
     | '/sign-in'
     | '/change-password'
     | '/users'
+    | '/e2e/today'
     | '/api/auth/$'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -104,6 +114,7 @@ export interface FileRouteTypes {
     | '/sign-in'
     | '/change-password'
     | '/users'
+    | '/e2e/today'
     | '/'
     | '/api/auth/$'
   id:
@@ -114,6 +125,7 @@ export interface FileRouteTypes {
     | '/sign-in'
     | '/_authed/change-password'
     | '/_authed/users'
+    | '/e2e/today'
     | '/_authed/'
     | '/api/auth/$'
   fileRoutesById: FileRoutesById
@@ -123,6 +135,7 @@ export interface RootRouteChildren {
   HealthRoute: typeof HealthRoute
   SetupRoute: typeof SetupRoute
   SignInRoute: typeof SignInRoute
+  E2eTodayRoute: typeof E2eTodayRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
 }
 
@@ -177,6 +190,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedUsersRouteImport
       parentRoute: typeof AuthedRoute
     }
+    '/e2e/today': {
+      id: '/e2e/today'
+      path: '/e2e/today'
+      fullPath: '/e2e/today'
+      preLoaderRoute: typeof E2eTodayRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/auth/$': {
       id: '/api/auth/$'
       path: '/api/auth/$'
@@ -207,6 +227,7 @@ const rootRouteChildren: RootRouteChildren = {
   HealthRoute: HealthRoute,
   SetupRoute: SetupRoute,
   SignInRoute: SignInRoute,
+  E2eTodayRoute: E2eTodayRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
 }
 export const routeTree = rootRouteImport

@@ -1,6 +1,8 @@
 import { HeadContent, Outlet, Scripts, createRootRoute } from "@tanstack/react-router";
 import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
 
+import { ThemeProvider } from "@gousset/ui/components/theme-provider";
+
 import { getViewer } from "@/functions/viewer";
 
 import appCss from "../index.css?url";
@@ -37,12 +39,15 @@ function RootDocument() {
   const locale = Route.useRouteContext({ select: (context) => context.viewer.locale });
 
   return (
-    <html lang={locale}>
+    // The saved colour scheme lands on <html> before hydration (ThemeProvider).
+    <html lang={locale} suppressHydrationWarning>
       <head>
         <HeadContent />
       </head>
       <body>
-        <Outlet />
+        <ThemeProvider>
+          <Outlet />
+        </ThemeProvider>
         <TanStackRouterDevtools position="bottom-left" />
         <Scripts />
       </body>
