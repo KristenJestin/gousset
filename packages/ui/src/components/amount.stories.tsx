@@ -2,8 +2,24 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import { useState } from "react";
 
 import { MONTH_FIGURES } from "../stories/made-up";
-import { Amount, AmountSkeleton } from "./amount";
+import { Amount, AmountSkeleton, Count } from "./amount";
 import { Button } from "./button";
+
+/** A count that goes down, as the lines to review do when one is approved. */
+function CountingDown() {
+  const [count, setCount] = useState(6);
+
+  return (
+    <div className="flex flex-col items-start gap-4">
+      <span className="text-sm">
+        <Count value={count} locale="en" /> lines to review
+      </span>
+      <Button variant="secondary" onClick={() => setCount(Math.max(0, count - 1))}>
+        Approve one
+      </Button>
+    </div>
+  );
+}
 
 /** Switches between this month and the one before: the digits roll. */
 function SwitchingMonths() {
@@ -53,6 +69,12 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const Default: Story = {};
+
+/**
+ * `Count`: a whole number that rolls like an amount (the lines to review, in a block's badge).
+ * Motion: its digits roll in 200 ms, from below when it grows, from above when it drops.
+ */
+export const Counting: Story = { render: () => <CountingDown /> };
 
 /** `sm` in rows, `md` in text, `lg` for a block's headline figure. */
 export const Sizes: Story = {
