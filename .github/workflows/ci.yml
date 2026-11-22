@@ -183,6 +183,7 @@ jobs:
         continue-on-error: true
         env:
           DEBUG: pw:browser
+          GOUSSET_DIAG: "1"
         run: pnpm e2e tests/diag-firefox-crash.spec.ts --project=firefox-desktop --project=chromium-desktop --workers=1
       - name: End-to-end tests, shard ${{ matrix.shard }} of 2
         if: steps.harness.outputs.present == 'true'
