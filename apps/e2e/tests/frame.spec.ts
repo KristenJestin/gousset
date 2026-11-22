@@ -202,6 +202,8 @@ test("the user's menu changes the language and the colour scheme", async ({ user
 
   await menu.getByRole("menuitemradio", { name: "Dark" }).click();
   await expect(userPage.locator("html")).toHaveAttribute("data-color-scheme", "dark");
+  // A choice closes the menu; reopened while it still fades out, the trigger would close it again.
+  await expect(userPage.getByRole("menu")).toHaveCount(0);
 
   menu = await openAccountMenu(userPage, user.name);
   await expect(menu.getByRole("menuitemradio", { name: "English" })).toBeChecked();
