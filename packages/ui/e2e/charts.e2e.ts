@@ -60,10 +60,19 @@ async function revealSamples(page: Page, figure: Locator) {
     return { at: Number(at), width: Number(width) };
   });
 
-  const first = samples[0]?.at ?? 0;
-  const final = samples.at(-1)?.width ?? 1;
+  // Before its first layout the clip has no width yet, with or without motion: the reveal starts
+  // at its first frame with a width.
+  const drawn = samples.slice(
+    Math.max(
+      0,
+      samples.findIndex((sample) => sample.width > 0),
+    ),
+  );
 
-  return samples.map((sample) => ({ at: sample.at - first, fraction: sample.width / final }));
+  const first = drawn[0]?.at ?? 0;
+  const final = drawn.at(-1)?.width ?? 1;
+
+  return drawn.map((sample) => ({ at: sample.at - first, fraction: sample.width / final }));
 }
 
 async function revealFractions(page: Page, figure: Locator) {
@@ -97,8 +106,11 @@ test.describe("the spending chart", () => {
 
     await expect(dashed).toHaveCount(1);
     await expect(dashed).not.toHaveCSS("stroke-dasharray", "none");
-    await expect(figure.getByText("October")).toBeVisible();
-    await expect(figure.getByText("September")).toBeVisible();
+    // In the legend (the figures' table, closed, names them too).
+    const legend = figure.getByRole("list");
+
+    await expect(legend.getByText("October")).toBeVisible();
+    await expect(legend.getByText("September")).toBeVisible();
   });
 
   test("hovering shows the crosshair and the hovered day's amounts", async ({ page }) => {
@@ -304,6 +316,11 @@ test.describe("the bar chart", () => {
   test("a single month is one bar", async ({ page }) => {
     await page.emulateMedia({ reducedMotion: "reduce" });
     await page.goto(bars("single-month"));
-    await expect(page.getByRole("figure", { name: BARS }).getByText("Oct")).toBeVisible();
+
+    const figure = page.getByRole("figure", { name: BARS });
+
+    // Under the bar (the figures' table, closed, names it too).
+    await expect(figure.locator('span:text-is("Oct")')).toBeVisible();
+    await expect(figure.getByRole("table").getByRole("row")).toHaveCount(2);
   });
 });
