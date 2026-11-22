@@ -9,11 +9,13 @@
 #   tools/privacy-check.sh --message <file>      a commit message, without Git's comment lines and
 #                                                what follows its scissors line (commit-msg hook)
 #   tools/privacy-check.sh --range <base> <head> each commit of base..head: the lines and file names
-#                                                it adds (a merge's are in the range's), its
-#                                                message, author and committer; and what the
-#                                                whole range adds (CI)
+#                                                it adds, its message, author and committer; and
+#                                                what the whole range adds (CI)
 # An identity (author, committer) is the public one its author chose: it is checked against the
-# private list, home paths and IBANs, not the e-mail rule. Binary files are not read.
+# private list, home paths and IBANs, not the e-mail rule. Binary files are not read; which files
+# are binary is read from the base's .gitattributes, never the change's. A merge commit's own
+# resolution is checked only through the range's net diff: a line a merge adds and a later commit
+# removes is not seen.
 #   tools/privacy-check.sh [--base <ref>] <file>...
 #                                                text files, every line: a pull request's title and
 #                                                description
@@ -39,6 +41,9 @@ if [ -n "${GOUSSET_PRIVATE_WORDS:-}" ]; then
     word="${word%"${word##*[![:space:]]}"}"
     if [ -n "$word" ]; then PRIVATE_WORDS+=("${word,,}"); fi
   done < "$GOUSSET_PRIVATE_WORDS"
+elif [ -n "${GOUSSET_REQUIRE_PRIVATE_WORDS:-}" ]; then
+  # CI without the list (a fork's pull request gets no secret): a person decides, not a green check.
+  fail "GOUSSET_PRIVATE_WORDS is not set, and this run requires the private words"
 else
   echo "note: GOUSSET_PRIVATE_WORDS is not set, so the private words are not checked" >&2
 fi
@@ -69,9 +74,10 @@ EMAIL='[A-Za-z0-9._%+-]+@([A-Za-z0-9-]+\.)+[A-Za-z]{2,}'
 # Two letters, two check digits, then 11 to 30 letters or digits, maybe grouped by spaces.
 IBAN='(^|[^A-Za-z0-9])([A-Z]{2}[0-9]{2}( ?[A-Z0-9]){11,30})([^A-Za-z0-9]|$)'
 # A user's folder: under home (Linux, Fedora Atomic's /var/home), Users (macOS), C:\Users
-# (Windows, its backslashes maybe escaped, or WSL's /mnt/c/Users); not a URL's page of that name.
+# (Windows, its backslashes maybe escaped, or WSL's /mnt/c/Users); not a URL's page of that name,
+# nor a folder of the repository after a route group, routes/(app)/home.
 NAME='[A-Za-z0-9._-]+'
-HOME_PATH="(^|[^A-Za-z0-9_.~-])((/var)?/home/$NAME|(/mnt/[a-z])?/Users/$NAME|[A-Za-z]:(\\\\\\\\|\\\\|/)Users(\\\\\\\\|\\\\|/)$NAME)"
+HOME_PATH="(^|[^A-Za-z0-9_.~)-])((/var)?/home/$NAME|(/mnt/[a-z])?/Users/$NAME|[A-Za-z]:(\\\\\\\\|\\\\|/)Users(\\\\\\\\|\\\\|/)$NAME)"
 
 found=0
 
@@ -125,6 +131,13 @@ check_ibans() { # <where> <text>
   done
 }
 
+# Whether <where> is a line of the list of invented IBANs itself: "<path>:<line>", maybe after
+# "commit <sha> ", with exactly that path.
+in_list() { # <where>
+  local path=${1#commit * }
+  [[ $path == "$IBANS_FILE":* ]]
+}
+
 check_line() { # <where> <text> [<e-mail rule: yes|no>]
   local where=$1 text=$2 rest match domain lower word
 
@@ -147,7 +160,7 @@ check_line() { # <where> <text> [<e-mail rule: yes|no>]
   done
 
   # The list of invented IBANs itself: a person reads what it adds (see read_allowed_ibans).
-  if [[ $where != *"$IBANS_FILE:"* ]]; then check_ibans "$where" "$text"; fi
+  if ! in_list "$where"; then check_ibans "$where" "$text"; fi
 
   if [[ $text =~ $HOME_PATH ]]; then
     refuse "$where" "absolute home path ${BASH_REMATCH[2]}: write a path relative to the repository or ~"
@@ -170,14 +183,17 @@ check_identity() { # <where> <identity>
   check_line "$1" "$2" no
 }
 
-# Reads "<where>\t<text>" lines. The same text is checked once: a line the range adds is also
-# added by one of its commits.
+# Reads "<where>\t<text>" lines. The same text is checked once (a line the range adds is also
+# added by one of its commits), apart in the list of IBANs and elsewhere: the list's lines skip the
+# IBAN rule, the same line in another file does not.
 declare -A SEEN=()
 check_lines() { # < lines
-  local where text
+  local where text key
   while IFS=$'\t' read -r where text; do
-    [ -z "${SEEN["x$text"]+set}" ] || continue
-    SEEN["x$text"]=1
+    key="other $text"
+    if in_list "$where"; then key="list $text"; fi
+    [ -z "${SEEN["$key"]+set}" ] || continue
+    SEEN["$key"]=1
     check_line "$where" "$text"
   done
 }
@@ -197,12 +213,14 @@ numbered() { # <where>
   awk -v where="$1" '{ sub(/\r$/, ""); print where ":" NR "\t" $0 }'
 }
 
-DIFF=(git -c core.quotePath=false diff --no-color --no-ext-diff --no-renames -U0)
+# Which files are binary comes from the base's .gitattributes, never the change's: a change could
+# otherwise mark its own text files -diff and hide every line it adds.
+ATTRIBUTES=()
 
 check_diff() { # <label> <git diff arguments>...
   local label=$1 out names
   shift
-  out=$("${DIFF[@]}" "$@" | added_lines "$label") || fail "git diff $* failed"
+  out=$(git "${ATTRIBUTES[@]}" -c core.quotePath=false diff --no-color --no-ext-diff --no-renames -U0 "$@" | added_lines "$label") || fail "git diff $* failed"
   names=$(git -c core.quotePath=false diff --name-only --no-renames --diff-filter=d "$@") || fail "git diff $* failed"
   check_lines <<< "$out"
   if grep -qxF "$IBANS_FILE" <<< "$names"; then
@@ -233,12 +251,18 @@ check_commit() { # <sha>
 }
 
 check_file() { # <file> <strip Git's comments: yes|no>
-  local file=$1 text out
+  local file=$1 text out comment
   [ -f "$file" ] && [ -r "$file" ] || fail "cannot read $file"
   text=$(cat -- "$file") || fail "cannot read $file"
   if [ "$2" = yes ]; then
-    # What Git strips from a message: what follows the scissors line, then the comment lines.
-    text=$(awk '/^# -+ >8 -+$/ { exit } !/^#/' <<< "$text")
+    # What Git strips from a message: what follows the scissors line, then the comment lines,
+    # which start with core.commentChar (with "auto", the one its scissors line shows).
+    comment=$(git config --get core.commentString || git config --get core.commentChar || echo '#')
+    if [ "$comment" = auto ]; then
+      comment=$(awk '/ -+ >8 -+$/ { print substr($0, 1, index($0, " ") - 1); exit }' <<< "$text")
+      comment=${comment:-#}
+    fi
+    text=$(awk -v c="$comment" '$0 ~ / -+ >8 -+$/ && index($0, c " ") == 1 { exit } index($0, c) != 1' <<< "$text")
   fi
   out=$(numbered "${file##*/}" <<< "$text")
   check_lines <<< "$out"
@@ -247,7 +271,10 @@ check_file() { # <file> <strip Git's comments: yes|no>
 case "${1:-}" in
   --staged)
     [ $# -eq 1 ] || fail "usage: $0 --staged"
-    if git rev-parse --verify --quiet HEAD > /dev/null; then read_allowed_ibans HEAD; fi
+    if git rev-parse --verify --quiet HEAD > /dev/null; then
+      read_allowed_ibans HEAD
+      ATTRIBUTES=(--attr-source=HEAD)
+    fi
     check_diff "" --cached
     identity=$(git var GIT_AUTHOR_IDENT) || fail "git var GIT_AUTHOR_IDENT failed"
     check_identity "author" "${identity% [0-9]* [-+][0-9]*}"
@@ -262,6 +289,7 @@ case "${1:-}" in
   --range)
     [ $# -eq 3 ] || fail "usage: $0 --range <base> <head>"
     read_allowed_ibans "$2" "$3"
+    ATTRIBUTES=(--attr-source="$2")
     check_diff "" "$2...$3"
     commits=$(git rev-list "$2..$3") || fail "git rev-list $2..$3 failed"
     while IFS= read -r sha; do

@@ -359,6 +359,87 @@ describe("tools/privacy-check.sh", () => {
     expect(result.stderr).not.toContain(`IBAN ${INVENTED_IBAN}`);
   });
 
+  test("only the list of invented IBANs itself skips the IBAN rule, not a file named like it", () => {
+    const repository = repositoryWithFixtures();
+    const base = git(repository, ["rev-parse", "HEAD"]);
+
+    write(repository, `apps/web/${IBANS_FILE}`, `export const MORE = ["${OTHER_IBAN}"];\n`);
+
+    const head = commit(repository, "test(fixture): a look-alike list");
+    const result = run(["--range", base, head], repository);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(`apps/web/${IBANS_FILE}:1: IBAN ${OTHER_IBAN}`);
+  });
+
+  test("a line added to the list and elsewhere is checked elsewhere", () => {
+    const repository = repositoryWithFixtures();
+    const base = git(repository, ["rev-parse", "HEAD"]);
+    const line = `export const MORE = ["${OTHER_IBAN}"];\n`;
+
+    write(repository, IBANS_FILE, line);
+    write(repository, "packages/ui/src/leak.ts", line);
+
+    const head = commit(repository, "test(fixture): the same line twice");
+    const result = run(["--range", base, head], repository);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(`packages/ui/src/leak.ts:1: IBAN ${OTHER_IBAN}`);
+  });
+
+  test("a change's own .gitattributes cannot hide its lines", () => {
+    const repository = repositoryWithFixtures();
+    const base = git(repository, ["rev-parse", "HEAD"]);
+
+    write(repository, ".gitattributes", "* -diff\n");
+    write(repository, "notes.md", `Write to ${OUTSIDE_EMAIL}\n`);
+
+    const head = commit(repository, "docs(docs): notes");
+    const result = run(["--range", base, head], repository);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain(`notes.md:1: e-mail address ${OUTSIDE_EMAIL}`);
+  });
+
+  test("a run that requires the private words stops without them", () => {
+    const file = join(scratch, "message");
+
+    writeFileSync(file, "Nothing personal.\n");
+
+    const env = environment(null);
+
+    env.GOUSSET_REQUIRE_PRIVATE_WORDS = "1";
+
+    const result = spawnSync("bash", [SCRIPT, file], { cwd: fixtures, encoding: "utf8", env });
+
+    expect(result.status).toBe(2);
+    expect(result.stderr).toContain("this run requires the private words");
+  });
+
+  test("a commit message is read with the repository's comment character", () => {
+    const repository = repositoryWithFixtures();
+    const file = join(scratch, "COMMIT_EDITMSG");
+
+    git(repository, ["config", "core.commentChar", ";"]);
+    writeFileSync(
+      file,
+      [
+        "feat(web): show the total",
+        "",
+        `; Author: Alex <${OUTSIDE_EMAIL}>`,
+        "; ------------------------ >8 ------------------------",
+        `-Write to ${OUTSIDE_EMAIL}`,
+        "",
+      ].join("\n"),
+    );
+
+    expect(run(["--message", file], repository).status).toBe(0);
+  });
+
+  test("a folder named home after a route group is not a home path", () => {
+    expect(checkText("apps/web/src/routes/(app)/home/index.tsx\n").status).toBe(0);
+  });
+
   test("a range git cannot read stops the check", () => {
     const result = run(["--range", "deadbeef", "cafebabe"]);
 
