@@ -3,9 +3,13 @@
 # drawn by a local browser, whose fonts render differently. Existing references are never changed
 # here (`--update-snapshots=missing`): to redraw one, delete it in the branch first.
 #
-# Started by hand (Actions, "ui-snapshots", with the branch), or by putting the `update-snapshots`
-# label on a pull request of this repository. A push made with GITHUB_TOKEN starts no new CI run:
-# push a commit of your own afterwards to have `ui` compare against the new references.
+# Started three ways:
+# - a push to a branch other than dev and main whose head commit carries the trailer
+#   `Update-Snapshots: missing` on a line of its body (the subject stays a normal one);
+# - by hand (Actions, "ui-snapshots", with the branch), once this file is on the default branch;
+# - the `update-snapshots` label on a pull request of this repository.
+# A push made with GITHUB_TOKEN starts no new CI run: push a commit of your own afterwards to have
+# `ui` compare against the new references.
 #
 # Actions are pinned by commit, the version beside it.
 name: ui-snapshots
@@ -19,9 +23,11 @@ on:
         type: string
   pull_request:
     types: [labeled]
+  push:
+    branches-ignore: [dev, main]
 
 concurrency:
-  group: ui-snapshots-${{ github.event.pull_request.head.ref || inputs.branch }}
+  group: ui-snapshots-${{ github.event.pull_request.head.ref || inputs.branch || github.ref_name }}
   cancel-in-progress: false
 
 permissions:
@@ -33,9 +39,11 @@ env:
 jobs:
   snapshots:
     # A label only counts on a branch of this repository: a fork's code never runs with a token
-    # that can push.
+    # that can push. A push counts only with the trailer, so that ordinary pushes cost nothing.
     if: >-
       github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'push' &&
+       contains(github.event.head_commit.message, 'Update-Snapshots: missing')) ||
       (github.event.label.name == 'update-snapshots' &&
        github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-latest
@@ -47,7 +55,7 @@ jobs:
       options: --ipc=host
     env:
       HOME: /root
-      BRANCH: ${{ github.event.pull_request.head.ref || inputs.branch }}
+      BRANCH: ${{ github.event.pull_request.head.ref || inputs.branch || github.ref_name }}
     steps:
       - name: Refuse the integration and release branches
         run: |
