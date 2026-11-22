@@ -1,13 +1,13 @@
 import { m } from "@gousset/i18n/messages";
 import { getLocale } from "@gousset/i18n/runtime";
+import { Amount } from "@gousset/ui/components/amount";
 import { Page } from "@gousset/ui/components/app-shell";
 import { Button } from "@gousset/ui/components/button";
 import {
-  BreakdownSkeleton,
   FigureList,
+  FigureListSkeleton,
   FigureMore,
   FigureRow,
-  PlainAmount,
 } from "@gousset/ui/components/data-block";
 import { noop, useSuspenseQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
@@ -66,21 +66,21 @@ function Review() {
       <p className="text-sm text-muted-foreground">{m.reviewMadeUp()}</p>
       <DataBlock
         title={m.reviewSummaryTitle()}
-        skeleton={<BreakdownSkeleton rows={4} />}
+        skeleton={<FigureListSkeleton rows={4} />}
         resetKey={shown}
       >
         <Summary month={shown} />
       </DataBlock>
       <DataBlock
         title={m.reviewSpendingTitle()}
-        skeleton={<BreakdownSkeleton rows={SPENDING_ROWS} more />}
+        skeleton={<FigureListSkeleton rows={SPENDING_ROWS} more />}
         resetKey={shown}
       >
         <Spending month={shown} />
       </DataBlock>
       <DataBlock
         title={m.reviewToReviewTitle()}
-        skeleton={<BreakdownSkeleton rows={LINES_TO_REVIEW} more />}
+        skeleton={<FigureListSkeleton rows={LINES_TO_REVIEW} more />}
         resetKey={shown}
       >
         <ToReview month={shown} />
@@ -105,9 +105,7 @@ function Summary({ month }: { month: string }) {
         <FigureRow
           key={label}
           label={label}
-          figure={
-            <PlainAmount minor={amount.minor} currency={amount.currency} locale={getLocale()} />
-          }
+          figure={<Amount value={amount} locale={getLocale()} size="sm" />}
         />
       ))}
     </FigureList>
@@ -124,13 +122,7 @@ function Spending({ month }: { month: string }) {
         <FigureRow
           key={row.name}
           label={row.name}
-          figure={
-            <PlainAmount
-              minor={row.amount.minor}
-              currency={row.amount.currency}
-              locale={getLocale()}
-            />
-          }
+          figure={<Amount value={row.amount} locale={getLocale()} size="sm" />}
         />
       ))}
       {hidden > 0 ? (
@@ -164,13 +156,7 @@ function ToReview({ month }: { month: string }) {
           key={line.id}
           label={line.label}
           detail={[line.merchant, line.category].filter((part) => part !== null).join(" · ")}
-          figure={
-            <PlainAmount
-              minor={line.amount.minor}
-              currency={line.amount.currency}
-              locale={getLocale()}
-            />
-          }
+          figure={<Amount value={line.amount} locale={getLocale()} size="sm" />}
           action={
             <Button
               variant="secondary"

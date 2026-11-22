@@ -54,8 +54,10 @@ test("a page importing Tabler fails vp lint, and Icon passes", () => {
   );
 
   expect(tabler.status).not.toBe(0);
+  // The rule's own message ("use <Icon name=…>") is left out of CI's annotation format: the
+  // rule's name is what both formats print.
   expect(tabler.output).toContain("no-restricted-imports");
-  expect(tabler.output).toContain("<Icon name=");
+  expect(tabler.output).toContain("@tabler/icons-react");
 
   const icon = lintSource(
     'import { Icon } from "@gousset/ui/components/icon";\n\nexport function Page() {\n  return <Icon name="housing" />;\n}\n',

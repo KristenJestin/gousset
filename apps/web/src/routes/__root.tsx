@@ -12,7 +12,7 @@ import { Suspense, lazy } from "react";
 
 import { m } from "@gousset/i18n/messages";
 import { getLocale } from "@gousset/i18n/runtime";
-import { Toaster } from "@gousset/ui/components/toaster-stand-in";
+import { Toaster } from "@gousset/ui/components/toaster";
 import { ThemeProvider } from "@gousset/ui/components/theme-provider";
 
 import { getViewer } from "@/functions/viewer";

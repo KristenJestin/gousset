@@ -1,6 +1,7 @@
 import { motion } from "motion/react";
 import type { ReactNode } from "react";
 
+import { useAnimatedPercent } from "../hooks/use-animated-percent";
 import { useUiMessages } from "../hooks/use-ui-messages";
 import { monthBarLayout } from "../lib/money";
 import type { Money, MoneyRole, MonthBarLayout } from "../lib/money";
@@ -30,26 +31,36 @@ export type MonthBarProps = {
   locale?: string;
 };
 
+/** One part of the bar: its start and width move to the new month's (SVG geometry, no reflow). */
+function BarPart({ part }: { part: MonthBarLayout["parts"][number] }) {
+  const width = useAnimatedPercent(part.width);
+
+  return (
+    // `x` alone would be a transform for Motion: `attrX` is the attribute.
+    <motion.rect
+      data-role={part.role}
+      y="0"
+      width={width}
+      height="100%"
+      initial={false}
+      animate={{ attrX: `${String(part.x)}%` }}
+      transition={transition.base}
+      className={cn(
+        "stroke-card stroke-2",
+        part.role === "spent" && "fill-money-spent",
+        part.role === "saved" && "fill-money-saved",
+        part.role === "left" && "fill-money-left",
+      )}
+    />
+  );
+}
+
 function Bar({ layout }: { layout: MonthBarLayout }) {
   return (
     <div className="h-6 overflow-hidden rounded-md bg-muted">
       <svg className="block size-full" aria-hidden="true" data-slot="month-bar-drawing">
         {layout.parts.map((part) => (
-          <motion.rect
-            key={part.role}
-            data-role={part.role}
-            y="0"
-            height="100%"
-            initial={false}
-            animate={{ attrX: `${String(part.x)}%`, width: `${String(part.width)}%` }}
-            transition={transition.base}
-            className={cn(
-              "stroke-card stroke-2",
-              part.role === "spent" && "fill-money-spent",
-              part.role === "saved" && "fill-money-saved",
-              part.role === "left" && "fill-money-left",
-            )}
-          />
+          <BarPart key={part.role} part={part} />
         ))}
         {layout.receivedMark === null ? null : (
           <motion.rect

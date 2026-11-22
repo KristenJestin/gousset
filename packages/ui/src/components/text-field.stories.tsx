@@ -37,7 +37,7 @@ export const WithDescription: Story = {
   args: { description: "Only used to sign in; never shown to anyone." },
 };
 
-/** Required: a star after the label, hidden from screen readers, which hear `required`. */
+/** Required: announced by the control itself; the label stays exactly its words (no star). */
 export const Required: Story = { args: { required: true } };
 
 /** An error from the page or the server: the input is invalid and the message is linked to it. */

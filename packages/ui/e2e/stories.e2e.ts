@@ -85,11 +85,13 @@ for (const scheme of ["light", "dark"] as const) {
 
       if (shot.open !== undefined) {
         await openPopup(page, shot.open);
+        // The visible popup: a trigger's own tooltip sits closed and hidden in the page too.
         await expect(
           page
             .locator(
               '[role="dialog"], [role="menu"], [role="tooltip"], [data-slot$="-content"][data-open]',
             )
+            .filter({ visible: true })
             .first(),
         ).toBeVisible();
       }
