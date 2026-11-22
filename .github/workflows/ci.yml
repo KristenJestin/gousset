@@ -1,6 +1,7 @@
 # Every pull request, and every push to dev and main, is verified here (issue #3). What reads a
 # pull request's title and description is in pull-request.yml, which runs again when they change.
-# Required on dev and main: verify, ui, e2e and react-doctor here, privacy there.
+# Required on dev and main: verify, ui, e2e and react-doctor here, privacy there. ui and e2e also
+# run on each push to dev, so that what a merge breaks there shows at once.
 #
 # Actions are pinned by commit, the version beside it: a moved tag runs no new code here.
 name: ci
@@ -56,7 +57,7 @@ jobs:
   # one tools/playwright-docker.sh renders the reference screenshots in, so both draw alike. Its
   # version is @playwright/test's in packages/ui/package.json: they move together.
   ui:
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/dev'
     runs-on: ubuntu-latest
     container:
       image: mcr.microsoft.com/playwright:v1.65.1-noble
@@ -90,7 +91,7 @@ jobs:
   # and each shard passes saying so.
   e2e-shard:
     name: e2e shard ${{ matrix.shard }}
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/dev'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -156,7 +157,7 @@ jobs:
   # The required check: one job named e2e that passes only when every shard passed, whatever the
   # number of shards.
   e2e:
-    if: always() && github.event_name == 'pull_request'
+    if: always() && (github.event_name == 'pull_request' || github.ref == 'refs/heads/dev')
     needs: e2e-shard
     runs-on: ubuntu-latest
     steps:
