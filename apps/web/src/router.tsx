@@ -6,6 +6,8 @@ export const getRouter = () => {
   const router = createTanStackRouter({
     routeTree,
     scrollRestoration: true,
+    // Load before the click: a link preloads its route on hover or focus.
+    defaultPreload: "intent",
     defaultPreloadStaleTime: 0,
     defaultNotFoundComponent: () => <div>Not Found</div>,
   });
