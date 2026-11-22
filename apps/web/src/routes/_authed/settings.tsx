@@ -43,16 +43,30 @@ function Settings() {
       refusalOf(() => revokeConnectedClient({ data: { clientId } })),
     );
 
-    // A failure says so, and the client stays listed: never a silent "revoked".
-    setRevoked(refusal === undefined ? messages.settings.revoked(name) : undefined);
-    setClientsError(refusal === undefined ? undefined : errorMessage(messages, refusal));
+    // A failure says so, and the page stays as it is, the client listed: never a silent
+    // "revoked", and no reload that would take the message away.
+    if (refusal !== undefined) {
+      setRevoked(undefined);
+      setClientsError(errorMessage(messages, refusal));
+
+      return;
+    }
+
+    setClientsError(undefined);
+    setRevoked(messages.settings.revoked(name));
     await router.invalidate();
   }
 
   async function turn(open: boolean) {
     const refusal = await whileBusy(setBusy, () => refusalOf(() => setMcpDoor({ data: { open } })));
 
-    setDoorError(refusal === undefined ? undefined : errorMessage(messages, refusal));
+    if (refusal !== undefined) {
+      setDoorError(errorMessage(messages, refusal));
+
+      return;
+    }
+
+    setDoorError(undefined);
     await router.invalidate();
   }
 
