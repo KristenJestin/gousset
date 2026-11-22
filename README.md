@@ -7,6 +7,12 @@ users, and nobody's bank credentials are handed to anyone.
 **Nothing works yet.** The repository holds the documents that describe what will be built
 ([`docs/`](docs/)) and the empty project they will be built in.
 
+## Install
+
+With Docker Compose: `docker-compose.yml`, its secrets and its variables are described in
+[`docs/releases.md`](docs/releases.md), "Installing", with how versions, betas and releases are
+made.
+
 ## Develop
 
 Node.js 24 and pnpm 12.
