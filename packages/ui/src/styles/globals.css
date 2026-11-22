@@ -1,113 +1,203 @@
+/* ui-sdk adds the little CSS its behaviours need in this layer: declared first, every other
+   style wins over it (ui-sdk, "The ui-sdk Layer"). Its starter `web.css` is not used. */
+@layer ui-sdk;
+
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
+@import "@fontsource-variable/geist";
 @source "../../../apps/**/*.{ts,tsx}";
 @source "../**/*.{ts,tsx}";
 
-@custom-variant dark (&:is(.dark *));
-
-:root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.58 0.22 27);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.809 0.105 251.813);
-  --chart-2: oklch(0.623 0.214 259.815);
-  --chart-3: oklch(0.546 0.245 262.881);
-  --chart-4: oklch(0.488 0.243 264.376);
-  --chart-5: oklch(0.424 0.199 265.638);
-  --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+/* One switch drives everything (docs/design.md, "CSS variables"). ui-sdk's colour scheme puts
+   the choice on `data-color-scheme` ("system", "light", "dark"); CSS maps it to `color-scheme`,
+   and every colour below is a `light-dark()` pair, so the browser picks the right one before
+   any script runs. `ThemeProvider` also puts `.dark` on the root for code that looks for it. */
+:root,
+[data-color-scheme="system"] {
+  color-scheme: light dark;
 }
 
-.dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.87 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.371 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.809 0.105 251.813);
-  --chart-2: oklch(0.623 0.214 259.815);
-  --chart-3: oklch(0.546 0.245 262.881);
-  --chart-4: oklch(0.488 0.243 264.376);
-  --chart-5: oklch(0.424 0.199 265.638);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+[data-color-scheme="light"] {
+  color-scheme: light;
+}
+
+[data-color-scheme="dark"] {
+  color-scheme: dark;
+}
+
+/* `dark:` follows the same choice: dark chosen, or the system's dark while "system" is. Bklit's
+   own `dark:` classes go through it, and `.dark` keeps meaning dark. */
+@custom-variant dark {
+  &:where(.dark, .dark *, [data-color-scheme="dark"], [data-color-scheme="dark"] *) {
+    @slot;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    &:where([data-color-scheme="system"], [data-color-scheme="system"] *) {
+      @slot;
+    }
+  }
+}
+
+/* The palette. Each token is `light-dark(light, dark)`. Text and surfaces are warm greys; colour
+   is for data (docs/design.md, "Colour"). Every text pair is 4.5:1 or more in both schemes:
+   `src/lib/contrast.test.ts` measures them from this file, and the "Theme/Tokens" story lists
+   the figures. */
+:root {
+  /* The brand violet (brand/colors.txt), on light and on dark. */
+  --brand-light: #6a44c8;
+  --brand-dark: #b49af7;
+
+  /* Interface: shadcn's names. Blocks sit one step above the background. */
+  --background: light-dark(oklch(0.975 0.003 85), oklch(0.17 0.006 75));
+  --foreground: light-dark(oklch(0.21 0.01 75), oklch(0.93 0.012 85));
+  --card: light-dark(oklch(1 0 0), oklch(0.215 0.006 75));
+  --card-foreground: var(--foreground);
+  --popover: light-dark(oklch(1 0 0), oklch(0.24 0.006 75));
+  --popover-foreground: var(--foreground);
+  --primary: light-dark(var(--brand-light), var(--brand-dark));
+  --primary-foreground: light-dark(oklch(1 0 0), oklch(0.17 0.006 75));
+  --secondary: light-dark(oklch(0.945 0.005 85), oklch(0.26 0.006 75));
+  --secondary-foreground: var(--foreground);
+  --muted: light-dark(oklch(0.945 0.005 85), oklch(0.26 0.006 75));
+  --muted-foreground: light-dark(oklch(0.49 0.012 75), oklch(0.72 0.012 80));
+  --accent: light-dark(oklch(0.945 0.005 85), oklch(0.26 0.006 75));
+  --accent-foreground: var(--foreground);
+  --destructive: light-dark(oklch(0.53 0.19 27), oklch(0.7 0.16 25));
+  --border: light-dark(oklch(0.905 0.006 85), oklch(0.29 0.006 75));
+  --input: light-dark(oklch(0.87 0.008 85), oklch(0.34 0.008 75));
+  --ring: var(--primary);
+  /* 12 px corners on blocks: `rounded-lg`. */
+  --radius: 0.75rem;
+  --sidebar: var(--card);
+  --sidebar-foreground: var(--card-foreground);
+  --sidebar-primary: var(--primary);
+  --sidebar-primary-foreground: var(--primary-foreground);
+  --sidebar-accent: var(--accent);
+  --sidebar-accent-foreground: var(--accent-foreground);
+  --sidebar-border: var(--border);
+  --sidebar-ring: var(--ring);
+
+  /* Money, Gousset's own: one colour per role, everywhere. Hues kept apart from each other, from
+     the destructive red and from the violet accent, so none reads as another. */
+  --money-spent: light-dark(oklch(0.545 0.14 50), oklch(0.75 0.13 55));
+  --money-saved: light-dark(oklch(0.52 0.11 235), oklch(0.75 0.1 235));
+  --money-left: light-dark(oklch(0.52 0.08 195), oklch(0.77 0.09 195));
+  --money-income: light-dark(oklch(0.52 0.12 150), oklch(0.77 0.14 150));
+  /* Money apart (restricted, expiring, refunded) is hatched, not coloured: a neutral stroke. */
+  --money-restricted: light-dark(oklch(0.5 0.01 75), oklch(0.7 0.01 80));
+
+  /* Charts: Bklit's names. Series follow the money roles, the rest follows the interface. */
+  --chart-1: var(--money-spent);
+  --chart-2: var(--money-saved);
+  --chart-3: var(--money-left);
+  --chart-4: var(--money-income);
+  --chart-5: var(--muted-foreground);
+  --chart-positive: var(--money-income);
+  --chart-negative: var(--destructive);
+  --chart-background: var(--card);
+  --chart-foreground: var(--foreground);
+  --chart-foreground-muted: var(--muted-foreground);
+  --chart-label: var(--muted-foreground);
+  --chart-line-primary: var(--chart-1);
+  --chart-line-secondary: var(--chart-2);
+  --chart-crosshair: var(--muted-foreground);
+  --chart-grid: var(--border);
+  --chart-brush-border: var(--chart-grid);
+  --chart-tooltip-background: var(--popover);
+  --chart-tooltip-foreground: var(--popover-foreground);
+  --chart-tooltip-muted: var(--muted-foreground);
+  --chart-marker-background: var(--muted);
+  --chart-marker-border: var(--input);
+  --chart-marker-foreground: var(--foreground);
+  --chart-marker-badge-background: var(--foreground);
+  --chart-marker-badge-foreground: var(--background);
+  --chart-indicator-color: var(--foreground);
+  --chart-indicator-secondary-color: var(--muted);
+  --chart-segment-background: light-dark(oklch(0.5 0.01 75 / 0.06), oklch(0.7 0.01 80 / 0.12));
+  --chart-segment-line: light-dark(oklch(0.5 0.01 75 / 0.25), oklch(0.93 0.012 85 / 0.25));
+  --chart-scale-mix: var(--card);
+  --chart-scale-01: var(--muted);
+  --chart-scale-02: color-mix(in oklab, var(--chart-1) 35%, var(--chart-scale-mix));
+  --chart-scale-03: color-mix(in oklab, var(--chart-1) 55%, var(--chart-scale-mix));
+  --chart-scale-04: color-mix(in oklab, var(--chart-1) 78%, var(--chart-scale-mix));
+  --chart-scale-05: var(--chart-1);
+  --chart-scale-pattern-color: var(--card);
+
+  /* Icons (Tabler, outline): one size and one stroke, set here. A size class still wins. */
+  --icon-size: 1rem;
+  --icon-stroke: 1.5;
 }
 
 @theme inline {
-  --font-sans: "Inter Variable", sans-serif;
-  --color-sidebar-ring: var(--sidebar-ring);
-  --color-sidebar-border: var(--sidebar-border);
-  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-  --color-sidebar-accent: var(--sidebar-accent);
-  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-  --color-sidebar-primary: var(--sidebar-primary);
-  --color-sidebar-foreground: var(--sidebar-foreground);
-  --color-sidebar: var(--sidebar);
-  --color-chart-5: var(--chart-5);
-  --color-chart-4: var(--chart-4);
-  --color-chart-3: var(--chart-3);
-  --color-chart-2: var(--chart-2);
-  --color-chart-1: var(--chart-1);
-  --color-ring: var(--ring);
-  --color-input: var(--input);
-  --color-border: var(--border);
-  --color-destructive: var(--destructive);
-  --color-accent-foreground: var(--accent-foreground);
-  --color-accent: var(--accent);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-muted: var(--muted);
-  --color-secondary-foreground: var(--secondary-foreground);
-  --color-secondary: var(--secondary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-primary: var(--primary);
-  --color-popover-foreground: var(--popover-foreground);
-  --color-popover: var(--popover);
-  --color-card-foreground: var(--card-foreground);
-  --color-card: var(--card);
-  --color-foreground: var(--foreground);
+  --font-sans: "Geist Variable", ui-sans-serif, system-ui, sans-serif;
   --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-money-spent: var(--money-spent);
+  --color-money-saved: var(--money-saved);
+  --color-money-left: var(--money-left);
+  --color-money-income: var(--money-income);
+  --color-money-restricted: var(--money-restricted);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --color-chart-positive: var(--chart-positive);
+  --color-chart-negative: var(--chart-negative);
+  --color-chart-background: var(--chart-background);
+  --color-chart-foreground: var(--chart-foreground);
+  --color-chart-foreground-muted: var(--chart-foreground-muted);
+  --color-chart-label: var(--chart-label);
+  --color-chart-line-primary: var(--chart-line-primary);
+  --color-chart-line-secondary: var(--chart-line-secondary);
+  --color-chart-crosshair: var(--chart-crosshair);
+  --color-chart-grid: var(--chart-grid);
+  --color-chart-brush-border: var(--chart-brush-border);
+  --color-chart-tooltip-background: var(--chart-tooltip-background);
+  --color-chart-tooltip-foreground: var(--chart-tooltip-foreground);
+  --color-chart-tooltip-muted: var(--chart-tooltip-muted);
+  --color-chart-marker-background: var(--chart-marker-background);
+  --color-chart-marker-border: var(--chart-marker-border);
+  --color-chart-marker-foreground: var(--chart-marker-foreground);
+  --color-chart-marker-badge-background: var(--chart-marker-badge-background);
+  --color-chart-marker-badge-foreground: var(--chart-marker-badge-foreground);
+  --color-chart-indicator-color: var(--chart-indicator-color);
+  --color-chart-indicator-secondary-color: var(--chart-indicator-secondary-color);
+  --color-chart-segment-background: var(--chart-segment-background);
+  --color-chart-segment-line: var(--chart-segment-line);
+  --color-chart-scale-mix: var(--chart-scale-mix);
+  --color-chart-scale-01: var(--chart-scale-01);
+  --color-chart-scale-02: var(--chart-scale-02);
+  --color-chart-scale-03: var(--chart-scale-03);
+  --color-chart-scale-04: var(--chart-scale-04);
+  --color-chart-scale-05: var(--chart-scale-05);
+  --color-chart-scale-pattern-color: var(--chart-scale-pattern-color);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);
@@ -117,14 +207,57 @@
   --radius-4xl: calc(var(--radius) + 16px);
 }
 
+/* Motion (docs/design.md, "Motion"): short, easing out. The same values are in
+   `src/lib/motion.ts` for Motion for React. */
+@theme {
+  --default-transition-duration: 200ms;
+  --default-transition-timing-function: cubic-bezier(0, 0, 0.2, 1);
+}
+
 @layer base {
   * {
-    @apply border-border outline-ring/50;
+    @apply border-border outline-ring;
   }
-  body {
-    @apply font-sans bg-background text-foreground;
-  }
+
   html {
     @apply font-sans;
+
+    /* The browser's own surfaces, themed: caret, native controls, scrollbars. */
+    caret-color: var(--primary);
+    accent-color: var(--primary);
+    scrollbar-color: var(--input) transparent;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+  }
+
+  ::selection {
+    background-color: color-mix(in oklab, var(--primary) 30%, transparent);
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--ring);
+    outline-offset: 2px;
+  }
+
+  /* Tabler's icons take the theme's size and stroke; a size class on the icon still wins. */
+  .tabler-icon {
+    width: var(--icon-size);
+    height: var(--icon-size);
+    stroke-width: var(--icon-stroke);
+  }
+}
+
+/* Everything is cut when the system asks for reduced motion. An element that has its own
+   reduced form (the loader's soft pulse) opts out with `data-reduced-motion="own"`. */
+@media (prefers-reduced-motion: reduce) {
+  *:not([data-reduced-motion="own"]),
+  *:not([data-reduced-motion="own"])::before,
+  *:not([data-reduced-motion="own"])::after {
+    animation-duration: 0s !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0s !important;
+    scroll-behavior: auto !important;
   }
 }
