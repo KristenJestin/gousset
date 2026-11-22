@@ -38,6 +38,15 @@ export type CallObserver = <A>(
 export const unobserved: CallObserver = (_call, run) => run(() => undefined);
 
 /**
+ * Runs a tool's effect with the services it needs (`R`): the app's runtime, the same one its
+ * server functions use, so that both read the same store.
+ */
+export type Runner<R> = <A, E>(effect: Effect.Effect<A, E, R>) => Promise<Exit.Exit<A, E>>;
+
+/** Runs an effect that needs no service. */
+export const runAlone: Runner<never> = (effect) => Effect.runPromiseExit(effect);
+
+/**
  * A family tool (docs/mcp.md, "Tools"): one concept, its actions behind `action`.
  *
  * - `description` says what it does, when to use it rather than another tool, its effects and
@@ -48,7 +57,7 @@ export const unobserved: CallObserver = (_call, run) => run(() => undefined);
  *   the write scope, and the annotations follow from it.
  * - `run` calls the packages, no logic of its own, and answers text: names, not ids.
  */
-export type ToolSpec<Input extends { readonly action: string }, Encoded> = {
+export type ToolSpec<Input extends { readonly action: string }, Encoded, R> = {
   readonly name: string;
   readonly title: string;
   readonly description: string;
@@ -58,11 +67,11 @@ export type ToolSpec<Input extends { readonly action: string }, Encoded> = {
   /** A valid call, written in the errors that come from wrong arguments. */
   readonly example: Encoded;
   readonly access: { readonly [A in Input["action"]]: Access };
-  readonly run: (input: Input, caller: Caller) => Effect.Effect<string, ToolRefusal>;
+  readonly run: (input: Input, caller: Caller) => Effect.Effect<string, ToolRefusal, R>;
 };
 
-/** A tool as the server lists and calls it, its types erased. */
-export type Tool = {
+/** A tool as the server lists and calls it, its input's types erased; `R`, the services it needs. */
+export type Tool<R = never> = {
   readonly name: string;
   readonly title: string;
   readonly description: string;
@@ -73,7 +82,12 @@ export type Tool = {
     readonly openWorldHint: false;
   };
   readonly inputSchema: ReturnType<typeof listedInputSchema>;
-  readonly register: (server: McpServer, caller: Caller, observe: CallObserver) => void;
+  readonly register: (
+    server: McpServer,
+    caller: Caller,
+    observe: CallObserver,
+    run: Runner<R>,
+  ) => void;
 };
 
 const WRITE_REFUSED =
@@ -93,9 +107,9 @@ const error = (body: string): CallResult => ({
   isError: true,
 });
 
-export function defineTool<Input extends { readonly action: string }, Encoded>(
-  spec: ToolSpec<Input, Encoded>,
-): Tool {
+export function defineTool<Input extends { readonly action: string }, Encoded, R = never>(
+  spec: ToolSpec<Input, Encoded, R>,
+): Tool<R> {
   const accesses: ReadonlyArray<Access> = Object.values(spec.access);
   const readOnly = accesses.every((access) => access === "read");
   const inputSchema = listedInputSchema(spec.input);
@@ -128,7 +142,7 @@ export function defineTool<Input extends { readonly action: string }, Encoded>(
       openWorldHint: false,
     },
     inputSchema,
-    register: (server, caller, observe) => {
+    register: (server, caller, observe, run) => {
       server.registerTool(
         spec.name,
         {
@@ -172,7 +186,7 @@ export function defineTool<Input extends { readonly action: string }, Encoded>(
               Option.fromUndefinedOr(given),
             );
 
-            const answered = await Effect.runPromiseExit(spec.run(input, caller));
+            const answered = await run(spec.run(input, caller));
 
             if (Exit.isSuccess(answered)) {
               const page = pageOf(answered.value, Option.getOrUndefined(cursor), (next) =>

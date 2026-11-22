@@ -1,7 +1,7 @@
 import { Client, StreamableHTTPClientTransport } from "@modelcontextprotocol/client";
 
 import { authInfoOf, createMcpEndpoint } from "./server";
-import type { ServerOptions } from "./server";
+import type { ServerDefinition, ServerRuntime } from "./server";
 import type { Caller } from "./tool";
 
 export type Revision = "2025-11-25" | "2026-07-28";
@@ -11,12 +11,13 @@ export type Revision = "2025-11-25" | "2026-07-28";
  * a network: the client's requests go straight to the endpoint's handler, as `caller`. For the
  * package's tests; the end-to-end tests go through the built app and OAuth.
  */
-export async function connectInProcess(
-  options: ServerOptions,
+export async function connectInProcess<R>(
+  definition: ServerDefinition<R>,
+  runtime: ServerRuntime<R>,
   caller: Caller,
   revision: Revision,
 ): Promise<Client> {
-  const endpoint = createMcpEndpoint(options);
+  const endpoint = createMcpEndpoint(definition, runtime);
 
   const transport = new StreamableHTTPClientTransport(new URL("http://gousset.test/mcp"), {
     fetch: (input, init) =>

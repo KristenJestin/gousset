@@ -4,7 +4,7 @@ import { describe, expect, test } from "vite-plus/test";
 import { ERROR_LIMIT, RESULT_LIMIT } from "./results";
 import { callText, connectInProcess } from "./test-client";
 import type { Revision } from "./test-client";
-import { ToolRefusal, defineTool } from "./tool";
+import { ToolRefusal, defineTool, runAlone } from "./tool";
 import type { CallOutcome, CallObserver, Caller } from "./tool";
 
 // A tool made for these tests only: one read, one write, a long read, a refusal and a failure, so
@@ -67,7 +67,10 @@ const timer = defineTool({
   title: "Timer",
   description: "Test timer.",
   idempotent: true,
-  input: Schema.Struct({ action: Schema.Literal("show") }),
+  input: Schema.Struct({
+    action: Schema.Literal("show"),
+    label: Schema.optional(Schema.String.annotate({ description: "A label." })),
+  }),
   example: { action: "show" },
   access: { show: "read" },
   run: () => Effect.succeed("Nothing."),
@@ -75,7 +78,8 @@ const timer = defineTool({
 
 function connect(caller: Caller, revision: Revision, observe?: CallObserver) {
   return connectInProcess(
-    { tools: [notes, timer], instructions: "Test instructions.", version: "0.0.0", observe },
+    { tools: [notes, timer], instructions: "Test instructions.", version: "0.0.0" },
+    { run: runAlone, observe },
     caller,
     revision,
   );
@@ -141,6 +145,17 @@ describe("the listing", () => {
     expect(schema).not.toContain("minLength");
     expect(schema).toContain("A note's title, as written.");
     expect(listed?.inputSchema.properties).toHaveProperty("cursor");
+  });
+
+  test("lists an optional argument as its own type, without null", async () => {
+    const client = await connect(reader, "2025-11-25");
+    const [, shown] = (await client.listTools()).tools;
+
+    expect(shown?.inputSchema.properties?.["label"]).toStrictEqual({
+      type: "string",
+      description: "A label.",
+    });
+    expect(shown?.inputSchema.required).toStrictEqual(["action"]);
   });
 });
 

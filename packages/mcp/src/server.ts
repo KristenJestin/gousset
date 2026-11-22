@@ -3,15 +3,21 @@ import type { AuthInfo } from "@modelcontextprotocol/server";
 import { Option, Schema } from "effect";
 
 import { unobserved } from "./tool";
-import type { CallObserver, Caller, Tool } from "./tool";
+import type { CallObserver, Caller, Runner, Tool } from "./tool";
 
 /** The server's own name, as clients show it. */
 export const SERVER_NAME = "gousset";
 
-export type ServerOptions = {
-  readonly tools: ReadonlyArray<Tool>;
+/** What the server serves: its tools, in order, and its instructions. */
+export type ServerDefinition<R> = {
+  readonly tools: ReadonlyArray<Tool<R>>;
   readonly instructions: string;
   readonly version: string;
+};
+
+/** How the server runs: the services its tools need, and the observer of each call. */
+export type ServerRuntime<R> = {
+  readonly run: Runner<R>;
   readonly observe?: CallObserver;
 };
 
@@ -20,14 +26,18 @@ export type ServerOptions = {
  * same for both protocol revisions), and the instructions. No roots, sampling, logging nor
  * elicitation (docs/mcp.md, rule 10): only tools are declared.
  */
-export function createServer(options: ServerOptions, caller: Caller): McpServer {
+export function createServer<R>(
+  definition: ServerDefinition<R>,
+  runtime: ServerRuntime<R>,
+  caller: Caller,
+): McpServer {
   const server = new McpServer(
-    { name: SERVER_NAME, version: options.version },
-    { instructions: options.instructions, capabilities: { tools: {} } },
+    { name: SERVER_NAME, version: definition.version },
+    { instructions: definition.instructions, capabilities: { tools: {} } },
   );
 
-  for (const tool of options.tools) {
-    tool.register(server, caller, options.observe ?? unobserved);
+  for (const tool of definition.tools) {
+    tool.register(server, caller, runtime.observe ?? unobserved, runtime.run);
   }
 
   return server;
@@ -54,7 +64,7 @@ export function authInfoOf(caller: Caller, token: string, clientId: string): Aut
  * so both revisions list the same tools in the same order. It verifies nothing itself: the door
  * gives it the caller it verified, and a request without one gets no server.
  */
-export function createMcpEndpoint(options: ServerOptions) {
+export function createMcpEndpoint<R>(definition: ServerDefinition<R>, runtime: ServerRuntime<R>) {
   const handler = createMcpHandler(
     ({ authInfo }) => {
       const caller = callerOf(authInfo?.extra);
@@ -63,7 +73,7 @@ export function createMcpEndpoint(options: ServerOptions) {
         throw new Error("The MCP door verifies the caller before the server is built.");
       }
 
-      return createServer(options, caller.value);
+      return createServer(definition, runtime, caller.value);
     },
     { legacy: "stateless" },
   );

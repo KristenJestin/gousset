@@ -481,6 +481,9 @@ importers:
 
   packages/mcp:
     dependencies:
+      '@gousset/core':
+        specifier: workspace:*
+        version: link:../core
       '@modelcontextprotocol/server':
         specifier: 2.4.0
         version: 2.4.0
