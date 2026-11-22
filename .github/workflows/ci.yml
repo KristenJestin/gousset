@@ -1,0 +1,171 @@
+# Every pull request, and every push to dev and main, is verified here (issue #3). What reads a
+# pull request's title and description is in pull-request.yml, which runs again when they change.
+# Required on dev and main: verify, e2e and react-doctor here, privacy there.
+#
+# Actions are pinned by commit, the version beside it: a moved tag runs no new code here.
+name: ci
+
+on:
+  pull_request:
+  push:
+    branches: [dev, main]
+
+# A new push makes the runs of the same pull request's older pushes useless. Not on dev and main,
+# whose runs always finish.
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: "26"
+
+jobs:
+  # Format, lint, types, unit tests, build, and React Doctor on the whole of apps/web and
+  # packages/ui (doctor.config.ts), failing on an error.
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Format, lint and types (vp check, then each package's check-types)
+        run: pnpm run check
+      - name: Unit tests (vp test)
+        run: pnpm run test
+      - name: Build
+        run: pnpm run build
+      # Nothing leaves CI: no score, no sharing, no supply-chain pass (doctor.config.ts), no
+      # telemetry.
+      - name: React Doctor, the whole of apps/web and packages/ui
+        env:
+          REACT_DOCTOR_NO_TELEMETRY: "1"
+        run: pnpm exec react-doctor --no-telemetry --yes --blocking error
+
+  # The end-to-end suite (apps/e2e), sharded. Until the harness lands there is no `e2e` script,
+  # and each shard passes saying so.
+  e2e-shard:
+    name: e2e shard ${{ matrix.shard }}
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: gousset
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/gousset
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Is there a suite to run
+        id: harness
+        run: |
+          if [ "$(node -p "Boolean(require('./package.json').scripts.e2e)")" != true ]; then
+            echo "::notice::No e2e script yet (the harness is its own ticket): nothing to run."
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Playwright's browsers
+        if: steps.harness.outputs.present == 'true'
+        run: pnpm --dir apps/e2e exec playwright install --with-deps chromium firefox
+      # The suite runs the built app.
+      - name: Build
+        if: steps.harness.outputs.present == 'true'
+        run: pnpm run build
+      - name: End-to-end tests, shard ${{ matrix.shard }} of 2
+        if: steps.harness.outputs.present == 'true'
+        run: pnpm e2e --shard=${{ matrix.shard }}/2
+      - name: Keep the trace, video and screenshots
+        if: failure() && steps.harness.outputs.present == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: e2e-shard-${{ matrix.shard }}
+          path: |
+            apps/e2e/test-results
+            apps/e2e/playwright-report
+          if-no-files-found: ignore
+          retention-days: 14
+
+  # The required check: one job named e2e that passes only when every shard passed, whatever the
+  # number of shards.
+  e2e:
+    if: always() && github.event_name == 'pull_request'
+    needs: e2e-shard
+    runs-on: ubuntu-latest
+    steps:
+      - name: Every shard passed
+        env:
+          RESULT: ${{ needs.e2e-shard.result }}
+        run: |
+          echo "The shards: $RESULT"
+          [ "$RESULT" = success ]
+
+  # React Doctor on what the pull request introduces, through its official Action: one summary
+  # comment kept up to date and inline comments on the changed lines. An error fails the check; a
+  # warning stays a comment to answer. Its settings (projects, no score, no sharing, no
+  # supply-chain pass) are in doctor.config.ts. Its job holds a token that writes comments, and no
+  # more: no commit status, no credentials left in .git.
+  react-doctor:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+    steps:
+      # The whole history: the Action diffs the pull request against its base.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      # The installed react-doctor runs, at the version of the lockfile, and doctor.config.ts
+      # resolves its import.
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      # The Action passes no --no-telemetry: the variable turns it off.
+      - uses: millionco/react-doctor@695e46eee203a5d1855020191aa7e9c010a1250e # v2
+        env:
+          REACT_DOCTOR_NO_TELEMETRY: "1"
+        with:
+          blocking: error
+          commit-status: false
+          # The Action's default, "*", would scan every workspace project: these are doctor.config.ts's.
+          project: apps/web,packages/ui
+          node-version: ${{ env.NODE_VERSION }}
