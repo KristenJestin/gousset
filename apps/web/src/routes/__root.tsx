@@ -24,9 +24,25 @@ const Devtools = import.meta.env.DEV ? lazy(async () => import("../devtools")) :
 /** What every route's loader may use: the request's query client. */
 type RouterContext = { queryClient: QueryClient };
 
+/** Whose data each query client holds: the e-mail of the user it was filled for. */
+const ownerOf = new WeakMap<QueryClient, string | null>();
+
 export const Route = createRootRouteWithContext<RouterContext>()({
   // Every navigation asks the server who is looking: the guards of the routes below read it.
-  beforeLoad: async () => ({ viewer: await getViewer() }),
+  beforeLoad: async ({ context: { queryClient } }) => {
+    const viewer = await getViewer();
+    const owner = viewer.user?.email ?? null;
+
+    // Signing out, or in as someone else, without a reload: nothing cached for the previous user
+    // may show to the next one.
+    if (ownerOf.has(queryClient) && ownerOf.get(queryClient) !== owner) {
+      queryClient.clear();
+    }
+
+    ownerOf.set(queryClient, owner);
+
+    return { viewer };
+  },
   head: () => ({
     meta: [
       {
