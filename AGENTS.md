@@ -211,10 +211,12 @@ The lead reviews every change to the tools against `docs/mcp.md` before merging.
   phone; screenshots compared). CI runs them in the official Playwright image; refresh the
   reference screenshots in that same image with `tools/playwright-docker.sh
   --update-snapshots=all`, never with a local browser, which renders fonts differently. Missing
-  references are made by CI, never on the machine: push a commit whose body ends with the
-  trailer line `Update-Snapshots: missing`, and the `ui-snapshots` workflow draws the missing
-  ones in that image and commits them to the branch (`test(ui): …`); then fetch, check them, and
-  push a commit of your own so that CI runs again. To redraw a reference, delete it first.
+  references are made by CI, never on the machine: push a commit whose body has the trailer line
+  `Update-Snapshots: missing` alone, as the last commit of the push, and the `ui-snapshots`
+  workflow draws the missing ones in that image and commits them to the branch (`test(ui): …`);
+  then fetch, check them, and push a commit of your own so that CI runs again. To redraw a
+  reference, delete it first. The branch's code draws them with a read-only token; another job,
+  which runs none of it, checks they are only new PNGs and pushes them.
 - **CI on a pull request runs Chromium on a desktop only**, in `e2e` and `ui`; each push to `dev`
   runs every browser and width. A failure seen only on `dev` is fixed at once. A pull request
   whose head commit ends with the trailer line `E2E-Matrix: full` runs every browser and width as

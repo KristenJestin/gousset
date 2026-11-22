@@ -4,12 +4,18 @@
 # here (`--update-snapshots=missing`): to redraw one, delete it in the branch first.
 #
 # Started three ways:
-# - a push to a branch other than dev and main whose head commit carries the trailer
-#   `Update-Snapshots: missing` on a line of its body (the subject stays a normal one);
-# - by hand (Actions, "ui-snapshots", with the branch), once this file is on the default branch;
+# - a push to a branch other than dev and main whose last commit has, in its body, the line
+#   `Update-Snapshots: missing` alone (a trailer; the subject stays a normal one);
+# - by hand (Actions, "ui-snapshots", with the branch's plain name), once this file is on the
+#   default branch;
 # - the `update-snapshots` label on a pull request of this repository.
 # A push made with GITHUB_TOKEN starts no new CI run: push a commit of your own afterwards to have
 # `ui` compare against the new references.
+#
+# Two jobs, so that the branch's code never runs beside a token that can push: `draw` runs it
+# (install, Storybook, Playwright) with a read-only token and hands over only the new PNGs, as an
+# artifact; `commit` holds the write token, runs nothing of the branch, checks the artifact holds
+# only new PNGs under packages/ui/e2e/__screenshots__, and commits them with Git's hooks off.
 #
 # Actions are pinned by commit, the version beside it.
 name: ui-snapshots
@@ -18,7 +24,7 @@ on:
   workflow_dispatch:
     inputs:
       branch:
-        description: "The pull request's branch to add the screenshots to (never dev or main)"
+        description: "The pull request's branch, its plain name (never dev or main)"
         required: true
         type: string
   pull_request:
@@ -35,11 +41,13 @@ permissions:
 
 env:
   NODE_VERSION: "26"
+  SCREENSHOTS: packages/ui/e2e/__screenshots__
 
 jobs:
-  snapshots:
-    # A label only counts on a branch of this repository: a fork's code never runs with a token
-    # that can push. A push counts only with the trailer, so that ordinary pushes cost nothing.
+  draw:
+    # A label only counts on a branch of this repository: a fork's code never runs here. A push is
+    # looked at only when its last commit mentions the trailer; the first step then reads it as a
+    # line of its own, so that ordinary pushes cost nothing.
     if: >-
       github.event_name == 'workflow_dispatch' ||
       (github.event_name == 'push' &&
@@ -48,52 +56,146 @@ jobs:
        github.event.pull_request.head.repo.full_name == github.repository)
     runs-on: ubuntu-latest
     permissions:
-      # The push of the new screenshots, and nothing else.
-      contents: write
+      contents: read
     container:
       image: mcr.microsoft.com/playwright:v1.65.1-noble
       options: --ipc=host
     env:
       HOME: /root
       BRANCH: ${{ github.event.pull_request.head.ref || inputs.branch || github.ref_name }}
+    outputs:
+      drawn: ${{ steps.collect.outputs.drawn }}
+      branch: ${{ steps.branch.outputs.branch }}
+      sha: ${{ steps.branch.outputs.sha }}
     steps:
-      - name: Refuse the integration and release branches
+      - name: Read the trailer, on a line of the body alone
+        id: trailer
+        if: github.event_name == 'push'
+        env:
+          MESSAGE: ${{ github.event.head_commit.message }}
+        run: |
+          if printf '%s\n' "$MESSAGE" | tail -n +2 | grep -qxF 'Update-Snapshots: missing'; then
+            echo "go=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::the last commit only mentions Update-Snapshots, without the trailer line: nothing drawn"
+            echo "go=false" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Accept a plain branch of this repository, never dev or main
+        id: branch
+        if: steps.trailer.outputs.go != 'false'
+        env:
+          REPOSITORY: ${{ github.repository }}
         run: |
           case "$BRANCH" in
-            dev | main | "") echo "::error::ui-snapshots never commits to '$BRANCH'"; exit 1 ;;
+            "" | dev | main | refs/* | -* | */ | *..* | *[!A-Za-z0-9._/-]*)
+              echo "::error::ui-snapshots takes a plain branch name, never '$BRANCH'"; exit 1 ;;
           esac
+          sha="$(git ls-remote --heads "https://github.com/${REPOSITORY}.git" "refs/heads/${BRANCH}" | cut -f1)"
+          if [ -z "$sha" ]; then
+            echo "::error::no branch '$BRANCH' in ${REPOSITORY}"; exit 1
+          fi
+          echo "branch=$BRANCH" >> "$GITHUB_OUTPUT"
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: steps.branch.outputs.sha != ''
         with:
-          ref: ${{ env.BRANCH }}
-          # The token is not left in .git while the branch's own code runs; the last step uses it.
+          ref: ${{ steps.branch.outputs.sha }}
           persist-credentials: false
       - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+        if: steps.branch.outputs.sha != ''
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        if: steps.branch.outputs.sha != ''
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: pnpm
       - name: Install
+        if: steps.branch.outputs.sha != ''
         run: pnpm install --frozen-lockfile
       # Every browser check that compares a screenshot, as `ui` runs them; a check failing for
       # another reason does not stop the new references from being kept (the `ui` job judges it).
       - name: Draw the missing references
+        if: steps.branch.outputs.sha != ''
         working-directory: packages/ui
         run: |
           pnpm exec playwright test --project chromium --project firefox --project phone \
             --update-snapshots=missing || echo "::warning::some browser checks failed; see the ui job"
-      - name: Commit and push them to the branch
+      - name: Set the new references apart
+        id: collect
+        if: steps.branch.outputs.sha != ''
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          cd "$GITHUB_WORKSPACE"
+          mkdir -p "$RUNNER_TEMP/drawn"
+          git ls-files --others --exclude-standard -z -- "$SCREENSHOTS" |
+            xargs -0 -r cp --parents -t "$RUNNER_TEMP/drawn"
+          if [ -z "$(ls -A "$RUNNER_TEMP/drawn")" ]; then
+            echo "No missing reference."
+            echo "drawn=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "drawn=true" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: steps.collect.outputs.drawn == 'true'
+        with:
+          name: new-references
+          path: ${{ runner.temp }}/drawn
+          if-no-files-found: error
+          retention-days: 1
+
+  commit:
+    needs: draw
+    if: needs.draw.outputs.drawn == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      # The push of the new screenshots, and nothing else.
+      contents: write
+    env:
+      BRANCH: ${{ needs.draw.outputs.branch }}
+      SHA: ${{ needs.draw.outputs.sha }}
+    steps:
+      # The branch as it was drawn from; nothing of it runs here.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ needs.draw.outputs.sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: new-references
+          path: ${{ runner.temp }}/drawn
+      - name: Check the artifact holds only new PNGs under the screenshots folder
+        run: |
+          cd "$RUNNER_TEMP/drawn"
+          if [ -n "$(find . ! -type f ! -type d)" ]; then
+            echo "::error::the artifact holds something that is neither a file nor a folder"; exit 1
+          fi
+          find . -type f -print0 | while IFS= read -r -d '' file; do
+            path="${file#./}"
+            if ! printf '%s' "$path" |
+              grep -qxE "packages/ui/e2e/__screenshots__/[a-z0-9-]+/[A-Za-z0-9._-]+\.png"; then
+              echo "::error::not a reference screenshot: $path"; exit 1
+            fi
+            if [ "$(head -c 8 "$file" | od -An -tx1 | tr -d ' \n')" != 89504e470d0a1a0a ]; then
+              echo "::error::not a PNG: $path"; exit 1
+            fi
+            if [ -e "$GITHUB_WORKSPACE/$path" ]; then
+              echo "::error::already a reference, never replaced here: $path"; exit 1
+            fi
+          done
+      - name: Commit and push them to the branch, if it has not moved
         env:
           TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
         run: |
-          git config --global --add safe.directory "$GITHUB_WORKSPACE"
-          cd "$GITHUB_WORKSPACE"
-          git add -- packages/ui/e2e/__screenshots__
-          if git diff --cached --quiet; then
-            echo "No missing reference."
-            exit 0
+          now="$(git ls-remote --heads "https://github.com/${REPOSITORY}.git" "refs/heads/${BRANCH}" | cut -f1)"
+          if [ "$now" != "$SHA" ]; then
+            echo "::error::'$BRANCH' moved since the references were drawn; start ui-snapshots again"
+            exit 1
           fi
-          git -c user.name="github-actions[bot]" \
+          cp -r "$RUNNER_TEMP/drawn/." .
+          git add -- "$SCREENSHOTS"
+          git -c core.hooksPath=/dev/null \
+            -c user.name="github-actions[bot]" \
             -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
             commit -m "test(ui): add the missing reference screenshots"
-          git push "https://x-access-token:${TOKEN}@github.com/${REPOSITORY}.git" "HEAD:refs/heads/${BRANCH}"
+          git -c core.hooksPath=/dev/null push \
+            "https://x-access-token:${TOKEN}@github.com/${REPOSITORY}.git" "HEAD:refs/heads/${BRANCH}"

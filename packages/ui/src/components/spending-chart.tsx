@@ -3,12 +3,14 @@ import { useUiMessages } from "../hooks/use-ui-messages";
 import type { SpendingDay, SpendingRow } from "../lib/chart-amounts";
 import { formatChartDay, spendingRows } from "../lib/chart-amounts";
 import { formatMoney } from "../lib/money";
+import { duration } from "../lib/motion";
 import { Grid } from "./charts/grid";
 import { Line } from "./charts/line";
 import { LineChart } from "./charts/line-chart";
 import { ChartTooltip } from "./charts/tooltip/chart-tooltip";
 import { XAxis } from "./charts/x-axis";
 import { Amount } from "./amount";
+import { ChartFigures, ChartFiguresSkeleton } from "./chart-figures";
 import { Skeleton, SkeletonFrame } from "./skeleton";
 
 export type { SpendingDay } from "../lib/chart-amounts";
@@ -155,7 +157,13 @@ export function SpendingChart({
       ) : !hydrated ? (
         <div className="aspect-2/1 w-full" />
       ) : (
-        <LineChart data={rows} margin={MARGIN}>
+        <LineChart
+          data={rows}
+          margin={MARGIN}
+          // The design's longest motion (300 ms), not Bklit's 1.1 s; reduced motion skips it
+          // (`followReducedMotion`).
+          animationDuration={duration.slow * 1000}
+        >
           <Grid />
           <Line
             dataKey="previous"
@@ -192,6 +200,20 @@ export function SpendingChart({
           />
         </LineChart>
       )}
+      {rows.length === 0 ? null : (
+        <ChartFigures
+          caption={label}
+          columns={[messages.charts.day, currentLabel, previousLabel]}
+          rows={rows.map((row) => ({
+            key: row.date.toISOString(),
+            cells: [
+              formatChartDay(row.date, locale),
+              formatMoney({ minor: row.currentMinor, currency }, { locale }),
+              formatMoney({ minor: row.previousMinor, currency }, { locale }),
+            ],
+          }))}
+        />
+      )}
     </figure>
   );
 }
@@ -206,6 +228,7 @@ export function SpendingChartSkeleton() {
           <Skeleton className="h-3 w-20" />
         </div>
         <Skeleton className="aspect-2/1 w-full" />
+        <ChartFiguresSkeleton />
       </div>
     </SkeletonFrame>
   );

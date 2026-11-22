@@ -45,8 +45,11 @@ export function MonthSwitcher({ value, onChange, latest }: MonthSwitcherProps) {
   // so the server's markup carries no `style` attribute (the Content Security Policy forbids
   // them). Once given, its exit plays as Motion's (and is skipped under reduced motion).
   const hydrated = useHydrated();
-  // Read once, when it mounts: a page left open past midnight on the 1st keeps its bound.
+  // Read once, when it mounts: a page left open past midnight on the 1st keeps its bound. Only
+  // the browser's reading counts: the server's clock and timezone may name another month, and
+  // hydration would keep the server's `disabled` on Next.
   const [current] = useState(() => monthOf(new Date()));
+  const bound = latest ?? (hydrated ? current : undefined);
 
   // Which way the month moved decides which way the label slides.
   if (index !== shownIndex) {
@@ -54,7 +57,8 @@ export function MonthSwitcher({ value, onChange, latest }: MonthSwitcherProps) {
     setShownIndex(index);
   }
 
-  const canGoNext = index < monthIndex(latest ?? current);
+  // Until the bound is known (on the server, without `latest`), Next leads nowhere.
+  const canGoNext = bound !== undefined && index < monthIndex(bound);
   const label = formatMonth(value, language);
 
   const step = (steps: number) => {
@@ -104,6 +108,9 @@ export function MonthSwitcher({ value, onChange, latest }: MonthSwitcherProps) {
         icon="next"
         label={messages.pieces.nextMonth}
         disabled={!canGoNext}
+        // It turns disabled under the user's focus on the latest month: the focus stays on it,
+        // and the arrows keep working.
+        focusableWhenDisabled
         onClick={() => step(1)}
       />
     </div>

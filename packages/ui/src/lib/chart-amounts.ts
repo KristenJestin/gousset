@@ -56,10 +56,19 @@ export type MonthAmount = { date: Date; amount: Money };
 /** One bar as the bar chart draws it: its label, its height in major units, its amount. */
 export type MonthBar = { name: string; value: number; amount: Money };
 
-/** The bars, each named by its short month in the page's language. */
+/**
+ * The bars, each named by its short month in the page's language, and by its year too once a
+ * month comes back (thirteen months, two Octobers): the chart places its bars by name, and two
+ * bars with one name would share one place.
+ */
 export function monthBars(months: ReadonlyArray<MonthAmount>, locale: string): Array<MonthBar> {
-  return months.map((month) => ({
-    name: formatChartMonth(month.date, locale),
+  const short = months.map((month) => formatChartMonth(month.date, locale));
+  const withYear = new Set(short).size < short.length;
+
+  return months.map((month, index) => ({
+    name: withYear
+      ? new Intl.DateTimeFormat(locale, { month: "short", year: "2-digit" }).format(month.date)
+      : (short[index] ?? ""),
     value: toChartValue(month.amount),
     amount: month.amount,
   }));

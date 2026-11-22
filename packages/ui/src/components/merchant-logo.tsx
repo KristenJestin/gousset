@@ -28,7 +28,8 @@ const TONES = [
 /**
  * A merchant's logo, or its initials on a tile whose tone comes from its name (stable, never
  * random). Decorative: the merchant's name sits beside it, so the image's `alt` is empty. The
- * image loads lazily; if it fails, the initials take its place.
+ * image loads lazily; if it fails, the initials take its place, also when it failed before the
+ * page hydrated (no `error` event comes then: the image is read when it mounts).
  */
 export function MerchantLogo({ name, src, size = "md", corners = "rounded" }: MerchantLogoProps) {
   const [failed, setFailed] = useState<string>();
@@ -52,6 +53,12 @@ export function MerchantLogo({ name, src, size = "md", corners = "rounded" }: Me
           loading="lazy"
           decoding="async"
           className="size-full object-cover"
+          ref={(image) => {
+            // Already settled without a picture: it failed before React listened.
+            if (image !== null && image.complete && image.naturalWidth === 0) {
+              setFailed(src);
+            }
+          }}
           onError={() => setFailed(src)}
         />
       ) : (
