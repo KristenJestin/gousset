@@ -10,6 +10,7 @@
     "lint": "vp lint",
     "format": "vp fmt",
     "test": "vp test",
+    "e2e": "pnpm --filter @gousset/e2e exec playwright test",
     "staged": "vp staged",
     "hooks:setup": "vp config",
     "dev:web": "vp run --filter web dev",
