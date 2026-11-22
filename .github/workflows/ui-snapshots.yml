@@ -1,0 +1,99 @@
+# Makes packages/ui's missing reference screenshots in the official Playwright image, the one the
+# `ui` job compares them in, and commits them to the pull request's branch: references are never
+# drawn by a local browser, whose fonts render differently. Existing references are never changed
+# here (`--update-snapshots=missing`): to redraw one, delete it in the branch first.
+#
+# Started three ways:
+# - a push to a branch other than dev and main whose head commit carries the trailer
+#   `Update-Snapshots: missing` on a line of its body (the subject stays a normal one);
+# - by hand (Actions, "ui-snapshots", with the branch), once this file is on the default branch;
+# - the `update-snapshots` label on a pull request of this repository.
+# A push made with GITHUB_TOKEN starts no new CI run: push a commit of your own afterwards to have
+# `ui` compare against the new references.
+#
+# Actions are pinned by commit, the version beside it.
+name: ui-snapshots
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: "The pull request's branch to add the screenshots to (never dev or main)"
+        required: true
+        type: string
+  pull_request:
+    types: [labeled]
+  push:
+    branches-ignore: [dev, main]
+
+concurrency:
+  group: ui-snapshots-${{ github.event.pull_request.head.ref || inputs.branch || github.ref_name }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: "26"
+
+jobs:
+  snapshots:
+    # A label only counts on a branch of this repository: a fork's code never runs with a token
+    # that can push. A push counts only with the trailer, so that ordinary pushes cost nothing.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'push' &&
+       contains(github.event.head_commit.message, 'Update-Snapshots: missing')) ||
+      (github.event.label.name == 'update-snapshots' &&
+       github.event.pull_request.head.repo.full_name == github.repository)
+    runs-on: ubuntu-latest
+    permissions:
+      # The push of the new screenshots, and nothing else.
+      contents: write
+    container:
+      image: mcr.microsoft.com/playwright:v1.65.1-noble
+      options: --ipc=host
+    env:
+      HOME: /root
+      BRANCH: ${{ github.event.pull_request.head.ref || inputs.branch || github.ref_name }}
+    steps:
+      - name: Refuse the integration and release branches
+        run: |
+          case "$BRANCH" in
+            dev | main | "") echo "::error::ui-snapshots never commits to '$BRANCH'"; exit 1 ;;
+          esac
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ env.BRANCH }}
+          # The token is not left in .git while the branch's own code runs; the last step uses it.
+          persist-credentials: false
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      # Every browser check that compares a screenshot, as `ui` runs them; a check failing for
+      # another reason does not stop the new references from being kept (the `ui` job judges it).
+      - name: Draw the missing references
+        working-directory: packages/ui
+        run: |
+          pnpm exec playwright test --project chromium --project firefox --project phone \
+            --update-snapshots=missing || echo "::warning::some browser checks failed; see the ui job"
+      - name: Commit and push them to the branch
+        env:
+          TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          cd "$GITHUB_WORKSPACE"
+          git add -- packages/ui/e2e/__screenshots__
+          if git diff --cached --quiet; then
+            echo "No missing reference."
+            exit 0
+          fi
+          git -c user.name="github-actions[bot]" \
+            -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -m "test(ui): add the missing reference screenshots"
+          git push "https://x-access-token:${TOKEN}@github.com/${REPOSITORY}.git" "HEAD:refs/heads/${BRANCH}"

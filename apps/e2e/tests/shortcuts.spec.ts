@@ -92,14 +92,16 @@ test.describe("in French", () => {
   });
 });
 
-test("the dialog fades in over 150 ms, and not at all under reduced motion", async ({ page }) => {
+// The shared `Dialog` of packages/ui (#7): it fades and grows in 200 ms; reduced motion cuts every
+// transition to 0 s.
+test("the dialog fades in over 200 ms, and not at all under reduced motion", async ({ page }) => {
   await openHome(page);
 
   await page.keyboard.press("?");
 
   const dialog = page.getByRole("dialog", { name: "Keyboard shortcuts" });
 
-  await expect(dialog).toHaveCSS("transition-duration", "0.15s");
+  await expect(dialog).toHaveCSS("transition-duration", "0.2s");
   await expect(dialog).toHaveCSS("transition-property", /opacity/);
 
   await page.keyboard.press("Escape");
@@ -108,5 +110,5 @@ test("the dialog fades in over 150 ms, and not at all under reduced motion", asy
   await page.keyboard.press("?");
 
   await expect(dialog).toBeVisible();
-  await expect(dialog).toHaveCSS("transition-property", "none");
+  await expect(dialog).toHaveCSS("transition-duration", "0s");
 });
