@@ -28,7 +28,7 @@ export type ReviewLinesProps = {
   onApprove: (id: string) => void;
   /** Show this many lines, then "+ N more". All of them when left out. */
   limit?: number;
-  /** "+ N more" was chosen: show the rest. */
+  /** Show the rest: "+ N more" becomes a button, "Show the other N". */
   onMore?: () => void;
   /** What the list is, for screen readers. */
   label: string;
@@ -49,7 +49,7 @@ function More({ count, onMore }: { count: number; onMore: (() => void) | undefin
           className="-mx-2 cursor-pointer rounded-md px-2 transition-colors duration-150 hover:bg-muted hover:text-foreground"
           onClick={onMore}
         >
-          {messages.moreRows(count)}
+          {messages.showOtherRows(count)}
         </button>
       )}
     </li>
@@ -61,8 +61,9 @@ function More({ count, onMore }: { count: number; onMore: (() => void) | undefin
  * label, what the rules made of it (merchant, category, account), its amount and the action that
  * approves it. Cut after `limit` lines with "+ N more".
  *
- * Motion: an approved line folds away (its height and opacity to nothing, 200 ms, ease-out) and
- * the lines under it move up; a line put back unfolds the same way. Cut under reduced motion.
+ * Motion: an approved line fades out (200 ms, ease-out) and the lines under it slide up into its
+ * place (a layout move, by transform: nothing is laid out again at each frame); a line put back
+ * fades in while the others slide down. Cut under reduced motion.
  */
 export function ReviewLines({
   lines,
@@ -83,18 +84,20 @@ export function ReviewLines({
   const unfolds = (id: string) =>
     first.has(id)
       ? {}
-      : { initial: { height: 0, opacity: 0 }, animate: { height: "auto", opacity: 1 } };
+      : { initial: { opacity: 0 }, animate: { opacity: 1 } };
 
   return (
-    <ul aria-label={label} data-slot="review-lines" className="flex flex-col">
-      <AnimatePresence initial={false}>
+    <ul aria-label={label} data-slot="review-lines" className="relative flex flex-col">
+      {/* The line that leaves is taken out of the flow at once; the others move up by layout. */}
+      <AnimatePresence initial={false} mode="popLayout">
         {lines.slice(0, shown).map((line) => (
           <motion.li
             key={line.id}
             data-slot="review-line"
-            className="overflow-hidden border-b last:border-b-0"
+            layout="position"
+            className="border-b bg-card last:border-b-0"
             {...unfolds(line.id)}
-            exit={{ height: 0, opacity: 0 }}
+            exit={{ opacity: 0 }}
             transition={transition.base}
           >
             <div className="flex h-16 items-center gap-3">
