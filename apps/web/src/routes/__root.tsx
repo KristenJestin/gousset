@@ -1,11 +1,23 @@
-import { HeadContent, Outlet, Scripts, createRootRoute, useRouter } from "@tanstack/react-router";
-import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
+import { HotkeysProvider } from "@tanstack/react-hotkeys";
+import {
+  ClientOnly,
+  HeadContent,
+  Outlet,
+  Scripts,
+  createRootRoute,
+  useRouter,
+} from "@tanstack/react-router";
+import { Suspense, lazy } from "react";
 
 import { ThemeProvider } from "@gousset/ui/components/theme-provider";
 
 import { getViewer } from "@/functions/viewer";
 
 import appCss from "../index.css?url";
+import { Shortcuts, appHotkeys } from "../shortcuts";
+
+// Development only: a production build reads `false` here and drops the import, devtools and all.
+const Devtools = import.meta.env.DEV ? lazy(async () => import("../devtools")) : null;
 
 export const Route = createRootRoute({
   // Every navigation asks the server who is looking: the guards of the routes below read it.
@@ -48,9 +60,18 @@ function RootDocument() {
       </head>
       <body>
         <ThemeProvider nonce={nonce}>
-          <Outlet />
+          <HotkeysProvider appHotkeys={appHotkeys}>
+            <Outlet />
+            <Shortcuts />
+          </HotkeysProvider>
         </ThemeProvider>
-        <TanStackRouterDevtools position="bottom-left" />
+        {Devtools === null ? null : (
+          <ClientOnly>
+            <Suspense>
+              <Devtools />
+            </Suspense>
+          </ClientOnly>
+        )}
         <Scripts />
       </body>
     </html>

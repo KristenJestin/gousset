@@ -44,6 +44,21 @@ const en = {
     created: (name: string) => `${name} can now sign in with the temporary password.`,
     back: "Back",
   },
+  dialog: {
+    close: "Close",
+  },
+  shortcuts: {
+    title: "Keyboard shortcuts",
+    // By the id of each app hotkey (apps/web/src/shortcuts.tsx).
+    hotkeys: {
+      "shortcuts.show": "Show keyboard shortcuts",
+      "search.open": "Search",
+    },
+  },
+  search: {
+    title: "Search",
+    empty: "Nothing to search yet.",
+  },
   errors: {
     invalidCredentials: "Wrong e-mail or password.",
     tooManyAttempts: "Too many failed attempts. Try again in a few minutes.",
@@ -103,6 +118,20 @@ const fr: Messages = {
     create: "Créer l'utilisateur",
     created: (name) => `${name} peut maintenant se connecter avec le mot de passe provisoire.`,
     back: "Retour",
+  },
+  dialog: {
+    close: "Fermer",
+  },
+  shortcuts: {
+    title: "Raccourcis clavier",
+    hotkeys: {
+      "shortcuts.show": "Afficher les raccourcis clavier",
+      "search.open": "Rechercher",
+    },
+  },
+  search: {
+    title: "Recherche",
+    empty: "Rien à rechercher pour l'instant.",
   },
   errors: {
     invalidCredentials: "E-mail ou mot de passe incorrect.",

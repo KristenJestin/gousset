@@ -57,8 +57,12 @@ async function freePort(): Promise<number> {
   return port;
 }
 
-function appEnvironment(port: number, database: string) {
+/** Variables a test adds to its worker's app (`appEnvironment` in `src/test.ts`). */
+export type AppEnvironment = Readonly<Record<string, string>>;
+
+function appEnvironment(port: number, database: string, extra: AppEnvironment) {
   return {
+    ...extra,
     NODE_ENV: "production",
     HOST: APP_HOST,
     PORT: String(port),
@@ -71,8 +75,13 @@ function appEnvironment(port: number, database: string) {
 }
 
 /** The built server (`pnpm build`), or the image named by `E2E_APP_IMAGE`. */
-function launch(port: number, database: string, container: string): ChildProcess {
-  const environment = appEnvironment(port, database);
+function launch(
+  port: number,
+  database: string,
+  container: string,
+  extra: AppEnvironment,
+): ChildProcess {
+  const environment = appEnvironment(port, database, extra);
 
   if (harness.appImage !== undefined) {
     // Each variable by name only: docker takes its value from its own environment, so that the
@@ -184,6 +193,7 @@ async function stopProcess(app: Launched, container: string): Promise<void> {
 export async function startWorkerEnvironment(
   slot: number,
   logFile: string,
+  extra: AppEnvironment = {},
 ): Promise<WorkerEnvironment> {
   const database = workerDatabaseName(slot);
 
@@ -197,7 +207,7 @@ export async function startWorkerEnvironment(
 
   // Appended: a worker that replaces a failed one on the same slot keeps the failed one's log.
   const log = createWriteStream(logFile, { flags: "a" });
-  const app = follow(launch(port, database, container));
+  const app = follow(launch(port, database, container, extra));
 
   app.server.stdout?.pipe(log);
   app.server.stderr?.pipe(log);
