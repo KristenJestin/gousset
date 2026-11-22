@@ -1,8 +1,22 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 
-import { List, ListItem } from "./list";
+import { Card } from "./card";
+import { EmptyState } from "./empty-state";
+import { ErrorState } from "./error-state";
+import { List, ListItem, ListSkeleton } from "./list";
 
-/** A list of people or things, one per row, with short tags. Not for lines of money. */
+/**
+ * A list of people or things, one per row, with short tags (the users of an installation). It
+ * sits in a `Card`, which is the block; the list draws no block of its own. While its data comes,
+ * `ListSkeleton` takes its place with rows of the same height; with nothing to show, an
+ * `EmptyState`; when it failed, an `ErrorState`.
+ *
+ * Motion: none of its own; its skeleton waits 150 ms, fades in over 200 ms and breathes; cut
+ * under reduced motion.
+ *
+ * Don't: use it for lines of money (they have their own rows, with amounts lined up), put a card
+ * in a row, or render an empty list where an `EmptyState` belongs.
+ */
 const meta = {
   title: "Data/List",
   component: List,
@@ -27,4 +41,56 @@ export const Users: Story = {
   ),
 };
 
-export const Empty: Story = { args: { children: null } };
+/** Three rows on their way, each the height of a loaded row. */
+export const Loading: Story = { render: () => <ListSkeleton label="Loading the users" /> };
+
+/** The loaded list and its skeleton side by side: the same height. */
+export const LoadingBesideLoaded: Story = {
+  render: (args) => (
+    <div className="grid gap-4 sm:grid-cols-2">
+      <Card title="Users">
+        <List label={args.label}>
+          <ListItem title="Ada Example" description="ada@example.com" tags={["Administrator"]} />
+          <ListItem title="Grace Example" description="grace@example.com" />
+          <ListItem title="Alan Example" description="alan@example.com" />
+        </List>
+      </Card>
+      <Card title="Users">
+        <ListSkeleton />
+      </Card>
+    </div>
+  ),
+};
+
+/** Nothing to list: the block says so, rather than an empty list. */
+export const Empty: Story = {
+  render: () => (
+    <Card title="Users">
+      <EmptyState title="Nobody else yet" description="Add the people who share this place." />
+    </Card>
+  ),
+};
+
+export const Failed: Story = {
+  render: () => (
+    <Card title="Users">
+      <ErrorState title="The users could not be loaded" onRetry={() => undefined} />
+    </Card>
+  ),
+};
+
+export const Phone: Story = {
+  globals: { viewport: { value: "mobile1", isRotated: false } },
+  render: (args) => (
+    <Card title="Users">
+      <List label={args.label}>
+        <ListItem title="Ada Example" description="ada@example.com" tags={["Administrator"]} />
+        <ListItem
+          title="Grace Example"
+          description="grace@example.com"
+          tags={["Temporary password"]}
+        />
+      </List>
+    </Card>
+  ),
+};
