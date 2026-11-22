@@ -189,16 +189,38 @@ describe("tools/version.sh", () => {
     expect(repository.version("beta")).toBe("0.2.0-beta.2");
   });
 
-  it("publishes nothing stable when nothing was committed since the release", () => {
+  it("gives a release commit neither a release nor a beta, never a -beta.0", () => {
     const repository = new Repository();
 
     repository.commit("chore(repo): start");
     repository.tag("v0.1.0");
-    const result = repository.run("version.sh", "stable");
 
-    expect(result.status).toBe(3);
-    expect(result.out).toBe("");
-    expect(result.err).toContain("nothing to release since v0.1.0");
+    for (const channel of ["stable", "beta"]) {
+      const result = repository.run("version.sh", channel);
+
+      expect(result.status).toBe(3);
+      expect(result.out).toBe("");
+      expect(result.err).toContain("is v0.1.0 itself: nothing since it");
+    }
+  });
+
+  it("counts from the releases the commit holds, not from a later one", () => {
+    const repository = new Repository();
+
+    repository.commit("chore(repo): start");
+    repository.tag("v0.1.0");
+    const before = repository.commit("fix(web): before");
+    const released = repository.commit("fix(web): released");
+
+    repository.commit("fix(web): after");
+    // Its beta was 0.1.1-beta.3 before the release of `released`, which then takes 0.1.1.
+    expect(repository.version("beta")).toBe("0.1.1-beta.3");
+    repository.git("tag", "v0.1.1", released);
+
+    expect(repository.version("beta", "--at", before)).toBe("0.1.1-beta.1");
+    expect(repository.run("version.sh", "beta", "--at", released).status).toBe(3);
+    expect(repository.version("stable")).toBe("0.1.2");
+    expect(repository.version("beta")).toBe("0.1.2-beta.1");
   });
 
   it("takes a Release-As above the computed version, for the betas that follow too", () => {
@@ -213,25 +235,52 @@ describe("tools/version.sh", () => {
     expect(repository.version("stable")).toBe("0.1.1");
   });
 
-  it("refuses a Release-As below the computed version or not X.Y.Z, naming the commit", () => {
+  it("ignores a Release-As below the computed version or not X.Y.Z, warning with the commit", () => {
     const repository = new Repository();
 
     repository.commit("chore(repo): start");
     repository.tag("v0.4.0");
     const below = repository.commit("fix(web): a link\n\nRelease-As: 0.3.0");
-    const refused = repository.run("version.sh", "stable");
+    const result = repository.run("version.sh", "stable");
 
-    expect(refused.status).toBe(1);
-    expect(refused.err).toContain(
-      `commit ${below} says Release-As: 0.3.0, below the computed 0.4.1`,
+    expect(result.status).toBe(0);
+    expect(result.out).toBe("0.4.1\n");
+    expect(result.err).toContain(
+      `commit ${below} says Release-As: 0.3.0, below the computed 0.4.1: ignored`,
     );
 
     const other = new Repository();
     const malformed = other.commit("fix(web): a link\n\nRelease-As: v1");
-    const result = other.run("version.sh", "beta");
+    const beta = other.run("version.sh", "beta");
 
-    expect(result.status).toBe(1);
-    expect(result.err).toContain(`commit ${malformed} says Release-As: 'v1', which is not X.Y.Z`);
+    expect(beta.status).toBe(0);
+    expect(beta.out).toBe("0.0.1-beta.1\n");
+    expect(beta.err).toContain(
+      `commit ${malformed} says Release-As: 'v1', which is not X.Y.Z: ignored`,
+    );
+  });
+
+  it("never lets a later breaking change turn a Release-As into a block", () => {
+    const repository = new Repository();
+
+    repository.commit("chore(repo): start");
+    repository.tag("v1.2.3");
+    repository.commit("feat(web): a page\n\nRelease-As: 1.3.0");
+    expect(repository.version("stable")).toBe("1.3.0");
+    repository.commit("feat(db)!: a new schema", "fix(web): later");
+    const result = repository.run("version.sh", "beta");
+
+    expect(result.status).toBe(0);
+    expect(result.out).toBe("2.0.0-beta.3\n");
+    expect(result.err).toContain("Release-As: 1.3.0, below the computed 2.0.0: ignored");
+  });
+
+  it("takes the highest of several valid requests", () => {
+    const repository = new Repository();
+
+    repository.commit("fix(web): a\n\nRelease-As: 0.3.0", "fix(web): b\n\nRelease-As: 0.2.0");
+
+    expect(repository.version("stable")).toBe("0.3.0");
   });
 
   it("refuses an unknown channel", () => {
