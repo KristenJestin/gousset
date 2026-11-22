@@ -1,15 +1,15 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 
+import { Amount } from "@gousset/ui/components/amount";
 import { Button } from "@gousset/ui/components/button";
 import {
   Block,
-  BreakdownSkeleton,
-  ErrorState,
   FigureList,
+  FigureListSkeleton,
   FigureMore,
   FigureRow,
-  PlainAmount,
 } from "@gousset/ui/components/data-block";
+import { ErrorState } from "@gousset/ui/components/error-state";
 
 // Made-up figures, as packages/fixture's October 2026 has them.
 const SPENDING = [
@@ -25,7 +25,7 @@ function Loaded() {
         <FigureRow
           key={row.name}
           label={row.name}
-          figure={<PlainAmount minor={row.minor} currency="EUR" locale="en" />}
+          figure={<Amount value={{ minor: row.minor, currency: "EUR" }} locale="en" size="sm" />}
         />
       ))}
       <FigureMore>+ 4 more categories</FigureMore>
@@ -42,8 +42,6 @@ function Loaded() {
  *
  * Don't: give a skeleton another number of rows than the block it stands for; the page would
  * jump when the data arrives. Don't put a block inside a block.
- *
- * The skeleton, the error state and the amount are stand-ins until the shared components (#7).
  */
 const meta = {
   title: "Data/Block",
@@ -59,7 +57,7 @@ export const Default: Story = {};
 
 /** Loading: three rows and the "more" row, as the loaded block has. */
 export const Loading: Story = {
-  args: { children: <BreakdownSkeleton rows={3} more /> },
+  args: { children: <FigureListSkeleton rows={3} more /> },
 };
 
 /** Failed: the error stays in its block, with a retry. */
@@ -76,7 +74,7 @@ export const WithAction: Story = {
         <FigureRow
           label="PAYLINK *PIXELPLAY"
           detail="Pixelplay · Leisure"
-          figure={<PlainAmount minor={-1499} currency="EUR" locale="en" />}
+          figure={<Amount value={{ minor: -1499, currency: "EUR" }} locale="en" size="sm" />}
           action={<Button variant="secondary">Approve</Button>}
         />
       </FigureList>

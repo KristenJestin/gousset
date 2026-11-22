@@ -9,14 +9,14 @@ test.describe("ErrorState", () => {
 
     const alert = page.getByRole("alert");
 
-    await expect(alert).toContainText("This could not be loaded");
-    await expect(page.getByRole("button", { name: "Retry" })).toBeEnabled();
+    await expect(alert).toContainText("This block could not be loaded");
+    await expect(page.getByRole("button", { name: "Try again" })).toBeEnabled();
   });
 
-  test("Retry runs, and shows the loader while its promise runs", async ({ page }) => {
+  test("Try again runs, and shows the loader while its promise runs", async ({ page }) => {
     await page.goto(story("states-errorstate--retry-then-loaded"));
 
-    const retry = page.getByRole("button", { name: "Retry" });
+    const retry = page.getByRole("button", { name: "Try again" });
 
     await retry.click();
     await expect(retry).toHaveAttribute("aria-busy", "true");

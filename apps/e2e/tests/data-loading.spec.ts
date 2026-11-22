@@ -24,6 +24,11 @@ const LATENCY_MS = 1500;
 
 const block = (page: Page, title: string) => page.getByRole("region", { name: title });
 
+const errorToast = (page: Page) =>
+  page
+    .getByRole("region", { name: "Notifications" })
+    .locator('[data-slot="toast"][data-type="error"]');
+
 /** Leaves the review for a page that links back to it, so that the way back is a client navigation. */
 async function openUsersPage(page: Page) {
   await visit(page, "/users");
@@ -134,8 +139,9 @@ test("a refused mutation rolls back", async ({ userPage: page }) => {
   // Folded away at once, before the server answers…
   await expect(line).toHaveCount(0);
 
-  // …then put back, with a message that says so.
-  const toast = page.getByRole("alert");
+  // …then put back, with a message that says so: an error toast in the Notifications landmark
+  // (packages/ui's toaster; ui-sdk announces it assertively through its own live region).
+  const toast = errorToast(page);
 
   await expect(toast).toContainText("Something went wrong");
   await expect(toast).toContainText("The line could not be approved; it is back in the list.");
@@ -253,7 +259,7 @@ test("a line already reviewed elsewhere is refused, and stays reviewed", async (
     .first()
     .click();
 
-  await expect(page.getByRole("alert")).toContainText("This line was already reviewed elsewhere.");
+  await expect(errorToast(page)).toContainText("This line was already reviewed elsewhere.");
   await expect(toReview).toContainText("+ 2 more");
 });
 

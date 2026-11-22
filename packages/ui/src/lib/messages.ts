@@ -7,9 +7,9 @@
 const en = {
   loading: "Loading",
   states: {
-    errorTitle: "This could not be loaded",
+    errorTitle: "This block could not be loaded",
     errorMessage: "Something went wrong on the way. The rest of the page still works.",
-    retry: "Retry",
+    retry: "Try again",
   },
   pieces: {
     uncategorised: "Uncategorised",

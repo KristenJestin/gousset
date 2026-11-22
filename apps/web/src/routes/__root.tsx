@@ -10,7 +10,7 @@ import {
 } from "@tanstack/react-router";
 import { Suspense, lazy } from "react";
 
-import { Toaster } from "@gousset/ui/components/toaster-stand-in";
+import { Toaster } from "@gousset/ui/components/toaster";
 import { ThemeProvider } from "@gousset/ui/components/theme-provider";
 
 import { getViewer } from "@/functions/viewer";
