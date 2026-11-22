@@ -1,14 +1,18 @@
+import { cimd } from "@better-auth/cimd";
+import { fetchClientMetadataResource } from "@better-auth/cimd/node";
 import { drizzleAdapter } from "@better-auth/drizzle-adapter/relations-v2";
+import { mcp } from "@better-auth/mcp";
 import type { Database } from "@gousset/db";
 import { tables } from "@gousset/db/schema/index";
 import { betterAuth } from "better-auth";
 import { APIError, createAuthMiddleware, isAPIError } from "better-auth/api";
-import { admin } from "better-auth/plugins";
+import { admin, jwt } from "better-auth/plugins";
 import { tanstackStartCookies } from "better-auth/tanstack-start";
 import { Option, Schema } from "effect";
 
 import { TOO_MANY_ATTEMPTS } from "./attempt-guard";
 import { CLIENT_ADDRESS_HEADER } from "./client-address";
+import { CONSENT_PATH, McpScope, SIGN_IN_PATH, mcpResourceOf } from "./mcp";
 
 export { guardAttempt } from "./attempt-guard";
 
@@ -39,7 +43,36 @@ const passwordsOf = Schema.decodeUnknownOption(
   Schema.Struct({ currentPassword: Schema.String, newPassword: Schema.String }),
 );
 
+/**
+ * The MCP door's authorization server (docs/mcp.md): OAuth 2.1 with tokens bound to the `/mcp`
+ * resource and signed by the JWT plugin, clients identified by their Client ID Metadata Document,
+ * no dynamic client registration. Its tables carry the `auth_` prefix like the others.
+ */
+function mcpPlugins(resource: string) {
+  return [
+    jwt({ schema: { jwks: { modelName: "authJwks" } } }),
+    mcp({
+      resource,
+      loginPage: SIGN_IN_PATH,
+      consentPage: CONSENT_PATH,
+      scopes: [McpScope.read, McpScope.write, "offline_access"],
+      schema: {
+        oauthClient: { modelName: "authOauthClient" },
+        oauthResource: { modelName: "authOauthResource" },
+        oauthClientResource: { modelName: "authOauthClientResource" },
+        oauthRefreshToken: { modelName: "authOauthRefreshToken" },
+        oauthAccessToken: { modelName: "authOauthAccessToken" },
+        oauthConsent: { modelName: "authOauthConsent" },
+        oauthClientAssertion: { modelName: "authOauthClientAssertion" },
+      },
+    }),
+    cimd({ fetchClientMetadataResource, metadataProfile: "mcp-2026-07-28" }),
+  ];
+}
+
 export function createAuth(env: AuthConfig, database: Database) {
+  const mcpResource = mcpResourceOf(env.BETTER_AUTH_URL);
+
   return betterAuth({
     database: drizzleAdapter(database, {
       provider: "pg",
@@ -136,7 +169,11 @@ export function createAuth(env: AuthConfig, database: Database) {
         },
       },
     },
-    plugins: [admin({ defaultRole: "user", adminRoles: ["admin"] }), tanstackStartCookies()],
+    plugins: [
+      admin({ defaultRole: "user", adminRoles: ["admin"] }),
+      ...(mcpResource === undefined ? [] : mcpPlugins(mcpResource)),
+      tanstackStartCookies(),
+    ],
   });
 }
 
