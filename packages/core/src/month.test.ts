@@ -173,11 +173,12 @@ describe("spendingDays", () => {
 });
 
 describe("monthOverview", () => {
-  test("gives the summary with both groupings", async () => {
+  test("gives the summary with its three groupings", async () => {
     const overview = await run(monthOverview("ada", "2026-10"));
 
     expect(overview.byCategory.total).toEqual(overview.summary.spent);
     expect(overview.byMerchant.total).toEqual(overview.summary.spent);
+    expect(overview.bySubject).toEqual(await run(spending("ada", "2026-10", "subject")));
   });
 });
 

@@ -82,6 +82,7 @@ export type MonthOverview = {
   summary: MonthSummary;
   byCategory: Spending;
   byMerchant: Spending;
+  bySubject: Spending;
 };
 
 /** Every made-up account is kept in euros; a currency per account comes with real accounts. */
@@ -298,12 +299,13 @@ export const spendingDays = (owner: string, month: string, by: SpendingGroup, na
     return { month: data.month, by, name, currency: CURRENCY, days } satisfies SpendingDays;
   });
 
-/** The month's summary with its spending by category and by merchant. */
+/** The month's summary with its spending by category, by merchant and by subject. */
 export const monthOverview = (owner: string, month: string) =>
   Effect.map(withHistory(owner, month), ([data, before]): MonthOverview => ({
     summary: summarise(data, before),
     byCategory: group(data, "category", before),
     byMerchant: group(data, "merchant", before),
+    bySubject: group(data, "subject", before),
   }));
 
 /** The month's lines waiting in the review. */
