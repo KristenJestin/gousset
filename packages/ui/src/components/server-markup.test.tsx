@@ -13,7 +13,14 @@ import { InvestmentList } from "./investment-list";
 import { MonthBar } from "./month-bar";
 import { MonthSwitcher } from "./month-switcher";
 import { MovementList } from "./movement-list";
-import { CountChip, JumpLink, ReviewCell, ReviewGrid, ReviewStatus, StatusPiece } from "./review-layout";
+import {
+  CountChip,
+  JumpLink,
+  ReviewCell,
+  ReviewGrid,
+  ReviewStatus,
+  StatusPiece,
+} from "./review-layout";
 import { ReviewLines } from "./review-lines";
 import { Tab, Tabs, TabsList, TabsPanel } from "./tabs";
 
@@ -56,7 +63,13 @@ describe("the review's components on the server", () => {
           saved={eur(60_000)}
           left={eur(49_000)}
           restricted={eur(12_000)}
-          comparison={<Delta value={eur(203_000)} reference={eur(193_000)} referenceLabel={m.reviewAverage()} />}
+          comparison={
+            <Delta
+              value={eur(203_000)}
+              reference={eur(193_000)}
+              referenceLabel={m.reviewAverage()}
+            />
+          }
         />
         <ReviewGrid>
           <ReviewCell column="main">
@@ -67,7 +80,14 @@ describe("the review's components on the server", () => {
                 </TabsList>
                 <TabsPanel value="category">
                   <Breakdown
-                    rows={[{ id: "housing", name: "Housing", amount: eur(69_000), benchmark: eur(69_000) }]}
+                    rows={[
+                      {
+                        id: "housing",
+                        name: "Housing",
+                        amount: eur(69_000),
+                        benchmark: eur(69_000),
+                      },
+                    ]}
                     onSelect={() => {}}
                   />
                 </TabsPanel>
