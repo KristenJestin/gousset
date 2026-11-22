@@ -5,12 +5,13 @@ import { useState } from "react";
 import { transition } from "@gousset/ui/lib/motion";
 
 /**
- * The shared motion: a block that fades in over `transition.slow` (300 ms, ease-out) each time it
- * is replayed. When the system asks for reduced motion, even while the page is open, it appears
- * at once.
+ * The shared motion: one block, always on screen, that fades between full and faint over
+ * `transition.slow` (300 ms, ease-out) each time it is toggled. While the system asks for reduced
+ * motion it jumps at once, and that follows a change made while the page is open, for this block
+ * too: `ThemeProvider` sets Motion's global switch, which Motion reads at each animation.
  */
 function MotionSample() {
-  const [round, setRound] = useState(0);
+  const [shown, setShown] = useState(true);
 
   return (
     <div className="flex flex-col items-start gap-4 p-8">
@@ -18,17 +19,16 @@ function MotionSample() {
         type="button"
         className="rounded-md border bg-card px-3 py-1 text-sm"
         onClick={() => {
-          setRound(round + 1);
+          setShown(!shown);
         }}
       >
-        Replay
+        Toggle
       </button>
       <motion.div
-        key={round}
         data-testid="motion-sample"
         className="size-16 rounded-lg bg-primary"
-        initial={{ opacity: 0 }}
-        animate={{ opacity: 1 }}
+        initial={false}
+        animate={{ opacity: shown ? 1 : 0.25 }}
         transition={transition.slow}
       />
     </div>
@@ -44,4 +44,4 @@ export default meta;
 
 type Story = StoryObj<typeof meta>;
 
-export const FadeIn: Story = {};
+export const Fade: Story = {};

@@ -12,11 +12,14 @@ const THEME_TOKENS = themeTokens(
 const TOKENS = "/iframe.html?id=theme-tokens--tokens&viewMode=story";
 const WITH_CHART = "/iframe.html?id=theme-colour-scheme--with-chart&viewMode=story";
 const DISABLED = "/iframe.html?id=theme-colour-scheme--disabled&viewMode=story";
-const MOTION = "/iframe.html?id=theme-motion--fade-in&viewMode=story";
+const MOTION = "/iframe.html?id=theme-motion--fade&viewMode=story";
 
-/** Replays the fade and reads the block's opacity two frames later, 300 ms before it ends. */
-async function opacityJustAfterReplay(page: Page) {
-  await page.getByRole("button", { name: "Replay" }).click();
+/**
+ * Toggles the block, which stays mounted, and reads its opacity two frames later: still on its
+ * way while it animates (300 ms), already at its target when the animation is skipped.
+ */
+async function opacityJustAfterToggle(page: Page) {
+  await page.getByRole("button", { name: "Toggle" }).click();
 
   return page.getByTestId("motion-sample").evaluate(
     (element) =>
@@ -91,7 +94,9 @@ test("the token page shows every token in both schemes", async ({ page }) => {
 test("switching the scheme changes ui-sdk's parts and Bklit's charts together, without a reload", async ({
   page,
 }) => {
-  await page.emulateMedia({ colorScheme: "light" });
+  // Reduced motion: the chart is drawn in its final state at once, so its screenshots never
+  // catch Bklit's reveal (1.1 s) on its way. Colours are what this test is about.
+  await page.emulateMedia({ colorScheme: "light", reducedMotion: "reduce" });
   await page.goto(WITH_CHART);
   await expect(page.getByTestId("chart").locator("svg path").first()).toBeVisible();
   await page.evaluate(() => {
@@ -162,25 +167,44 @@ test("Motion is cut as soon as the system asks for reduced motion, without a rel
 }) => {
   await page.emulateMedia({ reducedMotion: "no-preference" });
   await page.goto(MOTION);
-  expect(await opacityJustAfterReplay(page)).toBeLessThan(1);
 
+  const block = page.getByTestId("motion-sample");
+
+  await expect(block).toHaveCSS("opacity", "1");
+  // Toward 0.25: still near 1 two frames in.
+  expect(await opacityJustAfterToggle(page)).toBeGreaterThan(0.5);
+  await expect(block).toHaveCSS("opacity", "0.25");
+
+  // The same block, still mounted: toward 1, there at once.
   await page.emulateMedia({ reducedMotion: "reduce" });
-  expect(await opacityJustAfterReplay(page)).toBe(1);
+  expect(await opacityJustAfterToggle(page)).toBe(1);
 
+  // And back: toward 0.25, animated again.
   await page.emulateMedia({ reducedMotion: "no-preference" });
-  expect(await opacityJustAfterReplay(page)).toBeLessThan(1);
+  expect(await opacityJustAfterToggle(page)).toBeGreaterThan(0.5);
+});
+
+test("Motion is cut from the first render when reduced motion is already asked for", async ({
+  page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.goto(MOTION);
+  await expect(page.getByTestId("motion-sample")).toHaveCSS("opacity", "1");
+  expect(await opacityJustAfterToggle(page)).toBe(0.25);
 });
 
 test("a disabled picker cannot change the scheme", async ({ page }) => {
-  await page.emulateMedia({ colorScheme: "light" });
-  await page.goto(DISABLED);
+  for (const scheme of ["light", "dark"] as const) {
+    await page.emulateMedia({ colorScheme: scheme });
+    await page.goto(DISABLED);
 
-  const dark = page.getByRole("radio", { name: "Dark" });
+    const dark = page.getByRole("radio", { name: "Dark" });
 
-  await expect(dark).toBeDisabled();
-  await dark.click({ force: true });
-  await expect(page.locator("html")).toHaveAttribute("data-color-scheme", "system");
-  await expect(page.getByRole("radiogroup", { name: "Colour scheme" })).toHaveScreenshot(
-    "picker-disabled.png",
-  );
+    await expect(dark).toBeDisabled();
+    await dark.click({ force: true });
+    await expect(page.locator("html")).toHaveAttribute("data-color-scheme", "system");
+    await expect(page.getByRole("radiogroup", { name: "Colour scheme" })).toHaveScreenshot(
+      `picker-disabled-${scheme}.png`,
+    );
+  }
 });
