@@ -1,9 +1,14 @@
 import {
   approveLine as approveCoreLine,
   currentMonth,
+  flags,
+  importState,
+  investments,
   linesToReview,
   monthSummary,
+  movements,
   spending,
+  spendingDays,
 } from "@gousset/core";
 import { Month, SpendingGroup } from "@gousset/core/values";
 import { createMiddleware, createServerFn } from "@tanstack/react-start";
@@ -49,6 +54,42 @@ export const getSpending = createServerFn({ method: "GET" })
   .middleware([signedIn, slowedInDevelopment])
   .validator(Schema.toStandardSchemaV1(Schema.Struct({ month: Month, by: SpendingGroup })))
   .handler(({ data, context }) => runCore(spending(context.owner, data.month, data.by)));
+
+/** One row of where the month's money went, day by day, against the month before. */
+export const getSpendingDays = createServerFn({ method: "GET" })
+  .middleware([signedIn, slowedInDevelopment])
+  .validator(
+    Schema.toStandardSchemaV1(
+      Schema.Struct({ month: Month, by: SpendingGroup, name: Schema.String }),
+    ),
+  )
+  .handler(({ data, context }) =>
+    runCore(spendingDays(context.owner, data.month, data.by, data.name)),
+  );
+
+/** What came in and what moved between the user's accounts. */
+export const getMovements = createServerFn({ method: "GET" })
+  .middleware([signedIn, slowedInDevelopment])
+  .validator(MonthInput)
+  .handler(({ data, context }) => runCore(movements(context.owner, data.month)));
+
+/** Each investment account at the end of the month. */
+export const getInvestments = createServerFn({ method: "GET" })
+  .middleware([signedIn, slowedInDevelopment])
+  .validator(MonthInput)
+  .handler(({ data, context }) => runCore(investments(context.owner, data.month)));
+
+/** How far the month's statements were imported. */
+export const getImportState = createServerFn({ method: "GET" })
+  .middleware([signedIn, slowedInDevelopment])
+  .validator(MonthInput)
+  .handler(({ data, context }) => runCore(importState(context.owner, data.month)));
+
+/** What the review points out. */
+export const getFlags = createServerFn({ method: "GET" })
+  .middleware([signedIn, slowedInDevelopment])
+  .validator(MonthInput)
+  .handler(({ data, context }) => runCore(flags(context.owner, data.month)));
 
 /** The month's lines waiting in the review. */
 export const getLinesToReview = createServerFn({ method: "GET" })

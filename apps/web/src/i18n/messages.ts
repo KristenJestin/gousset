@@ -55,10 +55,44 @@ const en = {
       spent: "Spent",
       setAside: "Set aside",
       left: "Left",
+      spending: "spending",
+      average: "your 6-month average",
+    },
+    imports: {
+      imported: (imported: number, accounts: number) =>
+        `${imported} of ${accounts} ${accounts === 1 ? "account" : "accounts"} imported`,
+      upTo: (account: string, day: string) => `${account} up to ${day}`,
+      linesToReview: (count: number) => `${count} ${count === 1 ? "line" : "lines"} to review`,
     },
     spending: {
       title: "Where the money goes",
       more: (count: number) => `+ ${count} more ${count === 1 ? "category" : "categories"}`,
+      tabs: { category: "Categories", merchant: "Merchants", subject: "Subjects" },
+      empty: {
+        category: "Nothing spent yet this month.",
+        merchant: "Nothing spent yet this month.",
+        subject: "No expense of the month is attached to a subject.",
+      },
+      pending: (amount: string) => `${amount} more waits in the lines to review.`,
+      chart: (name: string, month: string, previous: string) =>
+        `${name}: spending in ${month}, against ${previous}`,
+    },
+    movements: {
+      title: "Movements between your accounts",
+      aside: "neither spending nor income",
+      empty: "No money moved this month.",
+    },
+    investments: {
+      title: "Investments",
+      empty: "No investment account yet.",
+    },
+    flags: {
+      title: "Flagged",
+      empty: "Nothing to point out this month.",
+      priceChange: (merchant: string, before: string, now: string) =>
+        `${merchant} goes from ${before} to ${now}`,
+      notImported: (account: string, day: string) =>
+        `${account} is imported only up to ${day}`,
     },
     toReview: {
       title: "To review",
@@ -156,10 +190,41 @@ const fr: Messages = {
       spent: "Dépensé",
       setAside: "Mis de côté",
       left: "Reste",
+      spending: "dépenses",
+      average: "votre moyenne sur 6 mois",
+    },
+    imports: {
+      imported: (imported, accounts) =>
+        `${imported} ${imported <= 1 ? "compte importé" : "comptes importés"} sur ${accounts}`,
+      upTo: (account, day) => `${account} jusqu'au ${day}`,
+      linesToReview: (count) => `${count} ${count <= 1 ? "ligne à revoir" : "lignes à revoir"}`,
     },
     spending: {
       title: "Où va l'argent",
       more: (count) => `+ ${count} ${count === 1 ? "autre catégorie" : "autres catégories"}`,
+      tabs: { category: "Catégories", merchant: "Commerçants", subject: "Sujets" },
+      empty: {
+        category: "Rien de dépensé ce mois-ci pour l'instant.",
+        merchant: "Rien de dépensé ce mois-ci pour l'instant.",
+        subject: "Aucune dépense du mois n'est rattachée à un sujet.",
+      },
+      pending: (amount) => `${amount} de plus attendent dans les lignes à revoir.`,
+      chart: (name, month, previous) => `${name} : dépenses en ${month}, face à ${previous}`,
+    },
+    movements: {
+      title: "Mouvements entre vos comptes",
+      aside: "ni dépenses ni revenus",
+      empty: "Aucun mouvement ce mois-ci.",
+    },
+    investments: {
+      title: "Placements",
+      empty: "Pas encore de compte de placement.",
+    },
+    flags: {
+      title: "À signaler",
+      empty: "Rien à signaler ce mois-ci.",
+      priceChange: (merchant, before, now) => `${merchant} passe de ${before} à ${now}`,
+      notImported: (account, day) => `${account} n'est importé que jusqu'au ${day}`,
     },
     toReview: {
       title: "À revoir",

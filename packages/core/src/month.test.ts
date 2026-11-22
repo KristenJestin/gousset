@@ -5,7 +5,14 @@ import { describe, expect, test } from "vite-plus/test";
 
 import { FixtureLedger } from "./ledger";
 import type { Ledger } from "./ledger";
-import { approveLine, linesToReview, monthOverview, monthSummary, spending } from "./month";
+import {
+  approveLine,
+  linesToReview,
+  monthOverview,
+  monthSummary,
+  spending,
+  spendingDays,
+} from "./month";
 import { Today, currentMonth } from "./today";
 
 /** Runs against a fresh made-up ledger, on a fixed day. */
@@ -145,6 +152,21 @@ describe("spending", () => {
     expect(
       (bySubject.rows.find((row) => row.name === "Van")?.amount.minor ?? 0) + pendingFuel,
     ).toBe(fuel.reduce((sum, expense) => sum + expense.netMinor, 0));
+  });
+});
+
+describe("spendingDays", () => {
+  test("runs a row's total day by day, against the month before, up to today", async () => {
+    const result = await run(spendingDays("ada", "2026-11", "category", "Housing"));
+
+    // The rent is paid on the 5th, in both months.
+    expect(result.days).toHaveLength(30);
+    expect(result.days[3]).toEqual({ date: "2026-11-04", current: 0, previous: 0 });
+    expect(result.days[4]).toEqual({ date: "2026-11-05", current: 69_000, previous: 69_000 });
+    expect(result.days[21]?.current).toBe(69_000);
+    // After today (the 22nd), the month has no figure yet.
+    expect(result.days[22]?.current).toBeNull();
+    expect(result.days[22]?.previous).toBe(69_000);
   });
 });
 

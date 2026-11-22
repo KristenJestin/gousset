@@ -2,6 +2,7 @@ import type { Expense, MadeUpMonth } from "@gousset/fixture";
 import { Effect } from "effect";
 
 import { Ledger } from "./ledger";
+import { today } from "./today";
 import { addMonths } from "./values";
 import type { SpendingGroup } from "./values";
 
@@ -233,6 +234,41 @@ function group(data: MadeUpMonth, by: SpendingGroup, before: ReadonlyArray<MadeU
   };
 }
 
+/** One day of a month's spending, cumulative, in minor units; `null` where the day has none. */
+export type SpendingDay = { date: string; current: number | null; previous: number | null };
+
+/**
+ * One row of "Where the money goes" day by day: what it had cost by each day of the month, against
+ * the month before, as its spending chart draws it. Counts what its row counts: approved expenses.
+ */
+export type SpendingDays = {
+  month: string;
+  by: SpendingGroup;
+  name: string;
+  currency: string;
+  days: ReadonlyArray<SpendingDay>;
+};
+
+/** The approved expenses of a row, as a running total by day of the month (index 0 is the 1st). */
+function runningTotal(data: MadeUpMonth, by: SpendingGroup, name: string): Array<number> {
+  const waiting = new Set(data.lines.flatMap((line) => (line.reviewed ? [] : [line.id])));
+  const [year = 0, number = 1] = data.month.split("-").map(Number);
+  const length = new Date(Date.UTC(year, number, 0)).getUTCDate();
+  const byDay = Array.from({ length }, () => 0);
+
+  for (const expense of data.expenses) {
+    if (namesOf(expense, by).includes(name) && !isPending(expense, waiting)) {
+      const index = Number(expense.bookedOn.slice(8, 10)) - 1;
+
+      byDay[index] = (byDay[index] ?? 0) + expense.netMinor;
+    }
+  }
+
+  let total = 0;
+
+  return byDay.map((amount) => (total += amount));
+}
+
 const withHistory = (owner: string, month: string) =>
   Effect.all([read(owner, month), readBefore(owner, month, BENCHMARK_MONTHS)]);
 
@@ -243,6 +279,24 @@ export const monthSummary = (owner: string, month: string) =>
 /** Where the money went in the month, by category, merchant or subject, with benchmarks. */
 export const spending = (owner: string, month: string, by: SpendingGroup) =>
   Effect.map(withHistory(owner, month), ([data, before]) => group(data, by, before));
+
+/** A row's spending, day by day, against the month before; nothing after today. */
+export const spendingDays = (owner: string, month: string, by: SpendingGroup, name: string) =>
+  Effect.gen(function* () {
+    const data = yield* read(owner, month);
+    const [before] = yield* readBefore(owner, month, 1);
+    const day = yield* today;
+    const current = runningTotal(data, by, name);
+    const previous = before === undefined ? [] : runningTotal(before, by, name);
+
+    const days = current.map((total, index): SpendingDay => {
+      const date = `${data.month}-${String(index + 1).padStart(2, "0")}`;
+
+      return { date, current: date > day ? null : total, previous: previous[index] ?? null };
+    });
+
+    return { month: data.month, by, name, currency: CURRENCY, days } satisfies SpendingDays;
+  });
 
 /** The month's summary with its spending by category and by merchant. */
 export const monthOverview = (owner: string, month: string) =>

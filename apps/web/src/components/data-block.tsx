@@ -1,4 +1,5 @@
 import { Block, ErrorState, FadeIn } from "@gousset/ui/components/data-block";
+import type { BlockProps } from "@gousset/ui/components/data-block";
 import { useQueryErrorResetBoundary } from "@tanstack/react-query";
 import { Component, Suspense } from "react";
 import type { ReactNode } from "react";
@@ -31,20 +32,17 @@ class BlockBoundary extends Component<BoundaryProps, { failed: boolean }> {
  * One block of a page that loads on its own (docs/architecture.md, "Data loading and skeletons"):
  * its content reads its query with `useSuspenseQuery`; while it waits, the block shows `skeleton`,
  * shaped exactly like its content; if it fails, the block alone says so and offers to try again.
+ * The rest of its props are `Block`'s.
  */
 export function DataBlock({
-  title,
   skeleton,
   children,
-}: {
-  title: string;
-  skeleton: ReactNode;
-  children: ReactNode;
-}) {
+  ...block
+}: Omit<BlockProps, "children"> & { skeleton: ReactNode; children: ReactNode }) {
   const { reset } = useQueryErrorResetBoundary();
 
   return (
-    <Block title={title}>
+    <Block {...block}>
       <BlockBoundary onReset={reset} fallback={(retry) => <ErrorState onRetry={retry} />}>
         <Suspense fallback={skeleton}>
           <FadeIn>{children}</FadeIn>

@@ -62,6 +62,8 @@ const en = {
     received: "received",
     /** Each part of the month bar, after its amount. */
     roles: { spent: "spent", saved: "set aside", left: "left" },
+    /** Under the part left when some of it sits on benefit accounts. */
+    leftRestricted: (amount: string) => `left, ${amount} restricted`,
     /** In place of "left" when more went out than came in. */
     overspent: "overspent",
     /** The month bar's parts, as a group. */
@@ -74,6 +76,10 @@ const en = {
     benchmark: (amount: string) => `benchmark ${amount}`,
     moreRows: (count: number) => `+ ${count} more`,
     empty: "Nothing to show this month.",
+    /** A movement into an investment account, then what it bought: "buy World index ETF". */
+    bought: (name: string) => `buy ${name}`,
+    /** What an investment's gain is measured against: its net contributions. */
+    putIn: "what was put in",
   },
 };
 
@@ -128,6 +134,7 @@ const fr: UiMessages = {
   money: {
     received: "reçus",
     roles: { spent: "dépensés", saved: "mis de côté", left: "restants" },
+    leftRestricted: (amount: string) => `restants, dont ${amount} réservés`,
     overspent: "de dépassement",
     parts: "L’argent du mois, par part",
     deltaMore: (change: string, reference: string) => `${change} de plus que ${reference}`,
@@ -137,6 +144,8 @@ const fr: UiMessages = {
     benchmark: (amount: string) => `repère ${amount}`,
     moreRows: (count: number) => `+ ${count} de plus`,
     empty: "Rien à afficher ce mois-ci.",
+    bought: (name: string) => `achat ${name}`,
+    putIn: "ce qui a été versé",
   },
 };
 

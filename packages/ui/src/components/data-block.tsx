@@ -8,14 +8,43 @@ import { Button } from "./button";
 // (docs/architecture.md, "Data loading and skeletons"). The skeleton, the error state and the
 // amount below are the smallest stand-ins until the shared components land (#7).
 
-/** One block of a page: a title, then its data. Never a block inside a block. */
-export function Block({ title, children }: { title: string; children: ReactNode }) {
+export type BlockProps = {
+  title: string;
+  children: ReactNode;
+  /** After the title: a count (`Count`), say. */
+  badge?: ReactNode;
+  /** At the end of the title's line, small and grey: "neither spending nor income". */
+  aside?: ReactNode;
+  /** The block's id, for a link that leads to it ("6 lines to review ↓"). */
+  anchor?: string;
+  /**
+   * On a phone the block is one line, its content opening full screen: the title is left to the
+   * content's `Folded`, which writes it on that line.
+   */
+  foldOnPhone?: boolean;
+};
+
+/**
+ * One block of a page: a title, then its data. Never a block inside a block. 12 px corners and a
+ * border, one step above the background (docs/design.md, "Surfaces").
+ */
+export function Block({ title, children, badge, aside, anchor, foldOnPhone = false }: BlockProps) {
   return (
     <section
+      id={anchor}
       aria-label={title}
-      className="bg-card text-card-foreground flex w-full flex-col gap-3 rounded-lg border p-6"
+      className={cn(
+        "bg-card text-card-foreground flex w-full scroll-mt-6 flex-col gap-3 rounded-xl border p-4 md:p-6",
+        foldOnPhone && "max-md:gap-0 max-md:p-0",
+      )}
     >
-      <h2 className="text-base font-semibold">{title}</h2>
+      <div className={cn("flex min-h-6 items-center gap-2", foldOnPhone && "max-md:sr-only")}>
+        <h2 className="text-base font-semibold">{title}</h2>
+        {badge}
+        {aside === undefined ? null : (
+          <span className="text-muted-foreground ml-auto truncate text-xs">{aside}</span>
+        )}
+      </div>
       {children}
     </section>
   );

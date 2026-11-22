@@ -11,6 +11,7 @@ export {
   monthOverview,
   monthSummary,
   spending,
+  spendingDays,
 } from "./month";
 
 export type {
@@ -20,6 +21,8 @@ export type {
   MonthOverview,
   MonthSummary,
   Spending,
+  SpendingDay,
+  SpendingDays,
   SpendingRow,
 } from "./month";
 

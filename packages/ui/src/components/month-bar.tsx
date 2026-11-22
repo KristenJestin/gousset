@@ -1,12 +1,15 @@
 import { motion } from "motion/react";
+import { useId } from "react";
 import type { ReactNode } from "react";
 
+import { usePageLanguage } from "../hooks/use-page-language";
 import { useUiMessages } from "../hooks/use-ui-messages";
-import { monthBarLayout } from "../lib/money";
+import { formatMoney, monthBarLayout } from "../lib/money";
 import type { Money, MoneyRole, MonthBarLayout } from "../lib/money";
 import { transition } from "../lib/motion";
 import { cn } from "../lib/utils";
 import { Amount, AmountSkeleton } from "./amount";
+import { Lines } from "./charts/patterns/lines";
 import { Icon } from "./icon";
 import { Skeleton, SkeletonFrame } from "./skeleton";
 
@@ -20,6 +23,11 @@ export type MonthBarProps = {
   saved: Money;
   /** What remains: received − spent − set aside; negative when the month is overspent. */
   left: Money;
+  /**
+   * The part of `left` on benefit accounts (meal vouchers): yours, but restricted. Hatched at the
+   * end of the part left (docs/design.md, "Hatching for money apart").
+   */
+  restricted?: Money;
   /** Where the money came from, in the page's words: "salary and meal vouchers". */
   note?: string;
   /** At the end of the first line, usually a `Delta` against the 6-month average. */
@@ -31,9 +39,20 @@ export type MonthBarProps = {
 };
 
 function Bar({ layout }: { layout: MonthBarLayout }) {
+  // An SVG id without React's punctuation, unique to this bar.
+  const hatch = `month-bar-hatch-${useId().replaceAll(/[^a-zA-Z0-9]/g, "")}`;
+
   return (
     <div className="h-6 overflow-hidden rounded-md bg-muted">
       <svg className="block size-full" aria-hidden="true" data-slot="month-bar-drawing">
+        <Lines
+          id={hatch}
+          width={6}
+          height={6}
+          strokeWidth={1.5}
+          orientation={["diagonal"]}
+          className="stroke-money-restricted"
+        />
         {layout.parts.map((part) => (
           <motion.rect
             key={part.role}
@@ -51,6 +70,20 @@ function Bar({ layout }: { layout: MonthBarLayout }) {
             )}
           />
         ))}
+        {layout.restricted === null ? null : (
+          <motion.rect
+            data-slot="month-bar-restricted"
+            y="0"
+            height="100%"
+            fill={`url(#${hatch})`}
+            initial={false}
+            animate={{
+              attrX: `${String(layout.restricted.x)}%`,
+              width: `${String(layout.restricted.width)}%`,
+            }}
+            transition={transition.base}
+          />
+        )}
         {layout.receivedMark === null ? null : (
           <motion.rect
             data-slot="month-bar-received-mark"
@@ -72,15 +105,24 @@ function PartContent({
   role,
   amount,
   overspent,
+  restricted,
   locale,
 }: {
   role: MoneyRole;
   amount: Money;
   overspent: boolean;
+  /** Said under the part left, when some of it is restricted. */
+  restricted: Money | null;
   locale: string | undefined;
 }) {
   const messages = useUiMessages().money;
+  const language = usePageLanguage();
   const over = role === "left" && overspent;
+
+  const label =
+    restricted === null
+      ? messages.roles[role]
+      : messages.leftRestricted(formatMoney(restricted, { locale: locale ?? language, whole: true }));
 
   return (
     <>
@@ -107,7 +149,7 @@ function PartContent({
       <span
         className={cn("h-4 truncate text-xs", over ? "text-destructive" : "text-muted-foreground")}
       >
-        {over ? messages.overspent : messages.roles[role]}
+        {over ? messages.overspent : label}
       </span>
     </>
   );
@@ -121,7 +163,8 @@ const PART_CLASSES =
  * set aside and left, each in its role's colour, with its amount under it and the total above.
  * Each part is a button when `onSelect` is given. When more went out than came in, the bar
  * stretches to what went out, a dark mark shows where the money received ended, and the part
- * left says by how much the month is overspent, in red.
+ * left says by how much the month is overspent, in red. With `restricted`, the end of the part
+ * left is hatched (benefit accounts' money) and its label says how much of it.
  *
  * Motion: when the month changes, the parts grow or shrink to their new widths in 200 ms
  * (ease-out) and the amounts roll; cut under reduced motion.
@@ -131,14 +174,18 @@ export function MonthBar({
   spent,
   saved,
   left,
+  restricted,
   note,
   comparison,
   onSelect,
   locale,
 }: MonthBarProps) {
   const messages = useUiMessages().money;
-  const layout = monthBarLayout({ received, spent, saved, left });
+  const layout = monthBarLayout({ received, spent, saved, left, restricted });
   const amounts = { spent, saved, left };
+
+  const restrictedOf = (role: MoneyRole) =>
+    role === "left" && layout.restricted !== null && restricted !== undefined ? restricted : null;
 
   return (
     <div data-slot="month-bar" className="flex flex-col gap-2">
@@ -161,6 +208,7 @@ export function MonthBar({
                 role={role}
                 amount={amounts[role]}
                 overspent={layout.overspent}
+                restricted={restrictedOf(role)}
                 locale={locale}
               />
             </div>
@@ -176,6 +224,7 @@ export function MonthBar({
                 role={role}
                 amount={amounts[role]}
                 overspent={layout.overspent}
+                restricted={restrictedOf(role)}
                 locale={locale}
               />
             </button>
