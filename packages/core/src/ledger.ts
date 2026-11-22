@@ -79,7 +79,13 @@ export function monthAsOf(made: MadeUpMonth, day: string): MadeUpMonth {
     ];
   });
 
-  return { ...made, lines, expenses };
+  // A statement cannot cover days that have not come yet.
+  const statements = made.statements.map((statement) => ({
+    ...statement,
+    coveredTo: statement.coveredTo < day ? statement.coveredTo : day,
+  }));
+
+  return { ...made, lines, expenses, statements };
 }
 
 /** The last `limit` months made, the least recently read dropped first. */

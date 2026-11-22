@@ -36,6 +36,30 @@ describe("monthSummary", () => {
       summary.received.minor - summary.spent.minor - summary.setAside.minor,
     );
     expect(summary.madeUp).toBe(true);
+    expect(summary.receivedFrom).toEqual(["Salary", "Meal vouchers"]);
+  });
+
+  test("sets apart what is left on the benefit account", async () => {
+    const summary = await run(monthSummary("ada", "2026-10"));
+
+    const onMealCard = madeUpMonth("2026-10")
+      .lines.filter((line) => line.accountId === "mealcard")
+      .reduce((sum, line) => sum + line.amountMinor, 0);
+
+    expect(summary.restricted.minor).toBe(Math.max(0, Math.min(summary.left.minor, onMealCard)));
+  });
+
+  test("compares the month with the six months before", async () => {
+    const summary = await run(monthSummary("ada", "2026-10"));
+    const months = ["2026-04", "2026-05", "2026-06", "2026-07", "2026-08", "2026-09"];
+
+    const spent = months.map((month) =>
+      madeUpMonth(month).expenses.reduce((sum, expense) => sum + expense.netMinor, 0),
+    );
+
+    expect(summary.averageSpent?.minor).toBe(
+      Math.round(spent.reduce((sum, value) => sum + value, 0) / months.length),
+    );
   });
 
   test("shows nothing booked after today", async () => {
@@ -61,9 +85,66 @@ describe("spending", () => {
   });
 
   test("counts an expense at its net cost, its refund taken off", async () => {
-    const byMerchant = await run(spending("ada", "2026-10", "merchant"));
+    const byMerchant = await run(
+      Effect.gen(function* () {
+        // The made-up refund waits in the review: its expense counts in its row once approved.
+        const { lines } = yield* linesToReview("ada", "2026-10");
+        const refund = lines.find((line) => line.label.includes("REFUND"));
+
+        yield* approveLine("ada", refund?.id ?? "");
+
+        return yield* spending("ada", "2026-10", "merchant");
+      }),
+    );
 
     expect(byMerchant.rows.find((row) => row.name === "Riverside Gym")?.amount.minor).toBe(850);
+  });
+
+  test("keeps an expense with a line to review apart, and counts it in its row once approved", async () => {
+    const [before, after] = await run(
+      Effect.gen(function* () {
+        const waiting = yield* spending("ada", "2026-10", "category");
+        const { lines } = yield* linesToReview("ada", "2026-10");
+
+        for (const line of lines) {
+          yield* approveLine("ada", line.id);
+        }
+
+        return [waiting, yield* spending("ada", "2026-10", "category")] as const;
+      }),
+    );
+
+    const rowsTotal = (rows: typeof before.rows) =>
+      rows.reduce((sum, row) => sum + row.amount.minor, 0);
+
+    expect(before.pending.minor).toBeGreaterThan(0);
+    expect(rowsTotal(before.rows) + before.pending.minor).toBe(before.total.minor);
+    expect(after.pending.minor).toBe(0);
+    expect(rowsTotal(after.rows)).toBe(after.total.minor);
+    expect(after.total).toEqual(before.total);
+  });
+
+  test("gives each row the average of the six months before as its benchmark", async () => {
+    const byCategory = await run(spending("ada", "2026-10", "category"));
+    const row = (name: string) => byCategory.rows.find((candidate) => candidate.name === name);
+
+    // The rent is the same every month; the subscription's price rose this month.
+    expect(row("Housing")?.benchmark?.minor).toBe(69_000);
+    expect(row("Subscriptions")?.benchmark?.minor).toBe(899);
+    expect(row("Subscriptions")?.amount.minor).toBe(949);
+  });
+
+  test("counts an expense in full in each of its subjects", async () => {
+    const bySubject = await run(spending("ada", "2026-10", "subject"));
+    const fuel = madeUpMonth("2026-10").expenses.filter(
+      (expense) => expense.merchant === "Fuelstop",
+    );
+    const pendingFuel = bySubject.pending.minor;
+
+    expect(bySubject.rows.find((row) => row.name === "Home")?.amount.minor).toBe(69_000);
+    expect(
+      (bySubject.rows.find((row) => row.name === "Van")?.amount.minor ?? 0) + pendingFuel,
+    ).toBe(fuel.reduce((sum, expense) => sum + expense.netMinor, 0));
   });
 });
 

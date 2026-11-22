@@ -4,7 +4,14 @@ export { LineAlreadyReviewed, LineNotFound, MonthOutOfRange } from "./errors";
 
 export { FixtureLedger, Ledger, MONTHS_FROM_TODAY } from "./ledger";
 
-export { approveLine, linesToReview, monthOverview, monthSummary, spending } from "./month";
+export {
+  BENCHMARK_MONTHS,
+  approveLine,
+  linesToReview,
+  monthOverview,
+  monthSummary,
+  spending,
+} from "./month";
 
 export type {
   LineToReview,
@@ -15,6 +22,19 @@ export type {
   Spending,
   SpendingRow,
 } from "./month";
+
+export { flags, importState, investments, movements } from "./review";
+
+export type {
+  Flag,
+  Flags,
+  ImportState,
+  InvestmentAccount,
+  Investments,
+  Movement,
+  Movements,
+  PartialImport,
+} from "./review";
 
 export { Today, currentMonth, today } from "./today";
 
