@@ -106,3 +106,30 @@ export const MONTHLY_SPENDING = [
   { date: new Date(2026, 8, 1), spent: eur(193_400) },
   { date: new Date(2026, 9, 1), spent: eur(203_000) },
 ];
+
+// Money (Amount, Delta, MonthBar, Breakdown): the month before, and a month that went over.
+
+/** What each category spent the month before, for the stories that switch months. */
+const PREVIOUS_SPENT = new Map([
+  ["housing", 69_000],
+  ["groceries", 37_900],
+  ["leisure", 14_800],
+  ["transport", 17_900],
+  ["restaurants", 17_800],
+  ["health", 5700],
+  ["subscriptions", 4847],
+  ["gifts", 3500],
+]);
+
+export const PREVIOUS_CATEGORIES: ReadonlyArray<MadeUpCategory> = CATEGORIES.map((category) => ({
+  ...category,
+  spent: eur(PREVIOUS_SPENT.get(category.id) ?? 0),
+}));
+
+/** A month where more went out than came in: a car repair on top of the usual. */
+export const OVERSPENT_FIGURES = {
+  received: eur(312_000),
+  spent: eur(329_500),
+  saved: eur(20_000),
+  left: eur(-37_500),
+};
