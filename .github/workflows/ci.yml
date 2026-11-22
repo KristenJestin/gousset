@@ -1,7 +1,9 @@
 # Every pull request, and every push to dev and main, is verified here (issue #3). What reads a
 # pull request's title and description is in pull-request.yml, which runs again when they change.
 # Required on dev and main: verify, ui, e2e and react-doctor here, privacy there. ui and e2e also
-# run on each push to dev, so that what a merge breaks there shows at once.
+# run on each push to dev, so that what a merge breaks there shows at once. A pull request runs them
+# in Chromium on a desktop only; dev runs every browser and width, and a failure seen only there is
+# fixed at once.
 #
 # Actions are pinned by commit, the version beside it: a moved tag runs no new code here.
 name: ci
@@ -76,8 +78,11 @@ jobs:
           cache: pnpm
       - name: Install
         run: pnpm install --frozen-lockfile
+      # A pull request runs Chromium and the lint scenario; dev every project.
       - name: Browser checks of packages/ui (Storybook)
-        run: pnpm test:ui
+        env:
+          PROJECTS: ${{ github.event_name == 'pull_request' && '--project=chromium --project=lint' || '' }}
+        run: pnpm --filter @gousset/ui test:e2e $PROJECTS
       - name: Keep the report and the screenshots
         if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -88,7 +93,8 @@ jobs:
           retention-days: 14
 
   # The end-to-end suite (apps/e2e), sharded. Until the harness lands there is no `e2e` script,
-  # and each shard passes saying so.
+  # and each shard passes saying so. A pull request runs the chromium-desktop project only, dev
+  # every project (apps/e2e/playwright.config.ts).
   e2e-shard:
     name: e2e shard ${{ matrix.shard }}
     if: github.event_name == 'pull_request' || github.ref == 'refs/heads/dev'
@@ -112,6 +118,8 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     env:
+      E2E_BROWSERS: ${{ github.event_name == 'pull_request' && 'chromium' || 'chromium firefox' }}
+      E2E_PROJECTS: ${{ github.event_name == 'pull_request' && '--project=chromium-desktop' || '' }}
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/gousset
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -135,14 +143,14 @@ jobs:
           fi
       - name: Playwright's browsers
         if: steps.harness.outputs.present == 'true'
-        run: pnpm --dir apps/e2e exec playwright install --with-deps chromium firefox
+        run: pnpm --dir apps/e2e exec playwright install --with-deps $E2E_BROWSERS
       # The suite runs the built app.
       - name: Build
         if: steps.harness.outputs.present == 'true'
         run: pnpm run build
       - name: End-to-end tests, shard ${{ matrix.shard }} of 2
         if: steps.harness.outputs.present == 'true'
-        run: pnpm e2e --shard=${{ matrix.shard }}/2
+        run: pnpm e2e --shard=${{ matrix.shard }}/2 $E2E_PROJECTS
       - name: Keep the trace, video and screenshots
         if: failure() && steps.harness.outputs.present == 'true'
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

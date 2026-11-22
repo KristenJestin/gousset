@@ -8,7 +8,7 @@ import { Config, Effect, Option, Schema } from "effect";
 
 import { isDoorOpen, mcpAddress, mcpResource, notFound } from "../lib/mcp-door";
 import { mcpCallObserver } from "../lib/mcp-telemetry";
-import { auth, db, runtime } from "../services";
+import { auth, db, runCore } from "../services";
 import { telemetry } from "../telemetry.server";
 
 /** Present only when the end-to-end harness started the app; any value but `on` fails loudly. */
@@ -24,7 +24,8 @@ const served = Option.isSome(e2eProbe)
   : goussetServer;
 
 const endpoint = createMcpEndpoint(served, {
-  run: (effect) => runtime.runPromiseExit(effect),
+  // The same runtime and `today` as the server functions (`runCore`).
+  run: (effect) => runCore(Effect.exit(effect)),
   // A span per call, under the request's (docs/mcp.md, rule 16).
   observe: mcpCallObserver((effect) => telemetry.runPromise(effect)),
 });

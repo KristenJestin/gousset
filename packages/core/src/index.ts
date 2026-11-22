@@ -1,17 +1,10 @@
-// Gousset's logic, called alike by the web app's server functions, the MCP door and the jobs.
-export { LineAlreadyReviewed, LineNotFound } from "./errors";
+// Gousset's logic, called alike by the web app's server functions, the MCP door and the jobs. The
+// browser imports `@gousset/core/values` only.
+export { LineAlreadyReviewed, LineNotFound, MonthOutOfRange } from "./errors";
 
-export { FixtureLedger, Ledger } from "./ledger";
+export { FixtureLedger, Ledger, MONTHS_FROM_TODAY } from "./ledger";
 
-export {
-  Month,
-  SpendingGroup,
-  approveLine,
-  linesToReview,
-  monthOverview,
-  monthSummary,
-  spending,
-} from "./month";
+export { approveLine, linesToReview, monthOverview, monthSummary, spending } from "./month";
 
 export type {
   LineToReview,
@@ -23,4 +16,6 @@ export type {
   SpendingRow,
 } from "./month";
 
-export { currentMonth, today } from "./today";
+export { Today, currentMonth, today } from "./today";
+
+export { Month, SpendingGroup, addMonths } from "./values";

@@ -1,22 +1,11 @@
 import type { MadeUpMonth } from "@gousset/fixture";
-import { Effect, Schema } from "effect";
+import { Effect } from "effect";
 
 import { Ledger } from "./ledger";
+import type { SpendingGroup } from "./values";
 
 // The month's figures, read for the web app's server functions and the MCP door alike: no caller
 // computes a figure of its own (docs/architecture.md, "Calls between the interface and the server").
-
-/** `YYYY-MM`. */
-export const Month = Schema.String.check(
-  Schema.isPattern(/^\d{4}-(0[1-9]|1[0-2])$/, {
-    message: "A month is written YYYY-MM, as 2026-10.",
-  }),
-);
-
-/** What spending is grouped by. */
-export const SpendingGroup = Schema.Literals(["category", "merchant"]);
-
-export type SpendingGroup = typeof SpendingGroup.Type;
 
 /** An amount in minor units (cents) of its currency: never a float. */
 export type Money = { minor: number; currency: string };

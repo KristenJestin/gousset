@@ -74,11 +74,14 @@ describe("month summary", () => {
     }
   });
 
-  test("names a month of a year under 100 by its own year", async () => {
+  test("refuses a month too far from today, saying which months it reads", async () => {
     const { text, isError } = await month({ action: "summary", month: "0042-03" });
 
-    expect(isError).toBe(false);
-    expect(text).toMatch(/^March 42,/);
+    expect(isError).toBe(true);
+    expect(text).toContain("0042-03");
+    expect(text).toContain("2016-11");
+    expect(text).toContain("2036-11");
+    expect(text).toContain('A valid call: month {"action":"summary","month":"2026-10"}');
   });
 
   test("labels the made-up data as such", async () => {

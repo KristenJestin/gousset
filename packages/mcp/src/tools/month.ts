@@ -2,7 +2,7 @@ import { Month, currentMonth, monthOverview } from "@gousset/core";
 import type { Ledger, Money, MonthOverview, Spending } from "@gousset/core";
 import { Effect, Schema } from "effect";
 
-import { defineTool } from "../tool";
+import { ToolRefusal, defineTool } from "../tool";
 
 const MonthInput = Schema.Struct({
   action: Schema.Literal("summary").annotate({
@@ -31,16 +31,11 @@ function amount(money: Money): string {
   return `${units} ${money.currency}`;
 }
 
-/** `October 2026`. */
+/** `October 2026` (a month is read within ten years of today: never a year under 100). */
 function monthName(month: string): string {
   const [year = 0, number = 1] = month.split("-").map(Number);
 
-  const first = new Date(Date.UTC(2000, number - 1, 1));
-
-  // Set apart: `Date.UTC` reads a year under 100 as 19xx.
-  first.setUTCFullYear(year);
-
-  return first.toLocaleString("en-US", {
+  return new Date(Date.UTC(year, number - 1, 1)).toLocaleString("en-US", {
     month: "long",
     year: "numeric",
     timeZone: "UTC",
@@ -90,7 +85,16 @@ export const monthTool = defineTool<typeof MonthInput.Type, typeof MonthInput.En
           const wanted = input.month ?? (yield* currentMonth);
 
           return summaryText(yield* monthOverview(caller.userId, wanted));
-        });
+        }).pipe(
+          Effect.catchTag("MonthOutOfRange", (outside) =>
+            Effect.fail(
+              new ToolRefusal({
+                message: `Gousset reads months from ${outside.earliest} to ${outside.latest}: ${outside.month} is outside. Ask for a month in that range.`,
+                example: `month ${JSON.stringify({ action: "summary", month: "2026-10" })}`,
+              }),
+            ),
+          ),
+        );
       }
     }
   },

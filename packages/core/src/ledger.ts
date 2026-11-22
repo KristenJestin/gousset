@@ -2,8 +2,15 @@ import { madeUpMonth, monthParts } from "@gousset/fixture";
 import type { Line, MadeUpMonth } from "@gousset/fixture";
 import { Context, Effect, Layer } from "effect";
 
-import { LineAlreadyReviewed, LineNotFound } from "./errors";
+import { LineAlreadyReviewed, LineNotFound, MonthOutOfRange } from "./errors";
 import { today } from "./today";
+import { addMonths } from "./values";
+
+/** How far from today's month a month may be read: ten years either way. */
+export const MONTHS_FROM_TODAY = 120;
+
+/** The made-up months kept generated, the least recently read dropped first. */
+export const CACHED_MONTHS = 36;
 
 /**
  * Where a user's money is read and changed. v0.1 has no tables of its own yet: `FixtureLedger`
@@ -14,8 +21,11 @@ import { today } from "./today";
 export class Ledger extends Context.Service<
   Ledger,
   {
-    /** The user's month, as it stands today: nothing after today, reviews applied. */
-    readonly month: (owner: string, month: string) => Effect.Effect<MadeUpMonth>;
+    /**
+     * The user's month, as it stands today: nothing booked after today, reviews applied. Fails
+     * with `MonthOutOfRange` more than ten years from today.
+     */
+    readonly month: (owner: string, month: string) => Effect.Effect<MadeUpMonth, MonthOutOfRange>;
     /** Marks a line waiting in the review as reviewed. */
     readonly markReviewed: (
       owner: string,
@@ -37,24 +47,73 @@ function monthOfLine(lineId: string): string | undefined {
   }
 }
 
-/** The made-up data, each user's reviews kept in memory: a restart forgets them. */
-export const FixtureLedger = Layer.sync(Ledger, () => {
-  const generated = new Map<string, MadeUpMonth>();
-  const reviewedBy = new Map<string, Set<string>>();
+/**
+ * The month as it stands on `day`: the lines booked by then, and the expenses paid by then, each
+ * made only of those lines and at the net cost they give (a refund booked later does not count
+ * yet).
+ */
+export function monthAsOf(made: MadeUpMonth, day: string): MadeUpMonth {
+  const lines = made.lines.filter((line) => line.bookedOn <= day);
+  const amountOf = new Map(lines.map((line) => [line.id, line.amountMinor]));
+  const booked = (id: string) => amountOf.has(id);
 
-  const generate = (month: string) => {
-    const known = generated.get(month);
+  const sum = (ids: ReadonlyArray<string>) =>
+    ids.reduce((total, id) => total + (amountOf.get(id) ?? 0), 0);
 
-    if (known !== undefined) {
-      return known;
+  const expenses = made.expenses.flatMap((expense) => {
+    const paymentLineIds = expense.paymentLineIds.filter(booked);
+
+    if (paymentLineIds.length === 0) {
+      return [];
     }
 
-    const made = madeUpMonth(month);
+    const refundLineIds = expense.refundLineIds.filter(booked);
 
-    generated.set(month, made);
+    return [
+      {
+        ...expense,
+        paymentLineIds,
+        refundLineIds,
+        netMinor: -(sum(paymentLineIds) + sum(refundLineIds)),
+      },
+    ];
+  });
 
-    return made;
+  return { ...made, lines, expenses };
+}
+
+/** The last `limit` months made, the least recently read dropped first. */
+export function monthCache(limit: number, make: (month: string) => MadeUpMonth) {
+  // A Map keeps its insertion order: the first key is the least recently read.
+  const kept = new Map<string, MadeUpMonth>();
+
+  return {
+    get(month: string): MadeUpMonth {
+      const made = kept.get(month) ?? make(month);
+
+      kept.delete(month);
+      kept.set(month, made);
+
+      for (const oldest of kept.keys()) {
+        if (kept.size <= limit) {
+          break;
+        }
+
+        kept.delete(oldest);
+      }
+
+      return made;
+    },
+
+    months: (): ReadonlyArray<string> => [...kept.keys()],
   };
+}
+
+/** The made-up data, each user's reviews kept in memory: a restart forgets them. */
+export const FixtureLedger = Layer.sync(Ledger, () => {
+  const generated = monthCache(CACHED_MONTHS, (month) => madeUpMonth(month));
+  const reviewedBy = new Map<string, Set<string>>();
+  const generate = (month: string) => generated.get(month);
 
   const reviewedOf = (owner: string) => {
     const reviewed = reviewedBy.get(owner) ?? new Set<string>();
@@ -65,18 +124,25 @@ export const FixtureLedger = Layer.sync(Ledger, () => {
   };
 
   const month = (owner: string, wanted: string) =>
-    Effect.map(today, (day): MadeUpMonth => {
-      const made = generate(wanted);
+    Effect.gen(function* () {
+      const day = yield* today;
+      const current = day.slice(0, 7);
+      const earliest = addMonths(current, -MONTHS_FROM_TODAY);
+      const latest = addMonths(current, MONTHS_FROM_TODAY);
+
+      if (wanted < earliest || wanted > latest) {
+        return yield* new MonthOutOfRange({ month: wanted, earliest, latest });
+      }
+
+      const asOf = monthAsOf(generate(wanted), day);
       const reviewed = reviewedOf(owner);
 
       return {
-        ...made,
-        lines: made.lines.flatMap((line) =>
-          line.bookedOn > day
-            ? []
-            : [{ ...line, reviewed: line.reviewed || reviewed.has(line.id) }],
-        ),
-        expenses: made.expenses.filter((expense) => expense.bookedOn <= day),
+        ...asOf,
+        lines: asOf.lines.map((line) => ({
+          ...line,
+          reviewed: line.reviewed || reviewed.has(line.id),
+        })),
       };
     });
 
@@ -88,7 +154,10 @@ export const FixtureLedger = Layer.sync(Ledger, () => {
         return yield* new LineNotFound({ lineId });
       }
 
-      const { lines } = yield* month(owner, wanted);
+      const { lines } = yield* month(owner, wanted).pipe(
+        Effect.catchTag("MonthOutOfRange", () => Effect.fail(new LineNotFound({ lineId }))),
+      );
+
       const line = lines.find((candidate) => candidate.id === lineId);
 
       if (line === undefined) {

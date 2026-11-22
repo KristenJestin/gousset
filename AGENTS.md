@@ -211,6 +211,8 @@ The lead reviews every change to the tools against `docs/mcp.md` before merging.
   phone; screenshots compared). CI runs them in the official Playwright image; refresh the
   reference screenshots in that same image with `tools/playwright-docker.sh
   --update-snapshots=all`, never with a local browser, which renders fonts differently.
+- **CI on a pull request runs Chromium on a desktop only**, in `e2e` and `ui`; each push to `dev`
+  runs every browser and width. A failure seen only on `dev` is fixed at once.
 - **Required checks** on `dev` and `main`: `verify`, `ui`, `e2e`, `react-doctor` and `privacy`.
 
 ## How the work is organised
