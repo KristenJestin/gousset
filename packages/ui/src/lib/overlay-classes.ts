@@ -12,8 +12,19 @@ export const tooltipClasses =
 
 /** A popover or a menu: fading and growing out of its trigger in 150 ms, ease-out. */
 export const popupClasses =
-  "rounded-lg bg-popover text-popover-foreground shadow-lg outline-none " +
+  "rounded-lg border-0 bg-popover text-popover-foreground shadow-lg outline-none " +
   "origin-(--transform-origin) transition duration-150 ease-out " +
+  "data-starting-style:scale-95 data-starting-style:opacity-0 " +
+  "data-ending-style:scale-95 data-ending-style:opacity-0";
+
+/**
+ * A dialog: centred, 16 px from the screen's edges at most, fading and growing in 200 ms,
+ * ease-out, and leaving the same way.
+ */
+export const dialogClasses =
+  "fixed inset-4 m-auto flex h-fit max-h-full w-auto max-w-md flex-col overflow-y-auto " +
+  "rounded-lg border-0 bg-popover p-6 text-popover-foreground shadow-xl outline-none " +
+  "transition duration-200 ease-out " +
   "data-starting-style:scale-95 data-starting-style:opacity-0 " +
   "data-ending-style:scale-95 data-ending-style:opacity-0";
 
