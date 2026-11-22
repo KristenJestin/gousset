@@ -41,6 +41,75 @@ async function languageCookie(page: Page) {
   return cookies.find((cookie) => cookie.name === LANGUAGE_COOKIE)?.value;
 }
 
+/** One frame of a move between screens: when, from the press, and what the frame showed. */
+type MoveFrame = { at: number; opacity: number; markTop: number };
+
+/**
+ * Clicks the sidebar's link named `name` and, from the press, samples at every frame for 700 ms
+ * the screen's opacity and where the sidebar's current-item mark stands. Nothing depends on how
+ * fast frames come.
+ */
+async function moveTo(page: Page, name: string) {
+  const frames = page.evaluate(
+    (duration) =>
+      new Promise<Array<MoveFrame>>((resolve) => {
+        const seen: Array<MoveFrame> = [];
+
+        document.addEventListener(
+          "pointerdown",
+          () => {
+            const start = performance.now();
+
+            const sample = () => {
+              const screen = document.querySelector('[data-slot="screen"]');
+              const mark = document.querySelector('aside [data-slot="current-mark"]');
+
+              seen.push({
+                at: performance.now() - start,
+                opacity: screen === null ? 1 : Number(getComputedStyle(screen).opacity),
+                markTop: mark === null ? Number.NaN : mark.getBoundingClientRect().top,
+              });
+
+              if (performance.now() - start < duration) {
+                requestAnimationFrame(sample);
+              } else {
+                resolve(seen);
+              }
+            };
+
+            requestAnimationFrame(sample);
+          },
+          { once: true, capture: true },
+        );
+      }),
+    700,
+  );
+
+  await page.getByRole("navigation", { name: "Main" }).getByRole("link", { name }).click();
+
+  return frames;
+}
+
+/** The frames where the screen was neither hidden nor fully drawn: its fade. */
+function fading(frames: Array<MoveFrame>) {
+  return frames.filter((frame) => frame.opacity > 0.01 && frame.opacity < 0.99);
+}
+
+/** The frames where the mark stood between the item it left and the item it reached: its slide. */
+function sliding(frames: Array<MoveFrame>) {
+  const from = frames.at(0)?.markTop ?? Number.NaN;
+  const to = frames.at(-1)?.markTop ?? Number.NaN;
+  const low = Math.min(from, to) + 0.5;
+  const high = Math.max(from, to) - 0.5;
+
+  return frames.filter((frame) => frame.markTop > low && frame.markTop < high);
+}
+
+/** How long, in ms, from the first of these frames to the last. */
+function spanOf(frames: Array<MoveFrame>) {
+  return (frames.at(-1)?.at ?? 0) - (frames.at(0)?.at ?? 0);
+}
+
 async function chooseLanguage(page: Page, language: "en" | "fr") {
   await page
     .context()
@@ -235,23 +304,30 @@ test("moving between screens fades the screen, the current item slides, empty st
   await expect(block).toHaveCSS("animation-duration", "0.2s");
   await expect(block).toHaveCSS("animation-name", "enter");
 
-  // The current item's background is one element, which moves to the item reached.
-  const current = userPage
-    .getByRole("navigation", { name: "Main" })
-    .locator("[aria-current=page] > span")
-    .first();
+  // The screen reached fades in, and the current item's mark slides from the item left to it:
+  // 200 ms each, so a few frames in between, all within 400 ms of each other.
+  const moved = await moveTo(userPage, "Subjects");
 
-  await expect(current).toBeVisible();
-  await userPage.getByRole("link", { name: "Subjects" }).click();
   await expect(userPage.getByRole("link", { name: "Subjects" })).toHaveAttribute(
     "aria-current",
     "page",
   );
+  expect(fading(moved).length).toBeGreaterThan(1);
+  expect(spanOf(fading(moved))).toBeLessThan(400);
+  expect(sliding(moved).length).toBeGreaterThan(1);
+  expect(spanOf(sliding(moved))).toBeLessThan(400);
 
-  // The screen reached fades in and ends fully drawn.
-  await expect(userPage.locator('[data-slot="screen"]')).toHaveCSS("opacity", "1");
-
+  // Cut under reduced motion: the screen shows at once, the mark is at once on its item.
   await userPage.emulateMedia({ reducedMotion: "reduce" });
+
+  const cut = await moveTo(userPage, "Accounts");
+
+  await expect(userPage.getByRole("link", { name: "Accounts" })).toHaveAttribute(
+    "aria-current",
+    "page",
+  );
+  expect(fading(cut)).toEqual([]);
+  expect(sliding(cut)).toEqual([]);
   await expect(block).toHaveCSS("animation-duration", "0s");
 });
 
