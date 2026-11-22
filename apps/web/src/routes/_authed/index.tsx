@@ -1,21 +1,23 @@
 import type { Flag, Money } from "@gousset/core";
-import { Month, SpendingGroup, addMonths } from "@gousset/core/values";
+import { SpendingGroup, addMonths } from "@gousset/core/values";
+import { m } from "@gousset/i18n/messages";
+import { getLocale } from "@gousset/i18n/runtime";
 import { Count } from "@gousset/ui/components/amount";
+import { Page } from "@gousset/ui/components/app-shell";
 import { Breakdown, BreakdownSkeleton } from "@gousset/ui/components/breakdown";
 import { Delta } from "@gousset/ui/components/delta";
 import { FlagList, FlagListSkeleton } from "@gousset/ui/components/flag-list";
 import { Folded } from "@gousset/ui/components/folded";
+import type { IconName } from "@gousset/ui/components/icons";
 import { InvestmentList, InvestmentListSkeleton } from "@gousset/ui/components/investment-list";
 import { MonthBar, MonthBarSkeleton } from "@gousset/ui/components/month-bar";
-import { MonthSwitcher } from "@gousset/ui/components/month-switcher";
 import { MovementList, MovementListSkeleton } from "@gousset/ui/components/movement-list";
 import {
   CountChip,
   JumpLink,
   ReviewCell,
   ReviewGrid,
-  ReviewHeader,
-  ReviewPage,
+  ReviewStatus,
   StatusPiece,
 } from "@gousset/ui/components/review-layout";
 import { ReviewLines, ReviewLinesSkeleton } from "@gousset/ui/components/review-lines";
@@ -23,38 +25,15 @@ import { SpendingChart, SpendingChartSkeleton } from "@gousset/ui/components/spe
 import { Tab, Tabs, TabsList, TabsPanel } from "@gousset/ui/components/tabs";
 import { formatMoney } from "@gousset/ui/lib/money";
 import { noop, useQuery, useSuspenseQuery } from "@tanstack/react-query";
-import { createFileRoute, useNavigate, useRouter } from "@tanstack/react-router";
-import { Schema } from "effect";
+import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { Suspense, useDeferredValue, useEffect, useState } from "react";
 
 import { DataBlock } from "@/components/data-block";
-import type { Locale } from "@/i18n/messages";
-import { useMessages } from "@/i18n/use-messages";
+import { MonthSwitch } from "@/components/month-switch";
 import { loadBlocks } from "@/lib/load-blocks";
+import { monthSearch } from "@/lib/month";
 import { useApproveLine } from "@/queries/approve-line";
 import { monthQueries } from "@/queries/month";
-
-const monthNameOptions = { month: "long", year: "numeric", timeZone: "UTC" } as const;
-
-/** "October 2026", in each language of the interface. */
-const monthNames = {
-  en: new Intl.DateTimeFormat("en", monthNameOptions),
-  fr: new Intl.DateTimeFormat("fr", monthNameOptions),
-} satisfies { [locale in Locale]: Intl.DateTimeFormat };
-
-const shortDayOptions = { day: "numeric", month: "short", timeZone: "UTC" } as const;
-
-/** "24 Oct", in each language of the interface. */
-const shortDays = {
-  en: new Intl.DateTimeFormat("en-GB", shortDayOptions),
-  fr: new Intl.DateTimeFormat("fr", shortDayOptions),
-} satisfies { [locale in Locale]: Intl.DateTimeFormat };
-
-/** "Salary and Meal vouchers", in each language of the interface. */
-const lists = {
-  en: new Intl.ListFormat("en", { type: "conjunction" }),
-  fr: new Intl.ListFormat("fr", { type: "conjunction" }),
-} satisfies { [locale in Locale]: Intl.ListFormat };
 
 /** Rows shown before "+ N more": the skeletons have exactly as many. */
 const SPENDING_ROWS = 5;
@@ -62,23 +41,41 @@ const LINES_TO_REVIEW = 3;
 const GROUPS = SpendingGroup.literals;
 const TO_REVIEW = "to-review";
 
+const TAB_LABELS = {
+  category: () => m.reviewTabCategories(),
+  merchant: () => m.reviewTabMerchants(),
+  subject: () => m.reviewTabSubjects(),
+} satisfies { [group in SpendingGroup]: () => string };
+
+const EMPTY_LABELS = {
+  category: () => m.reviewSpendingEmpty(),
+  merchant: () => m.reviewSpendingEmpty(),
+  subject: () => m.reviewSubjectsEmpty(),
+} satisfies { [group in SpendingGroup]: () => string };
+
+const FLAG_ICONS = {
+  "price-change": "subscriptions",
+  "not-imported": "import",
+} satisfies { [kind in Flag["kind"]]: IconName };
+
 const dateOf = (day: string) => new Date(`${day}T00:00:00Z`);
 
-const yearMonthOf = (month: string) => {
-  const [year = 0, number = 1] = month.split("-").map(Number);
+/** "24 Oct", "24 oct.": a day in the page's language. */
+const shortDay = (day: string, locale: string) =>
+  new Intl.DateTimeFormat(locale === "en" ? "en-GB" : locale, {
+    day: "numeric",
+    month: "short",
+    timeZone: "UTC",
+  }).format(dateOf(day));
 
-  return { year, month: number };
-};
-
-const monthText = (value: { year: number; month: number }) =>
-  `${String(value.year)}-${String(value.month).padStart(2, "0")}`;
+const isOne = (count: number, locale: string) =>
+  new Intl.PluralRules(locale).select(count) === "one";
 
 export const Route = createFileRoute("/_authed/")({
-  validateSearch: Schema.toStandardSchemaV1(Schema.Struct({ month: Schema.optional(Month) })),
+  validateSearch: monthSearch,
   loaderDeps: ({ search }) => ({ month: search.month }),
-  loader: async ({ context: { queryClient }, deps }) => {
-    const current = await queryClient.ensureQueryData(monthQueries.current());
-    const month = deps.month ?? current;
+  loader: async ({ context: { queryClient, currentMonth }, deps }) => {
+    const month = deps.month ?? currentMonth;
 
     await loadBlocks([
       queryClient.ensureQueryData(monthQueries.summary(month)).then(noop),
@@ -92,65 +89,58 @@ export const Route = createFileRoute("/_authed/")({
       queryClient.ensureQueryData(monthQueries.toReview(month)).then(noop),
     ]);
 
-    return { month, current };
+    return { month };
   },
   component: Review,
 });
 
-function useLocale() {
-  return Route.useRouteContext({ select: (context) => context.viewer.locale });
-}
-
-/** The monthly review (docs/wireframes, screens 1 and 11), on the made-up data of v0.1. */
+/** The monthly review, the home (docs/wireframes, screens 1 and 11), on the made-up data of v0.1. */
 function Review() {
-  const messages = useMessages();
-  const locale = useLocale();
-  const navigate = useNavigate();
+  const navigate = Route.useNavigate();
   const router = useRouter();
-  const { month, current } = Route.useLoaderData();
+  const { month } = Route.useLoaderData();
+  const { currentMonth } = Route.useRouteContext();
   // Changing month keeps the month on screen until the next one has its data; then the bars and
   // amounts move to their new values.
   const shown = useDeferredValue(month);
   const linesToReview = useQuery(monthQueries.toReview(shown)).data?.count ?? 0;
+  const locale = getLocale();
 
   // The months a press away are loaded before the press.
   useEffect(() => {
     for (const next of [addMonths(month, -1), addMonths(month, 1)]) {
-      if (next <= current) {
+      if (next <= currentMonth) {
         void router.preloadRoute({ to: "/", search: { month: next } });
       }
     }
-  }, [month, current, router]);
+  }, [month, currentMonth, router]);
 
   return (
-    <ReviewPage>
-      <ReviewHeader
-        title={monthNames[locale].format(dateOf(`${shown}-01`))}
-        month={
-          <MonthSwitcher
-            value={yearMonthOf(shown)}
-            latest={yearMonthOf(current)}
-            onChange={(next) => void navigate({ to: "/", search: { month: monthText(next) } })}
-          />
-        }
+    <Page
+      title={m.reviewTitle()}
+      actions={
+        <MonthSwitch
+          month={shown}
+          currentMonth={currentMonth}
+          onChange={(next) => void navigate({ search: { month: next } })}
+        />
+      }
+    >
+      <ReviewStatus
         status={
           <Suspense fallback={null}>
             <ImportStatus month={shown} />
           </Suspense>
         }
-        notice={messages.review.madeUp}
+        notice={m.reviewMadeUp()}
       />
-      <DataBlock
-        title={messages.review.summary.title}
-        skeleton={<MonthBarSkeleton />}
-        resetKey={shown}
-      >
+      <DataBlock title={m.reviewSummaryTitle()} skeleton={<MonthBarSkeleton />} resetKey={shown}>
         <Summary month={shown} />
       </DataBlock>
       <ReviewGrid>
         <ReviewCell column="main">
           <DataBlock
-            title={messages.review.spending.title}
+            title={m.reviewSpendingTitle()}
             skeleton={<BreakdownSkeleton rows={SPENDING_ROWS} more />}
             resetKey={shown}
           >
@@ -159,8 +149,8 @@ function Review() {
         </ReviewCell>
         <ReviewCell column="side">
           <DataBlock
-            title={messages.review.movements.title}
-            aside={messages.review.movements.aside}
+            title={m.reviewMovementsTitle()}
+            aside={m.reviewMovementsAside()}
             foldOnPhone
             skeleton={<MovementListSkeleton />}
             resetKey={shown}
@@ -168,7 +158,7 @@ function Review() {
             <Movements month={shown} />
           </DataBlock>
           <DataBlock
-            title={messages.review.investments.title}
+            title={m.investmentsTitle()}
             foldOnPhone
             skeleton={<InvestmentListSkeleton />}
             resetKey={shown}
@@ -179,7 +169,7 @@ function Review() {
         {linesToReview === 0 ? null : (
           <ReviewCell column="main" lastOnPhone>
             <DataBlock
-              title={messages.review.toReview.title}
+              title={m.reviewToReviewTitle()}
               anchor={TO_REVIEW}
               badge={
                 <CountChip>
@@ -196,7 +186,7 @@ function Review() {
         )}
         <ReviewCell column="side">
           <DataBlock
-            title={messages.review.flags.title}
+            title={m.reviewFlagsTitle()}
             foldOnPhone
             skeleton={<FlagListSkeleton />}
             resetKey={shown}
@@ -205,33 +195,37 @@ function Review() {
           </DataBlock>
         </ReviewCell>
       </ReviewGrid>
-    </ReviewPage>
+    </Page>
   );
 }
 
 function ImportStatus({ month }: { month: string }) {
-  const messages = useMessages();
-  const locale = useLocale();
+  const locale = getLocale();
   const { data: imports } = useSuspenseQuery(monthQueries.imports(month));
   const { data: toReview } = useSuspenseQuery(monthQueries.toReview(month));
+  const counts = { imported: imports.imported, accounts: imports.accounts };
 
   return (
     <>
       <StatusPiece>
-        {messages.review.imports.imported(imports.imported, imports.accounts)}
+        {isOne(imports.accounts, locale)
+          ? m.reviewImportedOne(counts)
+          : m.reviewImportedOther(counts)}
       </StatusPiece>
       {imports.partial.map((partial) => (
         <StatusPiece key={partial.account}>
-          {messages.review.imports.upTo(
-            partial.account,
-            shortDays[locale].format(dateOf(partial.coveredTo)),
-          )}
+          {m.reviewImportedUpTo({
+            account: partial.account,
+            day: shortDay(partial.coveredTo, locale),
+          })}
         </StatusPiece>
       ))}
       {toReview.count === 0 ? null : (
         <StatusPiece>
           <JumpLink to={TO_REVIEW}>
-            {messages.review.imports.linesToReview(toReview.count)}
+            {isOne(toReview.count, locale)
+              ? m.reviewLinesToReviewOne({ count: toReview.count })
+              : m.reviewLinesToReviewOther({ count: toReview.count })}
           </JumpLink>
         </StatusPiece>
       )}
@@ -240,8 +234,7 @@ function ImportStatus({ month }: { month: string }) {
 }
 
 function Summary({ month }: { month: string }) {
-  const messages = useMessages();
-  const locale = useLocale();
+  const locale = getLocale();
   const { data } = useSuspenseQuery(monthQueries.summary(month));
 
   return (
@@ -251,15 +244,15 @@ function Summary({ month }: { month: string }) {
       saved={data.setAside}
       left={data.left}
       restricted={data.restricted}
-      note={lists[locale].format(data.receivedFrom)}
+      note={new Intl.ListFormat(locale, { type: "conjunction" }).format(data.receivedFrom)}
       comparison={
         data.averageSpent === null ? undefined : (
           <>
-            {messages.review.summary.spending}{" "}
+            {m.reviewSpendingWord()}{" "}
             <Delta
               value={data.spent}
               reference={data.averageSpent}
-              referenceLabel={messages.review.summary.average}
+              referenceLabel={m.reviewAverage()}
               locale={locale}
             />
           </>
@@ -271,7 +264,6 @@ function Summary({ month }: { month: string }) {
 }
 
 function Spending({ month }: { month: string }) {
-  const messages = useMessages();
   const [by, setBy] = useState<SpendingGroup>("category");
 
   return (
@@ -285,10 +277,10 @@ function Spending({ month }: { month: string }) {
         }
       }}
     >
-      <TabsList label={messages.review.spending.title}>
+      <TabsList label={m.reviewSpendingTitle()}>
         {GROUPS.map((group) => (
           <Tab key={group} value={group}>
-            {messages.review.spending.tabs[group]}
+            {TAB_LABELS[group]()}
           </Tab>
         ))}
       </TabsList>
@@ -304,8 +296,7 @@ function Spending({ month }: { month: string }) {
 }
 
 function SpendingRows({ month, by }: { month: string; by: SpendingGroup }) {
-  const messages = useMessages();
-  const locale = useLocale();
+  const locale = getLocale();
   const { data } = useSuspenseQuery(monthQueries.spending(month, by));
   const [all, setAll] = useState(false);
   const [open, setOpen] = useState<string | null>(null);
@@ -324,7 +315,7 @@ function SpendingRows({ month, by }: { month: string; by: SpendingGroup }) {
       onSelect={setOpen}
       selectedId={row === undefined ? null : row.name}
       onClose={() => setOpen(null)}
-      benchmarkLabel={messages.review.summary.average}
+      benchmarkLabel={m.reviewAverage()}
       detail={
         row === undefined ? null : (
           <Suspense fallback={<SpendingChartSkeleton />}>
@@ -332,10 +323,10 @@ function SpendingRows({ month, by }: { month: string; by: SpendingGroup }) {
           </Suspense>
         )
       }
-      emptyText={messages.review.spending.empty[by]}
+      emptyText={EMPTY_LABELS[by]()}
       footnote={
         data.pending.minor > 0
-          ? messages.review.spending.pending(formatMoney(data.pending, { locale, whole: true }))
+          ? m.reviewSpendingPending({ amount: formatMoney(data.pending, { locale, whole: true }) })
           : undefined
       }
       locale={locale}
@@ -344,21 +335,19 @@ function SpendingRows({ month, by }: { month: string; by: SpendingGroup }) {
 }
 
 function RowChart({ month, by, name }: { month: string; by: SpendingGroup; name: string }) {
-  const messages = useMessages();
-  const locale = useLocale();
+  const locale = getLocale();
   const { data } = useSuspenseQuery(monthQueries.spendingDays(month, by, name));
-  const [year = 0, number = 1] = month.split("-").map(Number);
 
   const monthName = (offset: number) =>
     new Intl.DateTimeFormat(locale, { month: "long", timeZone: "UTC" }).format(
-      new Date(Date.UTC(year, number - 1 + offset, 1)),
+      dateOf(`${addMonths(month, offset)}-01`),
     );
 
   return (
     <SpendingChart
       days={data.days.map((day) => ({ ...day, date: dateOf(day.date) }))}
       currency={data.currency}
-      label={messages.review.spending.chart(name, monthName(0), monthName(-1))}
+      label={m.reviewSpendingChart({ name, month: monthName(0), previous: monthName(-1) })}
       currentLabel={monthName(0)}
       previousLabel={monthName(-1)}
     />
@@ -366,13 +355,12 @@ function RowChart({ month, by, name }: { month: string; by: SpendingGroup; name:
 }
 
 function Movements({ month }: { month: string }) {
-  const messages = useMessages();
-  const locale = useLocale();
+  const locale = getLocale();
   const { data } = useSuspenseQuery(monthQueries.movements(month));
 
   return (
     <Folded
-      title={messages.review.movements.title}
+      title={m.reviewMovementsTitle()}
       summary={<Count value={data.movements.length} locale={locale} />}
     >
       <MovementList
@@ -384,8 +372,8 @@ function Movements({ month }: { month: string }) {
           amount: movement.amount,
           bought: movement.bought ?? undefined,
         }))}
-        label={messages.review.movements.title}
-        emptyText={messages.review.movements.empty}
+        label={m.reviewMovementsTitle()}
+        emptyText={m.reviewMovementsEmpty()}
         locale={locale}
       />
     </Folded>
@@ -393,21 +381,20 @@ function Movements({ month }: { month: string }) {
 }
 
 function Investments({ month }: { month: string }) {
-  const messages = useMessages();
-  const locale = useLocale();
+  const locale = getLocale();
   const { data } = useSuspenseQuery(monthQueries.investments(month));
   const total = data.accounts.reduce((sum, account) => sum + account.value.minor, 0);
   const currency = data.accounts[0]?.value.currency ?? "EUR";
 
   return (
     <Folded
-      title={messages.review.investments.title}
+      title={m.investmentsTitle()}
       summary={formatMoney({ minor: total, currency }, { locale, whole: true })}
     >
       <InvestmentList
         accounts={data.accounts.map((account) => ({ id: account.account, ...account }))}
-        label={messages.review.investments.title}
-        emptyText={messages.review.investments.empty}
+        label={m.investmentsTitle()}
+        emptyText={m.reviewInvestmentsEmpty()}
         locale={locale}
       />
     </Folded>
@@ -415,17 +402,13 @@ function Investments({ month }: { month: string }) {
 }
 
 function ToReview({ month }: { month: string }) {
-  const messages = useMessages();
-  const locale = useLocale();
+  const locale = getLocale();
   const { data } = useSuspenseQuery(monthQueries.toReview(month));
   const approve = useApproveLine(month);
   const [all, setAll] = useState(false);
 
   return (
-    <Folded
-      title={messages.review.toReview.title}
-      summary={<Count value={data.count} locale={locale} />}
-    >
+    <Folded title={m.reviewToReviewTitle()} summary={<Count value={data.count} locale={locale} />}>
       <ReviewLines
         lines={data.lines.map((line) => ({
           id: line.id,
@@ -434,60 +417,61 @@ function ToReview({ month }: { month: string }) {
           tags: [line.category, line.account].flatMap((tag) => (tag === null ? [] : [tag])),
           amount: line.amount,
         }))}
-        approveText={messages.review.toReview.approve}
-        approveLabel={(line) => messages.review.toReview.approveLine(line.label)}
+        approveText={m.reviewApprove()}
+        approveLabel={(line) => m.reviewApproveLine({ label: line.label })}
         onApprove={(id) => approve.mutate(id)}
         limit={all ? undefined : LINES_TO_REVIEW}
         onMore={() => setAll(true)}
-        label={messages.review.toReview.title}
+        label={m.reviewToReviewTitle()}
         locale={locale}
       />
     </Folded>
   );
 }
 
-function Flags({ month }: { month: string }) {
-  const messages = useMessages();
-  const locale = useLocale();
-  const { data } = useSuspenseQuery(monthQueries.flags(month));
+/** A flag as the page says it: its key, its icon and its sentence. */
+function flagRow(flag: Flag, locale: string) {
   const amount = (value: Money) => formatMoney(value, { locale });
 
-  const sentence = (flag: Flag) => {
-    switch (flag.kind) {
-      case "price-change": {
-        return {
-          id: `price-${flag.merchant}`,
-          icon: flag.now.minor > flag.before.minor ? ("up" as const) : ("down" as const),
-          text: messages.review.flags.priceChange(
-            flag.merchant,
-            amount(flag.before),
-            amount(flag.now),
-          ),
-        };
-      }
-
-      case "not-imported": {
-        return {
-          id: `import-${flag.account}`,
-          icon: "import" as const,
-          text: messages.review.flags.notImported(
-            flag.account,
-            shortDays[locale].format(dateOf(flag.coveredTo)),
-          ),
-        };
-      }
+  switch (flag.kind) {
+    case "price-change": {
+      return {
+        id: `${flag.kind}-${flag.merchant}`,
+        icon: FLAG_ICONS[flag.kind],
+        text: m.reviewFlagPriceChange({
+          merchant: flag.merchant,
+          before: amount(flag.before),
+          now: amount(flag.now),
+        }),
+      };
     }
-  };
+
+    case "not-imported": {
+      return {
+        id: `${flag.kind}-${flag.account}`,
+        icon: FLAG_ICONS[flag.kind],
+        text: m.reviewFlagNotImported({
+          account: flag.account,
+          day: shortDay(flag.coveredTo, locale),
+        }),
+      };
+    }
+  }
+}
+
+function Flags({ month }: { month: string }) {
+  const locale = getLocale();
+  const { data } = useSuspenseQuery(monthQueries.flags(month));
 
   return (
     <Folded
-      title={messages.review.flags.title}
+      title={m.reviewFlagsTitle()}
       summary={<Count value={data.flags.length} locale={locale} />}
     >
       <FlagList
-        flags={data.flags.map(sentence)}
-        label={messages.review.flags.title}
-        emptyText={messages.review.flags.empty}
+        flags={data.flags.map((flag) => flagRow(flag, locale))}
+        label={m.reviewFlagsTitle()}
+        emptyText={m.reviewFlagsEmpty()}
       />
     </Folded>
   );

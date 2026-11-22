@@ -20,12 +20,12 @@ const meta = {
     <>
       <Button
         variant="secondary"
-        onClick={() =>
+        onClick={() => {
           notify.failed({
             description: "The line could not be approved; it is back in the list.",
             retry: () => {},
-          })
-        }
+          });
+        }}
       >
         Refuse an approval
       </Button>

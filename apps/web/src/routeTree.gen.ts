@@ -14,9 +14,18 @@ import { Route as HealthRouteImport } from './routes/health'
 import { Route as SetupRouteImport } from './routes/setup'
 import { Route as SignInRouteImport } from './routes/sign-in'
 import { Route as AuthedIndexRouteImport } from './routes/_authed/index'
+import { Route as AuthedAccountsRouteImport } from './routes/_authed/accounts'
 import { Route as AuthedChangePasswordRouteImport } from './routes/_authed/change-password'
+import { Route as AuthedImportRouteImport } from './routes/_authed/import'
+import { Route as AuthedInvestmentsRouteImport } from './routes/_authed/investments'
+import { Route as AuthedOperationsRouteImport } from './routes/_authed/operations'
+import { Route as AuthedSettingsRouteRouteImport } from './routes/_authed/settings/route'
+import { Route as AuthedSubjectsRouteImport } from './routes/_authed/subjects'
 import { Route as AuthedUsersRouteImport } from './routes/_authed/users'
 import { Route as E2eTodayRouteImport } from './routes/e2e/today'
+import { Route as AuthedSettingsIndexRouteImport } from './routes/_authed/settings/index'
+import { Route as AuthedSettingsCategoriesRouteImport } from './routes/_authed/settings/categories'
+import { Route as AuthedSettingsRulesRouteImport } from './routes/_authed/settings/rules'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 
 const AuthedRoute = AuthedRouteImport.update({
@@ -43,9 +52,39 @@ const AuthedIndexRoute = AuthedIndexRouteImport.update({
   path: '/',
   getParentRoute: () => AuthedRoute,
 } as any)
+const AuthedAccountsRoute = AuthedAccountsRouteImport.update({
+  id: '/accounts',
+  path: '/accounts',
+  getParentRoute: () => AuthedRoute,
+} as any)
 const AuthedChangePasswordRoute = AuthedChangePasswordRouteImport.update({
   id: '/change-password',
   path: '/change-password',
+  getParentRoute: () => AuthedRoute,
+} as any)
+const AuthedImportRoute = AuthedImportRouteImport.update({
+  id: '/import',
+  path: '/import',
+  getParentRoute: () => AuthedRoute,
+} as any)
+const AuthedInvestmentsRoute = AuthedInvestmentsRouteImport.update({
+  id: '/investments',
+  path: '/investments',
+  getParentRoute: () => AuthedRoute,
+} as any)
+const AuthedOperationsRoute = AuthedOperationsRouteImport.update({
+  id: '/operations',
+  path: '/operations',
+  getParentRoute: () => AuthedRoute,
+} as any)
+const AuthedSettingsRouteRoute = AuthedSettingsRouteRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => AuthedRoute,
+} as any)
+const AuthedSubjectsRoute = AuthedSubjectsRouteImport.update({
+  id: '/subjects',
+  path: '/subjects',
   getParentRoute: () => AuthedRoute,
 } as any)
 const AuthedUsersRoute = AuthedUsersRouteImport.update({
@@ -58,6 +97,22 @@ const E2eTodayRoute = E2eTodayRouteImport.update({
   path: '/e2e/today',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthedSettingsIndexRoute = AuthedSettingsIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AuthedSettingsRouteRoute,
+} as any)
+const AuthedSettingsCategoriesRoute =
+  AuthedSettingsCategoriesRouteImport.update({
+    id: '/categories',
+    path: '/categories',
+    getParentRoute: () => AuthedSettingsRouteRoute,
+  } as any)
+const AuthedSettingsRulesRoute = AuthedSettingsRulesRouteImport.update({
+  id: '/rules',
+  path: '/rules',
+  getParentRoute: () => AuthedSettingsRouteRoute,
+} as any)
 const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
   id: '/api/auth/$',
   path: '/api/auth/$',
@@ -69,20 +124,37 @@ export interface FileRoutesByFullPath {
   '/health': typeof HealthRoute
   '/setup': typeof SetupRoute
   '/sign-in': typeof SignInRoute
+  '/settings': typeof AuthedSettingsRouteRouteWithChildren
+  '/accounts': typeof AuthedAccountsRoute
   '/change-password': typeof AuthedChangePasswordRoute
+  '/import': typeof AuthedImportRoute
+  '/investments': typeof AuthedInvestmentsRoute
+  '/operations': typeof AuthedOperationsRoute
+  '/subjects': typeof AuthedSubjectsRoute
   '/users': typeof AuthedUsersRoute
   '/e2e/today': typeof E2eTodayRoute
+  '/settings/categories': typeof AuthedSettingsCategoriesRoute
+  '/settings/rules': typeof AuthedSettingsRulesRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/settings/': typeof AuthedSettingsIndexRoute
 }
 export interface FileRoutesByTo {
   '/health': typeof HealthRoute
   '/setup': typeof SetupRoute
   '/sign-in': typeof SignInRoute
+  '/accounts': typeof AuthedAccountsRoute
   '/change-password': typeof AuthedChangePasswordRoute
+  '/import': typeof AuthedImportRoute
+  '/investments': typeof AuthedInvestmentsRoute
+  '/operations': typeof AuthedOperationsRoute
+  '/subjects': typeof AuthedSubjectsRoute
   '/users': typeof AuthedUsersRoute
   '/e2e/today': typeof E2eTodayRoute
   '/': typeof AuthedIndexRoute
+  '/settings/categories': typeof AuthedSettingsCategoriesRoute
+  '/settings/rules': typeof AuthedSettingsRulesRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/settings': typeof AuthedSettingsIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -90,11 +162,20 @@ export interface FileRoutesById {
   '/health': typeof HealthRoute
   '/setup': typeof SetupRoute
   '/sign-in': typeof SignInRoute
+  '/_authed/settings': typeof AuthedSettingsRouteRouteWithChildren
+  '/_authed/accounts': typeof AuthedAccountsRoute
   '/_authed/change-password': typeof AuthedChangePasswordRoute
+  '/_authed/import': typeof AuthedImportRoute
+  '/_authed/investments': typeof AuthedInvestmentsRoute
+  '/_authed/operations': typeof AuthedOperationsRoute
+  '/_authed/subjects': typeof AuthedSubjectsRoute
   '/_authed/users': typeof AuthedUsersRoute
   '/e2e/today': typeof E2eTodayRoute
   '/_authed/': typeof AuthedIndexRoute
+  '/_authed/settings/categories': typeof AuthedSettingsCategoriesRoute
+  '/_authed/settings/rules': typeof AuthedSettingsRulesRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/_authed/settings/': typeof AuthedSettingsIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -103,31 +184,57 @@ export interface FileRouteTypes {
     | '/health'
     | '/setup'
     | '/sign-in'
+    | '/settings'
+    | '/accounts'
     | '/change-password'
+    | '/import'
+    | '/investments'
+    | '/operations'
+    | '/subjects'
     | '/users'
     | '/e2e/today'
+    | '/settings/categories'
+    | '/settings/rules'
     | '/api/auth/$'
+    | '/settings/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/health'
     | '/setup'
     | '/sign-in'
+    | '/accounts'
     | '/change-password'
+    | '/import'
+    | '/investments'
+    | '/operations'
+    | '/subjects'
     | '/users'
     | '/e2e/today'
     | '/'
+    | '/settings/categories'
+    | '/settings/rules'
     | '/api/auth/$'
+    | '/settings'
   id:
     | '__root__'
     | '/_authed'
     | '/health'
     | '/setup'
     | '/sign-in'
+    | '/_authed/settings'
+    | '/_authed/accounts'
     | '/_authed/change-password'
+    | '/_authed/import'
+    | '/_authed/investments'
+    | '/_authed/operations'
+    | '/_authed/subjects'
     | '/_authed/users'
     | '/e2e/today'
     | '/_authed/'
+    | '/_authed/settings/categories'
+    | '/_authed/settings/rules'
     | '/api/auth/$'
+    | '/_authed/settings/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -176,11 +283,53 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedIndexRouteImport
       parentRoute: typeof AuthedRoute
     }
+    '/_authed/accounts': {
+      id: '/_authed/accounts'
+      path: '/accounts'
+      fullPath: '/accounts'
+      preLoaderRoute: typeof AuthedAccountsRouteImport
+      parentRoute: typeof AuthedRoute
+    }
     '/_authed/change-password': {
       id: '/_authed/change-password'
       path: '/change-password'
       fullPath: '/change-password'
       preLoaderRoute: typeof AuthedChangePasswordRouteImport
+      parentRoute: typeof AuthedRoute
+    }
+    '/_authed/import': {
+      id: '/_authed/import'
+      path: '/import'
+      fullPath: '/import'
+      preLoaderRoute: typeof AuthedImportRouteImport
+      parentRoute: typeof AuthedRoute
+    }
+    '/_authed/investments': {
+      id: '/_authed/investments'
+      path: '/investments'
+      fullPath: '/investments'
+      preLoaderRoute: typeof AuthedInvestmentsRouteImport
+      parentRoute: typeof AuthedRoute
+    }
+    '/_authed/operations': {
+      id: '/_authed/operations'
+      path: '/operations'
+      fullPath: '/operations'
+      preLoaderRoute: typeof AuthedOperationsRouteImport
+      parentRoute: typeof AuthedRoute
+    }
+    '/_authed/settings': {
+      id: '/_authed/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof AuthedSettingsRouteRouteImport
+      parentRoute: typeof AuthedRoute
+    }
+    '/_authed/subjects': {
+      id: '/_authed/subjects'
+      path: '/subjects'
+      fullPath: '/subjects'
+      preLoaderRoute: typeof AuthedSubjectsRouteImport
       parentRoute: typeof AuthedRoute
     }
     '/_authed/users': {
@@ -197,6 +346,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof E2eTodayRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_authed/settings/': {
+      id: '/_authed/settings/'
+      path: '/'
+      fullPath: '/settings/'
+      preLoaderRoute: typeof AuthedSettingsIndexRouteImport
+      parentRoute: typeof AuthedSettingsRouteRoute
+    }
+    '/_authed/settings/categories': {
+      id: '/_authed/settings/categories'
+      path: '/categories'
+      fullPath: '/settings/categories'
+      preLoaderRoute: typeof AuthedSettingsCategoriesRouteImport
+      parentRoute: typeof AuthedSettingsRouteRoute
+    }
+    '/_authed/settings/rules': {
+      id: '/_authed/settings/rules'
+      path: '/rules'
+      fullPath: '/settings/rules'
+      preLoaderRoute: typeof AuthedSettingsRulesRouteImport
+      parentRoute: typeof AuthedSettingsRouteRoute
+    }
     '/api/auth/$': {
       id: '/api/auth/$'
       path: '/api/auth/$'
@@ -207,14 +377,41 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface AuthedSettingsRouteRouteChildren {
+  AuthedSettingsCategoriesRoute: typeof AuthedSettingsCategoriesRoute
+  AuthedSettingsRulesRoute: typeof AuthedSettingsRulesRoute
+  AuthedSettingsIndexRoute: typeof AuthedSettingsIndexRoute
+}
+
+const AuthedSettingsRouteRouteChildren: AuthedSettingsRouteRouteChildren = {
+  AuthedSettingsCategoriesRoute: AuthedSettingsCategoriesRoute,
+  AuthedSettingsRulesRoute: AuthedSettingsRulesRoute,
+  AuthedSettingsIndexRoute: AuthedSettingsIndexRoute,
+}
+
+const AuthedSettingsRouteRouteWithChildren =
+  AuthedSettingsRouteRoute._addFileChildren(AuthedSettingsRouteRouteChildren)
+
 interface AuthedRouteChildren {
+  AuthedSettingsRouteRoute: typeof AuthedSettingsRouteRouteWithChildren
+  AuthedAccountsRoute: typeof AuthedAccountsRoute
   AuthedChangePasswordRoute: typeof AuthedChangePasswordRoute
+  AuthedImportRoute: typeof AuthedImportRoute
+  AuthedInvestmentsRoute: typeof AuthedInvestmentsRoute
+  AuthedOperationsRoute: typeof AuthedOperationsRoute
+  AuthedSubjectsRoute: typeof AuthedSubjectsRoute
   AuthedUsersRoute: typeof AuthedUsersRoute
   AuthedIndexRoute: typeof AuthedIndexRoute
 }
 
 const AuthedRouteChildren: AuthedRouteChildren = {
+  AuthedSettingsRouteRoute: AuthedSettingsRouteRouteWithChildren,
+  AuthedAccountsRoute: AuthedAccountsRoute,
   AuthedChangePasswordRoute: AuthedChangePasswordRoute,
+  AuthedImportRoute: AuthedImportRoute,
+  AuthedInvestmentsRoute: AuthedInvestmentsRoute,
+  AuthedOperationsRoute: AuthedOperationsRoute,
+  AuthedSubjectsRoute: AuthedSubjectsRoute,
   AuthedUsersRoute: AuthedUsersRoute,
   AuthedIndexRoute: AuthedIndexRoute,
 }

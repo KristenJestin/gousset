@@ -1,3 +1,4 @@
+import { m } from "@gousset/i18n/messages";
 import { Button } from "@gousset/ui/components/button";
 import { Card } from "@gousset/ui/components/card";
 import { FormMessage } from "@gousset/ui/components/form-message";
@@ -9,7 +10,6 @@ import type { FormEvent } from "react";
 
 import { AppLink } from "@/components/app-link";
 import { errorMessage } from "@/i18n/messages";
-import { useMessages } from "@/i18n/use-messages";
 import { authClient } from "@/lib/auth-client";
 import { formText } from "@/lib/form";
 import { whileBusy } from "@/lib/while-busy";
@@ -19,7 +19,6 @@ export const Route = createFileRoute("/_authed/change-password")({
 });
 
 function ChangePassword() {
-  const messages = useMessages();
   const navigate = useNavigate();
   const router = useRouter();
   const { user } = Route.useRouteContext();
@@ -40,7 +39,7 @@ function ChangePassword() {
     );
 
     if (refusal) {
-      setError(errorMessage(messages, refusal.code));
+      setError(errorMessage(refusal.code));
 
       return;
     }
@@ -52,23 +51,21 @@ function ChangePassword() {
   return (
     <Screen>
       <Card
-        title={messages.changePassword.title}
+        title={m.changePasswordTitle()}
         description={
-          user.mustChangePassword
-            ? messages.changePassword.required
-            : messages.changePassword.description
+          user.mustChangePassword ? m.changePasswordRequired() : m.changePasswordDescription()
         }
       >
         <Form onSubmit={(event) => void submit(event)} onInput={() => setError(undefined)}>
           <TextField
-            label={messages.fields.currentPassword}
+            label={m.fieldCurrentPassword()}
             name="currentPassword"
             type="password"
             autoComplete="current-password"
             required
           />
           <TextField
-            label={messages.fields.newPassword}
+            label={m.fieldNewPassword()}
             name="newPassword"
             type="password"
             autoComplete="new-password"
@@ -78,9 +75,9 @@ function ChangePassword() {
           <FormMessage message={error} />
           <Actions>
             <Button type="submit" loading={busy}>
-              {messages.changePassword.submit}
+              {m.changePasswordSubmit()}
             </Button>
-            {user.mustChangePassword ? null : <AppLink to="/">{messages.users.back}</AppLink>}
+            {user.mustChangePassword ? null : <AppLink to="/">{m.usersBack()}</AppLink>}
           </Actions>
         </Form>
       </Card>

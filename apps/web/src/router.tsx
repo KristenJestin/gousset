@@ -1,3 +1,4 @@
+import { m } from "@gousset/i18n/messages";
 import { QueryClient } from "@tanstack/react-query";
 import { createRouter as createTanStackRouter } from "@tanstack/react-router";
 import { setupRouterSsrQueryIntegration } from "@tanstack/react-router-ssr-query";
@@ -39,7 +40,7 @@ export const getRouter = () => {
     defaultPreload: "intent",
     // TanStack Query decides when data is fresh, not the router's own cache.
     defaultPreloadStaleTime: 0,
-    defaultNotFoundComponent: () => <div>Not Found</div>,
+    defaultNotFoundComponent: () => <p>{m.notFoundTitle()}</p>,
   });
 
   // The server's queries travel with the page and fill the browser's client before it renders.

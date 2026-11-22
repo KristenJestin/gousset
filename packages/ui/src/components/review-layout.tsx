@@ -3,50 +3,27 @@ import type { ReactNode } from "react";
 import { cn } from "../lib/utils";
 import { Icon } from "./icon";
 
-// The monthly review's frame (docs/wireframes, screens 1 and 11): its header, then its blocks on a
-// grid, in the order the screen reads them. Until the app's frame comes (#8), the page stands alone.
+// The monthly review's pieces (docs/wireframes, screens 1 and 11): the state line under the
+// page's title, then its blocks on a grid, in the order the screen reads them. The page itself is
+// the frame's `Page`, the month switcher beside its title.
 
-/** The review's page: its column, centred, wide on a desktop, edge to edge on a phone. */
-export function ReviewPage({ children }: { children: ReactNode }) {
-  return (
-    <main className="min-h-svh bg-background">
-      <div className="mx-auto flex w-full max-w-6xl flex-col gap-4 p-4 md:gap-5 md:p-8">
-        {children}
-      </div>
-    </main>
-  );
-}
-
-export type ReviewHeaderProps = {
-  /** The page's heading, for screen readers: "October 2026"; the switcher shows it. */
-  title: string;
-  /** The month and its arrows: a `MonthSwitcher`. */
-  month: ReactNode;
+export type ReviewStatusProps = {
   /** How far the month's statements are imported, and the link to the lines to review. */
-  status?: ReactNode;
-  /** At the end of the line, the page's main action. */
-  action?: ReactNode;
+  status: ReactNode;
   /** Under it, what the screen shows when it is not the user's own data: "Made-up data…". */
   notice?: string;
 };
 
 /**
- * The review's header (block "header" of the wireframes): the month with its arrows, the state of
- * the imports and the link down to the lines to review, and the page's action. On a phone the
- * month comes first, alone on its line, and the state goes under it.
+ * The review's state line (screen 1, the header): the state of the imports and the link down to
+ * the lines to review, `StatusPiece`s separated by dots; under it, a notice when the data is not
+ * the user's own.
  */
-export function ReviewHeader({ title, month, status, action, notice }: ReviewHeaderProps) {
+export function ReviewStatus({ status, notice }: ReviewStatusProps) {
   return (
-    <header className="flex flex-col gap-2">
-      <h1 className="sr-only">{title}</h1>
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-        <div className="text-base">{month}</div>
-        {status === undefined ? null : (
-          <div className="flex min-w-0 flex-wrap items-center gap-x-2 text-sm text-muted-foreground max-md:order-last max-md:w-full">
-            {status}
-          </div>
-        )}
-        {action === undefined ? null : <div className="ml-auto">{action}</div>}
+    <div className="-mt-3 flex flex-col gap-1.5">
+      <div className="flex min-h-5 min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
+        {status}
       </div>
       {notice === undefined ? null : (
         <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
@@ -54,7 +31,7 @@ export function ReviewHeader({ title, month, status, action, notice }: ReviewHea
           {notice}
         </p>
       )}
-    </header>
+    </div>
   );
 }
 

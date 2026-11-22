@@ -10,6 +10,8 @@ import {
 } from "@tanstack/react-router";
 import { Suspense, lazy } from "react";
 
+import { m } from "@gousset/i18n/messages";
+import { getLocale } from "@gousset/i18n/runtime";
 import { Toaster } from "@gousset/ui/components/toaster-stand-in";
 import { ThemeProvider } from "@gousset/ui/components/theme-provider";
 
@@ -54,7 +56,7 @@ export const Route = createRootRouteWithContext<RouterContext>()({
         content: "width=device-width, initial-scale=1",
       },
       {
-        title: "Gousset",
+        title: m.appName(),
       },
     ],
     links: [
@@ -62,6 +64,11 @@ export const Route = createRootRouteWithContext<RouterContext>()({
         rel: "stylesheet",
         href: appCss,
       },
+      // The brand (brand/README.md): the tab, the iOS home screen and the installed app.
+      { rel: "icon", href: "/favicon.ico", sizes: "32x32" },
+      { rel: "icon", href: "/favicon.svg", type: "image/svg+xml" },
+      { rel: "apple-touch-icon", href: "/apple-touch-icon.png" },
+      { rel: "manifest", href: "/manifest.webmanifest" },
     ],
   }),
 
@@ -69,13 +76,13 @@ export const Route = createRootRouteWithContext<RouterContext>()({
 });
 
 function RootDocument() {
-  const locale = Route.useRouteContext({ select: (context) => context.viewer.locale });
   // The response's CSP nonce: the request's on the server, read back from the page in the browser.
   const nonce = useRouter().options.ssr?.nonce;
 
   return (
-    // The saved colour scheme lands on <html> before hydration (ThemeProvider).
-    <html lang={locale} suppressHydrationWarning>
+    // The saved colour scheme lands on <html> before hydration (ThemeProvider). The language is
+    // the request's on the server (src/server.ts), the same cookie or browser's in the page.
+    <html lang={getLocale()} suppressHydrationWarning>
       <head>
         <HeadContent />
       </head>

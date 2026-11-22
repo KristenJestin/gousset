@@ -1,3 +1,4 @@
+import { m } from "@gousset/i18n/messages";
 import { renderToString } from "react-dom/server";
 import { describe, expect, it } from "vite-plus/test";
 
@@ -35,10 +36,10 @@ describe("the review's components on the server", () => {
               amount: eur(-1499),
             },
           ]}
-          approveText="Approve"
-          approveLabel={(line) => `Approve ${line.label}`}
+          approveText={m.reviewApprove()}
+          approveLabel={(line) => m.reviewApproveLine({ label: line.label })}
           onApprove={() => {}}
-          label="To review"
+          label={m.reviewToReviewTitle()}
         />
       </>,
     );

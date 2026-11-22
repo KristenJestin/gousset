@@ -14,6 +14,7 @@
     "@gousset/auth": "workspace:*",
     "@gousset/core": "workspace:*",
     "@gousset/db": "workspace:*",
+    "@gousset/i18n": "workspace:*",
     "@gousset/telemetry": "workspace:*",
     "@gousset/ui": "workspace:*",
     "@tailwindcss/vite": "^4.3.5",

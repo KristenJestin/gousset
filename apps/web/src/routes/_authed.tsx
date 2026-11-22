@@ -1,5 +1,7 @@
 import { Outlet, createFileRoute, redirect } from "@tanstack/react-router";
 
+import { Frame } from "@/components/frame";
+
 /** Every page but sign-in (and the first setup) requires a session. */
 export const Route = createFileRoute("/_authed")({
   beforeLoad: ({ context, location }) => {
@@ -21,7 +23,22 @@ export const Route = createFileRoute("/_authed")({
       throw redirect({ to: "/change-password" });
     }
 
-    return { user: viewer.user };
+    return { user: viewer.user, currentMonth: viewer.currentMonth };
   },
-  component: Outlet,
+  component: Authed,
 });
+
+function Authed() {
+  const { user } = Route.useRouteContext();
+
+  // A temporary password is changed alone on its page, before the app opens.
+  if (user.mustChangePassword) {
+    return <Outlet />;
+  }
+
+  return (
+    <Frame user={user}>
+      <Outlet />
+    </Frame>
+  );
+}

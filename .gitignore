@@ -55,6 +55,8 @@ test-results
 playwright-report
 # Pages the lint scenario writes and removes (packages/ui/e2e/lint-probe.ts)
 apps/web/src/lint-probe-*
+# ...and the text scenario (tools/lint/gousset/no-text-outside-messages.test.ts)
+packages/ui/src/components/lint-probe-*
 
 # Misc
 *.tgz
