@@ -67,6 +67,8 @@ function appEnvironment(port: number, database: string) {
     DATABASE_URL: databaseUrl(database),
     // The server's clock reads the day `fixDay` sets (README, "The server's clock").
     GOUSSET_E2E_CLOCK: "on",
+    // `/mcp` serves its test-only write action, `e2e_probe` (packages/mcp, tools/e2e-probe.ts).
+    GOUSSET_E2E_PROBE: "on",
   };
 }
 

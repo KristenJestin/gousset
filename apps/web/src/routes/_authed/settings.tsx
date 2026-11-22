@@ -1,5 +1,6 @@
 import { Button } from "@gousset/ui/components/button";
 import { Card } from "@gousset/ui/components/card";
+import { FormMessage } from "@gousset/ui/components/form-message";
 import { List, ListItem } from "@gousset/ui/components/list";
 import { Actions, Screen } from "@gousset/ui/components/screen";
 import { StatusMessage } from "@gousset/ui/components/status-message";
@@ -13,7 +14,9 @@ import {
   revokeConnectedClient,
   setMcpDoor,
 } from "@/functions/mcp";
+import { errorMessage } from "@/i18n/messages";
 import { useMessages } from "@/i18n/use-messages";
+import { refusalOf } from "@/lib/refusal";
 import { whileBusy } from "@/lib/while-busy";
 
 /** A user's settings: the MCP clients they allowed; for the administrator, the MCP door itself. */
@@ -31,16 +34,25 @@ function Settings() {
   const router = useRouter();
   const { clients, door } = Route.useLoaderData();
   const [revoked, setRevoked] = useState<string>();
+  const [clientsError, setClientsError] = useState<string>();
+  const [doorError, setDoorError] = useState<string>();
   const [busy, setBusy] = useState(false);
 
   async function revoke(clientId: string, name: string) {
-    await whileBusy(setBusy, () => revokeConnectedClient({ data: { clientId } }));
-    setRevoked(messages.settings.revoked(name));
+    const refusal = await whileBusy(setBusy, () =>
+      refusalOf(() => revokeConnectedClient({ data: { clientId } })),
+    );
+
+    // A failure says so, and the client stays listed: never a silent "revoked".
+    setRevoked(refusal === undefined ? messages.settings.revoked(name) : undefined);
+    setClientsError(refusal === undefined ? undefined : errorMessage(messages, refusal));
     await router.invalidate();
   }
 
   async function turn(open: boolean) {
-    await whileBusy(setBusy, () => setMcpDoor({ data: { open } }));
+    const refusal = await whileBusy(setBusy, () => refusalOf(() => setMcpDoor({ data: { open } })));
+
+    setDoorError(refusal === undefined ? undefined : errorMessage(messages, refusal));
     await router.invalidate();
   }
 
@@ -64,7 +76,9 @@ function Settings() {
               <ListItem
                 key={client.clientId}
                 title={client.name}
-                description={client.address ?? undefined}
+                description={
+                  client.host === null ? undefined : messages.settings.clientFrom(client.host)
+                }
                 tags={[client.canWrite ? messages.settings.readWrite : messages.settings.readOnly]}
                 action={
                   <Button
@@ -81,6 +95,7 @@ function Settings() {
           </List>
         )}
         <StatusMessage message={revoked} />
+        <FormMessage message={clientsError} />
       </Card>
       {door.canManage ? (
         <Card title={messages.settings.doorTitle} description={doorState}>
@@ -91,6 +106,7 @@ function Settings() {
               </Button>
             </Actions>
           ) : null}
+          <FormMessage message={doorError} />
         </Card>
       ) : null}
       <Actions>

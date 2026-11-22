@@ -37,6 +37,9 @@ const en = {
   consent: {
     title: (client: string) => `Allow ${client} to reach your Gousset?`,
     unknownClient: "An MCP client",
+    origin: (client: string, back: string) =>
+      `It comes from ${client} and will be sent back to ${back}.`,
+    unknownOrigin: (back: string) => `It will be sent back to ${back}.`,
     description:
       "It will read your months, accounts and lines from an AI agent, as you. You can revoke it at any time in your settings.",
     writeDescription:
@@ -58,6 +61,7 @@ const en = {
     revoke: "Revoke",
     revokeLabel: (client: string) => `Revoke ${client}`,
     revoked: (client: string) => `${client} can no longer reach your data.`,
+    clientFrom: (host: string) => `From ${host}`,
     doorTitle: "MCP access",
     doorOpen: "Every user can connect AI agents to their own data.",
     doorClosed: "MCP access is turned off: no AI agent can reach this installation.",
@@ -86,6 +90,8 @@ const en = {
     passwordUnchanged: "The new password must differ from the current one.",
     emailTaken: "An account already uses this e-mail.",
     invalidEmail: "This e-mail is not valid.",
+    signInRequired: "Your session has ended: sign in again.",
+    adminOnly: "Only the administrator can do this.",
     unknown: "Something went wrong. Try again.",
   },
 };
@@ -130,6 +136,8 @@ const fr: Messages = {
   consent: {
     title: (client) => `Autoriser ${client} à accéder à votre Gousset ?`,
     unknownClient: "Un client MCP",
+    origin: (client, back) => `Il vient de ${client} et sera renvoyé vers ${back}.`,
+    unknownOrigin: (back) => `Il sera renvoyé vers ${back}.`,
     description:
       "Il lira vos mois, vos comptes et vos lignes depuis un agent IA, en votre nom. Vous pouvez le révoquer à tout moment dans vos paramètres.",
     writeDescription:
@@ -151,6 +159,7 @@ const fr: Messages = {
     revoke: "Révoquer",
     revokeLabel: (client) => `Révoquer ${client}`,
     revoked: (client) => `${client} ne peut plus accéder à vos données.`,
+    clientFrom: (host) => `Depuis ${host}`,
     doorTitle: "Accès MCP",
     doorOpen: "Chaque utilisateur peut connecter des agents IA à ses propres données.",
     doorClosed: "L'accès MCP est désactivé : aucun agent IA ne peut joindre cette installation.",
@@ -179,6 +188,8 @@ const fr: Messages = {
     passwordUnchanged: "Le nouveau mot de passe doit être différent de l'actuel.",
     emailTaken: "Un compte utilise déjà cet e-mail.",
     invalidEmail: "Cet e-mail n'est pas valide.",
+    signInRequired: "Votre session a pris fin : reconnectez-vous.",
+    adminOnly: "Seul l'administrateur peut faire cela.",
     unknown: "Une erreur est survenue. Réessayez.",
   },
 };
@@ -244,6 +255,10 @@ export function errorMessage(messages: Messages, code: string | undefined): stri
       return messages.errors.emailTaken;
     case "INVALID_EMAIL":
       return messages.errors.invalidEmail;
+    case "SIGN_IN_REQUIRED":
+      return messages.errors.signInRequired;
+    case "ADMIN_ONLY":
+      return messages.errors.adminOnly;
     default:
       return messages.errors.unknown;
   }

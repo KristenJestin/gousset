@@ -4,9 +4,13 @@ import {
   authOauthClient,
   authOauthConsent,
   authOauthRefreshToken,
+  authUser,
 } from "@gousset/db/schema/auth";
 import { installationSettings } from "@gousset/db/schema/settings";
-import { and, asc, eq, isNull } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, like, lt, max, notExists } from "drizzle-orm";
+
+import { McpScope } from "./mcp";
+import { clientHost } from "./mcp-guards";
 
 /** Verifies an MCP access token: signed by Gousset, unexpired, bound to the `/mcp` resource. */
 export { requireMcpAuth } from "@better-auth/mcp";
@@ -34,24 +38,25 @@ export async function setMcpDoorOpen(database: Database, open: boolean): Promise
 /** A client the user allowed to reach their data, as their settings show it. */
 export type ConnectedClient = {
   clientId: string;
+  /** The name it gives itself. */
   name: string;
-  /** Where the client says it comes from, if it says so. */
-  address: string | null;
+  /** The host its client ID is served from (`clientHost`). */
+  host: string | null;
   canWrite: boolean;
   since: Date | null;
 };
 
-/** The name a client gives itself, for the consent page; `undefined` for an unknown client. */
-export async function clientName(
+/** The client asking for access, for the consent page; `undefined` for an unknown client. */
+export async function consentClient(
   database: Database,
   clientId: string,
-): Promise<string | undefined> {
+): Promise<{ name: string; host: string | null } | undefined> {
   const [row] = await database
     .select({ name: authOauthClient.name })
     .from(authOauthClient)
     .where(eq(authOauthClient.clientId, clientId));
 
-  return row === undefined ? undefined : (row.name ?? clientId);
+  return row === undefined ? undefined : { name: row.name ?? clientId, host: clientHost(clientId) };
 }
 
 /** The clients a user allowed on the consent page, oldest first. */
@@ -63,7 +68,6 @@ export async function listConnectedClients(
     .select({
       clientId: authOauthConsent.clientId,
       name: authOauthClient.name,
-      uri: authOauthClient.uri,
       scopes: authOauthConsent.scopes,
       since: authOauthConsent.createdAt,
     })
@@ -75,10 +79,30 @@ export async function listConnectedClients(
   return rows.map((row) => ({
     clientId: row.clientId,
     name: row.name ?? row.clientId,
-    address: row.uri,
-    canWrite: row.scopes.includes("write"),
+    host: clientHost(row.clientId),
+    canWrite: row.scopes.includes(McpScope.write),
     since: row.since,
   }));
+}
+
+/** Revokes the user's refresh and access tokens of one client, or of every client. */
+async function revokeTokens(database: Pick<Database, "update">, userId: string, clientId?: string) {
+  const now = new Date();
+
+  const ofRefresh = and(
+    eq(authOauthRefreshToken.userId, userId),
+    clientId === undefined ? undefined : eq(authOauthRefreshToken.clientId, clientId),
+    isNull(authOauthRefreshToken.revoked),
+  );
+
+  const ofAccess = and(
+    eq(authOauthAccessToken.userId, userId),
+    clientId === undefined ? undefined : eq(authOauthAccessToken.clientId, clientId),
+    isNull(authOauthAccessToken.revoked),
+  );
+
+  await database.update(authOauthRefreshToken).set({ revoked: now }).where(ofRefresh);
+  await database.update(authOauthAccessToken).set({ revoked: now }).where(ofAccess);
 }
 
 /**
@@ -90,51 +114,184 @@ export async function revokeClient(
   userId: string,
   clientId: string,
 ): Promise<void> {
-  const now = new Date();
-
   await database.transaction(async (transaction) => {
     await transaction
       .delete(authOauthConsent)
       .where(and(eq(authOauthConsent.userId, userId), eq(authOauthConsent.clientId, clientId)));
 
-    await transaction
-      .update(authOauthRefreshToken)
-      .set({ revoked: now })
-      .where(
-        and(
-          eq(authOauthRefreshToken.userId, userId),
-          eq(authOauthRefreshToken.clientId, clientId),
-          isNull(authOauthRefreshToken.revoked),
-        ),
-      );
-
-    await transaction
-      .update(authOauthAccessToken)
-      .set({ revoked: now })
-      .where(
-        and(
-          eq(authOauthAccessToken.userId, userId),
-          eq(authOauthAccessToken.clientId, clientId),
-          isNull(authOauthAccessToken.revoked),
-        ),
-      );
+    await revokeTokens(transaction, userId, clientId);
   });
 }
 
 /**
- * Whether the user still allows the client: checked on every call, since a signed access token
- * stays valid until it expires and revocation must take effect at once.
+ * Revokes every client of a user: when their password changes or they are banned, nothing they
+ * allowed before keeps reaching their data.
  */
-export async function isClientAllowed(
+export async function revokeAllClients(database: Database, userId: string): Promise<void> {
+  await database.transaction(async (transaction) => {
+    await transaction.delete(authOauthConsent).where(eq(authOauthConsent.userId, userId));
+    await revokeTokens(transaction, userId);
+  });
+}
+
+/**
+ * After a consent changed in place (a client authorized again, read only this time): the tokens
+ * holding a scope the consent no longer gives are revoked, so that a refresh token cannot mint
+ * write access the user took back.
+ */
+export async function alignTokensWithConsents(database: Database, userId: string): Promise<void> {
+  const consents = await database
+    .select({ clientId: authOauthConsent.clientId, scopes: authOauthConsent.scopes })
+    .from(authOauthConsent)
+    .where(eq(authOauthConsent.userId, userId));
+
+  const allowed = new Map(consents.map((consent) => [consent.clientId, new Set(consent.scopes)]));
+
+  const exceeds = (clientId: string, scopes: ReadonlyArray<string>) =>
+    scopes.some((scope) => allowed.get(clientId)?.has(scope) !== true);
+
+  const refreshTokens = await database
+    .select({
+      id: authOauthRefreshToken.id,
+      clientId: authOauthRefreshToken.clientId,
+      scopes: authOauthRefreshToken.scopes,
+    })
+    .from(authOauthRefreshToken)
+    .where(and(eq(authOauthRefreshToken.userId, userId), isNull(authOauthRefreshToken.revoked)));
+
+  const accessTokens = await database
+    .select({
+      id: authOauthAccessToken.id,
+      clientId: authOauthAccessToken.clientId,
+      scopes: authOauthAccessToken.scopes,
+    })
+    .from(authOauthAccessToken)
+    .where(and(eq(authOauthAccessToken.userId, userId), isNull(authOauthAccessToken.revoked)));
+
+  const now = new Date();
+  const overRefresh = refreshTokens.filter((token) => exceeds(token.clientId, token.scopes));
+  const overAccess = accessTokens.filter((token) => exceeds(token.clientId, token.scopes));
+
+  if (overRefresh.length > 0) {
+    await database
+      .update(authOauthRefreshToken)
+      .set({ revoked: now })
+      .where(
+        inArray(
+          authOauthRefreshToken.id,
+          overRefresh.map((token) => token.id),
+        ),
+      );
+  }
+
+  if (overAccess.length > 0) {
+    await database
+      .update(authOauthAccessToken)
+      .set({ revoked: now })
+      .where(
+        inArray(
+          authOauthAccessToken.id,
+          overAccess.map((token) => token.id),
+        ),
+      );
+  }
+}
+
+/** What the user allows a client today, as the door reads it on every call. */
+export type Grant = {
+  scopes: ReadonlyArray<string>;
+  /** When the user allowed it (better-auth keeps it to the second). */
+  since: Date;
+  /**
+   * The last time a token of this client was revoked for the user (a revocation, a consent that
+   * narrowed), to the millisecond: a token minted no later than that is refused.
+   */
+  revokedUntil: Date | undefined;
+};
+
+/**
+ * The grant a token of this client may use now: none when the user revoked the client, or is
+ * banned. Read on every call, since a signed access token stays valid until it expires.
+ */
+export async function currentGrant(
   database: Database,
   userId: string,
   clientId: string,
-): Promise<boolean> {
+  now = new Date(),
+): Promise<Grant | undefined> {
   const [row] = await database
-    .select({ id: authOauthConsent.id })
+    .select({
+      scopes: authOauthConsent.scopes,
+      since: authOauthConsent.createdAt,
+      banned: authUser.banned,
+      banExpires: authUser.banExpires,
+    })
     .from(authOauthConsent)
+    .innerJoin(authUser, eq(authUser.id, authOauthConsent.userId))
     .where(and(eq(authOauthConsent.userId, userId), eq(authOauthConsent.clientId, clientId)))
     .limit(1);
 
-  return row !== undefined;
+  if (row === undefined) {
+    return undefined;
+  }
+
+  const banned = row.banned === true && (row.banExpires === null || row.banExpires > now);
+
+  if (banned) {
+    return undefined;
+  }
+
+  const [refresh] = await database
+    .select({ last: max(authOauthRefreshToken.revoked) })
+    .from(authOauthRefreshToken)
+    .where(
+      and(eq(authOauthRefreshToken.userId, userId), eq(authOauthRefreshToken.clientId, clientId)),
+    );
+
+  const [access] = await database
+    .select({ last: max(authOauthAccessToken.revoked) })
+    .from(authOauthAccessToken)
+    .where(
+      and(eq(authOauthAccessToken.userId, userId), eq(authOauthAccessToken.clientId, clientId)),
+    );
+
+  const revocations = [refresh?.last, access?.last].filter(
+    (last): last is Date => last !== null && last !== undefined,
+  );
+
+  return {
+    scopes: row.scopes,
+    since: row.since ?? new Date(0),
+    revokedUntil:
+      revocations.length === 0
+        ? undefined
+        : new Date(Math.max(...revocations.map((last) => last.getTime()))),
+  };
+}
+
+/**
+ * Forgets the clients that came by their metadata document but that no user ever allowed, once
+ * older than `before`: anyone can make one exist by starting an authorization.
+ */
+export async function forgetUnallowedClients(database: Database, before: Date): Promise<void> {
+  await database
+    .delete(authOauthClient)
+    .where(
+      and(
+        like(authOauthClient.clientId, "https://%"),
+        lt(authOauthClient.createdAt, before),
+        notExists(
+          database
+            .select({ id: authOauthConsent.id })
+            .from(authOauthConsent)
+            .where(eq(authOauthConsent.clientId, authOauthClient.clientId)),
+        ),
+        notExists(
+          database
+            .select({ id: authOauthRefreshToken.id })
+            .from(authOauthRefreshToken)
+            .where(eq(authOauthRefreshToken.clientId, authOauthClient.clientId)),
+        ),
+      ),
+    );
 }

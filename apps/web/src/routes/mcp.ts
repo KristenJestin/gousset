@@ -1,14 +1,27 @@
-import { MCP_SCOPES, McpScope } from "@gousset/auth/mcp";
-import { isClientAllowed, requireMcpAuth } from "@gousset/auth/mcp-door";
+import { ISSUED_AT_MS_CLAIM, MCP_SCOPES, McpScope } from "@gousset/auth/mcp";
+import { currentGrant, requireMcpAuth } from "@gousset/auth/mcp-door";
 import { goussetServer } from "@gousset/mcp/gousset";
 import { authInfoOf, createMcpEndpoint } from "@gousset/mcp/server";
+import { E2E_PROBE_VARIABLE, e2eProbeTool } from "@gousset/mcp/tools/e2e-probe";
 import { createFileRoute } from "@tanstack/react-router";
-import { Option, Schema } from "effect";
+import { Config, Effect, Option, Schema } from "effect";
 
 import { isDoorOpen, mcpAddress, mcpResource, notFound } from "../lib/mcp-door";
 import { auth, db, runtime } from "../services";
 
-const endpoint = createMcpEndpoint(goussetServer, {
+/** Present only when the end-to-end harness started the app; any value but `on` fails loudly. */
+const e2eProbe = Effect.runSync(
+  Effect.gen(function* () {
+    return yield* Config.option(Config.Literal("on", E2E_PROBE_VARIABLE));
+  }),
+);
+
+/** Gousset's tools; under the harness, its test-only write action after them. */
+const served = Option.isSome(e2eProbe)
+  ? { ...goussetServer, tools: [...goussetServer.tools, e2eProbeTool] }
+  : goussetServer;
+
+const endpoint = createMcpEndpoint(served, {
   run: (effect) => runtime.runPromiseExit(effect),
 });
 
@@ -16,6 +29,7 @@ const endpoint = createMcpEndpoint(goussetServer, {
 const AccessClaims = Schema.Struct({
   sub: Schema.String,
   azp: Schema.String,
+  [ISSUED_AT_MS_CLAIM]: Schema.Number,
   scope: Schema.optional(Schema.String),
 });
 
@@ -58,14 +72,25 @@ function protect(resource: string) {
       }
 
       const { sub: userId, azp: clientId, scope = "" } = claims.value;
+      const issuedAt = claims.value[ISSUED_AT_MS_CLAIM];
 
-      // A signed token stays valid until it expires: the consent is read on every call, so that
-      // revoking a client in the settings shuts it out at once.
-      if (!(await isClientAllowed(db, userId, clientId))) {
+      // A signed token stays valid until it expires: the grant is read on every call, so that
+      // revoking a client (or banning its user) shuts it out at once, and a token issued before
+      // the current consent (an older one, revoked since) is never revived by it.
+      const grant = await currentGrant(db, userId, clientId);
+
+      if (
+        grant === undefined ||
+        issuedAt < grant.since.getTime() ||
+        (grant.revokedUntil !== undefined && issuedAt <= grant.revokedUntil.getTime())
+      ) {
         return revoked(resource);
       }
 
-      const canWrite = scope.split(" ").includes(McpScope.write);
+      // Write needs both: the token was issued with it, and the user still allows it.
+      const canWrite =
+        scope.split(" ").includes(McpScope.write) && grant.scopes.includes(McpScope.write);
+
       const token = (request.headers.get("authorization") ?? "").replace(/^Bearer /i, "");
 
       return endpoint(request, authInfoOf({ userId, canWrite }, token, clientId));

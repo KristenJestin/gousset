@@ -15,6 +15,48 @@ export const TEST_CLIENT_ID = "gousset-e2e";
 export const TEST_REDIRECT_URL = "http://127.0.0.1:47213/mcp/callback";
 
 /**
+ * Writes a client as a metadata document would have made it exist, `ageHours` ago, never allowed
+ * by anyone: what the app forgets after a day.
+ */
+export async function writeUnallowedClient(
+  database: string,
+  clientId: string,
+  ageHours: number,
+): Promise<void> {
+  const client = new pg.Client({ connectionString: databaseUrl(database) });
+  const createdAt = new Date(Date.now() - ageHours * 3_600_000);
+
+  await client.connect();
+
+  try {
+    await client.query(
+      `INSERT INTO auth_oauth_client (id, client_id, name, redirect_uris, created_at, updated_at)
+       VALUES ($1, $2, 'Stale Example', $3, $4, $4)`,
+      [randomUUID(), clientId, ["https://stale.example.com/callback"], createdAt],
+    );
+  } finally {
+    await client.end();
+  }
+}
+
+/** Whether a client of that ID exists in a worker's database. */
+export async function clientExists(database: string, clientId: string): Promise<boolean> {
+  const client = new pg.Client({ connectionString: databaseUrl(database) });
+
+  await client.connect();
+
+  try {
+    const found = await client.query("SELECT 1 FROM auth_oauth_client WHERE client_id = $1", [
+      clientId,
+    ]);
+
+    return found.rowCount === 1;
+  } finally {
+    await client.end();
+  }
+}
+
+/**
  * Registers the harness's MCP client in a worker's database, linked to the worker's `/mcp`.
  *
  * Gousset identifies MCP clients by their Client ID Metadata Document, which must be served over

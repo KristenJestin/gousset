@@ -21,7 +21,12 @@ import { whileBusy } from "@/lib/while-busy";
 const ConsentSearch = Schema.Struct({
   client_id: Schema.optional(Schema.String),
   scope: Schema.optional(Schema.String),
+  redirect_uri: Schema.optional(Schema.String),
 });
+
+/** The host a redirect sends the browser to, as the user should read it. */
+const hostOf = (uri: string | undefined) =>
+  uri !== undefined && URL.canParse(uri) ? new URL(uri).host : undefined;
 
 /** Where better-auth sends the browser once the user answered: back to the client. */
 const ConsentAnswer = Schema.Struct({ url: Schema.String });
@@ -37,8 +42,9 @@ export const Route = createFileRoute("/_authed/consent")({
 
 function Consent() {
   const messages = useMessages();
-  const { name } = Route.useLoaderData();
-  const { scope = "" } = Route.useSearch();
+  const client = Route.useLoaderData();
+  const { scope = "", redirect_uri: redirectUri } = Route.useSearch();
+  const back = hostOf(redirectUri);
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
   const requested = scope.split(" ").filter((part) => part !== "");
@@ -63,19 +69,32 @@ function Consent() {
     window.location.assign(next.value.url);
   }
 
-  // Read only keeps what was asked but the write scope; read and write keeps it all.
+  // Read only keeps what was asked but the write scope (the server adds read to a request for
+  // write, so read is always there to keep); read and write keeps it all.
   const readOnly = requested.filter((part) => part !== McpScope.write);
   const everything = requested.length > 0 ? requested : [...MCP_SCOPES];
+
+  // Who really asks: the name is the client's own words, the hosts are not.
+  const origin =
+    back === undefined
+      ? undefined
+      : client?.host === null || client?.host === undefined
+        ? messages.consent.unknownOrigin(back)
+        : messages.consent.origin(client.host, back);
+
+  const description = [
+    origin,
+    messages.consent.description,
+    asksWrite ? messages.consent.writeDescription : undefined,
+  ]
+    .filter((part) => part !== undefined)
+    .join(" ");
 
   return (
     <Screen>
       <Card
-        title={messages.consent.title(name ?? messages.consent.unknownClient)}
-        description={
-          asksWrite
-            ? `${messages.consent.description} ${messages.consent.writeDescription}`
-            : messages.consent.description
-        }
+        title={messages.consent.title(client?.name ?? messages.consent.unknownClient)}
+        description={description}
       >
         <FormMessage message={error} />
         <Actions>

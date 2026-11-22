@@ -1,5 +1,5 @@
 import {
-  clientName,
+  consentClient,
   isMcpDoorOpen,
   listConnectedClients,
   revokeClient,
@@ -12,12 +12,18 @@ import { Effect, Schema } from "effect";
 import { mcpAddress } from "@/lib/mcp-door";
 import { auth, db } from "@/services";
 
+/** The codes these functions refuse with; the interface translates them (`errorMessage`). */
+export const McpRefusal = {
+  signInRequired: "SIGN_IN_REQUIRED",
+  adminOnly: "ADMIN_ONLY",
+} as const;
+
 /** The signed-in user; the pages' guards send everyone else to sign in. */
 const signedIn = createMiddleware({ type: "function" }).server(async ({ next }) => {
   const session = await auth.api.getSession({ headers: getRequestHeaders() });
 
   if (session === null) {
-    throw new Error("Sign in first.");
+    throw new Error(McpRefusal.signInRequired);
   }
 
   return next({ context: { userId: session.user.id, isAdmin: session.user.role === "admin" } });
@@ -32,7 +38,7 @@ export const getConnectedClients = createServerFn({ method: "GET" })
         (await listConnectedClients(db, context.userId)).map((client) => ({
           clientId: client.clientId,
           name: client.name,
-          address: client.address,
+          host: client.host,
           canWrite: client.canWrite,
         })),
       ),
@@ -70,18 +76,19 @@ export const setMcpDoor = createServerFn({ method: "POST" })
   .validator(Schema.toStandardSchemaV1(Schema.Struct({ open: Schema.Boolean })))
   .handler(({ context, data }) => {
     if (!context.isAdmin) {
-      throw new Error("Only the administrator opens or closes the MCP door.");
+      throw new Error(McpRefusal.adminOnly);
     }
 
     return Effect.runPromise(Effect.promise(() => setMcpDoorOpen(db, data.open)));
   });
 
-/** The client asking for access, by the name it gives itself, for the consent page. */
+/**
+ * The client asking for access, for the consent page: the name it gives itself, and the host its
+ * client ID is served from, which it cannot choose.
+ */
 export const getConsentClient = createServerFn({ method: "GET" })
   .middleware([signedIn])
   .validator(Schema.toStandardSchemaV1(Schema.Struct({ clientId: Schema.String })))
   .handler(({ data }) =>
-    Effect.runPromise(
-      Effect.promise(async () => ({ name: (await clientName(db, data.clientId)) ?? null })),
-    ),
+    Effect.runPromise(Effect.promise(async () => (await consentClient(db, data.clientId)) ?? null)),
   );

@@ -13,6 +13,12 @@ export type McpScope = (typeof McpScope)[keyof typeof McpScope];
 
 export const MCP_SCOPES = [McpScope.read, McpScope.write] as const;
 
+/**
+ * The access token's own claim of when it was minted, in milliseconds: `iat` counts in seconds, and
+ * a client revoked then allowed again within one second must not see its old token revived.
+ */
+export const ISSUED_AT_MS_CLAIM = "gousset_iat_ms";
+
 /** The path of the MCP door in the app. */
 export const MCP_PATH = "/mcp";
 
