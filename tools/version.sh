@@ -11,8 +11,9 @@
 # the patch before it, `fix` and `perf` the patch, `!` or a `BREAKING CHANGE:` footer the major (the
 # minor before 1.0), and nothing that bumps is the next patch. A `Release-As: X.Y.Z` footer sets the
 # next version when it is above the computed one; below it, or not X.Y.Z, it is ignored with a
-# warning naming the commit, never fatal (commits of dev cannot be changed). N counts the commits
-# since the last release, first parents only, and is never 0.
+# warning naming the commit, never fatal (commits of dev cannot be changed). N is the commit's
+# place on its first-parent line, counted from the first commit: it never restarts, so no two
+# commits of dev ever share a beta's name, whichever commit is released when.
 set -euo pipefail
 
 channel=${1:-}
@@ -52,6 +53,7 @@ if [ "$count" -eq 0 ]; then
   echo "version.sh: $at is ${base:-the first commit} itself: nothing since it" >&2
   exit 3
 fi
+place=$(git rev-list --count --first-parent "$at")
 IFS=. read -r major minor patch <<< "${base#v}"
 major=${major:-0} minor=${minor:-0} patch=${patch:-0}
 
@@ -111,5 +113,5 @@ done
 
 case "$channel" in
   stable) echo "$next" ;;
-  beta) echo "$next-beta.$count" ;;
+  beta) echo "$next-beta.$place" ;;
 esac

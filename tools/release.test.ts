@@ -120,7 +120,7 @@ describe("tools/version.sh", () => {
     expect(repository.version("stable")).toBe("0.1.1");
     repository.commit("feat(import): read OFX");
     expect(repository.version("stable")).toBe("0.1.1");
-    expect(repository.version("beta")).toBe("0.1.1-beta.2");
+    expect(repository.version("beta")).toBe("0.1.1-beta.3");
     repository.commit("refactor(db)!: rename the accounts");
     expect(repository.version("stable")).toBe("0.2.0");
   });
@@ -156,7 +156,7 @@ describe("tools/version.sh", () => {
     repository.commit("docs(docs): a word", "chore(ci): a step");
 
     expect(repository.version("stable")).toBe("0.1.1");
-    expect(repository.version("beta")).toBe("0.1.1-beta.2");
+    expect(repository.version("beta")).toBe("0.1.1-beta.3");
   });
 
   it("counts from the highest release, and never from a pre-release tag", () => {
@@ -172,7 +172,7 @@ describe("tools/version.sh", () => {
     repository.commit("fix(web): three");
 
     expect(repository.version("stable")).toBe("0.10.1");
-    expect(repository.version("beta")).toBe("0.10.1-beta.2");
+    expect(repository.version("beta")).toBe("0.10.1-beta.4");
     expect(repository.version("base")).toBe(`v0.10.0 ${released}`);
   });
 
@@ -185,8 +185,8 @@ describe("tools/version.sh", () => {
 
     repository.commit("feat(db)!: a new schema");
 
-    expect(repository.version("beta", "--at", fix)).toBe("0.1.1-beta.1");
-    expect(repository.version("beta")).toBe("0.2.0-beta.2");
+    expect(repository.version("beta", "--at", fix)).toBe("0.1.1-beta.2");
+    expect(repository.version("beta")).toBe("0.2.0-beta.3");
   });
 
   it("gives a release commit neither a release nor a beta, never a -beta.0", () => {
@@ -213,14 +213,38 @@ describe("tools/version.sh", () => {
     const released = repository.commit("fix(web): released");
 
     repository.commit("fix(web): after");
-    // Its beta was 0.1.1-beta.3 before the release of `released`, which then takes 0.1.1.
-    expect(repository.version("beta")).toBe("0.1.1-beta.3");
+    // Its beta was 0.1.1-beta.4 before the release of `released`, which then takes 0.1.1.
+    expect(repository.version("beta")).toBe("0.1.1-beta.4");
     repository.git("tag", "v0.1.1", released);
 
-    expect(repository.version("beta", "--at", before)).toBe("0.1.1-beta.1");
+    expect(repository.version("beta", "--at", before)).toBe("0.1.1-beta.2");
     expect(repository.run("version.sh", "beta", "--at", released).status).toBe(3);
     expect(repository.version("stable")).toBe("0.1.2");
-    expect(repository.version("beta")).toBe("0.1.2-beta.1");
+    expect(repository.version("beta")).toBe("0.1.2-beta.4");
+  });
+
+  it("never gives two commits of dev the same beta, whichever commit is released", () => {
+    const repository = new Repository();
+
+    repository.commit("chore(repo): start");
+    repository.tag("v1.0.0");
+    const fix = repository.commit("fix(web): x");
+    const published = [repository.version("beta")];
+
+    repository.commit("feat(web): f\n\nRelease-As: 2.0.0");
+    published.push(repository.version("beta"));
+    repository.commit("chore(ci): s");
+    published.push(repository.version("beta"));
+    expect(published).toEqual(["1.0.1-beta.2", "2.0.0-beta.3", "2.0.0-beta.4"]);
+    // A commit before dev's head is released: the pushes after it keep counting.
+    repository.git("tag", "v1.0.1", fix);
+    repository.commit("chore(ci): t");
+    published.push(repository.version("beta"));
+    repository.commit("chore(ci): u");
+    published.push(repository.version("beta"));
+
+    expect(published.slice(3)).toEqual(["2.0.0-beta.5", "2.0.0-beta.6"]);
+    expect(new Set(published).size).toBe(published.length);
   });
 
   it("takes a Release-As above the computed version, for the betas that follow too", () => {
@@ -271,7 +295,7 @@ describe("tools/version.sh", () => {
     const result = repository.run("version.sh", "beta");
 
     expect(result.status).toBe(0);
-    expect(result.out).toBe("2.0.0-beta.3\n");
+    expect(result.out).toBe("2.0.0-beta.4\n");
     expect(result.err).toContain("Release-As: 1.3.0, below the computed 2.0.0: ignored");
   });
 
