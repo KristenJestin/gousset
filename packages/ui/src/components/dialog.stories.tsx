@@ -5,8 +5,8 @@ import { Dialog } from "./dialog";
 
 /**
  * A modal dialog for a short task or a piece of help: the shortcuts list, the search. It opens
- * with a fade and a slight growth (150 ms), cut under reduced motion. Escape and its close button
- * close it.
+ * with a fade and a slight growth (150 ms), cut under reduced motion, and closes at once. Escape
+ * and its close button close it.
  *
  * Don't: put a form of several steps in it (a page does that), open one dialog from another, or
  * give it a style of its own from a page.

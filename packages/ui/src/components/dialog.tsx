@@ -6,8 +6,8 @@ import type { ReactNode } from "react";
  * out of reach and closes it on Escape; `onClose` then tells the page. The smallest one Gousset
  * needs until the base components are built on ui-sdk (issue #7), which may replace it.
  *
- * Motion: it fades in and grows from 95 % in 150 ms, easing out, and fades out in 150 ms; both
- * are cut when the system asks for reduced motion.
+ * Motion: it fades in and grows from 95 % in 150 ms, easing out, cut when the system asks for
+ * reduced motion. It closes at once: an exit fade would need `display` itself to transition.
  */
 export interface DialogProps {
   /** Whether it is open; the page owns the state. */
@@ -51,7 +51,7 @@ export function Dialog({ open, onClose, title, description, closeLabel, children
       aria-labelledby={titleId}
       aria-describedby={description === undefined ? undefined : descriptionId}
       onClose={onClose}
-      className="m-auto w-full max-w-md scale-95 rounded-xl border-none bg-popover p-6 text-popover-foreground opacity-0 shadow-lg transition-all transition-discrete duration-150 ease-out backdrop:bg-foreground/20 open:scale-100 open:opacity-100 motion-reduce:transition-none starting:open:scale-95 starting:open:opacity-0"
+      className="m-auto w-full max-w-md scale-95 rounded-xl border-none bg-popover p-6 text-popover-foreground opacity-0 shadow-lg transition duration-150 ease-out backdrop:bg-foreground/20 open:scale-100 open:opacity-100 motion-reduce:transition-none starting:open:scale-95 starting:open:opacity-0"
     >
       {open ? (
         <div className="flex flex-col gap-4">
