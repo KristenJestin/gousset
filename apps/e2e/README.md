@@ -37,27 +37,33 @@ dropped when their worker and the run end; a run killed before its teardown leav
 
 ## The server's clock
 
-`fixDay` fixes the browser's clock only. A page rendered on the server still sees today, which
-is harmless while no screen shows a date. When the first month or expiry scenario needs it (from
-#10), the app gets a test-only clock: the server reads "today" from one function, which returns
-a fixed day only when an environment variable that only the harness sets (for example
-`GOUSSET_E2E_TODAY`) is present. The harness then passes the scenario's day to its worker's app,
-and `fixDay` fixes both clocks at once. An installation never sets that variable.
+`fixDay` fixes both clocks at once. The server reads "today" from one function
+(`apps/web/src/lib/today.ts`), which is the server's own clock unless the app was started with
+`GOUSSET_E2E_CLOCK=on`: then a request's `gousset-e2e-day` cookie, which `fixDay` sets on the
+page's context, gives the day. Only the harness sets that variable, on every worker's app; an
+installation never does (neither the image, nor docker-compose.yml, nor `.env.schema` names it),
+and without it the cookie is ignored. Any other value of the variable fails the request.
+
+A cookie rather than a day per app: the worker's app serves every test of the worker, each with
+its own day, and a test's browser context starts without cookies. Only what runs inside a request
+sees the fixed day; a background job reads the server's own clock. `/e2e/today`, not found
+outside a test run, shows the server's day, the month it falls in and, once hydrated, the
+browser's day (`tests/server-clock.spec.ts`).
 
 ## Helpers
 
 Import `test` and `expect` from `src/test.ts`, never from `@playwright/test`.
 
-| Helper                             | What                                                                                                 |
-| ---------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| `user`, `userPage`                 | A user signed up through the app once per worker; the test's page signed in as them (`src/auth.ts`). |
-| `secondUser`, `secondUserPage`     | Another user, in a browser context of its own, to prove one never sees the other's data.             |
-| `statements`                       | The made-up example statement written in OFX, QIF, CAMT.053, MT940 and CSV, by format.               |
-| `visit(page, path)`                | Opens a screen and checks it with axe. Each page is also checked on the screen it ends on.           |
-| `expectAccessible(page)`           | axe (WCAG 2.2 A and AA) on the screen as it is, after a client-side change.                          |
-| `fixDay(page, "2026-10-15")`       | Fixes the browser's clock to noon UTC that day. The server's clock is not fixed (below).             |
-| `slowServerFunctions(page, ms)`    | Holds the browser's server function calls, for loading and skeleton scenarios.                       |
-| `connectMcp({ baseURL, page, … })` | The official MCP client through the real OAuth flow. Not run yet: `/mcp` comes with #39.             |
+| Helper                             | What                                                                                                  |
+| ---------------------------------- | ----------------------------------------------------------------------------------------------------- |
+| `user`, `userPage`                 | A user signed up through the app once per worker; the test's page signed in as them (`src/auth.ts`).  |
+| `secondUser`, `secondUserPage`     | Another user, in a browser context of its own, to prove one never sees the other's data.              |
+| `statements`                       | The made-up example statement written in OFX, QIF, CAMT.053, MT940 and CSV, by format.                |
+| `visit(page, path)`                | Opens a screen and checks it with axe. Each page is also checked on the screen it ends on.            |
+| `expectAccessible(page)`           | axe (WCAG 2.2 A and AA) on the screen as it is, after a client-side change.                           |
+| `fixDay(page, "2026-10-15")`       | Fixes the browser's clock to noon UTC that day, and the server's day for this page's context (below). |
+| `slowServerFunctions(page, ms)`    | Holds the browser's server function calls, for loading and skeleton scenarios.                        |
+| `connectMcp({ baseURL, page, … })` | The official MCP client through the real OAuth flow. Not run yet: `/mcp` comes with #39.              |
 
 A visual test compares its screenshots with `toHaveScreenshot("<screen>-<theme>.png")`, light and
 dark, in each project; a changed screenshot is reviewed in the pull request, never updated
