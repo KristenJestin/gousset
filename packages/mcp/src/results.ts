@@ -4,12 +4,12 @@ export const RESULT_LIMIT = 20_000;
 /** An error's text stays under this. */
 export const ERROR_LIMIT = 2000;
 
-/** Room kept at the end of a page for the line that says how to read on. */
-const FOOTER_ROOM = 600;
+/** The line that ends a page but the last, saying how to read on. */
+const footer = (part: number, parts: number, call: string) =>
+  `\n\n(Part ${part} of ${parts}. Read on with: ${call})`;
 
-/** The pages of a text, cut between lines, each under the limit with its footer. */
-function pagesOf(text: string, limit: number): Array<string> {
-  const room = limit - FOOTER_ROOM;
+/** The pages of a text, cut between lines, each at most `room` long. */
+function pagesOf(text: string, room: number): Array<string> {
   const pages: Array<string> = [];
   let page = "";
 
@@ -52,7 +52,10 @@ export function pageOf(
     return { text };
   }
 
-  const pages = pagesOf(text, limit);
+  // The room a footer takes, measured on the call it writes (its cursor at its longest), so that
+  // a long call never pushes a page over the limit.
+  const footerRoom = footer(99_999, 99_999, nextCall("99999")).length;
+  const pages = pagesOf(text, Math.max(limit - footerRoom, 1));
   const index = cursor === undefined ? 0 : Number(cursor) - 1;
   const page = pages[index];
 
@@ -70,7 +73,7 @@ export function pageOf(
   const next = String(index + 2);
 
   return {
-    text: `${page}\n\n(Part ${index + 1} of ${pages.length}. Read on with: ${nextCall(next)})`,
+    text: `${page}${footer(index + 1, pages.length, nextCall(next))}`,
   };
 }
 

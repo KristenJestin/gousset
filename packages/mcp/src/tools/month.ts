@@ -35,7 +35,12 @@ function amount(money: Money): string {
 function monthName(month: string): string {
   const [year = 0, number = 1] = month.split("-").map(Number);
 
-  return new Date(Date.UTC(year, number - 1, 1)).toLocaleString("en-US", {
+  const first = new Date(Date.UTC(2000, number - 1, 1));
+
+  // Set apart: `Date.UTC` reads a year under 100 as 19xx.
+  first.setUTCFullYear(year);
+
+  return first.toLocaleString("en-US", {
     month: "long",
     year: "numeric",
     timeZone: "UTC",

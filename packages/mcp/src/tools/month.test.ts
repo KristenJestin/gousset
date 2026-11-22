@@ -74,6 +74,13 @@ describe("month summary", () => {
     }
   });
 
+  test("names a month of a year under 100 by its own year", async () => {
+    const { text, isError } = await month({ action: "summary", month: "0042-03" });
+
+    expect(isError).toBe(false);
+    expect(text).toMatch(/^March 42,/);
+  });
+
   test("labels the made-up data as such", async () => {
     const { text } = await month({ action: "summary", month: "2026-10" });
 
