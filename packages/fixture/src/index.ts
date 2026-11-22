@@ -1,5 +1,17 @@
 // The shared made-up data: one generator for Storybook stories, tests, the development database
 // and the demonstration (docs/architecture.md, "Data loading and skeletons").
+export { FIXTURE_SEED, madeUpAccounts, madeUpMonth, monthParts } from "./ledger/ledger";
+
+export type {
+  Account,
+  AccountKind,
+  Expense,
+  Investment,
+  Line,
+  LineKind,
+  MadeUpMonth,
+} from "./ledger/ledger";
+
 export { exampleStatement } from "./statements/example";
 
 export {

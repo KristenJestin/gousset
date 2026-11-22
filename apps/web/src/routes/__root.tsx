@@ -1,14 +1,16 @@
+import type { QueryClient } from "@tanstack/react-query";
 import { HotkeysProvider } from "@tanstack/react-hotkeys";
 import {
   ClientOnly,
   HeadContent,
   Outlet,
   Scripts,
-  createRootRoute,
+  createRootRouteWithContext,
   useRouter,
 } from "@tanstack/react-router";
 import { Suspense, lazy } from "react";
 
+import { Toaster } from "@gousset/ui/components/toaster-stand-in";
 import { ThemeProvider } from "@gousset/ui/components/theme-provider";
 
 import { getViewer } from "@/functions/viewer";
@@ -19,9 +21,28 @@ import { Shortcuts, appHotkeys } from "../shortcuts";
 // Development only: a production build reads `false` here and drops the import, devtools and all.
 const Devtools = import.meta.env.DEV ? lazy(async () => import("../devtools")) : null;
 
-export const Route = createRootRoute({
+/** What every route's loader may use: the request's query client. */
+type RouterContext = { queryClient: QueryClient };
+
+/** Whose data each query client holds: the e-mail of the user it was filled for. */
+const ownerOf = new WeakMap<QueryClient, string | null>();
+
+export const Route = createRootRouteWithContext<RouterContext>()({
   // Every navigation asks the server who is looking: the guards of the routes below read it.
-  beforeLoad: async () => ({ viewer: await getViewer() }),
+  beforeLoad: async ({ context: { queryClient } }) => {
+    const viewer = await getViewer();
+    const owner = viewer.user?.email ?? null;
+
+    // Signing out, or in as someone else, without a reload: nothing cached for the previous user
+    // may show to the next one.
+    if (ownerOf.has(queryClient) && ownerOf.get(queryClient) !== owner) {
+      queryClient.clear();
+    }
+
+    ownerOf.set(queryClient, owner);
+
+    return { viewer };
+  },
   head: () => ({
     meta: [
       {
@@ -64,6 +85,7 @@ function RootDocument() {
             <Outlet />
             <Shortcuts />
           </HotkeysProvider>
+          <Toaster />
         </ThemeProvider>
         {Devtools === null ? null : (
           <ClientOnly>
