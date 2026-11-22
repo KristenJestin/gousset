@@ -37,7 +37,6 @@
     "@tanstack/react-devtools": "^0.10.15",
     "@tanstack/react-hotkeys-devtools": "^0.14.14",
     "@tanstack/react-pacer-devtools": "^0.9.1",
-    "@tanstack/react-query-devtools": "^5.108.2",
     "@tanstack/react-router-devtools": "^1.167.4",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
