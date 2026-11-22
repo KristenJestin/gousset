@@ -1,6 +1,7 @@
 # Every pull request, and every push to dev and main, is verified here (issue #3). What reads a
 # pull request's title and description is in pull-request.yml, which runs again when they change.
-# Required on dev and main: verify, e2e and react-doctor here, privacy there.
+# Required on dev and main: verify, ui, e2e and react-doctor here, privacy there. ui and e2e also
+# run on each push to dev, so that what a merge breaks there shows at once.
 #
 # Actions are pinned by commit, the version beside it: a moved tag runs no new code here.
 name: ci
@@ -51,11 +52,46 @@ jobs:
           REACT_DOCTOR_NO_TELEMETRY: "1"
         run: pnpm exec react-doctor --no-telemetry --yes --blocking error
 
+  # packages/ui's browser checks on Storybook (`pnpm test:ui`): Chromium, Firefox and a phone,
+  # screenshots compared, and the lint scenario. They run in the official Playwright image, the
+  # one tools/playwright-docker.sh renders the reference screenshots in, so both draw alike. Its
+  # version is @playwright/test's in packages/ui/package.json: they move together.
+  ui:
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/dev'
+    runs-on: ubuntu-latest
+    container:
+      image: mcr.microsoft.com/playwright:v1.65.1-noble
+      options: --ipc=host
+    env:
+      # Firefox refuses a home it does not own, which a runner's container gives it.
+      HOME: /root
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      - name: Browser checks of packages/ui (Storybook)
+        run: pnpm test:ui
+      - name: Keep the report and the screenshots
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ui
+          path: packages/ui/test-results
+          if-no-files-found: ignore
+          retention-days: 14
+
   # The end-to-end suite (apps/e2e), sharded. Until the harness lands there is no `e2e` script,
   # and each shard passes saying so.
   e2e-shard:
     name: e2e shard ${{ matrix.shard }}
-    if: github.event_name == 'pull_request'
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/dev'
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -121,7 +157,7 @@ jobs:
   # The required check: one job named e2e that passes only when every shard passed, whatever the
   # number of shards.
   e2e:
-    if: always() && github.event_name == 'pull_request'
+    if: always() && (github.event_name == 'pull_request' || github.ref == 'refs/heads/dev')
     needs: e2e-shard
     runs-on: ubuntu-latest
     steps:

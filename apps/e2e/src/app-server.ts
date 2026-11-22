@@ -21,6 +21,9 @@ const WEB_APP = fileURLToPath(new URL("../../web", import.meta.url));
 const BUILT_SERVER = ".output/server/index.mjs";
 const STARTUP_TIMEOUT_MS = 60_000;
 
+/** Where every worker's app listens; `fixDay` sets its cookie for this host. */
+export const APP_HOST = "127.0.0.1";
+
 /**
  * A test-only secret: the app runs in production mode, where better-auth refuses to start
  * without one. It signs nothing outside a test run.
@@ -61,11 +64,13 @@ function appEnvironment(port: number, database: string, extra: AppEnvironment) {
   return {
     ...extra,
     NODE_ENV: "production",
-    HOST: "127.0.0.1",
+    HOST: APP_HOST,
     PORT: String(port),
-    BETTER_AUTH_URL: `http://127.0.0.1:${port}`,
+    BETTER_AUTH_URL: `http://${APP_HOST}:${port}`,
     BETTER_AUTH_SECRET: TEST_AUTH_SECRET,
     DATABASE_URL: databaseUrl(database),
+    // The server's clock reads the day `fixDay` sets (README, "The server's clock").
+    GOUSSET_E2E_CLOCK: "on",
   };
 }
 
@@ -195,7 +200,7 @@ export async function startWorkerEnvironment(
   await recreateDatabase(database, templateDatabase());
 
   const port = await freePort();
-  const baseURL = `http://127.0.0.1:${port}`;
+  const baseURL = `http://${APP_HOST}:${port}`;
   const container = `gousset-e2e-${port}`;
 
   mkdirSync(dirname(logFile), { recursive: true });

@@ -1,6 +1,17 @@
 import { HotkeysProvider } from "@tanstack/react-hotkeys";
-import { ClientOnly, HeadContent, Outlet, Scripts, createRootRoute } from "@tanstack/react-router";
+import {
+  ClientOnly,
+  HeadContent,
+  Outlet,
+  Scripts,
+  createRootRoute,
+  useRouter,
+} from "@tanstack/react-router";
 import { Suspense, lazy } from "react";
+
+import { ThemeProvider } from "@gousset/ui/components/theme-provider";
+
+import { getViewer } from "@/functions/viewer";
 
 import appCss from "../index.css?url";
 import { Shortcuts, appHotkeys } from "../shortcuts";
@@ -9,6 +20,8 @@ import { Shortcuts, appHotkeys } from "../shortcuts";
 const Devtools = import.meta.env.DEV ? lazy(async () => import("../devtools")) : null;
 
 export const Route = createRootRoute({
+  // Every navigation asks the server who is looking: the guards of the routes below read it.
+  beforeLoad: async () => ({ viewer: await getViewer() }),
   head: () => ({
     meta: [
       {
@@ -35,16 +48,23 @@ export const Route = createRootRoute({
 });
 
 function RootDocument() {
+  const locale = Route.useRouteContext({ select: (context) => context.viewer.locale });
+  // The response's CSP nonce: the request's on the server, read back from the page in the browser.
+  const nonce = useRouter().options.ssr?.nonce;
+
   return (
-    <html lang="en">
+    // The saved colour scheme lands on <html> before hydration (ThemeProvider).
+    <html lang={locale} suppressHydrationWarning>
       <head>
         <HeadContent />
       </head>
       <body>
-        <HotkeysProvider appHotkeys={appHotkeys}>
-          <Outlet />
-          <Shortcuts />
-        </HotkeysProvider>
+        <ThemeProvider nonce={nonce}>
+          <HotkeysProvider appHotkeys={appHotkeys}>
+            <Outlet />
+            <Shortcuts />
+          </HotkeysProvider>
+        </ThemeProvider>
         {Devtools === null ? null : (
           <ClientOnly>
             <Suspense>

@@ -1,7 +1,10 @@
 import { defineRelationsPart } from "drizzle-orm";
 import { pgTable, text, timestamp, boolean, index } from "drizzle-orm/pg-core";
 
-export const user = pgTable("user", {
+// better-auth's tables carry an `auth_` prefix: its `account` would collide with bank accounts.
+// The keys of `tables` (authUser…) are the model names better-auth is given (packages/auth).
+
+export const authUser = pgTable("auth_user", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
   email: text("email").notNull().unique(),
@@ -12,10 +15,22 @@ export const user = pgTable("user", {
     .defaultNow()
     .$onUpdate(() => /* @__PURE__ */ new Date())
     .notNull(),
+  // better-auth's admin plugin: "admin" for the first user, "user" for the others.
+  role: text("role"),
+  banned: boolean("banned").default(false),
+  banReason: text("ban_reason"),
+  banExpires: timestamp("ban_expires"),
+  // Set when the administrator creates the user with a temporary password.
+  mustChangePassword: boolean("must_change_password").default(false).notNull(),
+  // The user created by sign-up on a fresh install. Two sign-ups at once could both see no user
+  // yet: a unique index lets only one of them be written. That index is not declared here, since
+  // `pnpm auth:generate` rewrites this file, but in a custom migration of its own
+  // (migrations/*_first_user_index), which regenerating the schema never drops.
+  isFirstUser: boolean("is_first_user").default(false).notNull(),
 });
 
-export const session = pgTable(
-  "session",
+export const authSession = pgTable(
+  "auth_session",
   {
     id: text("id").primaryKey(),
     expiresAt: timestamp("expires_at").notNull(),
@@ -28,20 +43,21 @@ export const session = pgTable(
     userAgent: text("user_agent"),
     userId: text("user_id")
       .notNull()
-      .references(() => user.id, { onDelete: "cascade" }),
+      .references(() => authUser.id, { onDelete: "cascade" }),
+    impersonatedBy: text("impersonated_by"),
   },
-  (table) => [index("session_userId_idx").on(table.userId)],
+  (table) => [index("auth_session_userId_idx").on(table.userId)],
 );
 
-export const account = pgTable(
-  "account",
+export const authAccount = pgTable(
+  "auth_account",
   {
     id: text("id").primaryKey(),
     accountId: text("account_id").notNull(),
     providerId: text("provider_id").notNull(),
     userId: text("user_id")
       .notNull()
-      .references(() => user.id, { onDelete: "cascade" }),
+      .references(() => authUser.id, { onDelete: "cascade" }),
     accessToken: text("access_token"),
     refreshToken: text("refresh_token"),
     idToken: text("id_token"),
@@ -54,11 +70,11 @@ export const account = pgTable(
       .$onUpdate(() => /* @__PURE__ */ new Date())
       .notNull(),
   },
-  (table) => [index("account_userId_idx").on(table.userId)],
+  (table) => [index("auth_account_userId_idx").on(table.userId)],
 );
 
-export const verification = pgTable(
-  "verification",
+export const authVerification = pgTable(
+  "auth_verification",
   {
     id: text("id").primaryKey(),
     identifier: text("identifier").notNull(),
@@ -70,30 +86,33 @@ export const verification = pgTable(
       .$onUpdate(() => /* @__PURE__ */ new Date())
       .notNull(),
   },
-  (table) => [index("verification_identifier_idx").on(table.identifier)],
+  (table) => [index("auth_verification_identifier_idx").on(table.identifier)],
 );
 
-export const authRelations = defineRelationsPart({ user, session, account, verification }, (r) => ({
-  user: {
-    sessions: r.many.session({
-      from: r.user.id,
-      to: r.session.userId,
-    }),
-    accounts: r.many.account({
-      from: r.user.id,
-      to: r.account.userId,
-    }),
-  },
-  session: {
-    user: r.one.user({
-      from: r.session.userId,
-      to: r.user.id,
-    }),
-  },
-  account: {
-    user: r.one.user({
-      from: r.account.userId,
-      to: r.user.id,
-    }),
-  },
-}));
+export const authRelations = defineRelationsPart(
+  { authUser, authSession, authAccount, authVerification },
+  (r) => ({
+    authUser: {
+      sessions: r.many.authSession({
+        from: r.authUser.id,
+        to: r.authSession.userId,
+      }),
+      accounts: r.many.authAccount({
+        from: r.authUser.id,
+        to: r.authAccount.userId,
+      }),
+    },
+    authSession: {
+      user: r.one.authUser({
+        from: r.authSession.userId,
+        to: r.authUser.id,
+      }),
+    },
+    authAccount: {
+      user: r.one.authUser({
+        from: r.authAccount.userId,
+        to: r.authUser.id,
+      }),
+    },
+  }),
+);

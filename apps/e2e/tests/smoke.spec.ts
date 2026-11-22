@@ -1,7 +1,37 @@
 import { expect, test, visit } from "../src/test";
 
-test("the starter page loads", async ({ page }) => {
-  await visit(page, "/");
+declare global {
+  interface Window {
+    /** Exposed by the test below: one Content Security Policy violation of the page. */
+    reportCspViolation: (violation: string) => Promise<void>;
+  }
+}
 
-  await expect(page.getByRole("heading", { level: 1, name: "Gousset" })).toBeVisible();
+test("the app loads for a signed-in user", async ({ userPage, user }) => {
+  await visit(userPage, "/");
+
+  await expect(
+    userPage.getByRole("heading", { level: 1, name: `Hello, ${user.name}.` }),
+  ).toBeVisible();
+});
+
+test("the app's page breaks no rule of its Content Security Policy", async ({ userPage, user }) => {
+  const violations: Array<string> = [];
+
+  await userPage.exposeFunction("reportCspViolation", (violation: string) => {
+    violations.push(violation);
+  });
+
+  await userPage.addInitScript(() => {
+    document.addEventListener("securitypolicyviolation", (event) => {
+      void window.reportCspViolation(`${event.effectiveDirective}: ${event.sample}`);
+    });
+  });
+
+  await visit(userPage, "/");
+
+  await expect(
+    userPage.getByRole("heading", { level: 1, name: `Hello, ${user.name}.` }),
+  ).toBeVisible();
+  expect(violations).toEqual([]);
 });

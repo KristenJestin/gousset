@@ -32,16 +32,17 @@ file is how to work.
 
 ## Layout
 
-| Path               | What                                                                 |
-| ------------------ | -------------------------------------------------------------------- |
-| `apps/web`         | The app: TanStack Start (pages, server functions, API, jobs, `/mcp`) |
-| `packages/ui`      | Every component and the theme, each described in Storybook           |
-| `packages/db`      | The Drizzle schema and migrations                                    |
-| `packages/auth`    | better-auth, wired to the database                                   |
-| `packages/fixture` | The shared made-up data                                              |
-| `packages/config`  | The shared TypeScript configuration                                  |
-| `tools/oxlint`     | Lint rules vendored from upstream (see [Lint](#lint))                |
-| `.agents/skills`   | Skills for agents, vendored from upstream                            |
+| Path                                | What                                                                  |
+| ----------------------------------- | --------------------------------------------------------------------- |
+| `apps/web`                          | The app: TanStack Start (pages, server functions, API, jobs, `/mcp`)  |
+| `packages/ui`                       | Every component and the theme, each described in Storybook            |
+| `packages/db`                       | The Drizzle schema and migrations                                     |
+| `packages/auth`                     | better-auth, wired to the database                                    |
+| `packages/fixture`                  | The shared made-up data                                               |
+| `packages/config`                   | The shared TypeScript configuration                                   |
+| `tools/oxlint`                      | Lint rules vendored from upstream (see [Lint](#lint))                 |
+| `.agents/skills`                    | Skills for agents, vendored from upstream                             |
+| `packages/ui/src/components/charts` | Bklit's charts, vendored from its shadcn registry (see [Lint](#lint)) |
 
 ## Commands
 
@@ -159,6 +160,14 @@ The vendored rules are updated with the `install-anti-slop` skill
 (`.agents/skills/install-anti-slop/`), which merges upstream into the local copies and keeps
 local changes; each folder's `UPSTREAM.md` records the commit it comes from.
 
+**Vendored code is out of `vp lint` and `vp fmt`** (`VENDORED` in `vite.config.ts`): the lint
+rules above, and Bklit's charts (`packages/ui/src/components/charts/`, with
+`shimmering-text.tsx`) as `shadcn add @bklit/...` installs them, their `cn` import pointed to the
+repository's; the charts are out of React Doctor too (`ignore.files` in `doctor.config.ts`), and
+their `UPSTREAM.md` records where they come from. They keep their upstream form so that the next update stays a readable diff; the
+type checker still reads them. Gousset's own code never goes there, and a chart's Gousset-specific
+wrapper lives beside them, linted like the rest.
+
 ## MCP
 
 The app serves MCP at `/mcp` (`docs/mcp.md`). For every change to its tools:
@@ -196,6 +205,11 @@ The lead reviews every change to the tools against `docs/mcp.md` before merging.
 - **No module mocking**, no test that only checks a mock was called.
 - **A test that passes only on retry is a bug.** No automatic retries.
 - Examples and fixtures are made up (`packages/fixture`), never real data.
+- **`packages/ui`'s browser checks** run on Storybook with `pnpm test:ui` (Chromium, Firefox, a
+  phone; screenshots compared). CI runs them in the official Playwright image; refresh the
+  reference screenshots in that same image with `tools/playwright-docker.sh
+  --update-snapshots=all`, never with a local browser, which renders fonts differently.
+- **Required checks** on `dev` and `main`: `verify`, `ui`, `e2e`, `react-doctor` and `privacy`.
 
 ## How the work is organised
 
