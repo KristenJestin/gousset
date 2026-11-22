@@ -112,6 +112,8 @@ test("the sidebar names every screen, the current one marked", async ({ userPage
   await userPage.getByRole("link", { name: "Rules" }).click();
   await expect(userPage).toHaveURL(/\/settings\/rules$/);
   await expect(userPage.getByText("No rule yet")).toBeVisible();
+  // The screen reached fades in: axe checks it once drawn.
+  await animationsDone(userPage);
 });
 
 test("on a phone, a tab bar holds review, operations, accounts and more", async ({
@@ -198,14 +200,12 @@ test("the user's menu changes the language and the colour scheme", async ({ user
   test.skip(onPhone(userPage), "On a phone, the language and the scheme are in Settings.");
   await visit(userPage, "/");
 
-  let menu = await openAccountMenu(userPage, user.name);
+  const menu = await openAccountMenu(userPage, user.name);
 
   await menu.getByRole("menuitemradio", { name: "Dark" }).click();
   await expect(userPage.locator("html")).toHaveAttribute("data-color-scheme", "dark");
-  // A choice closes the menu; reopened while it still fades out, the trigger would close it again.
-  await expect(userPage.getByRole("menu")).toHaveCount(0);
 
-  menu = await openAccountMenu(userPage, user.name);
+  // A radio choice keeps the menu open, as a menu's radios do: the language is chosen in it too.
   await expect(menu.getByRole("menuitemradio", { name: "English" })).toBeChecked();
   await menu.getByRole("menuitemradio", { name: "Français" }).click();
 
