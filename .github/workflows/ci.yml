@@ -176,6 +176,14 @@ jobs:
       - name: Build
         if: steps.harness.outputs.present == 'true'
         run: pnpm run build
+      # TEMPORARY (#7): Firefox's own output while its "Page crashed" is bisected; removed
+      # before the pull request is merged.
+      - name: Firefox crash diagnostics
+        if: steps.harness.outputs.present == 'true' && matrix.shard == 1 && contains(env.E2E_BROWSERS, 'firefox')
+        continue-on-error: true
+        env:
+          DEBUG: pw:browser
+        run: pnpm e2e tests/diag-firefox-crash.spec.ts --project=firefox-desktop --project=chromium-desktop --workers=1
       - name: End-to-end tests, shard ${{ matrix.shard }} of 2
         if: steps.harness.outputs.present == 'true'
         run: pnpm e2e --shard=${{ matrix.shard }}/2 $E2E_PROJECTS
