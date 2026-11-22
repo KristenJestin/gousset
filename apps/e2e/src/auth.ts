@@ -1,19 +1,25 @@
 import { request } from "@playwright/test";
-import type { Cookie } from "@playwright/test";
+import type { APIResponse, Cookie } from "@playwright/test";
 import { Schema } from "effect";
 
 /**
- * How the harness signs a user up, in one place so that the auth ticket (#5) can change it.
+ * How the harness gets its users, the way the app gives them (#5):
  *
- * It assumes what the starter's better-auth gives today: e-mail and password sign-up is open to
- * anyone at `POST /api/auth/sign-up/email` with `{ name, email, password }`, signs the new user in
- * at once (a session cookie in the answer), and checks the request's `Origin` against
- * `BETTER_AUTH_URL`. Sign-in is `POST /api/auth/sign-in/email` with `{ email, password }`.
+ * - the first user of an installation signs up at `POST /api/auth/sign-up/email`
+ *   (`{ name, email, password }`), is signed in at once and is the administrator; sign-up is closed
+ *   after that;
+ * - the administrator creates every other user with a temporary password
+ *   (`POST /api/auth/admin/create-user`), which the user changes at the first sign-in
+ *   (`POST /api/auth/change-password`) before anything else.
+ *
+ * better-auth checks each request's `Origin` against `BETTER_AUTH_URL`.
  */
 export const SIGN_UP_PATH = "/api/auth/sign-up/email";
 export const SIGN_IN_PATH = "/api/auth/sign-in/email";
+export const CREATE_USER_PATH = "/api/auth/admin/create-user";
+export const CHANGE_PASSWORD_PATH = "/api/auth/change-password";
 
-/** A made-up user, signed up through the app; `cookies` carry its session. */
+/** A made-up user of the app; `cookies` carry its session. */
 export type TestUser = {
   name: string;
   email: string;
@@ -21,12 +27,14 @@ export type TestUser = {
   cookies: ReadonlyArray<Cookie>;
 };
 
+type Person = { name: string; email: string; password: string };
+
 const SignedUp = Schema.Struct({
   user: Schema.Struct({ email: Schema.String }),
 });
 
 /** A made-up person per worker and role: `@example.com` only, never a real address. */
-export function madeUpUser(role: "first" | "second", slot: number) {
+export function madeUpUser(role: "first" | "second", slot: number): Person {
   const name = role === "first" ? "Alex Example" : "Sam Example";
   const local = role === "first" ? "alex" : "sam";
 
@@ -37,12 +45,32 @@ export function madeUpUser(role: "first" | "second", slot: number) {
   };
 }
 
-/** Tries to sign in with an e-mail and a password, and gives the HTTP status the app answers. */
+/** A request context speaking to the app as its own pages do. */
+function appRequest(baseURL: string, headers: Record<string, string> = {}) {
+  return request.newContext({ baseURL, extraHTTPHeaders: { Origin: baseURL, ...headers } });
+}
+
+async function ensureOk(answer: Promise<APIResponse>, what: string) {
+  const response = await answer;
+
+  if (!response.ok()) {
+    throw new Error(`${what} answered ${response.status()}.`);
+  }
+}
+
+/**
+ * Tries to sign in with an e-mail and a password, and gives the HTTP status the app answers.
+ * `forwardedFor` sends an `X-Forwarded-For`, which the app must not trust from a client.
+ */
 export async function signInStatus(
   baseURL: string,
   credentials: { email: string; password: string },
+  forwardedFor?: string,
 ): Promise<number> {
-  const context = await request.newContext({ baseURL, extraHTTPHeaders: { Origin: baseURL } });
+  const context = await appRequest(
+    baseURL,
+    forwardedFor === undefined ? {} : { "X-Forwarded-For": forwardedFor },
+  );
 
   try {
     const response = await context.post(SIGN_IN_PATH, {
@@ -55,11 +83,9 @@ export async function signInStatus(
   }
 }
 
-export async function signUp(
-  baseURL: string,
-  person: { name: string; email: string; password: string },
-): Promise<TestUser> {
-  const context = await request.newContext({ baseURL, extraHTTPHeaders: { Origin: baseURL } });
+/** The first user of an installation, through sign-up: the administrator. */
+export async function signUp(baseURL: string, person: Person): Promise<TestUser> {
+  const context = await appRequest(baseURL);
 
   try {
     const response = await context.post(SIGN_UP_PATH, { data: person });
@@ -79,5 +105,63 @@ export async function signUp(
     return { ...person, cookies };
   } finally {
     await context.dispose();
+  }
+}
+
+/**
+ * The administrator creates a user whose password is temporary, as the users page does: the user
+ * must change it at the first sign-in.
+ */
+export async function createUser(baseURL: string, admin: TestUser, person: Person): Promise<void> {
+  const asAdmin = await request.newContext({
+    baseURL,
+    extraHTTPHeaders: { Origin: baseURL },
+    storageState: { cookies: [...admin.cookies], origins: [] },
+  });
+
+  try {
+    await ensureOk(
+      asAdmin.post(CREATE_USER_PATH, {
+        data: { ...person, role: "user", data: { mustChangePassword: true } },
+      }),
+      `Creating ${person.email}`,
+    );
+  } finally {
+    await asAdmin.dispose();
+  }
+}
+
+/**
+ * Another user of the installation: created by the administrator with a temporary password, then
+ * signed in once to change it, as the app asks at the first sign-in.
+ */
+export async function addUser(baseURL: string, admin: TestUser, person: Person): Promise<TestUser> {
+  const temporary = `${person.password}-temporary`;
+
+  await createUser(baseURL, admin, { ...person, password: temporary });
+
+  const asUser = await appRequest(baseURL);
+
+  try {
+    await ensureOk(
+      asUser.post(SIGN_IN_PATH, { data: { email: person.email, password: temporary } }),
+      `Signing in ${person.email}`,
+    );
+    await ensureOk(
+      asUser.post(CHANGE_PASSWORD_PATH, {
+        data: {
+          currentPassword: temporary,
+          newPassword: person.password,
+          revokeOtherSessions: true,
+        },
+      }),
+      `Changing the password of ${person.email}`,
+    );
+
+    const { cookies } = await asUser.storageState();
+
+    return { ...person, cookies };
+  } finally {
+    await asUser.dispose();
   }
 }
