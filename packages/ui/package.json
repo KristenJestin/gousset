@@ -13,10 +13,20 @@
   "scripts": {
     "check-types": "tsc --noEmit",
     "storybook": "storybook dev --port 6006 --no-open",
-    "build-storybook": "storybook build"
+    "build-storybook": "storybook build",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
+    "@fontsource-variable/geist": "^5.3.0",
+    "@number-flow/react": "^0.6.2",
+    "@tabler/icons-react": "^3.52.0",
+    "@ui-sdk/core": "0.1.0-beta.13",
+    "@ui-sdk/react": "0.1.0-beta.13",
     "cn": "^0.5.2",
+    "d3-array": "^3.2.5",
+    "d3-scale": "^4.0.3",
+    "d3-shape": "^3.2.1",
+    "motion": "^14.14.0",
     "react": "catalog:",
     "react-dom": "catalog:",
     "shadcn": "^4.23.0",
@@ -24,8 +34,12 @@
   },
   "devDependencies": {
     "@gousset/config": "workspace:*",
+    "@playwright/test": "^1.65.1",
     "@storybook/react-vite": "^10.6.8",
     "@tailwindcss/postcss": "^4.3.5",
+    "@types/d3-array": "^3.2.2",
+    "@types/d3-scale": "^4.0.9",
+    "@types/d3-shape": "^3.2.0",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
     "storybook": "catalog:",

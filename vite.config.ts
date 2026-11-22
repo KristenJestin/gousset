@@ -17,8 +17,16 @@ const GENERATED = [
   "packages/db/src/env.ts",
 ];
 
-/** Vendored code keeps its upstream form, so that the next update stays a readable diff. */
-const VENDORED = ["tools/oxlint/**"];
+/**
+ * Vendored code keeps its upstream form, so that the next update stays a readable diff: the lint
+ * rules, and Bklit's charts as its shadcn registry installs them (`shadcn add @bklit/...`). The
+ * type checker still reads them.
+ */
+const VENDORED = [
+  "tools/oxlint/**",
+  "packages/ui/src/components/charts/**",
+  "packages/ui/src/components/shimmering-text.tsx",
+];
 
 /** Agent tooling installed into the repository: skills, not Gousset's source. */
 const AGENT_TOOLING = [".agents/**", ".claude/**"];
@@ -115,7 +123,8 @@ export default defineConfig({
   },
   test: {
     passWithNoTests: true,
-    // The end-to-end specs belong to Playwright (`pnpm e2e`), not to Vitest.
+    // The end-to-end specs (`pnpm e2e`) and the theme's browser checks on Storybook
+    // (`pnpm test:ui`, packages/ui/e2e/*.e2e.ts, outside Vitest's pattern) belong to Playwright.
     exclude: ["**/node_modules/**", "**/.git/**", "apps/e2e/**"],
   },
   staged: {
