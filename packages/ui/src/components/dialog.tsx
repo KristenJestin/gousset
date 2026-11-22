@@ -16,6 +16,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@ui-sdk/react/dialog";
+import { useState } from "react";
 import type { ReactElement, ReactNode } from "react";
 
 import { useUiMessages } from "../hooks/use-ui-messages";
@@ -133,6 +134,19 @@ export function AlertDialog({
   onOpenChange,
 }: AlertDialogProps) {
   const messages = useUiMessages();
+  // ui-sdk keeps the close pending, but its state does not reach our `Button`: track it here so
+  // the button shows the loader and `aria-busy` like any other busy button.
+  const [confirming, setConfirming] = useState(false);
+
+  const confirm = async () => {
+    setConfirming(true);
+
+    try {
+      await onConfirm();
+    } finally {
+      setConfirming(false);
+    }
+  };
 
   return (
     <AlertDialogRoot open={open} onOpenChange={(next) => onOpenChange?.(next)}>
@@ -149,9 +163,11 @@ export function AlertDialog({
           />
           <AlertDialogClose
             value="confirm"
-            action={() => onConfirm()}
+            action={confirm}
             render={
-              <Button variant={destructive ? "destructive" : "primary"}>{confirmLabel}</Button>
+              <Button variant={destructive ? "destructive" : "primary"} loading={confirming}>
+                {confirmLabel}
+              </Button>
             }
           />
         </DialogActions>

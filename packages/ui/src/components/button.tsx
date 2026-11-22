@@ -143,7 +143,15 @@ function LabelSlot({
 
   return (
     <span className="grid place-items-center">
-      <span className={cn("col-start-1 row-start-1", replaced && "invisible")}>{children}</span>
+      {/* Without a loading label, the label stays the button's name: faded out, not removed. */}
+      <span
+        className={cn(
+          "col-start-1 row-start-1",
+          replaced && (loadingLabel === undefined ? "opacity-0" : "invisible"),
+        )}
+      >
+        {children}
+      </span>
       {replaced || loadingLabel !== undefined ? (
         <span
           className={cn(

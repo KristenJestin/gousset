@@ -80,6 +80,15 @@ test("while loading, the button is busy and refuses presses, its label says what
   await expect(button.locator('[data-slot="loader"]')).toBeVisible();
 });
 
+test("loading without an icon keeps the button's name", async ({ page }) => {
+  await page.goto(story("loading-without-icon"));
+
+  const button = page.getByRole("button", { name: "Save" });
+
+  await expect(button.locator('[data-slot="loader"]')).toBeVisible();
+  await expect(button).toHaveAttribute("aria-busy", "true");
+});
+
 test("a fast action never shows the loader", async ({ page }) => {
   await page.goto(story("fast-action"));
   expect(await loaderTimeline(page, 900)).toEqual({ first: null, last: null });

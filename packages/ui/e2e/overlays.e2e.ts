@@ -333,11 +333,12 @@ test.describe("Dialog", () => {
     await page.mouse.click(2, 2);
     await expect(dialog).toBeVisible();
     await dialog.getByRole("button", { name: "Delete" }).click();
-    // While its answer runs, the button is pending and refuses presses.
-    await expect(dialog.getByRole("button", { name: "Delete" })).toHaveAttribute(
-      "aria-disabled",
-      "true",
-    );
+    // While its answer runs, the button is busy, refuses presses and shows the loader.
+    const confirm = dialog.getByRole("button", { name: "Delete" });
+
+    await expect(confirm).toHaveAttribute("aria-disabled", "true");
+    await expect(confirm).toHaveAttribute("aria-busy", "true");
+    await expect(confirm.locator('[data-slot="loader"]')).toBeVisible();
     await expect(dialog).toBeHidden({ timeout: 3000 });
     await expect(page.getByText("Deleted")).toBeVisible();
   });
