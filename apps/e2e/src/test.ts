@@ -151,4 +151,6 @@ export { fixDay } from "./clock";
 
 export { slowServerFunctions } from "./latency";
 
+export { SKELETON, animationsDone, watchLoading } from "./loading";
+
 export { connectMcp } from "./mcp";
