@@ -89,7 +89,6 @@
   "settingsLanguageDescription": "La langue de l'interface sur cet appareil. Elle suit votre navigateur tant que vous n'en choisissez pas une.",
   "settingsColorSchemeTitle": "Thème",
   "settingsColorSchemeDescription": "Suivre le système, ou garder l'interface claire ou sombre.",
-  "categoriesTitle": "Catégories",
   "categoriesEmptyTitle": "Aucune catégorie pour l'instant",
   "categoriesEmptyDescription": "Vos catégories, sur deux niveaux, seront listées ici avec leur moyenne sur 6 mois et leur repère.",
   "uiLoading": "Chargement",
@@ -134,7 +133,6 @@
   "uiBenchmark": "repère {amount}",
   "uiMoreRows": "+ {count} de plus",
   "uiMoneyEmpty": "Rien à afficher ce mois-ci.",
-  "rulesTitle": "Règles",
   "rulesEmptyTitle": "Aucune règle pour l'instant",
   "rulesEmptyDescription": "Les règles classent vos lignes à l'import : si le libellé contient ceci, alors tel commerçant et telle catégorie. La plupart naissent d'une correction pendant le bilan."
 }

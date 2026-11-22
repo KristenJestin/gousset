@@ -89,7 +89,6 @@
   "settingsLanguageDescription": "The language of the interface on this device. It follows your browser until you choose one.",
   "settingsColorSchemeTitle": "Colour scheme",
   "settingsColorSchemeDescription": "Follow the system, or keep the interface light or dark.",
-  "categoriesTitle": "Categories",
   "categoriesEmptyTitle": "No category yet",
   "categoriesEmptyDescription": "Your categories, on two levels, will be listed here with their 6-month average and their benchmark.",
   "uiLoading": "Loading",
@@ -134,7 +133,6 @@
   "uiBenchmark": "benchmark {amount}",
   "uiMoreRows": "+ {count} more",
   "uiMoneyEmpty": "Nothing to show this month.",
-  "rulesTitle": "Rules",
   "rulesEmptyTitle": "No rule yet",
   "rulesEmptyDescription": "Rules classify your lines on import: if the label contains this, then this merchant and category. Most are born from a correction during the review."
 }
