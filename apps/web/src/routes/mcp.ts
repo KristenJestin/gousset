@@ -7,7 +7,9 @@ import { createFileRoute } from "@tanstack/react-router";
 import { Config, Effect, Option, Schema } from "effect";
 
 import { isDoorOpen, mcpAddress, mcpResource, notFound } from "../lib/mcp-door";
+import { mcpCallObserver } from "../lib/mcp-telemetry";
 import { auth, db, runtime } from "../services";
+import { telemetry } from "../telemetry.server";
 
 /** Present only when the end-to-end harness started the app; any value but `on` fails loudly. */
 const e2eProbe = Effect.runSync(
@@ -23,6 +25,8 @@ const served = Option.isSome(e2eProbe)
 
 const endpoint = createMcpEndpoint(served, {
   run: (effect) => runtime.runPromiseExit(effect),
+  // A span per call, under the request's (docs/mcp.md, rule 16).
+  observe: mcpCallObserver((effect) => telemetry.runPromise(effect)),
 });
 
 /** What the door reads of a verified access token. */

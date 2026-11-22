@@ -49,7 +49,11 @@ export const underActiveSpan = <A, E, R>(self: Effect.Effect<A, E, R>): Effect.E
 const recordedMethod = (method: string): SpanName => {
   const upper = method.toUpperCase();
 
-  return SPAN_NAMES.find((name) => name === upper && name !== "server function") ?? "_OTHER";
+  return (
+    SPAN_NAMES.find(
+      (name) => name === upper && name !== "server function" && name !== "mcp tool call",
+    ) ?? "_OTHER"
+  );
 };
 
 /** The request a server span is opened for: never its URL, its headers or its body. */
@@ -79,6 +83,29 @@ export const requestSpan =
       ),
     );
   };
+
+/** Sets attributes, held to the allowlist, on a span from outside Effect. */
+const setAttributes = (span: Tracer.Span, attributes: SpanAttributes) => {
+  for (const [key, value] of Object.entries(attributes)) {
+    span.attribute(key, value);
+  }
+};
+
+/**
+ * The span of one call to an MCP tool: its tool, then, reported by the call once known, its action
+ * and how it ended. The span's own duration is the call's. Never an argument nor a result.
+ */
+export const mcpToolCall = <A>(
+  tool: string,
+  run: (report: (action: string, outcome: string) => void) => PromiseLike<A>,
+) =>
+  Effect.flatMap(Effect.currentSpan, (span) =>
+    fromPromise(() =>
+      run((action, outcome) =>
+        setAttributes(span, { "gousset.mcp.action": action, "gousset.mcp.outcome": outcome }),
+      ),
+    ),
+  ).pipe(withSpan("mcp tool call", { "gousset.mcp.tool": tool }));
 
 /** The span of one server function, named by its name in the code. */
 export const serverFunctionSpan =
