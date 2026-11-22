@@ -55,6 +55,7 @@ function Review() {
   return (
     <Page
       title={m.reviewTitle()}
+      description={m.reviewMadeUp()}
       actions={
         <MonthSwitch
           month={shown}
@@ -63,7 +64,6 @@ function Review() {
         />
       }
     >
-      <p className="text-sm text-muted-foreground">{m.reviewMadeUp()}</p>
       <DataBlock
         title={m.reviewSummaryTitle()}
         skeleton={<FigureListSkeleton rows={4} />}

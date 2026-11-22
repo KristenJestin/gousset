@@ -223,17 +223,27 @@ export function ScreenTransition({ id, children }: { id: string; children: React
 export type PageProps = {
   /** The screen's name: its only `h1`. */
   title: string;
+  /** A sentence under the title, about the whole screen ("Made-up data…"). */
+  description?: string;
   /** Beside the title: the month switcher of a month's screen, a screen's main action. */
   actions?: ReactNode;
   children: ReactNode;
 };
 
-/** A screen of the app: its title, what sits beside it, then its blocks one under the other. */
-export function Page({ title, actions, children }: PageProps) {
+/**
+ * A screen of the app: its title and the sentence under it, what sits beside them, then its
+ * blocks one under the other.
+ */
+export function Page({ title, description, actions, children }: PageProps) {
   return (
     <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-6 p-4 md:p-8">
       <header className="flex min-h-9 flex-wrap items-center justify-between gap-3">
-        <h1 className="text-xl font-semibold">{title}</h1>
+        <div className="flex flex-col gap-1">
+          <h1 className="text-xl font-semibold">{title}</h1>
+          {description === undefined ? null : (
+            <p className="text-sm text-muted-foreground">{description}</p>
+          )}
+        </div>
         {actions === undefined ? null : <div className="flex items-center gap-2">{actions}</div>}
       </header>
       {children}

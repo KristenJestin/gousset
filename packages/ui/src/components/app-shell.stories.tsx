@@ -129,6 +129,23 @@ export const Phone: Story = {
   globals: { viewport: { value: "mobile1", isRotated: false } },
 };
 
+/** A sentence under the title, about the whole screen. */
+export const WithDescription: Story = {
+  render: () => (
+    <Page
+      title="Monthly review"
+      description="Made-up data: every account, line and amount here is invented."
+    >
+      <ScreenBlock>
+        <EmptyState
+          title="Nothing to show yet"
+          description="Import your bank statements: what fills this screen will show here."
+        />
+      </ScreenBlock>
+    </Page>
+  ),
+};
+
 /** A screen in sections, like the settings, with its blocks under their headings. */
 export const Sections: Story = {
   render: () => (
