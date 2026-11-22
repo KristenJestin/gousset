@@ -1,29 +1,70 @@
 import type { Page } from "@playwright/test";
 import { expect, test } from "@playwright/test";
-import { Schema } from "effect";
 
 /**
- * Every story of `packages/ui`, in light and in dark, screenshotted headless (the issue's "How
- * to verify"). On the desktop Chromium and the phone; Firefox runs the components' own specs.
- * Reduced motion: each story is caught in its final state, never on its way. The list comes from
- * the built Storybook's own index, so a new story is covered without touching this file.
+ * One representative story per component, in light and in dark, screenshotted headless on the
+ * desktop Chromium (the issue's "How to verify"). Each component's other stories, its phone
+ * layout included (its `Phone` story), are covered by its behaviour tests; screenshotting every
+ * story in every browser would put over a thousand images in Git. Reduced motion: each story is
+ * caught in its final state, never on its way.
+ *
+ * The references come from CI (`.github/workflows/ui-snapshots.yml`), never from a local browser.
  */
-const StoryIndex = Schema.Struct({
-  entries: Schema.Record(Schema.String, Schema.Struct({ id: Schema.String, type: Schema.String })),
-});
+type Shot = {
+  id: string;
+  /** What to do before the screenshot, for a popup that opens from its trigger. */
+  open?: "click" | "focus";
+};
 
-async function storyIds(page: Page) {
-  const response = await page.request.get("/index.json");
-  const index = Schema.decodeUnknownSync(StoryIndex)(JSON.parse(await response.text()));
-  const ids: Array<string> = [];
+const SHOTS: ReadonlyArray<Shot> = [
+  { id: "foundations-icon--category-icons" },
+  { id: "foundations-loader--sizes" },
+  { id: "actions-button--variants" },
+  { id: "actions-iconbutton--variants" },
+  { id: "actions-textlink--in-text" },
+  { id: "forms-textfield--error" },
+  { id: "forms-select--chosen" },
+  { id: "forms-combobox--chosen" },
+  { id: "forms-checkbox--checked" },
+  { id: "forms-switch--on" },
+  { id: "forms-datepicker--chosen" },
+  { id: "forms-statusmessage--shown" },
+  { id: "forms-formmessage--shown" },
+  { id: "navigation-tabs--with-icons" },
+  { id: "overlays-tooltip--default", open: "focus" },
+  { id: "overlays-menu--default", open: "click" },
+  { id: "overlays-popover--default", open: "click" },
+  { id: "overlays-dialog--default", open: "click" },
+  { id: "overlays-sheet--default", open: "click" },
+  { id: "feedback-toaster--failed" },
+  { id: "states-emptystate--in-a-block" },
+  { id: "states-errorstate--beside-a-working-block" },
+  { id: "layout-card--with-description" },
+  { id: "layout-screen--sign-in" },
+  { id: "data-list--loading-beside-loaded" },
+  { id: "data-categoryicon--in-rows" },
+  { id: "data-merchantlogo--in-rows" },
+  { id: "data-accountchip--kinds" },
+  { id: "data-monthswitcher--default" },
+  { id: "help-shortcutlist--default" },
+  { id: "money-amount--tones" },
+  { id: "money-delta--spending-up" },
+  { id: "money-month-bar--default" },
+  { id: "money-month-bar--overspent" },
+  { id: "money-breakdown--default" },
+  { id: "money-breakdown--loading" },
+  { id: "charts-spending-chart--default" },
+  { id: "charts-bar-chart--default" },
+];
 
-  for (const entry of Object.values(index.entries)) {
-    if (entry.type === "story") {
-      ids.push(entry.id);
-    }
+async function openPopup(page: Page, open: Shot["open"]) {
+  const trigger = page.locator("#storybook-root button").first();
+
+  if (open === "click") {
+    await trigger.click();
+  } else if (open === "focus") {
+    await page.keyboard.press("Tab");
   }
-
-  return ids.toSorted();
 }
 
 test.beforeEach(async ({ page }) => {
@@ -31,25 +72,29 @@ test.beforeEach(async ({ page }) => {
 });
 
 for (const scheme of ["light", "dark"] as const) {
-  test(`every story, ${scheme}`, async ({ page }, testInfo) => {
-    test.skip(testInfo.project.name === "firefox", "Chromium and the phone sweep every story");
-    test.setTimeout(600_000);
+  for (const shot of SHOTS) {
+    test(`${shot.id}, ${scheme}`, async ({ page }, testInfo) => {
+      test.skip(testInfo.project.name !== "chromium", "Screenshotted on the desktop Chromium");
 
-    await page.emulateMedia({ colorScheme: scheme, reducedMotion: "reduce" });
-
-    const ids = await storyIds(page);
-
-    expect(ids.length).toBeGreaterThan(20);
-
-    for (const id of ids) {
-      await test.step(id, async () => {
-        await page.goto(`/iframe.html?id=${id}&viewMode=story`);
-        await page.locator("#storybook-root > *").first().waitFor();
-        await page.evaluate(async () => {
-          await document.fonts.ready;
-        });
-        await expect.soft(page).toHaveScreenshot(`${id}-${scheme}.png`);
+      await page.emulateMedia({ colorScheme: scheme, reducedMotion: "reduce" });
+      await page.goto(`/iframe.html?id=${shot.id}&viewMode=story`);
+      await page.locator("#storybook-root > *").first().waitFor();
+      await page.evaluate(async () => {
+        await document.fonts.ready;
       });
-    }
-  });
+
+      if (shot.open !== undefined) {
+        await openPopup(page, shot.open);
+        await expect(
+          page
+            .locator(
+              '[role="dialog"], [role="menu"], [role="tooltip"], [data-slot$="-content"][data-open]',
+            )
+            .first(),
+        ).toBeVisible();
+      }
+
+      await expect(page).toHaveScreenshot(`${shot.id}-${scheme}.png`);
+    });
+  }
 }

@@ -41,7 +41,6 @@
     "@types/d3-shape": "^3.2.0",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
-    "effect": "catalog:",
     "fast-check": "4.10.3",
     "storybook": "catalog:",
     "tailwindcss": "catalog:",
