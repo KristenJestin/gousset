@@ -2,6 +2,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 
 import type { Page } from "@playwright/test";
 
+import { openAccountMenu } from "../src/frame";
 import { SERVER_FUNCTIONS } from "../src/latency";
 import {
   SKELETON,
@@ -21,8 +22,12 @@ import {
 const MONTH = "/?month=2026-10";
 const BLOCKS = ["The month", "Where the money goes", "To review"];
 const LATENCY_MS = 1500;
+const SLOW_MONTH_MS = 6000;
 
 const block = (page: Page, title: string) => page.getByRole("region", { name: title });
+
+/** The month switcher beside the page's title. */
+const monthSwitcher = (page: Page) => page.getByRole("group", { name: "Month" });
 
 /** Leaves the review for a page that links back to it, so that the way back is a client navigation. */
 async function openUsersPage(page: Page) {
@@ -170,7 +175,7 @@ test("an error stays in its block, with a retry, and the rest of the page works"
     timeout: 10_000,
   });
   // The other blocks have their data, and their actions still work.
-  await expect(block(page, "The month")).toContainText("Received");
+  await expect(block(page, "The month")).toContainText("received");
   await expect(block(page, "To review").getByRole("button", { name: /^Approve / })).toHaveCount(3);
 
   failing = false;
@@ -207,9 +212,9 @@ test("a block that failed shows the next month once the month changes", async ({
 
   await expect(spending.getByRole("alert")).toBeVisible({ timeout: 10_000 });
 
-  await page.getByRole("link", { name: "Previous month" }).click();
+  await monthSwitcher(page).getByRole("button", { name: "Previous month" }).click();
 
-  await expect(page.getByText("September 2026")).toBeVisible({ timeout: 10_000 });
+  await expect(monthSwitcher(page)).toContainText("September 2026", { timeout: 10_000 });
   await expect(spending).toContainText("Housing");
   await expect(spending.getByRole("alert")).toHaveCount(0);
   await animationsDone(page);
@@ -259,6 +264,7 @@ test("a line already reviewed elsewhere is refused, and stays reviewed", async (
 
 test("a user who signs in after another in the same tab never sees the other's data", async ({
   userPage: page,
+  user,
   secondUser,
 }) => {
   // July is this test's own month: the review opens on it.
@@ -285,15 +291,16 @@ test("a user who signs in after another in the same tab never sees the other's d
   await page.evaluate(() => {
     document.documentElement.dataset.e2eNoReload = "yes";
   });
-  await page.getByRole("button", { name: "Sign out" }).click();
+  const menu = await openAccountMenu(page, user.name);
+
+  await menu.getByRole("menuitem", { name: "Sign out" }).click();
   await expect(page).toHaveURL(/\/sign-in$/);
   await page.getByLabel("E-mail").fill(secondUser.email);
   await page.getByLabel("Password", { exact: true }).fill(secondUser.password);
   await page.getByRole("button", { name: "Sign in" }).click();
 
-  await expect(
-    page.getByRole("heading", { level: 1, name: `Hello, ${secondUser.name}.` }),
-  ).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: "Monthly review" })).toBeVisible();
+  await expect(page.getByRole("button", { name: secondUser.name })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.dataset.e2eNoReload)).toBe("yes");
 
   // Their own July: every line still to review, not the first user's list.
@@ -306,36 +313,31 @@ test("changing month keeps the current data on screen while the next one loads",
 }) => {
   const counts = await watchLoading(page);
 
+  // The first paint is the server's; the browser's calls, September's among them, are slowed.
+  // Long enough for the press to come while September is still on its way.
+  await slowServerFunctions(page, SLOW_MONTH_MS);
   await visit(page, MONTH);
 
   const spending = block(page, "Where the money goes");
   const october = await spending.textContent();
 
-  await slowServerFunctions(page, LATENCY_MS);
-  await page.getByRole("link", { name: "Previous month" }).click();
+  // September is on its way (the page asked for it ahead, slowed down); October stays on screen,
+  // without a skeleton, and so does its name.
+  await monthSwitcher(page).getByRole("button", { name: "Previous month" }).click();
   await expect(page).toHaveURL(/month=2026-09/);
-
-  // September is on its way; October stays on screen, without a skeleton, and the links still
-  // lead from the month the header names.
   expect(await spending.textContent()).toBe(october);
-  await expect(page.getByText("October 2026")).toBeVisible();
-  await expect(page.getByRole("link", { name: "Previous month" })).toHaveAttribute(
-    "href",
-    /month=2026-09/,
-  );
-  await expect(page.getByRole("link", { name: "Next month" })).toHaveAttribute(
-    "href",
-    /month=2026-11/,
-  );
+  await expect(monthSwitcher(page)).toContainText("October 2026");
 
-  await expect(page.getByText("September 2026")).toBeVisible({ timeout: 10_000 });
+  await expect(monthSwitcher(page)).toContainText("September 2026", {
+    timeout: SLOW_MONTH_MS + 10_000,
+  });
   expect(await spending.textContent()).not.toBe(october);
   expect((await counts()).skeletons).toBe(0);
 });
 
-test("a link preloads its route on hover and on focus", async ({ userPage: page }) => {
-  await visit(page, MONTH);
-
+test("the months either side are loaded before the switcher is pressed", async ({
+  userPage: page,
+}) => {
   const asked: Array<string> = [];
 
   page.on("request", (request) => {
@@ -344,12 +346,11 @@ test("a link preloads its route on hover and on focus", async ({ userPage: page 
     }
   });
 
-  await page.getByRole("link", { name: "Previous month" }).hover();
-  await expect.poll(() => asked.some((url) => url.includes("2026-09"))).toBe(true);
+  await visit(page, MONTH);
 
-  await page.getByRole("link", { name: "Next month" }).focus();
+  await expect.poll(() => asked.some((url) => url.includes("2026-09"))).toBe(true);
   await expect.poll(() => asked.some((url) => url.includes("2026-11"))).toBe(true);
 
-  // Nothing was clicked: still October.
+  // Nothing was pressed: still October.
   await expect(page).toHaveURL(/month=2026-10/);
 });

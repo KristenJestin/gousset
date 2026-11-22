@@ -5,6 +5,23 @@ import { harness } from "./src/config";
 const DESKTOP = { width: 1440, height: 900 };
 const PHONE = { width: 390, height: 844 };
 
+/** The review's motions, filmed (issue #10): only the `motion-*` projects run them. */
+const MOTION = /motion\.spec\.ts$/;
+
+/** One recording project: Chromium, a width and a colour scheme, every test filmed. */
+function recording(name: string, viewport: typeof DESKTOP, colorScheme: "light" | "dark") {
+  return {
+    name,
+    testMatch: MOTION,
+    use: {
+      ...devices["Desktop Chrome"],
+      viewport,
+      colorScheme,
+      video: { mode: "on" as const, size: viewport },
+    },
+  };
+}
+
 /**
  * Gousset's end-to-end harness (AGENTS.md, "Testing"): the built app, a database per worker, a
  * real browser. Locally one spec at a time (`pnpm e2e <file>`); CI runs the whole suite, sharded
@@ -39,10 +56,32 @@ export default defineConfig({
   // the project. A changed screenshot is reviewed in the pull request, never updated blindly.
   snapshotPathTemplate: "{testDir}/__screenshots__/{testFilePath}/{arg}-{projectName}{ext}",
   // WebKit joins for the phone layout once CI runs it (issue #40).
+  // The `motion-*` projects film the review's motions; CI runs them in a job of their own and
+  // keeps the videos (.github/workflows/ci.yml, `motion`).
   projects: [
-    { name: "chromium-desktop", use: { ...devices["Desktop Chrome"], viewport: DESKTOP } },
-    { name: "chromium-phone", use: { ...devices["Desktop Chrome"], viewport: PHONE } },
-    { name: "firefox-desktop", use: { ...devices["Desktop Firefox"], viewport: DESKTOP } },
-    { name: "firefox-phone", use: { ...devices["Desktop Firefox"], viewport: PHONE } },
+    {
+      name: "chromium-desktop",
+      testIgnore: MOTION,
+      use: { ...devices["Desktop Chrome"], viewport: DESKTOP },
+    },
+    {
+      name: "chromium-phone",
+      testIgnore: MOTION,
+      use: { ...devices["Desktop Chrome"], viewport: PHONE },
+    },
+    {
+      name: "firefox-desktop",
+      testIgnore: MOTION,
+      use: { ...devices["Desktop Firefox"], viewport: DESKTOP },
+    },
+    {
+      name: "firefox-phone",
+      testIgnore: MOTION,
+      use: { ...devices["Desktop Firefox"], viewport: PHONE },
+    },
+    recording("motion-desktop-light", DESKTOP, "light"),
+    recording("motion-desktop-dark", DESKTOP, "dark"),
+    recording("motion-phone-light", PHONE, "light"),
+    recording("motion-phone-dark", PHONE, "dark"),
   ],
 });
