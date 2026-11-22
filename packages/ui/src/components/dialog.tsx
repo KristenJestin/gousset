@@ -60,7 +60,9 @@ export function Dialog({
     <DialogRoot open={open} onOpenChange={(next) => onOpenChange?.(next)}>
       {trigger === undefined ? null : <DialogTrigger render={trigger} />}
       <DialogBackdrop className={backdropClasses} />
-      <DialogContent className={dialogClasses}>
+      {/* Focus starts on the dialog itself: reading starts at the title, and Escape closes it at
+          once (on the close button, its tooltip would take the first Escape). */}
+      <DialogContent initialFocus="content" className={dialogClasses}>
         <div className="flex items-start justify-between gap-4">
           <div className="flex flex-col gap-1">
             <DialogTitle className="text-base font-semibold">{title}</DialogTitle>

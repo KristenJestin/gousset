@@ -5,13 +5,19 @@ import type { Page } from "@playwright/test";
 
 import { expectAccessible } from "./accessibility";
 import { startWorkerEnvironment } from "./app-server";
-import type { WorkerEnvironment } from "./app-server";
+import type { AppEnvironment, WorkerEnvironment } from "./app-server";
 import { addUser, madeUpUser, signUp } from "./auth";
 import type { TestUser } from "./auth";
 import { writeStatements } from "./statements";
 import type { StatementPaths } from "./statements";
 
 type WorkerFixtures = {
+  /**
+   * Variables added to this worker's app, none by default. A spec that needs others overrides it,
+   * with `test.use` for fixed values or `test.extend` for values another fixture computes (the
+   * address of a collector it started).
+   */
+  appEnvironment: AppEnvironment;
   /** This worker's app, on its own database cloned from the template. */
   app: WorkerEnvironment;
   /** The first user of the worker's app, signed up through the first visit: the administrator. */
@@ -45,9 +51,10 @@ async function expectAccessibleIfOpen(page: Page): Promise<void> {
 // Playwright calls a fixture's second argument `use`; it is named `provide` here so that the
 // React hook rules do not read it as a hook.
 export const test = base.extend<TestFixtures, WorkerFixtures>({
+  appEnvironment: [{}, { scope: "worker", option: true }],
+
   app: [
-    // oxlint-disable-next-line no-empty-pattern -- Playwright reads a fixture's dependencies from this pattern, even when there are none.
-    async ({}, provide, workerInfo) => {
+    async ({ appEnvironment }, provide, workerInfo) => {
       const slot = workerInfo.parallelIndex;
 
       const logFile = join(
@@ -55,7 +62,7 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
         `app-${workerInfo.project.name}-worker-${slot}.log`,
       );
 
-      const app = await startWorkerEnvironment(slot, logFile);
+      const app = await startWorkerEnvironment(slot, logFile, appEnvironment);
 
       try {
         await provide(app);
