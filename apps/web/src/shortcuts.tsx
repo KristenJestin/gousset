@@ -8,12 +8,12 @@ import {
 } from "@tanstack/react-hotkeys";
 import { useState } from "react";
 
-import { browserMessages } from "./messages";
+import { useMessages } from "./i18n/use-messages";
 
 /**
  * Every shortcut of the app, declared once: the `?` list is built from here, and the user's
  * rebinding (later) is keyed by these ids, which therefore never change. Each id has its label in
- * the messages, under `hotkeys.<id>`.
+ * the messages, under `shortcuts.hotkeys`.
  */
 export const appHotkeys = defineAppHotkeys({
   "shortcuts.show": { hotkey: "?", meta: { name: "Show keyboard shortcuts" } },
@@ -32,12 +32,12 @@ type Open = "shortcuts" | "search" | null;
 /** The app-wide shortcuts and the dialogs they open: the shortcuts list, and the search. */
 export function Shortcuts() {
   const [open, setOpen] = useState<Open>(null);
-  const messages = browserMessages();
+  const messages = useMessages();
   const formatForDisplay = useFormatForDisplay();
 
   const shortcuts = useAppHotkeyList().map(({ appHotkey }) => ({
     id: appHotkey.id,
-    label: messages[`hotkeys.${appHotkey.id}`],
+    label: messages.shortcuts.hotkeys[appHotkey.id],
     keys: appHotkey.hotkey === null ? "" : formatForDisplay(appHotkey.hotkey),
   }));
 
@@ -51,17 +51,17 @@ export function Shortcuts() {
       <Dialog
         open={open === "shortcuts"}
         onClose={close}
-        title={messages["shortcuts.title"]}
-        closeLabel={messages["dialog.close"]}
+        title={messages.shortcuts.title}
+        closeLabel={messages.dialog.close}
       >
         <ShortcutList shortcuts={shortcuts} />
       </Dialog>
       <Dialog
         open={open === "search"}
         onClose={close}
-        title={messages["search.title"]}
-        description={messages["search.empty"]}
-        closeLabel={messages["dialog.close"]}
+        title={messages.search.title}
+        description={messages.search.empty}
+        closeLabel={messages.dialog.close}
       />
     </>
   );
