@@ -88,7 +88,8 @@ jobs:
         env:
           BODY: ${{ github.event.pull_request.body }}
         run: |
-          if grep -qE '^Note: <|Closes #<n>' <<< "$BODY"; then
+          # The template's own lines, at the start of a line: a sentence may still name them.
+          if grep -qE '^(Note: <|Closes #<n>)' <<< "$BODY"; then
             echo "::error::The description still holds a placeholder of the template (Note: <...> or Closes #<n>): write the sentence and the issue's number."
             exit 1
           fi
