@@ -212,6 +212,8 @@ The lead reviews every change to the tools against `docs/mcp.md` before merging.
   --update-snapshots=all`, never with a local browser, which renders fonts differently. Missing
   references are made by CI: the `ui-snapshots` workflow (by hand with the branch, or the
   `update-snapshots` label on a pull request) commits them to the branch.
+- **CI on a pull request runs Chromium on a desktop only**, in `e2e` and `ui`; each push to `dev`
+  runs every browser and width. A failure seen only on `dev` is fixed at once.
 - **Required checks** on `dev` and `main`: `verify`, `ui`, `e2e`, `react-doctor` and `privacy`.
 
 ## How the work is organised

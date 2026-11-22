@@ -123,10 +123,10 @@ function Review() {
   return (
     <ReviewPage>
       <ReviewHeader
-        title={monthNames[locale].format(dateOf(`${month}-01`))}
+        title={monthNames[locale].format(dateOf(`${shown}-01`))}
         month={
           <MonthSwitcher
-            value={yearMonthOf(month)}
+            value={yearMonthOf(shown)}
             latest={yearMonthOf(current)}
             onChange={(next) => void navigate({ to: "/", search: { month: monthText(next) } })}
           />
@@ -138,7 +138,11 @@ function Review() {
         }
         notice={messages.review.madeUp}
       />
-      <DataBlock title={messages.review.summary.title} skeleton={<MonthBarSkeleton />}>
+      <DataBlock
+        title={messages.review.summary.title}
+        skeleton={<MonthBarSkeleton />}
+        resetKey={shown}
+      >
         <Summary month={shown} />
       </DataBlock>
       <ReviewGrid>
@@ -146,6 +150,7 @@ function Review() {
           <DataBlock
             title={messages.review.spending.title}
             skeleton={<BreakdownSkeleton rows={SPENDING_ROWS} more />}
+            resetKey={shown}
           >
             <Spending month={shown} />
           </DataBlock>
@@ -156,6 +161,7 @@ function Review() {
             aside={messages.review.movements.aside}
             foldOnPhone
             skeleton={<MovementListSkeleton />}
+            resetKey={shown}
           >
             <Movements month={shown} />
           </DataBlock>
@@ -163,6 +169,7 @@ function Review() {
             title={messages.review.investments.title}
             foldOnPhone
             skeleton={<InvestmentListSkeleton />}
+            resetKey={shown}
           >
             <Investments month={shown} />
           </DataBlock>
@@ -179,6 +186,7 @@ function Review() {
               }
               foldOnPhone
               skeleton={<ReviewLinesSkeleton rows={LINES_TO_REVIEW} more />}
+              resetKey={shown}
             >
               <ToReview month={shown} />
             </DataBlock>
@@ -189,6 +197,7 @@ function Review() {
             title={messages.review.flags.title}
             foldOnPhone
             skeleton={<FlagListSkeleton />}
+            resetKey={shown}
           >
             <Flags month={shown} />
           </DataBlock>
