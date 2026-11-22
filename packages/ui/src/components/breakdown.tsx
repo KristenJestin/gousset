@@ -31,7 +31,10 @@ export type BreakdownProps = {
   limit?: number;
   /** A row was chosen (click, or Enter / Space on it). Rows are buttons only with it. */
   onSelect?: (id: string) => void;
-  /** "+ N more" was chosen: show the rest. A button only with it. */
+  /**
+   * Show the rest. With it, "+ N more" becomes a button, "Show the other N": no "more" in its
+   * name, which the frame's menu has.
+   */
   onMore?: () => void;
   /** What an empty list says, in the page's words; a general sentence when left out. */
   emptyText?: string;
@@ -208,7 +211,7 @@ function More({ count, onMore }: { count: number; onMore: (() => void) | undefin
           className="-mx-2 cursor-pointer rounded-md px-2 transition-colors duration-150 hover:bg-muted hover:text-foreground"
           onClick={onMore}
         >
-          {messages.moreRows(count)}
+          {messages.showOtherRows(count)}
         </button>
       )}
     </li>

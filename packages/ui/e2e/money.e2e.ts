@@ -296,14 +296,14 @@ test.describe("MonthBar", () => {
 });
 
 test.describe("Breakdown", () => {
-  test("shows its rows, cut with + N more, each a button", async ({ page }) => {
+  test("shows its rows, cut with a button for the others, each a button", async ({ page }) => {
     await page.goto(story("breakdown", "default"));
 
     const rows = page.locator('[data-slot="breakdown"] > li');
 
     await expect(rows).toHaveCount(6);
     await expect(page.getByRole("button", { name: /^Housing/ })).toBeVisible();
-    await page.getByRole("button", { name: "+ 3 more" }).click();
+    await page.getByRole("button", { name: "Show the other 3" }).click();
     await expect(rows).toHaveCount(8);
   });
 

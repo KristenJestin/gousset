@@ -230,7 +230,7 @@ test("a line already reviewed elsewhere is refused, and stays reviewed", async (
 
   const toReview = block(page, "To review");
 
-  await expect(toReview).toContainText("+ 3 more");
+  await expect(toReview).toContainText("Show the other 3");
 
   // The same line, approved first in another tab of the same session.
   const other = await page.context().newPage();
@@ -259,7 +259,7 @@ test("a line already reviewed elsewhere is refused, and stays reviewed", async (
     .click();
 
   await expect(page.getByRole("alert")).toContainText("This line was already reviewed elsewhere.");
-  await expect(toReview).toContainText("+ 2 more");
+  await expect(toReview).toContainText("Show the other 2");
 });
 
 test("a user who signs in after another in the same tab never sees the other's data", async ({
@@ -273,7 +273,7 @@ test("a user who signs in after another in the same tab never sees the other's d
 
   const toReview = block(page, "To review");
 
-  await expect(toReview).toContainText("+ 3 more");
+  await expect(toReview).toContainText("Show the other 3");
 
   // The first user approves a line: their list has one line less.
   const approved = page.waitForResponse(
@@ -285,7 +285,7 @@ test("a user who signs in after another in the same tab never sees the other's d
     .first()
     .click();
   await approved;
-  await expect(toReview).toContainText("+ 2 more");
+  await expect(toReview).toContainText("Show the other 2");
 
   // They sign out, and the second user signs in, in the same tab: no reload anywhere.
   await page.evaluate(() => {
@@ -304,7 +304,7 @@ test("a user who signs in after another in the same tab never sees the other's d
   expect(await page.evaluate(() => document.documentElement.dataset.e2eNoReload)).toBe("yes");
 
   // Their own July: every line still to review, not the first user's list.
-  await expect(toReview).toContainText("+ 3 more");
+  await expect(toReview).toContainText("Show the other 3");
   await animationsDone(page);
 });
 

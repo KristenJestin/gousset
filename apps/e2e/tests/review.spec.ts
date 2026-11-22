@@ -11,7 +11,7 @@ const OCTOBER = "/?month=2026-10";
 
 const block = (page: Page, title: string) => page.getByRole("region", { name: title });
 
-const monthSwitcher = (page: Page) => page.getByRole("group", { name: "Month" });
+const monthSwitcher = (page: Page) => page.getByRole("group", { name: "Month", exact: true });
 
 /** The first amount a text holds, in cents: "Housing €690 benchmark €690" gives 69000. */
 function centsIn(text: string): number {
@@ -96,7 +96,7 @@ test("the review of a month shows each of its blocks, labelled as made-up", asyn
   const toReview = await openBlock(page, "To review");
 
   await expect(toReview.getByRole("button", { name: /^Approve / })).toHaveCount(3);
-  await expect(toReview).toContainText("+ 3 more");
+  await expect(toReview).toContainText("Show the other 3");
   await page.keyboard.press("Escape");
   await animationsDone(page);
 });
@@ -165,7 +165,7 @@ test("approving a line folds it away, the counter drops and its category's bar g
   }
 
   const spending = block(page, "Where the money goes");
-  const more = spending.getByRole("button", { name: /^\+ \d+ more$/ });
+  const more = spending.getByRole("button", { name: /^Show the other \d+$/ });
 
   if ((await more.count()) > 0) {
     await more.click();

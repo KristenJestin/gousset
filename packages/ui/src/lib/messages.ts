@@ -89,6 +89,8 @@ function uiMessages(locale: Locale) {
       overBenchmark: m.uiOverBenchmark({}, options),
       benchmark: (amount: string) => m.uiBenchmark({ amount }, options),
       moreRows: (count: number) => m.uiMoreRows({ count }, options),
+      /** The button that shows the rows a list leaves out: never "more", the frame's own menu. */
+      showOtherRows: (count: number) => m.uiShowOtherRows({ count }, options),
       empty: m.uiMoneyEmpty({}, options),
       /** A movement into an investment account, then what it bought: "buy World index ETF". */
       bought: (name: string) => m.uiMoneyBought({ name }, options),
