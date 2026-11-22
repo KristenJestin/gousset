@@ -15,6 +15,7 @@
     "dev:web": "vp run --filter web dev",
     "storybook": "vp run --filter @gousset/ui storybook",
     "build:storybook": "vp run --filter @gousset/ui build-storybook",
+    "test:ui": "vp run --filter @gousset/ui test:e2e",
     "db:push": "vp run --filter @gousset/db db:push",
     "db:studio": "vp run --filter @gousset/db db:studio",
     "db:generate": "vp run --filter @gousset/db db:generate",

@@ -1,6 +1,8 @@
 import { HeadContent, Outlet, Scripts, createRootRoute } from "@tanstack/react-router";
 import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
 
+import { ThemeProvider } from "@gousset/ui/components/theme-provider";
+
 import appCss from "../index.css?url";
 
 export const Route = createRootRoute({
@@ -31,12 +33,15 @@ export const Route = createRootRoute({
 
 function RootDocument() {
   return (
-    <html lang="en">
+    // The saved colour scheme lands on <html> before hydration (ThemeProvider).
+    <html lang="en" suppressHydrationWarning>
       <head>
         <HeadContent />
       </head>
       <body>
-        <Outlet />
+        <ThemeProvider>
+          <Outlet />
+        </ThemeProvider>
         <TanStackRouterDevtools position="bottom-left" />
         <Scripts />
       </body>

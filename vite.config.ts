@@ -14,8 +14,16 @@ const GENERATED = [
   "packages/db/src/env.ts",
 ];
 
-/** Vendored code keeps its upstream form, so that the next update stays a readable diff. */
-const VENDORED = ["tools/oxlint/**"];
+/**
+ * Vendored code keeps its upstream form, so that the next update stays a readable diff: the lint
+ * rules, and Bklit's charts as its shadcn registry installs them (`shadcn add @bklit/...`). The
+ * type checker still reads them.
+ */
+const VENDORED = [
+  "tools/oxlint/**",
+  "packages/ui/src/components/charts/**",
+  "packages/ui/src/components/shimmering-text.tsx",
+];
 
 /** Agent tooling installed into the repository: skills, not Gousset's source. */
 const AGENT_TOOLING = [".agents/**", ".claude/**"];
@@ -111,7 +119,8 @@ export default defineConfig({
     sortPackageJson: true,
   },
   test: {
-    // No test yet: end-to-end tests come with their harness (docs/architecture.md, "Quality").
+    // Unit tests only; end-to-end tests come with their harness (docs/architecture.md, "Quality"),
+    // and the theme's browser checks run on Storybook (`pnpm test:ui`).
     passWithNoTests: true,
   },
   staged: {
