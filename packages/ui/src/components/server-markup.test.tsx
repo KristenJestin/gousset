@@ -26,7 +26,15 @@ describe("the review's components on the server", () => {
           onSelect={() => {}}
         />
         <ReviewLines
-          lines={[{ id: "l1", label: "PAYLINK *PIXELPLAY", title: "Pixelplay", tags: [], amount: eur(-1499) }]}
+          lines={[
+            {
+              id: "l1",
+              label: "PAYLINK *PIXELPLAY",
+              title: "Pixelplay",
+              tags: [],
+              amount: eur(-1499),
+            },
+          ]}
           approveText="Approve"
           approveLabel={(line) => `Approve ${line.label}`}
           onApprove={() => {}}

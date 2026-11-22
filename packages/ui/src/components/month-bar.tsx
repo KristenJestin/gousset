@@ -122,7 +122,9 @@ function PartContent({
   const label =
     restricted === null
       ? messages.roles[role]
-      : messages.leftRestricted(formatMoney(restricted, { locale: locale ?? language, whole: true }));
+      : messages.leftRestricted(
+          formatMoney(restricted, { locale: locale ?? language, whole: true }),
+        );
 
   return (
     <>

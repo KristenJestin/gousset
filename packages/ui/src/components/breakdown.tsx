@@ -295,7 +295,11 @@ export function Breakdown({
                 <RowContent row={row} bar={bar} locale={writtenIn} />
               </div>
             ) : (
-              <motion.div layoutId={layoutIdOf(row.id)} transition={transition.slow} className="h-full">
+              <motion.div
+                layoutId={layoutIdOf(row.id)}
+                transition={transition.slow}
+                className="h-full"
+              >
                 <button
                   ref={(button) => {
                     if (button === null) {

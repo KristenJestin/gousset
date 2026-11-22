@@ -82,7 +82,9 @@ export const Route = createFileRoute("/_authed/")({
 
     await loadBlocks([
       queryClient.ensureQueryData(monthQueries.summary(month)).then(noop),
-      ...GROUPS.map((by) => queryClient.ensureQueryData(monthQueries.spending(month, by)).then(noop)),
+      ...GROUPS.map((by) =>
+        queryClient.ensureQueryData(monthQueries.spending(month, by)).then(noop),
+      ),
       queryClient.ensureQueryData(monthQueries.movements(month)).then(noop),
       queryClient.ensureQueryData(monthQueries.investments(month)).then(noop),
       queryClient.ensureQueryData(monthQueries.imports(month)).then(noop),
@@ -215,15 +217,22 @@ function ImportStatus({ month }: { month: string }) {
 
   return (
     <>
-      <StatusPiece>{messages.review.imports.imported(imports.imported, imports.accounts)}</StatusPiece>
+      <StatusPiece>
+        {messages.review.imports.imported(imports.imported, imports.accounts)}
+      </StatusPiece>
       {imports.partial.map((partial) => (
         <StatusPiece key={partial.account}>
-          {messages.review.imports.upTo(partial.account, shortDays[locale].format(dateOf(partial.coveredTo)))}
+          {messages.review.imports.upTo(
+            partial.account,
+            shortDays[locale].format(dateOf(partial.coveredTo)),
+          )}
         </StatusPiece>
       ))}
       {toReview.count === 0 ? null : (
         <StatusPiece>
-          <JumpLink to={TO_REVIEW}>{messages.review.imports.linesToReview(toReview.count)}</JumpLink>
+          <JumpLink to={TO_REVIEW}>
+            {messages.review.imports.linesToReview(toReview.count)}
+          </JumpLink>
         </StatusPiece>
       )}
     </>
@@ -326,9 +335,7 @@ function SpendingRows({ month, by }: { month: string; by: SpendingGroup }) {
       emptyText={messages.review.spending.empty[by]}
       footnote={
         data.pending.minor > 0
-          ? messages.review.spending.pending(
-              formatMoney(data.pending, { locale, whole: true }),
-            )
+          ? messages.review.spending.pending(formatMoney(data.pending, { locale, whole: true }))
           : undefined
       }
       locale={locale}
@@ -341,6 +348,7 @@ function RowChart({ month, by, name }: { month: string; by: SpendingGroup; name:
   const locale = useLocale();
   const { data } = useSuspenseQuery(monthQueries.spendingDays(month, by, name));
   const [year = 0, number = 1] = month.split("-").map(Number);
+
   const monthName = (offset: number) =>
     new Intl.DateTimeFormat(locale, { month: "long", timeZone: "UTC" }).format(
       new Date(Date.UTC(year, number - 1 + offset, 1)),
@@ -363,7 +371,10 @@ function Movements({ month }: { month: string }) {
   const { data } = useSuspenseQuery(monthQueries.movements(month));
 
   return (
-    <Folded title={messages.review.movements.title} summary={<Count value={data.movements.length} locale={locale} />}>
+    <Folded
+      title={messages.review.movements.title}
+      summary={<Count value={data.movements.length} locale={locale} />}
+    >
       <MovementList
         movements={data.movements.map((movement) => ({
           id: movement.id,
@@ -411,7 +422,10 @@ function ToReview({ month }: { month: string }) {
   const [all, setAll] = useState(false);
 
   return (
-    <Folded title={messages.review.toReview.title} summary={<Count value={data.count} locale={locale} />}>
+    <Folded
+      title={messages.review.toReview.title}
+      summary={<Count value={data.count} locale={locale} />}
+    >
       <ReviewLines
         lines={data.lines.map((line) => ({
           id: line.id,
@@ -444,7 +458,11 @@ function Flags({ month }: { month: string }) {
         return {
           id: `price-${flag.merchant}`,
           icon: flag.now.minor > flag.before.minor ? ("up" as const) : ("down" as const),
-          text: messages.review.flags.priceChange(flag.merchant, amount(flag.before), amount(flag.now)),
+          text: messages.review.flags.priceChange(
+            flag.merchant,
+            amount(flag.before),
+            amount(flag.now),
+          ),
         };
       }
 
@@ -462,7 +480,10 @@ function Flags({ month }: { month: string }) {
   };
 
   return (
-    <Folded title={messages.review.flags.title} summary={<Count value={data.flags.length} locale={locale} />}>
+    <Folded
+      title={messages.review.flags.title}
+      summary={<Count value={data.flags.length} locale={locale} />}
+    >
       <FlagList
         flags={data.flags.map(sentence)}
         label={messages.review.flags.title}

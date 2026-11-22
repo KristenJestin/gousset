@@ -58,10 +58,14 @@ export function ReviewHeader({ title, month, status, action, notice }: ReviewHea
   );
 }
 
-/** One piece of the header's state line; pieces are separated by a dot. */
+/** One piece of the header's state line; a small dot separates it from the one before. */
 export function StatusPiece({ children }: { children: ReactNode }) {
   return (
-    <span className="inline-flex items-center gap-1.5 after:text-muted-foreground after:content-['·'] last:after:content-none">
+    <span className="group/status inline-flex items-center gap-2">
+      <span
+        aria-hidden="true"
+        className="size-1 rounded-full bg-muted-foreground group-first/status:hidden"
+      />
       {children}
     </span>
   );

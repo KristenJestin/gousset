@@ -143,9 +143,11 @@ describe("spending", () => {
 
   test("counts an expense in full in each of its subjects", async () => {
     const bySubject = await run(spending("ada", "2026-10", "subject"));
+
     const fuel = madeUpMonth("2026-10").expenses.filter(
       (expense) => expense.merchant === "Fuelstop",
     );
+
     const pendingFuel = bySubject.pending.minor;
 
     expect(bySubject.rows.find((row) => row.name === "Home")?.amount.minor).toBe(69_000);

@@ -91,8 +91,7 @@ const en = {
       empty: "Nothing to point out this month.",
       priceChange: (merchant: string, before: string, now: string) =>
         `${merchant} goes from ${before} to ${now}`,
-      notImported: (account: string, day: string) =>
-        `${account} is imported only up to ${day}`,
+      notImported: (account: string, day: string) => `${account} is imported only up to ${day}`,
     },
     toReview: {
       title: "To review",
