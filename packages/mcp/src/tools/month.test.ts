@@ -1,4 +1,12 @@
-import { FixtureLedger, monthOverview } from "@gousset/core";
+import {
+  FixtureLedger,
+  flags,
+  importState,
+  investments,
+  linesToReview,
+  monthOverview,
+  movements,
+} from "@gousset/core";
 import type { Ledger } from "@gousset/core";
 import { Effect, Exit, Layer } from "effect";
 import { TestClock } from "effect/testing";
@@ -31,9 +39,9 @@ async function month(args: { [key: string]: string }, day = TODAY) {
   return callText(client, "month", args);
 }
 
-/** What the packages compute for the month, in the tool's words (`1,234.56 EUR`). */
-async function expected(wanted: string) {
-  const exit = await onDay(TODAY)(monthOverview(reader.userId, wanted));
+/** What the packages answer, on the test's day. */
+async function computed<A, E>(effect: Effect.Effect<A, E, Ledger>) {
+  const exit = await onDay(TODAY)(effect);
 
   if (Exit.isFailure(exit)) {
     throw new Error("The made-up ledger did not answer.");
@@ -41,6 +49,9 @@ async function expected(wanted: string) {
 
   return exit.value;
 }
+
+/** What the packages compute for the month, in the tool's words (`1,234.56 EUR`). */
+const expected = (wanted: string) => computed(monthOverview(reader.userId, wanted));
 
 const euros = (minor: number) =>
   `${(minor / 100).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })} EUR`;
@@ -106,11 +117,104 @@ describe("month summary", () => {
 
   test("every month of the made-up data answers in one part, under the limit", async () => {
     for (const wanted of ["2025-11", "2026-01", "2026-06", "2026-10", "2026-11"]) {
-      const { text, isError } = await month({ action: "summary", month: wanted });
+      for (const action of ["summary", "review"]) {
+        const { text, isError } = await month({ action, month: wanted });
 
-      expect(isError, wanted).toBe(false);
-      expect(text.length, wanted).toBeLessThan(RESULT_LIMIT);
-      expect(text, wanted).not.toContain("Part 1 of");
+        expect(isError, `${action} ${wanted}`).toBe(false);
+        expect(text.length, `${action} ${wanted}`).toBeLessThan(RESULT_LIMIT);
+        expect(text, `${action} ${wanted}`).not.toContain("Part 1 of");
+      }
+    }
+  });
+
+  test("says where the money came from, against the six months before, and what is restricted", async () => {
+    // A month whose part left sits partly on the meal voucher card.
+    const months = ["2026-05", "2026-06", "2026-07", "2026-08", "2026-09", "2026-10"];
+    const overviews = await Promise.all(months.map(async (wanted) => expected(wanted)));
+    const restricted = overviews.find((overview) => overview.summary.restricted.minor > 0);
+
+    expect(restricted).toBeDefined();
+
+    const summary = restricted?.summary ?? overviews[0]?.summary;
+
+    if (summary === undefined) {
+      return;
+    }
+
+    const { text } = await month({ action: "summary", month: summary.month });
+
+    expect(text).toContain(
+      `Received: ${euros(summary.received.minor)}, from ${summary.receivedFrom.join(" and ")}`,
+    );
+    expect(text).toContain(
+      `Spent: ${euros(summary.spent.minor)} (6-month average: ${euros(summary.averageSpent?.minor ?? 0)})`,
+    );
+    expect(text).toContain(
+      `Left: ${euros(summary.left.minor)}, of which ${euros(summary.restricted.minor)} restricted on benefit accounts`,
+    );
+  });
+
+  test("gives each row its benchmark, what still waits in the review, and the subjects", async () => {
+    const { text } = await month({ action: "summary", month: "2026-10" });
+    const { byCategory, bySubject } = await expected("2026-10");
+    const benchmarked = byCategory.rows.find((row) => row.benchmark !== null);
+
+    expect(text).toContain(
+      `- ${benchmarked?.name}: ${euros(benchmarked?.amount.minor ?? 0)} (benchmark ${euros(benchmarked?.benchmark?.minor ?? 0)})`,
+    );
+    expect(byCategory.pending.minor).toBeGreaterThan(0);
+    expect(text).toContain(
+      `Not counted above until its lines are reviewed: ${euros(byCategory.pending.minor)}.`,
+    );
+    expect(text).toContain("By subject");
+
+    for (const row of bySubject.rows) {
+      expect(text).toContain(`- ${row.name}: ${euros(row.amount.minor)}`);
+    }
+  });
+});
+
+describe("month review", () => {
+  const OCTOBER = "2026-10";
+
+  test("tells the imports, the lines to review, the movements, the investments and the flags", async () => {
+    const { text, isError } = await month({ action: "review", month: OCTOBER });
+    const user = reader.userId;
+    const imports = await computed(importState(user, OCTOBER));
+    const waiting = await computed(linesToReview(user, OCTOBER));
+    const moved = await computed(movements(user, OCTOBER));
+    const invested = await computed(investments(user, OCTOBER));
+    const flagged = await computed(flags(user, OCTOBER));
+
+    expect(isError).toBe(false);
+    expect(text).toContain("October 2026, made-up data");
+    expect(text).toContain(`Imports: ${imports.imported} of ${imports.accounts} accounts imported`);
+    expect(text).toContain(`Lines to review (${waiting.count}):`);
+
+    for (const line of waiting.lines) {
+      expect(text).toContain(`${line.bookedOn} ${line.label}: ${euros(line.amount.minor)}`);
+    }
+
+    for (const movement of moved.movements) {
+      expect(text).toContain(`${movement.from} → ${movement.to}: ${euros(movement.amount.minor)}`);
+    }
+
+    for (const account of invested.accounts) {
+      expect(text).toContain(
+        `- ${account.account}: worth ${euros(account.value.minor)}, put in ${euros(account.netContributions.minor)}`,
+      );
+    }
+
+    expect(flagged.flags.length).toBeGreaterThan(0);
+    expect(text).toContain("Streamly: its price went from 8.99 EUR to 9.49 EUR.");
+  });
+
+  test("names accounts and merchants, never an id", async () => {
+    const { text } = await month({ action: "review", month: OCTOBER });
+    const waiting = await computed(linesToReview(reader.userId, OCTOBER));
+
+    for (const line of waiting.lines) {
+      expect(text).not.toContain(line.id);
     }
   });
 });
