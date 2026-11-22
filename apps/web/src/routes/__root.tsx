@@ -1,4 +1,4 @@
-import { HeadContent, Outlet, Scripts, createRootRoute } from "@tanstack/react-router";
+import { HeadContent, Outlet, Scripts, createRootRoute, useRouter } from "@tanstack/react-router";
 import { TanStackRouterDevtools } from "@tanstack/react-router-devtools";
 
 import { ThemeProvider } from "@gousset/ui/components/theme-provider";
@@ -37,6 +37,8 @@ export const Route = createRootRoute({
 
 function RootDocument() {
   const locale = Route.useRouteContext({ select: (context) => context.viewer.locale });
+  // The response's CSP nonce: the request's on the server, read back from the page in the browser.
+  const nonce = useRouter().options.ssr?.nonce;
 
   return (
     // The saved colour scheme lands on <html> before hydration (ThemeProvider).
@@ -45,7 +47,7 @@ function RootDocument() {
         <HeadContent />
       </head>
       <body>
-        <ThemeProvider>
+        <ThemeProvider nonce={nonce}>
           <Outlet />
         </ThemeProvider>
         <TanStackRouterDevtools position="bottom-left" />
