@@ -15,20 +15,40 @@ const DISABLED = "/iframe.html?id=theme-colour-scheme--disabled&viewMode=story";
 const MOTION = "/iframe.html?id=theme-motion--fade&viewMode=story";
 
 /**
- * Toggles the block, which stays mounted, and reads its opacity two frames later: still on its
- * way while it animates (300 ms), already at its target when the animation is skipped.
+ * Toggles the block, which stays mounted between 1 and 0.25, and tells whether it passed through
+ * a value in between during the next 250 ms, sampled at every frame: it does while the fade runs
+ * (300 ms), never when the animation is skipped. Nothing depends on how fast frames come.
  */
-async function opacityJustAfterToggle(page: Page) {
-  await page.getByRole("button", { name: "Toggle" }).click();
-
+async function fadesAfterToggle(page: Page) {
   return page.getByTestId("motion-sample").evaluate(
-    (element) =>
-      new Promise<number>((resolve) => {
-        requestAnimationFrame(() => {
-          requestAnimationFrame(() => {
-            resolve(Number(getComputedStyle(element).opacity));
-          });
-        });
+    (block) =>
+      new Promise<boolean>((resolve) => {
+        const toggle = [...document.querySelectorAll("button")].find(
+          (button) => button.textContent === "Toggle",
+        );
+
+        if (toggle === undefined) {
+          throw new Error("The story has no Toggle button");
+        }
+
+        let start = 0;
+        let between = false;
+
+        const sample = () => {
+          const opacity = Number(getComputedStyle(block).opacity);
+
+          between ||= opacity > 0.26 && opacity < 0.99;
+
+          if (performance.now() - start < 250) {
+            requestAnimationFrame(sample);
+          } else {
+            resolve(between);
+          }
+        };
+
+        start = performance.now();
+        toggle.click();
+        requestAnimationFrame(sample);
       }),
   );
 }
@@ -171,17 +191,21 @@ test("Motion is cut as soon as the system asks for reduced motion, without a rel
   const block = page.getByTestId("motion-sample");
 
   await expect(block).toHaveCSS("opacity", "1");
-  // Toward 0.25: still near 1 two frames in.
-  expect(await opacityJustAfterToggle(page)).toBeGreaterThan(0.5);
+  // Toward 0.25: it fades.
+  expect(await fadesAfterToggle(page)).toBe(true);
   await expect(block).toHaveCSS("opacity", "0.25");
 
-  // The same block, still mounted: toward 1, there at once.
+  // The same block, still mounted: toward 1, at once. The page hears of the system's change a
+  // little later than emulateMedia returns: wait until the theme has.
   await page.emulateMedia({ reducedMotion: "reduce" });
-  expect(await opacityJustAfterToggle(page)).toBe(1);
+  await expect(page.locator("html")).toHaveAttribute("data-motion", "reduced");
+  expect(await fadesAfterToggle(page)).toBe(false);
+  await expect(block).toHaveCSS("opacity", "1");
 
-  // And back: toward 0.25, animated again.
+  // And back: toward 0.25, it fades again.
   await page.emulateMedia({ reducedMotion: "no-preference" });
-  expect(await opacityJustAfterToggle(page)).toBeGreaterThan(0.5);
+  await expect(page.locator("html")).toHaveAttribute("data-motion", "full");
+  expect(await fadesAfterToggle(page)).toBe(true);
 });
 
 test("Motion is cut from the first render when reduced motion is already asked for", async ({
@@ -190,7 +214,8 @@ test("Motion is cut from the first render when reduced motion is already asked f
   await page.emulateMedia({ reducedMotion: "reduce" });
   await page.goto(MOTION);
   await expect(page.getByTestId("motion-sample")).toHaveCSS("opacity", "1");
-  expect(await opacityJustAfterToggle(page)).toBe(0.25);
+  expect(await fadesAfterToggle(page)).toBe(false);
+  await expect(page.getByTestId("motion-sample")).toHaveCSS("opacity", "0.25");
 });
 
 test("a disabled picker cannot change the scheme", async ({ page }) => {

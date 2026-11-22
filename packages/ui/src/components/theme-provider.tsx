@@ -15,7 +15,7 @@ import { followReducedMotion } from "@gousset/ui/lib/reduced-motion";
  * entry animation (those start in passive effects), so the first render is already right.
  */
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  useLayoutEffect(() => followReducedMotion(), []);
+  useLayoutEffect(() => followReducedMotion(document.documentElement), []);
   useEffect(() => followDarkClass(document.documentElement), []);
 
   return <Preferences preferences={[colorScheme]}>{children}</Preferences>;
