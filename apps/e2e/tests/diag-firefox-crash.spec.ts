@@ -1,35 +1,46 @@
-// TEMPORARY (#7): bisects Firefox's "Page crashed" on the sign-in page. Every variant passes; each
-// prints what happened, for the CI log. Removed before the pull request is merged.
+// TEMPORARY (#7): bisects Firefox's "Page crashed" on the sign-in page. The first round showed the
+// page alive without axe in every variant; every crashing test runs axe first (`visit`). Every
+// variant passes; each prints what happened, for the CI log. Removed before the pull request is
+// merged.
+import AxeBuilder from "@axe-core/playwright";
 import type { Page } from "@playwright/test";
 
 import { test } from "../src/test";
 
+const WCAG_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"];
+
 type Variant = {
   name: string;
-  /** Changes the sign-in page's response before the browser reads it. */
-  rewrite?: (body: string, headers: Record<string, string>) => [string, Record<string, string>];
   javaScript?: boolean;
-  reducedMotion?: boolean;
+  /** Runs before axe, in the page. */
+  prepare?: (page: Page) => Promise<void>;
+  /** axe as the variant runs it; none skips axe. */
+  axe?: (page: Page) => AxeBuilder;
 };
 
+const wcag = (page: Page) => new AxeBuilder({ page }).withTags(WCAG_TAGS);
+
 const VARIANTS: Array<Variant> = [
-  { name: "as served" },
+  { name: "axe as visit runs it", axe: wcag },
+  { name: "axe without JavaScript", javaScript: false, axe: wcag },
   {
-    name: "without the csp-nonce meta",
-    rewrite: (body, headers) => [body.replace(/<meta property="csp-nonce"[^>]*>/, ""), headers],
+    name: "axe without color-contrast",
+    axe: (page) => wcag(page).disableRules(["color-contrast"]),
   },
+  { name: "axe on main alone", axe: (page) => wcag(page).include("main") },
   {
-    name: "without the Content-Security-Policy header",
-    rewrite: (body, headers) => {
-      const kept = { ...headers };
-
-      delete kept["content-security-policy"];
-
-      return [body, kept];
+    name: "toaster removed, then axe",
+    prepare: async (page) => {
+      await page.evaluate(() => {
+        for (const element of document.querySelectorAll(
+          '[aria-label="Notifications"], [data-ui-sdk-announcer]',
+        )) {
+          element.remove();
+        }
+      });
     },
+    axe: wcag,
   },
-  { name: "without JavaScript", javaScript: false },
-  { name: "under reduced motion", reducedMotion: true },
 ];
 
 function log(variant: string, line: string) {
@@ -37,59 +48,55 @@ function log(variant: string, line: string) {
   console.log(`[diag-firefox] ${variant}: ${line}`);
 }
 
-async function tryTyping(page: Page, variant: string) {
+async function tryAxeThenTyping(page: Page, variant: Variant) {
   let crashed = false;
 
   page.on("crash", () => {
     crashed = true;
-    log(variant, "crash event");
+    log(variant.name, "crash event");
   });
-  page.on("pageerror", (error) => log(variant, `pageerror ${error.message}`));
-  page.on("console", (message) => log(variant, `console.${message.type()} ${message.text()}`));
+  page.on("pageerror", (error) => log(variant.name, `pageerror ${error.message}`));
 
   try {
     await page.goto("/sign-in");
     await page.waitForLoadState("load");
-    log(variant, "loaded");
-    await page.waitForTimeout(1500);
-    log(variant, crashed ? "crashed while idle" : "idle 1.5 s, alive");
+    log(variant.name, "loaded");
+    await variant.prepare?.(page);
+
+    if (variant.axe !== undefined) {
+      const started = Date.now();
+      const results = await variant.axe(page).analyze();
+
+      log(
+        variant.name,
+        `axe done in ${Date.now() - started} ms, ${results.violations.length} violation(s)`,
+      );
+    }
+
+    await page.waitForTimeout(1000);
+    log(variant.name, crashed ? "crashed after axe" : "idle 1 s after axe, alive");
     await page.getByLabel("E-mail").click({ timeout: 5000 });
-    log(variant, "clicked the e-mail field");
-    await page.keyboard.type("a", { delay: 50 });
-    log(variant, "typed one key");
+    log(variant.name, "clicked the e-mail field");
     await page.getByLabel("E-mail").fill("ada@example.com", { timeout: 5000 });
-    log(variant, "filled the e-mail field");
-    await page.getByLabel("Password", { exact: true }).fill("not-the-password", { timeout: 5000 });
-    log(variant, "filled the password");
+    log(variant.name, "filled the e-mail field");
   } catch (error) {
-    log(variant, `stopped: ${error instanceof Error ? error.message.split("\n")[0] : "?"}`);
+    log(variant.name, `stopped: ${error instanceof Error ? error.message.split("\n")[0] : "?"}`);
   }
 
-  log(variant, crashed ? "RESULT crashed" : "RESULT alive");
+  log(variant.name, crashed ? "RESULT crashed" : "RESULT alive");
 }
 
 for (const variant of VARIANTS) {
-  test(`diag: sign-in ${variant.name}`, async ({ browser, app }) => {
+  test(`diag: sign-in, ${variant.name}`, async ({ browser, app }) => {
     const context = await browser.newContext({
       baseURL: app.baseURL,
       javaScriptEnabled: variant.javaScript ?? true,
-      reducedMotion: variant.reducedMotion === true ? "reduce" : "no-preference",
     });
 
     const page = await context.newPage();
-    const { rewrite } = variant;
-
-    if (rewrite !== undefined) {
-      await page.route("**/sign-in", async (route) => {
-        const response = await route.fetch();
-        const [body, headers] = rewrite(await response.text(), response.headers());
-
-        await route.fulfill({ response, body, headers });
-      });
-    }
 
     try {
-      await tryTyping(page, variant.name);
+      await tryAxeThenTyping(page, variant);
     } finally {
       await context.close();
     }
