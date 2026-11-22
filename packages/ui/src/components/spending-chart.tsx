@@ -1,3 +1,4 @@
+import { useHydrated } from "../hooks/use-hydrated";
 import { useUiMessages } from "../hooks/use-ui-messages";
 import type { SpendingDay, SpendingRow } from "../lib/chart-amounts";
 import { formatChartDay, spendingRows } from "../lib/chart-amounts";
@@ -129,6 +130,10 @@ function EmptyChart({ message }: { message: string }) {
 /**
  * This period's cumulative spending day by day, against the period before, dashed: Bklit's line
  * chart with a crosshair that follows the pointer and a sober tooltip whose amounts roll.
+ *
+ * Drawn once the page has hydrated: Bklit sizes its frame with `style` attributes, which the
+ * Content Security Policy drops from the server's markup. Until then, a blank frame of the same
+ * size holds its place.
  */
 export function SpendingChart({
   days,
@@ -140,12 +145,15 @@ export function SpendingChart({
   const messages = useUiMessages();
   const locale = messages.charts.locale;
   const rows = spendingRows(days, currency);
+  const hydrated = useHydrated();
 
   return (
     <figure aria-label={label} data-slot="spending-chart" className="flex w-full flex-col gap-3">
       <Legend currentLabel={currentLabel} previousLabel={previousLabel} />
       {rows.length === 0 ? (
         <EmptyChart message={messages.charts.empty} />
+      ) : !hydrated ? (
+        <div className="aspect-2/1 w-full" />
       ) : (
         <LineChart data={rows} margin={MARGIN}>
           <Grid />
