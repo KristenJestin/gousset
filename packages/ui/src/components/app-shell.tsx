@@ -175,11 +175,21 @@ export function ScreenTransition({ id, children }: { id: string; children: React
     setFirst(null);
   }
 
+  // The first screen carries no Motion values, so the server's markup has no `style` attribute
+  // (the Content Security Policy forbids them).
+  if (first === id) {
+    return (
+      <div key={id} data-slot="screen" className="flex min-w-0 flex-1 flex-col">
+        {children}
+      </div>
+    );
+  }
+
   return (
     <motion.div
       key={id}
       data-slot="screen"
-      initial={first === id ? false : { opacity: 0 }}
+      initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       transition={transition.base}
       className="flex min-w-0 flex-1 flex-col"

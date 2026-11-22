@@ -19,6 +19,9 @@ export type MonthSwitcherProps = {
   latest?: YearMonth;
 };
 
+const LABEL_CLASSES =
+  "block px-2 text-sm font-medium whitespace-nowrap text-foreground tabular-nums first-letter:uppercase";
+
 // The label slides in from the side the month comes from, and the old one out the other way.
 const slide = {
   enter: (direction: number) => ({ x: `${direction * 40}%`, opacity: 0 }),
@@ -40,6 +43,9 @@ export function MonthSwitcher({ value, onChange, latest }: MonthSwitcherProps) {
   const index = monthIndex(value);
   const [shownIndex, setShownIndex] = useState(index);
   const [direction, setDirection] = useState(1);
+  // Until the month first changes the label is plain text, so the server's markup carries no
+  // `style` attribute (the Content Security Policy forbids them); from then on it slides.
+  const [moved, setMoved] = useState(false);
   // Read once, when it mounts: a page left open past midnight on the 1st keeps its bound.
   const [current] = useState(() => monthOf(new Date()));
 
@@ -47,6 +53,7 @@ export function MonthSwitcher({ value, onChange, latest }: MonthSwitcherProps) {
   if (index !== shownIndex) {
     setDirection(index > shownIndex ? 1 : -1);
     setShownIndex(index);
+    setMoved(true);
   }
 
   const canGoNext = index < monthIndex(latest ?? current);
@@ -80,19 +87,33 @@ export function MonthSwitcher({ value, onChange, latest }: MonthSwitcherProps) {
       </span>
       <div aria-hidden="true" className="relative grid min-w-36 place-items-center overflow-hidden">
         <AnimatePresence initial={false} custom={direction} mode="popLayout">
-          <motion.span
-            key={index}
-            custom={direction}
-            variants={slide}
-            initial="enter"
-            animate="center"
-            exit="exit"
-            transition={transition.base}
-            data-slot="month-label"
-            className="block px-2 text-sm font-medium whitespace-nowrap text-foreground tabular-nums first-letter:uppercase"
-          >
-            {label}
-          </motion.span>
+          {moved ? (
+            <motion.span
+              key={index}
+              custom={direction}
+              variants={slide}
+              initial="enter"
+              animate="center"
+              exit="exit"
+              transition={transition.base}
+              data-slot="month-label"
+              className={LABEL_CLASSES}
+            >
+              {label}
+            </motion.span>
+          ) : (
+            <motion.span
+              key={index}
+              custom={direction}
+              variants={slide}
+              exit="exit"
+              transition={transition.base}
+              data-slot="month-label"
+              className={LABEL_CLASSES}
+            >
+              {label}
+            </motion.span>
+          )}
         </AnimatePresence>
       </div>
       <IconButton
