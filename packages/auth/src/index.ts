@@ -1,14 +1,20 @@
+import { cimd } from "@better-auth/cimd";
 import { drizzleAdapter } from "@better-auth/drizzle-adapter/relations-v2";
+import { mcp } from "@better-auth/mcp";
 import type { Database } from "@gousset/db";
 import { tables } from "@gousset/db/schema/index";
 import { betterAuth } from "better-auth";
-import { APIError, createAuthMiddleware, isAPIError } from "better-auth/api";
-import { admin } from "better-auth/plugins";
+import { APIError, createAuthMiddleware, getSessionFromCtx, isAPIError } from "better-auth/api";
+import { admin, jwt } from "better-auth/plugins";
 import { tanstackStartCookies } from "better-auth/tanstack-start";
 import { Option, Schema } from "effect";
 
 import { TOO_MANY_ATTEMPTS } from "./attempt-guard";
+import { cimdOptions } from "./cimd";
 import { CLIENT_ADDRESS_HEADER } from "./client-address";
+import { CONSENT_PATH, ISSUED_AT_MS_CLAIM, McpScope, SIGN_IN_PATH, mcpResourceOf } from "./mcp";
+import { alignTokensWithConsents, currentGrant, revokeAllClients } from "./mcp-door";
+import { isMetadataDocumentClient, redirectBoundToClient, withReadForWrite } from "./mcp-guards";
 
 export { guardAttempt } from "./attempt-guard";
 
@@ -39,7 +45,58 @@ const passwordsOf = Schema.decodeUnknownOption(
   Schema.Struct({ currentPassword: Schema.String, newPassword: Schema.String }),
 );
 
+/** What the authorize endpoint's guard reads of its query. */
+const authorizeQueryOf = Schema.decodeUnknownOption(
+  Schema.Struct({
+    client_id: Schema.String,
+    redirect_uri: Schema.optional(Schema.String),
+    prompt: Schema.optional(Schema.String),
+    scope: Schema.optional(Schema.String),
+  }),
+);
+
+/** The user an administrator's action is about (ban, new password). */
+const targetUserOf = Schema.decodeUnknownOption(Schema.Struct({ userId: Schema.String }));
+
+/** The administrator's actions after which a user's MCP clients lose their access. */
+const CUTTING_ADMIN_ACTIONS = new Set(["/admin/ban-user", "/admin/set-user-password"]);
+
+/**
+ * The MCP door's authorization server (docs/mcp.md): OAuth 2.1 with tokens bound to the `/mcp`
+ * resource and signed by the JWT plugin, clients identified by their Client ID Metadata Document,
+ * no dynamic client registration. Its tables carry the `auth_` prefix like the others.
+ */
+function mcpPlugins(resource: string) {
+  return [
+    jwt({ schema: { jwks: { modelName: "authJwks" } } }),
+    mcp({
+      resource,
+      loginPage: SIGN_IN_PATH,
+      consentPage: CONSENT_PATH,
+      scopes: [McpScope.read, McpScope.write, "offline_access"],
+      // Clients come from their metadata documents (CIMD), never from a user: the endpoints that
+      // create, change or list OAuth clients and resources are closed to everyone.
+      clientPrivileges: () => false,
+      resourcePrivileges: () => false,
+      // When the token was minted, to the millisecond: the door refuses one older than the consent.
+      customAccessTokenClaims: () => ({ [ISSUED_AT_MS_CLAIM]: Date.now() }),
+      schema: {
+        oauthClient: { modelName: "authOauthClient" },
+        oauthResource: { modelName: "authOauthResource" },
+        oauthClientResource: { modelName: "authOauthClientResource" },
+        oauthRefreshToken: { modelName: "authOauthRefreshToken" },
+        oauthAccessToken: { modelName: "authOauthAccessToken" },
+        oauthConsent: { modelName: "authOauthConsent" },
+        oauthClientAssertion: { modelName: "authOauthClientAssertion" },
+      },
+    }),
+    cimd(cimdOptions),
+  ];
+}
+
 export function createAuth(env: AuthConfig, database: Database) {
+  const mcpResource = mcpResourceOf(env.BETTER_AUTH_URL);
+
   return betterAuth({
     database: drizzleAdapter(database, {
       provider: "pg",
@@ -69,7 +126,9 @@ export function createAuth(env: AuthConfig, database: Database) {
       updateAge: 24 * 60 * 60,
     },
     account: { modelName: "authAccount" },
-    verification: { modelName: "authVerification" },
+    // `storeInDatabase` is better-auth's default (no secondary storage here): written out so that
+    // the options' type matches what @better-auth/mcp's `requireMcpAuth` reads of them.
+    verification: { modelName: "authVerification", storeInDatabase: false },
     // better-auth's own limit counts every request, successful or not, per address it reads from
     // `X-Forwarded-For`. Gousset counts failed attempts at a password instead, around this handler
     // (attempt-guard.ts), from the address the app resolves from the connection (client-address.ts).
@@ -95,6 +154,55 @@ export function createAuth(env: AuthConfig, database: Database) {
           }
         }
 
+        if (ctx.path === "/oauth2/authorize") {
+          const query = authorizeQueryOf(ctx.query);
+
+          if (Option.isSome(query)) {
+            const {
+              client_id: clientId,
+              redirect_uri: redirectUri,
+              prompt = "",
+              scope,
+            } = query.value;
+
+            // A metadata document may name any redirect: only its own site or the user's machine
+            // is accepted, so that a look-alike name cannot send the code elsewhere.
+            if (
+              isMetadataDocumentClient(clientId) &&
+              !redirectBoundToClient(clientId, redirectUri)
+            ) {
+              throw new APIError("BAD_REQUEST", {
+                error: "invalid_request",
+                error_description:
+                  "redirect_uri must be on the client_id's origin, or http on a loopback address",
+              });
+            }
+
+            // A silent authorization redirects without showing anything: only for a signed-in user
+            // who already allowed this client, never as a redirect from Gousset to anyone.
+            if (prompt.split(" ").includes("none")) {
+              const session = await getSessionFromCtx(ctx);
+
+              const allowed =
+                session !== null &&
+                (await currentGrant(database, session.user.id, clientId)) !== undefined;
+
+              if (!allowed) {
+                throw new APIError("BAD_REQUEST", {
+                  error: "interaction_required",
+                  error_description: "the user must sign in and allow this client first",
+                });
+              }
+            }
+
+            const widened = withReadForWrite(scope);
+
+            if (widened !== scope) {
+              return { context: { query: { ...ctx.query, scope: widened } } };
+            }
+          }
+        }
+
         if (ctx.path === "/change-password") {
           const passwords = passwordsOf(ctx.body);
 
@@ -113,11 +221,34 @@ export function createAuth(env: AuthConfig, database: Database) {
         const returned = ctx.context.returned;
         const refusal = isAPIError(returned) ? returned : undefined;
 
-        if (ctx.path === "/change-password" && refusal === undefined) {
+        if (refusal !== undefined) {
+          return;
+        }
+
+        if (ctx.path === "/change-password") {
           const userId = ctx.context.session?.user.id;
 
           if (userId !== undefined) {
             await ctx.context.internalAdapter.updateUser(userId, { mustChangePassword: false });
+            // A new password ends what the old one allowed, MCP clients included.
+            await revokeAllClients(database, userId);
+          }
+        }
+
+        if (CUTTING_ADMIN_ACTIONS.has(ctx.path)) {
+          const target = targetUserOf(ctx.body);
+
+          if (Option.isSome(target)) {
+            await revokeAllClients(database, target.value.userId);
+          }
+        }
+
+        if (ctx.path === "/oauth2/consent") {
+          const userId = (await getSessionFromCtx(ctx))?.user.id;
+
+          // Allowing a client again, read only this time, takes write back from its tokens.
+          if (userId !== undefined) {
+            await alignTokensWithConsents(database, userId);
           }
         }
       }),
@@ -136,7 +267,11 @@ export function createAuth(env: AuthConfig, database: Database) {
         },
       },
     },
-    plugins: [admin({ defaultRole: "user", adminRoles: ["admin"] }), tanstackStartCookies()],
+    plugins: [
+      admin({ defaultRole: "user", adminRoles: ["admin"] }),
+      ...(mcpResource === undefined ? [] : mcpPlugins(mcpResource)),
+      tanstackStartCookies(),
+    ],
   });
 }
 

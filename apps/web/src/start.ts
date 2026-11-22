@@ -3,7 +3,7 @@ import { createCsrfMiddleware, createMiddleware, createStart } from "@tanstack/r
 import { setResponseHeaders } from "@tanstack/react-start/server";
 
 import { ENV } from "./env.server";
-import { createNonce, securityHeaders } from "./security";
+import { createNonce, securityHeaders, servedOverHttps } from "./security";
 import { telemetry } from "./telemetry.server";
 
 /** A span for every request to the server: pages, server routes and server functions alike. */
@@ -33,7 +33,7 @@ const securityMiddleware = createMiddleware().server(({ next }) => {
     securityHeaders({
       nonce,
       strict: import.meta.env.PROD,
-      https: ENV.BETTER_AUTH_URL.startsWith("https://"),
+      https: servedOverHttps(ENV),
     }),
   );
 

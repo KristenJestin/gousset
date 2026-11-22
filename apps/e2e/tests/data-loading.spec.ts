@@ -8,6 +8,7 @@ import {
   animationsDone,
   expect,
   fixDay,
+  signIn,
   slowServerFunctions,
   test,
   visit,
@@ -264,9 +265,17 @@ test("a line already reviewed elsewhere is refused, and stays reviewed", async (
 });
 
 test("a user who signs in after another in the same tab never sees the other's data", async ({
-  userPage: page,
+  page,
+  user,
   secondUser,
+  baseURL,
 }) => {
+  // The first user signs out below: in a session of their own, never the worker's shared one,
+  // which every later test of the worker uses.
+  const own = await signIn(baseURL ?? "", user);
+
+  await page.context().addCookies([...own.cookies]);
+
   // July is this test's own month: the review opens on it.
   await fixDay(page, "2026-07-31");
   await visit(page, "/");

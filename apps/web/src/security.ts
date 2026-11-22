@@ -1,3 +1,12 @@
+/**
+ * Whether the app is served over HTTPS, from the address it was started with. The environment is
+ * passed whole: written `ENV.BETTER_AUTH_URL`, a public variable is replaced by its build-time
+ * value, and an image built once would then say the same for every installation.
+ */
+export function servedOverHttps(env: { readonly BETTER_AUTH_URL: string }): boolean {
+  return env.BETTER_AUTH_URL.startsWith("https://");
+}
+
 /** A fresh nonce for one response's Content Security Policy. */
 export function createNonce(): string {
   const bytes = crypto.getRandomValues(new Uint8Array(16));
