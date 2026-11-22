@@ -12,6 +12,8 @@
 #                                                it adds (a merge's are in the range's), its
 #                                                message, author and committer; and what the
 #                                                whole range adds (CI)
+# An identity (author, committer) is the public one its author chose: it is checked against the
+# private list, home paths and IBANs, not the e-mail rule. Binary files are not read.
 #   tools/privacy-check.sh [--base <ref>] <file>...
 #                                                text files, every line: a pull request's title and
 #                                                description
@@ -70,8 +72,6 @@ IBAN='(^|[^A-Za-z0-9])([A-Z]{2}[0-9]{2}( ?[A-Z0-9]){11,30})([^A-Za-z0-9]|$)'
 # (Windows, its backslashes maybe escaped, or WSL's /mnt/c/Users); not a URL's page of that name.
 NAME='[A-Za-z0-9._-]+'
 HOME_PATH="(^|[^A-Za-z0-9_.~-])((/var)?/home/$NAME|(/mnt/[a-z])?/Users/$NAME|[A-Za-z]:(\\\\\\\\|\\\\|/)Users(\\\\\\\\|\\\\|/)$NAME)"
-# GitHub's own addresses, which keep a person's e-mail private: allowed for a commit's identities.
-GITHUB_NOREPLY='(^|<)([A-Za-z0-9._+-]+@users\.noreply\.github\.com|noreply@github\.com)>?$'
 
 found=0
 
@@ -125,10 +125,11 @@ check_ibans() { # <where> <text>
   done
 }
 
-check_line() { # <where> <text>
+check_line() { # <where> <text> [<e-mail rule: yes|no>]
   local where=$1 text=$2 rest match domain lower word
 
   rest=$text
+  [ "${3:-yes}" = yes ] || rest=""
   while [[ $rest =~ $EMAIL ]]; do
     match=${BASH_REMATCH[0]}
     domain=${match##*@}
@@ -163,13 +164,10 @@ check_line() { # <where> <text>
   fi
 }
 
-# A commit's identity, "Name <e-mail>": GitHub's no-reply addresses pass, the rest is a line.
+# A commit's identity, "Name <e-mail>": the public identity its author chose, so the e-mail rule
+# does not apply (AGENTS.md); the private list, home paths and IBANs do.
 check_identity() { # <where> <identity>
-  if [[ $2 =~ $GITHUB_NOREPLY ]]; then
-    check_line "$1" "${2%<*}"
-  else
-    check_line "$1" "$2"
-  fi
+  check_line "$1" "$2" no
 }
 
 # Reads "<where>\t<text>" lines. The same text is checked once: a line the range adds is also

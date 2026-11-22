@@ -14,6 +14,7 @@ const scratch = mkdtempSync(join(tmpdir(), "gousset-privacy-check-"));
 // privacy check reads this file too, in every pull request that changes it. The invented IBAN
 // too: the check allows only those its base lists.
 const OUTSIDE_EMAIL = ["alex", "mail.test"].join("@");
+const PRIVATE_EMAIL = ["zorblax", "mail.test"].join("@");
 const INVENTED_IBAN = ["FR76", "99999", "00001", "00012345678", "09"].join("");
 const OTHER_IBAN = ["DE78", "99999999", "0087654321"].join("");
 const LINUX_HOME = ["", "home", "alex", "notes.txt"].join("/");
@@ -258,11 +259,11 @@ describe("tools/privacy-check.sh", () => {
     write(repository, `docs/${OUTSIDE_EMAIL}.md`, "Nothing personal.\n");
     git(repository, ["add", "--all"]);
 
-    const result = run(["--staged"], repository, PRIVATE_WORDS, OUTSIDE_EMAIL);
+    const result = run(["--staged"], repository, PRIVATE_WORDS, PRIVATE_EMAIL);
 
     expect(result.status).toBe(1);
     expect(result.stderr).toContain(`file name docs/${OUTSIDE_EMAIL}.md: e-mail address`);
-    expect(result.stderr).toContain(`author: e-mail address ${OUTSIDE_EMAIL}`);
+    expect(result.stderr).toContain("author: a word of the private list");
   });
 
   test("a range checks the lines it adds and its commit messages", () => {
@@ -296,7 +297,7 @@ describe("tools/privacy-check.sh", () => {
     write(repository, "notes.md", "Nothing personal.\n");
     write(repository, `docs/${OUTSIDE_EMAIL}.md`, "Nothing personal.\n");
 
-    const named = commit(repository, "docs(docs): name a file", OUTSIDE_EMAIL);
+    const named = commit(repository, "docs(docs): name a file", PRIVATE_EMAIL);
     const result = run(["--range", base, named], repository);
 
     expect(result.status).toBe(1);
@@ -305,17 +306,22 @@ describe("tools/privacy-check.sh", () => {
     );
     expect(result.stderr).toContain(`file name docs/${OUTSIDE_EMAIL}.md: e-mail address`);
     expect(result.stderr).toContain(
-      `commit ${named.slice(0, 8)} author: e-mail address ${OUTSIDE_EMAIL}`,
+      `commit ${named.slice(0, 8)} author: a word of the private list`,
     );
   });
 
-  test("GitHub's no-reply address passes as a commit's author", () => {
+  test("an author's own public address passes: identities are not held to the e-mail rule", () => {
     const repository = repositoryWithFixtures();
     const base = git(repository, ["rev-parse", "HEAD"]);
-    const noreply = ["12345+alex", "users.noreply.github.com"].join("@");
-    const head = commit(repository, "docs(docs): nothing", noreply);
+
+    write(repository, "notes.md", "Nothing personal.\n");
+
+    const head = commit(repository, "docs(docs): nothing", OUTSIDE_EMAIL);
 
     expect(run(["--range", base, head], repository).status).toBe(0);
+    write(repository, "notes.md", "Nothing personal, still.\n");
+    git(repository, ["add", "--all"]);
+    expect(run(["--staged"], repository, PRIVATE_WORDS, OUTSIDE_EMAIL).status).toBe(0);
   });
 
   test("an IBAN a range adds to the fixtures is not allowed by it", () => {
