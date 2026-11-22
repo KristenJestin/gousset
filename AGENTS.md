@@ -205,6 +205,11 @@ The lead reviews every change to the tools against `docs/mcp.md` before merging.
 - **No module mocking**, no test that only checks a mock was called.
 - **A test that passes only on retry is a bug.** No automatic retries.
 - Examples and fixtures are made up (`packages/fixture`), never real data.
+- **`packages/ui`'s browser checks** run on Storybook with `pnpm test:ui` (Chromium, Firefox, a
+  phone; screenshots compared). CI runs them in the official Playwright image; refresh the
+  reference screenshots in that same image with `tools/playwright-docker.sh
+  --update-snapshots=all`, never with a local browser, which renders fonts differently.
+- **Required checks** on `dev` and `main`: `verify`, `ui`, `e2e`, `react-doctor` and `privacy`.
 
 ## How the work is organised
 
