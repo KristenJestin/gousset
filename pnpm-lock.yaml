@@ -265,6 +265,9 @@ importers:
       '@gousset/fixture':
         specifier: workspace:*
         version: link:../../packages/fixture
+      '@gousset/telemetry':
+        specifier: workspace:*
+        version: link:../../packages/telemetry
       '@modelcontextprotocol/client':
         specifier: 2.4.0
         version: 2.4.0
