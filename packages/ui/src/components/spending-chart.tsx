@@ -1,14 +1,13 @@
-import NumberFlow from "@number-flow/react";
-
 import { useUiMessages } from "../hooks/use-ui-messages";
 import type { SpendingDay, SpendingRow } from "../lib/chart-amounts";
-import { formatChartDay, spendingRows, toChartValue } from "../lib/chart-amounts";
+import { formatChartDay, spendingRows } from "../lib/chart-amounts";
 import { formatMoney } from "../lib/money";
 import { Grid } from "./charts/grid";
 import { Line } from "./charts/line";
 import { LineChart } from "./charts/line-chart";
 import { ChartTooltip } from "./charts/tooltip/chart-tooltip";
 import { XAxis } from "./charts/x-axis";
+import { Amount } from "./amount";
 import { Skeleton, SkeletonFrame } from "./skeleton";
 
 export type { SpendingDay } from "../lib/chart-amounts";
@@ -77,14 +76,10 @@ function TooltipAmount({
       <span className="text-chart-tooltip-muted">{label}</span>
       <span className="font-medium text-chart-tooltip-foreground tabular-nums">
         <span className="sr-only">{formatMoney(money, { locale })}</span>
-        {/* Major units for NumberFlow; its digits come from Intl, rounded to the currency's. */}
-        <NumberFlow
-          aria-hidden="true"
-          value={toChartValue(money)}
-          locales={locale}
-          format={{ style: "currency", currency }}
-          transformTiming={{ duration: 200, easing: "ease-out" }}
-        />
+        {/* `Amount` rolls its digits without injecting a style (NumberFlow does, which the CSP forbids). */}
+        <span aria-hidden="true">
+          <Amount value={money} locale={locale} size="sm" />
+        </span>
       </span>
     </div>
   );
