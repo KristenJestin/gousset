@@ -316,3 +316,103 @@
     scroll-behavior: auto !important;
   }
 }
+
+/* Toasts (`components/toaster.tsx`, #7): the stack, from the heights ui-sdk measures and sets
+   through the CSSOM (`--toast-front-height`, `--toast-index`, `--toast-offset`, `--toast-height`).
+   Collapsed, the toasts behind the newest peek out by 10 px, a little smaller; expanded (hover,
+   focus), each sits by its offset with a 12 px gap. A new toast slides in from its side and fades;
+   a closing one fades. 300 ms, easing out; cut under reduced motion like everything else. The
+   toast's own height follows a spring in the component. */
+@layer components {
+  [data-slot="toast-region"] {
+    --toast-gap: 0.75rem;
+    --toast-peek: 0.625rem;
+
+    position: fixed;
+    inset-inline: 1rem;
+    width: auto;
+    height: var(--toast-front-height, 0px);
+    transition: height 300ms var(--default-transition-timing-function);
+  }
+
+  @media (width >= 40rem) {
+    [data-slot="toast-region"] {
+      inset-inline: auto 1.5rem;
+      width: 22rem;
+    }
+  }
+
+  [data-slot="toast-region"][data-side="bottom"] {
+    top: auto;
+    bottom: calc(1.5rem + var(--keyboard-inset, 0px) + env(safe-area-inset-bottom, 0px));
+  }
+
+  [data-slot="toast-region"][data-side="top"] {
+    top: calc(1rem + env(safe-area-inset-top, 0px));
+    bottom: auto;
+  }
+
+  [data-slot="toast-region"][data-expanded] {
+    height: calc(var(--toast-stack-height, 0px) + (var(--toast-count, 1) - 1) * var(--toast-gap));
+  }
+
+  [data-slot="toast"] {
+    position: absolute;
+    inset-inline: 0;
+    z-index: calc(10 - var(--toast-index, 0));
+    height: var(--toast-height);
+    overflow: hidden;
+    user-select: none;
+    translate: var(--toast-swipe-x, 0px) calc(var(--toast-y, 0px) + var(--toast-swipe-y, 0px));
+    scale: calc(1 - var(--toast-index, 0) * 0.05);
+    transition-property: translate, scale, opacity;
+    transition-duration: 300ms;
+    transition-timing-function: var(--default-transition-timing-function);
+  }
+
+  [data-side="bottom"] [data-slot="toast"] {
+    --toast-y: calc(var(--toast-index, 0) * -1 * var(--toast-peek));
+
+    bottom: 0;
+    transform-origin: bottom center;
+  }
+
+  [data-side="top"] [data-slot="toast"] {
+    --toast-y: calc(var(--toast-index, 0) * var(--toast-peek));
+
+    top: 0;
+    transform-origin: top center;
+  }
+
+  [data-slot="toast"]:not([data-front], [data-expanded]) {
+    height: var(--toast-front-height);
+  }
+
+  [data-slot="toast"][data-expanded] {
+    scale: 1;
+  }
+
+  [data-side="bottom"] [data-slot="toast"][data-expanded] {
+    --toast-y: calc(-1 * (var(--toast-offset, 0px) + var(--toast-index, 0) * var(--toast-gap)));
+  }
+
+  [data-side="top"] [data-slot="toast"][data-expanded] {
+    --toast-y: calc(var(--toast-offset, 0px) + var(--toast-index, 0) * var(--toast-gap));
+  }
+
+  [data-slot="toast"]:is([data-starting-style], [data-swiping]) {
+    transition: none;
+  }
+
+  [data-side="bottom"] [data-slot="toast"][data-starting-style][data-front] {
+    --toast-y: 100%;
+  }
+
+  [data-side="top"] [data-slot="toast"][data-starting-style][data-front] {
+    --toast-y: -100%;
+  }
+
+  [data-slot="toast"]:is([data-starting-style], [data-ending-style]) {
+    opacity: 0;
+  }
+}

@@ -36,6 +36,23 @@ const en = {
     moreRows: (count: number) => `+ ${count} more`,
     empty: "Nothing to show this month.",
   },
+  notify: {
+    /** The toasts' landmark, reached with F6. */
+    region: "Notifications",
+    saved: "Saved",
+    failed: "Something went wrong",
+    retry: "Retry",
+    /** A progress toast's title when the caller gives none. */
+    working: "Working…",
+    /** A progress toast resolved without a title of the caller's. */
+    done: "Done",
+    undo: "Undo",
+    undone: "Undone",
+    undoFailed: "Couldn't undo",
+    dismiss: "Dismiss",
+    /** Said once a toast's button has been working for a second. */
+    pending: "Still working",
+  },
 };
 
 export type UiMessages = typeof en;
@@ -66,6 +83,19 @@ const fr: UiMessages = {
     benchmark: (amount: string) => `repère ${amount}`,
     moreRows: (count: number) => `+ ${count} de plus`,
     empty: "Rien à afficher ce mois-ci.",
+  },
+  notify: {
+    region: "Notifications",
+    saved: "Enregistré",
+    failed: "Un problème est survenu",
+    retry: "Réessayer",
+    working: "En cours…",
+    done: "Terminé",
+    undo: "Annuler",
+    undone: "Annulé",
+    undoFailed: "Impossible d’annuler",
+    dismiss: "Fermer",
+    pending: "Toujours en cours",
   },
 };
 
