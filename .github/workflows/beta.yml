@@ -1,0 +1,112 @@
+# The beta of each push to dev (docs/releases.md, "Betas"): once the `verify` job of that push's
+# `ci` run passed, the image ghcr.io/kristenjestin/gousset:X.Y.Z-beta.N, checked by installing it
+# as docker-compose.yml does, and the tag `beta`, while the commit is still dev's head.
+name: beta
+
+on:
+  workflow_run:
+    workflows: [ci]
+    types: [completed]
+    branches: [dev]
+
+permissions: {}
+
+# One beta at a time, in the order of the pushes: an older one never takes `beta` back.
+concurrency:
+  group: beta
+
+env:
+  IMAGE: ghcr.io/kristenjestin/gousset
+
+jobs:
+  beta:
+    if: github.event.workflow_run.event == 'push'
+    runs-on: ubuntu-latest
+    permissions:
+      # To read the run's jobs.
+      actions: read
+      contents: read
+      packages: write
+    steps:
+      - name: The verify job of the push passed
+        id: verified
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN: ${{ github.event.workflow_run.id }}
+        run: |
+          conclusion=$(gh api "repos/$GH_REPO/actions/runs/$RUN/jobs" --paginate --jq '.jobs[] | select(.name == "verify") | .conclusion')
+          if [ "$conclusion" = success ]; then
+            echo "publish=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::verify did not pass on this push (${conclusion:-not found}): no beta is published."
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - if: steps.verified.outputs.publish == 'true'
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+          # Every commit and tag: the version counts from the last release.
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: The version
+        if: steps.verified.outputs.publish == 'true'
+        id: version
+        env:
+          SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          version=$(tools/version.sh beta --at "$SHA")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "::notice::The beta of $SHA is $version."
+
+      - if: steps.verified.outputs.publish == 'true'
+        uses: docker/setup-buildx-action@v4
+
+      - name: Build the image
+        if: steps.verified.outputs.publish == 'true'
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          load: true
+          tags: ${{ env.IMAGE }}:${{ steps.version.outputs.version }}
+          build-args: VERSION=${{ steps.version.outputs.version }}
+          labels: org.opencontainers.image.revision=${{ github.event.workflow_run.head_sha }}
+
+      - name: It installs, migrates and answers, as docker-compose.yml runs it
+        if: steps.verified.outputs.publish == 'true'
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: tools/check-image.sh "$VERSION"
+
+      # Signed in only now, once the branch's code has run.
+      - if: steps.verified.outputs.publish == 'true'
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Publish the beta
+        if: steps.verified.outputs.publish == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          SHA: ${{ github.event.workflow_run.head_sha }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          # A published version is never replaced: a run again pushes only what is missing.
+          if docker buildx imagetools inspect "$IMAGE:$VERSION" > /dev/null 2>&1; then
+            echo "::notice::$IMAGE:$VERSION is published already."
+          else
+            docker push "$IMAGE:$VERSION"
+          fi
+          # `beta` follows dev's head: a push made since publishes its own.
+          head=$(gh api "repos/$GH_REPO/git/ref/heads/dev" --jq .object.sha)
+          if [ "$head" = "$SHA" ]; then
+            docker buildx imagetools create --tag "$IMAGE:beta" "$IMAGE:$VERSION"
+            echo "::notice::$IMAGE:beta is $VERSION."
+          else
+            echo "::notice::dev moved on to $head: beta is left to its run."
+          fi

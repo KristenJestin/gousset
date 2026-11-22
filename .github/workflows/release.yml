@@ -1,0 +1,176 @@
+# A release (docs/releases.md, "Releasing"), started by hand from dev:
+#   gh workflow run release.yml --ref dev [-f commit=<full SHA of dev>]
+# main moves forward to a commit of dev (a fast-forward, never a squash nor a merge of its own),
+# the beta image of that commit is published again as X.Y.Z and latest, and the GitHub release
+# vX.Y.Z, which makes the tag, carries the notes built from the pull requests' `Note:` lines.
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      commit:
+        description: The commit of dev to release, its full SHA, or dev for its head
+        required: true
+        default: dev
+
+permissions: {}
+
+# Two releases at once would race for main.
+concurrency:
+  group: release
+
+env:
+  IMAGE: ghcr.io/kristenjestin/gousset
+
+jobs:
+  # Reads only: what is released, its version and its notes.
+  prepare:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # The notes read the pull requests' descriptions.
+      pull-requests: read
+    outputs:
+      sha: ${{ steps.commit.outputs.sha }}
+      version: ${{ steps.version.outputs.version }}
+      beta: ${{ steps.version.outputs.beta }}
+    steps:
+      - name: Started from dev, for a commit of dev
+        env:
+          COMMIT: ${{ inputs.commit }}
+        run: |
+          # dev's copy of this workflow is the one that releases: another branch's may say anything.
+          if [ "$GITHUB_REF" != refs/heads/dev ]; then
+            echo "::error::The release is started from dev, not $GITHUB_REF: nothing was released."
+            exit 1
+          fi
+          if [ "$COMMIT" != dev ] && ! [[ $COMMIT =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::The commit to release is a full SHA of dev, or dev for its head: nothing was released."
+            exit 1
+          fi
+
+      - uses: actions/checkout@v7
+        with:
+          ref: dev
+          # Every commit and tag: the version counts from the last release.
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: The commit
+        id: commit
+        env:
+          COMMIT: ${{ inputs.commit }}
+        run: |
+          sha=$(git rev-parse HEAD)
+          if [ "$COMMIT" != dev ]; then
+            if ! git merge-base --is-ancestor "$COMMIT" HEAD 2> /dev/null; then
+              echo "::error::$COMMIT is not a commit of dev: nothing was released."
+              exit 1
+            fi
+            sha=$COMMIT
+          fi
+          # main is always an ancestor of dev; before the first release it does not exist yet.
+          if git rev-parse -q --verify refs/remotes/origin/main > /dev/null &&
+            ! git merge-base --is-ancestor origin/main "$sha"; then
+            echo "::error::main is not an ancestor of $sha: main cannot move forward to it, nothing was released."
+            exit 1
+          fi
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
+
+      - name: The version
+        id: version
+        env:
+          SHA: ${{ steps.commit.outputs.sha }}
+        run: |
+          status=0
+          version=$(tools/version.sh stable --at "$SHA") || status=$?
+          if [ "$status" -eq 3 ]; then
+            echo "::error::Nothing was committed since the last release: nothing was released."
+            exit 1
+          fi
+          [ "$status" -eq 0 ] || exit "$status"
+          beta=$(tools/version.sh beta --at "$SHA")
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "beta=$beta" >> "$GITHUB_OUTPUT"
+          echo "::notice::$SHA is released as $version, the image of $beta."
+
+      - name: The notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          SHA: ${{ steps.commit.outputs.sha }}
+          VERSION: ${{ steps.version.outputs.version }}
+          BETA: ${{ steps.version.outputs.beta }}
+        run: |
+          {
+            echo "The image: \`$IMAGE:$VERSION\` (and \`latest\`), the very image of the beta \`$BETA\`. Install or update it with \`docker-compose.yml\` (docs/releases.md, \"Installing\")."
+            echo
+            tools/changelog.sh --at "$SHA"
+          } > "$RUNNER_TEMP/notes.md"
+          cat "$RUNNER_TEMP/notes.md" >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: notes
+          path: ${{ runner.temp }}/notes.md
+          retention-days: 7
+
+  # Holds the tokens that write main, the tags and the images: no checkout, no code of any branch,
+  # only `gh` and `docker` on what prepare decided.
+  release:
+    needs: prepare
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      SHA: ${{ needs.prepare.outputs.sha }}
+      VERSION: ${{ needs.prepare.outputs.version }}
+      BETA: ${{ needs.prepare.outputs.beta }}
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          name: notes
+          path: ${{ runner.temp }}/notes
+
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      # Published by beta.yml once verify passed on that commit: a release is never built anew.
+      - name: The beta of the commit is published
+        run: |
+          if ! docker buildx imagetools inspect "$IMAGE:$BETA" > /dev/null; then
+            echo "::error::$IMAGE:$BETA, the beta of $SHA, is not published (did verify pass on its push?): nothing was released."
+            exit 1
+          fi
+
+      - name: Move main forward to the commit
+        run: |
+          if main=$(gh api "repos/$GH_REPO/git/ref/heads/main" --jq .object.sha 2> /dev/null); then
+            if [ "$main" = "$SHA" ]; then
+              echo "::notice::main is $SHA already."
+            else
+              # Not forced: GitHub refuses anything but a fast-forward, so nothing is overwritten.
+              gh api -X PATCH "repos/$GH_REPO/git/refs/heads/main" -f sha="$SHA" -F force=false > /dev/null
+              echo "::notice::main moved forward to $SHA."
+            fi
+          else
+            gh api "repos/$GH_REPO/git/refs" -f ref=refs/heads/main -f sha="$SHA" > /dev/null
+            echo "::notice::main made on $SHA."
+          fi
+
+      - name: Publish the image as X.Y.Z and latest
+        run: |
+          docker buildx imagetools create --tag "$IMAGE:$VERSION" --tag "$IMAGE:latest" "$IMAGE:$BETA"
+          echo "::notice::$IMAGE:$VERSION and latest are $BETA."
+
+      # Last: the release makes the tag, after which the version counts from it.
+      - name: The release vX.Y.Z and its tag
+        run: |
+          gh release create "v$VERSION" --target "$SHA" --title "$VERSION" \
+            --notes-file "$RUNNER_TEMP/notes/notes.md" --latest
