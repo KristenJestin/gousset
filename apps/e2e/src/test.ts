@@ -6,7 +6,7 @@ import type { Page } from "@playwright/test";
 import { expectAccessible } from "./accessibility";
 import { startWorkerEnvironment } from "./app-server";
 import type { AppEnvironment, WorkerEnvironment } from "./app-server";
-import { addUser, madeUpUser, signUp } from "./auth";
+import { addUser, hasLiveSession, madeUpUser, signUp } from "./auth";
 import type { TestUser } from "./auth";
 import { TEST_CLIENT_ID, registerTestClient } from "./oauth-client";
 import { writeStatements } from "./statements";
@@ -45,6 +45,19 @@ type TestFixtures = {
    */
   mcpClientId: string;
 };
+
+/**
+ * The worker's users keep one session each, shared by every test of the worker: a test that ended
+ * it (signed out) would send every later test to the sign-in page, and fail there far from the
+ * cause. Checked before each test that uses it.
+ */
+async function expectSharedSession(baseURL: string, person: TestUser): Promise<void> {
+  if (!(await hasLiveSession(baseURL, person))) {
+    throw new Error(
+      `A previous test ended the shared session of ${person.email}: a test that signs out must sign in with a session of its own (signIn in src/auth.ts).`,
+    );
+  }
+}
 
 async function expectAccessibleIfOpen(page: Page): Promise<void> {
   if (page.isClosed() || page.url() === "about:blank") {
@@ -102,16 +115,19 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
     await provide(TEST_CLIENT_ID);
   },
 
-  userPage: async ({ page, user }, provide) => {
+  userPage: async ({ page, user, app }, provide) => {
+    await expectSharedSession(app.baseURL, user);
     await page.context().addCookies([...user.cookies]);
     await provide(page);
   },
 
   secondUserPage: async (
-    { browser, secondUser, baseURL, viewport, colorScheme, locale, timezoneId },
+    { browser, secondUser, app, baseURL, viewport, colorScheme, locale, timezoneId },
     provide,
     testInfo,
   ) => {
+    await expectSharedSession(app.baseURL, secondUser);
+
     const context = await browser.newContext({
       baseURL,
       viewport,
@@ -156,7 +172,7 @@ export { expect } from "@playwright/test";
 
 export { expectAccessible, visit } from "./accessibility";
 
-export { SIGN_IN_PATH, SIGN_UP_PATH, createUser, signInStatus } from "./auth";
+export { SIGN_IN_PATH, SIGN_UP_PATH, createUser, signIn, signInStatus } from "./auth";
 
 export { fixDay } from "./clock";
 
