@@ -150,9 +150,9 @@ function Group({ title, children }: { title: string; children: ReactNode }) {
 function TokenGroup({ title, holds }: { title: string; holds: (name: string) => boolean }) {
   return (
     <Group title={title}>
-      {TOKENS.filter((token) => holds(token.name)).map((token) => (
-        <TokenRow key={token.name} token={token} />
-      ))}
+      {TOKENS.flatMap((token) =>
+        holds(token.name) ? [<TokenRow key={token.name} token={token} />] : [],
+      )}
     </Group>
   );
 }
