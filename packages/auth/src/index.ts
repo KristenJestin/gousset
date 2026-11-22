@@ -1,5 +1,4 @@
 import { cimd } from "@better-auth/cimd";
-import { fetchClientMetadataResource } from "@better-auth/cimd/node";
 import { drizzleAdapter } from "@better-auth/drizzle-adapter/relations-v2";
 import { mcp } from "@better-auth/mcp";
 import type { Database } from "@gousset/db";
@@ -11,6 +10,7 @@ import { tanstackStartCookies } from "better-auth/tanstack-start";
 import { Option, Schema } from "effect";
 
 import { TOO_MANY_ATTEMPTS } from "./attempt-guard";
+import { cimdOptions } from "./cimd";
 import { CLIENT_ADDRESS_HEADER } from "./client-address";
 import { CONSENT_PATH, McpScope, SIGN_IN_PATH, mcpResourceOf } from "./mcp";
 
@@ -70,7 +70,7 @@ function mcpPlugins(resource: string) {
         oauthClientAssertion: { modelName: "authOauthClientAssertion" },
       },
     }),
-    cimd({ fetchClientMetadataResource, metadataProfile: "mcp-2026-07-28" }),
+    cimd(cimdOptions),
   ];
 }
 
