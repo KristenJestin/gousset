@@ -17,7 +17,7 @@ Status: the naming of CSS variables is validated. The rest of the visual directi
 - **ui-sdk** for behaviours and base components.
 - **Bklit UI** for charts. It is built on shadcn/ui, Tailwind and visx.
 - **Motion for React** for animation.
-- **Tailwind**, **Geist** (typeface) and **Tabler** (icons). Geist sets every text of the app, headings included; the logo's wordmark is drawn in Instrument Sans and converted to paths, so the app never loads that font.
+- **Tailwind**, **Geist** (typeface) and **Tabler** (icons, see [Icons](#icons)). Geist sets every text of the app, headings included; the logo's wordmark is drawn in Instrument Sans and converted to paths, so the app never loads that font.
 - **kloq** for the few calendar views (recurring payments, see issue #34): installed from its shadcn registry into `packages/ui`, read only, adapted to Gousset's theme.
 
 The rest of the stack is in [`architecture.md`](architecture.md).
@@ -79,6 +79,24 @@ Motion where it explains what changes, never as decoration:
 - Everything is cut when the system asks for reduced motion.
 
 Motion is shared: ui-sdk animates the entry and exit of popups, menus and panels in CSS (`data-starting-style`, `data-ending-style`), and Motion does the rest.
+
+## Icons
+
+**Tabler Icons** (`@tabler/icons-react`), outline style, stroke 1.5. It covers every category a budget needs (groceries, fuel, health, travel, pets…), takes `currentColor`, a size and a stroke width, and is tree-shaken.
+
+- **Pages never import Tabler directly.** `packages/ui` exports the icons Gousset uses under its own names (`icons.ts`: `ImportIcon`, `TransferIcon`, `CategoryIcons.groceries`…), through one `Icon` wrapper that sets the size and the stroke. Changing the stroke, a drawing or the whole library touches that file only.
+- Category icons are chosen once, in that file, and the user picks among them; no emoji.
+
+## Loading
+
+Skeletons are for blocks whose data is coming ([architecture](architecture.md#data-loading-and-skeletons)). For an action or a job (a button that saves, an import reading its file), one indicator: **`Loader`**.
+
+- **The drawing: a coin falling into a pocket.** A U-shaped pocket (`M5 11v4a7 7 0 0 0 14 0v-4` in a 24 grid, stroke 2.6, round caps) and a coin (radius 3) that falls into it and fades, looping in about 1.3 s.
+- **One component, one place.** The SVG and its keyframes live only in `Loader` (CSS animation, no JavaScript, no inline style, so the Content Security Policy and `@shadcn/lint` stay happy). Every loading spot uses `Loader`; changing the animation, or replacing it with another drawing, touches that component only.
+- It takes `currentColor` and is sized in `em`, so it follows the text it sits in: 16 px in a button, 14 px in a small one.
+- **Reduced motion**: nothing falls; the coin pulses softly.
+- **In a button** (`Button`'s `loading` prop): the loader takes the place of the button's icon, the button keeps its width, is disabled and `aria-busy`, and its label may change ("Importing…"). It shows only after about 300 ms and then stays at least 500 ms, so it never flashes.
+- At 14 px the pocket is small: its story checks it at that size in both themes, and the stroke or the coin may be thickened for small sizes.
 
 ## CSS variables
 
