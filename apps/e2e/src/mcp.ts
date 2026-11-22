@@ -178,6 +178,10 @@ export async function connectMcp(connection: McpConnection): Promise<McpSession>
 
   const returned = (await callback).searchParams;
 
+  // The request is caught before its navigation ends: the page is left only once it is on the
+  // callback, or the test's next navigation would be cut by this one.
+  await connection.page.waitForURL(`${TEST_REDIRECT_URL}**`);
+
   if (returned.get("code") === null) {
     throw new Error(`The authorization came back without a code: ${returned.toString()}`);
   }
