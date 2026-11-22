@@ -34,6 +34,13 @@ const Manifest = Schema.Struct({
   icons: Schema.Array(Schema.Struct({ sizes: Schema.String, purpose: Schema.String })),
 });
 
+/** The language the user chose, kept in Paraglide's cookie; none while they chose nothing. */
+async function languageCookie(page: Page) {
+  const cookies = await page.context().cookies();
+
+  return cookies.find((cookie) => cookie.name === LANGUAGE_COOKIE)?.value;
+}
+
 async function chooseLanguage(page: Page, language: "en" | "fr") {
   await page
     .context()
@@ -184,12 +191,15 @@ test.describe("in French", () => {
     await expect(userPage.getByRole("heading", { level: 1, name: "Bilan du mois" })).toBeVisible();
     // Dates by the user's locale.
     await expect(userPage.getByRole("group", { name: "Mois" })).toContainText(/novembre 2026/i);
+    // Following the browser saves nothing: the browser's next language still wins.
+    expect(await languageCookie(userPage)).toBeUndefined();
 
     await visit(userPage, "/settings");
     await userPage.getByRole("radio", { name: "English" }).click();
 
     // Kept on this browser: the next visit is in English, whatever the browser says.
     await expect(userPage.getByRole("heading", { level: 1, name: "Settings" })).toBeVisible();
+    expect(await languageCookie(userPage)).toBe("en");
     await userPage.goto("/");
     await expect(userPage.locator("html")).toHaveAttribute("lang", "en");
     await expect(userPage.getByRole("heading", { level: 1, name: "Monthly review" })).toBeVisible();
