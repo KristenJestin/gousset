@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { mkdtempSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, test } from "vite-plus/test";
@@ -28,14 +28,26 @@ function git(cwd: string, args: Array<string>) {
   return result.stdout.trim();
 }
 
+function run(args: Array<string>, script = SCRIPT) {
+  const result = spawnSync("bash", [script, ...args], { cwd: scratch, encoding: "utf8" });
+
+  return { status: result.status, stderr: result.stderr };
+}
+
 function checkMessage(message: string) {
   const file = join(scratch, "COMMIT_EDITMSG");
 
   writeFileSync(file, message);
 
-  const result = spawnSync("bash", [SCRIPT, file], { encoding: "utf8" });
+  return run([file]);
+}
 
-  return { status: result.status, stderr: result.stderr };
+function checkTitle(title: string) {
+  const file = join(scratch, "title");
+
+  writeFileSync(file, `${title}\n`);
+
+  return run(["--title", file]);
 }
 
 describe("tools/commit-message.sh", () => {
@@ -143,5 +155,53 @@ describe("tools/commit-message.sh", () => {
     expect(result.status).toBe(1);
     expect(result.stderr).toContain(`${bad.slice(0, 8)}: "Fixed things."`);
     expect(result.stderr).not.toContain("show the total");
+  });
+
+  test("a pull request title follows the convention", () => {
+    expect(checkTitle("ci(ci): verify every pull request").status).toBe(0);
+
+    const result = checkTitle("ci: verify every pull request");
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("title: ");
+  });
+
+  test("a pull request title never passes as a subject Git wrote", () => {
+    for (const title of ["Merge the two account lists", "Revert the import change"]) {
+      const result = checkTitle(title);
+
+      expect(result.status).toBe(1);
+      expect(result.stderr).toContain("is not <type>(<scope>): <subject>");
+    }
+  });
+
+  test("a range git cannot read stops the check", () => {
+    const result = run(["--range", "deadbeef..cafebabe"]);
+
+    expect(result.status).toBe(2);
+    expect(result.stderr).toContain("commit message check: git rev-list");
+  });
+
+  test("a message that cannot be read stops the check", () => {
+    const result = run([join(scratch, "missing")]);
+
+    expect(result.status).toBe(2);
+    expect(result.stderr).toContain("cannot read");
+  });
+
+  test("without the lists of AGENTS.md the check stops and says so", () => {
+    const copy = mkdtempSync(join(scratch, "alone-"));
+
+    mkdirSync(join(copy, "tools"));
+    copyFileSync(SCRIPT, join(copy, "tools", "commit-message.sh"));
+    writeFileSync(join(copy, "AGENTS.md"), "# No lists here\n");
+
+    const result = run(
+      ["--title", join(scratch, "title")],
+      join(copy, "tools", "commit-message.sh"),
+    );
+
+    expect(result.status).toBe(2);
+    expect(result.stderr).toContain("no types or scopes found in AGENTS.md");
   });
 });
