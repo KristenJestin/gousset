@@ -411,6 +411,22 @@ importers:
 
   packages/config: {}
 
+  packages/core:
+    dependencies:
+      '@gousset/fixture':
+        specifier: workspace:*
+        version: link:../fixture
+      effect:
+        specifier: 'catalog:'
+        version: 4.1.5
+    devDependencies:
+      '@gousset/config':
+        specifier: workspace:*
+        version: link:../config
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+
   packages/db:
     dependencies:
       drizzle-orm:

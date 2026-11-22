@@ -32,16 +32,17 @@ file is how to work.
 
 ## Layout
 
-| Path               | What                                                                 |
-| ------------------ | -------------------------------------------------------------------- |
-| `apps/web`         | The app: TanStack Start (pages, server functions, API, jobs, `/mcp`) |
-| `packages/ui`      | Every component and the theme, each described in Storybook           |
-| `packages/db`      | The Drizzle schema and migrations                                    |
-| `packages/auth`    | better-auth, wired to the database                                   |
-| `packages/fixture` | The shared made-up data                                              |
-| `packages/config`  | The shared TypeScript configuration                                  |
-| `tools/oxlint`     | Lint rules vendored from upstream (see [Lint](#lint))                |
-| `.agents/skills`   | Skills for agents, vendored from upstream                            |
+| Path               | What                                                                  |
+| ------------------ | --------------------------------------------------------------------- |
+| `apps/web`         | The app: TanStack Start (pages, server functions, API, jobs, `/mcp`)  |
+| `packages/ui`      | Every component and the theme, each described in Storybook            |
+| `packages/core`    | The logic (the month's figures, reviews) the app and `/mcp` both call |
+| `packages/db`      | The Drizzle schema and migrations                                     |
+| `packages/auth`    | better-auth, wired to the database                                    |
+| `packages/fixture` | The shared made-up data                                               |
+| `packages/config`  | The shared TypeScript configuration                                   |
+| `tools/oxlint`     | Lint rules vendored from upstream (see [Lint](#lint))                 |
+| `.agents/skills`   | Skills for agents, vendored from upstream                             |
 
 ## Commands
 
