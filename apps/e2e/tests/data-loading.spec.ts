@@ -182,6 +182,125 @@ test("an error stays in its block, with a retry, and the rest of the page works"
   await animationsDone(page);
 });
 
+test("a block that failed shows the next month once the month changes", async ({
+  userPage: page,
+}) => {
+  await fixDay(page, "2026-10-31");
+  await openUsersPage(page);
+
+  // Only October's spending fails.
+  await page.route(SERVER_FUNCTIONS, async (route) => {
+    const url = decodeURIComponent(route.request().url());
+
+    if (url.includes("category") && url.includes("2026-10")) {
+      await route.fulfill({ status: 500, body: "Failed by the test." });
+
+      return;
+    }
+
+    await route.fallback();
+  });
+
+  await page.getByRole("link", { name: "Back" }).click();
+
+  const spending = block(page, "Where the money goes");
+
+  await expect(spending.getByRole("alert")).toBeVisible({ timeout: 10_000 });
+
+  await page.getByRole("link", { name: "Previous month" }).click();
+
+  await expect(page.getByText("September 2026")).toBeVisible({ timeout: 10_000 });
+  await expect(spending).toContainText("Housing");
+  await expect(spending.getByRole("alert")).toHaveCount(0);
+  await animationsDone(page);
+});
+
+test("a line already reviewed elsewhere is refused, and stays reviewed", async ({
+  userPage: page,
+}) => {
+  // A month of its own: the approval below changes this user's August for the rest of the run.
+  const august = "/?month=2026-08";
+
+  await visit(page, august);
+
+  const toReview = block(page, "To review");
+
+  await expect(toReview).toContainText("+ 3 more");
+
+  // The same line, approved first in another tab of the same session.
+  const other = await page.context().newPage();
+
+  try {
+    await visit(other, august);
+
+    const approved = other.waitForResponse(
+      (response) =>
+        response.request().method() === "POST" && response.url().includes("/_serverFn/"),
+    );
+
+    await block(other, "To review")
+      .getByRole("button", { name: /^Approve / })
+      .first()
+      .click();
+    await approved;
+  } finally {
+    await other.close();
+  }
+
+  // This tab still shows it: the server refuses, says why, and the line stays away.
+  await toReview
+    .getByRole("button", { name: /^Approve / })
+    .first()
+    .click();
+
+  await expect(page.getByRole("alert")).toContainText("This line was already reviewed elsewhere.");
+  await expect(toReview).toContainText("+ 2 more");
+});
+
+test("a user who signs in after another in the same tab never sees the other's data", async ({
+  userPage: page,
+  secondUser,
+}) => {
+  // July is this test's own month: the review opens on it.
+  await fixDay(page, "2026-07-31");
+  await visit(page, "/");
+
+  const toReview = block(page, "To review");
+
+  await expect(toReview).toContainText("+ 3 more");
+
+  // The first user approves a line: their list has one line less.
+  const approved = page.waitForResponse(
+    (response) => response.request().method() === "POST" && response.url().includes("/_serverFn/"),
+  );
+
+  await toReview
+    .getByRole("button", { name: /^Approve / })
+    .first()
+    .click();
+  await approved;
+  await expect(toReview).toContainText("+ 2 more");
+
+  // They sign out, and the second user signs in, in the same tab: no reload anywhere.
+  await page.evaluate(() => {
+    document.documentElement.dataset.e2eNoReload = "yes";
+  });
+  await page.getByRole("button", { name: "Sign out" }).click();
+  await expect(page).toHaveURL(/\/sign-in$/);
+  await page.getByLabel("E-mail").fill(secondUser.email);
+  await page.getByLabel("Password", { exact: true }).fill(secondUser.password);
+  await page.getByRole("button", { name: "Sign in" }).click();
+
+  await expect(
+    page.getByRole("heading", { level: 1, name: `Hello, ${secondUser.name}.` }),
+  ).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.dataset.e2eNoReload)).toBe("yes");
+
+  // Their own July: every line still to review, not the first user's list.
+  await expect(toReview).toContainText("+ 3 more");
+  await animationsDone(page);
+});
+
 test("changing month keeps the current data on screen while the next one loads", async ({
   userPage: page,
 }) => {
@@ -196,9 +315,18 @@ test("changing month keeps the current data on screen while the next one loads",
   await page.getByRole("link", { name: "Previous month" }).click();
   await expect(page).toHaveURL(/month=2026-09/);
 
-  // September is on its way; October stays on screen, without a skeleton.
+  // September is on its way; October stays on screen, without a skeleton, and the links still
+  // lead from the month the header names.
   expect(await spending.textContent()).toBe(october);
   await expect(page.getByText("October 2026")).toBeVisible();
+  await expect(page.getByRole("link", { name: "Previous month" })).toHaveAttribute(
+    "href",
+    /month=2026-09/,
+  );
+  await expect(page.getByRole("link", { name: "Next month" })).toHaveAttribute(
+    "href",
+    /month=2026-11/,
+  );
 
   await expect(page.getByText("September 2026")).toBeVisible({ timeout: 10_000 });
   expect(await spending.textContent()).not.toBe(october);
