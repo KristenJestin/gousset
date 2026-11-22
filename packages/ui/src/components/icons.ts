@@ -34,6 +34,7 @@ import {
   IconMinus,
   IconMovie,
   IconPaw,
+  IconPencil,
   IconPhone,
   IconPigMoney,
   IconPlane,
@@ -47,6 +48,7 @@ import {
   IconShirt,
   IconShoppingCart,
   IconToolsKitchen2,
+  IconTrash,
   IconTrendingDown,
   IconTrendingUp,
   IconWallet,
@@ -82,6 +84,9 @@ export const interfaceIcons = {
   wallet: IconWallet,
   savings: IconPigMoney,
   merchant: IconReceipt,
+  // Overlays (menus, dialogs): editing and deleting a line.
+  edit: IconPencil,
+  delete: IconTrash,
   // Money (Delta): a change too small to count.
   steady: IconMinus,
 } as const;

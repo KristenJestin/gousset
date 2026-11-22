@@ -18,23 +18,27 @@ const en = {
     nextMonth: "Next month",
     remove: (name: string) => `Remove ${name}`,
   },
-  money: {
-    /** After the amount: "€3,120 received". */
-    received: "received",
-    /** Each part of the month bar, after its amount. */
-    roles: { spent: "spent", saved: "set aside", left: "left" },
-    /** In place of "left" when more went out than came in. */
-    overspent: "overspent",
-    /** The month bar's parts, as a group. */
-    parts: "The month's money, by part",
-    /** A change and what it is against ("5%", "your 6-month average"). */
-    deltaMore: (change: string, reference: string) => `${change} more than ${reference}`,
-    deltaLess: (change: string, reference: string) => `${change} less than ${reference}`,
-    deltaSteady: (reference: string) => `About the same as ${reference}`,
-    overBenchmark: "Above the benchmark",
-    benchmark: (amount: string) => `benchmark ${amount}`,
-    moreRows: (count: number) => `+ ${count} more`,
-    empty: "Nothing to show this month.",
+  forms: {
+    noMatch: "Nothing matches this search.",
+    results: (count: number) => (count === 1 ? "1 result" : `${count} results`),
+    showOptions: "Show the options",
+    chooseDate: "Choose a date",
+    previousMonth: "Previous month",
+    nextMonth: "Next month",
+    dateFormat: (example: string) => `As in ${example}`,
+    /** The calendar's language (month and day names, the typed date's order). */
+    dateLocale: "en",
+    /** The calendar's first day of the week, 0 for Sunday. */
+    weekStartsOn: 0,
+  },
+  overlays: {
+    close: "Close",
+    cancel: "Cancel",
+  },
+  charts: {
+    /** The language of the amounts, days and months a chart writes. */
+    locale: "en",
+    empty: "Nothing spent yet in this period.",
   },
   notify: {
     /** The toasts' landmark, reached with F6. */
@@ -52,6 +56,24 @@ const en = {
     dismiss: "Dismiss",
     /** Said once a toast's button has been working for a second. */
     pending: "Still working",
+  },
+  money: {
+    /** After the amount: "€3,120 received". */
+    received: "received",
+    /** Each part of the month bar, after its amount. */
+    roles: { spent: "spent", saved: "set aside", left: "left" },
+    /** In place of "left" when more went out than came in. */
+    overspent: "overspent",
+    /** The month bar's parts, as a group. */
+    parts: "The month's money, by part",
+    /** A change and what it is against ("5%", "your 6-month average"). */
+    deltaMore: (change: string, reference: string) => `${change} more than ${reference}`,
+    deltaLess: (change: string, reference: string) => `${change} less than ${reference}`,
+    deltaSteady: (reference: string) => `About the same as ${reference}`,
+    overBenchmark: "Above the benchmark",
+    benchmark: (amount: string) => `benchmark ${amount}`,
+    moreRows: (count: number) => `+ ${count} more`,
+    empty: "Nothing to show this month.",
   },
 };
 
@@ -71,18 +93,24 @@ const fr: UiMessages = {
     nextMonth: "Mois suivant",
     remove: (name: string) => `Retirer ${name}`,
   },
-  money: {
-    received: "reçus",
-    roles: { spent: "dépensés", saved: "mis de côté", left: "restants" },
-    overspent: "de dépassement",
-    parts: "L’argent du mois, par part",
-    deltaMore: (change: string, reference: string) => `${change} de plus que ${reference}`,
-    deltaLess: (change: string, reference: string) => `${change} de moins que ${reference}`,
-    deltaSteady: (reference: string) => `À peu près comme ${reference}`,
-    overBenchmark: "Au-dessus du repère",
-    benchmark: (amount: string) => `repère ${amount}`,
-    moreRows: (count: number) => `+ ${count} de plus`,
-    empty: "Rien à afficher ce mois-ci.",
+  forms: {
+    noMatch: "Rien ne correspond à cette recherche.",
+    results: (count: number) => (count <= 1 ? `${count} résultat` : `${count} résultats`),
+    showOptions: "Afficher les choix",
+    chooseDate: "Choisir une date",
+    previousMonth: "Mois précédent",
+    nextMonth: "Mois suivant",
+    dateFormat: (example: string) => `Par exemple ${example}`,
+    dateLocale: "fr",
+    weekStartsOn: 1,
+  },
+  overlays: {
+    close: "Fermer",
+    cancel: "Annuler",
+  },
+  charts: {
+    locale: "fr",
+    empty: "Aucune dépense sur cette période pour l’instant.",
   },
   notify: {
     region: "Notifications",
@@ -96,6 +124,19 @@ const fr: UiMessages = {
     undoFailed: "Impossible d’annuler",
     dismiss: "Fermer",
     pending: "Toujours en cours",
+  },
+  money: {
+    received: "reçus",
+    roles: { spent: "dépensés", saved: "mis de côté", left: "restants" },
+    overspent: "de dépassement",
+    parts: "L’argent du mois, par part",
+    deltaMore: (change: string, reference: string) => `${change} de plus que ${reference}`,
+    deltaLess: (change: string, reference: string) => `${change} de moins que ${reference}`,
+    deltaSteady: (reference: string) => `À peu près comme ${reference}`,
+    overBenchmark: "Au-dessus du repère",
+    benchmark: (amount: string) => `repère ${amount}`,
+    moreRows: (count: number) => `+ ${count} de plus`,
+    empty: "Rien à afficher ce mois-ci.",
   },
 };
 
