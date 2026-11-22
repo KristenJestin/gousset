@@ -1,24 +1,8 @@
 import { cn } from "../lib/utils";
-import { categoryIcons, interfaceIcons } from "./icons";
-import type { CategoryIconName } from "./icons";
+import { ICONS } from "./icons";
+import type { IconName } from "./icons";
 
-export { CATEGORY_ICON_NAMES } from "./icons";
-
-export type { CategoryIconName } from "./icons";
-
-export type InterfaceIconName = keyof typeof interfaceIcons;
-
-export type IconName = InterfaceIconName | CategoryIconName;
-
-const ICONS = { ...interfaceIcons, ...categoryIcons };
-
-/** Whether a stored or typed name is one of Gousset's icons. */
-export function isIconName(name: string): name is IconName {
-  return Object.hasOwn(ICONS, name);
-}
-
-/** The interface's icons, in the order `icons.ts` declares them. */
-export const INTERFACE_ICON_NAMES = Object.keys(interfaceIcons).filter(isIconName);
+export type { CategoryIconName, IconName, InterfaceIconName } from "./icons";
 
 export type IconProps = {
   name: IconName;

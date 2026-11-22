@@ -3,19 +3,21 @@ import type { ButtonActionDetails } from "@ui-sdk/react/button";
 import type { MouseEvent, ReactNode } from "react";
 
 import { useUnhurried } from "../hooks/use-unhurried";
+import { buttonClasses } from "../lib/button-classes";
+import type { ButtonSize, ButtonVariant } from "../lib/button-classes";
 import { cn } from "../lib/utils";
 import { Icon } from "./icon";
 import type { IconName } from "./icon";
 import { Loader } from "./loader";
 
-export type ButtonVariant = "primary" | "secondary" | "ghost" | "destructive";
+export type { ButtonSize, ButtonVariant } from "../lib/button-classes";
 
 export type ButtonProps = {
   children: ReactNode;
   /** `primary` for the one action of a form or a screen, `secondary` for the others. */
   variant?: ButtonVariant;
   /** `sm` in dense rows and toolbars. */
-  size?: "md" | "sm";
+  size?: ButtonSize;
   /** An icon before the label; the loader takes its place while loading. */
   icon?: IconName;
   /**
@@ -39,27 +41,6 @@ export type ButtonProps = {
   "aria-controls"?: string;
   "aria-expanded"?: boolean;
 };
-
-/** The classes every button-like control shares: one look, set here. */
-export function buttonClasses(variant: ButtonVariant, size: "md" | "sm") {
-  return cn(
-    "relative inline-flex shrink-0 cursor-pointer items-center justify-center gap-2 whitespace-nowrap rounded-md font-medium select-none",
-    "transition duration-150 ease-out active:scale-97",
-    "focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
-    "data-disabled:cursor-not-allowed data-disabled:opacity-50 data-disabled:active:scale-100",
-    "aria-busy:cursor-progress aria-busy:opacity-100",
-    size === "md" && "h-9 px-4 text-sm",
-    size === "sm" && "h-8 px-3 text-xs",
-    variant === "primary" &&
-      "bg-primary text-primary-foreground hover:bg-primary/90 data-disabled:hover:bg-primary",
-    variant === "secondary" &&
-      "border border-input bg-card text-foreground hover:bg-muted data-disabled:hover:bg-card",
-    variant === "ghost" &&
-      "bg-transparent text-foreground hover:bg-muted data-disabled:hover:bg-transparent",
-    variant === "destructive" &&
-      "bg-destructive text-primary-foreground hover:bg-destructive/90 data-disabled:hover:bg-destructive",
-  );
-}
 
 /**
  * A button on ui-sdk's `Button`: native `<button>`, `type="button"` unless told otherwise.
@@ -99,56 +80,81 @@ export function Button({
   );
 }
 
-function ButtonContent({
-  busy,
-  icon,
-  small,
-  loadingLabel,
-  children,
-}: {
+type ContentProps = {
   busy: boolean;
   icon: IconName | undefined;
   small: boolean;
   loadingLabel: string | undefined;
   children: ReactNode;
-}) {
+};
+
+function ButtonContent({ busy, icon, small, loadingLabel, children }: ContentProps) {
   const shown = useUnhurried(busy);
-  const loader = <Loader size={small ? "sm" : "md"} />;
 
   return (
     <>
-      {icon === undefined ? null : (
-        <span className="grid place-items-center" data-slot="button-icon">
-          <span className={cn("col-start-1 row-start-1 flex", shown && "invisible")}>
-            <Icon name={icon} size={small ? "sm" : "md"} />
-          </span>
-          {shown ? <span className="col-start-1 row-start-1 flex">{loader}</span> : null}
+      {icon === undefined ? null : <IconSlot icon={icon} small={small} shown={shown} />}
+      <LabelSlot
+        shown={shown}
+        hasIcon={icon !== undefined}
+        small={small}
+        loadingLabel={loadingLabel}
+      >
+        {children}
+      </LabelSlot>
+    </>
+  );
+}
+
+/** The icon, and the loader in its place once shown: one cell, so nothing moves. */
+function IconSlot({ icon, small, shown }: { icon: IconName; small: boolean; shown: boolean }) {
+  return (
+    <span className="grid place-items-center" data-slot="button-icon">
+      <span className={cn("col-start-1 row-start-1 flex", shown && "invisible")}>
+        <Icon name={icon} size={small ? "sm" : "md"} />
+      </span>
+      {shown ? (
+        <span className="col-start-1 row-start-1 flex">
+          <Loader size={small ? "sm" : "md"} />
         </span>
-      )}
-      <span className="grid place-items-center">
+      ) : null}
+    </span>
+  );
+}
+
+/**
+ * The label and, stacked in the same cell, what replaces it while loading (the loading label,
+ * or the loader alone without an icon): the widest sets the width, which never changes.
+ */
+function LabelSlot({
+  shown,
+  hasIcon,
+  small,
+  loadingLabel,
+  children,
+}: {
+  shown: boolean;
+  hasIcon: boolean;
+  small: boolean;
+  loadingLabel: string | undefined;
+  children: ReactNode;
+}) {
+  const replaced = shown && (!hasIcon || loadingLabel !== undefined);
+
+  return (
+    <span className="grid place-items-center">
+      <span className={cn("col-start-1 row-start-1", replaced && "invisible")}>{children}</span>
+      {replaced || loadingLabel !== undefined ? (
         <span
           className={cn(
-            "col-start-1 row-start-1",
-            shown && (icon === undefined || loadingLabel !== undefined) && "invisible",
+            "col-start-1 row-start-1 inline-flex items-center gap-2",
+            !replaced && "invisible",
           )}
         >
-          {children}
+          {hasIcon ? null : <Loader size={small ? "sm" : "md"} />}
+          {loadingLabel}
         </span>
-        {loadingLabel === undefined ? null : (
-          <span
-            className={cn(
-              "col-start-1 row-start-1 inline-flex items-center gap-2",
-              !shown && "invisible",
-            )}
-          >
-            {icon === undefined ? loader : null}
-            {loadingLabel}
-          </span>
-        )}
-        {shown && icon === undefined && loadingLabel === undefined ? (
-          <span className="col-start-1 row-start-1 flex">{loader}</span>
-        ) : null}
-      </span>
-    </>
+      ) : null}
+    </span>
   );
 }

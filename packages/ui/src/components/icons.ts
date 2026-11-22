@@ -137,3 +137,18 @@ export const categoryIcons = {
   gifts: IconGift,
   other: IconCategory,
 } as const satisfies { [Name in CategoryIconName]: TablerIcon };
+
+export type InterfaceIconName = keyof typeof interfaceIcons;
+
+export type IconName = InterfaceIconName | CategoryIconName;
+
+/** Every icon by its name: what `Icon` draws. */
+export const ICONS = { ...interfaceIcons, ...categoryIcons };
+
+/** Whether a stored or typed name is one of Gousset's icons. */
+export function isIconName(name: string): name is IconName {
+  return Object.hasOwn(ICONS, name);
+}
+
+/** The interface's icons, in the order this file declares them. */
+export const INTERFACE_ICON_NAMES = Object.keys(interfaceIcons).filter(isIconName);

@@ -1,7 +1,8 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 
-import { CATEGORY_ICON_NAMES, Icon, INTERFACE_ICON_NAMES } from "./icon";
-import type { IconName } from "./icon";
+import { Icon } from "./icon";
+import { CATEGORY_ICON_NAMES, INTERFACE_ICON_NAMES } from "./icons";
+import type { IconName } from "./icons";
 
 function Gallery({ names }: { names: ReadonlyArray<IconName> }) {
   return (
