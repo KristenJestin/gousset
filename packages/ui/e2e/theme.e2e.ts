@@ -1,10 +1,14 @@
-import { join } from "node:path";
-
-import type { Page, TestInfo } from "@playwright/test";
+import type { Page } from "@playwright/test";
 import { expect, test } from "@playwright/test";
 
 const TOKENS = "/iframe.html?id=theme-tokens--tokens&viewMode=story";
 const WITH_CHART = "/iframe.html?id=theme-colour-scheme--with-chart&viewMode=story";
+const DISABLED = "/iframe.html?id=theme-colour-scheme--disabled&viewMode=story";
+
+// One fixed day, so nothing on screen depends on when the tests run; timers still run.
+test.beforeEach(async ({ page }) => {
+  await page.clock.setFixedTime(new Date("2026-06-15T12:00:00Z"));
+});
 
 /** What a token resolves to on the page now, as the browser computes a colour. */
 async function resolveToken(page: Page, token: string) {
@@ -20,11 +24,6 @@ async function resolveToken(page: Page, token: string) {
 
     return color;
   }, token);
-}
-
-/** Where the screenshots for the pull request go: Playwright's ignored output folder. */
-function screenshotPath(testInfo: TestInfo, name: string) {
-  return join(testInfo.project.outputDir, "screenshots", `${name}.png`);
 }
 
 /** The colours a ui-sdk part and a Bklit chart are drawn with (lines are gradients: their stops). */
@@ -43,7 +42,7 @@ async function drawnColours(page: Page) {
   };
 }
 
-test("the token page shows every token in both schemes", async ({ page }, testInfo) => {
+test("the token page shows every token in both schemes", async ({ page }) => {
   const backgrounds = new Map<string, string>();
 
   for (const scheme of ["light", "dark"] as const) {
@@ -54,10 +53,7 @@ test("the token page shows every token in both schemes", async ({ page }, testIn
 
     backgrounds.set(scheme, await resolveToken(page, "--background"));
 
-    await page.screenshot({
-      path: screenshotPath(testInfo, `tokens-${scheme}`),
-      fullPage: true,
-    });
+    await expect(page).toHaveScreenshot(`tokens-${scheme}.png`, { fullPage: true });
   }
 
   expect(backgrounds.get("light")).not.toBe(backgrounds.get("dark"));
@@ -65,7 +61,7 @@ test("the token page shows every token in both schemes", async ({ page }, testIn
 
 test("switching the scheme changes ui-sdk's parts and Bklit's charts together, without a reload", async ({
   page,
-}, testInfo) => {
+}) => {
   await page.emulateMedia({ colorScheme: "light" });
   await page.goto(WITH_CHART);
   await expect(page.getByTestId("chart").locator("svg path").first()).toBeVisible();
@@ -77,7 +73,7 @@ test("switching the scheme changes ui-sdk's parts and Bklit's charts together, w
 
   expect(light.picker).toBe(await resolveToken(page, "--muted"));
   expect(light.chart).toContain(await resolveToken(page, "--chart-1"));
-  await page.screenshot({ path: screenshotPath(testInfo, "scheme-light") });
+  await expect(page).toHaveScreenshot("scheme-light.png");
 
   await page.getByRole("radio", { name: "Dark" }).click();
 
@@ -94,7 +90,7 @@ test("switching the scheme changes ui-sdk's parts and Bklit's charts together, w
   expect(dark.chart).not.toEqual(light.chart);
   expect(dark.chart).toContain(await resolveToken(page, "--chart-1"));
   await expect(html).toHaveAttribute("data-same-document", "yes");
-  await page.screenshot({ path: screenshotPath(testInfo, "scheme-dark") });
+  await expect(page).toHaveScreenshot("scheme-dark.png");
 
   await page.getByRole("radio", { name: "Light" }).click();
   await expect(html).toHaveAttribute("data-color-scheme", "light");
@@ -130,4 +126,18 @@ test("transitions run 200 ms, and are cut under reduced motion", async ({ page }
 
   await page.emulateMedia({ reducedMotion: "reduce" });
   await expect(item).toHaveCSS("transition-duration", "0s");
+});
+
+test("a disabled picker cannot change the scheme", async ({ page }) => {
+  await page.emulateMedia({ colorScheme: "light" });
+  await page.goto(DISABLED);
+
+  const dark = page.getByRole("radio", { name: "Dark" });
+
+  await expect(dark).toBeDisabled();
+  await dark.click({ force: true });
+  await expect(page.locator("html")).toHaveAttribute("data-color-scheme", "system");
+  await expect(page.getByRole("radiogroup", { name: "Colour scheme" })).toHaveScreenshot(
+    "picker-disabled.png",
+  );
 });

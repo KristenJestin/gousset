@@ -15,11 +15,20 @@ export default defineConfig({
   forbidOnly: true,
   reporter: "list",
   outputDir: "test-results",
+  // Reference screenshots, one set per browser and platform: font rendering differs between them.
+  snapshotPathTemplate: "{testDir}/__screenshots__/{projectName}-{platform}/{arg}{ext}",
+  expect: {
+    toHaveScreenshot: { animations: "disabled", caret: "hide", scale: "css" },
+  },
   use: {
-    ...devices["Desktop Chrome"],
     baseURL: `http://localhost:${PORT}`,
     headless: true,
   },
+  projects: [
+    { name: "chromium", use: { ...devices["Desktop Chrome"] } },
+    { name: "firefox", use: { ...devices["Desktop Firefox"] } },
+    { name: "phone", use: { ...devices["Pixel 7"] } },
+  ],
   webServer: {
     command: `storybook build --quiet && vp preview --outDir storybook-static --port ${PORT} --strictPort`,
     url: `http://localhost:${PORT}`,
