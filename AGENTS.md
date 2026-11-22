@@ -1,13 +1,16 @@
 <!-- intent-skills:start -->
+
 ## Skill Loading
 
 Use the repository’s installed Intent. If it is unavailable, report the missing dependency instead of downloading a replacement.
 Before editing files for a substantial task:
+
 - Run `pnpm exec intent list` from the workspace root to see available local skills.
 - If a listed skill matches the task, run `pnpm exec intent load <package>#<skill>` before changing files.
 - Use the loaded `SKILL.md` guidance while making the change.
 - Monorepos: when working across packages, run the skill check from the workspace root and prefer the local skill for the package being changed.
 - Multiple matches: prefer the most specific local skill for the package or concern you are changing; load additional skills only when the task spans multiple packages or concerns.
+
 <!-- intent-skills:end -->
 
 # AGENTS.md — Gousset
@@ -29,16 +32,16 @@ file is how to work.
 
 ## Layout
 
-| Path | What |
-|---|---|
-| `apps/web` | The app: TanStack Start (pages, server functions, API, jobs, `/mcp`) |
-| `packages/ui` | Every component and the theme, each described in Storybook |
-| `packages/db` | The Drizzle schema and migrations |
-| `packages/auth` | better-auth, wired to the database |
-| `packages/fixture` | The shared made-up data |
-| `packages/config` | The shared TypeScript configuration |
-| `tools/oxlint` | Lint rules vendored from upstream (see [Lint](#lint)) |
-| `.agents/skills` | Skills for agents, vendored from upstream |
+| Path               | What                                                                 |
+| ------------------ | -------------------------------------------------------------------- |
+| `apps/web`         | The app: TanStack Start (pages, server functions, API, jobs, `/mcp`) |
+| `packages/ui`      | Every component and the theme, each described in Storybook           |
+| `packages/db`      | The Drizzle schema and migrations                                    |
+| `packages/auth`    | better-auth, wired to the database                                   |
+| `packages/fixture` | The shared made-up data                                              |
+| `packages/config`  | The shared TypeScript configuration                                  |
+| `tools/oxlint`     | Lint rules vendored from upstream (see [Lint](#lint))                |
+| `.agents/skills`   | Skills for agents, vendored from upstream                            |
 
 ## Commands
 
@@ -196,10 +199,10 @@ The lead reviews every change to the tools against `docs/mcp.md` before merging.
 
 ## How the work is organised
 
-| Who | What |
-|---|---|
-| The maintainer | decides what is built, tries each milestone, and merges what they have not delegated |
-| The lead agent | turns decisions into issues, launches the developing agents, reviews their work, keeps the tracker honest |
+| Who               | What                                                                                                             |
+| ----------------- | ---------------------------------------------------------------------------------------------------------------- |
+| The maintainer    | decides what is built, tries each milestone, and merges what they have not delegated                             |
+| The lead agent    | turns decisions into issues, launches the developing agents, reviews their work, keeps the tracker honest        |
 | Developing agents | implement one issue each: the failing test first, then the code, the checks and a pull request; they never merge |
 
 ### The tracker
