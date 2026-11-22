@@ -6,6 +6,7 @@ export type {
   Account,
   AccountKind,
   Expense,
+  ImportedStatement,
   Investment,
   Line,
   LineKind,

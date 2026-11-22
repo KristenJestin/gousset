@@ -2,6 +2,10 @@ import { describe, expect, test } from "vite-plus/test";
 
 import { FIXTURE_SEED, madeUpAccounts, madeUpMonth } from "./ledger";
 
+/** What the made-up subscription cost in a month: negative, money out. */
+const subscriptionPrice = (month: string) =>
+  madeUpMonth(month).lines.find((line) => line.merchant === "Streamly")?.amountMinor;
+
 describe("madeUpMonth", () => {
   test("gives the same month for the same seed", () => {
     expect(madeUpMonth("2026-10")).toEqual(madeUpMonth("2026-10", FIXTURE_SEED));
@@ -91,6 +95,44 @@ describe("madeUpMonth", () => {
       expect(lines.filter((line) => !line.reviewed)).toHaveLength(6);
       expect(new Set(expenses.map((expense) => expense.category)).size).toBeGreaterThanOrEqual(6);
     }
+  });
+
+  test("gives some expenses subjects, the same for the same merchant", () => {
+    const { expenses } = madeUpMonth("2026-10");
+
+    const subjectsOf = (merchant: string) =>
+      expenses.find((expense) => expense.merchant === merchant)?.subjects;
+
+    expect(subjectsOf("Fuelstop")).toEqual(["Van"]);
+    expect(subjectsOf("Glycine Homes")).toEqual(["Home"]);
+    expect(subjectsOf("Streamly")).toEqual([]);
+  });
+
+  test("raises the subscription's price in October 2026", () => {
+    expect(subscriptionPrice("2026-09")).toBe(-899);
+    expect(subscriptionPrice("2026-10")).toBe(-949);
+    expect(subscriptionPrice("2026-11")).toBe(-949);
+  });
+
+  test("says up to which day each account's statement was imported", () => {
+    const { statements, lines } = madeUpMonth("2026-10");
+
+    const lastMealCardLine = lines
+      .filter((line) => line.accountId === "mealcard")
+      .map((line) => line.bookedOn)
+      .toSorted()
+      .at(-1);
+
+    expect(statements.map((statement) => statement.accountId)).toEqual(
+      madeUpAccounts.map((account) => account.id),
+    );
+    expect(statements.find((statement) => statement.accountId === "current")?.coveredTo).toBe(
+      "2026-10-31",
+    );
+    // The benefit account's statement stops at its last line: it was downloaded that day.
+    expect(statements.find((statement) => statement.accountId === "mealcard")?.coveredTo).toBe(
+      lastMealCardLine,
+    );
   });
 
   test("refuses a month that is not YYYY-MM", () => {
