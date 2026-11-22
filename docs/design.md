@@ -80,6 +80,10 @@ Motion where it explains what changes, never as decoration:
 
 Motion is shared: ui-sdk animates the entry and exit of popups, menus and panels in CSS (`data-starting-style`, `data-ending-style`), and Motion does the rest.
 
+## Brand
+
+The logo files are in [`brand/`](../brand/README.md): a G in one stroke whose bar is a coin, violet `#b49af7` on dark and `#6a44c8` on light. The wordmark is Instrument Sans, drawn as paths; the app's text stays in Geist. The violet is the app's accent (`--primary`, focus ring), checked against the `--money-*` colours so that it is never read as one of them.
+
 ## Icons
 
 **Tabler Icons** (`@tabler/icons-react`), outline style, stroke 1.5. It covers every category a budget needs (groceries, fuel, health, travel, pets…), takes `currentColor`, a size and a stroke width, and is tree-shaken.

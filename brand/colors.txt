@@ -1,0 +1,5 @@
+Gousset
+on dark   #b49af7
+on light  #6a44c8
+cream     #ece5d8
+tile      #14120f
