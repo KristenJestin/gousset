@@ -2,6 +2,7 @@ import { AnimatePresence, motion } from "motion/react";
 import { useState } from "react";
 import type { KeyboardEvent } from "react";
 
+import { useHydrated } from "../hooks/use-hydrated";
 import { usePageLanguage } from "../hooks/use-page-language";
 import { useUiMessages } from "../hooks/use-ui-messages";
 import { addMonths, formatMonth, monthIndex, monthOf } from "../lib/month";
@@ -40,9 +41,10 @@ export function MonthSwitcher({ value, onChange, latest }: MonthSwitcherProps) {
   const index = monthIndex(value);
   const [shownIndex, setShownIndex] = useState(index);
   const [direction, setDirection] = useState(1);
-  // Until the month first changes, the label has no entry to play: no `initial` nor `animate`, so
-  // the server's markup carries no `style` attribute (the Content Security Policy forbids them).
-  const [moved, setMoved] = useState(false);
+  // False on the server and while hydrating, true after: until then the label has no `animate`,
+  // so the server's markup carries no `style` attribute (the Content Security Policy forbids
+  // them). Once given, its exit plays as Motion's (and is skipped under reduced motion).
+  const hydrated = useHydrated();
   // Read once, when it mounts: a page left open past midnight on the 1st keeps its bound.
   const [current] = useState(() => monthOf(new Date()));
 
@@ -50,7 +52,6 @@ export function MonthSwitcher({ value, onChange, latest }: MonthSwitcherProps) {
   if (index !== shownIndex) {
     setDirection(index > shownIndex ? 1 : -1);
     setShownIndex(index);
-    setMoved(true);
   }
 
   const canGoNext = index < monthIndex(latest ?? current);
@@ -88,8 +89,8 @@ export function MonthSwitcher({ value, onChange, latest }: MonthSwitcherProps) {
             key={index}
             custom={direction}
             variants={slide}
-            initial={moved ? "enter" : undefined}
-            animate={moved ? "center" : undefined}
+            initial={hydrated ? "enter" : undefined}
+            animate={hydrated ? "center" : undefined}
             exit="exit"
             transition={transition.base}
             data-slot="month-label"

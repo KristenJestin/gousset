@@ -1,3 +1,4 @@
+import { useHydrated } from "../hooks/use-hydrated";
 import { useUiMessages } from "../hooks/use-ui-messages";
 import type { MonthAmount, MonthBar } from "../lib/chart-amounts";
 import { monthBars } from "../lib/chart-amounts";
@@ -62,16 +63,23 @@ function EmptyBars({ message }: { message: string }) {
 /**
  * One bar per month (spending of the last six months, say): Bklit's bar chart, its bars growing
  * in on arrival, a crosshair on the hovered bar and a sober tooltip whose amount rolls.
+ *
+ * Drawn once the page has hydrated: Bklit sizes its frame with `style` attributes, which the
+ * Content Security Policy drops from the server's markup. Until then, a blank frame of the same
+ * size holds its place.
  */
 export function BarChart({ months, label, valueLabel }: BarChartProps) {
   const messages = useUiMessages();
   const locale = messages.charts.locale;
   const bars = monthBars(months, locale);
+  const hydrated = useHydrated();
 
   return (
     <figure aria-label={label} data-slot="bar-chart" className="w-full">
       {bars.length === 0 ? (
         <EmptyBars message={messages.charts.empty} />
+      ) : !hydrated ? (
+        <div className="aspect-2/1 w-full" />
       ) : (
         <BklitBarChart data={bars} margin={MARGIN} barGap={0.3}>
           <Grid />

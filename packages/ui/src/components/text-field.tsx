@@ -26,8 +26,8 @@ export type FieldProps = {
 
 /**
  * A control's field: its label above (or beside, for a checkbox or a switch), its help and its
- * error under it, all linked to the control by ui-sdk's `Field`. A required control's label
- * shows a star, hidden from screen readers, which hear the control's own `required`.
+ * error under it, all linked to the control by ui-sdk's `Field`. A required control's label is
+ * its words alone: screen readers hear the control's own `required`.
  */
 export function FormField({
   label,
