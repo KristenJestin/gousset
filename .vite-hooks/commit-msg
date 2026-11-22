@@ -1,0 +1,2 @@
+tools/commit-message.sh "$1"
+tools/privacy-check.sh --message "$1"
