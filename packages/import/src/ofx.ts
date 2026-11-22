@@ -1,0 +1,381 @@
+import { Effect } from "effect";
+
+import { readAmount } from "./amount";
+import type { FieldText } from "./amount";
+import { ofxDay } from "./dates";
+import {
+  InvalidField,
+  MalformedFile,
+  MissingField,
+  NotAStatement,
+  UnsupportedContent,
+} from "./errors";
+import type { ReadError } from "./errors";
+import type { Balance, Statement, StatementLine } from "./statement";
+import { decodeText } from "./text";
+
+// OFX 1.x is SGML: an element that holds a value may go without its closing tag (`<TRNAMT>-12.34`
+// then the next tag). OFX 2.x is XML, every element closed. QFX is OFX with a few tags of Intuit's
+// (`<INTU.BID>`), read past like any other. One reader takes them all.
+
+/** An OFX element: an aggregate holds elements, the others hold a value. */
+type OfxElement = {
+  name: string;
+  /** The file line its opening tag stands on. */
+  line: number;
+  /** The text it holds; `undefined` for an aggregate, or an element closed with nothing in it. */
+  value: string | undefined;
+  children: Array<OfxElement>;
+};
+
+const ENTITIES = new Map([
+  ["amp", "&"],
+  ["lt", "<"],
+  ["gt", ">"],
+  ["quot", '"'],
+  ["apos", "'"],
+  ["nbsp", " "],
+]);
+
+/** XML's entities and the few SGML files use; a bare `&`, as some banks write, stays as it is. */
+function decodeEntities(text: string): string {
+  return text.replaceAll(/&(#x[\da-f]+|#\d+|[a-z]+);/gi, (entity: string, name: string) => {
+    if (!name.startsWith("#")) {
+      return ENTITIES.get(name.toLowerCase()) ?? entity;
+    }
+
+    const hexadecimal = name.startsWith("#x") || name.startsWith("#X");
+    const code = Number.parseInt(name.slice(hexadecimal ? 2 : 1), hexadecimal ? 16 : 10);
+
+    // Unicode's last code point, U+10FFFF: anything above is no character.
+    return code <= 1_114_111 ? String.fromCodePoint(code) : entity;
+  });
+}
+
+function countNewlines(text: string): number {
+  return text.split("\n").length - 1;
+}
+
+/**
+ * The file's elements, under a nameless root. Its lines end in `\n` alone. An element left open
+ * with no value (`<MEMO>` then the next tag, in SGML) is empty: what was read inside it belongs to
+ * its parent, and goes back there when the parent closes.
+ */
+const readElements = (text: string) =>
+  Effect.gen(function* () {
+    const start = text.search(/<OFX\s*>/i);
+
+    if (start === -1) {
+      return yield* new NotAStatement({ format: "ofx" });
+    }
+
+    const root: OfxElement = { name: "", line: 0, value: undefined, children: [] };
+    const open = [root];
+    let line = countNewlines(text.slice(0, start)) + 1;
+    let position = start;
+    // The element that has just taken its value: its closing tag may follow.
+    let ended: OfxElement | undefined;
+
+    while (position < text.length) {
+      const nextTag = text.indexOf("<", position);
+      const textEnd = nextTag === -1 ? text.length : nextTag;
+      const between = text.slice(position, textEnd);
+      const value = between.trim();
+
+      if (value !== "") {
+        const valueLine = line + countNewlines(between.slice(0, between.indexOf(value)));
+        const holder = open.at(-1);
+
+        if (holder === undefined || holder === root || holder.children.length > 0) {
+          return yield* new MalformedFile({ line: valueLine, problem: "Text outside an element." });
+        }
+
+        holder.value = decodeEntities(value);
+        open.pop();
+        ended = holder;
+      }
+
+      line += countNewlines(between);
+      position = textEnd;
+
+      if (nextTag === -1) {
+        break;
+      }
+
+      const comment = text.startsWith("<!--", position);
+      const tagEnd = comment ? text.indexOf("-->", position) + 2 : text.indexOf(">", position);
+
+      if (tagEnd < position + 1) {
+        return yield* new MalformedFile({ line, problem: "A tag is never closed by `>`." });
+      }
+
+      const tag = text.slice(position + 1, tagEnd).trim();
+      const name = /^\/?([^\s/>]*)/.exec(tag)?.[1]?.toUpperCase() ?? "";
+      const tagLine = line;
+
+      line += countNewlines(text.slice(position, tagEnd));
+      position = tagEnd + 1;
+
+      if (comment || tag.startsWith("?") || tag.startsWith("!")) {
+        continue;
+      }
+
+      if (name === "") {
+        return yield* new MalformedFile({ line: tagLine, problem: "A tag without a name." });
+      }
+
+      const parent = open.at(-1) ?? root;
+
+      if (!tag.startsWith("/")) {
+        const element: OfxElement = { name, line: tagLine, value: undefined, children: [] };
+
+        parent.children.push(element);
+        ended = undefined;
+
+        if (tag.endsWith("/")) {
+          element.value = "";
+        } else {
+          open.push(element);
+        }
+
+        continue;
+      }
+
+      const closed = open.findLastIndex((element) => element.name === name);
+
+      if (closed <= 0) {
+        if (ended?.name !== name) {
+          return yield* new MalformedFile({
+            line: tagLine,
+            problem: `</${name}> closes no open element.`,
+          });
+        }
+
+        ended = undefined;
+
+        continue;
+      }
+
+      while (open.length > closed + 1) {
+        const empty = open.pop();
+        const holder = open.at(-1);
+
+        if (empty !== undefined && holder !== undefined) {
+          holder.children.push(...empty.children);
+          empty.children = [];
+          empty.value = "";
+        }
+      }
+
+      open.pop();
+      ended = undefined;
+    }
+
+    const unclosed = open[1];
+
+    if (unclosed !== undefined) {
+      return yield* new MalformedFile({
+        line,
+        problem: `The file ends before </${unclosed.name}>: it may have been cut short.`,
+      });
+    }
+
+    return root;
+  });
+
+function child(parent: OfxElement, name: string): OfxElement | undefined {
+  return parent.children.find((element) => element.name === name);
+}
+
+/** Every element named one of `names` under `parent`, not looking inside those found. */
+function findAll(parent: OfxElement, names: ReadonlyArray<string>): Array<OfxElement> {
+  return parent.children.flatMap((element) =>
+    names.includes(element.name) ? [element] : findAll(element, names),
+  );
+}
+
+/** A child's value; `undefined` when the child is absent or holds nothing. */
+function field(parent: OfxElement, name: string): FieldText | undefined {
+  const element = child(parent, name);
+
+  if (element === undefined || element.value === undefined || element.value === "") {
+    return undefined;
+  }
+
+  return { field: name, text: element.value, line: element.line };
+}
+
+function required(parent: OfxElement, name: string): Effect.Effect<FieldText, MissingField> {
+  const found = field(parent, name);
+
+  if (found === undefined) {
+    return Effect.fail(new MissingField({ line: parent.line, field: name }));
+  }
+
+  return Effect.succeed(found);
+}
+
+const DATE_EXAMPLE = "a date such as 20261002 or 20261002120000[+1:CET]";
+
+function readDay(date: FieldText): Effect.Effect<string, InvalidField> {
+  const day = ofxDay(date.text);
+
+  if (day === undefined) {
+    return Effect.fail(new InvalidField({ ...date, expected: DATE_EXAMPLE }));
+  }
+
+  return Effect.succeed(day);
+}
+
+function negate(amountMinor: number): number {
+  return amountMinor === 0 ? 0 : -amountMinor;
+}
+
+/** The types whose OFX definition says money went out, or came in. */
+const OUT_TYPES = new Set([
+  "DEBIT",
+  "PAYMENT",
+  "CHECK",
+  "FEE",
+  "SRVCHG",
+  "CASH",
+  "DIRECTDEBIT",
+  "REPEATPMT",
+]);
+
+const IN_TYPES = new Set(["CREDIT", "DEP", "DIRECTDEP", "INT", "DIV"]);
+
+type Transaction = { element: OfxElement; type: FieldText | undefined; line: StatementLine };
+
+const readTransaction = (element: OfxElement, currency: string) =>
+  Effect.gen(function* () {
+    const bookedOn = yield* readDay(yield* required(element, "DTPOSTED"));
+    const available = field(element, "DTAVAIL");
+    const valueOn = available === undefined ? null : yield* readDay(available);
+    const amountMinor = yield* readAmount(yield* required(element, "TRNAMT"), currency, "ofx");
+    const lineCurrency = child(element, "CURRENCY");
+    const symbol = lineCurrency === undefined ? undefined : field(lineCurrency, "CURSYM");
+
+    if (symbol !== undefined && symbol.text.toUpperCase() !== currency) {
+      return yield* new UnsupportedContent({
+        line: symbol.line,
+        problem: `A line in ${symbol.text}, while the account is in ${currency}.`,
+      });
+    }
+
+    const payee = child(element, "PAYEE");
+    const name = field(element, "NAME") ?? (payee === undefined ? undefined : field(payee, "NAME"));
+    const memo = field(element, "MEMO");
+
+    const line: StatementLine = {
+      bookedOn,
+      valueOn,
+      amountMinor,
+      label: (name ?? memo)?.text ?? "",
+      memo: name === undefined ? null : (memo?.text ?? null),
+      bankId: field(element, "FITID")?.text ?? null,
+    };
+
+    return { element, type: field(element, "TRNTYPE"), line };
+  });
+
+/**
+ * A line of a file whose amounts carry no sign, signed by its type. A type that does not say which
+ * way the money went (`POS`, `ATM`, `XFER`, `OTHER`) is refused rather than guessed.
+ */
+function signByType(transaction: Transaction): Effect.Effect<StatementLine, UnsupportedContent> {
+  const type = transaction.type?.text.toUpperCase() ?? "";
+  const { line } = transaction;
+
+  if (OUT_TYPES.has(type)) {
+    return Effect.succeed({ ...line, amountMinor: negate(line.amountMinor) });
+  }
+
+  if (IN_TYPES.has(type)) {
+    return Effect.succeed(line);
+  }
+
+  return Effect.fail(
+    new UnsupportedContent({
+      line: transaction.type?.line ?? transaction.element.line,
+      problem: `The file's amounts carry no sign, and the type "${type}" does not say whether the money went out or came in.`,
+    }),
+  );
+}
+
+const readBalance = (statement: OfxElement, currency: string) =>
+  Effect.gen(function* () {
+    const ledger = child(statement, "LEDGERBAL");
+
+    if (ledger === undefined) {
+      return null;
+    }
+
+    const balance: Balance = {
+      amountMinor: yield* readAmount(yield* required(ledger, "BALAMT"), currency, "ofx"),
+      on: yield* readDay(yield* required(ledger, "DTASOF")),
+    };
+
+    return balance;
+  });
+
+/**
+ * Reads an OFX file (1.x SGML or 2.x XML) or a QFX file: one bank account's statement
+ * (`STMTRS`) or one card's (`CCSTMTRS`).
+ *
+ * Amounts are signed from the account holder's side, as OFX defines them. A file whose amounts
+ * all lack a sign while some lines are typed `DEBIT` has written them unsigned: each line is then
+ * signed by its type. The balance is the ledger balance (`LEDGERBAL`), as the bank wrote it.
+ */
+export const readOfx = (bytes: Uint8Array): Effect.Effect<Statement, ReadError> =>
+  Effect.gen(function* () {
+    const root = yield* readElements(decodeText(bytes).replaceAll(/\r\n?/g, "\n"));
+    const [statement, another] = findAll(root, ["STMTRS", "CCSTMTRS"]);
+
+    if (statement === undefined) {
+      const investment = findAll(root, ["INVSTMTRS"])[0];
+
+      if (investment !== undefined) {
+        return yield* new UnsupportedContent({
+          line: investment.line,
+          problem: "An investment statement: Gousset reads bank and card statements.",
+        });
+      }
+
+      return yield* new MissingField({ line: root.children[0]?.line ?? 1, field: "STMTRS" });
+    }
+
+    if (another !== undefined) {
+      return yield* new UnsupportedContent({
+        line: another.line,
+        problem: "A second account's statement: export one account per file.",
+      });
+    }
+
+    const currencyField = yield* required(statement, "CURDEF");
+    const currency = currencyField.text.toUpperCase();
+
+    if (!/^[A-Z]{3}$/.test(currency)) {
+      return yield* new InvalidField({
+        ...currencyField,
+        expected: "a currency's ISO 4217 code, such as EUR",
+      });
+    }
+
+    const list = child(statement, "BANKTRANLIST");
+    const elements = list === undefined ? [] : findAll(list, ["STMTTRN"]);
+
+    const transactions = yield* Effect.forEach(elements, (element) =>
+      readTransaction(element, currency),
+    );
+
+    const unsigned =
+      transactions.every((transaction) => transaction.line.amountMinor >= 0) &&
+      transactions.some((transaction) => transaction.type?.text.toUpperCase() === "DEBIT");
+
+    const lines = unsigned
+      ? yield* Effect.forEach(transactions, signByType)
+      : transactions.map((transaction) => transaction.line);
+
+    return { currency, lines, balance: yield* readBalance(statement, currency) };
+  });

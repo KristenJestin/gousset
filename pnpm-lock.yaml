@@ -506,6 +506,25 @@ importers:
         specifier: 'catalog:'
         version: 7.0.2
 
+  packages/import:
+    dependencies:
+      effect:
+        specifier: 'catalog:'
+        version: 4.1.5
+    devDependencies:
+      '@gousset/config':
+        specifier: workspace:*
+        version: link:../config
+      '@gousset/fixture':
+        specifier: workspace:*
+        version: link:../fixture
+      fast-check:
+        specifier: 4.10.3
+        version: 4.10.3
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+
   packages/mcp:
     dependencies:
       '@gousset/core':
