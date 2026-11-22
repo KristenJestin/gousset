@@ -129,7 +129,7 @@ The interface follows a job's progress live (a server stream or short polling): 
 A first split:
 
 - `apps/web`: the app (pages, API, jobs).
-- `packages/db`: the Drizzle schema and migrations. The data model is written in `docs/data-model.md` by its own ticket, before v0.2.
+- `packages/db`: the Drizzle schema and migrations. The data model, and how each user's rows are kept apart, is in [`data-model.md`](data-model.md).
 - `packages/import`: the format readers (OFX/QFX, QIF, CAMT.053, MT940, CSV and its profiles), with no dependency on the database, tested on sample files.
 - `packages/ui`: the styled components and the theme's variables.
 - `packages/fixture`: the shared made-up data.
