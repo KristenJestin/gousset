@@ -40,6 +40,9 @@ export function MonthSwitcher({ value, onChange, latest }: MonthSwitcherProps) {
   const index = monthIndex(value);
   const [shownIndex, setShownIndex] = useState(index);
   const [direction, setDirection] = useState(1);
+  // Until the month first changes, the label has no entry to play: no `initial` nor `animate`, so
+  // the server's markup carries no `style` attribute (the Content Security Policy forbids them).
+  const [moved, setMoved] = useState(false);
   // Read once, when it mounts: a page left open past midnight on the 1st keeps its bound.
   const [current] = useState(() => monthOf(new Date()));
 
@@ -47,6 +50,7 @@ export function MonthSwitcher({ value, onChange, latest }: MonthSwitcherProps) {
   if (index !== shownIndex) {
     setDirection(index > shownIndex ? 1 : -1);
     setShownIndex(index);
+    setMoved(true);
   }
 
   const canGoNext = index < monthIndex(latest ?? current);
@@ -84,8 +88,8 @@ export function MonthSwitcher({ value, onChange, latest }: MonthSwitcherProps) {
             key={index}
             custom={direction}
             variants={slide}
-            initial="enter"
-            animate="center"
+            initial={moved ? "enter" : undefined}
+            animate={moved ? "center" : undefined}
             exit="exit"
             transition={transition.base}
             data-slot="month-label"
