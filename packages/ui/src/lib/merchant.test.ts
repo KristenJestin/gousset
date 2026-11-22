@@ -34,6 +34,7 @@ describe("toneIndexOf", () => {
       "Pixelplay",
       "Northbank",
     ];
+
     const seen = new Set<number>();
 
     for (const name of names) {

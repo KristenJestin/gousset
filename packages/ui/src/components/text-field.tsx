@@ -49,6 +49,7 @@ export function FormField({
   const labelPart = (
     <FieldLabelPart label={label} hidden={hideLabel} pressable={inline !== undefined} />
   );
+
   const help = description === undefined ? null : <FieldHelp description={description} />;
 
   return (
