@@ -57,7 +57,11 @@ jobs:
           TITLE: ${{ github.event.pull_request.title }}
           BODY: ${{ github.event.pull_request.body }}
           PRIVATE_WORDS: ${{ secrets.GOUSSET_PRIVATE_WORDS }}
+          FORK: ${{ github.event.pull_request.head.repo.fork }}
         run: |
+          # A fork's pull request gets no secret: without the private words the check fails, so a
+          # person decides instead of a green check.
+          if [ "$FORK" = true ]; then export GOUSSET_REQUIRE_PRIVATE_WORDS=1; fi
           if [ -n "$PRIVATE_WORDS" ]; then
             export GOUSSET_PRIVATE_WORDS="$RUNNER_TEMP/private-words"
             printf '%s\n' "$PRIVATE_WORDS" > "$GOUSSET_PRIVATE_WORDS"
@@ -70,9 +74,9 @@ jobs:
           tools/privacy-check.sh --base "$BASE" "$RUNNER_TEMP/pull-request" || status=$?
           exit $status
 
-  # The description follows AGENTS.md: a `Note:` line, in the user's words, and `Closes #<n>`.
-  # The template's placeholders left as they are fail. A feat or fix that touches the product
-  # (apps/, packages/) without a `Note:` line warns.
+  # The description against AGENTS.md (a `Note:` line, in the user's words, and `Closes #<n>`):
+  # a template placeholder left as it is fails; no `Closes #<n>` warns, and so does a feat or fix
+  # that touches the product (apps/, packages/) without a `Note:` line.
   shape:
     runs-on: ubuntu-latest
     steps:
@@ -89,6 +93,9 @@ jobs:
             exit 1
           fi
           echo "No placeholder of the template left."
+          if ! grep -qE '(^|[^A-Za-z])Closes #[0-9]+' <<< "$BODY"; then
+            echo "::warning::The description names no issue with 'Closes #<n>' (AGENTS.md): the issue stays open after the merge."
+          fi
       - name: A note for the user
         env:
           BASE: ${{ github.event.pull_request.base.sha }}
