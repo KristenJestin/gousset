@@ -4,6 +4,7 @@ import { Grid } from "@gousset/ui/components/charts/grid";
 import { Line } from "@gousset/ui/components/charts/line";
 import { LineChart } from "@gousset/ui/components/charts/line-chart";
 import { XAxis } from "@gousset/ui/components/charts/x-axis";
+import type { ColorSchemePickerProps } from "@gousset/ui/components/color-scheme-picker";
 import { ColorSchemePicker } from "@gousset/ui/components/color-scheme-picker";
 
 // Made-up figures for six months (packages/fixture has no generator yet).
@@ -17,6 +18,22 @@ const MONTHS = [
 ];
 
 const CHOICES = { system: "System", light: "Light", dark: "Dark" };
+
+function PickerWithChart(props: ColorSchemePickerProps) {
+  return (
+    <div className="flex max-w-2xl flex-col gap-6 rounded-lg border bg-card p-6">
+      <ColorSchemePicker {...props} />
+      <div data-testid="chart">
+        <LineChart data={MONTHS}>
+          <Grid />
+          <Line dataKey="spent" stroke="var(--chart-1)" />
+          <Line dataKey="income" stroke="var(--chart-4)" />
+          <XAxis />
+        </LineChart>
+      </div>
+    </div>
+  );
+}
 
 /**
  * The colour scheme: the system's by default, light or dark by choice, kept in this browser.
@@ -41,19 +58,16 @@ type Story = StoryObj<typeof meta>;
 
 export const Picker: Story = {};
 
+/** Disabled: the current choice shows, nothing can be picked (half opacity, no hover). */
+export const Disabled: Story = { args: { disabled: true } };
+
+/** On a phone: the picker keeps its own width; the chart fills the screen. */
+export const Phone: Story = {
+  globals: { viewport: { value: "mobile1", isRotated: false } },
+  render: (args) => <PickerWithChart {...args} />,
+};
+
 /** The picker (a ui-sdk part) and a Bklit chart, side by side: both follow one switch. */
 export const WithChart: Story = {
-  render: (args) => (
-    <div className="flex max-w-2xl flex-col gap-6 rounded-lg border bg-card p-6">
-      <ColorSchemePicker {...args} />
-      <div data-testid="chart">
-        <LineChart data={MONTHS}>
-          <Grid />
-          <Line dataKey="spent" stroke="var(--chart-1)" />
-          <Line dataKey="income" stroke="var(--chart-4)" />
-          <XAxis />
-        </LineChart>
-      </div>
-    </div>
-  ),
+  render: (args) => <PickerWithChart {...args} />,
 };
