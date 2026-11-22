@@ -85,6 +85,15 @@ test.describe("MerchantLogo", () => {
     await expect(tile.locator("img")).toHaveCount(0);
   });
 
+  test("falls back to the initials when its image failed before hydration", async ({ page }) => {
+    await page.goto(story("data-merchantlogo--broken-before-hydration"));
+
+    const tile = page.getByTestId("hydrated-after-failure").locator('[data-slot="merchant-logo"]');
+
+    await expect(tile).toHaveText("F");
+    await expect(tile.locator("img")).toHaveCount(0);
+  });
+
   test("a name keeps the same tile", async ({ page }) => {
     await page.goto(story("data-merchantlogo--in-rows"));
 
@@ -158,6 +167,23 @@ test.describe("MonthSwitcher", () => {
     await expect(page.getByRole("button", { name: "Next month", exact: true })).toBeDisabled();
     await page.getByRole("button", { name: "Previous month", exact: true }).focus();
     await page.keyboard.press("ArrowRight");
+    await expect(month(page)).toHaveText("October 2026");
+  });
+
+  test("the focus stays on next when it turns disabled, and the arrows still move", async ({
+    page,
+  }) => {
+    await page.goto(story("data-monthswitcher--default"));
+    await expect(month(page)).toHaveText("October 2026");
+
+    const next = page.getByRole("button", { name: "Next month", exact: true });
+
+    await next.focus();
+    await page.keyboard.press("Enter");
+    await expect(month(page)).toHaveText("November 2026");
+    await expect(next).toBeDisabled();
+    await expect(next).toBeFocused();
+    await page.keyboard.press("ArrowLeft");
     await expect(month(page)).toHaveText("October 2026");
   });
 
