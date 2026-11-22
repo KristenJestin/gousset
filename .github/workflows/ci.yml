@@ -182,9 +182,16 @@ jobs:
         if: steps.harness.outputs.present == 'true' && matrix.shard == 1 && contains(env.E2E_BROWSERS, 'firefox')
         continue-on-error: true
         env:
-          DEBUG: pw:browser
           GOUSSET_DIAG: "1"
-        run: pnpm e2e tests/diag-firefox-crash.spec.ts --project=firefox-desktop --project=chromium-desktop --workers=1
+        run: pnpm e2e tests/diag-firefox-crash.spec.ts --project=firefox-desktop --workers=1
+      # TEMPORARY (#7): the specs that crash in Firefox, run without axe: alive means the crash
+      # needs axe. Removed before the pull request is merged.
+      - name: Firefox without axe
+        if: steps.harness.outputs.present == 'true' && matrix.shard == 1 && contains(env.E2E_BROWSERS, 'firefox')
+        continue-on-error: true
+        env:
+          GOUSSET_DIAG_NO_AXE: "1"
+        run: pnpm e2e tests/auth.spec.ts tests/data-loading.spec.ts --project=firefox-desktop
       - name: End-to-end tests, shard ${{ matrix.shard }} of 2
         if: steps.harness.outputs.present == 'true'
         run: pnpm e2e --shard=${{ matrix.shard }}/2 $E2E_PROJECTS

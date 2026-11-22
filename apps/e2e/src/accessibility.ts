@@ -7,6 +7,12 @@ const WCAG_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"];
 
 /** Runs axe on the screen as it is now; any violation fails the test, listed by rule. */
 export async function expectAccessible(page: Page): Promise<void> {
+  // TEMPORARY (#7): CI's diagnostics step runs specs without axe, to prove Firefox's crash needs
+  // it. Removed before the pull request is merged.
+  if (process.env.GOUSSET_DIAG_NO_AXE === "1") {
+    return;
+  }
+
   const results = await new AxeBuilder({ page }).withTags(WCAG_TAGS).analyze();
 
   const violations = results.violations.map(
