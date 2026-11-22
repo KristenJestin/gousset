@@ -302,6 +302,24 @@
     height: var(--icon-size);
     stroke-width: var(--icon-stroke);
   }
+
+  /* ui-sdk's native inputs (a textarea for a select) behind a switch, a checkbox or a select,
+     which take part in the form:
+     ui-sdk hides them with a `style` attribute, which the Content Security Policy drops from the
+     server's markup. The same hiding, from the stylesheet. */
+  :is(input, textarea)[data-slot$="-input"][aria-hidden="true"][tabindex="-1"] {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    margin: -1px;
+    padding: 0;
+    border: 0;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+  }
 }
 
 /* Everything is cut when the system asks for reduced motion. An element that has its own

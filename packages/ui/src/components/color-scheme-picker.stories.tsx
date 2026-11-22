@@ -6,6 +6,7 @@ import { LineChart } from "@gousset/ui/components/charts/line-chart";
 import { XAxis } from "@gousset/ui/components/charts/x-axis";
 import type { ColorSchemePickerProps } from "@gousset/ui/components/color-scheme-picker";
 import { ColorSchemePicker } from "@gousset/ui/components/color-scheme-picker";
+import { useHydrated } from "@gousset/ui/hooks/use-hydrated";
 
 // Made-up figures for six months (packages/fixture has no generator yet).
 const MONTHS = [
@@ -20,16 +21,22 @@ const MONTHS = [
 const CHOICES = { system: "System", light: "Light", dark: "Dark" };
 
 function PickerWithChart(props: ColorSchemePickerProps) {
+  // Bklit's chart is drawn in the browser only: its frame's `style` attributes have no place in
+  // the server's markup (see `SpendingChart`).
+  const hydrated = useHydrated();
+
   return (
     <div className="flex max-w-2xl flex-col gap-6 rounded-lg border bg-card p-6">
       <ColorSchemePicker {...props} />
       <div data-testid="chart">
-        <LineChart data={MONTHS}>
-          <Grid />
-          <Line dataKey="spent" stroke="var(--chart-1)" />
-          <Line dataKey="income" stroke="var(--chart-4)" />
-          <XAxis />
-        </LineChart>
+        {hydrated ? (
+          <LineChart data={MONTHS}>
+            <Grid />
+            <Line dataKey="spent" stroke="var(--chart-1)" />
+            <Line dataKey="income" stroke="var(--chart-4)" />
+            <XAxis />
+          </LineChart>
+        ) : null}
       </div>
     </div>
   );

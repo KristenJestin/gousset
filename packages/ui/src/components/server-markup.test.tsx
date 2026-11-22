@@ -1,162 +1,61 @@
-import { m } from "@gousset/i18n/messages";
+import { composeStory, setProjectAnnotations } from "@storybook/react-vite";
+import type { Meta, StoryObj } from "@storybook/react-vite";
 import { renderToString } from "react-dom/server";
 import { describe, expect, it } from "vite-plus/test";
 
-import { Count } from "./amount";
-import { Page, ScreenTransition } from "./app-shell";
-import { Breakdown } from "./breakdown";
-import { Block } from "./data-block";
-import { Delta } from "./delta";
-import { FlagList } from "./flag-list";
-import { Folded } from "./folded";
-import { InvestmentList } from "./investment-list";
-import { MonthBar } from "./month-bar";
-import { MonthSwitcher } from "./month-switcher";
-import { MovementList } from "./movement-list";
-import {
-  CountChip,
-  JumpLink,
-  ReviewCell,
-  ReviewGrid,
-  ReviewStatus,
-  StatusPiece,
-} from "./review-layout";
-import { ReviewLines } from "./review-lines";
-import { Tab, Tabs, TabsList, TabsPanel } from "./tabs";
+import preview from "../../.storybook/preview";
 
 // The server's markup carries no `style` attribute: the Content Security Policy forbids them
-// (apps/web/src/security.ts), and the browser would report each one.
+// (apps/web/src/security.ts), the browser drops each one, and hydration never puts it back. Every
+// story of every component is rendered as the server renders a page, in the stories' own theme:
+// a component, a state or a story added later is covered without touching this file.
 
-const eur = (minor: number) => ({ minor, currency: "EUR" });
+setProjectAnnotations(preview);
 
-describe("the review's components on the server", () => {
-  it("the month switcher writes no style attribute", () => {
+// The components' stories, each file's meta and its stories; the theme's own pages (`src/styles`)
+// read the stylesheet as text.
+const metas = import.meta.glob<Meta>("./*.stories.tsx", { eager: true, import: "default" });
+const modules = import.meta.glob<Record<string, StoryObj>>("./*.stories.tsx", { eager: true });
+
+// The one exception, which no prop of ui-sdk's removes: the native input (a textarea for a
+// select) it keeps beside a switch, a checkbox, a radio or a select, so that the control takes part in its form. ui-sdk
+// writes its hiding as a `style` attribute; `globals.css` hides the same input from the
+// stylesheet, so it stays hidden once the policy drops the attribute.
+const UI_SDK_HIDDEN_INPUT =
+  /^<(input|textarea) data-slot="[a-z-]+-input"[^>]* aria-hidden="true" tabindex="-1" style="position:absolute;width:1px;height:1px;margin:-1px;padding:0;border:0;overflow:hidden;clip-path:inset\(50%\);white-space:nowrap;opacity:0;pointer-events:none"[^>]*>$/;
+
+const styledTags = (markup: string) =>
+  (markup.match(/<[^>]*\sstyle="[^"]*"[^>]*>/g) ?? []).filter(
+    (tag) => !UI_SDK_HIDDEN_INPUT.test(tag),
+  );
+
+describe("every story on the server", () => {
+  for (const [path, module] of Object.entries(modules)) {
+    for (const [name, story] of Object.entries(module)) {
+      const meta = metas[path];
+
+      if (name === "default" || meta === undefined) {
+        continue;
+      }
+
+      const Story = composeStory(story, meta, undefined, name);
+
+      it(`${path} ${name} writes no style attribute`, () => {
+        // The tags themselves, so that a failure says which.
+        expect(styledTags(renderToString(<Story />))).toEqual([]);
+      });
+    }
+  }
+});
+
+describe("the exception for ui-sdk's hidden inputs", () => {
+  it("is ui-sdk's hidden input alone", () => {
     expect(
-      renderToString(<MonthSwitcher value={{ year: 2026, month: 10 }} onChange={() => {}} />),
-    ).not.toMatch(/style=/);
-  });
-
-  it("the screen's transition writes no style attribute", () => {
-    expect(
-      renderToString(
-        <ScreenTransition id="/">
-          <Page title={m.reviewTitle()}>{m.reviewMadeUp()}</Page>
-        </ScreenTransition>,
+      styledTags(
+        '<input data-slot="switch-input" type="checkbox" aria-hidden="true" tabindex="-1" style="position:absolute;width:1px;height:1px;margin:-1px;padding:0;border:0;overflow:hidden;clip-path:inset(50%);white-space:nowrap;opacity:0;pointer-events:none" name="a"/>',
       ),
-    ).not.toMatch(/style=/);
-  });
-
-  it("the blocks write no style attribute", () => {
-    const markup = renderToString(
-      <>
-        <ReviewStatus
-          status={
-            <StatusPiece>
-              <JumpLink to="to-review">{m.reviewToReviewTitle()}</JumpLink>
-            </StatusPiece>
-          }
-          notice={m.reviewMadeUp()}
-        />
-        <MonthBar
-          received={eur(312_000)}
-          spent={eur(203_000)}
-          saved={eur(60_000)}
-          left={eur(49_000)}
-          restricted={eur(12_000)}
-          comparison={
-            <Delta
-              value={eur(203_000)}
-              reference={eur(193_000)}
-              referenceLabel={m.reviewAverage()}
-            />
-          }
-        />
-        <ReviewGrid>
-          <ReviewCell column="main">
-            <Block title={m.reviewSpendingTitle()}>
-              <Tabs value="category">
-                <TabsList label={m.reviewSpendingTitle()}>
-                  <Tab value="category">{m.reviewTabCategories()}</Tab>
-                </TabsList>
-                <TabsPanel value="category">
-                  <Breakdown
-                    rows={[
-                      {
-                        id: "housing",
-                        name: "Housing",
-                        amount: eur(69_000),
-                        benchmark: eur(69_000),
-                      },
-                    ]}
-                    onSelect={() => {}}
-                  />
-                </TabsPanel>
-              </Tabs>
-            </Block>
-          </ReviewCell>
-          <ReviewCell column="side">
-            <Block
-              title={m.reviewToReviewTitle()}
-              badge={
-                <CountChip>
-                  <Count value={6} />
-                </CountChip>
-              }
-              foldOnPhone
-            >
-              <Folded title={m.reviewToReviewTitle()} summary={<Count value={6} />}>
-                <ReviewLines
-                  lines={[
-                    {
-                      id: "l1",
-                      label: "PAYLINK *PIXELPLAY",
-                      title: "Pixelplay",
-                      tags: ["Leisure"],
-                      amount: eur(-1499),
-                    },
-                  ]}
-                  approveText={m.reviewApprove()}
-                  approveLabel={(line) => m.reviewApproveLine({ label: line.label })}
-                  onApprove={() => {}}
-                  label={m.reviewToReviewTitle()}
-                />
-              </Folded>
-            </Block>
-            <MovementList
-              movements={[
-                {
-                  id: "t1",
-                  from: "Current account",
-                  to: "Northbank PEA",
-                  amount: eur(35_000),
-                  bought: { name: "World index ETF", amount: eur(33_500) },
-                },
-              ]}
-              label={m.reviewMovementsTitle()}
-              emptyText={m.reviewMovementsEmpty()}
-            />
-            <InvestmentList
-              accounts={[
-                {
-                  id: "pea",
-                  account: "Northbank PEA",
-                  value: eur(418_000),
-                  netContributions: eur(390_000),
-                },
-              ]}
-              label={m.investmentsTitle()}
-              emptyText={m.reviewInvestmentsEmpty()}
-            />
-            <FlagList
-              flags={[{ id: "f1", icon: "subscriptions", text: "Streamly" }]}
-              label={m.reviewFlagsTitle()}
-              emptyText={m.reviewFlagsEmpty()}
-            />
-          </ReviewCell>
-        </ReviewGrid>
-      </>,
-    );
-
-    expect(markup).not.toMatch(/style=/);
+    ).toEqual([]);
+    expect(styledTags('<input data-slot="switch-input" style="color:red"/>')).toHaveLength(1);
+    expect(styledTags('<div style="position:absolute;inset:0">')).toHaveLength(1);
   });
 });

@@ -162,17 +162,18 @@ test("a created user must change their password", async ({ userPage, browser, ap
 
   // The confirmation's live region is there, empty, before the confirmation comes, so that a
   // screen reader announces it.
-  await expect(userPage.locator('[role="status"]')).toHaveCount(1);
-  await expect(userPage.locator('[role="status"]')).toBeEmpty();
+  // In the page itself: the toaster keeps live regions of its own beside it.
+  const status = userPage.getByRole("main").locator('[role="status"]');
+
+  await expect(status).toHaveCount(1);
+  await expect(status).toBeEmpty();
 
   await userPage.getByLabel("Name").fill("Robin Example");
   await userPage.getByLabel("E-mail").fill("robin@example.com");
   await userPage.getByLabel("Temporary password").fill("robin-temporary-e2e");
   await userPage.getByRole("button", { name: "Create the user" }).click();
 
-  await expect(userPage.getByRole("status")).toHaveText(
-    "Robin Example can now sign in with the temporary password.",
-  );
+  await expect(status).toHaveText("Robin Example can now sign in with the temporary password.");
   await expect(
     userPage.getByRole("listitem").filter({ hasText: "robin@example.com" }),
   ).toContainText("Temporary password");
@@ -231,10 +232,10 @@ test("a new password equal to the current one is refused", async ({ page, app, u
   await page.getByLabel("New password").fill(person.password);
   await page.getByRole("button", { name: "Change the password" }).click();
 
-  await expect(page.getByRole("alert")).toHaveText(
-    "The new password must differ from the current one.",
-  );
-  await expect(page.getByRole("alert")).toHaveCSS("opacity", "1");
+  const error = page.getByRole("main").getByRole("alert");
+
+  await expect(error).toHaveText("The new password must differ from the current one.");
+  await expect(error).toHaveCSS("opacity", "1");
 
   // Still temporary: nothing else opens.
   await page.goto("/");
@@ -278,11 +279,11 @@ test("too many failed attempts are refused for a while", async ({ page, app, use
   await page.getByLabel("Password", { exact: true }).fill(person.password);
   await page.getByRole("button", { name: "Sign in" }).click();
 
-  await expect(page.getByRole("alert")).toHaveText(
-    "Too many failed attempts. Try again in a few minutes.",
-  );
+  const error = page.getByRole("main").getByRole("alert");
+
+  await expect(error).toHaveText("Too many failed attempts. Try again in a few minutes.");
   // Faded in: axe measures its contrast at the end of the test.
-  await expect(page.getByRole("alert")).toHaveCSS("opacity", "1");
+  await expect(error).toHaveCSS("opacity", "1");
   await expect(page).toHaveURL(/\/sign-in$/);
 
   // Only that e-mail is refused: everyone else still signs in.
@@ -325,8 +326,9 @@ test("form errors fade in and out, and do not move under reduced motion", async 
 }) => {
   await visit(page, "/sign-in");
 
-  // Found by its role attribute: once it fades out, it leaves the accessibility tree.
-  const error = page.locator('[role="alert"]');
+  // Found by its role attribute: once it fades out, it leaves the accessibility tree. In the page
+  // itself: the toaster keeps live regions of its own beside it.
+  const error = page.getByRole("main").locator('[role="alert"]');
 
   await page.getByLabel("E-mail").fill(user.email);
   await page.getByLabel("Password", { exact: true }).fill("not-the-password");
