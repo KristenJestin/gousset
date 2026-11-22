@@ -46,3 +46,71 @@ test.describe("EmptyState", () => {
     await expect(page.locator('[data-slot="state"]')).toHaveAttribute("data-size", "compact");
   });
 });
+
+test.describe("CategoryIcon", () => {
+  test("is decorative beside a name, and the uncategorised form says so", async ({ page }) => {
+    await page.goto(story("data-categoryicon--in-rows"));
+    await expect(page.getByRole("img")).toHaveCount(1);
+    await expect(page.getByRole("img", { name: "Uncategorised" })).toBeVisible();
+  });
+
+  test("draws an icon, never an emoji", async ({ page }) => {
+    await page.goto(story("data-categoryicon--default"));
+
+    const tile = page.locator('[data-slot="category-icon"]');
+
+    await expect(tile.locator("svg")).toHaveCount(1);
+    await expect(tile).toHaveText("");
+  });
+});
+
+test.describe("MerchantLogo", () => {
+  test("shows the logo when it loads", async ({ page }) => {
+    await page.goto(story("data-merchantlogo--with-logo"));
+
+    const logo = page.locator('[data-slot="merchant-logo"] img');
+
+    await expect(logo).toHaveAttribute("alt", "");
+    await expect(logo).toHaveAttribute("loading", "lazy");
+    await expect(logo).toBeVisible();
+  });
+
+  test("falls back to the initials when its image fails", async ({ page }) => {
+    await page.goto(story("data-merchantlogo--broken-logo"));
+
+    const tile = page.locator('[data-slot="merchant-logo"]');
+
+    await expect(tile).toHaveText("F");
+    await expect(tile.locator("img")).toHaveCount(0);
+  });
+
+  test("a name keeps the same tile", async ({ page }) => {
+    await page.goto(story("data-merchantlogo--in-rows"));
+
+    const first = await page.locator('[data-slot="merchant-logo"]').first().getAttribute("class");
+
+    await page.reload();
+    await expect(page.locator('[data-slot="merchant-logo"]').first()).toHaveAttribute(
+      "class",
+      first ?? "",
+    );
+  });
+});
+
+test.describe("AccountChip", () => {
+  test("shows the account's name", async ({ page }) => {
+    await page.goto(story("data-accountchip--paid-with"));
+    await expect(page.getByText("MealCard")).toBeVisible();
+  });
+
+  test("a removable chip is taken out by its labelled cross", async ({ page }) => {
+    await page.goto(story("data-accountchip--removable"));
+
+    const remove = page.getByRole("button", { name: "Remove Livret A" });
+
+    await remove.focus();
+    await page.keyboard.press("Enter");
+    await expect(page.getByText("Livret A")).toHaveCount(0);
+    await expect(page.locator('[data-slot="account-chip"]')).toHaveCount(2);
+  });
+});
