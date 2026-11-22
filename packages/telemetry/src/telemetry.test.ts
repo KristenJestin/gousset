@@ -21,6 +21,7 @@ import {
   privacyTracer,
   requestSpan,
   serverFunctionSpan,
+  UNNAMED_SPAN,
   underActiveSpan,
 } from "./index";
 import { startOtlpReceiver } from "./testing";
@@ -197,7 +198,7 @@ describe("logs", () => {
 
     expect(written).toHaveLength(1);
     expect(Schema.decodeUnknownSync(LogLine)(written[0])).toEqual({
-      level: "ERROR",
+      level: "Error",
       traceId: span.traceId,
       spanId: span.spanId,
     });
@@ -234,8 +235,8 @@ describe("export", () => {
       expect(spans.map(({ name }) => name).toSorted()).toEqual([
         "GET",
         "POST",
-        "import",
         "server function",
+        UNNAMED_SPAN,
       ]);
       expect(new Set(spans.map(({ traceId }) => traceId)).size).toBe(1);
       expect(
@@ -246,6 +247,83 @@ describe("export", () => {
       for (const { body } of receiver.received()) {
         expect(body).not.toContain("Chez Martine");
       }
+    } finally {
+      await receiver.close();
+    }
+  });
+
+  test("an interrupted span is exported as interrupted, not as failed", async () => {
+    const receiver = await startOtlpReceiver();
+
+    try {
+      const runtime = ManagedRuntime.make(
+        configured({ OTEL_EXPORTER_OTLP_ENDPOINT: receiver.url }).pipe(
+          Layer.provide(TestConsole.layer),
+        ),
+      );
+
+      await runtime.runPromise(
+        Effect.interrupt.pipe(serverFunctionSpan("importStatement"), Effect.exit),
+      );
+      await runtime.dispose();
+
+      const [span] = receiver.spans();
+
+      expect(span?.attributes.map(({ key }) => key)).toContain("effect.fiber.interrupted");
+      expect(span?.events).toEqual([]);
+    } finally {
+      await receiver.close();
+    }
+  });
+
+  test("through Effect's raw APIs, nothing private reaches the collector or standard output", async () => {
+    const receiver = await startOtlpReceiver();
+
+    try {
+      const runtime = ManagedRuntime.make(
+        configured({ OTEL_EXPORTER_OTLP_ENDPOINT: receiver.url }).pipe(
+          Layer.provide(TestConsole.layer),
+        ),
+      );
+
+      // Each way a caller could put data into telemetry without Gousset's typed helpers.
+      const lines = await runtime.runPromise(
+        Effect.gen(function* () {
+          yield* Effect.annotateCurrentSpan("merchant.name", PRIVATE);
+          yield* Effect.logError(
+            "import failed",
+            new ImportFailed({ message: PRIVATE, code: "23505" }),
+          );
+          yield* Effect.logInfo("read", { file: PRIVATE });
+
+          return yield* TestConsole.logLines;
+        }).pipe(
+          Effect.annotateLogs({ file: PRIVATE, "gousset.server_function": "importStatement" }),
+          Effect.withLogSpan(PRIVATE),
+          Effect.annotateSpans({ "statement.file": PRIVATE }),
+          Effect.withSpan(`categorise ${PRIVATE}`, { attributes: { "merchant.name": PRIVATE } }),
+          Effect.provide(TestConsole.layer),
+        ),
+      );
+
+      await runtime.dispose();
+
+      const [span] = receiver.spans();
+
+      expect(span?.name).toBe(UNNAMED_SPAN);
+      expect(span?.attributes).toEqual([]);
+      expect(receiver.received().map(({ path }) => path)).toContain("/v1/logs");
+
+      for (const { body } of receiver.received()) {
+        expect(body).not.toContain("Chez Martine");
+      }
+
+      const written = Schema.decodeUnknownSync(Schema.Array(Schema.String))(lines);
+
+      expect(written).toHaveLength(2);
+      expect(written.join("\n")).not.toContain("Chez Martine");
+      expect(written[0]).toContain("ImportFailed 23505");
+      expect(written[0]).toContain("importStatement");
     } finally {
       await receiver.close();
     }

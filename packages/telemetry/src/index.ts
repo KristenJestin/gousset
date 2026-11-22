@@ -1,13 +1,24 @@
 export {
   ALLOWED_SPAN_ATTRIBUTES,
+  SPAN_NAMES,
+  UNNAMED_SPAN,
   disallowedAttributes,
   type AllowedSpanAttribute,
   type SpanAttributes,
+  type SpanName,
 } from "./attributes";
 
 export { layer } from "./layer";
 
-export { privacyLogger, privacyTracer, recordedCause, type RecordedError } from "./privacy";
+export {
+  privacyTracer,
+  privateLogEntries,
+  recordedCause,
+  recordedError,
+  type LoggedValue,
+  type PrivateLogEntry,
+  type RecordedError,
+} from "./privacy";
 
 export {
   annotate,

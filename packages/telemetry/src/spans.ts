@@ -3,11 +3,12 @@ import { AsyncLocalStorage } from "node:async_hooks";
 import { Effect, Option } from "effect";
 import type { Tracer } from "effect";
 
-import type { SpanAttributes } from "./attributes";
+import { SPAN_NAMES } from "./attributes";
+import type { SpanAttributes, SpanName } from "./attributes";
 
-/** `Effect.withSpan`, with attributes held to the allowlist. */
+/** `Effect.withSpan`, with its name from `SPAN_NAMES` and its attributes from the allowlist. */
 export const withSpan =
-  (name: string, attributes: SpanAttributes, kind: "internal" | "server" = "internal") =>
+  (name: SpanName, attributes: SpanAttributes, kind: "internal" | "server" = "internal") =>
   <A, E, R>(self: Effect.Effect<A, E, R>): Effect.Effect<A, E, R> =>
     Effect.withSpan(self, name, { attributes, kind });
 
@@ -44,23 +45,11 @@ export const underActiveSpan = <A, E, R>(self: Effect.Effect<A, E, R>): Effect.E
   return parent === undefined ? self : Effect.withParentSpan(self, parent);
 };
 
-const KNOWN_METHODS = new Set([
-  "CONNECT",
-  "DELETE",
-  "GET",
-  "HEAD",
-  "OPTIONS",
-  "PATCH",
-  "POST",
-  "PUT",
-  "TRACE",
-]);
-
 /** The method as the semantic conventions record it: a known method, or `_OTHER`. */
-const recordedMethod = (method: string): string => {
+const recordedMethod = (method: string): SpanName => {
   const upper = method.toUpperCase();
 
-  return KNOWN_METHODS.has(upper) ? upper : "_OTHER";
+  return SPAN_NAMES.find((name) => name === upper && name !== "server function") ?? "_OTHER";
 };
 
 /** The request a server span is opened for: never its URL, its headers or its body. */
