@@ -321,6 +321,7 @@ test.describe("the bar chart", () => {
 
     // Under the bar (the figures' table, closed, names it too).
     await expect(figure.locator('span:text-is("Oct")')).toBeVisible();
-    await expect(figure.getByRole("table").getByRole("row")).toHaveCount(2);
+    // The closed table is out of the accessibility tree: its rows are counted in the DOM.
+    await expect(figure.locator("table tr")).toHaveCount(2);
   });
 });
