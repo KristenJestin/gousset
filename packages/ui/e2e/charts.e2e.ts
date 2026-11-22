@@ -16,39 +16,58 @@ function revealClip(figure: Locator) {
 }
 
 /**
- * The reveal clip's width at every frame for `forMs`, as a fraction of its final width: below 1
- * while the lines are being uncovered, 1 once they are drawn.
+ * Opens a story while sampling, from the page's first frame, the reveal clip's width at every
+ * frame (written on `<html data-reveal>` as `time:width;…`): a reveal of 300 ms is over before
+ * a test could start looking for the clip.
  */
-async function revealFractions(figure: Locator, forMs: number) {
-  const clip = revealClip(figure);
+async function openWatchingReveal(page: Page, url: string) {
+  await page.addInitScript(() => {
+    const samples: Array<string> = [];
 
-  await expect(clip).toHaveCount(1);
+    const sample = () => {
+      const rect = document.querySelector('clipPath[id^="chart-grow-clip"] rect');
 
-  const samples = await clip.evaluate(
-    (rect, duration) =>
-      new Promise<Array<number>>((resolve) => {
-        const widths: Array<number> = [];
-        const start = performance.now();
+      if (rect !== null) {
+        // Motion sets the width as a style; a plain attribute is read the same way.
+        samples.push(`${performance.now()}:${Number.parseFloat(getComputedStyle(rect).width)}`);
+        document.documentElement.dataset.reveal = samples.join(";");
+      }
 
-        const sample = () => {
-          // Motion sets the width as a style; a plain attribute is read the same way.
-          widths.push(Number.parseFloat(getComputedStyle(rect).width));
-
-          if (performance.now() - start < duration) {
-            requestAnimationFrame(sample);
-          } else {
-            resolve(widths);
-          }
-        };
-
+      if (performance.now() < 10_000) {
         requestAnimationFrame(sample);
-      }),
-    forMs,
-  );
+      }
+    };
 
-  const final = await clip.evaluate((rect) => Number.parseFloat(getComputedStyle(rect).width));
+    requestAnimationFrame(sample);
+  });
+  await page.goto(url);
+}
 
-  return samples.map((width) => width / final);
+/**
+ * The reveal clip's width at every frame since it appeared, as a fraction of its final width
+ * (below 1 while the lines are being uncovered, 1 once they are drawn), with each sample's time
+ * since the first, in ms.
+ */
+async function revealSamples(page: Page, figure: Locator) {
+  await expect(revealClip(figure)).toHaveCount(1);
+  await page.waitForTimeout(1500);
+
+  const raw = (await page.locator("html").getAttribute("data-reveal")) ?? "";
+
+  const samples = raw.split(";").map((pair) => {
+    const [at, width] = pair.split(":");
+
+    return { at: Number(at), width: Number(width) };
+  });
+
+  const first = samples[0]?.at ?? 0;
+  const final = samples.at(-1)?.width ?? 1;
+
+  return samples.map((sample) => ({ at: sample.at - first, fraction: sample.width / final }));
+}
+
+async function revealFractions(page: Page, figure: Locator) {
+  return (await revealSamples(page, figure)).map((sample) => sample.fraction);
 }
 
 /** Moves the pointer over the plot, at a fraction of its width, until the tooltip shows. */
@@ -150,18 +169,54 @@ test.describe("the spending chart", () => {
   test("the lines are uncovered from the left, and drawn at once under reduced motion", async ({
     page,
   }) => {
-    await page.goto(spending("default"));
+    await openWatchingReveal(page, spending("default"));
 
-    const moving = await revealFractions(page.getByRole("figure", { name: SPENDING }), 600);
+    const moving = await revealFractions(page, page.getByRole("figure", { name: SPENDING }));
 
     expect(moving.some((fraction) => fraction < 0.95)).toBe(true);
 
     await page.emulateMedia({ reducedMotion: "reduce" });
     await page.goto(spending("default"));
 
-    const still = await revealFractions(page.getByRole("figure", { name: SPENDING }), 600);
+    const still = await revealFractions(page, page.getByRole("figure", { name: SPENDING }));
 
     expect(still.filter((fraction) => fraction !== 1)).toEqual([]);
+  });
+
+  test("the lines are drawn within the design's 300 ms", async ({ page }) => {
+    await openWatchingReveal(page, spending("default"));
+
+    const samples = await revealSamples(page, page.getByRole("figure", { name: SPENDING }));
+
+    // Every frame still uncovering comes within 450 ms of the clip's first (300 ms, and a few
+    // frames of slack); Bklit's own 1.1 s would leave frames far past it.
+    expect(samples.some((sample) => sample.fraction < 0.95)).toBe(true);
+    expect(samples.filter((sample) => sample.fraction < 0.999 && sample.at > 450)).toEqual([]);
+  });
+
+  test("its figures open as a table from the keyboard", async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.goto(spending("default"));
+
+    const figure = page.getByRole("figure", { name: SPENDING });
+    const show = figure.getByRole("button", { name: "Show the figures" });
+    const table = figure.getByRole("table", { name: SPENDING });
+
+    await expect(table).toBeHidden();
+    await show.focus();
+    await page.keyboard.press("Enter");
+    await expect(figure.getByRole("button", { name: "Hide the figures" })).toHaveAttribute(
+      "aria-expanded",
+      "true",
+    );
+    await expect(table).toBeVisible();
+    await expect(table.getByRole("columnheader")).toHaveText(["Day", "October", "September"]);
+
+    const first = DAILY_SPENDING[0];
+
+    await expect(table.getByRole("row").nth(1)).toContainText(
+      formatMoney({ minor: first?.current ?? 0, currency: "EUR" }, { locale: "en" }),
+    );
   });
 });
 
@@ -206,6 +261,44 @@ test.describe("the bar chart", () => {
     await expect(
       page.getByRole("figure", { name: BARS }).getByText("Nothing spent yet in this period."),
     ).toBeVisible();
+  });
+
+  test("under reduced motion the bars answer the pointer at once", async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.goto(bars("default"));
+
+    const figure = page.getByRole("figure", { name: BARS });
+
+    await expect(figure.locator("rect").first()).toBeVisible();
+
+    const start = Date.now();
+
+    await expect(async () => {
+      await hoverPlot(page, figure, 0.92);
+      await expect(figure.locator('[data-slot="bar-tooltip"]')).toBeVisible({ timeout: 200 });
+    }).toPass({ timeout: 5000 });
+    // Bklit waits for its grow-in (1.5 s by default) before it listens.
+    expect(Date.now() - start).toBeLessThan(1000);
+  });
+
+  test("its figures open as a table from the keyboard", async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.goto(bars("default"));
+
+    const figure = page.getByRole("figure", { name: BARS });
+    const table = figure.getByRole("table", { name: BARS });
+
+    await figure.getByRole("button", { name: "Show the figures" }).focus();
+    await page.keyboard.press("Enter");
+    await expect(table).toBeVisible();
+    await expect(table.getByRole("row")).toHaveCount(MONTHLY_SPENDING.length + 1);
+
+    const last = MONTHLY_SPENDING.at(-1);
+
+    await expect(table.getByRole("row").last()).toContainText("Oct");
+    await expect(table.getByRole("row").last()).toContainText(
+      formatMoney(last?.spent ?? { minor: 0, currency: "EUR" }, { locale: "en" }),
+    );
   });
 
   test("a single month is one bar", async ({ page }) => {

@@ -39,6 +39,12 @@ const en = {
     /** The language of the amounts, days and months a chart writes. */
     locale: "en",
     empty: "Nothing spent yet in this period.",
+    /** The button under a chart that opens its figures as a table. */
+    showFigures: "Show the figures",
+    hideFigures: "Hide the figures",
+    /** The table's first column. */
+    day: "Day",
+    month: "Month",
   },
   notify: {
     /** The toasts' landmark, reached with F6. */
@@ -111,6 +117,10 @@ const fr: UiMessages = {
   charts: {
     locale: "fr",
     empty: "Aucune dépense sur cette période pour l’instant.",
+    showFigures: "Afficher les chiffres",
+    hideFigures: "Masquer les chiffres",
+    day: "Jour",
+    month: "Mois",
   },
   notify: {
     region: "Notifications",
