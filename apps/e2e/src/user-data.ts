@@ -2,7 +2,7 @@ import { appConnection } from "@gousset/db/app-role";
 import type { APP_ROLE } from "@gousset/db/app-role";
 import { relations } from "@gousset/db/relations";
 import { authUser } from "@gousset/db/schema/auth";
-import { importProfile } from "@gousset/db/schema/ledger";
+import { importProfile, merchant, rule } from "@gousset/db/schema/ledger";
 import { recogniseMerchants } from "@gousset/core";
 import { seedMadeUpData } from "@gousset/db/seed";
 import type { SeedSummary } from "@gousset/db/seed";
@@ -36,6 +36,7 @@ export const USER_TABLES: ReadonlyArray<UserTable> = [
   { name: "transfer", key: "id", rows: "transfers" },
   { name: "merchant", key: "id", rows: "merchants" },
   { name: "merchant_alias", key: "id", rows: "merchants' cleaned labels" },
+  { name: "rule", key: "id", rows: "rules" },
 ];
 
 /**
@@ -262,6 +263,25 @@ export function openUserData(database: string) {
               );
 
               yield* recogniseMerchants(owner);
+
+              // A rule of the user's (#25), naming one of their merchants, so that every table
+              // holds a row of theirs.
+              yield* userData.transaction(owner, async (each) => {
+                const [shop] = await each.select({ id: merchant.id }).from(merchant).limit(1);
+
+                await each.insert(rule).values({
+                  userId: owner,
+                  conditions: {
+                    kind: "group",
+                    combinator: "and",
+                    children: [
+                      { kind: "rule", field: "label", operator: "contains", value: "MADE-UP" },
+                    ],
+                  },
+                  setMerchantId: shop?.id ?? null,
+                  createdFrom: "user",
+                });
+              });
             }),
           ),
           Effect.provide(layer),
