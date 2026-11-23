@@ -48,14 +48,14 @@ function firstLineNotUtf8(bytes: Uint8Array): number {
   return line;
 }
 
-/** Whether the bytes, past a byte order mark, are valid UTF-8. */
-export function isUtf8(bytes: Uint8Array): boolean {
-  try {
-    utf8.decode(withoutBom(bytes));
+/** A file's text, and the encoding it was read in. */
+export type Decoded = { text: string; encoding: CsvEncoding };
 
-    return true;
+function decodedOf(body: Uint8Array): Decoded {
+  try {
+    return { text: utf8.decode(body), encoding: "utf8" };
   } catch {
-    return false;
+    return { text: windows1252.decode(body), encoding: "windows-1252" };
   }
 }
 
@@ -78,6 +78,14 @@ export function checkSize(bytes: Uint8Array): Effect.Effect<void, UnsupportedCon
   }
 
   return Effect.void;
+}
+
+/**
+ * A file's text read once, in the encoding its bytes show: UTF-8 when they are valid UTF-8,
+ * Windows-1252 otherwise (README, "Encoding"). For detection, which has no profile to ask.
+ */
+export function decodeDetected(bytes: Uint8Array): Effect.Effect<Decoded, UnsupportedContent> {
+  return Effect.map(checkSize(bytes), () => decodedOf(withoutBom(bytes)));
 }
 
 /**
@@ -154,18 +162,33 @@ export function isBlank(row: CsvRow): boolean {
 }
 
 /**
+ * How much of a text to read: the rows kept, the lines and the characters, the first limit reached
+ * stopping it at the start of a row. Detection reads a sample so; the reader reads it all.
+ */
+export type ParseLimit = { rows: number; lines: number; characters: number };
+
+const WHOLE: ParseLimit = {
+  rows: Number.POSITIVE_INFINITY,
+  lines: Number.POSITIVE_INFINITY,
+  characters: Number.POSITIVE_INFINITY,
+};
+
+/**
  * The rows of a CSV text that hold something, blank ones left out as they are read, each value
  * with the line and the column it starts at; `firstLine` is the number of the text's first line in
- * the file. It stops after `limit` rows, and reads at most a thousand values a row and a million in
- * all (`UnsupportedContent` past them). Linear in the length it reads, whatever the text holds.
+ * the file. It reads what `limit` lets it, dropping a row the character limit cuts, and at most a
+ * thousand values a row and a million in all (`UnsupportedContent` past them). Linear in the
+ * length it reads, whatever the text holds.
  */
 export function parseRows(
   text: string,
   separator: string,
   firstLine: number,
-  limit = Number.POSITIVE_INFINITY,
+  limit: ParseLimit = WHOLE,
 ): Effect.Effect<Array<CsvRow>, MalformedFile | UnsupportedContent> {
   const rows: Array<CsvRow> = [];
+  const end = Math.min(text.length, limit.characters);
+  const cut = end < text.length;
   let cells: Array<CsvCell> = [];
   let values = 0;
   let rowLine = firstLine;
@@ -179,10 +202,14 @@ export function parseRows(
     }
   };
 
-  while (index < text.length && rows.length < limit) {
+  while (index < end) {
+    if (cells.length === 0 && (rows.length >= limit.rows || line - firstLine >= limit.lines)) {
+      break;
+    }
+
     const column = cells.length + 1;
     const cellLine = line;
-    let value = "";
+    let value: string;
 
     if (column > MAX_ROW_VALUES) {
       return Effect.fail(
@@ -206,25 +233,35 @@ export function parseRows(
     if (text[index] === '"') {
       index += 1;
 
-      let start = index;
+      const start = index;
       let closed = false;
+      let doubled = false;
 
-      while (index < text.length) {
+      while (index < end) {
         if (text[index] === '"') {
-          value += text.slice(start, index);
-          index += 1;
-
-          if (text[index] !== '"') {
+          if (text[index + 1] !== '"') {
             closed = true;
             break;
           }
 
-          start = index;
+          doubled = true;
+          index += 1;
         } else if (endsLine(text, index)) {
           line += 1;
         }
 
         index += 1;
+      }
+
+      // One slice and one replacement: joining the pieces between `""` one by one would chain a
+      // string per pair, a gigabyte for a file of quotes.
+      value = text.slice(start, index);
+      value = doubled ? value.replaceAll('""', '"') : value;
+      index += 1;
+
+      if (!closed && cut) {
+        cells = [];
+        break;
       }
 
       if (!closed) {
@@ -253,7 +290,7 @@ export function parseRows(
       const start = index;
 
       while (
-        index < text.length &&
+        index < end &&
         text[index] !== separator &&
         text[index] !== "\r" &&
         text[index] !== "\n"
@@ -262,6 +299,12 @@ export function parseRows(
       }
 
       value = text.slice(start, index);
+    }
+
+    // The character limit cut the row: it is left out, as the rows after it.
+    if (cut && index >= end) {
+      cells = [];
+      break;
     }
 
     cells.push({ text: value, line: cellLine, column });
@@ -279,7 +322,7 @@ export function parseRows(
   }
 
   // A separator ends the text: the row's last value is empty.
-  if (cells.length > 0) {
+  if (cells.length > 0 && !cut) {
     cells.push({ text: "", line, column: cells.length + 1 });
     keep({ line: rowLine, cells });
   }

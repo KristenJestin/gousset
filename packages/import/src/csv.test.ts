@@ -484,6 +484,35 @@ describe("refusing a CSV file", () => {
     );
   });
 
+  test("names the value's own line in a row that a quoted line break spreads over two", () => {
+    expect(refusal(`${HEADER}\n02/10/2026;"two\nlines";;EUR;R1\n`)).toEqual(
+      new MissingField({ line: 3, column: 3, field: "amount" }),
+    );
+
+    expect(refusal(`${HEADER}\n02/10/2026;"two\nlines";1,00;USD;R1\n`)).toEqual(
+      new UnsupportedContent({
+        line: 3,
+        column: 4,
+        problem: 'A line in "USD", in a file read for an account in EUR.',
+      }),
+    );
+
+    expect(
+      refusal(`${DEBIT_CREDIT_HEADER}\n02/11/2026;;"two\nlines";1,00;2,00\n`, debitCreditInline),
+    ).toEqual(
+      new UnsupportedContent({
+        line: 3,
+        column: 5,
+        problem:
+          "A debit (column 4) and a credit (column 5) on one line: a line fills one of them.",
+      }),
+    );
+
+    expect(
+      refusal(`${DEBIT_CREDIT_HEADER}\n02/11/2026;;"two\nlines";;\n`, debitCreditInline),
+    ).toEqual(new MissingField({ line: 3, column: 4, field: "debit" }));
+  });
+
   test("refuses a currency that is no ISO 4217 code", () => {
     const bytes = csvSamples.csvSemicolon.bytes;
 
@@ -595,5 +624,102 @@ describe("proposing a profile from a CSV file", () => {
         problem: "A file of more than 64 MiB: no statement is that large.",
       }),
     );
+  });
+
+  test("takes a column a header calls Debit or Credit for an amount, empty or in whole units", () => {
+    const emptyCredit =
+      "Date;Libellé;Débit;Crédit\n13/10/2026;CB Shop;23,90;\n14/10/2026;CB Books;12,00;\n";
+
+    const wholeUnits = "Date;Libellé;Débit;Crédit\n13/10/2026;CB Shop;23;\n14/10/2026;VIR;;100\n";
+    const debitCredit = { kind: "debit-credit", debit: 3, credit: 4 };
+    const proposed = detectText(emptyCredit);
+
+    expect(proposed.profile.columns.amount).toEqual(debitCredit);
+    expect(proposed.unsure).toEqual([]);
+
+    expect(
+      read(utf8.encode(emptyCredit), proposed.profile).lines.map((entry) => entry.amountMinor),
+    ).toEqual([-2390, -1200]);
+
+    expect(detectText(wholeUnits).profile.columns.amount).toEqual(debitCredit);
+    expect(detectText(wholeUnits).unsure).toEqual(["decimalMark"]);
+  });
+
+  test("is unsure of the amount when a header names one side alone, or both at once", () => {
+    const debitAlone =
+      "Date;Libellé;Débit;Note\n13/10/2026;CB Shop;23,90;x\n14/10/2026;CB Books;12,00;y\n";
+
+    const both = "Date;Libellé;Débit/Crédit\n02/11/2026;A;-12,00\n13/11/2026;B;5,00\n";
+
+    expect(detectText(debitAlone).profile.columns.amount).toEqual({ kind: "signed", column: 3 });
+    expect(detectText(debitAlone).unsure).toEqual(["amount"]);
+    expect(detectText(both).profile.columns.amount).toEqual({ kind: "signed", column: 3 });
+    expect(detectText(both).unsure).toEqual(["amount"]);
+  });
+
+  test("is unsure of the amount among several signed columns, named or not", () => {
+    const named =
+      "Date;Libellé;Montant devise;Montant EUR\n02/11/2026;A;-12,00;-11,50\n13/11/2026;B;-3,00;-2,80\n";
+
+    const unnamed = "Date;Libellé;X;Y\n02/11/2026;A;-12,00;-11,50\n13/11/2026;B;-3,00;-2,80\n";
+
+    for (const text of [named, unnamed]) {
+      expect(detectText(text).profile.columns.amount).toEqual({ kind: "signed", column: 3 });
+      expect(detectText(text).unsure).toEqual(["amount"]);
+    }
+  });
+
+  test("takes no column of digits alone for an amount: it may be a reference", () => {
+    const text =
+      "Date;Libellé;Montant;Numéro\n02/11/2026;A;-12,00;123456\n13/11/2026;B;5,00;123457\n";
+
+    expect(detectText(text).profile.columns.amount).toEqual({ kind: "signed", column: 3 });
+    expect(detectText(text).unsure).toEqual([]);
+  });
+
+  test("takes the longest text for the label when no header names it", () => {
+    const text =
+      "02/11/2026;CB;CARTE BOULANGERIE DU COIN;-4,20\n03/11/2026;VIR;VIREMENT SALAIRE ACME;2000,00\n";
+
+    expect(detectText(text).profile.columns.label).toBe(3);
+  });
+
+  test("reads German headers", () => {
+    const text =
+      "Buchungstag;Wertstellung;Verwendungszweck;Betrag\n01.10.2026;02.10.2026;REISEBÜRO BEISPIEL;-1.234,56\n15.10.2026;15.10.2026;TANKSTELLE;-45,90\n";
+
+    expect(detectText(text)).toEqual({
+      profile: {
+        ...semicolon,
+        dateFormat: "DD.MM.YYYY",
+        columns: {
+          bookedOn: 1,
+          valueOn: 2,
+          amount: { kind: "signed", column: 4 },
+          label: 3,
+          memo: null,
+          bankId: null,
+          currency: null,
+        },
+      },
+      header: "buchungstag;wertstellung;verwendungszweck;betrag",
+      unsure: [],
+    });
+  });
+
+  test("takes the widest table when two separators cut as many rows", () => {
+    const text = "01.10.26\tAB\t-1,00\n02.10.26\tCD\t-2,00\n";
+
+    expect(detectText(text).profile.separator).toBe("\t");
+  });
+
+  test("reads the first 2,000 lines at most", () => {
+    const table = "Date;Libellé;Montant\n13/11/2026;A;-12,00\n";
+
+    expect(detectText(`${"\n".repeat(1990)}${table}`).profile.skipRows).toBe(1990);
+
+    expect(
+      Effect.runSync(Effect.flip(detectCsvProfile(utf8.encode(`${";\n".repeat(2000)}${table}`)))),
+    ).toEqual(new NotAStatement({ format: "csv" }));
   });
 });

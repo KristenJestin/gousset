@@ -10,6 +10,10 @@ const parse = (text: string, separator: string) => Effect.runSync(parseRows(text
 const refusal = (text: string, separator: string) =>
   Effect.runSync(Effect.flip(parseRows(text, separator, 1)));
 
+/** The lines of the rows read within those limits. */
+const sample = (text: string, rows: number, lines: number, characters: number) =>
+  Effect.runSync(parseRows(text, ";", 1, { rows, lines, characters })).map((row) => row.line);
+
 /** Values with what a CSV writer must quote: separators, quotes, every kind of line break. */
 const values = fc.stringMatching(/^[a-zé€ 0-9;,|\t"\r\n]{0,8}$/);
 
@@ -58,10 +62,21 @@ describe("cutting a CSV text into rows", () => {
     );
   });
 
-  test("stops after the rows asked for", () => {
-    const rows = Effect.runSync(parseRows("a\n\nb\nc\nd\n", ";", 1, 2));
+  test("stops after the rows, the lines or the characters asked for, at a row's start", () => {
+    const all = Number.POSITIVE_INFINITY;
 
-    expect(rows.map((row) => row.line)).toEqual([1, 3]);
+    expect(sample("a\n\nb\nc\nd\n", 2, all, all)).toEqual([1, 3]);
+    expect(sample("a\n\n\nb\nc\n", all, 3, all)).toEqual([1]);
+    expect(sample("aaaa;b\ncccccccc;d\ne\n", all, all, 10)).toEqual([1]);
+
+    // A quoted value the limit cuts is no error: the file goes on past it.
+    expect(sample('a\n"bbbbbbbbbbbb\nb"\n', all, all, 8)).toEqual([1]);
+  });
+
+  test("reads a value of many quotes written twice", () => {
+    const rows = parse(`"${'""'.repeat(1_000_000)}";x\n`, ";");
+
+    expect(rows[0]?.cells.map((cell) => cell.text)).toEqual(['"'.repeat(1_000_000), "x"]);
   });
 
   test("skips the first lines, whatever ends them", () => {

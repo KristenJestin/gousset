@@ -22,9 +22,9 @@ export type CsvOptions = {
   currency: string;
 };
 
-/** The cell of a row at `column`; a row shorter than that has it empty. */
+/** The cell of a row at `column`; a row shorter than that has it empty, on the row's last line. */
 function cellAt(row: CsvRow, column: number): CsvCell {
-  return row.cells[column - 1] ?? { text: "", line: row.line, column };
+  return row.cells[column - 1] ?? { text: "", line: row.cells.at(-1)?.line ?? row.line, column };
 }
 
 function fieldText(field: string, cell: CsvCell): FieldText {
@@ -83,7 +83,11 @@ const readLineAmount = (row: CsvRow, reading: Reading) =>
       const written = fieldText("amount", cellAt(row, amount.column));
 
       if (written.text === "") {
-        return yield* new MissingField({ line: row.line, column: amount.column, field: "amount" });
+        return yield* new MissingField({
+          line: written.line,
+          column: amount.column,
+          field: "amount",
+        });
       }
 
       return {
@@ -96,7 +100,11 @@ const readLineAmount = (row: CsvRow, reading: Reading) =>
     const creditText = fieldText("credit", cellAt(row, amount.credit));
 
     if (debitText.text === "" && creditText.text === "") {
-      return yield* new MissingField({ line: row.line, column: amount.debit, field: "debit" });
+      return yield* new MissingField({
+        line: debitText.line,
+        column: amount.debit,
+        field: "debit",
+      });
     }
 
     const debit =
@@ -111,7 +119,7 @@ const readLineAmount = (row: CsvRow, reading: Reading) =>
 
     if (debit !== 0 && credit !== 0) {
       return yield* new UnsupportedContent({
-        line: row.line,
+        line: creditText.line,
         column: amount.credit,
         problem: `A debit (column ${String(amount.debit)}) and a credit (column ${String(amount.credit)}) on one line: a line fills one of them.`,
       });
@@ -132,7 +140,7 @@ const readLine = (row: CsvRow, reading: Reading): Effect.Effect<Read, ReadError>
 
     if (bookedOn === null) {
       return yield* new MissingField({
-        line: row.line,
+        line: cellAt(row, columns.bookedOn).line,
         column: columns.bookedOn,
         field: "bookedOn",
       });
@@ -149,7 +157,7 @@ const readLine = (row: CsvRow, reading: Reading): Effect.Effect<Read, ReadError>
     if (columns.currency !== null && lineCurrency !== null) {
       if (lineCurrency.toUpperCase() !== reading.currency) {
         return yield* new UnsupportedContent({
-          line: row.line,
+          line: cellAt(row, columns.currency).line,
           column: columns.currency,
           problem: `A line in ${quote(lineCurrency)}, in a file read for an account in ${reading.currency}.`,
         });

@@ -5,8 +5,8 @@ import type { AmountSyntax } from "./amount";
 import { normalizeHeader } from "./csv";
 import { dayReader } from "./csv-profile";
 import type { CsvProfile } from "./csv-profile";
-import { checkSize, decodeCsv, isUtf8, parseRows } from "./csv-parse";
-import type { CsvRow } from "./csv-parse";
+import { decodeDetected, parseRows } from "./csv-parse";
+import type { CsvRow, ParseLimit } from "./csv-parse";
 import { NotAStatement } from "./errors";
 import type { ReadError } from "./errors";
 import { cleanValue } from "./text";
@@ -85,11 +85,11 @@ const REFERENCE = ["reference", "ref", "id", "fitid"];
 const CURRENCY = ["devise", "currency", "ccy", "wahrung", "monnaie"];
 
 /**
- * The rows detection reads from the top of the file, under each separator: enough to tell the
- * table, its header and its columns, and few enough that a large file costs no more than a small
- * one.
+ * What detection reads from the top of the file, under each separator: 200 rows, within 2,000 lines
+ * and a mebibyte. Enough to tell the table, its header and its columns, and little enough that a
+ * large file, or one of blank lines, costs no more than a small one.
  */
-const SAMPLE_ROWS = 200;
+const SAMPLE: ParseLimit = { rows: 200, lines: 2000, characters: 1024 * 1024 };
 
 type Kind = "date" | "amount" | "currency" | "text";
 
@@ -108,7 +108,7 @@ type Column = {
 type Table = { separator: Separator; rows: Array<CsvRow>; width: number };
 
 function tableOf(text: string, separator: Separator): Table | undefined {
-  const parsed = Effect.runSyncExit(parseRows(text, separator, 1, SAMPLE_ROWS));
+  const parsed = Effect.runSyncExit(parseRows(text, separator, 1, SAMPLE));
 
   if (Exit.isFailure(parsed)) {
     return undefined;
@@ -225,15 +225,25 @@ function columnsOf(
       values.length > 0 && values.every((value) => read(value) !== undefined) ? [format] : [],
     );
 
-    const marks = ([".", ","] as const).filter(
-      (mark) => values.length > 0 && values.every((value) => readsAsAmount(value, mark)),
+    // Every mark reads an empty column: it holds no amount that says otherwise.
+    const marks = ([".", ","] as const).filter((mark) =>
+      values.every((value) => readsAsAmount(value, mark)),
     );
+
+    const words = wordsOf(header?.cells[index]?.text ?? "");
+
+    // A header saying Debit or Credit makes an amount column of what reads as one, empty in the
+    // sample or in whole units: taken for a text, an unsigned debit beside it would read as money in.
+    const sided = words.some((word) => DEBIT.includes(word) || CREDIT.includes(word));
 
     return {
       column: index + 1,
-      kind: kindOf(values, formats, marks),
+      kind:
+        sided && marks.length > 0 && formats.length === 0
+          ? "amount"
+          : kindOf(values, formats, marks),
       values,
-      words: wordsOf(header?.cells[index]?.text ?? ""),
+      words,
       formats,
       marks,
     };
@@ -252,8 +262,8 @@ function amountLayout(
   body: ReadonlyArray<CsvRow>,
 ): Layout | undefined {
   const amounts = columns.filter((column) => column.kind === "amount" && !says(column, BALANCE));
-  const debit = amounts.find((column) => says(column, DEBIT));
-  const credit = amounts.find((column) => says(column, CREDIT));
+  const debit = amounts.find((column) => says(column, DEBIT) && !says(column, CREDIT));
+  const credit = amounts.find((column) => says(column, CREDIT) && !says(column, DEBIT));
 
   if (debit !== undefined && credit !== undefined) {
     return {
@@ -269,12 +279,15 @@ function amountLayout(
     return undefined;
   }
 
-  const named = amounts.find((column) => says(column, AMOUNT));
+  // A header naming one side alone, or both at once (`Débit/Crédit`), says the file has a
+  // direction that what follows can only guess.
+  const sided = amounts.some((column) => says(column, DEBIT) || says(column, CREDIT));
+  const named = amounts.filter((column) => says(column, AMOUNT));
 
   const apart =
     amounts.length === 2 &&
     second !== undefined &&
-    named === undefined &&
+    named.length === 0 &&
     body.every((row) => !(holdsAmount(row, first) && holdsAmount(row, second)));
 
   if (apart) {
@@ -285,16 +298,16 @@ function amountLayout(
     return {
       amount: { kind: "debit-credit", debit: out.column, credit: into.column },
       used: [out, into],
-      unsure: negative(first) === negative(second),
+      unsure: sided || negative(first) === negative(second),
     };
   }
 
-  const signed = named ?? first;
+  const [signed = first] = named;
 
   return {
     amount: { kind: "signed", column: signed.column },
     used: [signed],
-    unsure: named === undefined && amounts.length > 1,
+    unsure: sided || named.length > 1 || (named.length === 0 && amounts.length > 1),
   };
 }
 
@@ -312,16 +325,13 @@ function averageLength(column: Column): number {
  * (`Libellé`, `Date de valeur`, `Debit`, `Transaction ID`) say which column is which; without one,
  * the first date column is the booking date and the longest text the label.
  *
- * Only the first rows are read (`SAMPLE_ROWS`). Fails with `NotAStatement` when no table with a
+ * Only the top of the file is read (`SAMPLE`). Fails with `NotAStatement` when no table with a
  * date, an amount and a text column for the label is found: the user then picks every column from
  * the preview.
  */
 export const detectCsvProfile = (bytes: Uint8Array): Effect.Effect<CsvProposal, ReadError> =>
   Effect.gen(function* () {
-    yield* checkSize(bytes);
-
-    const encoding = isUtf8(bytes) ? "utf8" : "windows-1252";
-    const text = yield* decodeCsv(bytes, encoding);
+    const { text, encoding } = yield* decodeDetected(bytes);
     const table = bestTable(text);
     const notCsv = new NotAStatement({ format: "csv" });
 
