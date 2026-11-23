@@ -76,6 +76,13 @@ export const Route = createFileRoute("/api/imports")({
   server: {
     handlers: {
       POST: async ({ request }) => {
+        // A page of another origin (a sibling subdomain, which the session cookie reaches) can
+        // send only a simple request without asking first: never this type, which takes a
+        // preflight that no CORS answer allows.
+        if (request.headers.get("content-type") !== "application/octet-stream") {
+          return refused("UPLOAD_FAILED", 415);
+        }
+
         const session = await auth.api.getSession({ headers: request.headers });
 
         if (!session) {
