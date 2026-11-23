@@ -243,10 +243,17 @@ test("the month is kept in the url and moves with the switcher", async ({ userPa
   await month.getByRole("button", { name: "Previous month" }).click();
   await expect(userPage).toHaveURL(/\?month=2026-10$/);
   await expect(month).toContainText("October 2026");
+  // Another month is still the review: its link stays the current one.
+  await expect(
+    userPage.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Review" }),
+  ).toHaveAttribute("aria-current", "page");
 
   // The address alone opens the month, the operations' too.
   await userPage.reload();
   await expect(userPage.getByRole("group", { name: "Month" })).toContainText("October 2026");
+  await expect(
+    userPage.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Review" }),
+  ).toHaveAttribute("aria-current", "page");
 
   await visit(userPage, "/operations?month=2025-02");
   await expect(userPage.getByRole("group", { name: "Month" })).toContainText("February 2025");
