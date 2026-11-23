@@ -298,8 +298,14 @@ test("the month is kept in the url and moves with the switcher", async ({ userPa
     userPage.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Review" }),
   ).toHaveAttribute("aria-current", "page");
 
+  // The operations read the older address's month as its first to last day.
   await visit(userPage, "/operations?month=2025-02");
-  await expect(userPage.getByRole("group", { name: "Month" })).toContainText("February 2025");
+  await expect(userPage.getByRole("textbox", { name: "From", exact: true })).toHaveValue(
+    "02/01/2025",
+  );
+  await expect(userPage.getByRole("textbox", { name: "To", exact: true })).toHaveValue(
+    "02/28/2025",
+  );
 
   // A month that cannot be read is the current one, not an error.
   await visit(userPage, "/?month=2026-13");
