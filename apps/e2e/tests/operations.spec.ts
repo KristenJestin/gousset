@@ -20,7 +20,8 @@ import { openUserData } from "../src/user-data";
 // the MCP scenario is lines-mcp.spec.ts. Each user here is the file's own (`personOfItsOwn`), so
 // that the counts are known whatever the worker's other specs add to the shared users: Oriane has
 // a few invented lines over three accounts, two of them of the same name, and 250 more to page
-// through; Basile has 10,000, written by the scrolling test alone; Noémie has none.
+// through; Basile has 10,000, written once per worker by the first test that needs them; Noémie
+// has none.
 
 const TODAY = "2026-11-15";
 
@@ -180,10 +181,25 @@ async function renderedRows(page: Page) {
   );
 }
 
-test("on 10,000 lines, scrolling stays smooth", async ({ page, app, user }) => {
-  test.setTimeout(120_000);
+/** Every 500th of Basile's lines, from the eighth: twenty lines whose label carries the word. */
+const ORCHARD = "ORCHARD";
+const ORCHARD_LINES = 20;
 
-  const basile = await addUser(app.baseURL, user, personOfItsOwn("basile"));
+let basileOnce: Promise<TestUser> | undefined;
+
+/**
+ * Basile and his 10,000 lines, made once per worker (the app and its database are the worker's):
+ * line i is booked i days before today, so that it is the (i + 1)th row; every 500th, from i = 7,
+ * also says `ORCHARD`.
+ */
+function basileWithTenThousandLines(baseURL: string, admin: TestUser): Promise<TestUser> {
+  basileOnce ??= writeBasile(baseURL, admin);
+
+  return basileOnce;
+}
+
+async function writeBasile(baseURL: string, admin: TestUser): Promise<TestUser> {
+  const basile = await addUser(baseURL, admin, personOfItsOwn("basile"));
   const owner = await data.ownerOf(basile.email);
 
   await data.asUser(owner, async (each) => {
@@ -205,14 +221,24 @@ test("on 10,000 lines, scrolling stays smooth", async ({ page, app, user }) => {
       throw new Error("The accounts were not created.");
     }
 
-    // One bulk insert: line i is booked i days before today, so that it is the (i + 1)th row.
+    // One bulk insert.
     await each.execute(sql`
       insert into statement_line (user_id, account_id, source, booked_on, amount_minor, label)
       select ${owner},
         case i % 3 when 0 then ${first}::uuid when 1 then ${second}::uuid else ${third}::uuid end,
-        'manual', date '2026-11-15' - i, -(100 + i), 'E2E BULK LINE ' || lpad(i::text, 5, '0')
+        'manual', date '2026-11-15' - i, -(100 + i),
+        'E2E BULK LINE ' || lpad(i::text, 5, '0')
+          || case when i % 500 = 7 then ' ' || ${ORCHARD}::text else '' end
       from generate_series(0, 9999) as i`);
   });
+
+  return basile;
+}
+
+test("on 10,000 lines, scrolling stays smooth", async ({ page, app, user }) => {
+  test.setTimeout(120_000);
+
+  const basile = await basileWithTenThousandLines(app.baseURL, user);
 
   await signedInAs(page, basile);
   await visit(page, "/operations");
@@ -275,6 +301,49 @@ test("on 10,000 lines, scrolling stays smooth", async ({ page, app, user }) => {
   // rendered every loaded row (thousands) takes seconds a frame there, far beyond it.
   expect(frames.length).toBeGreaterThan(100);
   expect(Math.max(...frames)).toBeLessThan(250);
+});
+
+test("on 10,000 lines, a search narrows the list", async ({ page, app, user }) => {
+  test.setTimeout(120_000);
+
+  const basile = await basileWithTenThousandLines(app.baseURL, user);
+
+  await signedInAs(page, basile);
+  await visit(page, "/operations");
+  await expect(count(page)).toHaveText("10,000 lines");
+  await hydrated(page);
+
+  const typed = Date.now();
+
+  await page.getByRole("searchbox", { name: "Search" }).fill("orchard");
+
+  // Within 5 s of the typing, on CI's two shared cores: the 300 ms wait for the typing to stop,
+  // then one search of 10,000 lines. A search that read every line into the page would not.
+  await expect(count(page)).toHaveText(`${String(ORCHARD_LINES)} lines`, { timeout: 5000 });
+  expect(Date.now() - typed).toBeLessThan(5000);
+
+  // Exactly those lines, newest first: line 7, then every 500th after it.
+  await expect
+    .poll(async () => (await renderedRows(page)).every((shown) => shown.text.includes(ORCHARD)))
+    .toBe(true);
+
+  const shown = await renderedRows(page);
+
+  expect(shown.length).toBeGreaterThan(0);
+
+  for (const { position, text } of shown) {
+    expect(position).toBeLessThanOrEqual(ORCHARD_LINES);
+    expect(text).toContain(
+      `E2E BULK LINE ${String(7 + (position - 1) * 500).padStart(5, "0")} ${ORCHARD}`,
+    );
+  }
+
+  // The address keeps the search, and opens it again.
+  await expect(page).toHaveURL(/[?&]q=orchard(&|$)/);
+  await page.reload();
+  await expect(page.getByRole("searchbox", { name: "Search" })).toHaveValue("orchard");
+  await expect(count(page)).toHaveText(`${String(ORCHARD_LINES)} lines`);
+  await animationsDone(page);
 });
 
 test("a search narrows the list", async ({ page }) => {
