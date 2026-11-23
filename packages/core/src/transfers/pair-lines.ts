@@ -36,6 +36,13 @@ const pairable = and(
   notPaired,
 );
 
+/**
+ * Which lines a pairing looks at: `automatic` (the import's, on demand, the lines to review) leaves
+ * out those the user said are no transfer; `by hand` (the candidates a line's detail offers) keeps
+ * them, so that the user can change their mind.
+ */
+export type PairingBy = "automatic" | "by hand";
+
 /** A pairable line, with its label for the side the app makes from it, and its review. */
 export type PoolLine = PairableLine & {
   readonly label: string;
@@ -46,6 +53,7 @@ export type PoolLine = PairableLine & {
 export function pairableLines(
   transaction: UserTransaction,
   where: SQL | undefined,
+  by: PairingBy = "automatic",
 ): Promise<ReadonlyArray<PoolLine>> {
   return transaction
     .select({
@@ -60,7 +68,13 @@ export function pairableLines(
     })
     .from(statementLine)
     .innerJoin(account, eq(account.id, statementLine.accountId))
-    .where(and(pairable, where));
+    .where(
+      and(
+        pairable,
+        by === "automatic" ? eq(statementLine.transferRefused, false) : undefined,
+        where,
+      ),
+    );
 }
 
 const bookedBetween = (from: string, to: string) =>

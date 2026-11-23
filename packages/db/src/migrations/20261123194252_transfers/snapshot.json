@@ -2,7 +2,7 @@
   "type": "diff",
   "version": "10",
   "dialect": "postgres",
-  "id": "e6d827d4-c529-4bab-99c3-2e88f9760a56",
+  "id": "8cb1c47a-75a7-4a23-bc8c-6a6d86c54c93",
   "prevIds": ["34a963e3-563d-4d2d-b25a-250d1fb48596", "3489e807-c6d9-45a4-a738-0a439b5ccede"],
   "footprints": [
     {
@@ -52,6 +52,16 @@
         "e|col|public.statement_line.review_state"
       ],
       "reads": ["n|tbl|public.statement_line", "n|sch|public", "n|enum|public.review_state"]
+    },
+    {
+      "statementType": "add_column",
+      "statementTarget": ["column", "public", "statement_line", "transfer_refused"],
+      "writes": [
+        "s|col|public.statement_line.transfer_refused",
+        "n|col|public.statement_line.transfer_refused",
+        "e|col|public.statement_line.transfer_refused"
+      ],
+      "reads": ["n|tbl|public.statement_line", "n|sch|public"]
     },
     {
       "statementType": "create_fk",
@@ -164,6 +174,22 @@
         "notNull": true,
         "dimensions": 0,
         "default": "'to_review'",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "statement_line",
+        "name": "transfer_refused",
+        "type": "boolean",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "false",
         "generated": null,
         "identity": null,
         "entityType": "columns"

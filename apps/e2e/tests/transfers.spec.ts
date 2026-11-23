@@ -4,6 +4,7 @@ import {
   DatabaseLineStore,
   Today,
   lineTransferOf,
+  pairEveryLine,
   pairLines,
   searchLines,
   transfersLayer,
@@ -326,6 +327,53 @@ test("undoing an import unpairs", async () => {
   expect((await linesOf(card)).map((line) => line.source)).toEqual(["import"]);
 });
 
+test("a line the user says is no transfer is not paired again by itself", async () => {
+  const current = await newAccount("Refused current", "current");
+  const savings = await newAccount("Refused savings", "savings");
+  const card = await newAccount("Refused card", "card", current);
+
+  await importInto(card, "refused-card", [
+    { bookedOn: "2026-09-15", amountMinor: -6420, label: "CB LITTLE BISTRO" },
+  ]);
+
+  await importInto(current, "refused-current", [
+    { bookedOn: "2026-09-20", amountMinor: -2222, label: "SEPA TRF TO A FRIEND" },
+    { bookedOn: "2026-10-05", amountMinor: -6420, label: "DEFERRED CARD DEBIT" },
+  ]);
+
+  await importInto(savings, "refused-savings", [
+    { bookedOn: "2026-09-21", amountMinor: 2222, label: "SEPA TRF RECEIVED" },
+  ]);
+
+  const out = await lineOf(current, -2222);
+  const into = await lineOf(savings, 2222);
+  const debit = await lineOf(current, -6420);
+
+  expect((await transferOf(out)).paired).not.toBeNull();
+  expect((await transferOf(debit)).paired).not.toBeNull();
+
+  // "Not a transfer", twice: both lines go back to the review, the card's made side goes.
+  await run(unpairLine(owner, out));
+  await run(unpairLine(owner, debit));
+
+  expect(await reviewOf([out, into])).toEqual(["to_review", "to_review"]);
+
+  // Neither the pairing on demand nor the card's next statement pairs them again.
+  await run(pairEveryLine(owner));
+
+  // Its period reaches the debit, which the card still owed: only the user's word keeps it apart.
+  await importInto(card, "refused-card-october", [
+    { bookedOn: "2026-10-01", amountMinor: -1500, label: "CB CORNER CAFE" },
+  ]);
+
+  expect((await transferOf(out)).paired).toBeNull();
+  expect((await transferOf(debit)).paired).toBeNull();
+  expect((await linesOf(card)).filter((line) => line.source === "counterpart")).toEqual([]);
+
+  // The user may still pair them by hand: the old other side is still offered.
+  expect((await transferOf(out)).candidates.map((side) => side.id)).toEqual([into]);
+});
+
 const allowReadAndWrite = (page: Page) =>
   page.getByRole("button", { name: "Allow read and write" }).click();
 
@@ -405,14 +453,14 @@ test("an MCP client shows a transfer, unpairs it, pairs it again and pairs every
   expect(again.isError).toBe(true);
   expect(again.text).toContain("is already a side of a transfer");
 
-  // Unpaired once more, the pairing on demand finds it again, as an import would.
+  // Unpaired once more, the user's "no transfer" holds: the pairing on demand leaves it alone.
   await callLines(session.client, { action: "unpair", line });
 
   const everyOne = await callLines(session.client, { action: "pair" });
 
   expect(everyOne.isError, everyOne.text).toBe(false);
-  expect(everyOne.text).toMatch(/^Paired every clear transfer: [1-9]\d* between two lines/);
-  expect((await callLines(session.client, { action: "show", line })).text).toContain(
-    "Transfer to Livret A (Riverside Bank), paired by Gousset",
+  expect(everyOne.text).toMatch(/^Paired every clear transfer: \d+ between two lines/);
+  expect((await callLines(session.client, { action: "show", line })).text).not.toContain(
+    "Transfer to",
   );
 });

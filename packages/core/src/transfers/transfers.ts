@@ -175,7 +175,11 @@ async function transferOfLine(transaction: UserTransaction, lineId: string) {
   return found;
 }
 
-/** The lines that may be the other side of `line`, nearest first: none unless it is pairable. */
+/**
+ * The lines that may be the other side of `line`, nearest first, for the user to pair by hand: none
+ * unless it is pairable. A line the user said is no transfer keeps them, and is one of them: only
+ * the automatic pairing leaves it alone.
+ */
 async function candidatesOfLine(
   transaction: UserTransaction,
   line: ReadLine,
@@ -193,6 +197,7 @@ async function candidatesOfLine(
       lte(statementLine.bookedOn, shiftDay(line.bookedOn, POOL_DAYS)),
       lte(statementLine.bookedOn, day),
     ),
+    "by hand",
   );
 
   const found = candidatesOf({ ...line }, pool);
@@ -351,10 +356,11 @@ async function pairInTransaction(
     return { refused: "already_paired", lineId };
   }
 
-  // The user said what both lines are: the monthly review no longer lists them.
+  // The user said what both lines are: the monthly review no longer lists them, and a "Not a
+  // transfer" said before no longer holds.
   await transaction
     .update(statementLine)
-    .set({ reviewState: "done" })
+    .set({ reviewState: "done", transferRefused: false })
     .where(inArray(statementLine.id, [out.id, into.id]));
 
   return { done: await lineTransfer(transaction, line, day) };
@@ -389,6 +395,13 @@ async function unpairInTransaction(
       and(inArray(statementLine.id, [line.id, otherId]), eq(statementLine.source, "counterpart")),
     )
     .returning({ id: statementLine.id });
+
+  // "Not a transfer", remembered on the lines left: the automatic pairing leaves them alone, and
+  // the monthly review lists them again, for what they are instead.
+  await transaction
+    .update(statementLine)
+    .set({ reviewState: "to_review", transferRefused: true })
+    .where(inArray(statementLine.id, [line.id, otherId]));
 
   return other === undefined
     ? { notPaired: lineId }

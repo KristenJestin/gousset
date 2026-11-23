@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import {
   bigint,
+  boolean,
   bytea,
   check,
   date,
@@ -319,6 +320,9 @@ export const statementLine = pgTable.withRLS(
     updatedAt: updatedAt(),
     // Added by v0.3 (#26), after the others: every line of v0.2 starts to review, which it is.
     reviewState: reviewState("review_state").default("to_review").notNull(),
+    // The user said this line is no transfer (unpaired it): the automatic pairing leaves it alone
+    // until the user pairs it by hand (#26).
+    transferRefused: boolean("transfer_refused").default(false).notNull(),
   },
   (table) => [
     unique("statement_line_user_id_id_key").on(table.userId, table.id),

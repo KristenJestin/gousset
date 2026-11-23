@@ -108,6 +108,10 @@ export const STATEMENT_LINES: ExportTable = {
       name: "review_state",
       holds: "to_review (the monthly review lists it) or done (you, or a sure rule, settled it)",
     },
+    {
+      name: "transfer_refused",
+      holds: "true once you said the line is no transfer: Gousset no longer pairs it by itself",
+    },
   ],
 };
 

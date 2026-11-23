@@ -12,6 +12,7 @@ CREATE TABLE "transfer" (
 --> statement-breakpoint
 ALTER TABLE "transfer" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
 ALTER TABLE "statement_line" ADD COLUMN "review_state" "review_state" DEFAULT 'to_review'::"review_state" NOT NULL;--> statement-breakpoint
+ALTER TABLE "statement_line" ADD COLUMN "transfer_refused" boolean DEFAULT false NOT NULL;--> statement-breakpoint
 ALTER TABLE "transfer" ADD CONSTRAINT "transfer_user_id_auth_user_id_fkey" FOREIGN KEY ("user_id") REFERENCES "auth_user"("id") ON DELETE CASCADE;--> statement-breakpoint
 ALTER TABLE "transfer" ADD CONSTRAINT "transfer_out_line_fk" FOREIGN KEY ("user_id","out_line_id") REFERENCES "statement_line"("user_id","id") ON DELETE CASCADE;--> statement-breakpoint
 ALTER TABLE "transfer" ADD CONSTRAINT "transfer_in_line_fk" FOREIGN KEY ("user_id","in_line_id") REFERENCES "statement_line"("user_id","id") ON DELETE CASCADE;--> statement-breakpoint
