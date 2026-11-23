@@ -9,7 +9,7 @@ import { Effect, Schema } from "effect";
 import fc from "fast-check";
 import { describe, expect, test } from "vite-plus/test";
 
-import { csvFile, readCsv, readCsvHeader } from "./csv";
+import { csvFile, previewCsvRows, readCsv, readCsvHeader, testReadCsv } from "./csv";
 import { detectCsvProfile } from "./csv-detect";
 import { CsvProfile, dayReader } from "./csv-profile";
 import {
@@ -772,5 +772,40 @@ describe("proposing a profile from a CSV file", () => {
         Effect.flip(detectCsvProfile(utf8.encode(`${linesAbove(101).join("\n")}\n${table}`))),
       ),
     ).toEqual(new NotAStatement({ format: "csv" }));
+  });
+});
+
+// The import screen's preview (#19): the top of the file as a profile splits it, and a test read.
+describe("previewing a CSV file with a profile", () => {
+  const preview = (bytes: Uint8Array, profile: CsvProfile) =>
+    Effect.runSync(previewCsvRows(csvFile(bytes), profile));
+
+  test("gives the header and the first five rows as written, past the lines skipped", () => {
+    const rows = preview(csvSamples.csvDebitCredit.bytes, debitCredit);
+
+    expect(rows).toHaveLength(6);
+
+    expect(rows.slice(0, 3)).toEqual([
+      ["Date", "Date de valeur", "Libellé", "Débit", "Crédit"],
+      ["02/11/2026", "31/10/2026", "CB PÂTISSERIE DU MARCHÉ 31/10", "23,90", ""],
+      ["02/11/2026", "02/11/2026", "VIR SEPA CAMILLE EXEMPLE", "", "150,00"],
+    ]);
+  });
+
+  test("splits the rows with the separator it is given, even a wrong one", () => {
+    const text = utf8.encode(`${HEADER}\n13/11/2026;EXAMPLE GROCER;-12,40;EUR;R1\n`);
+
+    expect(preview(text, { ...semicolon, separator: "," })).toEqual([
+      [HEADER],
+      ["13/11/2026;EXAMPLE GROCER;-12", "40;EUR;R1"],
+    ]);
+  });
+
+  test("a test read gives the lines of the file's top as the import reads them", () => {
+    const text = utf8.encode(`${HEADER}\n13/11/2026;EXAMPLE GROCER;-12,40;EUR;R1\n`);
+
+    expect(Effect.runSync(testReadCsv(csvFile(text), semicolon, "EUR")).lines).toEqual([
+      { ...line("2026-11-13", -1240, "EXAMPLE GROCER"), bankId: "R1" },
+    ]);
   });
 });

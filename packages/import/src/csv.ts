@@ -364,27 +364,41 @@ const SAMPLE: ParseLimit = { rows: 51, lines: 2000, characters: 1024 * 1024 };
 
 /**
  * Reads the top of a file with a profile, as `readCsv` reads it whole: its first 50 lines, past the
- * header. Fails with what `readCsv` would fail with there; succeeds when the profile fits the file,
- * as far as its top tells. With no `currency` (an import whose account is not chosen yet), amounts
- * are read with up to four decimals and the lines' currency is not checked; the header must still
- * have the currency column.
+ * header, which it gives. Fails with what `readCsv` would fail with there; succeeds when the profile
+ * fits the file, as far as its top tells. With no `currency` (an import whose account is not chosen
+ * yet), amounts are read with up to four decimals, in `CLF`, and the lines' currency is not
+ * checked; the header must still have the currency column.
  */
 export const testReadCsv = (
   file: CsvFile,
   profile: CsvProfile,
   currency: string | null,
-): Effect.Effect<void, ReadError> => {
+): Effect.Effect<Statement, ReadError> => {
   if (currency !== null) {
-    return Effect.asVoid(
-      Effect.flatMap(currencyOf(currency), (code) =>
-        readTable(file, profile, { code, checked: true }, SAMPLE),
-      ),
+    return Effect.flatMap(currencyOf(currency), (code) =>
+      readTable(file, profile, { code, checked: true }, SAMPLE),
     );
   }
 
   // The currency with four minor digits, as detection reads amounts: no account to say better.
-  return Effect.asVoid(readTable(file, profile, { code: "CLF", checked: false }, SAMPLE));
+  return readTable(file, profile, { code: "CLF", checked: false }, SAMPLE);
 };
+
+/** What the import screen's preview shows of a file: its header and five rows, from its top. */
+const PREVIEW: ParseLimit = { rows: 6, lines: 100, characters: 64 * 1024 };
+
+/**
+ * The first rows of a file as a profile splits them (its encoding, its separator, the lines it
+ * skips), each value as written, blank rows left out: the import screen's preview, the header first
+ * when the file has one. Only the file's top is parsed (`PREVIEW`).
+ */
+export const previewCsvRows = (
+  file: CsvFile,
+  profile: CsvProfile,
+): Effect.Effect<ReadonlyArray<ReadonlyArray<string>>, ReadError> =>
+  Effect.map(readRows(file, profile, PREVIEW), ({ rows }) =>
+    rows.map((row) => row.cells.map((cell) => cell.text)),
+  );
 
 /** The lines of the file, or of its top with `limit`, in `currency` (its code checked by the caller). */
 const readTable = (
