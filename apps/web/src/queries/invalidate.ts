@@ -4,6 +4,7 @@ import type { QueryClient } from "@tanstack/react-query";
 import type { Touched } from "@/jobs/view";
 
 import { accountKeys } from "./account-keys";
+import { categoryKeys } from "./category-keys";
 import { lineKeys } from "./line-keys";
 import { merchantKeys } from "./merchant-keys";
 import { monthKeys } from "./month-keys";
@@ -35,6 +36,20 @@ export async function invalidateTouched(queryClient: QueryClient, touched: Touch
       queryClient.invalidateQueries({ queryKey: monthKeys.of(month) }),
     ),
     ...linesAndAccounts,
+  ]);
+}
+
+/**
+ * Invalidates what a merchant's merge, a cleaned label moved or a default category set changes:
+ * the merchants, and the entries the server moved to a merchant's default category (#23), which
+ * the operations, the months' spending and the categories' figures show.
+ */
+export async function invalidateMerchantEntries(queryClient: QueryClient): Promise<void> {
+  await Promise.all([
+    queryClient.invalidateQueries({ queryKey: merchantKeys.all }),
+    queryClient.invalidateQueries({ queryKey: lineKeys.all }),
+    queryClient.invalidateQueries({ queryKey: monthKeys.all }),
+    queryClient.invalidateQueries({ queryKey: categoryKeys.all }),
   ]);
 }
 

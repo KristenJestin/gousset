@@ -35,6 +35,7 @@ import { categoryPath, choicesOf } from "@/lib/categories";
 import { labelsCount } from "@/lib/merchant-words";
 import { whileBusy } from "@/lib/while-busy";
 import { categoryQueries } from "@/queries/categories";
+import { invalidateMerchantEntries } from "@/queries/invalidate";
 import { invalidateMerchants, merchantQueries } from "@/queries/merchants";
 
 /** How long a name field waits for the typing to stop before it asks for suggestions. */
@@ -412,7 +413,7 @@ function MergeDialog({
       to: "/settings/merchants/$merchantId",
       params: { merchantId: answer.merged.into.id },
     });
-    await invalidateMerchants(queryClient);
+    await invalidateMerchantEntries(queryClient);
     notify.saved({
       description: m.merchantMerged({
         merged: answer.merged.merged,
@@ -477,7 +478,7 @@ function MoveDialog({
     }
 
     setRefusal(NO_REFUSAL);
-    await invalidateMerchants(queryClient);
+    await invalidateMerchantEntries(queryClient);
 
     const { moved } = answer;
 
@@ -564,7 +565,7 @@ function DefaultCategoryDialog({
     }
 
     setRefusal(NO_REFUSAL);
-    await invalidateMerchants(queryClient);
+    await invalidateMerchantEntries(queryClient);
     notify.saved({
       description:
         answer.category === null
