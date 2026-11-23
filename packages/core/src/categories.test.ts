@@ -352,6 +352,40 @@ describe("the fallback", () => {
 
     expect(await outcome(after, archiveCategory(ADA, housing.id))).toBe("CategoryRefused:fallback");
   });
+
+  test("a parent is not merged when its child the fallback would be merged away", async () => {
+    const { rows, other, housing, groceries } = startingRows();
+    const { rows: moved } = await run(rows, editCategory(ADA, other.id, { parentId: housing.id }));
+
+    const { rows: twin } = await run(
+      moved,
+      createCategory(ADA, { kind: "expense", name: "Other", parentId: groceries.id }),
+    );
+
+    const { result, rows: after } = await run(twin, mergeCategory(ADA, housing.id, groceries.id));
+
+    expect(result).toMatchObject({
+      failure: { _tag: "CategoryRefused", reason: "fallback", fallback: "Other" },
+    });
+    expect(after.categories.find((each) => each.id === other.id)?.fallback).toBe(true);
+
+    // Merged the other way, the fallback's parent keeps it: the twin goes into the fallback.
+    const { result: kept, rows: left } = await run(
+      twin,
+      mergeCategory(ADA, groceries.id, housing.id),
+    );
+
+    expect(kept).toMatchObject({ success: { childrenMerged: 1 } });
+    expect(left.categories.find((each) => each.id === other.id)?.fallback).toBe(true);
+  });
+
+  test("a refusal for the fallback names it as the user called it", async () => {
+    const { rows, other, groceries } = startingRows();
+    const { rows: renamed } = await run(rows, editCategory(ADA, other.id, { name: "Unsorted" }));
+    const { result } = await run(renamed, mergeCategory(ADA, other.id, groceries.id));
+
+    expect(result).toMatchObject({ failure: { reason: "fallback", fallback: "Unsorted" } });
+  });
 });
 
 describe("listing", () => {

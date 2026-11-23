@@ -122,6 +122,10 @@ export type CategoryMerge = {
 
 const refused = (reason: CategoryRefused["reason"]) => Result.fail(new CategoryRefused({ reason }));
 
+/** A change that would archive or delete a fallback, which names it. */
+const fallbackRefused = (fallback: CategoryRecord) =>
+  Result.fail(new CategoryRefused({ reason: "fallback", fallback: fallback.name }));
+
 const sameText = (a: string, b: string) =>
   a.trim().localeCompare(b.trim(), undefined, { sensitivity: "accent" }) === 0;
 
@@ -474,8 +478,9 @@ export const editCategory = (owner: string, categoryId: string, edit: CategoryEd
  * moves to the target; a merged parent's children go under the target, which must then be
  * top-level, and one whose name a child of the target already has is merged into that child; the
  * merged category is then deleted. Fails with `CategoryNotFound` or `CategoryRefused` (`itself`,
- * `parent_kind`, `archived` for an archived target, `fallback` for the fallback merged away,
- * `third_level` for a parent merged into a child).
+ * `parent_kind`, `archived` for an archived target, `fallback` for a fallback merged away, itself
+ * or as a child merged into the target's child of its name, `third_level` for a parent merged
+ * into a child).
  */
 export const mergeCategory = (owner: string, categoryId: string, intoId: string) =>
   Effect.gen(function* () {
@@ -498,7 +503,7 @@ export const mergeCategory = (owner: string, categoryId: string, intoId: string)
           }
 
           if (merged.fallback) {
-            return yield* refused("fallback");
+            return yield* fallbackRefused(merged);
           }
 
           if (merged.kind !== into.kind) {
@@ -514,6 +519,17 @@ export const mergeCategory = (owner: string, categoryId: string, intoId: string)
           }
 
           const targetChildren = childrenOf(categories, into.id);
+
+          // A child merged into the target's child of its name is deleted: never a fallback.
+          const lost = children.find(
+            (child) =>
+              child.fallback && targetChildren.some((each) => sameText(each.name, child.name)),
+          );
+
+          if (lost !== undefined) {
+            return yield* fallbackRefused(lost);
+          }
+
           let next = lastPosition(targetChildren);
 
           const childSteps = children.flatMap((child): ReadonlyArray<CategoryStep> => {
@@ -573,8 +589,10 @@ export const archiveCategory = (owner: string, categoryId: string) =>
           const category = yield* found(categories, categoryId);
           const children = childrenOf(categories, category.id);
 
-          if (category.fallback || children.some((child) => child.fallback)) {
-            return yield* refused("fallback");
+          const fallback = [category, ...children].find((each) => each.fallback);
+
+          if (fallback !== undefined) {
+            return yield* fallbackRefused(fallback);
           }
 
           return [category, ...children].flatMap((each): ReadonlyArray<CategoryStep> =>

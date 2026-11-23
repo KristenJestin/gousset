@@ -149,7 +149,8 @@ export class CategoryNameTaken extends Schema.TaggedError<CategoryNameTaken>()(
  * - `itself`: a category under itself, or merged into itself;
  * - `archived`: an archived category chosen as a parent, a merge's target or a line's category;
  * - `parent_archived`: a category restored while its parent stays archived;
- * - `fallback`: the fallback ("Other") archived or merged away, or a parent of it archived;
+ * - `fallback`: a fallback archived or merged away, itself or with its parent; `fallback` then
+ *   names it, as the user called it;
  * - `name`: a name empty or longer than 100 characters once trimmed, or holding `>`;
  * - `too_many`: the user has 300 categories already, archived ones included;
  * - `benchmark`: a fixed benchmark that is no whole number of minor units from 0;
@@ -170,6 +171,7 @@ export class CategoryRefused extends Schema.TaggedError<CategoryRefused>()("Cate
     "icon",
     "position",
   ]),
+  fallback: Schema.optional(Schema.String),
 }) {}
 
 /** No category of the user's has this name ("Parent > Child" names a child); with every one's. */
