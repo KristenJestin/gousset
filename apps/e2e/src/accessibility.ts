@@ -18,11 +18,12 @@ const WCAG_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"];
  * next click (the month, the user's menu, the tab bar's "More") kills the content process; every
  * other WCAG rule alone, run on the same page, leaves it alive, and so does no axe at all.
  *
- * `aria-toggle-field-name`: the same crash, on the settings once they hold a ui-sdk `Switch` (a
- * `role="switch"` named by its field's `<label>`): axe run there, the page's content process dies
- * at the next call. The same page without axe stays alive.
+ * `label-content-name-mismatch`: the same crash, on the settings once they hold a ui-sdk `Switch`
+ * (a `role="switch"` named by its field's `<label>`). After that rule alone runs there, the next
+ * call to the page kills its content process; every other WCAG rule alone (but `button-name`,
+ * above) leaves it alive, and so does no axe at all.
  */
-const FIREFOX_CRASHING_RULES = ["label", "button-name", "aria-toggle-field-name"];
+const FIREFOX_CRASHING_RULES = ["label", "button-name", "label-content-name-mismatch"];
 
 /** Runs axe on the screen as it is now; any violation fails the test, listed by rule. */
 export async function expectAccessible(page: Page): Promise<void> {
