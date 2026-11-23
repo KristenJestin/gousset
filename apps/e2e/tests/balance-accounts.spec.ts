@@ -1,6 +1,7 @@
 import { account, category, statementLine } from "@gousset/db/schema/ledger";
 import type { Locator, Page, TestInfo } from "@playwright/test";
 import { eq } from "drizzle-orm";
+import { Schema } from "effect";
 
 import type { WorkerEnvironment } from "../src/app-server";
 import { addUser } from "../src/auth";
@@ -134,6 +135,23 @@ async function noteBalance(page: Page, monthsBack: number, day: RegExp, amount: 
 
 const rows = (page: Page) => page.getByRole("list", { name: "Operations" }).getByRole("listitem");
 
+/** Each animation still running: its name or property, and where (the nearest `data-slot`). */
+const RUNNING = `document.getAnimations().map((each) => [
+  each.animationName ?? each.transitionProperty ?? "",
+  each.effect?.target?.closest?.("[data-slot]")?.getAttribute("data-slot") ?? each.effect?.target?.tagName ?? "",
+].join(" in "))`;
+
+const decodeRunning = Schema.decodeUnknownSync(Schema.Array(Schema.String));
+
+/** Waits until nothing animates, naming what still does when it times out. */
+async function nothingAnimates(page: Page): Promise<void> {
+  await expect
+    .poll(async () => decodeRunning(await page.evaluate(RUNNING)), {
+      message: "the animations still running",
+    })
+    .toEqual([]);
+}
+
 /** Once hydrated, the list places its rows itself, from script: the browser runs the page. */
 async function hydrated(page: Page) {
   await expect(page.locator('[data-slot="operation-row"][style*="top"]').first()).toBeAttached();
@@ -220,7 +238,7 @@ test("a balance going from 120 to 80 with a transfer of 50 in gives an expense o
 
   await expect(movement).toContainText("Made from a noted balance");
   await expect(movement).not.toContainText("Pair with an account");
-  await animationsDone(page);
+  await nothingAnimates(page);
   await expectAccessible(page);
 });
 
