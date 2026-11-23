@@ -44,14 +44,28 @@ export function benefitCreditsOf(
       amount: credit.amount,
       left: credit.left,
       expires: credit.expiresOn === null ? null : shortDay(credit.expiresOn, locale),
+      expired: credit.expiresOn !== null && credit.expiresOn < today,
     })),
     uncovered: credits.uncovered.minor > 0 ? credits.uncovered : undefined,
   };
 }
 
-/** A credit line's tag in the lines list ("expires Dec 31"); none for a line without expiry. */
-export function creditExpiryTag(expiresOn: string | null, locale: string): string | undefined {
-  return expiresOn === null
-    ? undefined
-    : m.uiAccountsCreditsExpires({ day: shortDay(expiresOn, locale) });
+/**
+ * A credit line's tag in the lines list ("expires Dec 31", or past `today` "Expired on Oct 15,
+ * still counted"); none for a line without expiry.
+ */
+export function creditExpiryTag(
+  expiresOn: string | null,
+  today: string,
+  locale: string,
+): string | undefined {
+  if (expiresOn === null) {
+    return undefined;
+  }
+
+  const day = shortDay(expiresOn, locale);
+
+  return expiresOn < today
+    ? m.uiAccountsCreditsExpiredOn({ day })
+    : m.uiAccountsCreditsExpires({ day });
 }

@@ -50,6 +50,7 @@ describe("benefit-credits", () => {
         amount: eur(2000),
         left: eur(500),
         expires: null,
+        expired: false,
       },
       {
         id: "0b6f1c1e-6f0e-4d4e-9f6a-1a2b3c4d5e6f",
@@ -58,8 +59,15 @@ describe("benefit-credits", () => {
         amount: eur(8000),
         left: eur(8000),
         expires: "Nov 30",
+        expired: false,
       },
     ]);
+  });
+
+  test("marks a credit whose expiry day is past as expired", () => {
+    const shown = benefitCreditsOf(CREDITS, "2026-12-01", "en");
+
+    expect(shown.credits.map((credit) => credit.expired)).toEqual([false, true]);
   });
 
   test("marks a day before today as expired, and today's or a later one as not", () => {
@@ -82,7 +90,10 @@ describe("benefit-credits", () => {
   });
 
   test("tags a credit line with its expiry, and no other line", () => {
-    expect(creditExpiryTag("2026-12-31", "en")).toBe("expires Dec 31");
-    expect(creditExpiryTag(null, "en")).toBeUndefined();
+    expect(creditExpiryTag("2026-12-31", "2026-10-31", "en")).toBe("expires Dec 31");
+    expect(creditExpiryTag("2026-10-15", "2026-10-31", "en")).toBe(
+      "Expired on Oct 15, still counted",
+    );
+    expect(creditExpiryTag(null, "2026-10-31", "en")).toBeUndefined();
   });
 });

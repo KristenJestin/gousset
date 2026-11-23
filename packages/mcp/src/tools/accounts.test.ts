@@ -416,7 +416,7 @@ describe("accounts show, a benefit account", () => {
     expect(text).toContain("Credits left, in order of use:");
 
     const january = text.indexOf(
-      "- credited on 2026-01-05, MEALCARD CREDIT JANUARY: 75.00 EUR left of 100.00 EUR, expires on 2026-10-31.",
+      "- credited on 2026-01-05, MEALCARD CREDIT JANUARY: 75.00 EUR left of 100.00 EUR, expired on 2026-10-31 and still counted.",
     );
 
     const gift = text.indexOf(
@@ -451,7 +451,7 @@ describe("accounts show, a benefit account", () => {
     expect(text).toContain("What expires when: no credit left has an expiry.");
   });
 
-  test("lists at most 30 credits, then says how many more", async () => {
+  test("lists at most 30 credits, then how many more and what they hold", async () => {
     const many = Array.from({ length: 45 }, (_, index) =>
       line(
         card.id,
@@ -469,7 +469,9 @@ describe("accounts show, a benefit account", () => {
     expect(isError).toBe(false);
     expect(text).toContain("CREDIT 30:");
     expect(text).not.toContain("CREDIT 31:");
-    expect(text).toContain("and 15 more.");
+    expect(text).toContain(
+      'and 15 more credits, used after these, 150.00 EUR left in all; "What expires when" counts them all.',
+    );
   });
 
   test("kept by its balance, says its balance is restricted and its credits not followed", async () => {

@@ -219,7 +219,8 @@ function showText(detail: AccountDetail, linesCount: number): string {
             const after =
               line.balanceAfter === null ? "" : `, balance ${amount(line.balanceAfter)}`;
 
-            const expiry = line.expiresOn === null ? "" : `, expires on ${line.expiresOn}`;
+            const expiry =
+              line.expiresOn === null ? "" : `, ${expiryText(line.expiresOn, detail.day)}`;
 
             return `- ${line.bookedOn}: ${amount(line.amount)}${after}, ${line.label === "" ? "(no label)" : line.label}${expiry}`;
           }),
@@ -256,15 +257,38 @@ const ORDER_TEXT = {
   expiring_first: "Credits are used soonest expiry first, as the issuer does.",
 } as const satisfies { readonly [Order in AccountCredits["order"]]: string };
 
-function creditLine(credit: AccountCredit): string {
+/** A credit's expiry as of `today`: an expired credit still counts until a line takes it out. */
+function expiryText(expiresOn: string, today: string): string {
+  return expiresOn < today
+    ? `expired on ${expiresOn} and still counted`
+    : `expires on ${expiresOn}`;
+}
+
+function creditLine(credit: AccountCredit, today: string): string {
   const which =
     credit.creditedOn === null
       ? "the opening balance"
       : `credited on ${credit.creditedOn}, ${credit.label === null || credit.label === "" ? "(no label)" : credit.label}`;
 
-  const expiry = credit.expiresOn === null ? "no expiry" : `expires on ${credit.expiresOn}`;
+  const expiry = credit.expiresOn === null ? "no expiry" : expiryText(credit.expiresOn, today);
 
   return `- ${which}: ${amount(credit.left)} left of ${amount(credit.amount)}, ${expiry}.`;
+}
+
+/** The credits past the first `MAX_CREDITS`: how many, and what they hold, in one line. */
+function moreCreditsLine(rest: ReadonlyArray<AccountCredit>): string {
+  const [first] = rest;
+
+  if (first === undefined) {
+    return "";
+  }
+
+  const left = {
+    minor: rest.reduce((total, credit) => total + credit.left.minor, 0),
+    currency: first.left.currency,
+  };
+
+  return `and ${rest.length} more credits, used after these, ${amount(left)} left in all; "What expires when" counts them all.`;
 }
 
 /** A benefit account's credits, in Gousset's words; null for every other account. */
@@ -291,15 +315,15 @@ function creditsText(detail: AccountDetail): string | null {
           ),
         ];
 
-  const more = credits.open.length - MAX_CREDITS;
+  const rest = credits.open.slice(MAX_CREDITS);
 
   const open =
     credits.open.length === 0
       ? ["No credit has anything left."]
       : [
           "Credits left, in order of use:",
-          ...credits.open.slice(0, MAX_CREDITS).map(creditLine),
-          ...(more > 0 ? [`and ${more} more.`] : []),
+          ...credits.open.slice(0, MAX_CREDITS).map((credit) => creditLine(credit, detail.day)),
+          ...(rest.length > 0 ? [moreCreditsLine(rest)] : []),
         ];
 
   const uncovered =

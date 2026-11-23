@@ -37,6 +37,8 @@ export type BenefitCredit = {
   left: Money;
   /** Its expiry day, already worded ("31 Dec."); `null` when it does not expire. */
   expires: string | null;
+  /** Its expiry day is past: still counted in the balance, until the issuer takes it back. */
+  expired: boolean;
 };
 
 export type BenefitCreditsProps = {
@@ -119,7 +121,13 @@ function CreditRow({
         <span className="w-14 shrink-0 text-muted-foreground">{credit.day}</span>
         <span className="flex min-w-0 flex-1 items-center gap-2">
           <span className="truncate">{credit.label}</span>
-          {credit.expires === null ? null : <Chip>{messages.creditsExpires(credit.expires)}</Chip>}
+          {credit.expires === null ? null : (
+            <Chip>
+              {credit.expired
+                ? messages.creditsExpiredOn(credit.expires)
+                : messages.creditsExpires(credit.expires)}
+            </Chip>
+          )}
         </span>
         <span className="flex shrink-0 items-baseline gap-1">
           <Amount value={credit.left} size="sm" locale={locale} />

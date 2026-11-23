@@ -546,14 +546,14 @@ function Settings({ accountId, onEdit }: { accountId: string; onEdit: () => void
   );
 }
 
-function toRow(line: AccountLine, locale: string): AccountLineRow {
+function toRow(line: AccountLine, today: string, locale: string): AccountLineRow {
   return {
     id: line.id,
     day: shortDay(line.bookedOn, locale),
     label: line.label,
     amount: line.amount,
     balanceAfter: line.balanceAfter ?? undefined,
-    tag: creditExpiryTag(line.expiresOn, locale),
+    tag: creditExpiryTag(line.expiresOn, today, locale),
   };
 }
 
@@ -603,7 +603,7 @@ function Lines({ accountId }: { accountId: string }) {
     }
   }
 
-  const rows = [...detail.lines, ...older].map((line) => toRow(line, locale));
+  const rows = [...detail.lines, ...older].map((line) => toRow(line, detail.day, locale));
 
   return (
     <AccountLines

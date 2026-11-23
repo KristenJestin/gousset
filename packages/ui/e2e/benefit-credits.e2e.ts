@@ -60,10 +60,11 @@ test.describe("BenefitCredits", () => {
   }) => {
     await page.goto(story("default"));
     await expect(page.getByText("Oldest first")).toBeVisible();
-    await expect(page.locator('[data-slot="benefit-expiring"]')).toHaveCount(3);
-    await expect(page.getByText("Expired on 31 Oct., still counted")).toBeVisible();
+    await expect(page.locator('[data-slot="benefit-expiring"]')).toHaveCount(2);
+    // In what expires when, and on the expired credit's own row.
+    await expect(page.getByText("Expired on 31 Oct., still counted")).toHaveCount(2);
     await expect(page.locator('[data-slot="benefit-credit"]')).toHaveCount(3);
-    await expect(page.getByText("expires 31 Dec.")).toBeVisible();
+    await expect(page.getByText("expires 28 Feb. 2027")).toBeVisible();
     await expect(page.locator(SEPTEMBER_BAR)).toHaveAttribute("width", "60%");
   });
 
@@ -97,7 +98,7 @@ test.describe("BenefitCredits", () => {
   test("writes French", async ({ page }) => {
     await page.goto(story("french"));
     await expect(page.getByText("Ce qui expire quand")).toBeVisible();
-    await expect(page.getByText("Expiré le 31 Oct., toujours compté")).toBeVisible();
+    await expect(page.getByText("Expiré le 31 Oct., toujours compté")).toHaveCount(2);
     await expect(page.getByText("Ordre d'utilisation")).toBeVisible();
   });
 

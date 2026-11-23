@@ -9,8 +9,7 @@ import { Button } from "./button";
 const eur = (minor: number) => ({ minor, currency: "EUR" });
 
 const EXPIRING: ReadonlyArray<BenefitExpiring> = [
-  { day: "31 Oct.", amount: eur(1240), expired: true },
-  { day: "31 Dec.", amount: eur(12_000), expired: false },
+  { day: "31 Oct.", amount: eur(12_000), expired: true },
   { day: "28 Feb. 2027", amount: eur(20_000), expired: false },
 ];
 
@@ -21,7 +20,8 @@ const CREDITS: ReadonlyArray<BenefitCredit> = [
     label: "Balance when the account was added",
     amount: eur(5000),
     left: eur(1240),
-    expires: "31 Oct.",
+    expires: null,
+    expired: false,
   },
   {
     id: "credit-sept",
@@ -29,7 +29,8 @@ const CREDITS: ReadonlyArray<BenefitCredit> = [
     label: "MEALCARD CREDIT",
     amount: eur(20_000),
     left: eur(12_000),
-    expires: "31 Dec.",
+    expires: "31 Oct.",
+    expired: true,
   },
   {
     id: "credit-oct",
@@ -38,6 +39,7 @@ const CREDITS: ReadonlyArray<BenefitCredit> = [
     amount: eur(20_000),
     left: eur(20_000),
     expires: "28 Feb. 2027",
+    expired: false,
   },
 ];
 
@@ -106,7 +108,7 @@ export default meta;
 
 type Story = StoryObj<typeof meta>;
 
-/** Two credits with different expiries, and an expired opening balance with something left. */
+/** The opening balance, a credit expired with something left, and one that expires later. */
 export const Default: Story = { render: () => <Editing /> };
 
 /** Without `onEditExpiry`: nothing to click. */
@@ -126,7 +128,7 @@ export const Empty: Story = { args: { expiring: [], credits: [] } };
 /** A purchase shrinks a credit: its bar moves to its new width. */
 export const SpendingACredit: Story = { render: () => <Spending /> };
 
-export const Loading: Story = { render: () => <BenefitCreditsSkeleton expiring={3} credits={3} /> };
+export const Loading: Story = { render: () => <BenefitCreditsSkeleton expiring={2} credits={3} /> };
 
 /** On a French page (`<html lang="fr">`): amounts and words in French. */
 export const French: Story = {
