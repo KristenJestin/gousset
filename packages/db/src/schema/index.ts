@@ -16,6 +16,9 @@ import {
 import {
   account,
   accountBalance,
+  category,
+  entry,
+  entryPart,
   importFile,
   importProfile,
   statementImport,
@@ -44,6 +47,9 @@ export const tables = {
   statementImport,
   importFile,
   importProfile,
+  category,
+  entry,
+  entryPart,
 };
 
 export { authRelations };

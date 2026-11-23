@@ -11,9 +11,13 @@ import {
 import type { Statement } from "@gousset/fixture";
 import { Effect } from "effect";
 
+import { eq } from "drizzle-orm";
+
+import { insertDefaultEntries } from "./entries";
 import {
   account,
   accountBalance,
+  category,
   importFile,
   statementImport,
   statementLine,
@@ -25,7 +29,9 @@ import type { QueryFailed, UserTransaction } from "./user-data";
 // The shared made-up data of `packages/fixture` written into a user's tables: the development
 // database (`pnpm db:seed`) and the end-to-end tests that need rows. Each made-up account gets one
 // OFX import a month, its file, its lines and the statement's closing balance. It goes through
-// `UserData`, as the app's own writes do. The fixture's sample statements of other formats (#17)
+// `UserData`, as the app's own writes do. Each counted line gets its entry, in its kind's fallback
+// category, as an import gives it: the user's categories are theirs from sign-up (packages/auth) or
+// from the migration that brought them. The fixture's sample statements of other formats (#17)
 // are not written yet.
 
 type Envelope = (typeof accountEnvelope.enumValues)[number];
@@ -81,6 +87,15 @@ async function writeMadeUpData(
 
   if (existing.length > 0) {
     return { accounts: 0, imports: 0, lines: 0 };
+  }
+
+  const fallbacks = await transaction
+    .select({ id: category.id })
+    .from(category)
+    .where(eq(category.isFallback, true));
+
+  if (fallbacks.length === 0) {
+    throw new Error("The user has no categories: sign up through the app, which copies them.");
   }
 
   const summary = { accounts: 0, imports: 0, lines: 0 };
@@ -162,18 +177,27 @@ async function writeMadeUpData(
       await transaction.insert(importFile).values({ importId: created.id, userId: owner, content });
 
       // Oldest first, as the import saves a file's lines.
-      await transaction.insert(statementLine).values(
-        statement.lines.map((line) => ({
-          userId: owner,
-          accountId,
-          importId: created.id,
-          source: "import" as const,
-          bookedOn: line.bookedOn,
-          amountMinor: line.amountMinor,
-          label: line.label,
-          bankId: line.reference,
-          dedupKey: `bank:${line.reference}`,
-        })),
+      const added = await transaction
+        .insert(statementLine)
+        .values(
+          statement.lines.map((line) => ({
+            userId: owner,
+            accountId,
+            importId: created.id,
+            source: "import" as const,
+            bookedOn: line.bookedOn,
+            amountMinor: line.amountMinor,
+            label: line.label,
+            bankId: line.reference,
+            dedupKey: `bank:${line.reference}`,
+          })),
+        )
+        .returning({ id: statementLine.id });
+
+      await insertDefaultEntries(
+        transaction,
+        owner,
+        added.map((line) => line.id),
       );
 
       const closing = closingBalanceMinor(statement);

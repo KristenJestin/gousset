@@ -1,0 +1,1134 @@
+{
+  "type": "diff",
+  "version": "10",
+  "dialect": "postgres",
+  "id": "3e9fb497-2ae4-47c3-80f2-9517bf469531",
+  "prevIds": ["34a963e3-563d-4d2d-b25a-250d1fb48596", "3489e807-c6d9-45a4-a738-0a439b5ccede"],
+  "footprints": [
+    {
+      "statementType": "create_enum",
+      "statementTarget": ["enum", "public", "benchmark_mode"],
+      "writes": [
+        "s|enum|public.benchmark_mode",
+        "n|enum|public.benchmark_mode",
+        "e|enum|public.benchmark_mode",
+        "n|type|public.benchmark_mode"
+      ],
+      "reads": ["n|sch|public"]
+    },
+    {
+      "statementType": "create_enum",
+      "statementTarget": ["enum", "public", "classified_by"],
+      "writes": [
+        "s|enum|public.classified_by",
+        "n|enum|public.classified_by",
+        "e|enum|public.classified_by",
+        "n|type|public.classified_by"
+      ],
+      "reads": ["n|sch|public"]
+    },
+    {
+      "statementType": "create_enum",
+      "statementTarget": ["enum", "public", "entry_kind"],
+      "writes": [
+        "s|enum|public.entry_kind",
+        "n|enum|public.entry_kind",
+        "e|enum|public.entry_kind",
+        "n|type|public.entry_kind"
+      ],
+      "reads": ["n|sch|public"]
+    },
+    {
+      "statementType": "create_enum",
+      "statementTarget": ["enum", "public", "entry_part_role"],
+      "writes": [
+        "s|enum|public.entry_part_role",
+        "n|enum|public.entry_part_role",
+        "e|enum|public.entry_part_role",
+        "n|type|public.entry_part_role"
+      ],
+      "reads": ["n|sch|public"]
+    },
+    {
+      "statementType": "create_table",
+      "statementTarget": ["table", "public", "category"],
+      "writes": [
+        "s|tbl|public.category",
+        "n|tbl|public.category",
+        "e|tbl|public.category",
+        "n|rel|public.category",
+        "n|type|public.category",
+        "n|rel|public.category_pkey",
+        "n|rel|public.category_user_id_id_key",
+        "n|rel|public.category_user_id_id_kind_key",
+        "n|rel|public.category_user_id_kind_parent_id_name_key"
+      ],
+      "reads": ["n|sch|public", "n|enum|public.entry_kind", "n|enum|public.benchmark_mode"]
+    },
+    {
+      "statementType": "create_table",
+      "statementTarget": ["table", "public", "entry"],
+      "writes": [
+        "s|tbl|public.entry",
+        "n|tbl|public.entry",
+        "e|tbl|public.entry",
+        "n|rel|public.entry",
+        "n|type|public.entry",
+        "n|rel|public.entry_pkey",
+        "n|rel|public.entry_user_id_id_key"
+      ],
+      "reads": ["n|sch|public", "n|enum|public.entry_kind", "n|enum|public.classified_by"]
+    },
+    {
+      "statementType": "create_table",
+      "statementTarget": ["table", "public", "entry_part"],
+      "writes": [
+        "s|tbl|public.entry_part",
+        "n|tbl|public.entry_part",
+        "e|tbl|public.entry_part",
+        "n|rel|public.entry_part",
+        "n|type|public.entry_part",
+        "n|rel|public.entry_part_pkey",
+        "n|rel|public.entry_part_entry_id_line_id_role_key"
+      ],
+      "reads": ["n|sch|public", "n|enum|public.entry_part_role"]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": ["index", "public", "category", "category_one_fallback_per_kind"],
+      "writes": [
+        "s|idx|public.category_one_fallback_per_kind",
+        "n|idx|public.category_one_fallback_per_kind",
+        "e|idx|public.category_one_fallback_per_kind",
+        "n|rel|public.category_one_fallback_per_kind"
+      ],
+      "reads": [
+        "n|tbl|public.category",
+        "n|sch|public",
+        "n|col|public.category.user_id",
+        "n|col|public.category.kind"
+      ]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": ["index", "public", "entry", "entry_user_id_happened_on_idx"],
+      "writes": [
+        "s|idx|public.entry_user_id_happened_on_idx",
+        "n|idx|public.entry_user_id_happened_on_idx",
+        "e|idx|public.entry_user_id_happened_on_idx",
+        "n|rel|public.entry_user_id_happened_on_idx"
+      ],
+      "reads": [
+        "n|tbl|public.entry",
+        "n|sch|public",
+        "n|col|public.entry.user_id",
+        "n|col|public.entry.happened_on"
+      ]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": ["index", "public", "entry", "entry_category_id_idx"],
+      "writes": [
+        "s|idx|public.entry_category_id_idx",
+        "n|idx|public.entry_category_id_idx",
+        "e|idx|public.entry_category_id_idx",
+        "n|rel|public.entry_category_id_idx"
+      ],
+      "reads": ["n|tbl|public.entry", "n|sch|public", "n|col|public.entry.category_id"]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": ["index", "public", "entry_part", "entry_part_line_id_idx"],
+      "writes": [
+        "s|idx|public.entry_part_line_id_idx",
+        "n|idx|public.entry_part_line_id_idx",
+        "e|idx|public.entry_part_line_id_idx",
+        "n|rel|public.entry_part_line_id_idx"
+      ],
+      "reads": ["n|tbl|public.entry_part", "n|sch|public", "n|col|public.entry_part.line_id"]
+    },
+    {
+      "statementType": "create_fk",
+      "statementTarget": ["table", "public", "category"],
+      "writes": [
+        "s|fk|public.category.category_user_id_auth_user_id_fkey",
+        "n|fk|public.category.category_user_id_auth_user_id_fkey",
+        "e|fk|public.category.category_user_id_auth_user_id_fkey",
+        "n|con|public.category.category_user_id_auth_user_id_fkey"
+      ],
+      "reads": [
+        "n|tbl|public.category",
+        "n|sch|public",
+        "n|tbl|public.auth_user",
+        "n|sch|public",
+        "n|col|public.category.user_id",
+        "n|col|public.auth_user.id",
+        "e|uniqueness|public.auth_user.id"
+      ]
+    },
+    {
+      "statementType": "create_fk",
+      "statementTarget": ["table", "public", "entry"],
+      "writes": [
+        "s|fk|public.entry.entry_user_id_auth_user_id_fkey",
+        "n|fk|public.entry.entry_user_id_auth_user_id_fkey",
+        "e|fk|public.entry.entry_user_id_auth_user_id_fkey",
+        "n|con|public.entry.entry_user_id_auth_user_id_fkey"
+      ],
+      "reads": [
+        "n|tbl|public.entry",
+        "n|sch|public",
+        "n|tbl|public.auth_user",
+        "n|sch|public",
+        "n|col|public.entry.user_id",
+        "n|col|public.auth_user.id",
+        "e|uniqueness|public.auth_user.id"
+      ]
+    },
+    {
+      "statementType": "create_fk",
+      "statementTarget": ["table", "public", "entry_part"],
+      "writes": [
+        "s|fk|public.entry_part.entry_part_user_id_auth_user_id_fkey",
+        "n|fk|public.entry_part.entry_part_user_id_auth_user_id_fkey",
+        "e|fk|public.entry_part.entry_part_user_id_auth_user_id_fkey",
+        "n|con|public.entry_part.entry_part_user_id_auth_user_id_fkey"
+      ],
+      "reads": [
+        "n|tbl|public.entry_part",
+        "n|sch|public",
+        "n|tbl|public.auth_user",
+        "n|sch|public",
+        "n|col|public.entry_part.user_id",
+        "n|col|public.auth_user.id",
+        "e|uniqueness|public.auth_user.id"
+      ]
+    },
+    {
+      "statementType": "create_fk",
+      "statementTarget": ["table", "public", "entry_part"],
+      "writes": [
+        "s|fk|public.entry_part.entry_part_entry_fk",
+        "n|fk|public.entry_part.entry_part_entry_fk",
+        "e|fk|public.entry_part.entry_part_entry_fk",
+        "n|con|public.entry_part.entry_part_entry_fk"
+      ],
+      "reads": [
+        "n|tbl|public.entry_part",
+        "n|sch|public",
+        "n|tbl|public.entry",
+        "n|sch|public",
+        "n|col|public.entry_part.user_id",
+        "n|col|public.entry_part.entry_id",
+        "n|col|public.entry.user_id",
+        "n|col|public.entry.id",
+        "e|uniqueness|public.entry.id.user_id"
+      ]
+    },
+    {
+      "statementType": "create_fk",
+      "statementTarget": ["table", "public", "entry_part"],
+      "writes": [
+        "s|fk|public.entry_part.entry_part_line_fk",
+        "n|fk|public.entry_part.entry_part_line_fk",
+        "e|fk|public.entry_part.entry_part_line_fk",
+        "n|con|public.entry_part.entry_part_line_fk"
+      ],
+      "reads": [
+        "n|tbl|public.entry_part",
+        "n|sch|public",
+        "n|tbl|public.statement_line",
+        "n|sch|public",
+        "n|col|public.entry_part.user_id",
+        "n|col|public.entry_part.line_id",
+        "n|col|public.statement_line.user_id",
+        "n|col|public.statement_line.id",
+        "e|uniqueness|public.statement_line.id.user_id"
+      ]
+    },
+    {
+      "statementType": "create_policy",
+      "statementTarget": ["table", "public", "category"],
+      "writes": [
+        "s|pol|public.category.category_own_rows_only",
+        "n|pol|public.category.category_own_rows_only",
+        "e|pol|public.category.category_own_rows_only"
+      ],
+      "reads": ["n|tbl|public.category", "n|sch|public", "e|rls|public.category"]
+    },
+    {
+      "statementType": "create_policy",
+      "statementTarget": ["table", "public", "entry"],
+      "writes": [
+        "s|pol|public.entry.entry_own_rows_only",
+        "n|pol|public.entry.entry_own_rows_only",
+        "e|pol|public.entry.entry_own_rows_only"
+      ],
+      "reads": ["n|tbl|public.entry", "n|sch|public", "e|rls|public.entry"]
+    },
+    {
+      "statementType": "create_policy",
+      "statementTarget": ["table", "public", "entry_part"],
+      "writes": [
+        "s|pol|public.entry_part.entry_part_own_rows_only",
+        "n|pol|public.entry_part.entry_part_own_rows_only",
+        "e|pol|public.entry_part.entry_part_own_rows_only"
+      ],
+      "reads": ["n|tbl|public.entry_part", "n|sch|public", "e|rls|public.entry_part"]
+    }
+  ],
+  "deltas": [
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "name": "category",
+        "isRlsEnabled": true,
+        "entityType": "tables"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "name": "entry",
+        "isRlsEnabled": true,
+        "entityType": "tables"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "name": "entry_part",
+        "isRlsEnabled": true,
+        "entityType": "tables"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "name": "benchmark_mode",
+        "values": ["automatic", "fixed", "none"],
+        "entityType": "enums"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "name": "classified_by",
+        "values": ["default", "rule", "user"],
+        "entityType": "enums"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "name": "entry_kind",
+        "values": ["expense", "income"],
+        "entityType": "enums"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "name": "entry_part_role",
+        "values": ["payment", "refund"],
+        "entityType": "enums"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "category",
+        "name": "id",
+        "type": "uuid",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "uuidv7()",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "category",
+        "name": "user_id",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "category",
+        "name": "parent_id",
+        "type": "uuid",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "category",
+        "name": "kind",
+        "type": "entry_kind",
+        "typeSchema": "public",
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "category",
+        "name": "name",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "category",
+        "name": "icon",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "category",
+        "name": "position",
+        "type": "integer",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "0",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "category",
+        "name": "archived_at",
+        "type": "timestamp with time zone",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "category",
+        "name": "benchmark_mode",
+        "type": "benchmark_mode",
+        "typeSchema": "public",
+        "notNull": true,
+        "dimensions": 0,
+        "default": "'automatic'",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "category",
+        "name": "benchmark_minor",
+        "type": "bigint",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "category",
+        "name": "is_fallback",
+        "type": "boolean",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "false",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "category",
+        "name": "created_at",
+        "type": "timestamp with time zone",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "now()",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "category",
+        "name": "updated_at",
+        "type": "timestamp with time zone",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "now()",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "entry",
+        "name": "id",
+        "type": "uuid",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "uuidv7()",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "entry",
+        "name": "user_id",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "entry",
+        "name": "kind",
+        "type": "entry_kind",
+        "typeSchema": "public",
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "entry",
+        "name": "happened_on",
+        "type": "date",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "entry",
+        "name": "category_id",
+        "type": "uuid",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "entry",
+        "name": "note",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "entry",
+        "name": "classified_by",
+        "type": "classified_by",
+        "typeSchema": "public",
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "entry",
+        "name": "created_at",
+        "type": "timestamp with time zone",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "now()",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "entry",
+        "name": "updated_at",
+        "type": "timestamp with time zone",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "now()",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "entry_part",
+        "name": "id",
+        "type": "uuid",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "uuidv7()",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "entry_part",
+        "name": "user_id",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "entry_part",
+        "name": "entry_id",
+        "type": "uuid",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "entry_part",
+        "name": "line_id",
+        "type": "uuid",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "entry_part",
+        "name": "role",
+        "type": "entry_part_role",
+        "typeSchema": "public",
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "entry_part",
+        "name": "amount_minor",
+        "type": "bigint",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "category",
+        "name": "category_one_fallback_per_kind",
+        "nameExplicit": true,
+        "columns": [
+          {
+            "value": "user_id",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          },
+          {
+            "value": "kind",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          }
+        ],
+        "isUnique": true,
+        "where": "\"is_fallback\"",
+        "with": "",
+        "method": "btree",
+        "entityType": "indexes"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "entry",
+        "name": "entry_user_id_happened_on_idx",
+        "nameExplicit": true,
+        "columns": [
+          {
+            "value": "user_id",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          },
+          {
+            "value": "happened_on",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          }
+        ],
+        "isUnique": false,
+        "where": null,
+        "with": "",
+        "method": "btree",
+        "entityType": "indexes"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "entry",
+        "name": "entry_category_id_idx",
+        "nameExplicit": true,
+        "columns": [
+          {
+            "value": "category_id",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          }
+        ],
+        "isUnique": false,
+        "where": null,
+        "with": "",
+        "method": "btree",
+        "entityType": "indexes"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "entry_part",
+        "name": "entry_part_line_id_idx",
+        "nameExplicit": true,
+        "columns": [
+          {
+            "value": "line_id",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          }
+        ],
+        "isUnique": false,
+        "where": null,
+        "with": "",
+        "method": "btree",
+        "entityType": "indexes"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "category",
+        "name": "category_user_id_auth_user_id_fkey",
+        "nameExplicit": false,
+        "columns": ["user_id"],
+        "schemaTo": "public",
+        "tableTo": "auth_user",
+        "columnsTo": ["id"],
+        "onUpdate": "NO ACTION",
+        "onDelete": "CASCADE",
+        "entityType": "fks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "entry",
+        "name": "entry_user_id_auth_user_id_fkey",
+        "nameExplicit": false,
+        "columns": ["user_id"],
+        "schemaTo": "public",
+        "tableTo": "auth_user",
+        "columnsTo": ["id"],
+        "onUpdate": "NO ACTION",
+        "onDelete": "CASCADE",
+        "entityType": "fks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "entry_part",
+        "name": "entry_part_user_id_auth_user_id_fkey",
+        "nameExplicit": false,
+        "columns": ["user_id"],
+        "schemaTo": "public",
+        "tableTo": "auth_user",
+        "columnsTo": ["id"],
+        "onUpdate": "NO ACTION",
+        "onDelete": "CASCADE",
+        "entityType": "fks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "entry_part",
+        "name": "entry_part_entry_fk",
+        "nameExplicit": true,
+        "columns": ["user_id", "entry_id"],
+        "schemaTo": "public",
+        "tableTo": "entry",
+        "columnsTo": ["user_id", "id"],
+        "onUpdate": "NO ACTION",
+        "onDelete": "CASCADE",
+        "entityType": "fks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "entry_part",
+        "name": "entry_part_line_fk",
+        "nameExplicit": true,
+        "columns": ["user_id", "line_id"],
+        "schemaTo": "public",
+        "tableTo": "statement_line",
+        "columnsTo": ["user_id", "id"],
+        "onUpdate": "NO ACTION",
+        "onDelete": "CASCADE",
+        "entityType": "fks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "category",
+        "name": "category_pkey",
+        "columns": ["id"],
+        "nameExplicit": false,
+        "entityType": "pks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "entry",
+        "name": "entry_pkey",
+        "columns": ["id"],
+        "nameExplicit": false,
+        "entityType": "pks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "entry_part",
+        "name": "entry_part_pkey",
+        "columns": ["id"],
+        "nameExplicit": false,
+        "entityType": "pks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "category",
+        "name": "category_user_id_id_key",
+        "nameExplicit": true,
+        "columns": ["user_id", "id"],
+        "nullsNotDistinct": false,
+        "entityType": "uniques"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "category",
+        "name": "category_user_id_id_kind_key",
+        "nameExplicit": true,
+        "columns": ["user_id", "id", "kind"],
+        "nullsNotDistinct": false,
+        "entityType": "uniques"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "category",
+        "name": "category_user_id_kind_parent_id_name_key",
+        "nameExplicit": true,
+        "columns": ["user_id", "kind", "parent_id", "name"],
+        "nullsNotDistinct": true,
+        "entityType": "uniques"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "entry",
+        "name": "entry_user_id_id_key",
+        "nameExplicit": true,
+        "columns": ["user_id", "id"],
+        "nullsNotDistinct": false,
+        "entityType": "uniques"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "entry_part",
+        "name": "entry_part_entry_id_line_id_role_key",
+        "nameExplicit": true,
+        "columns": ["entry_id", "line_id", "role"],
+        "nullsNotDistinct": false,
+        "entityType": "uniques"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "category",
+        "name": "category_fixed_benchmark_has_amount",
+        "value": "(\"benchmark_mode\" = 'fixed') = (\"benchmark_minor\" is not null)",
+        "entityType": "checks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "entry_part",
+        "name": "entry_part_amount_positive",
+        "value": "\"amount_minor\" > 0",
+        "entityType": "checks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "category",
+        "name": "category_own_rows_only",
+        "as": "PERMISSIVE",
+        "for": "ALL",
+        "roles": ["public"],
+        "using": "\"user_id\" = current_setting('gousset.user_id', true)",
+        "withCheck": "\"user_id\" = current_setting('gousset.user_id', true)",
+        "entityType": "policies"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "entry",
+        "name": "entry_own_rows_only",
+        "as": "PERMISSIVE",
+        "for": "ALL",
+        "roles": ["public"],
+        "using": "\"user_id\" = current_setting('gousset.user_id', true)",
+        "withCheck": "\"user_id\" = current_setting('gousset.user_id', true)",
+        "entityType": "policies"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "entry_part",
+        "name": "entry_part_own_rows_only",
+        "as": "PERMISSIVE",
+        "for": "ALL",
+        "roles": ["public"],
+        "using": "\"user_id\" = current_setting('gousset.user_id', true)",
+        "withCheck": "\"user_id\" = current_setting('gousset.user_id', true)",
+        "entityType": "policies"
+      }
+    }
+  ]
+}
