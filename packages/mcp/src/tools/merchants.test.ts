@@ -1,4 +1,5 @@
 import {
+  CategoryStore,
   DataExport,
   FixtureLedger,
   ImportProfiles,
@@ -13,9 +14,16 @@ import {
   Merchants,
   Transfers,
   memoryAccountStore,
+  memoryCategory,
+  memoryCategoryStore,
   memoryLineStore,
 } from "@gousset/core";
-import type { MerchantLine, MerchantSummary } from "@gousset/core";
+import type {
+  MemoryCategoryRows,
+  MerchantDefaultCategory,
+  MerchantLine,
+  MerchantSummary,
+} from "@gousset/core";
 import { Effect, Layer, Schema } from "effect";
 import { describe, expect, test } from "vite-plus/test";
 
@@ -28,8 +36,8 @@ import type { Caller, Runner } from "../tool";
 // The merchants tool through the official client, on a small in-memory `Merchants` of made-up
 // shops: the tool's words, paging and refusals; the service's own rules are core's tests.
 
-const writer: Caller = { userId: "ada", canWrite: true };
-const reader: Caller = { userId: "ada", canWrite: false };
+const writer: Caller = { userId: "ada", canWrite: true, currency: "EUR" };
+const reader: Caller = { userId: "ada", canWrite: false, currency: "EUR" };
 
 type StoredMerchant = { id: string; name: string; aliases: Array<string> };
 
@@ -37,6 +45,10 @@ type Store = {
   merchants: Array<StoredMerchant>;
   /** Each merchant's latest lines, by its id. */
   lines: Map<string, ReadonlyArray<MerchantLine>>;
+  /** Ada's categories, and her merchants' default categories, by owner. */
+  categories?: Map<string, MemoryCategoryRows>;
+  /** Runs just before a default category is written: what another call does meanwhile. */
+  beforeDefault?: () => void;
 };
 
 let made = 0;
@@ -57,17 +69,43 @@ function merchant(name: string, aliases: Array<string>): StoredMerchant {
   return { id: newId(), name, aliases };
 }
 
+/** Ada's categories, a few of the default set's, with Family archived. */
+function categoryRows(merchants: ReadonlyArray<StoredMerchant>): MemoryCategoryRows {
+  const groceries = memoryCategory("expense", "Groceries");
+
+  return {
+    categories: [
+      groceries,
+      memoryCategory("expense", "Bakery", { parentId: groceries.id }),
+      memoryCategory("expense", "Transport", { position: 1 }),
+      memoryCategory("expense", "Family", {
+        position: 2,
+        archivedAt: "2026-11-01T10:00:00.000Z",
+      }),
+      memoryCategory("expense", "Other", { position: 3, fallback: true }),
+      memoryCategory("income", "Salary"),
+      memoryCategory("income", "Other", { position: 1, fallback: true }),
+    ],
+    entries: [],
+    lines: [],
+    merchants: merchants.map((each) => ({ id: each.id, defaultCategoryId: null })),
+  };
+}
+
 /** Four made-up shops; Greenmarket under two cleaned labels, with two lines. */
 function store(): Store {
   const greenmarket = merchant("Greenmarket", ["GREENMARKET", "GREENMARKET RIVERTON"]);
 
+  const merchants = [
+    greenmarket,
+    merchant("Corner Cafe", ["CORNER CAFE"]),
+    merchant("Fuelstop", ["FUELSTOP"]),
+    merchant("Green Grocer", ["GREEN GROCER"]),
+  ];
+
   return {
-    merchants: [
-      greenmarket,
-      merchant("Corner Cafe", ["CORNER CAFE"]),
-      merchant("Fuelstop", ["FUELSTOP"]),
-      merchant("Green Grocer", ["GREEN GROCER"]),
-    ],
+    categories: new Map([[writer.userId, categoryRows(merchants)]]),
+    merchants,
     lines: new Map([
       [
         greenmarket.id,
@@ -97,6 +135,27 @@ const nameOf = (name: string) => {
     ? Effect.fail(new MerchantNameRefused({ reason: "too_long" }))
     : Effect.succeed(trimmed);
 };
+
+/** A merchant's default category, as the database reads it with the merchant. */
+function defaultOf(state: Store, merchantId: string): MerchantDefaultCategory | null {
+  const rows = state.categories?.get(writer.userId);
+  const chosen = rows?.merchants?.find((each) => each.id === merchantId)?.defaultCategoryId;
+  const category = rows?.categories.find((each) => each.id === chosen);
+
+  if (category === undefined) {
+    return null;
+  }
+
+  const parent = rows?.categories.find((each) => each.id === category.parentId);
+
+  return {
+    id: category.id,
+    name: category.name,
+    parentName: parent?.name ?? null,
+    kind: category.kind,
+    archived: category.archivedAt !== null,
+  };
+}
 
 /** `Merchants` over the store, as the database one answers. */
 function merchantsOf(state: Store) {
@@ -138,6 +197,7 @@ function merchantsOf(state: Store) {
       Effect.map(byId(merchantId), (found) => ({
         id: found.id,
         name: found.name,
+        defaultCategory: defaultOf(state, found.id),
         aliases: found.aliases.toSorted(),
         lines: state.lines.get(found.id) ?? [],
       })),
@@ -222,11 +282,39 @@ function merchantsOf(state: Store) {
   });
 }
 
+/** The categories over the store, with what happens meanwhile before a default is written. */
+function categoriesOf(state: Store) {
+  const memory = memoryCategoryStore(state.categories);
+  const meanwhile = state.beforeDefault;
+
+  if (meanwhile === undefined) {
+    return memory;
+  }
+
+  return Layer.effect(
+    CategoryStore,
+    Effect.gen(function* () {
+      const store = yield* CategoryStore;
+
+      return {
+        ...store,
+        setMerchantDefault: (owner, merchantId, decide) =>
+          Effect.suspend(() => {
+            meanwhile();
+
+            return store.setMerchantDefault(owner, merchantId, decide);
+          }),
+      };
+    }),
+  ).pipe(Layer.provide(memory));
+}
+
 function runnerOf(state: Store): Runner<GoussetServices> {
   const layer = Layer.mergeAll(
     FixtureLedger,
     memoryAccountStore(),
     memoryLineStore(),
+    categoriesOf(state),
     // merchants never reaches the imports nor the export.
     Layer.mock(Imports, {}),
     Layer.mock(ImportProfiles, {}),
@@ -636,6 +724,232 @@ describe("merchants edit", () => {
   });
 });
 
+describe("merchants edit with category", () => {
+  test("sets the merchant's default category, which show then gives", async () => {
+    const state = store();
+
+    const { text, isError } = await merchants(state, {
+      action: "edit",
+      merchant: "greenmarket",
+      category: "groceries > bakery",
+    });
+
+    expect(isError, text).toBe(false);
+    expect(text).toBe(
+      "Greenmarket's default category is now Groceries > Bakery (expense): the category its entries go in by default.",
+    );
+
+    const shown = await merchants(state, { action: "show", merchant: "Greenmarket" });
+
+    expect(shown.text).toContain("Default category: Groceries > Bakery (expense).");
+  });
+
+  test("an income category, and clear_category to clear it", async () => {
+    const state = store();
+
+    const set = await merchants(state, {
+      action: "edit",
+      merchant: "Corner Cafe",
+      category: "Salary",
+    });
+
+    expect(set.text).toContain("is now Salary (income)");
+
+    const { text, isError } = await merchants(state, {
+      action: "edit",
+      merchant: "Corner Cafe",
+      clear_category: true,
+    });
+
+    expect(isError, text).toBe(false);
+    expect(text).toBe("Corner Cafe has no default category any more.");
+
+    const shown = await merchants(state, { action: "show", merchant: "Corner Cafe" });
+
+    expect(shown.text).toContain("No default category: edit with category sets one.");
+  });
+
+  test("category is always a name: a category named None is chosen, and none clears nothing", async () => {
+    const state = store();
+
+    await merchants(state, { action: "edit", merchant: "Corner Cafe", category: "Transport" });
+
+    const missing = await merchants(state, {
+      action: "edit",
+      merchant: "Corner Cafe",
+      category: "none",
+    });
+
+    expect(missing.isError).toBe(true);
+    expect(missing.text).toContain('No category of the user\'s is named "none".');
+
+    const kept = await merchants(state, { action: "show", merchant: "Corner Cafe" });
+
+    expect(kept.text).toContain("Default category: Transport (expense).");
+
+    const rows = state.categories?.get(writer.userId);
+
+    rows?.categories.push(memoryCategory("expense", "None", { position: 4 }));
+
+    const { text, isError } = await merchants(state, {
+      action: "edit",
+      merchant: "Corner Cafe",
+      category: "None",
+    });
+
+    expect(isError, text).toBe(false);
+    expect(text).toContain("Corner Cafe's default category is now None (expense)");
+  });
+
+  test("a blank category is refused with a call that only reads", async () => {
+    const { text, isError } = await merchants(store(), {
+      action: "edit",
+      merchant: "Fuelstop",
+      category: " ",
+    });
+
+    expect(isError).toBe(true);
+    expect(text).toContain("clear_category");
+    expect(text).toContain('A valid call: categories {"action":"list"}');
+  });
+
+  test("a category merged away meanwhile: a call that only reads, never one that clears", async () => {
+    const state = store();
+
+    state.beforeDefault = () => {
+      const rows = state.categories?.get(writer.userId);
+
+      if (rows !== undefined) {
+        rows.categories = rows.categories.filter((each) => each.name !== "Transport");
+      }
+    };
+
+    const { text, isError } = await merchants(state, {
+      action: "edit",
+      merchant: "Fuelstop",
+      category: "Transport",
+    });
+
+    expect(isError).toBe(true);
+    expect(text).toContain('The category "Transport" is gone');
+    expect(text).toContain('A valid call: categories {"action":"list"}');
+    expect(text).not.toContain("clear_category");
+    expect(text.length).toBeLessThan(ERROR_LIMIT);
+  });
+
+  test("an unknown category: the user's categories, and a call that answers", async () => {
+    const state = store();
+
+    const { text, isError } = await merchants(state, {
+      action: "edit",
+      merchant: "Fuelstop",
+      category: "Fuel",
+    });
+
+    expect(isError).toBe(true);
+    expect(text).toContain('No category of the user\'s is named "Fuel".');
+    expect(text).toContain("Groceries > Bakery");
+    expect(text).toContain('categories {"action":"list"}');
+    expect(text.length).toBeLessThan(ERROR_LIMIT);
+  });
+
+  test("a name an expense and an income category share: kind tells them apart", async () => {
+    const state = store();
+
+    const { text, isError } = await merchants(state, {
+      action: "edit",
+      merchant: "Fuelstop",
+      category: "Other",
+    });
+
+    expect(isError).toBe(true);
+    expect(text).toContain("Add kind, expense or income");
+
+    const example = await expectValidExample(text, state);
+
+    expect(example).toEqual({
+      action: "edit",
+      merchant: "Fuelstop",
+      category: "Other",
+      kind: "expense",
+    });
+  });
+
+  test("an archived category is refused, with the call that restores it", async () => {
+    const state = store();
+
+    const { text, isError } = await merchants(state, {
+      action: "edit",
+      merchant: "Fuelstop",
+      category: "Family",
+    });
+
+    expect(isError).toBe(true);
+    expect(text).toContain('"Family" is archived');
+    expect(text).toContain('categories {"action":"archive","category":"Family","restore":true}');
+
+    const shown = await merchants(state, { action: "show", merchant: "Fuelstop" });
+
+    expect(shown.text).toContain("No default category");
+  });
+
+  test("an archived default is shown as such", async () => {
+    const state = store();
+    const rows = state.categories?.get(writer.userId);
+    const family = rows?.categories.find((each) => each.name === "Family");
+    const fuelstop = state.merchants.find((each) => each.name === "Fuelstop");
+
+    if (rows !== undefined) {
+      rows.merchants = rows.merchants?.map((each) =>
+        each.id === fuelstop?.id ? { ...each, defaultCategoryId: family?.id ?? null } : each,
+      );
+    }
+
+    const { text } = await merchants(state, { action: "show", merchant: "Fuelstop" });
+
+    expect(text).toContain(
+      "Default category: Family (expense), archived: it can no longer be chosen; edit with category sets another.",
+    );
+  });
+
+  test("clear_category goes alone, and never with category", async () => {
+    const { text, isError } = await merchants(store(), {
+      action: "edit",
+      merchant: "Fuelstop",
+      category: "Transport",
+      clear_category: true,
+    });
+
+    expect(isError).toBe(true);
+    expect(text).toContain("one thing at a time");
+    await expectValidExample(text);
+  });
+
+  test("category goes alone", async () => {
+    const { text, isError } = await merchants(store(), {
+      action: "edit",
+      merchant: "Fuelstop",
+      name: "Fuel Stop",
+      category: "Transport",
+    });
+
+    expect(isError).toBe(true);
+    expect(text).toContain("one thing at a time");
+    await expectValidExample(text);
+  });
+
+  test("needs the write scope", async () => {
+    const { text, isError } = await merchants(
+      store(),
+      { action: "edit", merchant: "Fuelstop", category: "Transport" },
+      reader,
+    );
+
+    expect(isError).toBe(true);
+    expect(text).toContain("choose Read and write on Gousset's consent page");
+  });
+});
+
 describe("merchants merge", () => {
   test("moves every cleaned label into the merchant kept, and deletes the other", async () => {
     const state = store();
@@ -716,7 +1030,7 @@ describe("the merchants tool", () => {
     expect(read.isError).toBe(false);
   });
 
-  test("writes, says so, and comes last in the fixed order", async () => {
+  test("writes, says so, and comes after lines in the fixed order", async () => {
     const client = await connectInProcess(
       goussetServer,
       { run: runnerOf(store()) },
@@ -727,7 +1041,15 @@ describe("the merchants tool", () => {
     const { tools } = await client.listTools();
     const tool = tools.find((each) => each.name === "merchants");
 
-    expect(tools.map((each) => each.name).at(-1)).toBe("merchants");
+    expect(tools.map((each) => each.name)).toEqual([
+      "month",
+      "imports",
+      "accounts",
+      "data",
+      "lines",
+      "merchants",
+      "categories",
+    ]);
     expect(tool?.title).toBe("Merchants");
     expect(tool?.annotations).toEqual({
       readOnlyHint: false,

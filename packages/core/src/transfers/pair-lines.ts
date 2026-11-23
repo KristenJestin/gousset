@@ -4,6 +4,7 @@ import type { UserTransaction } from "@gousset/db/user-data";
 import { and, eq, gte, inArray, lt, lte, ne, notInArray, or, sql } from "drizzle-orm";
 import type { SQL, SQLWrapper } from "drizzle-orm";
 
+import { dropEntriesOfTransferSides } from "../entries";
 import {
   CARD_DAYS,
   REPLACE_DAYS,
@@ -324,8 +325,8 @@ async function pairCardDebits(
  * app had made that a file now brings is replaced by the file's line; two lines that are each the
  * other's only candidate are paired; a line out of an account a deferred card settles into, with
  * no candidate, that pays what the card owed, is paired with a side the app makes on the card. A
- * line with several candidates is left as it is, for the user. Safe to run again: a paired line is
- * no candidate any more.
+ * line with several candidates is left as it is, for the user. A line paired loses its entry (#23):
+ * it is the transfer. Safe to run again: a paired line is no candidate any more.
  */
 export async function pairTransfers(
   transaction: UserTransaction,
@@ -391,12 +392,11 @@ export async function pairTransfers(
   const candidates = candidateFinder(available);
 
   const targets = debits.filter((line) => !taken.has(line.id) && candidates(line).length === 0);
+  const cardDebitsPaired = await pairCardDebits(transaction, owner, targets);
 
-  return {
-    paired,
-    cardDebits: await pairCardDebits(transaction, owner, targets),
-    replaced: replaced.size,
-  };
+  await dropEntriesOfTransferSides(transaction);
+
+  return { paired, cardDebits: cardDebitsPaired, replaced: replaced.size };
 }
 
 /**
@@ -423,12 +423,13 @@ export async function linesWithSeveralCandidates(
  * Undoing an import (docs/data-model.md, "Undoing an import from v0.3"): the transfers of the lines
  * `lineIds` selects go with them, by their foreign keys; the sides the app made for those transfers
  * are deleted here, since no file will ever bring them back, and the other sides go back to the
- * review. How many transfers go.
+ * review. How many transfers go, and the other sides left, which the caller gives back their entry
+ * once the import's lines, and so the transfers, are gone.
  */
 export async function unpairForUndo(
   transaction: UserTransaction,
   lineIds: SQLWrapper,
-): Promise<number> {
+): Promise<{ readonly removed: number; readonly others: ReadonlyArray<string> }> {
   const gone = await transaction
     .select({ outLineId: transfer.outLineId, inLineId: transfer.inLineId })
     .from(transfer)
@@ -436,17 +437,20 @@ export async function unpairForUndo(
 
   const sides = gone.flatMap((each) => [each.outLineId, each.inLineId]);
 
-  if (sides.length > 0) {
-    await transaction
-      .delete(statementLine)
-      .where(and(inArray(statementLine.id, sides), eq(statementLine.source, "counterpart")));
-
-    // The undone import's own lines are deleted next; the others are no transfer any more.
-    await transaction
-      .update(statementLine)
-      .set({ reviewState: "to_review" })
-      .where(and(inArray(statementLine.id, sides), notInArray(statementLine.id, lineIds)));
+  if (sides.length === 0) {
+    return { removed: 0, others: [] };
   }
 
-  return gone.length;
+  await transaction
+    .delete(statementLine)
+    .where(and(inArray(statementLine.id, sides), eq(statementLine.source, "counterpart")));
+
+  // The undone import's own lines are deleted next; the others are no transfer any more.
+  const others = await transaction
+    .update(statementLine)
+    .set({ reviewState: "to_review" })
+    .where(and(inArray(statementLine.id, sides), notInArray(statementLine.id, lineIds)))
+    .returning({ id: statementLine.id });
+
+  return { removed: gone.length, others: others.map((each) => each.id) };
 }

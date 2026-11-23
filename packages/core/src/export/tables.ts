@@ -164,6 +164,80 @@ export const IMPORT_PROFILES: ExportTable = {
   ],
 };
 
+export const CATEGORIES: ExportTable = {
+  table: "category",
+  file: "categories",
+  holds: "your expense and income categories, on two levels",
+  columns: [
+    ID,
+    OWNER,
+    { name: "parent_id", holds: "the category it is under (categories.id); empty at the top" },
+    { name: "kind", holds: "expense or income" },
+    { name: "name", holds: "the category's name" },
+    { name: "icon", holds: "the key of the icon it is shown with" },
+    {
+      name: "position",
+      holds: "its place among its siblings, which are ordered by it, then by id",
+    },
+    { name: "archived_at", holds: "when it was archived; empty while in use" },
+    {
+      name: "benchmark_mode",
+      holds: "what its spending is compared with: automatic (the six-month average), fixed or none",
+    },
+    {
+      name: "benchmark_minor",
+      holds: "a fixed benchmark, in minor units of your currency",
+    },
+    {
+      name: "is_fallback",
+      holds: "true for its kind's fallback (Other), where an entry goes until it is classified",
+    },
+    CREATED_AT,
+    UPDATED_AT,
+  ],
+};
+
+export const ENTRIES: ExportTable = {
+  table: "entry",
+  file: "entries",
+  holds: "what happened: each expense and income, with its category, made of parts of lines",
+  columns: [
+    ID,
+    OWNER,
+    { name: "kind", holds: "expense or income" },
+    { name: "happened_on", holds: "the day it happened" },
+    { name: "category_id", holds: "its category (categories.id)" },
+    { name: "note", holds: "your note" },
+    {
+      name: "classified_by",
+      holds:
+        "default (not classified yet: in its merchant's default category, or its kind's fallback), rule or user (by you)",
+    },
+    CREATED_AT,
+    UPDATED_AT,
+  ],
+};
+
+export const ENTRY_PARTS: ExportTable = {
+  table: "entry_part",
+  file: "entry-parts",
+  holds: "which lines pay each entry, or refund it, and by how much",
+  columns: [
+    ID,
+    OWNER,
+    { name: "entry_id", holds: "the entry (entries.id)" },
+    { name: "line_id", holds: "the line (statement-lines.id)" },
+    {
+      name: "role",
+      holds: "payment (money the entry's way: out for an expense, in for an income) or refund",
+    },
+    {
+      name: "amount_minor",
+      holds: "how much of the line, positive, in minor units of its account's currency",
+    },
+  ],
+};
+
 export const MERCHANTS: ExportTable = {
   table: "merchant",
   file: "merchants",
@@ -174,6 +248,11 @@ export const MERCHANTS: ExportTable = {
     { name: "name", holds: "the merchant's name, as you see it" },
     CREATED_AT,
     UPDATED_AT,
+    // Added after the others (#23): the database keeps it last.
+    {
+      name: "default_category_id",
+      holds: "the category (categories.id) its entries go in by default; empty for none",
+    },
   ],
 };
 
@@ -210,6 +289,9 @@ export const EXPORT_TABLES: ReadonlyArray<ExportTable> = [
   STATEMENT_LINES,
   IMPORTS,
   IMPORT_PROFILES,
+  CATEGORIES,
+  ENTRIES,
+  ENTRY_PARTS,
   TRANSFERS,
   MERCHANTS,
   MERCHANT_ALIASES,

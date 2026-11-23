@@ -11,9 +11,13 @@ import {
 import type { Statement } from "@gousset/fixture";
 import { Effect } from "effect";
 
+import { eq } from "drizzle-orm";
+
+import { insertDefaultEntries } from "./entries";
 import {
   account,
   accountBalance,
+  category,
   importFile,
   statementImport,
   statementLine,
@@ -26,7 +30,10 @@ import type { QueryFailed, UserTransaction } from "./user-data";
 // The shared made-up data of `packages/fixture` written into a user's tables: the development
 // database (`pnpm db:seed`) and the end-to-end tests that need rows. Each made-up account gets one
 // OFX import a month, its file, its lines and the statement's closing balance, and its transfers
-// paired as the import pairs them (#26). It goes through `UserData`, as the app's own writes do. The fixture's sample statements of other formats (#17)
+// paired as the import pairs them (#26). It goes through `UserData`, as the app's own writes do.
+// Each counted line that is no side of a transfer gets its entry, in its kind's fallback category,
+// as an import gives it: the user's categories are theirs from sign-up (packages/auth) or from the
+// migration that brought them. The fixture's sample statements of other formats (#17)
 // are not written yet.
 
 type Envelope = (typeof accountEnvelope.enumValues)[number];
@@ -82,6 +89,15 @@ async function writeMadeUpData(
 
   if (existing.length > 0) {
     return { accounts: 0, imports: 0, lines: 0 };
+  }
+
+  const fallbacks = await transaction
+    .select({ id: category.id })
+    .from(category)
+    .where(eq(category.isFallback, true));
+
+  if (fallbacks.length === 0) {
+    throw new Error("The user has no categories: sign up through the app, which copies them.");
   }
 
   const summary = { accounts: 0, imports: 0, lines: 0 };
@@ -225,6 +241,9 @@ async function writeMadeUpData(
   if (pairs.length > 0) {
     await transaction.insert(transfer).values(pairs);
   }
+
+  // After the transfers: their sides get no entry.
+  await insertDefaultEntries(transaction, owner, [...lineIds.values()]);
 
   return summary;
 }

@@ -46,6 +46,8 @@ export type LineDetailProps = {
   looksLike?: string;
   /** The import it came from; left out, the line was entered by hand. */
   importedFrom?: LineImport;
+  /** Its category, to see and change: a `CategoryPicker`; left out for a line with none. */
+  category?: ReactNode;
   /** The line's transfer or its candidates (`LineTransfer`), after its account and days. */
   transfer?: ReactNode;
   onClose: () => void;
@@ -71,7 +73,8 @@ function DetailGroup({ children }: { children: ReactNode }) {
  * day it was booked and its value date, the bank's raw label (fixed-width) with its memo and
  * counterparty, the original amount when it was in another currency, its expiry, "To review:
  * looks like …" on a held line, its transfer (`transfer`, a `LineTransfer`), and the import it
- * came from or "Entered by hand". Every text comes
+ * came from or "Entered by hand"; first, its category, through the control the page gives
+ * (`category`). Every text comes
  * worded from the page. The close button or Escape closes it; the focus goes into it when it opens.
  * `OperationsLayout` sets it beside the list on a wide screen and over it on a phone.
  *
@@ -95,6 +98,7 @@ export function LineDetail({
   expiresOn,
   looksLike,
   importedFrom,
+  category,
   transfer,
   onClose,
   locale,
@@ -125,6 +129,7 @@ export function LineDetail({
 
   const content = (
     <>
+      {category === undefined ? null : <div data-slot="line-category">{category}</div>}
       {looksLike === undefined ? null : (
         <p className="rounded-md bg-muted px-3 py-2 text-sm text-foreground">
           {words.looksLike(looksLike)}

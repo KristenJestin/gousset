@@ -15,6 +15,7 @@
     "@better-auth/drizzle-adapter": "1.7.27",
     "@better-auth/mcp": "1.7.27",
     "@better-auth/oauth-provider": "1.7.27",
+    "@gousset/core": "workspace:*",
     "@gousset/db": "workspace:*",
     "better-auth": "catalog:",
     "drizzle-orm": "catalog:",

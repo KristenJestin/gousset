@@ -49,6 +49,46 @@ export function accountRefusalMessage(code: string): string {
 }
 
 /**
+ * A refusal of a change of the categories (`CategoryRefusalCode`) or of a line's category
+ * (`LineRefusalCode`), by its code. An icon or a position the page never sends falls to the
+ * general message. `fallback` names the fallback a refusal is about, as the user called it.
+ */
+export function categoryRefusalMessage(code: string, fallback?: string | null): string {
+  switch (code) {
+    case "CATEGORY_NOT_FOUND":
+      return m.categoryRefusalNotFound();
+    case "CATEGORY_NAME_TAKEN":
+      return m.categoryRefusalNameTaken();
+    case "CATEGORY_THIRD_LEVEL":
+      return m.categoryRefusalThirdLevel();
+    case "CATEGORY_PARENT_KIND":
+      return m.categoryRefusalParentKind();
+    case "CATEGORY_ITSELF":
+      return m.categoryRefusalItself();
+    case "CATEGORY_ARCHIVED":
+      return m.categoryRefusalArchived();
+    case "CATEGORY_PARENT_ARCHIVED":
+      return m.categoryRefusalParentArchived();
+    case "CATEGORY_FALLBACK":
+      return m.categoryRefusalFallback({ name: fallback ?? "" });
+    case "CATEGORY_NAME":
+      return m.categoryRefusalName();
+    case "CATEGORY_TOO_MANY":
+      return m.categoryRefusalTooMany();
+    case "CATEGORY_BENCHMARK":
+      return m.categoryRefusalBenchmark();
+    case "CATEGORY_KIND_MISMATCH":
+      return m.categoryRefusalKindMismatch();
+    case "LINE_NOT_CLASSIFIABLE":
+      return m.categoryRefusalNotClassifiable();
+    case "LINE_NOT_FOUND":
+      return m.categoryRefusalLineNotFound();
+    default:
+      return m.errorUnknown();
+  }
+}
+
+/**
  * A merchant write or read's refusal (`MerchantRefusalCode`), by its code; `name` is the merchant
  * it is about, when the refusal names one (the one that has the name already).
  */
@@ -68,6 +108,10 @@ export function merchantRefusalMessage(code: string, name?: string): string {
       return m.merchantRefusalMergeIntoItself();
     case "MERGE_INTO_UNKNOWN":
       return m.merchantRefusalMergeIntoUnknown();
+    case "CATEGORY_NOT_FOUND":
+      return m.merchantRefusalCategoryNotFound();
+    case "CATEGORY_ARCHIVED":
+      return m.merchantRefusalCategoryArchived();
     default:
       return m.errorUnknown();
   }

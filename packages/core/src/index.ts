@@ -8,10 +8,17 @@ export {
   AccountNotClosed,
   AccountNotFound,
   BalanceAlreadyNoted,
+  CategoryKindMismatch,
+  CategoryNameAmbiguous,
+  CategoryNameTaken,
+  CategoryNameUnknown,
+  CategoryNotFound,
+  CategoryRefused,
   CurrencyLocked,
   DayRangeRefused,
   ExpiryBeforeCredit,
   LineAlreadyReviewed,
+  LineNotClassifiable,
   LineNotFound,
   LineSearchRefused,
   MonthOutOfRange,
@@ -86,6 +93,55 @@ export { memoryAccountStore, memoryId } from "./account-store-memory";
 export type { MemoryBalance, MemoryImport, MemoryLine, MemoryRows } from "./account-store-memory";
 
 export type { DayBalance } from "./balances";
+
+export {
+  AVERAGE_MONTHS,
+  MAX_CATEGORIES,
+  MAX_CATEGORY_NAME,
+  archiveCategory,
+  categoryNamed,
+  classifyLine,
+  createCategory,
+  editCategory,
+  listCategories,
+  mergeCategory,
+  setMerchantDefaultCategory,
+  restoreCategory,
+} from "./categories";
+
+export type {
+  CategoryEdit,
+  CategoryInput,
+  CategoryListing,
+  CategoryMerge,
+  CategoryNode,
+  CategoryTree,
+  LineClassification,
+} from "./categories";
+
+export { CategoryStore } from "./category-store";
+
+export type { Benchmark, CategoryRecord, EntryKind, LineCategory } from "./category-store";
+
+export { DatabaseCategoryStore } from "./category-store-database";
+
+export { memoryCategory, memoryCategoryStore } from "./category-store-memory";
+
+export type {
+  MemoryCategoryRows,
+  MemoryEntry,
+  MemoryMerchant,
+  MemoryPart,
+} from "./category-store-memory";
+
+export {
+  DEFAULT_CATEGORIES,
+  copyDefaultCategories,
+  defaultRows,
+  setLanguageOf,
+} from "./default-categories";
+
+export type { DefaultCategory, DefaultName, SetLanguage } from "./default-categories";
 
 export { DEFAULT_SEARCH_LINES, MAX_SEARCH_LINES, searchLines, showLine } from "./lines";
 
@@ -204,6 +260,7 @@ export {
 
 export type {
   AliasMoved,
+  MerchantDefaultCategory,
   MerchantDetail,
   MerchantLine,
   MerchantPage,

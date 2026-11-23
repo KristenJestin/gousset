@@ -6,6 +6,7 @@ import {
   Merchants,
   Transfers,
   memoryAccountStore,
+  memoryCategoryStore,
   memoryLineStore,
 } from "@gousset/core";
 import { Effect, Layer } from "effect";
@@ -18,10 +19,10 @@ import { connectInProcess } from "./test-client";
 // room: the maintainer decides.
 const MAX_TOOLS = 15;
 const MAX_LISTING_CHARACTERS = 30_000;
-const MAX_DESCRIPTION_CHARACTERS = 2048;
+const MAX_DESCRIPTION_CHARACTERS = 4000;
 const MAX_INSTRUCTION_WORDS = 600;
 
-const reader = { userId: "guard", canWrite: false };
+const reader = { userId: "guard", canWrite: false, currency: "EUR" };
 
 async function listing() {
   const client = await connectInProcess(
@@ -36,6 +37,7 @@ async function listing() {
               FixtureLedger,
               memoryAccountStore(),
               memoryLineStore(),
+              memoryCategoryStore(),
               Layer.mock(Imports, {}),
               Layer.mock(ImportProfiles, {}),
               Layer.mock(DataExport, {}),

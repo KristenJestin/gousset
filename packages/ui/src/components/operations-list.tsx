@@ -30,6 +30,8 @@ export type OperationRow = {
   amount: Money;
   /** Held for review: a "To review" chip beside the label. */
   toReview?: boolean;
+  /** Its category's name, already worded ("Food › Groceries"); shown with `withCategory`. */
+  category?: string;
 };
 
 export type OperationsListProps = {
@@ -50,6 +52,8 @@ export type OperationsListProps = {
   emptyText?: string;
   /** The page's language (`<html lang>`) unless given. */
   locale?: string;
+  /** A "Category" column, on a wide screen, with each row's `category`. */
+  withCategory?: boolean;
 };
 
 /** Every row's height, in pixels: `h-12`. The virtualiser places rows by it. */
@@ -142,13 +146,14 @@ const COLUMN = {
   day: "w-16 shrink-0",
   line: "flex min-w-0 flex-1 items-center gap-2",
   account: "hidden w-40 shrink-0 truncate md:block",
+  category: "hidden w-40 shrink-0 truncate lg:block",
   amount: "flex w-28 shrink-0 justify-end",
 };
 
 /**
  * The operations (docs/wireframes, screen 2, block 2): every statement line, newest first, one row
- * each: its day, its raw label (with a "To review" chip on a held line), its account and its
- * amount. A row opens the line (`onOpen`), by press or keyboard. Virtualised with ui-sdk's
+ * each: its day, its raw label (with a "To review" chip on a held line), its category on a wide
+ * screen (`withCategory`), its account and its amount. A row opens the line (`onOpen`), by press or keyboard. Virtualised with ui-sdk's
  * `createVirtualizer`: only the rows in view (and a few around) are in the page, each 48 px, in a
  * scroller of its own that fills its parent's height; `onEnd` asks for the next page.
  *
@@ -174,6 +179,7 @@ export function OperationsList({
   label,
   emptyText,
   locale,
+  withCategory = false,
 }: OperationsListProps) {
   const messages = useUiMessages().operations;
   const pageLocale = usePageLanguage();
@@ -236,6 +242,7 @@ export function OperationsList({
       // what Motion's shared layout moves between. An anchor coming back under an open detail
       // would take its place and hide it.
       anchored={hydrated && row.id !== openId}
+      withCategory={withCategory}
       locale={writtenIn}
       onOpen={onOpen}
       onFocusChange={(focused) => shown.focus(focused ? row.id : null)}
@@ -252,7 +259,7 @@ export function OperationsList({
   return (
     <LazyMotion features={domMax}>
       <div data-slot="operations-list" className="flex h-full min-h-0 flex-col">
-        <ColumnTitles />
+        <ColumnTitles withCategory={withCategory} />
         <m.div
           ref={scroller}
           layoutScroll
@@ -371,7 +378,7 @@ function PlacedRow({
 }
 
 /** The columns' names over the rows; the rows say their own text, so it is only drawn. */
-function ColumnTitles() {
+function ColumnTitles({ withCategory }: { withCategory: boolean }) {
   const columns = useUiMessages().operations.columns;
 
   return (
@@ -381,6 +388,7 @@ function ColumnTitles() {
     >
       <span className={COLUMN.day}>{columns.day}</span>
       <span className={COLUMN.line}>{columns.label}</span>
+      {withCategory ? <span className={COLUMN.category}>{columns.category}</span> : null}
       <span className={COLUMN.account}>{columns.account}</span>
       <span className={COLUMN.amount}>{columns.amount}</span>
     </div>
@@ -391,6 +399,7 @@ function RowButton({
   row,
   open,
   anchored,
+  withCategory,
   locale,
   onOpen,
   onFocusChange,
@@ -398,6 +407,7 @@ function RowButton({
 }: {
   row: OperationRow;
   open: boolean;
+  withCategory: boolean;
   /** Carries the shared layout's anchor: once hydrated (it is Motion's), while not open. */
   anchored: boolean;
   locale: string;
@@ -437,6 +447,9 @@ function RowButton({
         <span className="truncate">{row.label}</span>
         {row.toReview === true ? <Chip>{messages.toReview}</Chip> : null}
       </span>
+      {withCategory ? (
+        <span className={cn(COLUMN.category, "text-muted-foreground")}>{row.category}</span>
+      ) : null}
       <span className={cn(COLUMN.account, "text-muted-foreground")}>{row.account}</span>
       <span className={COLUMN.amount}>
         <Amount value={row.amount} size="sm" roll={false} locale={locale} />

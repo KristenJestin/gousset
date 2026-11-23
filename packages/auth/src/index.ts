@@ -1,13 +1,15 @@
 import { cimd } from "@better-auth/cimd";
 import { drizzleAdapter } from "@better-auth/drizzle-adapter/relations-v2";
 import { mcp } from "@better-auth/mcp";
+import { copyDefaultCategories, setLanguageOf } from "@gousset/core/default-categories";
 import type { Database } from "@gousset/db";
 import { tables } from "@gousset/db/schema/index";
+import { userDataLayer } from "@gousset/db/user-data";
 import { betterAuth } from "better-auth";
 import { APIError, createAuthMiddleware, getSessionFromCtx, isAPIError } from "better-auth/api";
 import { admin, jwt } from "better-auth/plugins";
 import { tanstackStartCookies } from "better-auth/tanstack-start";
-import { Option, Schema } from "effect";
+import { Effect, Option, Schema } from "effect";
 
 import { adminAccess } from "./admin-access";
 import { TOO_MANY_ATTEMPTS } from "./attempt-guard";
@@ -169,6 +171,10 @@ export function createAuth(env: AuthConfig, database: Database) {
         // Whether the shortcuts made of one character fire: the user turns them off in the
         // settings, through the app's own server function (apps/web, functions/shortcuts.ts).
         singleKeyShortcuts: { type: "boolean", required: false, defaultValue: true, input: false },
+        // The user's currency (ISO 4217): the one fixed benchmarks are written in, and a new
+        // account's by default. The settings change it through the app's own server function
+        // (apps/web, functions/currency.ts).
+        currency: { type: "string", required: false, defaultValue: "EUR", input: false },
       },
     },
     session: {
@@ -341,6 +347,20 @@ export function createAuth(env: AuthConfig, database: Database) {
             }
 
             return { data: { ...user, role: "admin", isFirstUser: true } };
+          },
+          // Every user starts with the default categories, in the language the request's browser
+          // prefers (French or English): at sign-up the user's own; for a user the administrator
+          // creates, the administrator's. From then on the names are the user's. Runs once the
+          // user's row is committed, as `gousset_user` for that user, as `UserData` does.
+          after: async (user, ctx) => {
+            const header =
+              ctx?.headers?.get("accept-language") ?? ctx?.request?.headers.get("accept-language");
+
+            await Effect.runPromise(
+              copyDefaultCategories(user.id, setLanguageOf(header)).pipe(
+                Effect.provide(userDataLayer(database)),
+              ),
+            );
           },
         },
       },

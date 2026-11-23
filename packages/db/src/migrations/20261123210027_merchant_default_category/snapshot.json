@@ -1,0 +1,75 @@
+{
+  "type": "diff",
+  "version": "10",
+  "dialect": "postgres",
+  "id": "dc4cfe67-8b6a-4391-9668-6b618377c7ae",
+  "prevIds": ["c692fa7d-765f-4a05-8292-bad8ecbdb214"],
+  "footprints": [
+    {
+      "statementType": "add_column",
+      "statementTarget": ["column", "public", "merchant", "default_category_id"],
+      "writes": [
+        "s|col|public.merchant.default_category_id",
+        "n|col|public.merchant.default_category_id",
+        "e|col|public.merchant.default_category_id"
+      ],
+      "reads": ["n|tbl|public.merchant", "n|sch|public"]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": ["index", "public", "merchant", "merchant_default_category_id_idx"],
+      "writes": [
+        "s|idx|public.merchant_default_category_id_idx",
+        "n|idx|public.merchant_default_category_id_idx",
+        "e|idx|public.merchant_default_category_id_idx",
+        "n|rel|public.merchant_default_category_id_idx"
+      ],
+      "reads": [
+        "n|tbl|public.merchant",
+        "n|sch|public",
+        "n|col|public.merchant.default_category_id"
+      ]
+    }
+  ],
+  "deltas": [
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "merchant",
+        "name": "default_category_id",
+        "type": "uuid",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "merchant",
+        "name": "merchant_default_category_id_idx",
+        "nameExplicit": true,
+        "columns": [
+          {
+            "value": "default_category_id",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          }
+        ],
+        "isUnique": false,
+        "where": null,
+        "with": "",
+        "method": "btree",
+        "entityType": "indexes"
+      }
+    }
+  ]
+}

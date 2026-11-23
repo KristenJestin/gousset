@@ -1,15 +1,17 @@
-import type { MerchantDetail } from "@gousset/core";
+import type { EntryKind, MerchantDetail } from "@gousset/core";
 import { m } from "@gousset/i18n/messages";
 import { AccountLines } from "@gousset/ui/components/account-lines";
 import type { AccountLineRow } from "@gousset/ui/components/account-lines";
 import { Block, ScreenBlock } from "@gousset/ui/components/app-shell";
 import { Button } from "@gousset/ui/components/button";
+import { CategoryPicker } from "@gousset/ui/components/category-picker";
 import { Dialog, DialogClose } from "@gousset/ui/components/dialog";
 import { EmptyState } from "@gousset/ui/components/empty-state";
 import { FormMessage } from "@gousset/ui/components/form-message";
 import { List, ListItem } from "@gousset/ui/components/list";
 import { NameField } from "@gousset/ui/components/name-field";
 import { Actions } from "@gousset/ui/components/screen";
+import { SegmentedChoice } from "@gousset/ui/components/segmented-choice";
 import { TextField } from "@gousset/ui/components/text-field";
 import { usePageLanguage } from "@gousset/ui/hooks/use-page-language";
 import { notify } from "@gousset/ui/lib/notify";
@@ -20,25 +22,35 @@ import { useId, useState } from "react";
 import type { ReactNode } from "react";
 
 import { AppLink } from "@/components/app-link";
-import { mergeMerchant, moveMerchantLabel, renameMerchant } from "@/functions/merchants";
+import {
+  mergeMerchant,
+  moveMerchantLabel,
+  renameMerchant,
+  setMerchantCategory,
+} from "@/functions/merchants";
 import type { MerchantRefusalCode } from "@/functions/merchants";
 import { merchantRefusalMessage } from "@/i18n/messages";
 import { shortDays } from "@/lib/account-day";
+import { categoryPath, choicesOf } from "@/lib/categories";
 import { labelsCount } from "@/lib/merchant-words";
 import { whileBusy } from "@/lib/while-busy";
+import { categoryQueries } from "@/queries/categories";
+import { invalidateMerchantEntries } from "@/queries/invalidate";
 import { invalidateMerchants, merchantQueries } from "@/queries/merchants";
 
 /** How long a name field waits for the typing to stop before it asks for suggestions. */
 const TYPING_WAIT_MS = 200;
 
 /**
- * One merchant (#24): its name, the cleaned labels that name it and its latest lines, with what the
- * user does to it, each in a dialog: rename it, merge it into another merchant, or move one of its
- * labels to another merchant (a new one when the name is new), which splits it.
+ * One merchant (#24): its name, its default category (#23), the cleaned labels that name it and
+ * its latest lines, with what the user does to it, each in a dialog: rename it, choose its default
+ * category, merge it into another merchant, or move one of its labels to another merchant (a new
+ * one when the name is new), which splits it.
  *
  * Motion: each dialog fades and grows in over 200 ms, ease-out, and leaves the same way (`Dialog`);
- * the toast that says what was done slides in (`Toaster`); the page then shows the merchant as it
- * is now, without animating the change. Cut under reduced motion.
+ * the category picker's list fades and grows in over 150 ms (`Combobox`); the toast that says what
+ * was done slides in (`Toaster`); the page then shows the merchant as it is now, without animating
+ * the change. Cut under reduced motion.
  */
 export const Route = createFileRoute("/_authed/settings/merchants/$merchantId")({
   loader: async ({ context: { queryClient }, params }) => {
@@ -80,6 +92,7 @@ function useMerchantDetail(merchantId: string): MerchantDetail {
 /** Which dialog is open, and its opening's count: each opening starts afresh. */
 type OpenDialog =
   | { kind: "rename"; opened: number }
+  | { kind: "category"; opened: number }
   | { kind: "merge"; opened: number }
   | { kind: "move"; label: string; opened: number };
 
@@ -119,6 +132,27 @@ function MerchantPage() {
           <AppLink to="/settings/merchants">{m.merchantsAll()}</AppLink>
         </Actions>
       </Block>
+      <Block title={m.merchantDefaultTitle()} description={m.merchantDefaultDescription()}>
+        <List label={m.merchantDefaultTitle()}>
+          <ListItem
+            title={
+              merchant.defaultCategory === null
+                ? m.merchantDefaultNone()
+                : categoryPath(merchant.defaultCategory)
+            }
+            description={defaultDescription(merchant)}
+            action={
+              <Button
+                variant="secondary"
+                aria-label={m.merchantDefaultChangeLabel({ name: merchant.name })}
+                onClick={() => show({ kind: "category", opened })}
+              >
+                {m.merchantDefaultChange()}
+              </Button>
+            }
+          />
+        </List>
+      </Block>
       <Block title={m.merchantLabelsTitle()} description={m.merchantLabelsDescription()}>
         <List label={m.merchantLabelsTitle()}>
           {merchant.aliases.map((alias) => (
@@ -144,6 +178,14 @@ function MerchantPage() {
       {dialog?.kind === "rename" ? (
         <RenameDialog key={dialog.opened} open={open} onOpenChange={setOpen} merchant={merchant} />
       ) : null}
+      {dialog?.kind === "category" ? (
+        <DefaultCategoryDialog
+          key={dialog.opened}
+          open={open}
+          onOpenChange={setOpen}
+          merchant={merchant}
+        />
+      ) : null}
       {dialog?.kind === "merge" ? (
         <MergeDialog key={dialog.opened} open={open} onOpenChange={setOpen} merchant={merchant} />
       ) : null}
@@ -158,6 +200,20 @@ function MerchantPage() {
       ) : null}
     </>
   );
+}
+
+const kindLabel = (kind: EntryKind) =>
+  kind === "expense" ? m.categoriesKindExpense() : m.categoriesKindIncome();
+
+/** Under the default category: its kind, or that it is archived; nothing when there is none. */
+function defaultDescription(merchant: MerchantDetail): string | undefined {
+  const chosen = merchant.defaultCategory;
+
+  if (chosen === null) {
+    return undefined;
+  }
+
+  return chosen.archived ? m.merchantDefaultArchived() : kindLabel(chosen.kind);
 }
 
 /** A call that failed outright, as a refusal the forms can show. */
@@ -357,7 +413,7 @@ function MergeDialog({
       to: "/settings/merchants/$merchantId",
       params: { merchantId: answer.merged.into.id },
     });
-    await invalidateMerchants(queryClient);
+    await invalidateMerchantEntries(queryClient);
     notify.saved({
       description: m.merchantMerged({
         merged: answer.merged.merged,
@@ -422,7 +478,7 @@ function MoveDialog({
     }
 
     setRefusal(NO_REFUSAL);
-    await invalidateMerchants(queryClient);
+    await invalidateMerchantEntries(queryClient);
 
     const { moved } = answer;
 
@@ -456,6 +512,108 @@ function MoveDialog({
         error={refusal.field}
         required
       />
+      <FormMessage message={refusal.form} />
+    </FormDialog>
+  );
+}
+
+/** What the dialog offers first: a kind's categories, or none. */
+type DefaultChoice = EntryKind | "none";
+
+/**
+ * The merchant's default category: none, or a category in use of the kind chosen (a merchant may
+ * be paid, or pay: an employer), found by typing. One archived is shown on the page, never offered.
+ */
+function DefaultCategoryDialog({
+  open,
+  onOpenChange,
+  merchant,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  merchant: MerchantDetail;
+}) {
+  const queryClient = useQueryClient();
+  const { data: tree } = useQuery(categoryQueries.list());
+  const current = merchant.defaultCategory;
+  const [choice, setChoice] = useState<DefaultChoice>(current?.kind ?? "expense");
+
+  const [categoryId, setCategoryId] = useState(
+    current === null || current.archived ? null : current.id,
+  );
+
+  const [busy, setBusy] = useState(false);
+  const [refusal, setRefusal] = useState(NO_REFUSAL);
+
+  async function save() {
+    if (choice !== "none" && categoryId === null) {
+      setRefusal({ field: m.merchantDefaultChoose(), form: undefined });
+
+      return;
+    }
+
+    const chosen = choice === "none" ? null : categoryId;
+
+    const answer = await whileBusy(setBusy, () =>
+      answerOf(setMerchantCategory({ data: { merchantId: merchant.id, categoryId: chosen } })),
+    );
+
+    if (!answer.ok) {
+      setRefusal(refusalOf(answer));
+
+      return;
+    }
+
+    setRefusal(NO_REFUSAL);
+    await invalidateMerchantEntries(queryClient);
+    notify.saved({
+      description:
+        answer.category === null
+          ? m.merchantDefaultCleared({ merchant: merchant.name })
+          : m.merchantDefaultSet({
+              merchant: merchant.name,
+              category: categoryPath(answer.category),
+            }),
+    });
+    onOpenChange(false);
+  }
+
+  return (
+    <FormDialog
+      title={m.merchantDefaultDialogTitle({ name: merchant.name })}
+      description={m.merchantDefaultDescription()}
+      submitLabel={m.merchantDefaultSubmit()}
+      open={open}
+      onOpenChange={onOpenChange}
+      busy={busy}
+      onSubmit={() => void save()}
+    >
+      <SegmentedChoice
+        label={m.fieldKind()}
+        value={choice}
+        choices={[
+          { value: "expense", label: m.categoriesKindExpense() },
+          { value: "income", label: m.categoriesKindIncome() },
+          { value: "none", label: m.merchantDefaultNone() },
+        ]}
+        onChange={(next) => {
+          setChoice(next);
+          // A category of the other kind cannot be kept.
+          setCategoryId(next === current?.kind && !current.archived ? current.id : null);
+          setRefusal(NO_REFUSAL);
+        }}
+      />
+      {choice === "none" ? null : (
+        <CategoryPicker
+          label={m.operationsCategory()}
+          placeholder={m.categoriesSearch()}
+          categories={tree === undefined ? [] : choicesOf(tree, choice)}
+          value={categoryId}
+          onValueChange={setCategoryId}
+          error={refusal.field}
+          required
+        />
+      )}
       <FormMessage message={refusal.form} />
     </FormDialog>
   );

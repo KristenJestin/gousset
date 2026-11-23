@@ -1,5 +1,6 @@
 import {
   MAX_SEARCH_LINES,
+  classifyLine as classifyCoreLine,
   lineTransferOf,
   pairLines,
   searchLines,
@@ -14,6 +15,7 @@ import { Effect, Schema } from "effect";
 import { LineId } from "@/lib/operations-search";
 import { runCore } from "@/services";
 
+import { CategoryId } from "./categories";
 import { signedIn, slowedInDevelopment } from "./month";
 
 /**
@@ -24,7 +26,11 @@ export type LineRefusalCode =
   | "AMOUNT_INVALID"
   | "PERIOD_INVALID"
   | "CURSOR_INVALID"
-  | "LINE_NOT_FOUND";
+  | "LINE_NOT_FOUND"
+  | "LINE_NOT_CLASSIFIABLE"
+  | "CATEGORY_NOT_FOUND"
+  | "CATEGORY_KIND_MISMATCH"
+  | "CATEGORY_ARCHIVED";
 
 const refused = (code: LineRefusalCode) => Effect.succeed({ ok: false as const, code });
 
@@ -95,6 +101,30 @@ export const getLine = createServerFn({ method: "GET" })
         Effect.map(([line, transfer]) => ({ ok: true as const, line, transfer })),
         Effect.catchTags({
           LineNotFound: () => refused("LINE_NOT_FOUND"),
+        }),
+      ),
+    ),
+  );
+
+/**
+ * Puts a line in a category, as the user's choice: its one entry's category. Refused with a code:
+ * a line the user does not have, a line with no single entry (held, discarded, of no amount, or
+ * split), a category the user does not have, of the other kind, or archived.
+ */
+export const classifyLine = createServerFn({ method: "POST" })
+  .middleware([signedIn, slowedInDevelopment])
+  .validator(Schema.toStandardSchemaV1(Schema.Struct({ lineId: LineId, categoryId: CategoryId })))
+  .handler(({ data, context }) =>
+    runCore(
+      classifyCoreLine(context.owner, data.lineId, { categoryId: data.categoryId }).pipe(
+        Effect.map((category) => ({ ok: true as const, category })),
+        Effect.catchTags({
+          LineNotFound: () => refused("LINE_NOT_FOUND"),
+          LineNotClassifiable: () => refused("LINE_NOT_CLASSIFIABLE"),
+          CategoryNotFound: () => refused("CATEGORY_NOT_FOUND"),
+          CategoryKindMismatch: () => refused("CATEGORY_KIND_MISMATCH"),
+          // The only refusal classifying meets: the category is archived.
+          CategoryRefused: () => refused("CATEGORY_ARCHIVED"),
         }),
       ),
     ),

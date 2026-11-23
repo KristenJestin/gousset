@@ -17,10 +17,12 @@ import type { TransferSideView } from "@gousset/ui/components/line-transfer";
 import { OperationsFilters } from "@gousset/ui/components/operations-filters";
 import type { OperationsFilterValues } from "@gousset/ui/components/operations-filters";
 import { OperationsLayout } from "@gousset/ui/components/operations-layout";
+import { CategoryPicker } from "@gousset/ui/components/category-picker";
 import { OperationsList, OperationsListSkeleton } from "@gousset/ui/components/operations-list";
 import type { OperationRow } from "@gousset/ui/components/operations-list";
 import { usePageLanguage } from "@gousset/ui/hooks/use-page-language";
 import { formatMoney } from "@gousset/ui/lib/money";
+import { notify } from "@gousset/ui/lib/notify";
 import { hasOperationsFilters } from "@gousset/ui/lib/operations";
 import { useDebouncer } from "@tanstack/react-pacer";
 import { noop, useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -28,9 +30,11 @@ import { createFileRoute } from "@tanstack/react-router";
 import { Schema } from "effect";
 import { useState } from "react";
 
-import { pairLine, unpairLine } from "@/functions/lines";
+import { classifyLine, pairLine, unpairLine } from "@/functions/lines";
 import type { TransferRefusalCode } from "@/functions/lines";
+import { categoryRefusalMessage } from "@/i18n/messages";
 import { dayRange, longDay, shortDay, shortDays } from "@/lib/account-day";
+import { categoryPath, choicesOf } from "@/lib/categories";
 import { loadBlocks } from "@/lib/load-blocks";
 import {
   OperationsSearch,
@@ -40,6 +44,7 @@ import {
   searchOf,
 } from "@/lib/operations-search";
 import { accountQueries } from "@/queries/accounts";
+import { categoryQueries, invalidateCategories } from "@/queries/categories";
 import { invalidateTouched } from "@/queries/invalidate";
 import { lineQueries } from "@/queries/lines";
 
@@ -63,7 +68,11 @@ export const Route = createFileRoute("/_authed/operations")({
       queryClient.ensureQueryData(accountQueries.list()).then(noop),
       ...(deps.line === undefined
         ? []
-        : [queryClient.ensureQueryData(lineQueries.detail(deps.line)).then(noop)]),
+        : [
+            queryClient.ensureQueryData(lineQueries.detail(deps.line)).then(noop),
+            // The open line's category is chosen among them.
+            queryClient.ensureQueryData(categoryQueries.list()).then(noop),
+          ]),
     ]);
   },
   component: Operations,
@@ -277,6 +286,7 @@ function Operations() {
               label={m.operationsTitle()}
               emptyText={m.operationsNoMatch()}
               locale={locale}
+              withCategory
             />
           )
         }
@@ -311,6 +321,7 @@ function toRow(
     account: nameOf(line.account),
     amount: line.amount,
     toReview: line.toReview,
+    category: line.category === null ? undefined : categoryPath(line.category),
   };
 }
 
@@ -318,6 +329,67 @@ function toRow(
 function accountChoices(list: AccountList | undefined, nameOf: (account: LineAccount) => string) {
   return [...(list?.groups.flatMap((group) => group.accounts) ?? []), ...(list?.closed ?? [])].map(
     (account) => ({ value: account.id, label: nameOf(account) }),
+  );
+}
+
+/**
+ * The open line's category, chosen among the categories of its kind in use (its own too, when it
+ * is archived: the line keeps it). The choice shows at once; refused, it goes back to the line's
+ * and a toast says why. Done, the lines and the categories are read again.
+ */
+function LineCategoryPicker({ line }: { line: Line }) {
+  const queryClient = useQueryClient();
+  const { data: tree } = useQuery(categoryQueries.list());
+  const current = line.category;
+  const [chosen, setChosen] = useState(current?.id ?? null);
+
+  if (current === null) {
+    return null;
+  }
+
+  const offered = tree === undefined ? [] : choicesOf(tree, current.kind);
+
+  const listed = offered.some(
+    (top) => top.id === current.id || top.children.some((child) => child.id === current.id),
+  );
+
+  const categories = listed
+    ? offered
+    : [...offered, { id: current.id, name: categoryPath(current), children: [] }];
+
+  async function choose(categoryId: string) {
+    if (categoryId === chosen) {
+      return;
+    }
+
+    const before = chosen;
+
+    setChosen(categoryId);
+
+    const answer = await classifyLine({ data: { lineId: line.id, categoryId } }).catch(() => ({
+      ok: false as const,
+      code: "UNKNOWN",
+    }));
+
+    if (!answer.ok) {
+      setChosen(before);
+      notify.failed({ description: categoryRefusalMessage(answer.code) });
+
+      return;
+    }
+
+    await invalidateCategories(queryClient);
+  }
+
+  return (
+    <CategoryPicker
+      label={m.operationsCategory()}
+      placeholder={m.categoriesSearch()}
+      size="sm"
+      categories={categories}
+      value={chosen}
+      onValueChange={(categoryId) => void choose(categoryId)}
+    />
   );
 }
 
@@ -403,7 +475,11 @@ function TransferOf({
       }
 
       setError(undefined);
-      await invalidateTouched(queryClient, touchedBy(line, result.other));
+      // The lines are expenses or incomes again: the categories' figures change too.
+      await Promise.all([
+        invalidateTouched(queryClient, touchedBy(line, result.other)),
+        invalidateCategories(queryClient),
+      ]);
 
       // This line was the side Gousset had made: gone with the transfer, its other side opens.
       if (result.lineDeleted) {
@@ -425,13 +501,17 @@ function TransferOf({
       }
 
       setError(undefined);
-      await invalidateTouched(
-        queryClient,
-        touchedBy(
-          line,
-          transfer.candidates.find((candidate) => candidate.id === otherId),
+      // Both lines are no expense nor income any more: the categories' figures change too.
+      await Promise.all([
+        invalidateTouched(
+          queryClient,
+          touchedBy(
+            line,
+            transfer.candidates.find((candidate) => candidate.id === otherId),
+          ),
         ),
-      );
+        invalidateCategories(queryClient),
+      ]);
 
       return true;
     } catch {
@@ -494,6 +574,7 @@ function OpenLine({
 
   return (
     <LineDetail
+      category={line.category === null ? undefined : <LineCategoryPicker line={line} />}
       id={line.id}
       label={line.label}
       amount={line.amount}

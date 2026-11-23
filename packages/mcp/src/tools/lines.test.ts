@@ -6,10 +6,18 @@ import {
   Merchants,
   Transfers,
   memoryAccountStore,
+  memoryCategory,
+  memoryCategoryStore,
   memoryId,
   memoryLineStore,
 } from "@gousset/core";
-import type { AccountRecord, MemoryLineDetail, MemoryLineRows } from "@gousset/core";
+import type {
+  AccountRecord,
+  CategoryRecord,
+  MemoryCategoryRows,
+  MemoryLineDetail,
+  MemoryLineRows,
+} from "@gousset/core";
 import { Effect, Layer, Schema } from "effect";
 import { TestClock } from "effect/testing";
 import { describe, expect, test } from "vite-plus/test";
@@ -24,7 +32,26 @@ import type { Runner } from "../tool";
 // allowed to read only.
 
 const TODAY = "2026-11-23";
-const reader = { userId: "ada", canWrite: false };
+const reader = { userId: "ada", canWrite: false, currency: "EUR" };
+const writer = { userId: "ada", canWrite: true, currency: "EUR" };
+
+const transport = memoryCategory("expense", "Transport");
+const fuelCategory = memoryCategory("expense", "Fuel", { parentId: transport.id });
+const otherExpense = memoryCategory("expense", "Other", { position: 1, fallback: true });
+
+const family = memoryCategory("expense", "Family", {
+  position: 2,
+  archivedAt: "2026-11-01T10:00:00.000Z",
+});
+
+const otherIncome = memoryCategory("income", "Other", { fallback: true });
+
+const lineCategory = (category: CategoryRecord) => ({
+  id: category.id,
+  name: category.name,
+  parentName: null,
+  kind: category.kind,
+});
 
 function account(name: string, change: Partial<AccountRecord> = {}): AccountRecord {
   return {
@@ -83,12 +110,14 @@ const OCTOBER = {
 const salary = line(current.id, "2026-10-01", 250_000, "SALARY EXAMPLE CORP", {
   importId: OCTOBER.id,
   counterpartyName: "Example Corp",
+  category: lineCategory(otherIncome),
 });
 
 const fuel = line(current.id, "2026-10-12", -4290, "CB FUELSTOP 0412 RIVERTON", {
   importId: OCTOBER.id,
   valueOn: "2026-10-13",
   memo: "Pump 4",
+  category: lineCategory(otherExpense),
 });
 
 const cafe = line(current.id, "2026-11-03", -2380, "CB CORNER CAFE", {
@@ -111,13 +140,43 @@ const ROWS: MemoryLineRows = {
   imports: [OCTOBER],
 };
 
-function onToday(rows: MemoryLineRows): Runner<GoussetServices> {
+/** A line's one entry, in `category`, as an import leaves it. */
+const entry = (of: MemoryLineDetail, category: CategoryRecord) => ({
+  id: memoryId(),
+  kind: category.kind,
+  happenedOn: of.bookedOn,
+  categoryId: category.id,
+  classifiedBy: "default" as const,
+  parts: [
+    {
+      lineId: of.id,
+      role: "payment" as const,
+      amountMinor: Math.abs(of.amountMinor),
+      currency: "EUR",
+    },
+  ],
+});
+
+/** The entries of the lines above, each in its kind's fallback. */
+function categoryRows(): MemoryCategoryRows {
+  return {
+    categories: [transport, fuelCategory, otherExpense, family, otherIncome],
+    entries: [entry(fuel, otherExpense), entry(salary, otherIncome)],
+    lines: [fuel, salary, heldCafe].map((each) => ({ id: each.id, amountMinor: each.amountMinor })),
+  };
+}
+
+function onToday(
+  rows: MemoryLineRows,
+  categories: Map<string, MemoryCategoryRows> = new Map(),
+): Runner<GoussetServices> {
   const byOwner = new Map([[reader.userId, rows]]);
 
   const layer = Layer.mergeAll(
     FixtureLedger,
     memoryAccountStore(byOwner),
     memoryLineStore(byOwner),
+    memoryCategoryStore(categories),
     // lines never reaches the imports.
     Layer.mock(Imports, {}),
     Layer.mock(ImportProfiles, {}),
@@ -142,11 +201,16 @@ function onToday(rows: MemoryLineRows): Runner<GoussetServices> {
 
 type Arguments = { readonly [key: string]: string | number | boolean };
 
-async function lines(args: Arguments, rows: MemoryLineRows = ROWS) {
+async function lines(
+  args: Arguments,
+  rows: MemoryLineRows = ROWS,
+  caller = reader,
+  categories: Map<string, MemoryCategoryRows> = new Map([[reader.userId, categoryRows()]]),
+) {
   const client = await connectInProcess(
     goussetServer,
-    { run: onToday(rows) },
-    reader,
+    { run: onToday(rows, categories) },
+    caller,
     "2025-11-25",
   );
 
@@ -204,6 +268,8 @@ describe("lines search", () => {
     expect(text).toContain(
       `- 2026-10-05, US brokerage (Harbor Securities): 1,000.00 USD, "DEPOSIT"; line: ${deposit.id}`,
     );
+    // Each line's category, as a person names it.
+    expect(text).toContain(`"CB FUELSTOP 0412 RIVERTON", in Other; line: ${fuel.id}`);
     expect(handlesOf(text)).toEqual([cafe.id, interest.id, fuel.id, deposit.id, salary.id]);
     // Held and future lines are not counted ones; accounts are named, never by id.
     expect(text).not.toContain(heldCafe.id);
@@ -251,7 +317,7 @@ describe("lines search", () => {
 
     expect(isError).toBe(false);
     expect(text).toContain(
-      "1 line(s) match: every line to review (near duplicates held, and transfers whose other side the user chooses).",
+      "1 line(s) match: every line to review (near duplicates held, transfers whose other side the user chooses, and counted lines still classified by default: not classified yet).",
     );
     expect(text).toContain(
       `- 2026-11-04, Current account (Riverside Bank): -23.80 EUR, "CB CORNER CAFE", to review; line: ${heldCafe.id}`,
@@ -407,6 +473,7 @@ describe("lines show", () => {
         "Amount: -42.90 EUR.",
         'Label: "CB FUELSTOP 0412 RIVERTON"',
         "Memo: Pump 4",
+        "Category: Other (expense)",
         'Imported from "october-statement.xml" (CAMT.053) on 2026-11-02, covering 2026-10-01 to 2026-10-31.',
       ].join("\n"),
     );
@@ -466,6 +533,173 @@ describe("lines show", () => {
   });
 });
 
+/** A classify call on rows of its own, and those rows after it. */
+async function classify(line: string, category: string, caller = writer) {
+  const categories = new Map([[writer.userId, categoryRows()]]);
+  const answer = await lines({ action: "classify", line, category }, ROWS, caller, categories);
+
+  return { ...answer, categories: categories.get(writer.userId) };
+}
+
+const entryOf = (rows: MemoryCategoryRows | undefined, of: MemoryLineDetail) =>
+  rows?.entries.find((each) => each.parts.some((part) => part.lineId === of.id));
+
+describe("lines classify", () => {
+  test("puts a line in a category named by its path, as the user's choice", async () => {
+    const { text, isError, categories } = await classify(fuel.id, "transport > fuel");
+
+    expect(isError, text).toBe(false);
+    expect(text).toBe(
+      'The line of 2026-10-12, -42.90 EUR, "CB FUELSTOP 0412 RIVERTON", is now in Transport > Fuel (expense). Kept as the user\'s choice: no rule changes it unasked.',
+    );
+    expect(entryOf(categories, fuel)).toMatchObject({
+      categoryId: fuelCategory.id,
+      classifiedBy: "user",
+    });
+  });
+
+  test("reads a shared name in the line's own kind", async () => {
+    const { text, isError, categories } = await classify(salary.id, "Other");
+
+    expect(isError, text).toBe(false);
+    expect(entryOf(categories, salary)?.categoryId).toBe(otherIncome.id);
+  });
+
+  test("a name alone is the top-level category of that name, the child's is its path", async () => {
+    const rows = categoryRows();
+    const travel = memoryCategory("expense", "Travel", { position: 3 });
+    const leisure = memoryCategory("expense", "Leisure", { position: 4 });
+    const leisureTravel = memoryCategory("expense", "Travel", { parentId: leisure.id });
+
+    rows.categories.push(travel, leisure, leisureTravel);
+
+    const categories = new Map([[writer.userId, rows]]);
+
+    const top = await lines(
+      { action: "classify", line: fuel.id, category: "Travel" },
+      ROWS,
+      writer,
+      categories,
+    );
+
+    expect(top.isError, top.text).toBe(false);
+    expect(top.text).toContain("is now in Travel (expense).");
+    expect(entryOf(categories.get(writer.userId), fuel)?.categoryId).toBe(travel.id);
+
+    const child = await lines(
+      { action: "classify", line: fuel.id, category: "Leisure > Travel" },
+      ROWS,
+      writer,
+      categories,
+    );
+
+    expect(child.text).toContain("is now in Leisure > Travel (expense).");
+  });
+
+  test("refuses an unknown or archived category, and a held line, saying what to do", async () => {
+    const unknown = await classify(fuel.id, "Salary");
+
+    expect(unknown.isError).toBe(true);
+    expect(unknown.text).toContain('No expense category of the user\'s is named "Salary"');
+    expect(unknown.text).toContain('A valid call: categories {"action":"list"}');
+
+    const archived = await classify(fuel.id, "Family");
+
+    expect(archived.isError).toBe(true);
+    expect(archived.text).toContain('"Family" is archived');
+    expect(archived.text.length).toBeLessThan(ERROR_LIMIT);
+    expect(entryOf(archived.categories, fuel)?.categoryId).toBe(otherExpense.id);
+
+    const held = await classify(heldCafe.id, "Transport");
+
+    expect(held.isError).toBe(true);
+    expect(held.text).toContain("no category to change: it is held for review");
+    await expectValidExample(held.text);
+
+    const gone = await classify("not-a-line", "Transport");
+
+    expect(gone.isError).toBe(true);
+    expect(gone.text).toContain("Handles come from search");
+    await expectValidExample(gone.text);
+  });
+
+  test("refuses a read-only token, saying how to get write", async () => {
+    const { text, isError, categories } = await classify(fuel.id, "Transport > Fuel", reader);
+
+    expect(isError).toBe(true);
+    expect(text).toContain("choose Read and write on Gousset's consent page");
+    expect(entryOf(categories, fuel)?.categoryId).toBe(otherExpense.id);
+  });
+
+  test("classifies a line as an expense, in the category named of that kind", async () => {
+    const categories = new Map([[writer.userId, categoryRows()]]);
+
+    const { text, isError } = await lines(
+      { action: "classify", line: fuel.id, kind: "expense", category: "Fuel" },
+      ROWS,
+      writer,
+      categories,
+    );
+
+    expect(isError, text).toBe(false);
+    expect(text).toContain("is now in Transport > Fuel (expense).");
+    expect(entryOf(categories.get(writer.userId), fuel)).toMatchObject({
+      categoryId: fuelCategory.id,
+      classifiedBy: "user",
+    });
+  });
+
+  test("with a kind and no category, puts the line in that kind's fallback, as the user's choice", async () => {
+    const categories = new Map([[writer.userId, categoryRows()]]);
+
+    const { text, isError } = await lines(
+      { action: "classify", line: salary.id, kind: "income" },
+      ROWS,
+      writer,
+      categories,
+    );
+
+    expect(isError, text).toBe(false);
+    expect(text).toContain("is now in Other (income).");
+    expect(entryOf(categories.get(writer.userId), salary)).toMatchObject({
+      categoryId: otherIncome.id,
+      classifiedBy: "user",
+    });
+
+    // Money in is no expense: the kind says what the line is, and must be its own.
+    const wrong = await lines(
+      { action: "classify", line: salary.id, kind: "expense" },
+      ROWS,
+      writer,
+      categories,
+    );
+
+    expect(wrong.isError).toBe(true);
+    expect(wrong.text).toContain(
+      "This line is an income (money in), not an expense: give kind income",
+    );
+  });
+
+  test("refuses a category for a transfer: it has none", async () => {
+    const { text, isError } = await lines(
+      { action: "classify", line: fuel.id, kind: "transfer", category: "Fuel" },
+      ROWS,
+      writer,
+    );
+
+    expect(isError).toBe(true);
+    expect(text).toContain("it has no category");
+  });
+
+  test("asks for the line and the category", async () => {
+    const { text, isError } = await lines({ action: "classify", line: fuel.id }, ROWS, writer);
+
+    expect(isError).toBe(true);
+    expect(text).toContain("classify needs the line's handle");
+    await expectValidExample(text);
+  });
+});
+
 describe("the lines tool", () => {
   test("pairs, classifies and unpairs only with the write scope, and says how to get it", async () => {
     for (const action of ["pair", "classify", "unpair"]) {
@@ -476,7 +710,7 @@ describe("the lines tool", () => {
     }
   });
 
-  test("writes transfers, and says so, in the fixed order", async () => {
+  test("writes categories and transfers, and says so, in the fixed order", async () => {
     const client = await connectInProcess(
       goussetServer,
       { run: onToday(ROWS) },
@@ -494,8 +728,29 @@ describe("the lines tool", () => {
       "data",
       "lines",
       "merchants",
+      "categories",
     ]);
     expect(tool?.title).toBe("Lines");
+
+    // classify and to_review, as they are: what a caller needs to call them right.
+    const description = tool?.description ?? "";
+
+    for (const said of [
+      '"transfer", "expense" or "income"',
+      'its one child; "Parent > Child" names a child',
+      "Without `category`, the kind's fallback",
+      "every counted line still classified by default",
+      "held, discarded or of no amount",
+      "unpair it first",
+      "split across several",
+      "an archived category",
+      "an unknown or ambiguous category name",
+      '{"action":"classify","line":"<a handle search gave>","kind":"expense","category":"Groceries > Bakery"}',
+    ]) {
+      expect(description, said).toContain(said);
+    }
+
+    expect(description).not.toContain("(Other)");
     expect(tool?.annotations).toEqual({
       readOnlyHint: false,
       destructiveHint: true,

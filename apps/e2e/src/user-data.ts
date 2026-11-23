@@ -18,7 +18,7 @@ import { databaseUrl } from "./database";
 export type UserTable = { name: string; key: string; rows: string };
 
 /**
- * Every table holding a user's rows (docs/data-model.md, v0.2). A table added later must be listed
+ * Every table holding a user's rows (docs/data-model.md, v0.2 and v0.3). A table added later must be listed
  * here: the isolation spec fails until it is, then tries every rule on it.
  */
 export const ACCOUNTS: UserTable = { name: "account", key: "id", rows: "accounts" };
@@ -30,6 +30,9 @@ export const USER_TABLES: ReadonlyArray<UserTable> = [
   { name: "import", key: "id", rows: "imports" },
   { name: "import_file", key: "import_id", rows: "imported files" },
   { name: "import_profile", key: "id", rows: "import profiles" },
+  { name: "category", key: "id", rows: "categories" },
+  { name: "entry", key: "id", rows: "entries" },
+  { name: "entry_part", key: "id", rows: "entry parts" },
   { name: "transfer", key: "id", rows: "transfers" },
   { name: "merchant", key: "id", rows: "merchants" },
   { name: "merchant_alias", key: "id", rows: "merchants' cleaned labels" },
@@ -355,6 +358,14 @@ export function openUserData(database: string) {
         order by ordinal_position`);
 
       return decodeKeys(result).rows.map((row) => row.key);
+    },
+
+    /**
+     * Deletes a user as the harness's own role, the tables' owner: Gousset has no route for it, and
+     * the deletion cascades into every table of theirs, as docs/data-model.md says it must.
+     */
+    async deleteUser(id: string): Promise<void> {
+      await catalog.delete(authUser).where(eq(authUser.id, id));
     },
 
     /** What `gousset_user` may do beyond its grants: nothing, or row-level security means nothing. */

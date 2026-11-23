@@ -6,6 +6,7 @@ import {
   Merchants,
   Transfers,
   memoryAccountStore,
+  memoryCategoryStore,
   memoryId,
   memoryLineStore,
 } from "@gousset/core";
@@ -24,7 +25,7 @@ import type { Runner } from "../tool";
 // The accounts tool through the official client, on an in-memory store of made-up accounts.
 
 const TODAY = "2026-11-23";
-const reader = { userId: "ada", canWrite: false };
+const reader = { userId: "ada", canWrite: false, currency: "EUR" };
 
 function account(name: string, change: Partial<AccountRecord> = {}): AccountRecord {
   return {
@@ -122,6 +123,7 @@ function onToday(rows: MemoryRows): Runner<GoussetServices> {
     memoryAccountStore(new Map([[reader.userId, rows]])),
     // accounts never reaches the imports, the export nor the line search.
     memoryLineStore(),
+    memoryCategoryStore(),
     Layer.mock(Imports, {}),
     Layer.mock(ImportProfiles, {}),
     Layer.mock(DataExport, {}),
@@ -529,6 +531,7 @@ describe("the accounts tool", () => {
       "data",
       "lines",
       "merchants",
+      "categories",
     ]);
     expect(tool?.title).toBe("Accounts");
     expect(tool?.annotations).toEqual({

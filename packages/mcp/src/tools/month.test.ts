@@ -11,6 +11,7 @@ import {
   investments,
   linesToReview,
   memoryAccountStore,
+  memoryCategoryStore,
   memoryLineStore,
   monthOverview,
   movements,
@@ -45,6 +46,7 @@ function onDay(day: string, ledger: Layer.Layer<Ledger> = FixtureLedger): Runner
             ledger,
             memoryAccountStore(),
             memoryLineStore(),
+            memoryCategoryStore(),
             Layer.mock(Imports, {}),
             Layer.mock(ImportProfiles, {}),
             Layer.mock(DataExport, {}),
@@ -57,7 +59,7 @@ function onDay(day: string, ledger: Layer.Layer<Ledger> = FixtureLedger): Runner
     );
 }
 
-const reader = { userId: "ada", canWrite: false };
+const reader = { userId: "ada", canWrite: false, currency: "EUR" };
 
 async function month(
   args: { [key: string]: string },

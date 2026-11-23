@@ -186,6 +186,7 @@ function uiMessages(locale: Locale) {
         day: m.uiOperationsColumnDay({}, options),
         label: m.uiOperationsColumnLabel({}, options),
         account: m.uiOperationsColumnAccount({}, options),
+        category: m.uiOperationsColumnCategory({}, options),
         amount: m.uiOperationsColumnAmount({}, options),
       },
       /** How many lines match, the count already written: "1,234 lines". */
@@ -234,6 +235,18 @@ function uiMessages(locale: Locale) {
       pairDescription: m.uiOperationsPairDescription({}, options),
       otherSide: m.uiOperationsOtherSide({}, options),
       pair: m.uiOperationsPair({}, options),
+    },
+    categories: {
+      columns: {
+        category: m.uiCategoriesColumnCategory({}, options),
+        average: m.uiCategoriesColumnAverage({}, options),
+        benchmark: m.uiCategoriesColumnBenchmark({}, options),
+        lines: m.uiCategoriesColumnLines({}, options),
+      },
+      /** A row's ⋮ menu, unique on the page: "Actions on Groceries". */
+      actionsOf: (name: string) => m.uiCategoriesActionsOf({ name }, options),
+      /** In place of the average of a category with no line in six months. */
+      noAverage: m.uiCategoriesNoAverage({}, options),
     },
   };
 }

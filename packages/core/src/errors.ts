@@ -130,6 +130,90 @@ export class ExpiryBeforeCredit extends Schema.TaggedError<ExpiryBeforeCredit>()
   { lineId: Schema.String, creditedOn: Schema.String, expiresOn: Schema.String },
 ) {}
 
+/** No category of the user's has this id. */
+export class CategoryNotFound extends Schema.TaggedError<CategoryNotFound>()("CategoryNotFound", {
+  categoryId: Schema.String,
+}) {}
+
+/** A sibling of the same kind already has this name (any case): the names of a level are unique. */
+export class CategoryNameTaken extends Schema.TaggedError<CategoryNameTaken>()(
+  "CategoryNameTaken",
+  { name: Schema.String },
+) {}
+
+/**
+ * A change of the categories that the rules refuse (docs/data-model.md, v0.3):
+ * - `third_level`: a category goes under one that has a parent, or one with children goes under a
+ *   parent, or a merged parent's children would go under a child;
+ * - `parent_kind`: the parent, or the merge's target, is of the other kind;
+ * - `itself`: a category under itself, or merged into itself;
+ * - `archived`: an archived category chosen as a parent, a merge's target or a line's category;
+ * - `parent_archived`: a category restored while its parent stays archived;
+ * - `fallback`: a fallback archived or merged away, itself or with its parent; `fallback` then
+ *   names it, as the user called it;
+ * - `name`: a name empty or longer than 100 characters once trimmed, or holding `>`;
+ * - `too_many`: the user has 300 categories already, archived ones included;
+ * - `benchmark`: a fixed benchmark that is no whole number of minor units from 0;
+ * - `icon`: an icon that is no key (lower case letters, digits and `-`, 64 at most);
+ * - `position`: a position that is no whole number from 0 to 1,000,000.
+ */
+export class CategoryRefused extends Schema.TaggedError<CategoryRefused>()("CategoryRefused", {
+  reason: Schema.Literals([
+    "third_level",
+    "parent_kind",
+    "itself",
+    "archived",
+    "parent_archived",
+    "fallback",
+    "name",
+    "too_many",
+    "benchmark",
+    "icon",
+    "position",
+  ]),
+  fallback: Schema.optional(Schema.String),
+}) {}
+
+/** No category of the user's has this name ("Parent > Child" names a child); with every one's. */
+export class CategoryNameUnknown extends Schema.TaggedError<CategoryNameUnknown>()(
+  "CategoryNameUnknown",
+  { name: Schema.String, categories: Schema.Array(Schema.String) },
+) {}
+
+/**
+ * Several categories of the user's have this name: each path ("Parent > Child") with its kind names
+ * one alone.
+ */
+export class CategoryNameAmbiguous extends Schema.TaggedError<CategoryNameAmbiguous>()(
+  "CategoryNameAmbiguous",
+  {
+    name: Schema.String,
+    matches: Schema.Array(
+      Schema.Struct({ path: Schema.String, kind: Schema.Literals(["expense", "income"]) }),
+    ),
+  },
+) {}
+
+/**
+ * A line's category is chosen through its one entry: a line held, discarded or of no amount has
+ * none (`no_entry`), nor has a side of a transfer, which is the transfer (`transfer`, #26), and a
+ * line split across several entries is classified entry by entry (`split`).
+ */
+export class LineNotClassifiable extends Schema.TaggedError<LineNotClassifiable>()(
+  "LineNotClassifiable",
+  { lineId: Schema.String, reason: Schema.Literals(["no_entry", "transfer", "split"]) },
+) {}
+
+/** A line's kind follows its sign: an expense category for money out, an income one for money in. */
+export class CategoryKindMismatch extends Schema.TaggedError<CategoryKindMismatch>()(
+  "CategoryKindMismatch",
+  {
+    lineId: Schema.String,
+    lineKind: Schema.Literals(["expense", "income"]),
+    categoryKind: Schema.Literals(["expense", "income"]),
+  },
+) {}
+
 /** The days asked for a chart run backwards, or over more days than a chart covers. */
 export class DayRangeRefused extends Schema.TaggedError<DayRangeRefused>()("DayRangeRefused", {
   from: Schema.String,

@@ -5,7 +5,8 @@ import { describe, expect, test } from "vite-plus/test";
 import type { Touched } from "@/jobs/view";
 
 import { accountKeys } from "./account-keys";
-import { invalidateApproval, invalidateTouched } from "./invalidate";
+import { categoryKeys } from "./category-keys";
+import { invalidateApproval, invalidateMerchantEntries, invalidateTouched } from "./invalidate";
 import { lineKeys } from "./line-keys";
 import { merchantKeys } from "./merchant-keys";
 import { monthKeys } from "./month-keys";
@@ -52,6 +53,20 @@ describe("invalidateTouched", () => {
 
     expect(isInvalidated(client, MERCHANTS)).toBe(true);
     expect(isInvalidated(client, MERCHANT)).toBe(true);
+  });
+});
+
+describe("invalidateMerchantEntries", () => {
+  test("reads the merchants, the operations, the months and the categories again: the entries moved", async () => {
+    const october = monthKeys.summary("2026-10");
+    const categories = categoryKeys.list();
+    const client = clientWith([MERCHANTS, MERCHANT, SEARCH, DETAIL, october, categories]);
+
+    await invalidateMerchantEntries(client);
+
+    for (const queryKey of [MERCHANTS, MERCHANT, SEARCH, DETAIL, october, categories]) {
+      expect(isInvalidated(client, queryKey), JSON.stringify(queryKey)).toBe(true);
+    }
   });
 });
 

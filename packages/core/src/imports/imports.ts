@@ -21,6 +21,7 @@ import type { CsvFile, CsvProfile, CsvUnsure } from "@gousset/import";
 import { and, asc, desc, eq, gt, inArray, isNull, lt, ne, or, sql } from "drizzle-orm";
 import { Context, Effect, Layer } from "effect";
 
+import { dropEntriesWithoutParts, entriesForLines } from "../entries";
 import type { ImportUnavailable, ProfileNotFound, ProfileUnreadable } from "./errors";
 import {
   AccountNotFound,
@@ -482,15 +483,25 @@ export const importsLayer = Layer.effect(
                   or(isNull(statementLine.importId), ne(statementLine.importId, importId)),
                 ),
               )
-              .returning({ bookedOn: statementLine.bookedOn });
+              .returning({ id: statementLine.id, bookedOn: statementLine.bookedOn });
 
             // Its lines' transfers go with them (#26), and the sides the app made for them.
-            const transfersRemoved = await unpairForUndo(transaction, own);
+            const unpaired = await unpairForUndo(transaction, own);
 
+            // The lines' parts go with them (`on delete cascade`); an entry left with no part goes
+            // too, and a line counted again, or no side of a transfer any more, gets its entry, in
+            // this same transaction.
             const removed = await transaction
               .delete(statementLine)
               .where(eq(statementLine.importId, importId))
               .returning({ bookedOn: statementLine.bookedOn });
+
+            await dropEntriesWithoutParts(transaction);
+
+            await entriesForLines(transaction, owner, [
+              ...givenBack.map((line) => line.id),
+              ...unpaired.others,
+            ]);
 
             await transaction.delete(accountBalance).where(eq(accountBalance.importId, importId));
             await transaction.delete(importFile).where(eq(importFile.importId, importId));
@@ -518,7 +529,7 @@ export const importsLayer = Layer.effect(
             return {
               linesRemoved: removed.length,
               linesGivenBack: givenBack.length,
-              transfersRemoved,
+              transfersRemoved: unpaired.removed,
               laterOverlapping: overlapping.length,
               months: [...months].toSorted(),
             };

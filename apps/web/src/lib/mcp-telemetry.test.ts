@@ -6,6 +6,7 @@ import {
   Merchants,
   Transfers,
   memoryAccountStore,
+  memoryCategoryStore,
   memoryLineStore,
 } from "@gousset/core";
 import { goussetServer } from "@gousset/mcp/gousset";
@@ -54,6 +55,7 @@ describe("a call to the MCP door", () => {
                   FixtureLedger,
                   memoryAccountStore(),
                   memoryLineStore(),
+                  memoryCategoryStore(),
                   Layer.mock(Imports, {}),
                   Layer.mock(ImportProfiles, {}),
                   Layer.mock(DataExport, {}),
@@ -64,7 +66,7 @@ describe("a call to the MCP door", () => {
             ),
           observe,
         },
-        { userId: "ada", canWrite: false },
+        { userId: "ada", canWrite: false, currency: "EUR" },
         revision,
       );
 

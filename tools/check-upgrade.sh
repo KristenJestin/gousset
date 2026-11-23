@@ -215,6 +215,17 @@ migrate "$work/migrate-2"
 dump "$work/columns-before" "$work/added" "$work/again"
 diff -q "$work/after" "$work/again" > /dev/null || fail "migrate run again changed rows."
 
+# Every counted line with an amount has its one entry, paid by the whole line (v0.3, #23), but a
+# side of a transfer (#26): the update gives one to each line the release held, once, however
+# often migrate runs.
+unclassified=$(sql "select count(*) from statement_line l where l.state = 'counted' and l.amount_minor <> 0
+  and not exists (select 1 from transfer t where l.id in (t.out_line_id, t.in_line_id))
+  and ((select count(*) from entry_part p where p.line_id = l.id) <> 1
+    or exists (select 1 from entry_part p where p.line_id = l.id
+      and (p.role <> 'payment' or p.amount_minor <> abs(l.amount_minor))))")
+[ "$unclassified" = 0 ] || fail "$unclassified counted lines have no entry of their own, or more than one, after the update."
+say "every counted line with an amount has its one entry."
+
 # 8. The installation as `docker compose up` brings it back: migrate, then the app.
 "${compose[@]}" up --detach --no-build --pull never --wait --wait-timeout 180 > "$work/up" 2>&1 ||
   fail "$tag did not come up over $from's data: $(tail -n 5 "$work/up")"

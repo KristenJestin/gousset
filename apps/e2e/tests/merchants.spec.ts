@@ -324,6 +324,54 @@ test("with no import yet, the merchants section says they come from imports", as
   await animationsDone(page);
 });
 
+test("choosing a merchant's default category in its page shows it there; None clears it", async ({
+  page,
+  app,
+  user,
+}) => {
+  const wanda = await shopper(app.baseURL, user, "wanda.merchants");
+
+  await signedInAs(page, wanda);
+  await openMerchant(page, "Quillbrook");
+
+  const chosen = block(page, "Default category").getByRole("listitem");
+
+  await expect(chosen).toContainText("None");
+
+  const change = page.getByRole("button", { name: "Change the default category of Quillbrook" });
+
+  await change.click();
+
+  const dialog = page.getByRole("dialog", { name: "Default category of Quillbrook" });
+
+  // Expense is offered first: its categories in use, found by typing.
+  await expect(dialog.getByRole("radio", { name: "Expense" })).toBeChecked();
+  await dialog.getByRole("combobox", { name: "Category" }).pressSequentially("Bakery");
+  await page.getByRole("option", { name: "Groceries › Bakery", exact: true }).click();
+  await dialog.getByRole("button", { name: "Save" }).click();
+  await expect(dialog).toBeHidden();
+  await expect(
+    page.getByText("The default category of Quillbrook is now Groceries › Bakery.").first(),
+  ).toBeVisible();
+  await expect(chosen).toContainText("Groceries › Bakery");
+  await expect(chosen).toContainText("Expense");
+
+  // The page read again shows it, from the database.
+  await page.reload();
+  await expect(block(page, "Default category").getByRole("listitem")).toContainText(
+    "Groceries › Bakery",
+  );
+
+  await change.click();
+  await dialog.getByRole("radio", { name: "None" }).click();
+  await expect(dialog.getByRole("combobox", { name: "Category" })).toHaveCount(0);
+  await dialog.getByRole("button", { name: "Save" }).click();
+  await expect(dialog).toBeHidden();
+  await expect(chosen).toContainText("None");
+  await expectAccessible(page);
+  await animationsDone(page);
+});
+
 test("a merchant's dialog fades and grows in 200 ms, and appears at once under reduced motion", async ({
   page,
   app,

@@ -1,5 +1,6 @@
 import {
   accountNamed,
+  classifyLine,
   lineTransferOf,
   pairEveryLine,
   pairLines,
@@ -9,7 +10,10 @@ import {
 } from "@gousset/core";
 import type {
   AccountStore,
+  CategoryStore,
+  EntryKind,
   LineDetail,
+  LineNotClassifiable,
   LinePage,
   LineRow,
   LineStore,
@@ -23,6 +27,7 @@ import { Effect, Schema } from "effect";
 
 import { ToolRefusal, defineTool } from "../tool";
 import { amount, named } from "./accounts";
+import { namedCategory, pathText } from "./categories";
 
 /** The lines `search` gives when none are asked for, and the most: 100 fit the result's budget. */
 const DEFAULT_LINES = 50;
@@ -68,7 +73,7 @@ const LinesInput = Schema.Struct({
   to_review: Schema.optional(
     Schema.Boolean.annotate({
       description:
-        "search: true for the lines to review only: near duplicates held, and lines whose transfer's other side the user chooses among several.",
+        "search: true for the lines to review only: near duplicates held, lines whose transfer's other side the user chooses among several, and every counted line still classified by default (not classified yet).",
     }),
   ),
   limit: Schema.optional(
@@ -94,24 +99,32 @@ const LinesInput = Schema.Struct({
     }),
   ),
   kind: Schema.optional(
-    Schema.Literals(["transfer"]).annotate({
+    Schema.Literals(["transfer", "expense", "income"]).annotate({
       description:
-        "classify: what the line is: transfer (one side of money moved between two of the user's accounts).",
+        "classify: what the line is: transfer (one side of money moved between two of the user's accounts), expense (money out) or income (money in), in category, or in that kind's fallback when category is left out. Left out with a category: the line's own kind.",
+    }),
+  ),
+  category: Schema.optional(
+    Schema.String.annotate({
+      description:
+        'classify, with kind expense or income: the category as categories list writes it (any case): a name alone is the top-level category of that name, else its one child; "Parent > Child" names a child. Left out: the kind\'s fallback.',
     }),
   ),
 });
 
 type LinesInput = typeof LinesInput.Type;
 
-const DESCRIPTION = `Every line of the user's accounts, as the bank wrote it: search across accounts, then read one. \`search\` finds lines by a piece of their label, memo or counterparty (\`text\`, any case), one account (\`account\`), a period (\`from\`, \`to\`, YYYY-MM-DD, both included), an amount range (\`amount_min\`, \`amount_max\`), or the lines to review (\`to_review\`: near duplicates and unsure transfers, listed only then); newest first, with how many match in all and each line's handle. \`show\` gives one line by that handle: its account, days, amount (and the amount in another currency), label, memo, counterparty, expiry, the line a held one looks like, its transfer, and the import it came from or how it was made.
+const DESCRIPTION = `Every line of the user's accounts, as the bank wrote it: search across accounts, read one, say what it is. \`search\` finds lines by a piece of their label, memo or counterparty (\`text\`, any case), one account (\`account\`), a period (\`from\`, \`to\`, YYYY-MM-DD, both included), an amount range (\`amount_min\`, \`amount_max\`), or the lines to review (\`to_review: true\`, listed only then: near duplicates held, transfers whose other side the user chooses, and every counted line still classified by default, that is not classified yet); newest first, with how many match in all, each line's category and its handle. \`show\` gives one line by that handle: its account, days, amount (and the amount in another currency), label, memo, counterparty, category, expiry, the line a held one looks like, its transfer, and the import it came from or how it was made.
 
-Use it for "when did I pay this shop?", "what was this 42.90?", "which import brought this line?". Use \`accounts\` instead for balances and one account's latest lines, \`month\` for where the money went. search and show only read.
+Use it for "when did I pay this shop?", "what was this 42.90?", "which import brought this line?", "put this line in Groceries". Use \`accounts\` instead for balances and one account's latest lines, \`month\` for where the money went, \`categories\` to list or change the categories themselves. search and show only read.
 
-Writes: \`pair\` pairs \`line\` and \`other\` as one transfer, never spending; \`line\` alone: its only candidate; neither: every clear pair. \`classify\` \`kind\` "transfer" is the same; \`unpair\` undoes it. Refused: lines of one account or direction, a paired line, several candidates.
+Writes, with the write scope: \`classify\` says what \`line\` is, by \`kind\`: "transfer", "expense" or "income". With "expense" or "income", the line goes in \`category\`, named as \`categories\` list writes it (any case): a name alone is the top-level category of that name, else its one child; "Parent > Child" names a child. Without \`category\`, the kind's fallback. \`kind\` may be left out with a category: the line's own. Kept as the user's choice: no rule changes it unasked. Refused, with what to do: a line held, discarded or of no amount (no expense nor income), a side of a transfer (unpair it first), a line split across several expenses, a kind or category of the other kind than the line's (money out is an expense, money in an income), an archived category, an unknown or ambiguous category name (with the names to choose from), a category with "transfer".
+
+\`pair\` pairs \`line\` and \`other\` as one transfer, never spending; \`line\` alone: its only candidate; neither: every clear pair. \`classify\` \`kind\` "transfer" is the same; \`unpair\` undoes it. Refused: lines of one account or direction, a paired line, several candidates.
 
 \`account\` is the name as \`accounts\` lists it (any case); add \`institution\` when two accounts share it. An unknown or ambiguous name is refused with the names to choose from. Amounts are decimal strings in each account's own currency, without sign or currency, compared with the line's absolute amount: a -42.90 EUR payment matches "amount_min":"40". A period that ends before it starts, an amount that is no decimal, or an \`after\` no result gave is refused. \`limit\` is 1 to ${MAX_LINES} lines, ${DEFAULT_LINES} by default; when more remain, the result writes the exact next call with \`after\`: copy it.
 
-Examples: {"action":"search","text":"corner cafe","account":"Current account","institution":"Riverside Bank","from":"2026-10-01"} · {"action":"search","amount_min":"40","amount_max":"45.50"} · {"action":"show","line":"<a handle search gave>"}`;
+Examples: {"action":"search","text":"corner cafe","account":"Current account","institution":"Riverside Bank","from":"2026-10-01"} · {"action":"search","amount_min":"40","amount_max":"45.50"} · {"action":"show","line":"<a handle search gave>"} · {"action":"classify","line":"<a handle search gave>","kind":"expense","category":"Groceries > Bakery"}`;
 
 const call = (input: typeof LinesInput.Encoded) => `lines ${JSON.stringify(input)}`;
 
@@ -161,7 +174,7 @@ function filtersText(input: LinesInput, account: string | undefined): string {
 
   const kind =
     input.to_review === true
-      ? "to review (near duplicates held, and transfers whose other side the user chooses)"
+      ? "to review (near duplicates held, transfers whose other side the user chooses, and counted lines still classified by default: not classified yet)"
       : "counted (add to_review: true for the lines to review)";
 
   return filters.length === 0 ? `every line ${kind}` : `lines ${kind}, ${filters.join(", ")}`;
@@ -169,8 +182,9 @@ function filtersText(input: LinesInput, account: string | undefined): string {
 
 function rowText(line: LineRow): string {
   const held = line.toReview ? ", to review" : "";
+  const category = line.category === null ? "" : `, in ${pathText(line.category)}`;
 
-  return `- ${line.bookedOn}, ${named(line.account)}: ${amount(line.amount)}, ${quoted(line.label)}${held}; line: ${line.id}`;
+  return `- ${line.bookedOn}, ${named(line.account)}: ${amount(line.amount)}, ${quoted(line.label)}${category}${held}; line: ${line.id}`;
 }
 
 /** A page of the search: how many match, the filters, the lines, and the call that reads on. */
@@ -182,7 +196,7 @@ function searchText(page: LinePage, input: LinesInput, account: string | undefin
   }
 
   const lines = [
-    `These ${page.lines.length}, newest first (booked on, account: amount, label; the handle show takes):`,
+    `These ${page.lines.length}, newest first (booked on, account: amount, label, category; the handle show and classify take):`,
     ...page.lines.map(rowText),
   ];
 
@@ -297,6 +311,9 @@ function showText(detail: LineDetail, transfer: LineTransfer): string {
     `Label: ${quoted(detail.label)}`,
     ...(detail.memo === null ? [] : [`Memo: ${detail.memo}`]),
     ...(detail.counterpartyName === null ? [] : [`Counterparty: ${detail.counterpartyName}`]),
+    ...(detail.category === null
+      ? []
+      : [`Category: ${pathText(detail.category)} (${detail.category.kind})`]),
     ...(detail.expiresOn === null ? [] : [`Expires on: ${detail.expiresOn}`]),
     ...review,
     ...transferText(detail.id, transfer),
@@ -505,14 +522,112 @@ function accountOf(caller: string, input: LinesInput) {
   );
 }
 
+const UNKNOWN_LINE = (line: string) =>
+  new ToolRefusal({
+    message: `No line of the user's has the handle "${line.slice(0, 80)}". Handles come from search: search for the line, then use the handle its result gives.`,
+    example: call({ action: "search", text: "corner cafe" }),
+  });
+
+const NOT_CLASSIFIABLE = {
+  no_entry:
+    "This line has no category to change: it is held for review, discarded, or of no amount, so it counts as no expense nor income.",
+  transfer:
+    "This line is a side of a transfer between two of the user's accounts: never an expense nor an income. If it is no transfer, unpair it first, then classify it.",
+  split:
+    "This line is split across several expenses, each with its own category: classify them in Gousset, one by one.",
+} as const satisfies { readonly [Reason in LineNotClassifiable["reason"]]: string };
+
 /**
- * The lines family (docs/mcp.md, "Tools"): searched and read; paired as transfers with the write
- * scope (#26).
+ * Puts a line in the category a person names, or in the fallback of the kind named (expense or
+ * income) when none is, as the user's choice.
+ */
+function classifyAction(owner: string, input: LinesInput, kind: EntryKind | undefined) {
+  const { line, category } = input;
+
+  if (line === undefined || line.trim() === "" || (category === undefined && kind === undefined)) {
+    return Effect.fail(
+      new ToolRefusal({
+        message:
+          "classify needs the line's handle, as search gives it, and a category, as categories list writes it, or a kind: expense, income or transfer.",
+        example: call({ action: "search", text: "corner cafe" }),
+      }),
+    );
+  }
+
+  const handle = line.trim();
+
+  return Effect.gen(function* () {
+    const detail = yield* showLine(owner, handle);
+
+    // Its kind tells an expense "Other" from an income one: the one named, else its sign's.
+    const kindOf =
+      kind ?? detail.category?.kind ?? (detail.amount.minor < 0 ? "expense" : "income");
+
+    const chosen =
+      category === undefined
+        ? { fallbackOf: kindOf }
+        : {
+            categoryId: (yield* namedCategory(owner, category, kindOf, (other, otherKind) =>
+              call({ action: "classify", line: handle, category: other, kind: otherKind }),
+            )).id,
+          };
+
+    const placed = yield* classifyLine(owner, detail.id, chosen);
+
+    return `The line of ${detail.bookedOn}, ${amount(detail.amount)}, ${quoted(detail.label)}, is now in ${pathText(placed)} (${placed.kind}). Kept as the user's choice: no rule changes it unasked.`;
+  }).pipe(
+    Effect.catchTags({
+      LineNotFound: () => Effect.fail(UNKNOWN_LINE(handle)),
+      LineNotClassifiable: (refused) =>
+        Effect.fail(
+          new ToolRefusal({
+            message: NOT_CLASSIFIABLE[refused.reason],
+            example: call({
+              action: refused.reason === "transfer" ? "unpair" : "show",
+              line: handle,
+            }),
+          }),
+        ),
+      CategoryKindMismatch: (mismatch) =>
+        Effect.fail(
+          new ToolRefusal({
+            message:
+              category === undefined
+                ? `This line is ${mismatch.lineKind === "expense" ? "an expense (money out)" : "an income (money in)"}, not ${mismatch.categoryKind === "expense" ? "an expense" : "an income"}: give kind ${mismatch.lineKind}, or one of its categories, as categories list gives them.`
+                : `This line is ${mismatch.lineKind === "expense" ? "an expense (money out)" : "an income (money in)"}, and "${category}" is ${mismatch.categoryKind === "expense" ? "an expense" : "an income"} category: choose an ${mismatch.lineKind} category, as categories list gives them.`,
+            example: `categories ${JSON.stringify({ action: "list", kind: mismatch.lineKind })}`,
+          }),
+        ),
+      CategoryRefused: (refused) =>
+        refused.reason === "archived"
+          ? Effect.fail(
+              new ToolRefusal({
+                message: `"${category}" is archived: it can no longer be chosen. Restore it with categories archive and restore: true, or choose a category in use.`,
+                example: `categories ${JSON.stringify({ action: "archive", category, restore: true })}`,
+              }),
+            )
+          : Effect.die(new Error(`A line's category refused: ${refused.reason}.`)),
+      // Found by name a moment before: changed in between.
+      CategoryNotFound: () =>
+        Effect.fail(
+          new ToolRefusal({
+            message: "The category is gone: list the categories again.",
+            example: `categories ${JSON.stringify({ action: "list" })}`,
+          }),
+        ),
+      QueryFailed: Effect.die,
+    }),
+  );
+}
+
+/**
+ * The lines family (docs/mcp.md, "Tools"): searched and read; put in a category (#23), paired as
+ * transfers (#26) with the write scope.
  */
 export const linesTool = defineTool<
   LinesInput,
   typeof LinesInput.Encoded,
-  AccountStore | LineStore | Transfers
+  AccountStore | LineStore | CategoryStore | Transfers
 >({
   name: "lines",
   title: "Lines",
@@ -594,13 +709,7 @@ export const linesTool = defineTool<
         ]).pipe(
           Effect.map(([detail, transfer]) => showText(detail, transfer)),
           Effect.catchTags({
-            LineNotFound: () =>
-              Effect.fail(
-                new ToolRefusal({
-                  message: `No line of the user's has the handle "${line.slice(0, 80)}". Handles come from search: search for the line, then show it with the handle its result gives.`,
-                  example: call({ action: "search", text: "corner cafe" }),
-                }),
-              ),
+            LineNotFound: () => Effect.fail(UNKNOWN_LINE(line)),
             QueryFailed: Effect.die,
           }),
         );
@@ -611,7 +720,25 @@ export const linesTool = defineTool<
       }
 
       case "classify": {
-        if (input.kind === undefined || (input.line?.trim() ?? "") === "") {
+        if (input.kind !== "transfer") {
+          return classifyAction(caller.userId, input, input.kind);
+        }
+
+        if (input.category !== undefined) {
+          return Effect.fail(
+            new ToolRefusal({
+              message:
+                "A transfer moves money between two of the user's accounts: it has no category. Leave category out, or classify the line as an expense or an income.",
+              example: call({
+                action: "classify",
+                line: input.line ?? "<a handle>",
+                kind: "transfer",
+              }),
+            }),
+          );
+        }
+
+        if ((input.line?.trim() ?? "") === "") {
           return Effect.fail(
             new ToolRefusal({
               message:

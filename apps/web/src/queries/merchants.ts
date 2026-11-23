@@ -48,8 +48,9 @@ export const merchantQueries = {
 };
 
 /**
- * After a rename, a merge or a label moved: the lists (names, counts, order) and the merchants'
- * pages may all have changed, so every merchants query is read again.
+ * After a rename: the lists (names, order) and the merchants' pages may all have changed, so every
+ * merchants query is read again. A merge, a label moved or a default category set move entries
+ * too: `invalidateMerchantEntries`.
  */
 export async function invalidateMerchants(queryClient: QueryClient): Promise<void> {
   await queryClient.invalidateQueries({ queryKey: merchantKeys.all });

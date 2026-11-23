@@ -106,7 +106,7 @@ Two guards, held by tests, say when the list grows too big to be read well:
 
 - at most **15 tools**;
 - at most **30,000 characters** of definitions in the listing (about 10,000 tokens, Anthropic's line beyond which tool search starts to help);
-- every **description under 2,048 characters**, the oldest cut of Claude Code, so that no version cuts one. The important part comes first, with an example call when an argument is easy to get wrong.
+- every **description under 4,000 characters**, within Claude Code's cut of 4,096 for an upfront tool. An older version cuts at 2,048: the important part comes first, so that what it keeps still says what the tool does, with an example call when an argument is easy to get wrong.
 
 They are not a number to trim to. **A tool keeps the description and the example it needs; a new tool is never paid for by shortening another, and a review refuses such a trim.** When a guard fails, nobody trims: the maintainer decides.
 

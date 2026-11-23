@@ -120,6 +120,18 @@ export const importStatus = pgEnum("import_status", [
 
 export const importProfileKind = pgEnum("import_profile_kind", ["statement", "operations"]);
 
+// v0.3, Classify (#23): what happened, outside the line. A category's kind is the entry's own enum,
+// since a foreign key compares the two.
+export const entryKind = pgEnum("entry_kind", ["expense", "income"]);
+
+export const benchmarkMode = pgEnum("benchmark_mode", ["automatic", "fixed", "none"]);
+
+// `default`: put in its kind's fallback category by the import, the backfill or sign-up, nothing
+// decided yet; `rule`: by a rule (#25); `user`: by the user, which no rule overwrites unasked.
+export const classifiedBy = pgEnum("classified_by", ["default", "rule", "user"]);
+
+export const entryPartRole = pgEnum("entry_part_role", ["payment", "refund"]);
+
 /** One account the user follows, of every kind. */
 export const account = pgTable.withRLS(
   "account",
@@ -379,10 +391,16 @@ export const merchant = pgTable.withRLS(
     name: text("name").notNull(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
+    // Added with the categories (#23), after the others: the category its entries go in by default.
+    // Its key (`on delete set null (default_category_id)`, which Drizzle cannot write) is in the
+    // custom migration `*_merchant_default_category_key`.
+    defaultCategoryId: uuid("default_category_id"),
   },
   (table) => [
     unique("merchant_user_id_id_key").on(table.userId, table.id),
     unique("merchant_user_id_name_key").on(table.userId, table.name),
+    // A merge of categories moves the defaults, and a deleted category clears them.
+    index("merchant_default_category_id_idx").on(table.defaultCategoryId),
     ownRowsOnly("merchant"),
   ],
 );
@@ -410,5 +428,108 @@ export const merchantAlias = pgTable.withRLS(
     // A merchant's aliases, for its page, a merge and the cascade.
     index("merchant_alias_merchant_id_idx").on(table.merchantId),
     ownRowsOnly("merchant_alias"),
+  ],
+);
+
+/**
+ * An expense or income category, on two levels (#23). Its parent, and an entry's category, are
+ * kept references (`on delete no action deferrable initially deferred`, which Drizzle cannot
+ * write): they are in the custom migration `*_categories_isolation`.
+ */
+export const category = pgTable.withRLS(
+  "category",
+  {
+    id: id(),
+    userId: owner(),
+    // Null for a top-level category. A third level is refused by packages/core.
+    parentId: uuid("parent_id"),
+    kind: entryKind("kind").notNull(),
+    name: text("name").notNull(),
+    // A key of the icons shipped with packages/ui.
+    icon: text("icon"),
+    // Siblings are ordered by (position, id); not unique, so a move writes the moved row only.
+    position: integer("position").default(0).notNull(),
+    archivedAt: timestamp("archived_at", { withTimezone: true }),
+    benchmarkMode: benchmarkMode("benchmark_mode").default("automatic").notNull(),
+    // A fixed benchmark, in minor units of the user's currency.
+    benchmarkMinor: minor("benchmark_minor"),
+    // Where an entry goes until it is classified: one per kind, never archived nor merged away.
+    isFallback: boolean("is_fallback").default(false).notNull(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    unique("category_user_id_id_key").on(table.userId, table.id),
+    // What the kept references point to: a child shares its parent's kind, an entry its category's.
+    unique("category_user_id_id_kind_key").on(table.userId, table.id, table.kind),
+    // Two top-level categories of a kind cannot share a name either.
+    unique("category_user_id_kind_parent_id_name_key")
+      .on(table.userId, table.kind, table.parentId, table.name)
+      .nullsNotDistinct(),
+    uniqueIndex("category_one_fallback_per_kind")
+      .on(table.userId, table.kind)
+      .where(sql`${table.isFallback}`),
+    check(
+      "category_fixed_benchmark_has_amount",
+      sql`(${table.benchmarkMode} = 'fixed') = (${table.benchmarkMinor} is not null)`,
+    ),
+    ownRowsOnly("category"),
+  ],
+);
+
+/**
+ * What happened: an expense or an income, with one category, made of parts of lines. Its merchant,
+ * intermediary, rule and subscription come with #24, #30, #25 and v0.4.
+ */
+export const entry = pgTable.withRLS(
+  "entry",
+  {
+    id: id(),
+    userId: owner(),
+    kind: entryKind("kind").notNull(),
+    // The day it happened: its first payment's booking date, until moved.
+    happenedOn: day("happened_on").notNull(),
+    categoryId: uuid("category_id").notNull(),
+    note: text("note"),
+    classifiedBy: classifiedBy("classified_by").notNull(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    unique("entry_user_id_id_key").on(table.userId, table.id),
+    // The month, by the day the expense happened.
+    index("entry_user_id_happened_on_idx").on(table.userId, table.happenedOn),
+    // The breakdowns and the merges.
+    index("entry_category_id_idx").on(table.categoryId),
+    ownRowsOnly("entry"),
+  ],
+);
+
+/** A part of a line paying an entry, or refunding it; positive, the role says which way. */
+export const entryPart = pgTable.withRLS(
+  "entry_part",
+  {
+    id: id(),
+    userId: owner(),
+    entryId: uuid("entry_id").notNull(),
+    lineId: uuid("line_id").notNull(),
+    role: entryPartRole("role").notNull(),
+    amountMinor: minor("amount_minor").notNull(),
+  },
+  (table) => [
+    unique("entry_part_entry_id_line_id_role_key").on(table.entryId, table.lineId, table.role),
+    foreignKey({
+      name: "entry_part_entry_fk",
+      columns: [table.userId, table.entryId],
+      foreignColumns: [entry.userId, entry.id],
+    }).onDelete("cascade"),
+    foreignKey({
+      name: "entry_part_line_fk",
+      columns: [table.userId, table.lineId],
+      foreignColumns: [statementLine.userId, statementLine.id],
+    }).onDelete("cascade"),
+    index("entry_part_line_id_idx").on(table.lineId),
+    check("entry_part_amount_positive", sql`${table.amountMinor} > 0`),
+    ownRowsOnly("entry_part"),
   ],
 );

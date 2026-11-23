@@ -94,6 +94,9 @@ const SHOTS: ReadonlyArray<Shot> = [
   { id: "operations-linedetail--to-review" },
   { id: "operations-operationsfilters--set" },
   { id: "operations-operationslayout--line-open" },
+  { id: "categories-categorytree--default" },
+  { id: "categories-categorypicker--chosen" },
+  { id: "operations-linedetail--with-category" },
 ];
 
 async function openPopup(page: Page, open: Shot["open"]) {

@@ -1,6 +1,7 @@
 import { Effect, Layer } from "effect";
 
 import type { MemoryImport, MemoryLine, MemoryRows } from "./account-store-memory";
+import type { LineCategory } from "./category-store";
 import type { ImportFormat } from "./imports/summary";
 import { LineStore } from "./line-store";
 import type { FoundLine, FoundLineDetail, LineQuery } from "./line-store";
@@ -18,6 +19,10 @@ export type MemoryLineDetail = MemoryLine & {
   readonly counterpartyIban?: string;
   readonly duplicateOfLineId?: string;
   readonly expiresOn?: string;
+  /** The category of its one entry. */
+  readonly category?: LineCategory;
+  /** Who put its entry in its category; `default`, the import, waits for the user. */
+  readonly classifiedBy?: "default" | "rule" | "user";
 };
 
 /** An import of the memory store, as a line's detail names it. */
@@ -53,7 +58,9 @@ function matches(line: MemoryLineDetail, currency: string, query: LineQuery): bo
 
   return (
     (state === query.state ||
-      (query.state === "held" && state === "counted" && query.alsoLineIds.includes(line.id))) &&
+      (query.state === "held" &&
+        state === "counted" &&
+        (query.alsoLineIds.includes(line.id) || line.classifiedBy === "default"))) &&
     line.bookedOn <= query.to &&
     (query.from === null || line.bookedOn >= query.from) &&
     (query.accountId === null || line.accountId === query.accountId) &&
@@ -92,6 +99,7 @@ function withAccount(own: MemoryLineRows, line: MemoryLineDetail): FoundLine | u
       institution: owned.institution,
       currency: owned.currency,
     },
+    category: line.category ?? null,
   };
 }
 

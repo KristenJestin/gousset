@@ -2,6 +2,7 @@ import type { QueryFailed } from "@gousset/db/user-data";
 import { Context } from "effect";
 import type { Effect } from "effect";
 
+import type { LineCategory } from "./category-store";
 import type { ImportFormat } from "./imports/summary";
 
 /**
@@ -23,7 +24,10 @@ export type LineQuery = {
   readonly to: string;
   /** The amount's bounds in each currency; null for none. */
   readonly amount: ((currency: string) => AmountBounds | null) | null;
-  /** `held` lines only (to review), or `counted` only; never `discarded`. */
+  /**
+   * `held` lines (to review), or `counted` only; never `discarded`. With `held`, the counted lines
+   * whose entry is still where the import put it (`classified_by = default`, #23) match too.
+   */
   readonly state: "counted" | "held";
   /** With `held`: these counted lines match too (a transfer's side to choose, #26). */
   readonly alsoLineIds: ReadonlyArray<string>;
@@ -49,6 +53,8 @@ export type FoundLine = {
     readonly institution: string | null;
     readonly currency: string;
   };
+  /** The category of its one entry; null for a line with none (held, of no amount) or split. */
+  readonly category: LineCategory | null;
 };
 
 /** A line with all that its detail shows. */
