@@ -126,10 +126,12 @@ jobs:
         run: |
           # The run checked last, by id, for full_matrix and job.
           run_id=
+          # Only this repository's dev counts: a fork's branch named dev, at the same commit, has
+          # runs of its own.
           passed() { # <workflow file> <event> <what>
             local run status conclusion url
             run=$(gh api "repos/$GH_REPO/actions/workflows/$1/runs?head_sha=$SHA&branch=dev&event=$2" \
-              --jq '.workflow_runs | if length == 0 then "none" else (max_by(.run_number) | "\(.status) \(.conclusion // "none") \(.html_url) \(.id)") end')
+              --jq "[.workflow_runs[] | select(.head_repository.full_name == \"$GH_REPO\")]"' | if length == 0 then "none" else (max_by(.run_number) | "\(.status) \(.conclusion // "none") \(.html_url) \(.id)") end')
             read -r status conclusion url run_id <<< "$run"
             if [ "$status" = none ]; then
               echo "::error::No $1 run of $3 was found: nothing was released."
