@@ -287,6 +287,43 @@ test("a fixed benchmark shows in its row", async ({ page }) => {
   await expect(row(page, "E2E Coffee")).toContainText("set · €130.00");
 });
 
+test("the currency chosen in Settings › General writes a fixed benchmark", async ({
+  page,
+  app,
+  user,
+}) => {
+  // A user of its own: changing Camille's currency would change the other tests' benchmarks.
+  const dominique = await addUser(app.baseURL, user, personOfItsOwn("dominique"));
+
+  await page.context().addCookies([...dominique.cookies]);
+  await fixDay(page, TODAY);
+  await visit(page, "/settings");
+
+  const currency = page.getByRole("combobox", { name: "Currency" });
+
+  await expect(currency).toHaveValue("EUR");
+  await currency.fill("");
+  await currency.pressSequentially("USD");
+  await page.getByRole("option", { name: "USD", exact: true }).click();
+  await expect(currency).toHaveValue("USD");
+
+  // Kept on the account: read back on the next visit.
+  await page.reload();
+  await expect(page.getByRole("combobox", { name: "Currency" })).toHaveValue("USD");
+
+  await visit(page, "/settings/categories");
+  await menuOf(page, "Groceries");
+  await page.getByRole("menuitem", { name: "Benchmark" }).click();
+
+  const dialog = page.getByRole("dialog", { name: "Benchmark of Groceries" });
+
+  await dialog.getByRole("radio", { name: "Set" }).click();
+  await dialog.getByRole("textbox", { name: "Amount per month" }).fill("130");
+  await dialog.getByRole("button", { name: "Save" }).click();
+  await expect(dialog).toBeHidden();
+  await expect(row(page, "Groceries")).toContainText("set · $130.00");
+});
+
 test("a category just added slides in, and appears at once under reduced motion", async ({
   page,
 }) => {
