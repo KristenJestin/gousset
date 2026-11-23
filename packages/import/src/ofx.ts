@@ -12,7 +12,7 @@ import {
 } from "./errors";
 import type { ReadError } from "./errors";
 import type { Balance, Statement, StatementLine } from "./statement";
-import { decodeText } from "./text";
+import { cleanValue, decodeText, quote } from "./text";
 
 // OFX 1.x is SGML: an element that holds a value may go without its closing tag (`<TRNAMT>-12.34`
 // then the next tag). OFX 2.x is XML, every element closed. QFX is OFX with a few tags of Intuit's
@@ -57,6 +57,17 @@ function countNewlines(text: string): number {
 }
 
 /**
+ * How deep elements may nest. A statement nests about eight deep, and an SGML file leaves a few
+ * empty elements open on top; a deeper file is no statement, and refusing it keeps the reader's
+ * work linear and its recursion short.
+ */
+const MAX_DEPTH = 64;
+
+const CDATA_START = "<![CDATA[";
+
+const CDATA_END = "]]>";
+
+/**
  * The file's elements, under a nameless root. Its lines end in `\n` alone. An element left open
  * with no value (`<MEMO>` then the next tag, in SGML) is empty: what was read inside it belongs to
  * its parent, and goes back there when the parent closes.
@@ -76,6 +87,10 @@ const readElements = (text: string) =>
     // The element that has just taken its value: its closing tag may follow.
     let ended: OfxElement | undefined;
 
+    /** Whether the open element may take a value: an element, open, holding none yet. */
+    const canHoldValue = (holder: OfxElement | undefined): holder is OfxElement =>
+      holder !== undefined && holder !== root && holder.children.length === 0;
+
     while (position < text.length) {
       const nextTag = text.indexOf("<", position);
       const textEnd = nextTag === -1 ? text.length : nextTag;
@@ -86,11 +101,11 @@ const readElements = (text: string) =>
         const valueLine = line + countNewlines(between.slice(0, between.indexOf(value)));
         const holder = open.at(-1);
 
-        if (holder === undefined || holder === root || holder.children.length > 0) {
+        if (!canHoldValue(holder)) {
           return yield* new MalformedFile({ line: valueLine, problem: "Text outside an element." });
         }
 
-        holder.value = decodeEntities(value);
+        holder.value = cleanValue(decodeEntities(value));
         open.pop();
         ended = holder;
       }
@@ -100,6 +115,31 @@ const readElements = (text: string) =>
 
       if (nextTag === -1) {
         break;
+      }
+
+      // XML's CDATA section: its text is the value, as written, `<`, `>` and `&` included.
+      if (text.startsWith(CDATA_START, position)) {
+        const cdataEnd = text.indexOf(CDATA_END, position);
+        const holder = open.at(-1);
+
+        if (cdataEnd === -1) {
+          return yield* new MalformedFile({
+            line,
+            problem: "A CDATA section is never closed by `]]>`.",
+          });
+        }
+
+        if (!canHoldValue(holder)) {
+          return yield* new MalformedFile({ line, problem: "Text outside an element." });
+        }
+
+        holder.value = cleanValue(text.slice(position + CDATA_START.length, cdataEnd));
+        open.pop();
+        ended = holder;
+        line += countNewlines(text.slice(position, cdataEnd));
+        position = cdataEnd + CDATA_END.length;
+
+        continue;
       }
 
       const comment = text.startsWith("<!--", position);
@@ -138,22 +178,31 @@ const readElements = (text: string) =>
           open.push(element);
         }
 
+        // The root is open too: its elements are one level less deep than the stack is long.
+        if (open.length > MAX_DEPTH + 1) {
+          return yield* new MalformedFile({
+            line: tagLine,
+            problem: `Elements nested more than ${String(MAX_DEPTH)} deep: no statement is.`,
+          });
+        }
+
+        continue;
+      }
+
+      // `<NAME>v</NAME>`: the element that has just taken its value, the commonest closing tag.
+      if (ended?.name === name) {
+        ended = undefined;
+
         continue;
       }
 
       const closed = open.findLastIndex((element) => element.name === name);
 
       if (closed <= 0) {
-        if (ended?.name !== name) {
-          return yield* new MalformedFile({
-            line: tagLine,
-            problem: `</${name}> closes no open element.`,
-          });
-        }
-
-        ended = undefined;
-
-        continue;
+        return yield* new MalformedFile({
+          line: tagLine,
+          problem: `${quote(`</${name}>`)} closes no open element.`,
+        });
       }
 
       while (open.length > closed + 1) {
@@ -161,7 +210,11 @@ const readElements = (text: string) =>
         const holder = open.at(-1);
 
         if (empty !== undefined && holder !== undefined) {
-          holder.children.push(...empty.children);
+          // One by one: a spread of a great many children would pass the engine's argument limit.
+          for (const moved of empty.children) {
+            holder.children.push(moved);
+          }
+
           empty.children = [];
           empty.value = "";
         }
@@ -176,7 +229,7 @@ const readElements = (text: string) =>
     if (unclosed !== undefined) {
       return yield* new MalformedFile({
         line,
-        problem: `The file ends before </${unclosed.name}>: it may have been cut short.`,
+        problem: `The file ends before ${quote(`</${unclosed.name}>`)}: it may have been cut short.`,
       });
     }
 
@@ -259,7 +312,7 @@ const readTransaction = (element: OfxElement, currency: string) =>
     if (symbol !== undefined && symbol.text.toUpperCase() !== currency) {
       return yield* new UnsupportedContent({
         line: symbol.line,
-        problem: `A line in ${symbol.text}, while the account is in ${currency}.`,
+        problem: `A line in ${quote(symbol.text)}, while the account is in ${currency}.`,
       });
     }
 
@@ -298,7 +351,7 @@ function signByType(transaction: Transaction): Effect.Effect<StatementLine, Unsu
   return Effect.fail(
     new UnsupportedContent({
       line: transaction.type?.line ?? transaction.element.line,
-      problem: `The file's amounts carry no sign, and the type "${type}" does not say whether the money went out or came in.`,
+      problem: `The file's amounts carry no sign, and the type ${quote(type)} does not say whether the money went out or came in.`,
     }),
   );
 }
@@ -324,8 +377,8 @@ const readBalance = (statement: OfxElement, currency: string) =>
  * (`STMTRS`) or one card's (`CCSTMTRS`).
  *
  * Amounts are signed from the account holder's side, as OFX defines them. A file whose amounts
- * all lack a sign while some lines are typed `DEBIT` has written them unsigned: each line is then
- * signed by its type. The balance is the ledger balance (`LEDGERBAL`), as the bank wrote it.
+ * all lack a sign while a line typed `DEBIT` takes money in has written them unsigned: each line is
+ * then signed by its type. A `DEBIT` of zero says nothing either way, and does not count. The balance is the ledger balance (`LEDGERBAL`), as the bank wrote it.
  */
 export const readOfx = (bytes: Uint8Array): Effect.Effect<Statement, ReadError> =>
   Effect.gen(function* () {
@@ -371,7 +424,10 @@ export const readOfx = (bytes: Uint8Array): Effect.Effect<Statement, ReadError> 
 
     const unsigned =
       transactions.every((transaction) => transaction.line.amountMinor >= 0) &&
-      transactions.some((transaction) => transaction.type?.text.toUpperCase() === "DEBIT");
+      transactions.some(
+        (transaction) =>
+          transaction.type?.text.toUpperCase() === "DEBIT" && transaction.line.amountMinor > 0,
+      );
 
     const lines = unsigned
       ? yield* Effect.forEach(transactions, signByType)

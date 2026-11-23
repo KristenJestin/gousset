@@ -4,16 +4,25 @@ import { readAmount } from "./amount";
 import type { FieldText } from "./amount";
 import { qifDay, readQifDate } from "./dates";
 import type { DateOrder, QifDate } from "./dates";
-import { InvalidField, MissingField, NotAStatement, UnsupportedContent } from "./errors";
+import {
+  InvalidField,
+  InvalidOption,
+  MissingField,
+  NotAStatement,
+  UnsupportedContent,
+} from "./errors";
 import type { ReadError } from "./errors";
 import type { Statement, StatementLine } from "./statement";
-import { decodeText, splitLines } from "./text";
+import { cleanValue, decodeText, quote, splitLines } from "./text";
 
 // QIF: header lines (`!Type:Bank`), then records of one field per line, a letter then its value
 // (`D` the date, `T` the amount, `P` the payee...), each record ended by `^`.
 
 export type QifOptions = {
-  /** The ISO 4217 code of the account the file goes into: a QIF file names no currency. */
+  /**
+   * The ISO 4217 code of the account the file goes into (`EUR`, `eur` taken as `EUR`): a QIF file
+   * names no currency. Anything else is refused with `InvalidOption`.
+   */
   currency: string;
   /** How to read `03/04/2026`, when the caller knows; otherwise the file decides (`QifDateOrder`). */
   dateOrder?: DateOrder;
@@ -72,7 +81,7 @@ const readRecords = (text: string) =>
             problem: "An investment account: Gousset reads bank and card accounts.",
           });
         } else {
-          return yield* new UnsupportedContent({ line, problem: `A section "${header}".` });
+          return yield* new UnsupportedContent({ line, problem: `A section ${quote(header)}.` });
         }
 
         if (accounts > 1) {
@@ -103,7 +112,7 @@ const readRecords = (text: string) =>
       }
 
       current ??= { line, fields: [] };
-      current.fields.push({ field: content.charAt(0), text: content.slice(1).trim(), line });
+      current.fields.push({ field: content.charAt(0), text: cleanValue(content.slice(1)), line });
     }
 
     if (current !== undefined) {
@@ -209,8 +218,17 @@ export const readQif = (
   options: QifOptions,
 ): Effect.Effect<QifStatement, ReadError> =>
   Effect.gen(function* () {
+    const currency = options.currency.toUpperCase();
+
+    if (!/^[A-Z]{3}$/.test(currency)) {
+      return yield* new InvalidOption({
+        option: "currency",
+        text: options.currency,
+        expected: "a currency's ISO 4217 code, such as EUR",
+      });
+    }
+
     const records = yield* readRecords(decodeText(bytes));
-    const { currency } = options;
 
     const entries = yield* Effect.forEach(records, (record) =>
       Effect.gen(function* () {

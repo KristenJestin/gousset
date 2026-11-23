@@ -1,6 +1,7 @@
 import { Effect } from "effect";
 
 import { InvalidField } from "./errors";
+import { quote } from "./text";
 
 /** A field's text and where it stands in the file, for the error that names it. */
 export type FieldText = { field: string; text: string; line: number };
@@ -57,7 +58,7 @@ function splitQif(unsigned: string, digits: number): Split {
   const bothMarks = lastDot !== -1 && lastComma !== -1;
 
   if (once && !bothMarks && unsigned.length - decimalAt - 1 === 3 && digits !== 3) {
-    return { expected: `${EXAMPLES.qif}: "${unsigned}" may be a thousand or a fraction` };
+    return { expected: `${EXAMPLES.qif}: ${quote(unsigned)} may be a thousand or a fraction` };
   }
 
   const whole = once ? unsigned.slice(0, decimalAt) : unsigned;
@@ -105,13 +106,22 @@ export const readAmount = (field: FieldText, currency: string, syntax: AmountSyn
       });
     }
 
-    const minor = BigInt(`0${whole}${fraction.slice(0, digits).padEnd(digits, "0")}`);
+    const significant = whole.replace(/^0+/, "");
+
+    const tooLarge = new InvalidField({
+      ...field,
+      expected: "an amount small enough to be held exactly",
+    });
+
+    // More digits than the largest safe integer has: refused before a megabyte of them is read.
+    if (significant.length + digits > String(Number.MAX_SAFE_INTEGER).length) {
+      return yield* tooLarge;
+    }
+
+    const minor = BigInt(`0${significant}${fraction.slice(0, digits).padEnd(digits, "0")}`);
 
     if (minor > BigInt(Number.MAX_SAFE_INTEGER)) {
-      return yield* new InvalidField({
-        ...field,
-        expected: "an amount small enough to be held exactly",
-      });
+      return yield* tooLarge;
     }
 
     const amount = Number(minor);

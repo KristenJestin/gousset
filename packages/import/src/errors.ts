@@ -41,9 +41,20 @@ export class UnsupportedContent extends Schema.TaggedError<UnsupportedContent>()
   { line: Schema.Number, problem: Schema.String },
 ) {}
 
+/**
+ * The caller's `option` cannot be used, whatever the file holds: `text` as given, and what was
+ * `expected`. The one error that names no line.
+ */
+export class InvalidOption extends Schema.TaggedError<InvalidOption>()("InvalidOption", {
+  option: Schema.String,
+  text: Schema.String,
+  expected: Schema.String,
+}) {}
+
 export type ReadError =
   | NotAStatement
   | MalformedFile
   | MissingField
   | InvalidField
-  | UnsupportedContent;
+  | UnsupportedContent
+  | InvalidOption;

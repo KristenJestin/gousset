@@ -4,7 +4,13 @@ import { Effect } from "effect";
 import fc from "fast-check";
 import { describe, expect, test } from "vite-plus/test";
 
-import { InvalidField, MissingField, NotAStatement, UnsupportedContent } from "./errors";
+import {
+  InvalidField,
+  InvalidOption,
+  MissingField,
+  NotAStatement,
+  UnsupportedContent,
+} from "./errors";
 import { readQif } from "./qif";
 import type { QifOptions, QifStatement } from "./qif";
 import { madeUpStatements } from "./testing";
@@ -188,5 +194,31 @@ describe("refusing a QIF file", () => {
     expect(refusal("!Type:Bank\n^\n!Type:Diary\n")).toEqual(
       new UnsupportedContent({ line: 3, problem: 'A section "Type:Diary".' }),
     );
+  });
+
+  test("refuses a currency that is no ISO 4217 code, and takes one in lowercase", () => {
+    const bytes = new TextEncoder().encode("!Type:Bank\nD03/10/2026\nT-4.20\n^\n");
+
+    expect(Effect.runSync(Effect.flip(readQif(bytes, { currency: "EURO" })))).toEqual(
+      new InvalidOption({
+        option: "currency",
+        text: "EURO",
+        expected: "a currency's ISO 4217 code, such as EUR",
+      }),
+    );
+
+    expect(read(bytes, { currency: "eur" }).currency).toBe("EUR");
+  });
+});
+
+describe("reading what a QIF file may hold besides plain text", () => {
+  test("drops control and direction characters from what it returns", () => {
+    const bytes = new TextEncoder().encode(
+      "!Type:Bank\nD03/10/2026\nT-4.20\nPCB\u0000 ACME‮ 01/10\nMONE\tTWO\nNEX\u000001\n^\n",
+    );
+
+    expect(read(bytes, { currency: "EUR" }).lines).toEqual([
+      { ...line("2026-10-03", -420, "CB ACME 01/10"), memo: "ONE TWO", bankId: "EX01" },
+    ]);
   });
 });

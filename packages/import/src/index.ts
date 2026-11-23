@@ -12,6 +12,7 @@ export type { Balance, Statement, StatementLine } from "./statement";
 
 export {
   InvalidField,
+  InvalidOption,
   MalformedFile,
   MissingField,
   NotAStatement,

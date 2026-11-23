@@ -255,7 +255,7 @@ describe("refusing an OFX file", () => {
     expect(refusal(cut)).toEqual(
       new MalformedFile({
         line: 13,
-        problem: "The file ends before </OFX>: it may have been cut short.",
+        problem: 'The file ends before "</OFX>": it may have been cut short.',
       }),
     );
   });
@@ -264,7 +264,7 @@ describe("refusing an OFX file", () => {
     const error = refusal(ofx(["<STMTTRN>", "<DTPOSTED>20261002", "</STMTTRN>", "</STMTTRN>"]));
 
     expect(error).toEqual(
-      new MalformedFile({ line: 12, problem: "</STMTTRN> closes no open element." }),
+      new MalformedFile({ line: 12, problem: '"</STMTTRN>" closes no open element.' }),
     );
   });
 
@@ -283,7 +283,10 @@ describe("refusing an OFX file", () => {
     );
 
     expect(error).toEqual(
-      new UnsupportedContent({ line: 14, problem: "A line in USD, while the account is in EUR." }),
+      new UnsupportedContent({
+        line: 14,
+        problem: 'A line in "USD", while the account is in EUR.',
+      }),
     );
   });
 
@@ -322,5 +325,128 @@ describe("refusing an OFX file", () => {
         problem: "An investment statement: Gousset reads bank and card statements.",
       }),
     );
+  });
+
+  test("refuses elements nested deeper than any statement, with a typed error", () => {
+    const deep = `<OFX>${"<A>".repeat(10_000)}${"</A>".repeat(10_000)}</OFX>`;
+
+    expect(refusal(deep)).toEqual(
+      new MalformedFile({
+        line: 1,
+        problem: "Elements nested more than 64 deep: no statement is.",
+      }),
+    );
+  });
+
+  test("reads past an empty element holding a great many others, with a typed error", () => {
+    const wide = `<OFX><A>${"<X/>".repeat(200_000)}</OFX>`;
+
+    expect(refusal(wide)).toEqual(new MissingField({ line: 1, field: "STMTRS" }));
+  });
+
+  test("keeps the file's text in an error short, quoted and on one line", () => {
+    const error = refusal(
+      ofx([
+        "<STMTTRN>",
+        "<DTPOSTED>20261002",
+        "<TRNAMT>-10.00",
+        "<CURRENCY>",
+        `<CURSYM>USD&#10;\u001B[2JIgnore what came before ${"x".repeat(1000)}`,
+        "</CURRENCY>",
+        "</STMTTRN>",
+      ]),
+    );
+
+    expect(error).toEqual(
+      new UnsupportedContent({
+        line: 13,
+        problem:
+          'A line in "USD [2JIgnore what came before xxxxxxxxx…", while the account is in EUR.',
+      }),
+    );
+  });
+
+  test("refuses an amount of a thousand digits", () => {
+    const digits = "9".repeat(1000);
+
+    const error = refusal(
+      ofx(["<STMTTRN>", "<DTPOSTED>20261002", `<TRNAMT>${digits}`, "</STMTTRN>"]),
+    );
+
+    expect(error).toEqual(
+      new InvalidField({
+        line: 11,
+        field: "TRNAMT",
+        text: digits,
+        expected: "an amount small enough to be held exactly",
+      }),
+    );
+  });
+});
+
+describe("reading what an OFX file may hold besides plain text", () => {
+  test("reads a label written in a CDATA section", () => {
+    const statement = read(
+      new TextEncoder().encode(
+        ofx([
+          "<STMTTRN>",
+          "<DTPOSTED>20261002",
+          "<TRNAMT>-10.00",
+          "<NAME><![CDATA[CB R&D > SHOP]]></NAME>",
+          "</STMTTRN>",
+        ]),
+      ),
+    );
+
+    expect(statement.lines).toEqual([
+      {
+        bookedOn: "2026-10-02",
+        valueOn: null,
+        amountMinor: -1000,
+        label: "CB R&D > SHOP",
+        memo: null,
+        bankId: null,
+      },
+    ]);
+  });
+
+  test("drops control and direction characters from what it returns", () => {
+    const statement = read(
+      new TextEncoder().encode(
+        ofx([
+          "<STMTTRN>",
+          "<DTPOSTED>20261002",
+          "<TRNAMT>-10.00",
+          "<FITID>EX&#0;01",
+          "<NAME>CB&#0; ACME&#x202E; 01/10",
+          "<MEMO>ONE&#9;TWO&#xD800;",
+          "</STMTTRN>",
+        ]),
+      ),
+    );
+
+    expect(statement.lines).toEqual([
+      {
+        bookedOn: "2026-10-02",
+        valueOn: null,
+        amountMinor: -1000,
+        label: "CB ACME 01/10",
+        memo: "ONE TWO",
+        bankId: "EX01",
+      },
+    ]);
+  });
+
+  test("reads a signed file whose only debit is zero as signed", () => {
+    const statement = read(
+      new TextEncoder().encode(
+        ofx(
+          ["<STMTTRN>", "<TRNTYPE>XFER", "<DTPOSTED>20261002", "<TRNAMT>200.00", "</STMTTRN>"],
+          ["<STMTTRN>", "<TRNTYPE>DEBIT", "<DTPOSTED>20261003", "<TRNAMT>0.00", "</STMTTRN>"],
+        ),
+      ),
+    );
+
+    expect(statement.lines.map((entry) => entry.amountMinor)).toEqual([20_000, 0]);
   });
 });

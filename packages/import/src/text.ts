@@ -16,6 +16,31 @@ export function decodeText(bytes: Uint8Array): string {
   }
 }
 
+/**
+ * A value as the readers return it: a tab or a line break inside it becomes a space, and the
+ * characters a label never shows are dropped (NUL and the other control codes, which Postgres or a
+ * terminal choke on, half surrogate pairs, and the direction marks that would make a payee read
+ * backwards).
+ */
+export function cleanValue(text: string): string {
+  return text
+    .replaceAll(/[\t\n\v\f\r]/g, " ")
+    .replaceAll(/[\p{Cc}\p{Cs}‎‏‪-‮⁦-⁩]/gu, "")
+    .trim();
+}
+
+const EXCERPT_LENGTH = 40;
+
+/**
+ * The file's own text as an error sentence quotes it: cut short, in quotes, its control codes
+ * escaped, so that a crafted file cannot write a long line, or a line of its own, into a log.
+ */
+export function quote(text: string): string {
+  const excerpt = text.length > EXCERPT_LENGTH ? `${text.slice(0, EXCERPT_LENGTH)}…` : text;
+
+  return JSON.stringify(excerpt);
+}
+
 /** The text's lines, whatever ends them: `\r\n`, `\n` or a lone `\r`. */
 export function splitLines(text: string): Array<string> {
   return text.split(/\r\n|\r|\n/);
