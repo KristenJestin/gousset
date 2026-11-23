@@ -431,8 +431,9 @@ describe("refusing a CSV file", () => {
 
     expect(refusal("")).toEqual(none);
 
-    // A file of line breaks alone builds no row (README, "Errors"), however large it is.
-    const blank = new Uint8Array(8 * 1024 * 1024).fill(0x0a);
+    // A file of line breaks alone builds no row (README, "Errors"), however large it is: this one
+    // is past every bound of the header search (100 lines, 64 KiB), which is all the test needs.
+    const blank = new Uint8Array(256 * 1024).fill(0x0a);
 
     expect(Effect.runSync(Effect.flip(readCsv(blank, semicolon, { currency: "EUR" })))).toEqual(
       none,
