@@ -3,6 +3,7 @@ import {
   FixtureLedger,
   ImportProfiles,
   Imports,
+  Transfers,
   memoryAccountStore,
   memoryLineStore,
 } from "@gousset/core";
@@ -37,6 +38,7 @@ async function listing() {
               Layer.mock(Imports, {}),
               Layer.mock(ImportProfiles, {}),
               Layer.mock(DataExport, {}),
+              Layer.mock(Transfers, {}),
             ),
           ),
         ),

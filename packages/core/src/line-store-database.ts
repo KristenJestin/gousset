@@ -7,6 +7,7 @@ import { alias } from "drizzle-orm/pg-core";
 import { Effect, Layer } from "effect";
 
 import { LineStore } from "./line-store";
+import { linesWithSeveralCandidates } from "./transfers/pair-lines";
 import type { FoundLine, FoundLineDetail, LineQuery } from "./line-store";
 
 // Every line of the user's, through `UserData` only (docs/data-model.md, "Ownership and
@@ -62,8 +63,13 @@ function amountCondition(
 }
 
 function conditions(accounts: ReadonlyArray<AccountColumns>, query: LineQuery) {
+  const ofState = eq(statementLine.state, query.state);
+  const ids = query.alsoLineIds.filter(isId);
+
   return and(
-    eq(statementLine.state, query.state),
+    query.state === "held" && ids.length > 0
+      ? or(ofState, and(eq(statementLine.state, "counted"), inArray(statementLine.id, ids)))
+      : ofState,
     lte(statementLine.bookedOn, query.to),
     query.from === null ? undefined : gte(statementLine.bookedOn, query.from),
     query.accountId === null ? undefined : eq(statementLine.accountId, query.accountId),
@@ -288,6 +294,9 @@ export const DatabaseLineStore = Layer.effect(
 
       show: (owner, lineId, day) =>
         userData.transaction(owner, (transaction) => show(transaction, lineId, day)),
+
+      severalCandidates: (owner, day) =>
+        userData.transaction(owner, (transaction) => linesWithSeveralCandidates(transaction, day)),
     };
   }),
 );

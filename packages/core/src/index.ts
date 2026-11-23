@@ -16,7 +16,9 @@ export {
   LineSearchRefused,
   MonthOutOfRange,
   NotACredit,
+  NotATransfer,
   SettlementRefused,
+  TransferRefused,
 } from "./errors";
 
 export { FixtureLedger, Ledger, MONTHS_FROM_TODAY } from "./ledger";
@@ -175,6 +177,19 @@ export type {
 export { ImportJobInput, markFailed, runImport } from "./imports/run";
 
 export type { ImportProgress, ImportRun } from "./imports/run";
+
+export {
+  Transfers,
+  lineTransferOf,
+  pairEveryLine,
+  pairLines,
+  transfersLayer,
+  unpairLine,
+} from "./transfers/transfers";
+
+export type { LineTransfer, PairingSummary, TransferSide, Unpaired } from "./transfers/transfers";
+
+export { CARD_DAYS, TRANSFER_DAYS } from "./transfers/pairing";
 
 export { DataExport, dataExportLayer } from "./export/export";
 

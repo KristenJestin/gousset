@@ -1,5 +1,24 @@
-import { accountNamed, searchLines, showLine } from "@gousset/core";
-import type { AccountStore, LineDetail, LinePage, LineRow, LineStore } from "@gousset/core";
+import {
+  accountNamed,
+  lineTransferOf,
+  pairEveryLine,
+  pairLines,
+  searchLines,
+  showLine,
+  unpairLine,
+} from "@gousset/core";
+import type {
+  AccountStore,
+  LineDetail,
+  LinePage,
+  LineRow,
+  LineStore,
+  LineTransfer,
+  PairingSummary,
+  TransferRefused,
+  TransferSide,
+  Transfers,
+} from "@gousset/core";
 import { Effect, Schema } from "effect";
 
 import { ToolRefusal, defineTool } from "../tool";
@@ -10,9 +29,9 @@ const DEFAULT_LINES = 50;
 const MAX_LINES = 100;
 
 const LinesInput = Schema.Struct({
-  action: Schema.Literals(["search", "show"]).annotate({
+  action: Schema.Literals(["search", "show", "pair", "classify", "unpair"]).annotate({
     description:
-      "search: the lines that match, across accounts, newest first. show: one line, all that is known of it.",
+      "search: the lines that match, across accounts, newest first. show: one line, all that is known of it. pair: two lines as one transfer (writes). classify: what one line is (writes). unpair: undoes a line's transfer (writes).",
   }),
   text: Schema.optional(
     Schema.String.annotate({
@@ -49,7 +68,7 @@ const LinesInput = Schema.Struct({
   to_review: Schema.optional(
     Schema.Boolean.annotate({
       description:
-        "search: true for the lines held for review only (near duplicates waiting for the user).",
+        "search: true for the lines to review only: near duplicates held, and lines whose transfer's other side the user chooses among several.",
     }),
   ),
   limit: Schema.optional(
@@ -64,15 +83,31 @@ const LinesInput = Schema.Struct({
     }),
   ),
   line: Schema.optional(
-    Schema.String.annotate({ description: "show: the line's handle, as search gives it." }),
+    Schema.String.annotate({
+      description: "show, pair, classify, unpair: the line's handle, as search gives it.",
+    }),
+  ),
+  other: Schema.optional(
+    Schema.String.annotate({
+      description:
+        "pair, classify: the handle of the transfer's other side; left out, the line's only candidate.",
+    }),
+  ),
+  kind: Schema.optional(
+    Schema.Literals(["transfer"]).annotate({
+      description:
+        "classify: what the line is: transfer (one side of money moved between two of the user's accounts).",
+    }),
   ),
 });
 
 type LinesInput = typeof LinesInput.Type;
 
-const DESCRIPTION = `Every line of the user's accounts, as the bank wrote it: search across accounts, then read one. \`search\` finds lines by a piece of their label, memo or counterparty (\`text\`, any case), one account (\`account\`), a period (\`from\`, \`to\`, YYYY-MM-DD, both included), an amount range (\`amount_min\`, \`amount_max\`), or the lines held for review (\`to_review\`: near duplicates waiting for the user, listed only then); newest first, with how many match in all and each line's handle. \`show\` gives one line by that handle: its account, days, amount (and the amount in another currency), label, memo, counterparty, expiry, the line a held one looks like, and the import it came from or how it was made.
+const DESCRIPTION = `Every line of the user's accounts, as the bank wrote it: search across accounts, then read one. \`search\` finds lines by a piece of their label, memo or counterparty (\`text\`, any case), one account (\`account\`), a period (\`from\`, \`to\`, YYYY-MM-DD, both included), an amount range (\`amount_min\`, \`amount_max\`), or the lines to review (\`to_review\`: near duplicates and unsure transfers, listed only then); newest first, with how many match in all and each line's handle. \`show\` gives one line by that handle: its account, days, amount (and the amount in another currency), label, memo, counterparty, expiry, the line a held one looks like, its transfer, and the import it came from or how it was made.
 
-Use it for "when did I pay this shop?", "what was this 42.90?", "which import brought this line?". Use \`accounts\` instead for balances and one account's latest lines, \`month\` for where the money went. Both actions only read.
+Use it for "when did I pay this shop?", "what was this 42.90?", "which import brought this line?". Use \`accounts\` instead for balances and one account's latest lines, \`month\` for where the money went. search and show only read.
+
+Writes: \`pair\` pairs \`line\` and \`other\` as one transfer, never spending; \`line\` alone: its only candidate; neither: every clear pair. \`classify\` \`kind\` "transfer" is the same; \`unpair\` undoes it. Refused: lines of one account or direction, a paired line, several candidates.
 
 \`account\` is the name as \`accounts\` lists it (any case); add \`institution\` when two accounts share it. An unknown or ambiguous name is refused with the names to choose from. Amounts are decimal strings in each account's own currency, without sign or currency, compared with the line's absolute amount: a -42.90 EUR payment matches "amount_min":"40". A period that ends before it starts, an amount that is no decimal, or an \`after\` no result gave is refused. \`limit\` is 1 to ${MAX_LINES} lines, ${DEFAULT_LINES} by default; when more remain, the result writes the exact next call with \`after\`: copy it.
 
@@ -126,8 +161,8 @@ function filtersText(input: LinesInput, account: string | undefined): string {
 
   const kind =
     input.to_review === true
-      ? "held for review (near duplicates waiting for the user)"
-      : "counted (add to_review: true for the lines held for review)";
+      ? "to review (near duplicates held, and transfers whose other side the user chooses)"
+      : "counted (add to_review: true for the lines to review)";
 
   return filters.length === 0 ? `every line ${kind}` : `lines ${kind}, ${filters.join(", ")}`;
 }
@@ -196,8 +231,51 @@ function originText(detail: LineDetail): string {
   return `Imported from "${read.fileName}" (${format}) on ${read.importedAt.slice(0, 10)}${period}.`;
 }
 
+const PAIRED_BY = { import: "Gousset", rule: "a rule", user: "the user" } as const;
+
+function sideText(side: TransferSide): string {
+  const made = side.madeByApp
+    ? ", made by Gousset as that account's statement does not show it"
+    : "";
+
+  return `the line of ${side.bookedOn}, ${named(side.account)}: ${amount(side.amount)}, ${quoted(side.label)}${made}; line: ${side.id}`;
+}
+
+/** A line's transfer, its candidates, or nothing when it is no transfer and has none. */
+function transferText(lineId: string, transfer: LineTransfer): Array<string> {
+  const { paired, candidates } = transfer;
+
+  if (paired !== null) {
+    const way = paired.direction === "out" ? "to" : "from";
+    const aside = paired.setAside ? " Set aside: money moved to savings or investments." : "";
+
+    return [
+      `Transfer ${way} ${named(paired.other.account)}, paired by ${PAIRED_BY[paired.pairedBy]}: never counted as spending.${aside} Its other side is ${sideText(paired.other)}. If it is no transfer: ${call({ action: "unpair", line: lineId })}`,
+    ];
+  }
+
+  const [first] = candidates;
+
+  if (first === undefined) {
+    return [];
+  }
+
+  const intro =
+    candidates.length === 1
+      ? "Maybe a transfer: one line may be its other side, but it has other candidates:"
+      : `To review: ${candidates.length} lines may be the other side of this transfer; the user chooses:`;
+
+  return [
+    [
+      intro,
+      ...candidates.map((side) => `- ${sideText(side)}`),
+      `Pair it with one: ${call({ action: "pair", line: lineId, other: first.id })}`,
+    ].join("\n"),
+  ];
+}
+
 /** One line, in Gousset's words: where and when, how much, what the bank said, where it came from. */
-function showText(detail: LineDetail): string {
+function showText(detail: LineDetail, transfer: LineTransfer): string {
   const valueOn = detail.valueOn === null ? "" : `, value on ${detail.valueOn}`;
 
   const original =
@@ -221,8 +299,133 @@ function showText(detail: LineDetail): string {
     ...(detail.counterpartyName === null ? [] : [`Counterparty: ${detail.counterpartyName}`]),
     ...(detail.expiresOn === null ? [] : [`Expires on: ${detail.expiresOn}`]),
     ...review,
+    ...transferText(detail.id, transfer),
     originText(detail),
   ].join("\n");
+}
+
+function pairingText(summary: PairingSummary): string {
+  const review =
+    summary.toReview === 0
+      ? "No line is left with several possible other sides."
+      : `${summary.toReview} line(s) have several possible other sides and wait for the user: \`show\` one to see them, then pair it with \`other\`.`;
+
+  return [
+    `Paired every clear transfer: ${summary.paired} between two lines, ${summary.cardDebits} deferred card debit(s) with the card's side made by Gousset, ${summary.replaced} side(s) Gousset had made replaced by the statement's own line.`,
+    review,
+  ].join(" ");
+}
+
+const lineRefused = (line: string, message: string) =>
+  Effect.fail(
+    new ToolRefusal({
+      message: `${message.replace("{line}", `"${line.slice(0, 80)}"`)} Handles come from search: search for the line, then use the handle its result gives.`,
+      example: call({ action: "search", text: "corner cafe" }),
+    }),
+  );
+
+const NOT_FOUND = "No line of the user's has the handle {line}.";
+
+const TRANSFER_REFUSALS = {
+  same_line: "A transfer has two sides: name two different lines.",
+  same_account:
+    "Both lines are on the same account: a transfer moves money between two of the user's accounts.",
+  same_sign:
+    "Both lines move money the same way: a transfer is one line out (negative) and one line in (positive).",
+  zero_amount: "A line of no amount moves no money: it is no side of a transfer.",
+  not_counted:
+    "The line {line} is held for review as a near duplicate (or thrown away): it is not counted, so it cannot be paired.",
+  made_from_balance:
+    "The line {line} was made by Gousset from a balance the user noted: it stands for the month's movement of an account kept by its balance, never for one side of a transfer.",
+  already_paired:
+    "The line {line} is already a side of a transfer: unpair it first if that pairing is wrong.",
+  no_candidate:
+    "No line of another of the user's accounts has the opposite amount within a few days: name the other side with other (across currencies too).",
+  several_candidates:
+    "Several lines may be the other side of this transfer: show the line to list them, then pair it with other.",
+} as const satisfies { readonly [Reason in TransferRefused["reason"]]: string };
+
+function transferRefused(input: LinesInput, refused: TransferRefused) {
+  const line = input.line ?? "";
+
+  const example =
+    refused.reason === "already_paired"
+      ? call({ action: "unpair", line: refused.lineId })
+      : refused.reason === "several_candidates" || refused.reason === "no_candidate"
+        ? call({ action: "show", line })
+        : call({ action: "search", text: "transfer" });
+
+  return Effect.fail(
+    new ToolRefusal({
+      message: TRANSFER_REFUSALS[refused.reason].replace("{line}", refused.lineId),
+      example,
+    }),
+  );
+}
+
+/** `pair` and `classify` as a transfer: two lines, one line and its only candidate, or every line. */
+function pairRun(input: LinesInput, owner: string) {
+  const line = input.line?.trim() ?? "";
+  const other = input.other?.trim() ?? "";
+
+  if (line === "") {
+    return other === ""
+      ? pairEveryLine(owner).pipe(
+          Effect.map(pairingText),
+          Effect.catchTag("QueryFailed", Effect.die),
+        )
+      : Effect.fail(
+          new ToolRefusal({
+            message: "other is the second side: give line too, the first one.",
+            example: call({ action: "pair", line: "<a handle>", other }),
+          }),
+        );
+  }
+
+  return pairLines(owner, line, other === "" ? null : other).pipe(
+    Effect.map((transfer) => [`Paired as a transfer.`, ...transferText(line, transfer)].join("\n")),
+    Effect.catchTags({
+      LineNotFound: (missing) => lineRefused(missing.lineId, NOT_FOUND),
+      TransferRefused: (refused) => transferRefused(input, refused),
+      QueryFailed: Effect.die,
+    }),
+  );
+}
+
+function unpairRun(input: LinesInput, owner: string) {
+  const line = input.line?.trim() ?? "";
+
+  if (line === "") {
+    return Effect.fail(
+      new ToolRefusal({
+        message: "unpair needs the handle of one side of the transfer.",
+        example: call({ action: "search", text: "transfer" }),
+      }),
+    );
+  }
+
+  return unpairLine(owner, line).pipe(
+    Effect.map(({ other, madeSideDeleted }) => {
+      if (!madeSideDeleted) {
+        return `No longer a transfer: the line and ${sideText(other)} are two separate lines again, each an expense or an income.`;
+      }
+
+      return other.madeByApp
+        ? `No longer a transfer. Its other side, which Gousset had made on ${named(other.account)}, is deleted; the line counts as an expense or an income again.`
+        : `No longer a transfer. This line, which Gousset had made, is deleted; ${sideText(other)} counts as an expense or an income again.`;
+    }),
+    Effect.catchTags({
+      LineNotFound: (missing) => lineRefused(missing.lineId, NOT_FOUND),
+      NotATransfer: () =>
+        Effect.fail(
+          new ToolRefusal({
+            message: `The line "${line.slice(0, 80)}" is no side of a transfer: there is nothing to unpair.`,
+            example: call({ action: "show", line }),
+          }),
+        ),
+      QueryFailed: Effect.die,
+    }),
+  );
 }
 
 const SEARCH_REFUSALS = {
@@ -302,11 +505,14 @@ function accountOf(caller: string, input: LinesInput) {
   );
 }
 
-/** The lines family (docs/mcp.md, "Tools"): read only. */
+/**
+ * The lines family (docs/mcp.md, "Tools"): searched and read; paired as transfers with the write
+ * scope (#26).
+ */
 export const linesTool = defineTool<
   LinesInput,
   typeof LinesInput.Encoded,
-  AccountStore | LineStore
+  AccountStore | LineStore | Transfers
 >({
   name: "lines",
   title: "Lines",
@@ -314,7 +520,7 @@ export const linesTool = defineTool<
   idempotent: true,
   input: LinesInput,
   example: { action: "search", text: "corner cafe", account: "Current account" },
-  access: { search: "read", show: "read" },
+  access: { search: "read", show: "read", pair: "write", classify: "write", unpair: "write" },
   run: (input, caller) => {
     switch (input.action) {
       case "search": {
@@ -382,8 +588,11 @@ export const linesTool = defineTool<
           );
         }
 
-        return showLine(caller.userId, line.trim()).pipe(
-          Effect.map(showText),
+        return Effect.all([
+          showLine(caller.userId, line.trim()),
+          lineTransferOf(caller.userId, line.trim()),
+        ]).pipe(
+          Effect.map(([detail, transfer]) => showText(detail, transfer)),
           Effect.catchTags({
             LineNotFound: () =>
               Effect.fail(
@@ -395,6 +604,28 @@ export const linesTool = defineTool<
             QueryFailed: Effect.die,
           }),
         );
+      }
+
+      case "pair": {
+        return pairRun(input, caller.userId);
+      }
+
+      case "classify": {
+        if (input.kind === undefined || (input.line?.trim() ?? "") === "") {
+          return Effect.fail(
+            new ToolRefusal({
+              message:
+                "classify needs the line's handle and its kind: transfer, with the other side's handle as other (or none for its only candidate).",
+              example: call({ action: "classify", line: "<a handle>", kind: "transfer" }),
+            }),
+          );
+        }
+
+        return pairRun(input, caller.userId);
+      }
+
+      case "unpair": {
+        return unpairRun(input, caller.userId);
       }
     }
   },
