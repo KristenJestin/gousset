@@ -1,0 +1,2667 @@
+{
+  "type": "diff",
+  "version": "10",
+  "dialect": "postgres",
+  "id": "cca2e126-34d0-46be-86da-c1a6c539165a",
+  "prevIds": ["eb197cf6-6e97-4193-9b58-8824f81d6222"],
+  "footprints": [
+    {
+      "statementType": "create_enum",
+      "statementTarget": ["enum", "public", "account_envelope"],
+      "writes": [
+        "s|enum|public.account_envelope",
+        "n|enum|public.account_envelope",
+        "e|enum|public.account_envelope",
+        "n|type|public.account_envelope"
+      ],
+      "reads": ["n|sch|public"]
+    },
+    {
+      "statementType": "create_enum",
+      "statementTarget": ["enum", "public", "account_kind"],
+      "writes": [
+        "s|enum|public.account_kind",
+        "n|enum|public.account_kind",
+        "e|enum|public.account_kind",
+        "n|type|public.account_kind"
+      ],
+      "reads": ["n|sch|public"]
+    },
+    {
+      "statementType": "create_enum",
+      "statementTarget": ["enum", "public", "account_mode"],
+      "writes": [
+        "s|enum|public.account_mode",
+        "n|enum|public.account_mode",
+        "e|enum|public.account_mode",
+        "n|type|public.account_mode"
+      ],
+      "reads": ["n|sch|public"]
+    },
+    {
+      "statementType": "create_enum",
+      "statementTarget": ["enum", "public", "balance_source"],
+      "writes": [
+        "s|enum|public.balance_source",
+        "n|enum|public.balance_source",
+        "e|enum|public.balance_source",
+        "n|type|public.balance_source"
+      ],
+      "reads": ["n|sch|public"]
+    },
+    {
+      "statementType": "create_enum",
+      "statementTarget": ["enum", "public", "credit_order"],
+      "writes": [
+        "s|enum|public.credit_order",
+        "n|enum|public.credit_order",
+        "e|enum|public.credit_order",
+        "n|type|public.credit_order"
+      ],
+      "reads": ["n|sch|public"]
+    },
+    {
+      "statementType": "create_enum",
+      "statementTarget": ["enum", "public", "import_format"],
+      "writes": [
+        "s|enum|public.import_format",
+        "n|enum|public.import_format",
+        "e|enum|public.import_format",
+        "n|type|public.import_format"
+      ],
+      "reads": ["n|sch|public"]
+    },
+    {
+      "statementType": "create_enum",
+      "statementTarget": ["enum", "public", "import_profile_kind"],
+      "writes": [
+        "s|enum|public.import_profile_kind",
+        "n|enum|public.import_profile_kind",
+        "e|enum|public.import_profile_kind",
+        "n|type|public.import_profile_kind"
+      ],
+      "reads": ["n|sch|public"]
+    },
+    {
+      "statementType": "create_enum",
+      "statementTarget": ["enum", "public", "import_status"],
+      "writes": [
+        "s|enum|public.import_status",
+        "n|enum|public.import_status",
+        "e|enum|public.import_status",
+        "n|type|public.import_status"
+      ],
+      "reads": ["n|sch|public"]
+    },
+    {
+      "statementType": "create_enum",
+      "statementTarget": ["enum", "public", "line_source"],
+      "writes": [
+        "s|enum|public.line_source",
+        "n|enum|public.line_source",
+        "e|enum|public.line_source",
+        "n|type|public.line_source"
+      ],
+      "reads": ["n|sch|public"]
+    },
+    {
+      "statementType": "create_enum",
+      "statementTarget": ["enum", "public", "line_state"],
+      "writes": [
+        "s|enum|public.line_state",
+        "n|enum|public.line_state",
+        "e|enum|public.line_state",
+        "n|type|public.line_state"
+      ],
+      "reads": ["n|sch|public"]
+    },
+    {
+      "statementType": "create_table",
+      "statementTarget": ["table", "public", "account"],
+      "writes": [
+        "s|tbl|public.account",
+        "n|tbl|public.account",
+        "e|tbl|public.account",
+        "n|rel|public.account",
+        "n|type|public.account",
+        "n|rel|public.account_pkey",
+        "n|rel|public.account_user_id_id_key",
+        "n|rel|public.account_user_id_iban_key",
+        "n|rel|public.account_user_id_number_key"
+      ],
+      "reads": [
+        "n|sch|public",
+        "n|enum|public.account_kind",
+        "n|enum|public.account_envelope",
+        "n|enum|public.account_mode",
+        "n|enum|public.credit_order"
+      ]
+    },
+    {
+      "statementType": "create_table",
+      "statementTarget": ["table", "public", "account_balance"],
+      "writes": [
+        "s|tbl|public.account_balance",
+        "n|tbl|public.account_balance",
+        "e|tbl|public.account_balance",
+        "n|rel|public.account_balance",
+        "n|type|public.account_balance",
+        "n|rel|public.account_balance_pkey"
+      ],
+      "reads": ["n|sch|public", "n|enum|public.balance_source"]
+    },
+    {
+      "statementType": "create_table",
+      "statementTarget": ["table", "public", "import_file"],
+      "writes": [
+        "s|tbl|public.import_file",
+        "n|tbl|public.import_file",
+        "e|tbl|public.import_file",
+        "n|rel|public.import_file",
+        "n|type|public.import_file",
+        "n|rel|public.import_file_pkey"
+      ],
+      "reads": ["n|sch|public"]
+    },
+    {
+      "statementType": "create_table",
+      "statementTarget": ["table", "public", "import_profile"],
+      "writes": [
+        "s|tbl|public.import_profile",
+        "n|tbl|public.import_profile",
+        "e|tbl|public.import_profile",
+        "n|rel|public.import_profile",
+        "n|type|public.import_profile",
+        "n|rel|public.import_profile_pkey",
+        "n|rel|public.import_profile_user_id_id_key"
+      ],
+      "reads": ["n|sch|public", "n|enum|public.import_profile_kind"]
+    },
+    {
+      "statementType": "create_table",
+      "statementTarget": ["table", "public", "import"],
+      "writes": [
+        "s|tbl|public.import",
+        "n|tbl|public.import",
+        "e|tbl|public.import",
+        "n|rel|public.import",
+        "n|type|public.import",
+        "n|rel|public.import_pkey",
+        "n|rel|public.import_user_id_id_key"
+      ],
+      "reads": ["n|sch|public", "n|enum|public.import_format", "n|enum|public.import_status"]
+    },
+    {
+      "statementType": "create_table",
+      "statementTarget": ["table", "public", "statement_line"],
+      "writes": [
+        "s|tbl|public.statement_line",
+        "n|tbl|public.statement_line",
+        "e|tbl|public.statement_line",
+        "n|rel|public.statement_line",
+        "n|type|public.statement_line",
+        "n|rel|public.statement_line_pkey",
+        "n|rel|public.statement_line_user_id_id_key",
+        "n|rel|public.statement_line_account_id_dedup_key_key"
+      ],
+      "reads": ["n|sch|public", "n|enum|public.line_source", "n|enum|public.line_state"]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": [
+        "index",
+        "public",
+        "account_balance",
+        "account_balance_account_id_day_idx"
+      ],
+      "writes": [
+        "s|idx|public.account_balance_account_id_day_idx",
+        "n|idx|public.account_balance_account_id_day_idx",
+        "e|idx|public.account_balance_account_id_day_idx",
+        "n|rel|public.account_balance_account_id_day_idx"
+      ],
+      "reads": [
+        "n|tbl|public.account_balance",
+        "n|sch|public",
+        "n|col|public.account_balance.account_id",
+        "n|col|public.account_balance.day"
+      ]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": ["index", "public", "account_balance", "account_balance_import_id_idx"],
+      "writes": [
+        "s|idx|public.account_balance_import_id_idx",
+        "n|idx|public.account_balance_import_id_idx",
+        "e|idx|public.account_balance_import_id_idx",
+        "n|rel|public.account_balance_import_id_idx"
+      ],
+      "reads": [
+        "n|tbl|public.account_balance",
+        "n|sch|public",
+        "n|col|public.account_balance.import_id"
+      ]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": ["index", "public", "import", "import_account_id_idx"],
+      "writes": [
+        "s|idx|public.import_account_id_idx",
+        "n|idx|public.import_account_id_idx",
+        "e|idx|public.import_account_id_idx",
+        "n|rel|public.import_account_id_idx"
+      ],
+      "reads": ["n|tbl|public.import", "n|sch|public", "n|col|public.import.account_id"]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": ["index", "public", "import", "import_user_id_file_sha256_idx"],
+      "writes": [
+        "s|idx|public.import_user_id_file_sha256_idx",
+        "n|idx|public.import_user_id_file_sha256_idx",
+        "e|idx|public.import_user_id_file_sha256_idx",
+        "n|rel|public.import_user_id_file_sha256_idx"
+      ],
+      "reads": [
+        "n|tbl|public.import",
+        "n|sch|public",
+        "n|col|public.import.user_id",
+        "n|col|public.import.file_sha256"
+      ]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": [
+        "index",
+        "public",
+        "statement_line",
+        "statement_line_account_id_booked_on_id_idx"
+      ],
+      "writes": [
+        "s|idx|public.statement_line_account_id_booked_on_id_idx",
+        "n|idx|public.statement_line_account_id_booked_on_id_idx",
+        "e|idx|public.statement_line_account_id_booked_on_id_idx",
+        "n|rel|public.statement_line_account_id_booked_on_id_idx"
+      ],
+      "reads": [
+        "n|tbl|public.statement_line",
+        "n|sch|public",
+        "n|col|public.statement_line.account_id",
+        "n|col|public.statement_line.booked_on",
+        "n|col|public.statement_line.id"
+      ]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": ["index", "public", "statement_line", "statement_line_import_id_idx"],
+      "writes": [
+        "s|idx|public.statement_line_import_id_idx",
+        "n|idx|public.statement_line_import_id_idx",
+        "e|idx|public.statement_line_import_id_idx",
+        "n|rel|public.statement_line_import_id_idx"
+      ],
+      "reads": [
+        "n|tbl|public.statement_line",
+        "n|sch|public",
+        "n|col|public.statement_line.import_id"
+      ]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": [
+        "index",
+        "public",
+        "statement_line",
+        "statement_line_duplicate_of_line_id_idx"
+      ],
+      "writes": [
+        "s|idx|public.statement_line_duplicate_of_line_id_idx",
+        "n|idx|public.statement_line_duplicate_of_line_id_idx",
+        "e|idx|public.statement_line_duplicate_of_line_id_idx",
+        "n|rel|public.statement_line_duplicate_of_line_id_idx"
+      ],
+      "reads": [
+        "n|tbl|public.statement_line",
+        "n|sch|public",
+        "n|col|public.statement_line.duplicate_of_line_id"
+      ]
+    },
+    {
+      "statementType": "create_fk",
+      "statementTarget": ["table", "public", "account"],
+      "writes": [
+        "s|fk|public.account.account_user_id_auth_user_id_fkey",
+        "n|fk|public.account.account_user_id_auth_user_id_fkey",
+        "e|fk|public.account.account_user_id_auth_user_id_fkey",
+        "n|con|public.account.account_user_id_auth_user_id_fkey"
+      ],
+      "reads": [
+        "n|tbl|public.account",
+        "n|sch|public",
+        "n|tbl|public.auth_user",
+        "n|sch|public",
+        "n|col|public.account.user_id",
+        "n|col|public.auth_user.id",
+        "e|uniqueness|public.auth_user.id"
+      ]
+    },
+    {
+      "statementType": "create_fk",
+      "statementTarget": ["table", "public", "account_balance"],
+      "writes": [
+        "s|fk|public.account_balance.account_balance_user_id_auth_user_id_fkey",
+        "n|fk|public.account_balance.account_balance_user_id_auth_user_id_fkey",
+        "e|fk|public.account_balance.account_balance_user_id_auth_user_id_fkey",
+        "n|con|public.account_balance.account_balance_user_id_auth_user_id_fkey"
+      ],
+      "reads": [
+        "n|tbl|public.account_balance",
+        "n|sch|public",
+        "n|tbl|public.auth_user",
+        "n|sch|public",
+        "n|col|public.account_balance.user_id",
+        "n|col|public.auth_user.id",
+        "e|uniqueness|public.auth_user.id"
+      ]
+    },
+    {
+      "statementType": "create_fk",
+      "statementTarget": ["table", "public", "account_balance"],
+      "writes": [
+        "s|fk|public.account_balance.account_balance_account_fk",
+        "n|fk|public.account_balance.account_balance_account_fk",
+        "e|fk|public.account_balance.account_balance_account_fk",
+        "n|con|public.account_balance.account_balance_account_fk"
+      ],
+      "reads": [
+        "n|tbl|public.account_balance",
+        "n|sch|public",
+        "n|tbl|public.account",
+        "n|sch|public",
+        "n|col|public.account_balance.user_id",
+        "n|col|public.account_balance.account_id",
+        "n|col|public.account.user_id",
+        "n|col|public.account.id",
+        "e|uniqueness|public.account.id.user_id"
+      ]
+    },
+    {
+      "statementType": "create_fk",
+      "statementTarget": ["table", "public", "account_balance"],
+      "writes": [
+        "s|fk|public.account_balance.account_balance_import_fk",
+        "n|fk|public.account_balance.account_balance_import_fk",
+        "e|fk|public.account_balance.account_balance_import_fk",
+        "n|con|public.account_balance.account_balance_import_fk"
+      ],
+      "reads": [
+        "n|tbl|public.account_balance",
+        "n|sch|public",
+        "n|tbl|public.import",
+        "n|sch|public",
+        "n|col|public.account_balance.user_id",
+        "n|col|public.account_balance.import_id",
+        "n|col|public.import.user_id",
+        "n|col|public.import.id",
+        "e|uniqueness|public.import.id.user_id"
+      ]
+    },
+    {
+      "statementType": "create_fk",
+      "statementTarget": ["table", "public", "import_file"],
+      "writes": [
+        "s|fk|public.import_file.import_file_user_id_auth_user_id_fkey",
+        "n|fk|public.import_file.import_file_user_id_auth_user_id_fkey",
+        "e|fk|public.import_file.import_file_user_id_auth_user_id_fkey",
+        "n|con|public.import_file.import_file_user_id_auth_user_id_fkey"
+      ],
+      "reads": [
+        "n|tbl|public.import_file",
+        "n|sch|public",
+        "n|tbl|public.auth_user",
+        "n|sch|public",
+        "n|col|public.import_file.user_id",
+        "n|col|public.auth_user.id",
+        "e|uniqueness|public.auth_user.id"
+      ]
+    },
+    {
+      "statementType": "create_fk",
+      "statementTarget": ["table", "public", "import_file"],
+      "writes": [
+        "s|fk|public.import_file.import_file_import_fk",
+        "n|fk|public.import_file.import_file_import_fk",
+        "e|fk|public.import_file.import_file_import_fk",
+        "n|con|public.import_file.import_file_import_fk"
+      ],
+      "reads": [
+        "n|tbl|public.import_file",
+        "n|sch|public",
+        "n|tbl|public.import",
+        "n|sch|public",
+        "n|col|public.import_file.user_id",
+        "n|col|public.import_file.import_id",
+        "n|col|public.import.user_id",
+        "n|col|public.import.id",
+        "e|uniqueness|public.import.id.user_id"
+      ]
+    },
+    {
+      "statementType": "create_fk",
+      "statementTarget": ["table", "public", "import_profile"],
+      "writes": [
+        "s|fk|public.import_profile.import_profile_user_id_auth_user_id_fkey",
+        "n|fk|public.import_profile.import_profile_user_id_auth_user_id_fkey",
+        "e|fk|public.import_profile.import_profile_user_id_auth_user_id_fkey",
+        "n|con|public.import_profile.import_profile_user_id_auth_user_id_fkey"
+      ],
+      "reads": [
+        "n|tbl|public.import_profile",
+        "n|sch|public",
+        "n|tbl|public.auth_user",
+        "n|sch|public",
+        "n|col|public.import_profile.user_id",
+        "n|col|public.auth_user.id",
+        "e|uniqueness|public.auth_user.id"
+      ]
+    },
+    {
+      "statementType": "create_fk",
+      "statementTarget": ["table", "public", "import"],
+      "writes": [
+        "s|fk|public.import.import_user_id_auth_user_id_fkey",
+        "n|fk|public.import.import_user_id_auth_user_id_fkey",
+        "e|fk|public.import.import_user_id_auth_user_id_fkey",
+        "n|con|public.import.import_user_id_auth_user_id_fkey"
+      ],
+      "reads": [
+        "n|tbl|public.import",
+        "n|sch|public",
+        "n|tbl|public.auth_user",
+        "n|sch|public",
+        "n|col|public.import.user_id",
+        "n|col|public.auth_user.id",
+        "e|uniqueness|public.auth_user.id"
+      ]
+    },
+    {
+      "statementType": "create_fk",
+      "statementTarget": ["table", "public", "import"],
+      "writes": [
+        "s|fk|public.import.import_account_fk",
+        "n|fk|public.import.import_account_fk",
+        "e|fk|public.import.import_account_fk",
+        "n|con|public.import.import_account_fk"
+      ],
+      "reads": [
+        "n|tbl|public.import",
+        "n|sch|public",
+        "n|tbl|public.account",
+        "n|sch|public",
+        "n|col|public.import.user_id",
+        "n|col|public.import.account_id",
+        "n|col|public.account.user_id",
+        "n|col|public.account.id",
+        "e|uniqueness|public.account.id.user_id"
+      ]
+    },
+    {
+      "statementType": "create_fk",
+      "statementTarget": ["table", "public", "statement_line"],
+      "writes": [
+        "s|fk|public.statement_line.statement_line_user_id_auth_user_id_fkey",
+        "n|fk|public.statement_line.statement_line_user_id_auth_user_id_fkey",
+        "e|fk|public.statement_line.statement_line_user_id_auth_user_id_fkey",
+        "n|con|public.statement_line.statement_line_user_id_auth_user_id_fkey"
+      ],
+      "reads": [
+        "n|tbl|public.statement_line",
+        "n|sch|public",
+        "n|tbl|public.auth_user",
+        "n|sch|public",
+        "n|col|public.statement_line.user_id",
+        "n|col|public.auth_user.id",
+        "e|uniqueness|public.auth_user.id"
+      ]
+    },
+    {
+      "statementType": "create_fk",
+      "statementTarget": ["table", "public", "statement_line"],
+      "writes": [
+        "s|fk|public.statement_line.statement_line_account_fk",
+        "n|fk|public.statement_line.statement_line_account_fk",
+        "e|fk|public.statement_line.statement_line_account_fk",
+        "n|con|public.statement_line.statement_line_account_fk"
+      ],
+      "reads": [
+        "n|tbl|public.statement_line",
+        "n|sch|public",
+        "n|tbl|public.account",
+        "n|sch|public",
+        "n|col|public.statement_line.user_id",
+        "n|col|public.statement_line.account_id",
+        "n|col|public.account.user_id",
+        "n|col|public.account.id",
+        "e|uniqueness|public.account.id.user_id"
+      ]
+    },
+    {
+      "statementType": "create_fk",
+      "statementTarget": ["table", "public", "statement_line"],
+      "writes": [
+        "s|fk|public.statement_line.statement_line_import_fk",
+        "n|fk|public.statement_line.statement_line_import_fk",
+        "e|fk|public.statement_line.statement_line_import_fk",
+        "n|con|public.statement_line.statement_line_import_fk"
+      ],
+      "reads": [
+        "n|tbl|public.statement_line",
+        "n|sch|public",
+        "n|tbl|public.import",
+        "n|sch|public",
+        "n|col|public.statement_line.user_id",
+        "n|col|public.statement_line.import_id",
+        "n|col|public.import.user_id",
+        "n|col|public.import.id",
+        "e|uniqueness|public.import.id.user_id"
+      ]
+    },
+    {
+      "statementType": "create_policy",
+      "statementTarget": ["table", "public", "account"],
+      "writes": [
+        "s|pol|public.account.account_own_rows_only",
+        "n|pol|public.account.account_own_rows_only",
+        "e|pol|public.account.account_own_rows_only"
+      ],
+      "reads": ["n|tbl|public.account", "n|sch|public", "e|rls|public.account"]
+    },
+    {
+      "statementType": "create_policy",
+      "statementTarget": ["table", "public", "account_balance"],
+      "writes": [
+        "s|pol|public.account_balance.account_balance_own_rows_only",
+        "n|pol|public.account_balance.account_balance_own_rows_only",
+        "e|pol|public.account_balance.account_balance_own_rows_only"
+      ],
+      "reads": ["n|tbl|public.account_balance", "n|sch|public", "e|rls|public.account_balance"]
+    },
+    {
+      "statementType": "create_policy",
+      "statementTarget": ["table", "public", "import_file"],
+      "writes": [
+        "s|pol|public.import_file.import_file_own_rows_only",
+        "n|pol|public.import_file.import_file_own_rows_only",
+        "e|pol|public.import_file.import_file_own_rows_only"
+      ],
+      "reads": ["n|tbl|public.import_file", "n|sch|public", "e|rls|public.import_file"]
+    },
+    {
+      "statementType": "create_policy",
+      "statementTarget": ["table", "public", "import_profile"],
+      "writes": [
+        "s|pol|public.import_profile.import_profile_own_rows_only",
+        "n|pol|public.import_profile.import_profile_own_rows_only",
+        "e|pol|public.import_profile.import_profile_own_rows_only"
+      ],
+      "reads": ["n|tbl|public.import_profile", "n|sch|public", "e|rls|public.import_profile"]
+    },
+    {
+      "statementType": "create_policy",
+      "statementTarget": ["table", "public", "import"],
+      "writes": [
+        "s|pol|public.import.import_own_rows_only",
+        "n|pol|public.import.import_own_rows_only",
+        "e|pol|public.import.import_own_rows_only"
+      ],
+      "reads": ["n|tbl|public.import", "n|sch|public", "e|rls|public.import"]
+    },
+    {
+      "statementType": "create_policy",
+      "statementTarget": ["table", "public", "statement_line"],
+      "writes": [
+        "s|pol|public.statement_line.statement_line_own_rows_only",
+        "n|pol|public.statement_line.statement_line_own_rows_only",
+        "e|pol|public.statement_line.statement_line_own_rows_only"
+      ],
+      "reads": ["n|tbl|public.statement_line", "n|sch|public", "e|rls|public.statement_line"]
+    }
+  ],
+  "deltas": [
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "name": "account",
+        "isRlsEnabled": true,
+        "entityType": "tables"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "name": "account_balance",
+        "isRlsEnabled": true,
+        "entityType": "tables"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "name": "import_file",
+        "isRlsEnabled": true,
+        "entityType": "tables"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "name": "import_profile",
+        "isRlsEnabled": true,
+        "entityType": "tables"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "name": "import",
+        "isRlsEnabled": true,
+        "entityType": "tables"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "name": "statement_line",
+        "isRlsEnabled": true,
+        "entityType": "tables"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "name": "account_envelope",
+        "values": ["pea", "life_insurance", "livret_a", "other"],
+        "entityType": "enums"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "name": "account_kind",
+        "values": ["current", "savings", "card", "investment", "loan", "benefit"],
+        "entityType": "enums"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "name": "account_mode",
+        "values": ["lines", "balance"],
+        "entityType": "enums"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "name": "balance_source",
+        "values": ["statement", "noted"],
+        "entityType": "enums"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "name": "credit_order",
+        "values": ["oldest_first", "expiring_first"],
+        "entityType": "enums"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "name": "import_format",
+        "values": ["ofx", "qfx", "qif", "camt053", "mt940", "csv"],
+        "entityType": "enums"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "name": "import_profile_kind",
+        "values": ["statement", "operations"],
+        "entityType": "enums"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "name": "import_status",
+        "values": ["queued", "reading", "waiting", "saving", "done", "failed", "undone"],
+        "entityType": "enums"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "name": "line_source",
+        "values": ["import", "manual", "balance", "counterpart"],
+        "entityType": "enums"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "name": "line_state",
+        "values": ["counted", "held", "discarded"],
+        "entityType": "enums"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "account",
+        "name": "id",
+        "type": "uuid",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "uuidv7()",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "account",
+        "name": "user_id",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "account",
+        "name": "name",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "account",
+        "name": "kind",
+        "type": "account_kind",
+        "typeSchema": "public",
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "account",
+        "name": "envelope",
+        "type": "account_envelope",
+        "typeSchema": "public",
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "account",
+        "name": "institution",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "account",
+        "name": "currency",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "account",
+        "name": "mode",
+        "type": "account_mode",
+        "typeSchema": "public",
+        "notNull": true,
+        "dimensions": 0,
+        "default": "'lines'",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "account",
+        "name": "opening_balance_minor",
+        "type": "bigint",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "0",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "account",
+        "name": "opened_on",
+        "type": "date",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "account",
+        "name": "closed_on",
+        "type": "date",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "account",
+        "name": "iban",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "account",
+        "name": "number",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "account",
+        "name": "settles_into_account_id",
+        "type": "uuid",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "account",
+        "name": "credit_order",
+        "type": "credit_order",
+        "typeSchema": "public",
+        "notNull": true,
+        "dimensions": 0,
+        "default": "'oldest_first'",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "account",
+        "name": "created_at",
+        "type": "timestamp with time zone",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "now()",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "account",
+        "name": "updated_at",
+        "type": "timestamp with time zone",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "now()",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "account_balance",
+        "name": "id",
+        "type": "uuid",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "uuidv7()",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "account_balance",
+        "name": "user_id",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "account_balance",
+        "name": "account_id",
+        "type": "uuid",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "account_balance",
+        "name": "day",
+        "type": "date",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "account_balance",
+        "name": "balance_minor",
+        "type": "bigint",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "account_balance",
+        "name": "source",
+        "type": "balance_source",
+        "typeSchema": "public",
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "account_balance",
+        "name": "import_id",
+        "type": "uuid",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "import_file",
+        "name": "import_id",
+        "type": "uuid",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "import_file",
+        "name": "user_id",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "import_file",
+        "name": "content",
+        "type": "bytea",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "import_profile",
+        "name": "id",
+        "type": "uuid",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "uuidv7()",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "import_profile",
+        "name": "user_id",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "import_profile",
+        "name": "name",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "import_profile",
+        "name": "institution",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "import_profile",
+        "name": "kind",
+        "type": "import_profile_kind",
+        "typeSchema": "public",
+        "notNull": true,
+        "dimensions": 0,
+        "default": "'statement'",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "import_profile",
+        "name": "definition",
+        "type": "jsonb",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "import_profile",
+        "name": "header",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "import_profile",
+        "name": "created_at",
+        "type": "timestamp with time zone",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "now()",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "import_profile",
+        "name": "updated_at",
+        "type": "timestamp with time zone",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "now()",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "import",
+        "name": "id",
+        "type": "uuid",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "uuidv7()",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "import",
+        "name": "user_id",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "import",
+        "name": "account_id",
+        "type": "uuid",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "import",
+        "name": "file_name",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "import",
+        "name": "file_sha256",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "import",
+        "name": "format",
+        "type": "import_format",
+        "typeSchema": "public",
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "import",
+        "name": "profile_id",
+        "type": "uuid",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "import",
+        "name": "shipped_profile",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "import",
+        "name": "status",
+        "type": "import_status",
+        "typeSchema": "public",
+        "notNull": true,
+        "dimensions": 0,
+        "default": "'queued'",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "import",
+        "name": "period_from",
+        "type": "date",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "import",
+        "name": "period_to",
+        "type": "date",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "import",
+        "name": "lines_read",
+        "type": "integer",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "0",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "import",
+        "name": "lines_added",
+        "type": "integer",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "0",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "import",
+        "name": "lines_duplicate",
+        "type": "integer",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "0",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "import",
+        "name": "lines_held",
+        "type": "integer",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "0",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "import",
+        "name": "error_code",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "import",
+        "name": "created_at",
+        "type": "timestamp with time zone",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "now()",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "import",
+        "name": "finished_at",
+        "type": "timestamp with time zone",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "import",
+        "name": "undone_at",
+        "type": "timestamp with time zone",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "statement_line",
+        "name": "id",
+        "type": "uuid",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "uuidv7()",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "statement_line",
+        "name": "user_id",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "statement_line",
+        "name": "account_id",
+        "type": "uuid",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "statement_line",
+        "name": "import_id",
+        "type": "uuid",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "statement_line",
+        "name": "source",
+        "type": "line_source",
+        "typeSchema": "public",
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "statement_line",
+        "name": "state",
+        "type": "line_state",
+        "typeSchema": "public",
+        "notNull": true,
+        "dimensions": 0,
+        "default": "'counted'",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "statement_line",
+        "name": "booked_on",
+        "type": "date",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "statement_line",
+        "name": "value_on",
+        "type": "date",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "statement_line",
+        "name": "amount_minor",
+        "type": "bigint",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "statement_line",
+        "name": "original_amount_minor",
+        "type": "bigint",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "statement_line",
+        "name": "original_currency",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "statement_line",
+        "name": "label",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "statement_line",
+        "name": "memo",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "statement_line",
+        "name": "counterparty_name",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "statement_line",
+        "name": "counterparty_iban",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "statement_line",
+        "name": "bank_id",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "statement_line",
+        "name": "dedup_key",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "statement_line",
+        "name": "duplicate_of_line_id",
+        "type": "uuid",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "statement_line",
+        "name": "expires_on",
+        "type": "date",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "statement_line",
+        "name": "created_at",
+        "type": "timestamp with time zone",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "now()",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "statement_line",
+        "name": "updated_at",
+        "type": "timestamp with time zone",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "now()",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "account_balance",
+        "name": "account_balance_account_id_day_idx",
+        "nameExplicit": true,
+        "columns": [
+          {
+            "value": "account_id",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          },
+          {
+            "value": "day",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          }
+        ],
+        "isUnique": false,
+        "where": null,
+        "with": "",
+        "method": "btree",
+        "entityType": "indexes"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "account_balance",
+        "name": "account_balance_import_id_idx",
+        "nameExplicit": true,
+        "columns": [
+          {
+            "value": "import_id",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          }
+        ],
+        "isUnique": false,
+        "where": null,
+        "with": "",
+        "method": "btree",
+        "entityType": "indexes"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "import",
+        "name": "import_account_id_idx",
+        "nameExplicit": true,
+        "columns": [
+          {
+            "value": "account_id",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          }
+        ],
+        "isUnique": false,
+        "where": null,
+        "with": "",
+        "method": "btree",
+        "entityType": "indexes"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "import",
+        "name": "import_user_id_file_sha256_idx",
+        "nameExplicit": true,
+        "columns": [
+          {
+            "value": "user_id",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          },
+          {
+            "value": "file_sha256",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          }
+        ],
+        "isUnique": false,
+        "where": null,
+        "with": "",
+        "method": "btree",
+        "entityType": "indexes"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "statement_line",
+        "name": "statement_line_account_id_booked_on_id_idx",
+        "nameExplicit": true,
+        "columns": [
+          {
+            "value": "account_id",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          },
+          {
+            "value": "booked_on",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          },
+          {
+            "value": "id",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          }
+        ],
+        "isUnique": false,
+        "where": null,
+        "with": "",
+        "method": "btree",
+        "entityType": "indexes"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "statement_line",
+        "name": "statement_line_import_id_idx",
+        "nameExplicit": true,
+        "columns": [
+          {
+            "value": "import_id",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          }
+        ],
+        "isUnique": false,
+        "where": null,
+        "with": "",
+        "method": "btree",
+        "entityType": "indexes"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "statement_line",
+        "name": "statement_line_duplicate_of_line_id_idx",
+        "nameExplicit": true,
+        "columns": [
+          {
+            "value": "duplicate_of_line_id",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          }
+        ],
+        "isUnique": false,
+        "where": null,
+        "with": "",
+        "method": "btree",
+        "entityType": "indexes"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "account",
+        "name": "account_user_id_auth_user_id_fkey",
+        "nameExplicit": false,
+        "columns": ["user_id"],
+        "schemaTo": "public",
+        "tableTo": "auth_user",
+        "columnsTo": ["id"],
+        "onUpdate": "NO ACTION",
+        "onDelete": "CASCADE",
+        "entityType": "fks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "account_balance",
+        "name": "account_balance_user_id_auth_user_id_fkey",
+        "nameExplicit": false,
+        "columns": ["user_id"],
+        "schemaTo": "public",
+        "tableTo": "auth_user",
+        "columnsTo": ["id"],
+        "onUpdate": "NO ACTION",
+        "onDelete": "CASCADE",
+        "entityType": "fks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "account_balance",
+        "name": "account_balance_account_fk",
+        "nameExplicit": true,
+        "columns": ["user_id", "account_id"],
+        "schemaTo": "public",
+        "tableTo": "account",
+        "columnsTo": ["user_id", "id"],
+        "onUpdate": "NO ACTION",
+        "onDelete": "CASCADE",
+        "entityType": "fks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "account_balance",
+        "name": "account_balance_import_fk",
+        "nameExplicit": true,
+        "columns": ["user_id", "import_id"],
+        "schemaTo": "public",
+        "tableTo": "import",
+        "columnsTo": ["user_id", "id"],
+        "onUpdate": "NO ACTION",
+        "onDelete": "CASCADE",
+        "entityType": "fks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "import_file",
+        "name": "import_file_user_id_auth_user_id_fkey",
+        "nameExplicit": false,
+        "columns": ["user_id"],
+        "schemaTo": "public",
+        "tableTo": "auth_user",
+        "columnsTo": ["id"],
+        "onUpdate": "NO ACTION",
+        "onDelete": "CASCADE",
+        "entityType": "fks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "import_file",
+        "name": "import_file_import_fk",
+        "nameExplicit": true,
+        "columns": ["user_id", "import_id"],
+        "schemaTo": "public",
+        "tableTo": "import",
+        "columnsTo": ["user_id", "id"],
+        "onUpdate": "NO ACTION",
+        "onDelete": "CASCADE",
+        "entityType": "fks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "import_profile",
+        "name": "import_profile_user_id_auth_user_id_fkey",
+        "nameExplicit": false,
+        "columns": ["user_id"],
+        "schemaTo": "public",
+        "tableTo": "auth_user",
+        "columnsTo": ["id"],
+        "onUpdate": "NO ACTION",
+        "onDelete": "CASCADE",
+        "entityType": "fks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "import",
+        "name": "import_user_id_auth_user_id_fkey",
+        "nameExplicit": false,
+        "columns": ["user_id"],
+        "schemaTo": "public",
+        "tableTo": "auth_user",
+        "columnsTo": ["id"],
+        "onUpdate": "NO ACTION",
+        "onDelete": "CASCADE",
+        "entityType": "fks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "import",
+        "name": "import_account_fk",
+        "nameExplicit": true,
+        "columns": ["user_id", "account_id"],
+        "schemaTo": "public",
+        "tableTo": "account",
+        "columnsTo": ["user_id", "id"],
+        "onUpdate": "NO ACTION",
+        "onDelete": "CASCADE",
+        "entityType": "fks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "statement_line",
+        "name": "statement_line_user_id_auth_user_id_fkey",
+        "nameExplicit": false,
+        "columns": ["user_id"],
+        "schemaTo": "public",
+        "tableTo": "auth_user",
+        "columnsTo": ["id"],
+        "onUpdate": "NO ACTION",
+        "onDelete": "CASCADE",
+        "entityType": "fks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "statement_line",
+        "name": "statement_line_account_fk",
+        "nameExplicit": true,
+        "columns": ["user_id", "account_id"],
+        "schemaTo": "public",
+        "tableTo": "account",
+        "columnsTo": ["user_id", "id"],
+        "onUpdate": "NO ACTION",
+        "onDelete": "CASCADE",
+        "entityType": "fks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "statement_line",
+        "name": "statement_line_import_fk",
+        "nameExplicit": true,
+        "columns": ["user_id", "import_id"],
+        "schemaTo": "public",
+        "tableTo": "import",
+        "columnsTo": ["user_id", "id"],
+        "onUpdate": "NO ACTION",
+        "onDelete": "CASCADE",
+        "entityType": "fks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "import_file",
+        "name": "import_file_pkey",
+        "columns": ["import_id"],
+        "nameExplicit": true,
+        "entityType": "pks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "account",
+        "name": "account_pkey",
+        "columns": ["id"],
+        "nameExplicit": false,
+        "entityType": "pks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "account_balance",
+        "name": "account_balance_pkey",
+        "columns": ["id"],
+        "nameExplicit": false,
+        "entityType": "pks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "import_profile",
+        "name": "import_profile_pkey",
+        "columns": ["id"],
+        "nameExplicit": false,
+        "entityType": "pks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "import",
+        "name": "import_pkey",
+        "columns": ["id"],
+        "nameExplicit": false,
+        "entityType": "pks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "statement_line",
+        "name": "statement_line_pkey",
+        "columns": ["id"],
+        "nameExplicit": false,
+        "entityType": "pks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "account",
+        "name": "account_user_id_id_key",
+        "nameExplicit": true,
+        "columns": ["user_id", "id"],
+        "nullsNotDistinct": false,
+        "entityType": "uniques"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "account",
+        "name": "account_user_id_iban_key",
+        "nameExplicit": true,
+        "columns": ["user_id", "iban"],
+        "nullsNotDistinct": false,
+        "entityType": "uniques"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "account",
+        "name": "account_user_id_number_key",
+        "nameExplicit": true,
+        "columns": ["user_id", "number"],
+        "nullsNotDistinct": false,
+        "entityType": "uniques"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "import_profile",
+        "name": "import_profile_user_id_id_key",
+        "nameExplicit": true,
+        "columns": ["user_id", "id"],
+        "nullsNotDistinct": false,
+        "entityType": "uniques"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "import",
+        "name": "import_user_id_id_key",
+        "nameExplicit": true,
+        "columns": ["user_id", "id"],
+        "nullsNotDistinct": false,
+        "entityType": "uniques"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "statement_line",
+        "name": "statement_line_user_id_id_key",
+        "nameExplicit": true,
+        "columns": ["user_id", "id"],
+        "nullsNotDistinct": false,
+        "entityType": "uniques"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "statement_line",
+        "name": "statement_line_account_id_dedup_key_key",
+        "nameExplicit": true,
+        "columns": ["account_id", "dedup_key"],
+        "nullsNotDistinct": false,
+        "entityType": "uniques"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "account",
+        "name": "account_currency_iso_4217",
+        "value": "\"currency\" ~ '^[A-Z]{3}$'",
+        "entityType": "checks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "account",
+        "name": "account_only_a_card_settles",
+        "value": "\"settles_into_account_id\" is null or \"kind\" = 'card'",
+        "entityType": "checks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "account_balance",
+        "name": "account_balance_statement_has_import",
+        "value": "(\"source\" = 'statement') = (\"import_id\" is not null)",
+        "entityType": "checks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "import",
+        "name": "import_one_profile",
+        "value": "\"profile_id\" is null or \"shipped_profile\" is null",
+        "entityType": "checks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "statement_line",
+        "name": "statement_line_imported_has_import",
+        "value": "(\"source\" = 'import') = (\"import_id\" is not null)",
+        "entityType": "checks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "statement_line",
+        "name": "statement_line_original_amount_and_currency",
+        "value": "(\"original_amount_minor\" is null) = (\"original_currency\" is null)",
+        "entityType": "checks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "account",
+        "name": "account_own_rows_only",
+        "as": "PERMISSIVE",
+        "for": "ALL",
+        "roles": ["public"],
+        "using": "\"user_id\" = current_setting('gousset.user_id', true)",
+        "withCheck": "\"user_id\" = current_setting('gousset.user_id', true)",
+        "entityType": "policies"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "account_balance",
+        "name": "account_balance_own_rows_only",
+        "as": "PERMISSIVE",
+        "for": "ALL",
+        "roles": ["public"],
+        "using": "\"user_id\" = current_setting('gousset.user_id', true)",
+        "withCheck": "\"user_id\" = current_setting('gousset.user_id', true)",
+        "entityType": "policies"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "import_file",
+        "name": "import_file_own_rows_only",
+        "as": "PERMISSIVE",
+        "for": "ALL",
+        "roles": ["public"],
+        "using": "\"user_id\" = current_setting('gousset.user_id', true)",
+        "withCheck": "\"user_id\" = current_setting('gousset.user_id', true)",
+        "entityType": "policies"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "import_profile",
+        "name": "import_profile_own_rows_only",
+        "as": "PERMISSIVE",
+        "for": "ALL",
+        "roles": ["public"],
+        "using": "\"user_id\" = current_setting('gousset.user_id', true)",
+        "withCheck": "\"user_id\" = current_setting('gousset.user_id', true)",
+        "entityType": "policies"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "import",
+        "name": "import_own_rows_only",
+        "as": "PERMISSIVE",
+        "for": "ALL",
+        "roles": ["public"],
+        "using": "\"user_id\" = current_setting('gousset.user_id', true)",
+        "withCheck": "\"user_id\" = current_setting('gousset.user_id', true)",
+        "entityType": "policies"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "statement_line",
+        "name": "statement_line_own_rows_only",
+        "as": "PERMISSIVE",
+        "for": "ALL",
+        "roles": ["public"],
+        "using": "\"user_id\" = current_setting('gousset.user_id', true)",
+        "withCheck": "\"user_id\" = current_setting('gousset.user_id', true)",
+        "entityType": "policies"
+      }
+    }
+  ]
+}
