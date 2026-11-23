@@ -29,6 +29,7 @@
     "better-auth": "catalog:",
     "effect": "catalog:",
     "nitro": "3.0.261103-rc",
+    "pg-boss": "^12.39.0",
     "react": "catalog:",
     "react-dom": "catalog:",
     "tailwindcss": "catalog:",

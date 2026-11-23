@@ -122,6 +122,39 @@ const en = {
     title: "Search",
     empty: "Nothing to search yet.",
   },
+  jobs: {
+    /** What a failed job says, by its code: what happened, and what to do. */
+    failures: {
+      interrupted:
+        "The job was stopped before it finished: the app stopped, or it took too long. Try again.",
+      unexpected:
+        "Something went wrong in the job. Try again; if it fails again, the app's log says where.",
+      invalidInput: "The job was sent something it cannot read. Start it again from its page.",
+      test: "The test job failed on purpose, as asked. Start it again with fewer failing attempts.",
+    },
+    /** The end-to-end harness's page (`/e2e/jobs`). */
+    test: {
+      title: "Test job",
+      description:
+        "The end-to-end harness's job: it reports its steps, fails as often as asked, and touches a month.",
+      count: "Items to count",
+      itemMs: "Milliseconds per item",
+      failures: "Attempts that fail",
+      start: "Start the test job",
+      job: "Counting test items",
+      steps: { prepare: "Preparing", count: "Counting the items", finish: "Finishing" },
+      done: "Every item counted.",
+      month: "The month it touches",
+      received: "Received",
+    },
+    /** The development panel (`src/devtools.tsx`). */
+    panel: {
+      title: "Jobs",
+      description: "Your last jobs and where each stands. Development only.",
+      empty: "No job yet.",
+      attempt: (attempt: number, attempts: number) => `Attempt ${attempt} of ${attempts}`,
+    },
+  },
   errors: {
     invalidCredentials: "Wrong e-mail or password.",
     tooManyAttempts: "Too many failed attempts. Try again in a few minutes.",
@@ -260,6 +293,37 @@ const fr: Messages = {
     title: "Recherche",
     empty: "Rien à rechercher pour l'instant.",
   },
+  jobs: {
+    failures: {
+      interrupted:
+        "La tâche a été arrêtée avant la fin : l'application s'est arrêtée, ou elle a pris trop de temps. Réessayez.",
+      unexpected:
+        "Un problème est survenu dans la tâche. Réessayez ; si elle échoue encore, le journal de l'application dit où.",
+      invalidInput:
+        "La tâche a reçu quelque chose qu'elle ne sait pas lire. Relancez-la depuis sa page.",
+      test: "La tâche de test a échoué exprès, comme demandé. Relancez-la avec moins de tentatives en échec.",
+    },
+    test: {
+      title: "Tâche de test",
+      description:
+        "La tâche du banc de test : elle annonce ses étapes, échoue autant que demandé et touche un mois.",
+      count: "Éléments à compter",
+      itemMs: "Millisecondes par élément",
+      failures: "Tentatives en échec",
+      start: "Lancer la tâche de test",
+      job: "Comptage des éléments de test",
+      steps: { prepare: "Préparation", count: "Comptage des éléments", finish: "Fin" },
+      done: "Tous les éléments sont comptés.",
+      month: "Le mois qu'elle touche",
+      received: "Reçu",
+    },
+    panel: {
+      title: "Tâches",
+      description: "Vos dernières tâches et où en est chacune. En développement seulement.",
+      empty: "Aucune tâche pour l'instant.",
+      attempt: (attempt, attempts) => `Tentative ${attempt} sur ${attempts}`,
+    },
+  },
   errors: {
     invalidCredentials: "E-mail ou mot de passe incorrect.",
     tooManyAttempts: "Trop de tentatives échouées. Réessayez dans quelques minutes.",
@@ -314,6 +378,20 @@ export function pickLocale(acceptLanguage: string | undefined): Locale {
   }
 
   return "en";
+}
+
+/** What a failed job says, by its failure's code (`JobFailed`, `FAILURES`). */
+export function jobFailureMessage(messages: Messages, code: string | null): string {
+  switch (code) {
+    case "INTERRUPTED":
+      return messages.jobs.failures.interrupted;
+    case "INVALID_INPUT":
+      return messages.jobs.failures.invalidInput;
+    case "TEST_FAILURE":
+      return messages.jobs.failures.test;
+    default:
+      return messages.jobs.failures.unexpected;
+  }
 }
 
 /** The message for a refusal of better-auth or of Gousset, by its code. */

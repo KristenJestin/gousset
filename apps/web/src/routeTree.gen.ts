@@ -21,7 +21,9 @@ import { Route as AuthedConsentRouteImport } from './routes/_authed/consent'
 import { Route as AuthedSettingsRouteImport } from './routes/_authed/settings'
 import { Route as AuthedUsersRouteImport } from './routes/_authed/users'
 import { Route as E2eTodayRouteImport } from './routes/e2e/today'
+import { Route as AuthedE2eJobsRouteImport } from './routes/_authed/e2e/jobs'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
+import { Route as ApiJobsJobIdEventsRouteImport } from './routes/api/jobs/$jobId/events'
 
 const AuthedRoute = AuthedRouteImport.update({
   id: '/_authed',
@@ -82,9 +84,19 @@ const E2eTodayRoute = E2eTodayRouteImport.update({
   path: '/e2e/today',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthedE2eJobsRoute = AuthedE2eJobsRouteImport.update({
+  id: '/e2e/jobs',
+  path: '/e2e/jobs',
+  getParentRoute: () => AuthedRoute,
+} as any)
 const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
   id: '/api/auth/$',
   path: '/api/auth/$',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiJobsJobIdEventsRoute = ApiJobsJobIdEventsRouteImport.update({
+  id: '/api/jobs/$jobId/events',
+  path: '/api/jobs/$jobId/events',
   getParentRoute: () => rootRouteImport,
 } as any)
 
@@ -100,7 +112,9 @@ export interface FileRoutesByFullPath {
   '/settings': typeof AuthedSettingsRoute
   '/users': typeof AuthedUsersRoute
   '/e2e/today': typeof E2eTodayRoute
+  '/e2e/jobs': typeof AuthedE2eJobsRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/jobs/$jobId/events': typeof ApiJobsJobIdEventsRoute
 }
 export interface FileRoutesByTo {
   '/health': typeof HealthRoute
@@ -114,7 +128,9 @@ export interface FileRoutesByTo {
   '/users': typeof AuthedUsersRoute
   '/e2e/today': typeof E2eTodayRoute
   '/': typeof AuthedIndexRoute
+  '/e2e/jobs': typeof AuthedE2eJobsRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/jobs/$jobId/events': typeof ApiJobsJobIdEventsRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -130,7 +146,9 @@ export interface FileRoutesById {
   '/_authed/users': typeof AuthedUsersRoute
   '/e2e/today': typeof E2eTodayRoute
   '/_authed/': typeof AuthedIndexRoute
+  '/_authed/e2e/jobs': typeof AuthedE2eJobsRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/jobs/$jobId/events': typeof ApiJobsJobIdEventsRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -146,7 +164,9 @@ export interface FileRouteTypes {
     | '/settings'
     | '/users'
     | '/e2e/today'
+    | '/e2e/jobs'
     | '/api/auth/$'
+    | '/api/jobs/$jobId/events'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/health'
@@ -160,7 +180,9 @@ export interface FileRouteTypes {
     | '/users'
     | '/e2e/today'
     | '/'
+    | '/e2e/jobs'
     | '/api/auth/$'
+    | '/api/jobs/$jobId/events'
   id:
     | '__root__'
     | '/_authed'
@@ -175,7 +197,9 @@ export interface FileRouteTypes {
     | '/_authed/users'
     | '/e2e/today'
     | '/_authed/'
+    | '/_authed/e2e/jobs'
     | '/api/auth/$'
+    | '/api/jobs/$jobId/events'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -187,6 +211,7 @@ export interface RootRouteChildren {
   DotwellKnownSplatRoute: typeof DotwellKnownSplatRoute
   E2eTodayRoute: typeof E2eTodayRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
+  ApiJobsJobIdEventsRoute: typeof ApiJobsJobIdEventsRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -275,11 +300,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof E2eTodayRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_authed/e2e/jobs': {
+      id: '/_authed/e2e/jobs'
+      path: '/e2e/jobs'
+      fullPath: '/e2e/jobs'
+      preLoaderRoute: typeof AuthedE2eJobsRouteImport
+      parentRoute: typeof AuthedRoute
+    }
     '/api/auth/$': {
       id: '/api/auth/$'
       path: '/api/auth/$'
       fullPath: '/api/auth/$'
       preLoaderRoute: typeof ApiAuthSplatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/jobs/$jobId/events': {
+      id: '/api/jobs/$jobId/events'
+      path: '/api/jobs/$jobId/events'
+      fullPath: '/api/jobs/$jobId/events'
+      preLoaderRoute: typeof ApiJobsJobIdEventsRouteImport
       parentRoute: typeof rootRouteImport
     }
   }
@@ -291,6 +330,7 @@ interface AuthedRouteChildren {
   AuthedSettingsRoute: typeof AuthedSettingsRoute
   AuthedUsersRoute: typeof AuthedUsersRoute
   AuthedIndexRoute: typeof AuthedIndexRoute
+  AuthedE2eJobsRoute: typeof AuthedE2eJobsRoute
 }
 
 const AuthedRouteChildren: AuthedRouteChildren = {
@@ -299,6 +339,7 @@ const AuthedRouteChildren: AuthedRouteChildren = {
   AuthedSettingsRoute: AuthedSettingsRoute,
   AuthedUsersRoute: AuthedUsersRoute,
   AuthedIndexRoute: AuthedIndexRoute,
+  AuthedE2eJobsRoute: AuthedE2eJobsRoute,
 }
 
 const AuthedRouteWithChildren =
@@ -313,6 +354,7 @@ const rootRouteChildren: RootRouteChildren = {
   DotwellKnownSplatRoute: DotwellKnownSplatRoute,
   E2eTodayRoute: E2eTodayRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
+  ApiJobsJobIdEventsRoute: ApiJobsJobIdEventsRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
