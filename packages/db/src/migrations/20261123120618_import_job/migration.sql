@@ -1,0 +1,1 @@
+ALTER TABLE "import" ADD COLUMN "job_id" uuid;

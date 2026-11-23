@@ -1,0 +1,37 @@
+{
+  "type": "diff",
+  "version": "10",
+  "dialect": "postgres",
+  "id": "780562ac-4327-42b7-98bd-3b0402a066e2",
+  "prevIds": ["30550eb6-ce59-49be-ae50-3e7c2c8f40b2"],
+  "footprints": [
+    {
+      "statementType": "add_column",
+      "statementTarget": ["column", "public", "import", "job_id"],
+      "writes": [
+        "s|col|public.import.job_id",
+        "n|col|public.import.job_id",
+        "e|col|public.import.job_id"
+      ],
+      "reads": ["n|tbl|public.import", "n|sch|public"]
+    }
+  ],
+  "deltas": [
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "import",
+        "name": "job_id",
+        "type": "uuid",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    }
+  ]
+}
