@@ -81,6 +81,17 @@ const en = {
     moreRows: (count: number) => `+ ${count} more`,
     empty: "Nothing to show this month.",
   },
+  jobs: {
+    /** A background job's state, beside its title. */
+    waiting: "Waiting to start",
+    step: (at: number, of: number) => `Step ${at} of ${of}`,
+    retrying: (attempt: number, attempts: number) => `Retrying: attempt ${attempt} of ${attempts}`,
+    completed: "Done",
+    failed: (attempts: number) => (attempts === 1 ? "Failed" : `Failed after ${attempts} attempts`),
+    /** How much of a step is done: "312 of 1,204". */
+    counts: (done: string, total: string) => `${done} of ${total}`,
+    retry: "Try again",
+  },
 };
 
 export type UiMessages = typeof en;
@@ -147,6 +158,16 @@ const fr: UiMessages = {
     benchmark: (amount: string) => `repère ${amount}`,
     moreRows: (count: number) => `+ ${count} de plus`,
     empty: "Rien à afficher ce mois-ci.",
+  },
+  jobs: {
+    waiting: "En attente",
+    step: (at: number, of: number) => `Étape ${at} sur ${of}`,
+    retrying: (attempt: number, attempts: number) =>
+      `Nouvel essai : tentative ${attempt} sur ${attempts}`,
+    completed: "Terminé",
+    failed: (attempts: number) => (attempts === 1 ? "Échec" : `Échec après ${attempts} tentatives`),
+    counts: (done: string, total: string) => `${done} sur ${total}`,
+    retry: "Réessayer",
   },
 };
 

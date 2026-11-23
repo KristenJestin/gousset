@@ -37,6 +37,7 @@ const SHOTS: ReadonlyArray<Shot> = [
   { id: "overlays-dialog--default", open: "click" },
   { id: "overlays-sheet--default", open: "click" },
   { id: "feedback-toaster--failed" },
+  { id: "feedback-job-progress--running" },
   { id: "states-emptystate--in-a-block" },
   { id: "states-errorstate--beside-a-working-block" },
   { id: "layout-card--with-description" },
