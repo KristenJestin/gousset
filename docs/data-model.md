@@ -14,6 +14,7 @@ A table below gives each column its Postgres type, whether it may be null (**nul
 - **`jsonb` only for a shape another package owns and decodes** with an Effect `Schema`: an import profile's definition (`packages/import`), a rule's conditions (v0.3). Anything the database must join on, constrain or refer to is a column.
 - **Nothing is soft-deleted.** An account is closed, a category or a subject archived: they keep their history. What is deleted is gone, and what refers to it goes with it or loses the reference, as each foreign key says. The one row kept for its memory is a discarded line ([Statement lines](#statement-lines)), so that it does not come back.
 - **An optional reference is cleared with its own column**: since foreign keys share `user_id` ([Ownership and isolation](#ownership-and-isolation)), they use `on delete set null (<column>)` (Postgres 15 and later), which never touches `user_id`. Drizzle cannot write it: those keys are in a custom migration, as #60 does.
+- **A reference that refuses its row's deletion is `on delete no action deferrable initially deferred`**, written **kept** below (a category in use, a security with operations), never `restrict`. Deleting a user cascades into every table at once, in an order the foreign keys' triggers choose: a `restrict` key could fire before the rows that point to it are gone, and the user could not be deleted. A deferred key is checked at commit, once every cascade has run, and still refuses a deletion that leaves a row pointing to nothing.
 - **No personal data in names, logs or telemetry**: labels, amounts, IBANs and file names live in their rows and nowhere else ([`architecture.md`](architecture.md#telemetry)).
 
 ## Money
@@ -46,13 +47,17 @@ A table below gives each column its Postgres type, whether it may be null (**nul
 3. Every server function, MCP tool and job that works for a user opens its transaction through one Effect service, `UserData` (`packages/db`), which starts with `set local role gousset_user` and `select set_config('gousset.user_id', $1, true)`. Both end with the transaction, so a pooled connection never carries a user into the next one.
 4. A transaction that switched role but set no user sees an empty setting, and the policies return no row: it fails closed.
 
-The role switch is what makes the policies bite. The app logs in as the Postgres image's user, a superuser, which row-level security never restricts; inside a user's transaction it acts as `gousset_user`, which it does restrict. Outside one, the app keeps its own role for what is not a user's data: migrations, better-auth, pg-boss's own schema, installation-wide jobs (prices, v0.6). That role is not restricted, so **a user's tables are reached only through `UserData`**: code that queries them elsewhere is a bug. The administrator is a user like the others for data: they never see another user's rows.
+The role switch is what makes the policies bite. The app logs in as the Postgres image's user, a superuser, which row-level security never restricts; inside a user's transaction it acts as `gousset_user`, which it does restrict. Outside one, the app keeps its own role for what is not a user's data: migrations, better-auth, pg-boss's own schema, installation-wide jobs (prices, v0.6). That role is not restricted, so **a user's tables are reached only through `UserData`**: code that queries them elsewhere is a bug. The one exception is the price job of v0.6, which reads the distinct ISINs of every user's `security` as the app's role, and nothing else of them.
+
+**The administrator is a user like the others for data**: they never see another user's rows, and they cannot act as another user. better-auth's admin plugin grants its administrators the right to impersonate a user by default; `packages/auth` removes that right (#65).
+
+**What this guards against today, and what not.** Row-level security catches a query that forgets its user's filter inside `UserData`. It does not stop SQL that is not the app's own: since the app logs in as a superuser, a value injected into a query could `reset role` or set `gousset.user_id` to another user, and a query sent through the global Drizzle handle instead of the transaction's sees every row. Every query is therefore parameterised (Drizzle's builder or `sql` with placeholders, never `sql.raw` with a value), and #66 closes the rest: the app logs in as a role that owns the tables but is no superuser, with `force row level security` on each user's table, and migrations run as another role. A slip then fails closed instead of open.
 
 A job that works for a user (an import, a rule applied to the past) carries the user's id in its payload (`owner`, as #14's jobs do) and opens the same transaction.
 
 **Every table added later** carries `user_id` and its foreign key, a unique `(user_id, id)` when anything refers to it, composite foreign keys, row-level security with the same policy, and its grant to `gousset_user` in its migration. #13's end-to-end test lists every table of the `public` schema that has a `user_id` (but better-auth's) and checks it has row-level security, the policy and the grant: a table that forgets one fails it.
 
-**Indexes and the policy.** The policy adds `user_id = …` to every query of a user's transaction. An index that serves a list therefore starts with `user_id`, or with a column that already belongs to one user (`account_id`). `current_setting` is stable within a statement, so Postgres uses such indexes.
+**Indexes and the policy.** The policy adds `user_id = …` to every query of a user's transaction. An index that serves a list therefore starts with `user_id`, or with a column that already belongs to one user (`account_id`). `current_setting` is stable within a statement, so Postgres uses such indexes. A condition whose operator is not `leakproof` (`like`, `ilike` and `pg_trgm`'s) is only applied after the policy's, so Postgres may not use an index on it under row-level security: the ticket that adds such an index checks with `explain` that it is used.
 
 ## Users
 
@@ -88,7 +93,7 @@ better-auth's `auth_user` is the user; its tables keep their `auth_` prefix (its
 | `credit_order` | `credit_order` | | `'oldest_first'` | read for a benefit account only: in which order its credits are used, `oldest_first` (by the day credited) or `expiring_first` (by expiry date) |
 | `created_at`, `updated_at` | `timestamptz` | | `now()` | |
 
-- Keys: unique `(user_id, id)`; unique `(user_id, iban)` and `(user_id, number)`, each when set (nulls are distinct), so that an import recognises its account by them.
+- Keys: unique `(user_id, id)`; unique `(user_id, iban)` when set (nulls are distinct), so that an import recognises its account by it. `number` is not unique: an OFX `ACCTID` is unique only with its `BANKID`, and two banks, or two masked cards (`XXXX1234`), can give one user the same number. A file whose number matches several accounts waits for the user to choose (`import.status = waiting`).
 - `settles_into_account_id`: `(user_id, settles_into_account_id) → account (user_id, id) on delete set null (settles_into_account_id)`.
 - Checks: `currency ~ '^[A-Z]{3}$'`; `settles_into_account_id is null or kind = 'card'`; `iban ~ '^[A-Z]{2}[0-9]{2}[A-Z0-9]{11,30}$'`, so that the unique key compares like with like.
 - No other index: a user has tens of accounts, read whole.
@@ -140,7 +145,7 @@ The account page's check (#15) compares the balance the app computes at the end 
 | `memo` | `text` | null | | the rest of the bank's text, when the format has a second field (OFX's `MEMO`, QIF's `M`, CAMT's remittance information) |
 | `counterparty_name` | `text` | null | | who paid or was paid, when the format names them (CAMT.053, MT940) |
 | `counterparty_iban` | `text` | null | | their IBAN, when given |
-| `bank_id` | `text` | null | | the bank's own reference for the line, as given (OFX's `FITID`, QIF's `N`, CAMT's entry reference), whether or not it is unique |
+| `bank_id` | `text` | null | | the bank's own reference for the line, as given, whether or not it is unique: OFX's and QFX's `FITID`, QIF's `N`, CAMT.053's account servicer reference (`Ntry/AcctSvcrRef`), MT940's references |
 | `dedup_key` | `text` | null | | the key that recognises the line in a later import ([Imports and deduplication](#imports-and-deduplication)) |
 | `duplicate_of_line_id` | `uuid` | null | | for a held line: the line it looks like; `(user_id, duplicate_of_line_id) → statement_line on delete set null (duplicate_of_line_id)` |
 | `expires_on` | `date` | null | | a credit of a benefit account: the day it expires |
@@ -195,15 +200,20 @@ The job reads the file from there, so an import interrupted by a restart resumes
 
 **The dedup key** (#20), computed by the import (`packages/core`) from each line a reader gives:
 
-- **When the format makes the bank's id unique within the account**: `bank:` and the id (`bank:20261021-000184`). That is OFX's and QFX's `FITID` and CAMT.053's account servicer reference. QIF's `N` (a cheque number or any reference) and MT940's references (often `NONREF`) do not count: they are kept in `bank_id` and the content key is used.
+- **When the format makes the bank's id unique within the account**: `bank:` and the id (`bank:20261021-000184`). That is OFX's and QFX's `FITID` and CAMT.053's account servicer reference, `Ntry/AcctSvcrRef`. CAMT.053's entry reference, `Ntry/NtryRef`, is never used: it is optional and often a sequence number within one statement, so line 1 of November would collide with line 1 of October and be dropped as a duplicate. QIF's `N` (a cheque number or any reference) and MT940's references (often `NONREF`) do not count: they are kept in `bank_id` and the content key is used. A line whose format counts but whose field is missing (a CAMT.053 entry without `AcctSvcrRef`) gets the content key too.
 - **Otherwise**: `content:` and the SHA-256 of the booking date, the amount and the label (trimmed, inner spaces collapsed), followed by the occurrence of that triple in the file: two identical coffees on the same day are `…#1` and `…#2`, and stay two.
 - The unique key `(account_id, dedup_key)` decides: the import inserts with `on conflict do nothing`, and what was not inserted is counted as a duplicate. Two imports running at once cannot add the same line twice, and an attempt run again after a crash adds nothing that the first one saved.
 
 Reimporting an overlapping period therefore adds only what is new: a day already imported with one coffee, read again with two, adds the second. A line that was held or discarded keeps its key, so it is not held again.
 
-**A near duplicate** is a line with no exact match but, on the same account, the same amount, a booking date a few days apart and a similar label, on a line from another import or entered by hand: the same payment read from a CSV after an OFX, say, whose labels differ. It is saved as `held`, with `duplicate_of_line_id`, and counted in `lines_held`.
+**A near duplicate** is a line with no exact match but, on the same account, the same amount, a booking date a few days apart and a similar label, on a line from another import or entered by hand: the same payment read from a CSV after an OFX, say, whose labels differ. It is saved as `held`, with `duplicate_of_line_id`, and counted in `lines_held`. Two lines whose keys already tell them apart are never near duplicates of each other:
 
-**Undoing an import** deletes its lines (counted, held and discarded), the balances read from it and its file, and marks it `undone`; the row stays, with its counts, in the history. It removes exactly what that import added (#20): a later import that skipped some of those lines as duplicates does not get them back, and importing its file again does. The undo screen says so when a later import overlaps the undone one. From v0.3, what points to those lines goes with them ([v0.3](#v03-classify)).
+- both have a `bank:` key, and the keys differ: the bank says they are two lines;
+- both have a `content:` key for the same date, amount and label, with another occurrence number: they are the second coffee of the day, which the content key counts on purpose.
+
+So a near duplicate is always a line read in another way than the one it looks like (a `bank:` key against a `content:` one, two content keys whose labels differ) or a line entered by hand.
+
+**Undoing an import** deletes its lines (counted, held and discarded), the balances read from it and its file, and marks it `undone`; the row stays, with its counts, in the history. It removes exactly what that import added (#20): a later import that skipped some of those lines as exact duplicates does not get them back, and importing its file again does. The undo screen says so when a later import overlaps the undone one. A line of another import that was held or discarded as a near duplicate of an undone line has lost what it duplicated: in the same transaction, undo makes it `counted` again and clears its `duplicate_of_line_id`, and the undo screen says how many lines it gives back that way. From v0.3, what points to those lines goes with them ([v0.3](#v03-classify)).
 
 ## Import profiles
 
@@ -249,7 +259,7 @@ Every table but `auth_user` also carries `user_id` ([Ownership and isolation](#o
 
 PR #60 (#13) writes this document's v0.2 tables, its foreign keys, its role and its policies as written here. It lacks:
 
-1. **#60 adds** the checks `account.iban ~ '^[A-Z]{2}[0-9]{2}[A-Z0-9]{11,30}$'`, `statement_line.original_currency ~ '^[A-Z]{3}$'` and `(source = 'import') = (dedup_key is not null)` on `statement_line`, and the unique index `account_balance (account_id, day) where source = 'noted'`. They are cheap before any data exists, and each guards a rule that later code relies on.
+1. **#60 adds** the checks `account.iban ~ '^[A-Z]{2}[0-9]{2}[A-Z0-9]{11,30}$'`, `statement_line.original_currency ~ '^[A-Z]{3}$'` and `(source = 'import') = (dedup_key is not null)` on `statement_line`, and the unique index `account_balance (account_id, day) where source = 'noted'`. It drops the unique key `account (user_id, number)`, which refuses two accounts of two banks with the same number. These are cheap before any data exists, and each guards a rule that later code relies on.
 2. **Left to the ticket that needs it**, each an addition that changes nothing #60 wrote:
    - `import.job_id`: #20, which writes the import's job;
    - `statement_line`'s `(user_id, booked_on, id)` index and its trigram index: #21, which searches every line.
@@ -264,8 +274,8 @@ Each later table carries `user_id`, composite foreign keys and the same policy (
 
 **`category`**: `id`, `user_id`, `parent_id uuid` null, `kind entry_kind` (`expense`, `income`: the entry's own enum, since a foreign key compares the kinds), `name text`, `icon text` null (a key of the icons shipped with `packages/ui`), `position integer`, `archived_at timestamptz` null, `benchmark_mode benchmark_mode` default `automatic` (`automatic`, `fixed`, `none`), `benchmark_minor bigint` null (a fixed benchmark, in the user's currency).
 
-- Unique `(user_id, id)` and `(user_id, id, kind)`; unique `(user_id, parent_id, name) nulls not distinct`, so two top-level categories cannot share a name either.
-- `(user_id, parent_id, kind) → category (user_id, id, kind) on delete restrict`: a category's children share its kind, and a parent with children is not deleted. A third level is refused by `packages/core` (#23), which reads the parent's own `parent_id`; the database does not see depth.
+- Unique `(user_id, id)` and `(user_id, id, kind)`; unique `(user_id, kind, parent_id, name) nulls not distinct`, so two top-level categories of a kind cannot share a name either, while an expense "Other" and an income "Other" can both exist.
+- `(user_id, parent_id, kind) → category (user_id, id, kind)`, kept: a category's children share its kind, and a parent with children is not deleted. A third level is refused by `packages/core` (#23), which reads the parent's own `parent_id`; the database does not see depth.
 - Check: `(benchmark_mode = 'fixed') = (benchmark_minor is not null)`.
 - Categories are archived, never deleted while an entry uses them; merging moves the entries and rules, then deletes the merged one. Siblings are ordered by `(position, id)`, `position` not unique, so a move writes the moved row only.
 - The default set is copied into a user's rows at sign-up, in the language of their browser: from then on the names are theirs. v0.3's migration gives each existing user the set in English.
@@ -278,7 +288,7 @@ Each later table carries `user_id`, composite foreign keys and the same policy (
 
 **`entry`**: `id`, `user_id`, `kind entry_kind`, `happened_on date`, `category_id uuid`, `merchant_id uuid` null (`on delete set null (merchant_id)`), `intermediary_id uuid` null (the intermediary's merchant, when a label names one, #30; same), `note text` null, `classified_by classified_by` (`rule`, `user`), `rule_id uuid` null (`on delete set null (rule_id)`), and from v0.4 `subscription_id uuid` null.
 
-- `(user_id, category_id, kind) → category (user_id, id, kind) on delete restrict`: an expense has an expense category, and every entry has exactly one (#23).
+- `(user_id, category_id, kind) → category (user_id, id, kind)`, kept: an expense has an expense category, and every entry has exactly one (#23).
 - Index `(user_id, happened_on)`: the month, by the day the expense happened. Indexes on `category_id` and `merchant_id`: the breakdowns and the merges.
 - `classified_by = 'user'` is what keeps a manual correction from being overwritten by a rule without asking (#25).
 - Its net cost is computed on read: its payments less its refunds.
@@ -292,7 +302,7 @@ Each later table carries `user_id`, composite foreign keys and the same policy (
 
 An entry's parts are all in one currency, refused otherwise by `packages/core`, until rates are decided.
 
-**`transfer`**: `id`, `user_id`, `out_line_id uuid`, `in_line_id uuid` (each `→ statement_line on delete cascade`, each unique: a line is the side of one transfer at most), `paired_by paired_by` (`import`, `rule`, `user`), `funds_entry_id uuid` null (`on delete set null (funds_entry_id)`), the expense a works council refund funds (#29; the expense keeps its cost). Check `out_line_id <> in_line_id`.
+**`transfer`**: `id`, `user_id`, `out_line_id uuid`, `in_line_id uuid` (each `→ statement_line on delete cascade`, each unique), `paired_by paired_by` (`import`, `rule`, `user`), `funds_entry_id uuid` null (`on delete set null (funds_entry_id)`), the expense a works council refund funds (#29; the expense keeps its cost). Check `out_line_id <> in_line_id`. A line is the side of one transfer at most: the two unique keys stop it being twice the same side, and `packages/core`, which writes every pairing, refuses a line that is already the other side of a transfer (two keys over two columns cannot say it).
 
 - The import pairs two lines of opposite amounts, a few days apart, on two of the user's accounts in the same currency, when there is one candidate; with several, it writes nothing and the line waits in the review, its candidates found again when shown (#26). The user may pair two lines by hand, across currencies too.
 - A deferred card's monthly debit is a transfer from the current account to the card account (#26); when the card's statement does not show it, the app makes that side (`source = counterpart`). A later file that brings the real line replaces it: the transfer moves to the imported line, and the counterpart is deleted.
@@ -317,7 +327,7 @@ An account kept by its balance (#31) has no lines from a file, but the month sti
 
 ### v0.5: Subjects
 
-- **`subject`**: `id`, `user_id`, `parent_id uuid` null (`on delete restrict`: a subject with children is not deleted), `name text`, `archived_at timestamptz` null; with a value, `estimated_value_minor bigint` null and `value_currency text` null (both or neither), `loan_account_id uuid` null (a `loan` account, `on delete set null (loan_account_id)`); with dates, `starts_on date` null and `ends_on date` null (`check (ends_on >= starts_on)`). Unique `(user_id, id)` and `(user_id, parent_id, name) nulls not distinct`. Any depth; a cycle is refused by `packages/core`, which walks the new parent's ancestors in the transaction that moves it.
+- **`subject`**: `id`, `user_id`, `parent_id uuid` null (kept: a subject with children is not deleted), `name text`, `archived_at timestamptz` null; with a value, `estimated_value_minor bigint` null and `value_currency text` null (both or neither), `loan_account_id uuid` null (a `loan` account, `on delete set null (loan_account_id)`); with dates, `starts_on date` null and `ends_on date` null (`check (ends_on >= starts_on)`). Unique `(user_id, id)` and `(user_id, parent_id, name) nulls not distinct`. Any depth; a cycle is refused by `packages/core`, which walks the new parent's ancestors in the transaction that moves it.
 - **`entry_subject`**: `entry_id`, `subject_id`, `user_id`; primary key `(entry_id, subject_id)`, index `(subject_id)`, both `on delete cascade`. An entry's subjects, zero or more. Counted in full in each, and once in a parent ([`vision.md`](vision.md#subjects)): a rule of the queries, not of the tables.
 - **`subject_account`**: `subject_id`, `account_id`, `user_id`; primary key `(subject_id, account_id)`, both `on delete cascade`. The accounts linked to a subject (the van's fuel card, say).
 - Splitting by subject is splitting a line into entries, as for categories. A rule attaches a subject through `rule.attach_subject_id`.
@@ -325,9 +335,9 @@ An account kept by its balance (#31) has no lines from a file, but the month sti
 ### v0.6: Investments
 
 - **`security`**: `id`, `user_id`, `isin text` null (null for a fund without one, such as a life insurance euro fund; `check (isin ~ '^[A-Z]{2}[A-Z0-9]{9}[0-9]$')`), `name text`, `currency text`. Unique `(user_id, id)` and `(user_id, isin)`: one row per user and ISIN, since what a user holds is theirs.
-- **`security_price`**: `isin text`, `day date`, `price numeric`, `currency text`, `source text`, `fetched_at timestamptz`; primary key `(isin, day)`. A day's price of an ISIN, fetched by the daily job and shared by the installation, since a price says nothing about anyone. It has no `user_id`. Its row-level security gives `gousset_user` `select` only, with the policy `using (isin in (select isin from security))`, itself filtered by `security`'s policy, so nobody learns what another holds; only the app's own role, in the price job, writes it. With `installation_settings`, it is the only table without an owner.
+- **`security_price`**: `isin text`, `day date`, `price numeric`, `currency text`, `source text`, `fetched_at timestamptz`; primary key `(isin, day)`. A day's price of an ISIN, fetched by the daily job and shared by the installation, since a price says nothing about anyone. It has no `user_id`. Its row-level security gives `gousset_user` `select` only, with the policy `using (isin in (select isin from security))`, itself filtered by `security`'s policy, so nobody learns what another holds; only the app's own role, in the price job, writes it. With `installation_settings`, it is the only table without an owner. #13's test finds the users' tables by their `user_id`, so v0.6 extends it to every table granted to `gousset_user`: `security_price` must have row-level security and its policy, or any user could list every ISIN held on the installation.
 - **`security_valuation`**: `id`, `user_id`, `security_id uuid` (`on delete cascade`), `day date`, `value_minor bigint`; unique `(security_id, day)`. A holding without an ISIN, valued by hand.
-- **`investment_operation`**: `id`, `user_id`, `account_id uuid` (`on delete cascade`), `import_id uuid` null (`on delete cascade`, so an undone broker's import takes its operations), `kind operation_kind` (`contribution`, `purchase`, `sale`, `dividend`, `fee`, `withdrawal`), `happened_on date`, `security_id uuid` null (`on delete restrict`; set for `purchase`, `sale` and `dividend`), `quantity numeric` null and `unit_price numeric` null (`purchase`, `sale`), `amount_minor bigint` (signed, on the account's cash), `fees_minor bigint` default `0`, `line_id uuid` null and unique (`on delete set null (line_id)`), the account's cash line, so that a purchase is never counted as spending, and `dedup_key text` null with unique `(account_id, dedup_key)`. Brokers' exports come in through import profiles of the `operations` kind, with the same dedup keys. Index `(account_id, happened_on)`. Holdings are computed on read, by security.
+- **`investment_operation`**: `id`, `user_id`, `account_id uuid` (`on delete cascade`), `import_id uuid` null (`on delete cascade`, which only an account's or a user's deletion reaches, since an undone import's row stays: undo deletes its operations itself, as it does its lines), `kind operation_kind` (`contribution`, `purchase`, `sale`, `dividend`, `fee`, `withdrawal`), `happened_on date`, `security_id uuid` null (kept; set for `purchase`, `sale` and `dividend`), `quantity numeric` null and `unit_price numeric` null (`purchase`, `sale`), `amount_minor bigint` (signed, on the account's cash), `fees_minor bigint` default `0`, `line_id uuid` null and unique (`on delete set null (line_id)`), the account's cash line, so that a purchase is never counted as spending, and `dedup_key text` null with unique `(account_id, dedup_key)`. Brokers' exports come in through import profiles of the `operations` kind, with the same dedup keys. Index `(account_id, happened_on)`. Holdings are computed on read, by security.
 - **Net contributions** are the transfers into the account (v0.3's `transfer`) less those out, plus the `contribution` operations of an account whose money goes in directly (a life insurance contract paid from the bank by its insurer).
 - **On `account`**: `contribution_cap_minor bigint` null and `envelope_key_date date` null; the opening date is `opened_on`. The rules shipped for the PEA, life insurance and the Livret A live in code and fill them when the envelope is chosen; for `other`, the user fills them.
 - **On `installation_settings`**: `prices_enabled boolean` default `true` and `price_source text` null, the source the administrator chose.
@@ -341,7 +351,7 @@ erDiagram
   statement_line ||--o| transfer : "out side"
   statement_line ||--o| transfer : "in side"
   transfer }o--o| entry : funds
-  account_balance ||--o| statement_line : "balance line"
+  account_balance |o--o| statement_line : "balance line"
   category |o--o{ category : parent
   category ||--o{ entry : classifies
   merchant |o--o{ entry : paid
