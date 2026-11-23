@@ -125,6 +125,7 @@
   "importEmptyDescription": "The bank statements you import will be listed here, with what each one added and what is left to check.",
   "settingsTitle": "Settings",
   "settingsNavGeneral": "General",
+  "settingsNavUsers": "Users",
   "settingsNavCategories": "Categories",
   "settingsNavRules": "Rules",
   "settingsLanguageTitle": "Language",

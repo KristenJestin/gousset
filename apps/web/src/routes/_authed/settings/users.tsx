@@ -1,23 +1,25 @@
 import { m } from "@gousset/i18n/messages";
+import { Block } from "@gousset/ui/components/app-shell";
 import { Button } from "@gousset/ui/components/button";
-import { Card } from "@gousset/ui/components/card";
 import { FormMessage } from "@gousset/ui/components/form-message";
 import { List, ListItem } from "@gousset/ui/components/list";
-import { Actions, Form, Screen } from "@gousset/ui/components/screen";
+import { Actions, Form } from "@gousset/ui/components/screen";
 import { StatusMessage } from "@gousset/ui/components/status-message";
 import { TextField } from "@gousset/ui/components/text-field";
 import { createFileRoute, redirect, useRouter } from "@tanstack/react-router";
 import { useState } from "react";
 import type { FormEvent } from "react";
 
-import { AppLink } from "@/components/app-link";
 import { createUser, listUsers } from "@/functions/users";
 import { errorMessage } from "@/i18n/messages";
 import { formText } from "@/lib/form";
 import { whileBusy } from "@/lib/while-busy";
 
-/** The administrator's page: who has an account, and creating the others. */
-export const Route = createFileRoute("/_authed/users")({
+/**
+ * The administrator's section of the settings (docs/wireframes, `rules`: the settings' menu lists
+ * the users): who has an account, and creating the others, each in a block.
+ */
+export const Route = createFileRoute("/_authed/settings/users")({
   beforeLoad: ({ context }) => {
     if (!context.user.isAdmin) {
       // oxlint-disable-next-line typescript/only-throw-error -- TanStack Router's redirects are thrown by design.
@@ -65,8 +67,8 @@ function Users() {
   }
 
   return (
-    <Screen>
-      <Card title={m.usersTitle()} description={m.usersDescription()}>
+    <>
+      <Block title={m.usersTitle()} description={m.usersDescription()}>
         <List label={m.usersTitle()}>
           {users.map((user) => (
             <ListItem
@@ -80,8 +82,8 @@ function Users() {
             />
           ))}
         </List>
-      </Card>
-      <Card title={m.usersCreateTitle()} description={m.usersCreateDescription()}>
+      </Block>
+      <Block title={m.usersCreateTitle()} description={m.usersCreateDescription()}>
         <Form onSubmit={(event) => void submit(event)} onInput={() => setError(undefined)}>
           <TextField label={m.fieldName()} name="name" autoComplete="off" required />
           <TextField label={m.fieldEmail()} name="email" type="email" autoComplete="off" required />
@@ -99,10 +101,9 @@ function Users() {
             <Button type="submit" loading={busy}>
               {m.usersCreate()}
             </Button>
-            <AppLink to="/">{m.usersBack()}</AppLink>
           </Actions>
         </Form>
-      </Card>
-    </Screen>
+      </Block>
+    </>
   );
 }
