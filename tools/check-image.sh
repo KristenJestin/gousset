@@ -47,9 +47,8 @@ health=$(curl --silent --show-error --max-time 10 --write-out '%{http_code}' --o
   fail "/health did not answer."
 [ "$health" = 200 ] || fail "/health answered $health."
 
-page=$(curl --silent --show-error --fail --max-time 10 "http://127.0.0.1:$port/") ||
-  fail "the app's page did not answer."
-[[ $page == *"<title>Gousset</title>"* ]] || fail "the app's page is not Gousset's."
+# No session and no administrator yet: `/` sends the visitor to /setup, Gousset's page.
+"$root/tools/check-page.sh" "http://127.0.0.1:$port" || fail "the app's page is not Gousset's."
 
 # The image beside the installation, on its network and database, one thing wrong: what its
 # /health answers once it answers (000: it never started, which is not healthy either).

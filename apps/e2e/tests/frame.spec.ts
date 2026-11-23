@@ -3,7 +3,16 @@ import { Schema } from "effect";
 
 import { APP_HOST } from "../src/app-server";
 import { onPhone, openAccountMenu } from "../src/frame";
-import { animationsDone, expect, expectAccessible, fixDay, test, visit } from "../src/test";
+import {
+  addUser,
+  animationsDone,
+  expect,
+  expectAccessible,
+  fixDay,
+  personOfItsOwn,
+  test,
+  visit,
+} from "../src/test";
 
 // The scenarios of issue #8 (the app's frame and navigation), "How to verify", one test each,
 // plus the issue's motion and its other points: the month in the URL, the language, the brand.
@@ -220,6 +229,7 @@ test("on a phone, a tab bar holds review, operations, accounts and more", async 
     "Settings",
     "Change password",
     "Users",
+    "Keyboard shortcuts",
     "Sign out",
   ]);
 
@@ -312,21 +322,30 @@ test.describe("in French", () => {
   });
 });
 
-test("the user's menu changes the language and the colour scheme", async ({ userPage, user }) => {
-  test.skip(onPhone(userPage), "On a phone, the language and the scheme are in Settings.");
-  await visit(userPage, "/");
+test("the user's menu changes the language and the colour scheme", async ({ page, app, user }) => {
+  test.skip(onPhone(page), "On a phone, the language and the scheme are in Settings.");
 
-  const menu = await openAccountMenu(userPage, user.name);
+  // The scheme is kept on the account: a user of the test's own, so that the worker's shared one
+  // keeps the system's.
+  const ezra = await addUser(app.baseURL, user, personOfItsOwn("ezra"));
+
+  await page.context().addCookies([...ezra.cookies]);
+  await visit(page, "/");
+
+  const menu = await openAccountMenu(page, ezra.name);
 
   await menu.getByRole("menuitemradio", { name: "Dark" }).click();
-  await expect(userPage.locator("html")).toHaveAttribute("data-color-scheme", "dark");
+  await expect(page.locator("html")).toHaveAttribute("data-color-scheme", "dark");
 
   // A radio choice keeps the menu open, as a menu's radios do: the language is chosen in it too.
   await expect(menu.getByRole("menuitemradio", { name: "English" })).toBeChecked();
   await menu.getByRole("menuitemradio", { name: "Français" }).click();
 
-  await expect(userPage.getByRole("heading", { level: 1, name: "Bilan du mois" })).toBeVisible();
-  await expect(userPage.locator("html")).toHaveAttribute("lang", "fr");
+  await expect(page.getByRole("heading", { level: 1, name: "Bilan du mois" })).toBeVisible();
+  await expect(page.locator("html")).toHaveAttribute("lang", "fr");
+  // The new language reloads the page; the server paints it in the scheme just picked, which
+  // reached the account first.
+  await expect(page.locator("html")).toHaveAttribute("data-color-scheme", "dark");
 });
 
 test("moving between screens fades the screen, the current item slides, empty states fade in", async ({

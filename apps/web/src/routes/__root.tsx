@@ -1,5 +1,4 @@
 import type { QueryClient } from "@tanstack/react-query";
-import { HotkeysProvider } from "@tanstack/react-hotkeys";
 import {
   ClientOnly,
   HeadContent,
@@ -18,7 +17,7 @@ import { ThemeProvider } from "@gousset/ui/components/theme-provider";
 import { getViewer } from "@/functions/viewer";
 
 import appCss from "../index.css?url";
-import { Shortcuts, appHotkeys } from "../shortcuts";
+import { Shortcuts } from "../shortcuts";
 
 // Development only: a production build reads `false` here and drops the import, devtools and all.
 const Devtools = import.meta.env.DEV ? lazy(async () => import("../devtools")) : null;
@@ -78,20 +77,25 @@ export const Route = createRootRouteWithContext<RouterContext>()({
 function RootDocument() {
   // The response's CSP nonce: the request's on the server, read back from the page in the browser.
   const nonce = useRouter().options.ssr?.nonce;
+  const { viewer } = Route.useRouteContext();
 
   return (
-    // The saved colour scheme lands on <html> before hydration (ThemeProvider). The language is
+    // The saved colour scheme, the account's once signed in, lands on <html> before hydration
+    // (ThemeProvider). The language is
     // the request's on the server (src/server.ts), the same cookie or browser's in the page.
     <html lang={getLocale()} suppressHydrationWarning>
       <head>
         <HeadContent />
       </head>
       <body>
-        <ThemeProvider nonce={nonce}>
-          <HotkeysProvider appHotkeys={appHotkeys}>
+        <ThemeProvider
+          nonce={nonce}
+          accountScheme={viewer.user?.colorScheme}
+          accountOwner={viewer.user?.email}
+        >
+          <Shortcuts singleKeyShortcuts={viewer.user?.singleKeyShortcuts ?? true}>
             <Outlet />
-            <Shortcuts />
-          </HotkeysProvider>
+          </Shortcuts>
           <Toaster />
         </ThemeProvider>
         {Devtools === null ? null : (
