@@ -234,6 +234,8 @@ describe("month review", () => {
       expect(text).toContain(`${movement.from} → ${movement.to}: ${euros(movement.amount.minor)}`);
     }
 
+    expect(text).toContain("Investments, on 2026-10-31:");
+
     for (const account of invested.accounts) {
       expect(text).toContain(
         `- ${account.account}: worth ${euros(account.value.minor)}, put in ${euros(account.netContributions.minor)}`,
@@ -242,6 +244,12 @@ describe("month review", () => {
 
     expect(flagged.flags.length).toBeGreaterThan(0);
     expect(text).toContain("Streamly: its price went from 8.99 EUR to 9.49 EUR.");
+  });
+
+  test("gives the investments as they stand today in the month under way", async () => {
+    const { text } = await month({ action: "review", month: "2026-11" });
+
+    expect(text).toContain(`Investments, on ${TODAY}:`);
   });
 
   test("names accounts and merchants, never an id", async () => {

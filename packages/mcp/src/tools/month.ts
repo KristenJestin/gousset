@@ -40,7 +40,7 @@ const DESCRIPTION = `One month of the user's money, as the monthly review shows 
 
 summary: what came in (received, and from what), what the expenses cost (spent, against the average of the six months before), what went to savings and investments (set aside) and what is left, with the part of it restricted to benefit accounts; then where the money went, by category, by merchant and by subject, the largest first, each row with its benchmark (its own 6-month average). Expenses whose lines still wait in the review are not in the rows yet: their total is given apart. Use it for "how much did I spend last month, and where?" and any question about a month's totals.
 
-review: what the month still asks of the user: how far its statements were imported, the lines the rules were not sure of (with what they proposed), the movements between the user's accounts and what came in, the investment accounts at the end of the month, and what is flagged (a subscription whose price changed, an account not imported). Use it for "what is left to check this month?".
+review: what the month still asks of the user: how far its statements were imported, the lines the rules were not sure of (with what they proposed), the movements between the user's accounts and what came in, the investment accounts at the end of the month (today in the month under way), and what is flagged (a subscription whose price changed, an account not imported). Use it for "what is left to check this month?".
 
 \`month\` is written YYYY-MM and is the current month when left out; for last month, work it out from today (in November 2026, last month is 2026-10). A month written another way is refused.
 
@@ -181,13 +181,13 @@ function movementsText({ movements: moved }: Movements): string {
   ].join("\n");
 }
 
-function investmentsText({ accounts }: Investments): string {
+function investmentsText({ asOf, accounts }: Investments): string {
   if (accounts.length === 0) {
     return "Investments: none.";
   }
 
   return [
-    "Investments, at the end of the month:",
+    `Investments, on ${asOf}:`,
     ...accounts.map(
       (account) =>
         `- ${account.account}: worth ${amount(account.value)}, put in ${amount(account.netContributions)}, gain ${amount(account.gain)}`,

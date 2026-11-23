@@ -27,6 +27,8 @@ function lastMealCardDay(month: string) {
     .at(-1);
 }
 
+const euros = (minor: number) => ({ minor, currency: "EUR" });
+
 describe("movements", () => {
   test("tells what came in and what moved between the accounts, from → to", async () => {
     const { movements: rows } = await run(movements("ada", "2026-10"));
@@ -78,6 +80,48 @@ describe("investments", () => {
       },
     ]);
   });
+
+  test("stands on the month's last day once it is over", async () => {
+    const { asOf } = await run(investments("ada", "2026-10"));
+
+    expect(asOf).toBe("2026-10-31");
+  });
+
+  test("in the month under way, adds what was put in so far, at cost, with no growth yet", async () => {
+    const [november] = madeUpMonth("2026-11").investments;
+    const value = november?.valueMinor ?? 0;
+    const putIn = november?.netContributionsMinor ?? 0;
+    // The made-up transfer to the PEA is booked on the 12th.
+    const before = await run(investments("ada", "2026-12"), "2026-12-05");
+    const after = await run(investments("ada", "2026-12"), "2026-12-12");
+
+    expect(before).toEqual({
+      month: "2026-12",
+      asOf: "2026-12-05",
+      accounts: [
+        {
+          account: "Northbank PEA",
+          value: euros(value),
+          netContributions: euros(putIn),
+          gain: euros(value - putIn),
+        },
+      ],
+    });
+    expect(after.accounts).toEqual([
+      {
+        account: "Northbank PEA",
+        value: euros(value + 35_000),
+        netContributions: euros(putIn + 35_000),
+        gain: euros(value - putIn),
+      },
+    ]);
+  });
+
+  test("shows no investment in a month not begun", async () => {
+    const { accounts } = await run(investments("ada", "2027-06"), "2026-12-05");
+
+    expect(accounts).toEqual([]);
+  });
 });
 
 describe("importState", () => {
@@ -95,6 +139,12 @@ describe("importState", () => {
     const state = await run(importState("ada", "2026-10"), "2026-10-02");
 
     expect(state.imported).toBe(state.accounts);
+  });
+
+  test("has no statement to import in a month not begun", async () => {
+    const state = await run(importState("ada", "2027-06"), "2026-12-05");
+
+    expect(state).toEqual({ month: "2027-06", accounts: 0, imported: 0, partial: [] });
   });
 });
 

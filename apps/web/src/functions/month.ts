@@ -73,7 +73,7 @@ export const getMovements = createServerFn({ method: "GET" })
   .validator(MonthInput)
   .handler(({ data, context }) => runCore(movements(context.owner, data.month)));
 
-/** Each investment account at the end of the month. */
+/** Each investment account at the end of the month, or as it stands today in the month under way. */
 export const getInvestments = createServerFn({ method: "GET" })
   .middleware([signedIn, slowedInDevelopment])
   .validator(MonthInput)

@@ -31,7 +31,7 @@ export type Movement = {
 
 export type Movements = { month: string; movements: ReadonlyArray<Movement> };
 
-/** An investment account at the end of the month (docs/vision.md, "Investments"). */
+/** An investment account on the day the month's positions stand on (docs/vision.md, "Investments"). */
 export type InvestmentAccount = {
   account: string;
   value: Money;
@@ -41,7 +41,12 @@ export type InvestmentAccount = {
   gain: Money;
 };
 
-export type Investments = { month: string; accounts: ReadonlyArray<InvestmentAccount> };
+export type Investments = {
+  month: string;
+  /** The day the values stand on: the month's last day, or today in the month under way. */
+  asOf: string;
+  accounts: ReadonlyArray<InvestmentAccount>;
+};
 
 /** An account whose imported statement stops before the day it should reach. */
 export type PartialImport = { account: string; coveredTo: string };
@@ -149,9 +154,14 @@ export const movements = (owner: string, month: string) =>
     movements: movementsOf(data),
   }));
 
-/** Each investment account's value, net contributions and gain at the end of the month. */
+/**
+ * Each investment account's value, net contributions and gain at the end of the month, or as they
+ * stand today in the month under way.
+ */
 export const investments = (owner: string, month: string) =>
-  Effect.map(read(owner, month), (data): Investments => {
+  Effect.gen(function* () {
+    const data = yield* read(owner, month);
+    const day = yield* today;
     const names = accountNames(data);
     const byAccount = new Map<string, { value: number; contributions: number }>();
 
@@ -166,13 +176,14 @@ export const investments = (owner: string, month: string) =>
 
     return {
       month: data.month,
+      asOf: expectedEnd(data.month, day),
       accounts: [...byAccount].map(([accountId, sums]) => ({
         account: names.get(accountId) ?? accountId,
         value: money(sums.value),
         netContributions: money(sums.contributions),
         gain: money(sums.value - sums.contributions),
       })),
-    };
+    } satisfies Investments;
   });
 
 /** The day the month's statements should reach: its last day, or today in the month under way. */
