@@ -39,9 +39,8 @@ async function pickScheme(
   await expect.poll(() => colorSchemeOf(database, person.email)).toBe(scheme.value);
 }
 
-/** Signs in through the sign-in page, as a person does: the app opens without a reload. */
+/** Signs in on the sign-in page the browser shows, as a person does: the app opens without a reload. */
 async function signInThroughThePage(page: Page, person: TestUser) {
-  await visit(page, "/sign-in");
   await page.getByLabel("E-mail").fill(person.email);
   await page.getByLabel("Password", { exact: true }).fill(person.password);
   await page.getByRole("button", { name: "Sign in" }).click();
@@ -80,6 +79,7 @@ test("a user picks dark, signs out; another user signs in on the same browser an
   }
 
   // On this browser, Jules picks dark, then signs out.
+  await visit(page, "/sign-in");
   await signInThroughThePage(page, jules);
   await pickScheme(page, app.database, jules, { name: "Dark", value: "dark" });
 
