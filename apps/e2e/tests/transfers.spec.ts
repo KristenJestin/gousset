@@ -271,6 +271,16 @@ test("a deferred card's monthly debit pairs with the card account", async () => 
   expect((await transferOf(debit)).paired).toMatchObject({
     other: { id: real, madeByApp: false },
   });
+
+  // Unpaired from the side the app made, that side goes: the card's balance holds its own lines.
+  const madeLine = await lineOf(card, 7500);
+  const unpaired = await run(unpairLine(owner, madeLine));
+
+  expect(unpaired).toMatchObject({
+    madeSideDeleted: true,
+    other: { id: await lineOf(current, -7500) },
+  });
+  expect((await linesOf(card)).filter((line) => line.source === "counterpart")).toEqual([]);
 });
 
 test("undoing an import unpairs", async () => {

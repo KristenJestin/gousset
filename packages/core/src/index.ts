@@ -187,7 +187,7 @@ export {
   unpairLine,
 } from "./transfers/transfers";
 
-export type { LineTransfer, PairingSummary, TransferSide } from "./transfers/transfers";
+export type { LineTransfer, PairingSummary, TransferSide, Unpaired } from "./transfers/transfers";
 
 export { CARD_DAYS, TRANSFER_DAYS } from "./transfers/pairing";
 

@@ -111,7 +111,6 @@ export const Transfer: Story = {
           amount: eur(25_000),
         }}
         setAside
-        madeByApp={false}
         onOpenOther={() => undefined}
         onUnpair={() => Promise.resolve()}
       />

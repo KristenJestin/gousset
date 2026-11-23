@@ -6,6 +6,7 @@ import type { SQL, SQLWrapper } from "drizzle-orm";
 
 import {
   CARD_DAYS,
+  REPLACE_DAYS,
   TRANSFER_DAYS,
   candidateFinder,
   cardDebits,
@@ -252,16 +253,22 @@ async function pairCardDebitsOnce(
       })
       .returning({ id: statementLine.id });
 
-    if (
-      made !== undefined &&
-      (await insertPairs(
-        transaction,
-        owner,
-        [{ outLineId: line.id, inLineId: made.id }],
-        "import",
-      )) > 0
-    ) {
+    if (made === undefined) {
+      continue;
+    }
+
+    const written = await insertPairs(
+      transaction,
+      owner,
+      [{ outLineId: line.id, inLineId: made.id }],
+      "import",
+    );
+
+    if (written > 0) {
       paired.add(line.id);
+    } else {
+      // Another pairing took the debit meanwhile: the side made for it stands for nothing.
+      await transaction.delete(statementLine).where(eq(statementLine.id, made.id));
     }
   }
 
@@ -323,7 +330,7 @@ export async function pairTransfers(
     imported
       ? and(
           eq(statementLine.accountId, scope.accountId),
-          bookedBetween(shiftDay(scope.from, -TRANSFER_DAYS), shiftDay(scope.to, TRANSFER_DAYS)),
+          bookedBetween(shiftDay(scope.from, -REPLACE_DAYS), shiftDay(scope.to, REPLACE_DAYS)),
         )
       : undefined,
   );

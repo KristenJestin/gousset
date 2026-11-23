@@ -47,6 +47,13 @@ export type LineTransfer = {
   readonly candidates: ReadonlyArray<TransferSide>;
 };
 
+/** A transfer undone: its other side, as it was, and whether a side the app made was deleted. */
+export type Unpaired = {
+  readonly other: TransferSide;
+  /** The side the app had made (this line, or the other) is gone with the transfer. */
+  readonly madeSideDeleted: boolean;
+};
+
 /** What a pairing on demand did, and what it leaves to the user. */
 export type PairingSummary = PairingWritten & {
   /** Lines with several candidates, which wait for the user to choose their other side. */
@@ -77,12 +84,12 @@ export class Transfers extends Context.Service<
     ) => Effect.Effect<LineTransfer, LineNotFound | TransferRefused | Failure>;
     /**
      * Undoes the transfer the line is a side of: both lines are no transfer any more, and a side the
-     * app had made is deleted. The other side, as it was.
+     * app had made, this line or the other, is deleted. The other side, as it was.
      */
     readonly unpair: (
       owner: string,
       lineId: string,
-    ) => Effect.Effect<TransferSide, LineNotFound | NotATransfer | Failure>;
+    ) => Effect.Effect<Unpaired, LineNotFound | NotATransfer | Failure>;
     /** Runs the import's pairing over every line of the user's. */
     readonly pairAll: (owner: string) => Effect.Effect<PairingSummary, Failure>;
   }
@@ -253,6 +260,13 @@ function refusalOf(
     return { reason: "same_line", lineId: line.id };
   }
 
+  // A line made from a noted balance stands for a month's movement (#31): never a transfer's side.
+  const fromBalance = [line, other].find((each) => each.source === "balance");
+
+  if (fromBalance !== undefined) {
+    return { reason: "made_from_balance", lineId: fromBalance.id };
+  }
+
   const held = [line, other].find((each) => each.state !== "counted");
 
   if (held !== undefined) {
@@ -350,7 +364,7 @@ async function unpairInTransaction(
   transaction: UserTransaction,
   lineId: string,
   day: string,
-): Promise<Outcome<TransferSide> | { readonly notPaired: string }> {
+): Promise<Outcome<Unpaired> | { readonly notPaired: string }> {
   const [line] = await readLines(transaction, [lineId], day);
 
   if (line === undefined) {
@@ -368,12 +382,17 @@ async function unpairInTransaction(
 
   await transaction.delete(transfer).where(eq(transfer.id, found.id));
 
-  // A side the app made stands for nothing once the transfer is gone.
-  await transaction
+  // A side the app made stands for nothing once the transfer is gone, whichever side it is.
+  const deleted = await transaction
     .delete(statementLine)
-    .where(and(eq(statementLine.id, otherId), eq(statementLine.source, "counterpart")));
+    .where(
+      and(inArray(statementLine.id, [line.id, otherId]), eq(statementLine.source, "counterpart")),
+    )
+    .returning({ id: statementLine.id });
 
-  return other === undefined ? { notPaired: lineId } : { done: sideOf(other) };
+  return other === undefined
+    ? { notPaired: lineId }
+    : { done: { other: sideOf(other), madeSideDeleted: deleted.length > 0 } };
 }
 
 /** The transfer a line is a side of, or the lines that may be its other side. */

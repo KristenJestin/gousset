@@ -136,8 +136,8 @@ export const pairLine = createServerFn({ method: "POST" })
 
 /**
  * Undoes the transfer the line is a side of: both lines are no transfer any more, and a side the
- * app had made is deleted. Answers the other side as it was; a line that is no transfer comes back
- * as a code.
+ * app had made, this line or the other, is deleted. Answers the other side as it was, and whether
+ * this line itself was the made one, now gone; a line that is no transfer comes back as a code.
  */
 export const unpairLine = createServerFn({ method: "POST" })
   .middleware([signedIn, slowedInDevelopment])
@@ -145,7 +145,11 @@ export const unpairLine = createServerFn({ method: "POST" })
   .handler(({ data, context }) =>
     runCore(
       unpairCoreLine(context.owner, data.lineId).pipe(
-        Effect.map((other) => ({ ok: true as const, other })),
+        Effect.map(({ other, madeSideDeleted }) => ({
+          ok: true as const,
+          other,
+          lineDeleted: madeSideDeleted && !other.madeByApp,
+        })),
         Effect.catchTags({
           LineNotFound: () => transferRefused("LINE_NOT_FOUND"),
           NotATransfer: () => transferRefused("NOT_A_TRANSFER"),

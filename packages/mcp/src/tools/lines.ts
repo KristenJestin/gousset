@@ -335,6 +335,8 @@ const TRANSFER_REFUSALS = {
   zero_amount: "A line of no amount moves no money: it is no side of a transfer.",
   not_counted:
     "The line {line} is held for review as a near duplicate (or thrown away): it is not counted, so it cannot be paired.",
+  made_from_balance:
+    "The line {line} was made by Gousset from a balance the user noted: it stands for the month's movement of an account kept by its balance, never for one side of a transfer.",
   already_paired:
     "The line {line} is already a side of a transfer: unpair it first if that pairing is wrong.",
   no_candidate:
@@ -403,11 +405,15 @@ function unpairRun(input: LinesInput, owner: string) {
   }
 
   return unpairLine(owner, line).pipe(
-    Effect.map((other) =>
-      other.madeByApp
-        ? `No longer a transfer. Its other side, made by Gousset, is deleted; the line counts as an expense or an income again.`
-        : `No longer a transfer: the line and ${sideText(other)} are two separate lines again, each an expense or an income.`,
-    ),
+    Effect.map(({ other, madeSideDeleted }) => {
+      if (!madeSideDeleted) {
+        return `No longer a transfer: the line and ${sideText(other)} are two separate lines again, each an expense or an income.`;
+      }
+
+      return other.madeByApp
+        ? `No longer a transfer. Its other side, which Gousset had made on ${named(other.account)}, is deleted; the line counts as an expense or an income again.`
+        : `No longer a transfer. This line, which Gousset had made, is deleted; ${sideText(other)} counts as an expense or an income again.`;
+    }),
     Effect.catchTags({
       LineNotFound: (missing) => lineRefused(missing.lineId, NOT_FOUND),
       NotATransfer: () =>

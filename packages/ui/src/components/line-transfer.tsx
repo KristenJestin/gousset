@@ -30,8 +30,11 @@ export type LineTransferProps = {
   other: TransferSideView;
   /** Money moved to savings or investments: the month sets it aside. */
   setAside: boolean;
-  /** The other side was made by the app: its account's statement does not show it. */
-  madeByApp: boolean;
+  /**
+   * One side was made by the app, this line or the other: the account it is on, whose statement
+   * does not show it. Unpairing deletes it.
+   */
+  madeOn?: string;
   /** Goes to the other side's detail. */
   onOpenOther: (id: string) => void;
   /** Runs once "Not a transfer" is confirmed; the dialog stays open, busy, until it settles. */
@@ -87,7 +90,7 @@ export function LineTransfer({
   direction,
   other,
   setAside,
-  madeByApp,
+  madeOn,
   onOpenOther,
   onUnpair,
   error,
@@ -120,9 +123,9 @@ export function LineTransfer({
         <Side side={other} locale={writtenIn} />
         <Icon name="next" size="sm" />
       </button>
-      {madeByApp ? (
-        <p className="text-xs text-muted-foreground">{words.madeByApp(other.account)}</p>
-      ) : null}
+      {madeOn === undefined ? null : (
+        <p className="text-xs text-muted-foreground">{words.madeByApp(madeOn)}</p>
+      )}
       <div className="flex">
         <AlertDialog
           trigger={
@@ -132,7 +135,7 @@ export function LineTransfer({
           }
           title={words.unpairTitle}
           description={
-            madeByApp ? words.unpairDescriptionMade(other.account) : words.unpairDescription
+            madeOn === undefined ? words.unpairDescription : words.unpairDescriptionMade(madeOn)
           }
           confirmLabel={words.unpair}
           onConfirm={onUnpair}

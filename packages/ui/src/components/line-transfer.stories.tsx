@@ -61,7 +61,6 @@ const meta = {
     direction: "out",
     other: livretA,
     setAside: true,
-    madeByApp: false,
     onOpenOther: () => undefined,
     onUnpair: () => wait(1000),
   },
@@ -98,7 +97,7 @@ export const MadeByGousset: Story = {
       amount: eur(41_230),
     },
     setAside: false,
-    madeByApp: true,
+    madeOn: "Deferred card",
   },
 };
 
@@ -126,7 +125,7 @@ export const OneCandidate: Story = {
 };
 
 export const French: Story = {
-  args: { other: { ...livretA, day: "10 oct." }, madeByApp: true },
+  args: { other: { ...livretA, day: "10 oct." }, madeOn: "Livret A" },
   render: (args) => (
     <InFrench>
       <Column>

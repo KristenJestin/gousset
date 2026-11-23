@@ -404,6 +404,11 @@ function TransferOf({
 
       setError(undefined);
       await invalidateTouched(queryClient, touchedBy(line, result.other));
+
+      // This line was the side Gousset had made: gone with the transfer, its other side opens.
+      if (result.lineDeleted) {
+        onOpen(result.other.id);
+      }
     } catch {
       setError(m.operationsTransferFailed());
     }
@@ -444,7 +449,13 @@ function TransferOf({
         direction={paired.direction}
         other={view(paired.other)}
         setAside={paired.setAside}
-        madeByApp={paired.other.madeByApp}
+        madeOn={
+          paired.other.madeByApp
+            ? nameOf(paired.other.account)
+            : line.source === "counterpart"
+              ? nameOf(line.account)
+              : undefined
+        }
         onOpenOther={onOpen}
         onUnpair={unpair}
         error={error}

@@ -227,8 +227,14 @@ export function cardDebits(
 export type Replacement = { readonly counterpartId: string; readonly lineId: string };
 
 /**
+ * How many days apart a card's own line of its payment and the side the app made on the debit's day
+ * may be: a card statement may book its payment before the current account does, or a week after.
+ */
+export const REPLACE_DAYS = 10;
+
+/**
  * The lines the app made for a side no file showed (`source = counterpart`) that a later file now
- * brings: the same account and amount, a few days apart, each the other's only match.
+ * brings: the same account and amount, at most `REPLACE_DAYS` apart, each the other's only match.
  */
 export function replacedCounterparts(
   fresh: ReadonlyArray<PairableLine>,
@@ -237,7 +243,7 @@ export function replacedCounterparts(
   const matches = (a: PairableLine, b: PairableLine) =>
     a.accountId === b.accountId &&
     a.amountMinor === b.amountMinor &&
-    daysApart(a, b) <= TRANSFER_DAYS;
+    daysApart(a, b) <= REPLACE_DAYS;
 
   return fresh.flatMap((line) => {
     const [made, ...others] = counterparts.filter((counterpart) => matches(line, counterpart));

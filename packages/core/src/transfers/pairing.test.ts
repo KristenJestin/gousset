@@ -165,6 +165,22 @@ describe("a counterpart the card's own file replaces", () => {
     ]);
   });
 
+  test("the card's line booked days before the debit, within ten days, replaces it too", () => {
+    const early = line("early", "card", "2026-10-31", 41_230);
+
+    expect(replacedCounterparts([early], [made])).toEqual([
+      { counterpartId: "made", lineId: "early" },
+    ]);
+    expect(replacedCounterparts([line("late", "card", "2026-11-16", 41_230)], [made])).toEqual([]);
+  });
+
+  test("two lines of the card that could be it replace nothing: the user chooses", () => {
+    const one = line("one", "card", "2026-11-04", 41_230);
+    const two = line("two", "card", "2026-11-07", 41_230);
+
+    expect(replacedCounterparts([one, two], [made])).toEqual([]);
+  });
+
   test("a line of another account or amount replaces nothing", () => {
     expect(replacedCounterparts([line("x", "other", "2026-11-05", 41_230)], [made])).toEqual([]);
     expect(replacedCounterparts([line("x", "card", "2026-11-05", 41_231)], [made])).toEqual([]);
