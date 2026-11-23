@@ -1,5 +1,6 @@
 import { MAX_SEARCH_LINES, searchLines, showLine } from "@gousset/core";
 import { AccountId } from "@gousset/core/account-values";
+import { MAX_FILTER_TEXT } from "@gousset/ui/lib/operations";
 import { createServerFn } from "@tanstack/react-start";
 import { Effect, Schema } from "effect";
 
@@ -26,8 +27,11 @@ const SEARCH_CODES = {
   cursor: "CURSOR_INVALID",
 } as const;
 
-/** Room for any search a person types, and no more: the server never reads a page of text. */
-const Words = Schema.String.check(Schema.isMaxLength(200));
+/**
+ * Room for any search a person types, and no more: the server never reads a page of text. The
+ * filter fields stop the typing there, and the page's address is cut to it.
+ */
+const Words = Schema.String.check(Schema.isMaxLength(MAX_FILTER_TEXT));
 
 /**
  * A search of the lines, as the operations page sends it (`LineSearch` in `@gousset/core`). The

@@ -4,20 +4,8 @@ import type { QueryClient } from "@tanstack/react-query";
 
 import { getAccount, getAccounts } from "@/functions/accounts";
 
-import { lineKeys } from "./lines";
-
-/**
- * The accounts domain's query keys, from one factory (docs/architecture.md, "Data loading and
- * skeletons"). Every key starts with `accountKeys.all`, so that one call reaches the list and every
- * account's page; `accountKeys.of(id)` reaches all of one account's.
- */
-export const accountKeys = {
-  all: ["accounts"] as const,
-  list: () => [...accountKeys.all, "list"] as const,
-  of: (accountId: string) => [...accountKeys.all, accountId] as const,
-  detail: (accountId: string, view: AccountView = {}) =>
-    [...accountKeys.of(accountId), "detail", view] as const,
-};
+import { accountKeys } from "./account-keys";
+import { lineKeys } from "./line-keys";
 
 /** The query of the accounts page and of an account's, for loaders and components alike. */
 export const accountQueries = {

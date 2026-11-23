@@ -2,6 +2,7 @@ import type { AccountList, LineAccount, LineDetail as Line, LineRow } from "@gou
 import { m } from "@gousset/i18n/messages";
 import { Page, ScreenBlock } from "@gousset/ui/components/app-shell";
 import { EmptyState } from "@gousset/ui/components/empty-state";
+import { ErrorState } from "@gousset/ui/components/error-state";
 import { FormMessage } from "@gousset/ui/components/form-message";
 import { LineDetail } from "@gousset/ui/components/line-detail";
 import { OperationsFilters } from "@gousset/ui/components/operations-filters";
@@ -133,7 +134,8 @@ function useFilterBar(applied: OperationsFilterValues) {
 
 /**
  * The lines of the applied filters, page after page: the last search's while this one loads, and
- * still the last one's when the server refuses this one (`refusal` says why).
+ * still the last one's when the server refuses this one (`refusal` says why). When the server
+ * fails this search, `failed` says so: neither the last list nor a skeleton stands for it.
  */
 function useShownLines(applied: OperationsFilterValues) {
   const lines = useInfiniteQuery(lineQueries.search(lineFiltersOf(applied)));
@@ -155,6 +157,8 @@ function useShownLines(applied: OperationsFilterValues) {
     lines,
     pages,
     refusal,
+    /** This search's first page failed (a refetch that fails keeps what it read). */
+    failed: lines.isError && answered === undefined,
     /** How many lines match; `undefined` until a first list comes. */
     total: shown === undefined ? undefined : total,
     /** No line at all, as the server says it with no filter (not the last search's, kept). */
@@ -173,7 +177,7 @@ function Operations() {
   const locale = usePageLanguage();
   const applied = filtersOf(search);
   const { draft, change } = useFilterBar(applied);
-  const { lines, pages, refusal, total, none } = useShownLines(applied);
+  const { lines, pages, refusal, failed, total, none } = useShownLines(applied);
   const { data: accounts } = useQuery(accountQueries.list());
   const nameOf = accountNames(accounts);
   const dayOf = shortDays(locale);
@@ -246,7 +250,9 @@ function Operations() {
         }
         count={total}
         list={
-          total === undefined ? (
+          failed ? (
+            <ErrorState onRetry={() => void lines.refetch()} />
+          ) : total === undefined ? (
             <OperationsListSkeleton />
           ) : (
             <OperationsList

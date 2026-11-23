@@ -1,29 +1,15 @@
 import { infiniteQueryOptions, keepPreviousData, queryOptions } from "@tanstack/react-query";
 
 import { getLine, getLines } from "@/functions/lines";
-import type { LineSearchInput } from "@/functions/lines";
+
+import { lineKeys } from "./line-keys";
+import type { LineFilters } from "./line-keys";
 
 /**
  * Lines a page: a few screens of rows at once, so that a long scroll asks the server seldom, and
  * well under the core's most (`MAX_SEARCH_LINES`).
  */
 const PAGE_LINES = 200;
-
-/** A search of the lines without its paging: what one list of the operations page shows. */
-export type LineFilters = Omit<LineSearchInput, "after" | "limit">;
-
-/**
- * The lines domain's query keys, from one factory (docs/architecture.md, "Data loading and
- * skeletons"). Every key starts with `lineKeys.all`, so that one call reaches every search and
- * every line's detail.
- */
-export const lineKeys = {
-  all: ["lines"] as const,
-  searches: () => [...lineKeys.all, "search"] as const,
-  search: (filters: LineFilters) => [...lineKeys.searches(), filters] as const,
-  details: () => [...lineKeys.all, "detail"] as const,
-  detail: (lineId: string) => [...lineKeys.details(), lineId] as const,
-};
 
 /** The queries of the operations page, for its loader and its components alike. */
 export const lineQueries = {

@@ -2,7 +2,7 @@ import { Input } from "@ui-sdk/react/input";
 
 import { useUiMessages } from "../hooks/use-ui-messages";
 import { controlClasses, groupFocusRing } from "../lib/form-classes";
-import { hasOperationsFilters, NO_OPERATIONS_FILTERS } from "../lib/operations";
+import { hasOperationsFilters, MAX_FILTER_TEXT, NO_OPERATIONS_FILTERS } from "../lib/operations";
 import type { OperationsFilterValues } from "../lib/operations";
 import { cn } from "../lib/utils";
 import { Button } from "./button";
@@ -35,7 +35,8 @@ const ALL_ACCOUNTS = "*";
  * the labels, the account ("All accounts" first), the period (from, to: each clearable), the
  * amount's bounds (typed as decimals, read by the page) and "To review only"; "Clear filters"
  * once any is set. It composes the form fields as they are and wraps on a narrow screen. Each
- * change goes to `onChange` at once; debouncing the search is the page's.
+ * change goes to `onChange` at once; debouncing the search is the page's. The words and each
+ * bound stop at `MAX_FILTER_TEXT` characters, what the server reads.
  *
  * Motion: none of its own; its fields' (a select's list, a calendar) as theirs.
  */
@@ -102,6 +103,7 @@ export function OperationsFilters({
             size="sm"
             inputMode="decimal"
             autoComplete="off"
+            maxLength={MAX_FILTER_TEXT}
             value={values.min}
             error={minError}
             onChange={(event) => set({ min: event.target.value })}
@@ -113,6 +115,7 @@ export function OperationsFilters({
             size="sm"
             inputMode="decimal"
             autoComplete="off"
+            maxLength={MAX_FILTER_TEXT}
             value={values.max}
             error={maxError}
             onChange={(event) => set({ max: event.target.value })}
@@ -159,6 +162,7 @@ function SearchField({
         <Input
           type="search"
           autoComplete="off"
+          maxLength={MAX_FILTER_TEXT}
           placeholder={placeholder}
           value={value}
           onChange={(event) => onValueChange(event.target.value)}

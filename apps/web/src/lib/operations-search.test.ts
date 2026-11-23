@@ -45,6 +45,16 @@ describe("operations-search", () => {
     expect(search.line).toBeUndefined();
   });
 
+  test("cuts words and amounts longer than the server reads to its 200 characters", () => {
+    const long = "a".repeat(201);
+    const search = decode({ q: long, min: "1".repeat(250), max: "2".repeat(200) });
+
+    expect(search.q).toBe("a".repeat(200));
+    expect(search.min).toBe("1".repeat(200));
+    expect(search.max).toBe("2".repeat(200));
+    expect(lineFiltersOf(filtersOf(search)).text).toHaveLength(200);
+  });
+
   test("puts the filters in the address and back, leaving out what is not set", () => {
     const values = {
       ...NO_OPERATIONS_FILTERS,

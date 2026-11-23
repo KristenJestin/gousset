@@ -1,8 +1,9 @@
 import { AccountId, Day } from "@gousset/core/account-values";
+import { MAX_FILTER_TEXT } from "@gousset/ui/lib/operations";
 import type { OperationsFilterValues } from "@gousset/ui/lib/operations";
-import { Effect, Option, Schema } from "effect";
+import { Effect, Option, Schema, SchemaGetter } from "effect";
 
-import type { LineFilters } from "@/queries/lines";
+import type { LineFilters } from "@/queries/line-keys";
 
 import { Month } from "./month";
 
@@ -22,11 +23,19 @@ const forgiving = <S extends Schema.Top>(schema: S) =>
     ),
   );
 
+/** Text cut to what the server reads: a longer address opens the page with its first part. */
+const Cut = Schema.String.pipe(
+  Schema.decode({
+    decode: SchemaGetter.transform((text: string) => text.slice(0, MAX_FILTER_TEXT)),
+    encode: SchemaGetter.transform((text: string) => text),
+  }),
+);
+
 /**
  * Words and amounts as the address gives them back: the router reads `?min=12.5` as a number and
  * `?q=lunch` as a string; both are the text the user typed.
  */
-const Typed = Schema.Union([Schema.String, Schema.Finite]);
+const Typed = Schema.Union([Cut, Schema.Finite]);
 
 /**
  * The operations page's address: its filters, and the open line, so that an address opens the

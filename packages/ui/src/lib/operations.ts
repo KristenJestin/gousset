@@ -10,6 +10,12 @@ export function operationLayoutId(id: string) {
   return `operation-line-${id}`;
 }
 
+/**
+ * The most characters the search's words, and each amount bound, take: the server reads no more,
+ * and the fields stop the typing there.
+ */
+export const MAX_FILTER_TEXT = 200;
+
 /** The operations' filters, as the page keeps them (in its URL, say). */
 export type OperationsFilterValues = {
   /** Words to find in the labels; "" for none. */
