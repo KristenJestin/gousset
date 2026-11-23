@@ -37,7 +37,11 @@ export function OperationsLayout({ filters, count, list, detail, locale }: Opera
   return (
     <div data-slot="operations-layout" className="flex h-svh min-h-120 flex-col gap-3">
       {filters}
-      <p aria-live="polite" className="flex h-5 items-center text-sm text-muted-foreground">
+      <p
+        data-slot="operations-count"
+        aria-live="polite"
+        className="flex h-5 items-center text-sm text-muted-foreground"
+      >
         {count === undefined ? (
           <Skeleton className="h-3.5 w-20" />
         ) : (

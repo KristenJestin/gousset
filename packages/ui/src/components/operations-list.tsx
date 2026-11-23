@@ -3,6 +3,7 @@ import type { VirtualItem } from "@ui-sdk/core";
 import { AnimatePresence, domMax, LazyMotion, m } from "motion/react";
 import type { Variants } from "motion/react";
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
+import type { ReactNode } from "react";
 
 import { useHydrated } from "../hooks/use-hydrated";
 import { usePageLanguage } from "../hooks/use-page-language";
@@ -272,30 +273,16 @@ export function OperationsList({
                     const row = rows[item.index];
 
                     return row === undefined ? null : (
-                      <m.li
+                      <PlacedRow
                         key={row.id}
-                        ref={(element: HTMLLIElement | null) => {
-                          // Placed from script, never by a `style` attribute (see above).
-                          if (element !== null) {
-                            element.style.top = `${item.start}px`;
-                          }
-                        }}
-                        layout="position"
-                        variants={ROW_MOTION}
-                        custom={fading}
-                        initial={
-                          change.before === null || change.before.has(row.id) ? false : "hidden"
-                        }
-                        animate="shown"
-                        exit="gone"
-                        transition={transition.base}
-                        aria-setsize={total}
-                        aria-posinset={item.index + 1}
-                        data-slot="operation-row"
-                        className="absolute inset-x-0 h-12 border-b bg-card"
+                        start={item.start}
+                        fading={fading}
+                        fadesIn={change.before !== null && !change.before.has(row.id)}
+                        total={total}
+                        position={item.index + 1}
                       >
                         {rowButton(row)}
-                      </m.li>
+                      </PlacedRow>
                     );
                   })
                 : // The server's rows, in the flow, with no `style` attribute (see above).
@@ -329,6 +316,57 @@ export function OperationsList({
         </m.div>
       </div>
     </LazyMotion>
+  );
+}
+
+/**
+ * A row of the hydrated list, placed at `start` from script, never by a `style` attribute (see
+ * `OperationsList`). A layout effect rather than a ref callback: Motion calls an `m.li`'s ref once,
+ * at mount, so a row that stays through a change of the rows would keep its old place. Set in the
+ * commit, the new place is what Motion measures after it, against the one it read before: the row
+ * slides from there (`layout="position"`, by transform).
+ */
+function PlacedRow({
+  start,
+  fading,
+  fadesIn,
+  total,
+  position,
+  children,
+}: {
+  start: number;
+  fading: boolean;
+  /** Came with a change of the rows, not by scrolling. */
+  fadesIn: boolean;
+  total: number;
+  position: number;
+  children: ReactNode;
+}) {
+  const element = useRef<HTMLLIElement>(null);
+
+  useLayoutEffect(() => {
+    if (element.current !== null) {
+      element.current.style.top = `${start}px`;
+    }
+  }, [start]);
+
+  return (
+    <m.li
+      ref={element}
+      layout="position"
+      variants={ROW_MOTION}
+      custom={fading}
+      initial={fadesIn ? "hidden" : false}
+      animate="shown"
+      exit="gone"
+      transition={transition.base}
+      aria-setsize={total}
+      aria-posinset={position}
+      data-slot="operation-row"
+      className="absolute inset-x-0 h-12 border-b bg-card"
+    >
+      {children}
+    </m.li>
   );
 }
 
