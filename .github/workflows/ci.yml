@@ -51,8 +51,6 @@ env:
   E2E_FULL_SHARDS: "6"
   UI_SHARDS: "2"
   UI_FULL_SHARDS: "4"
-  # A CI runner has four cores and is nobody's desktop: each worker runs its own app and browser.
-  E2E_WORKERS: "4"
 
 jobs:
   # What this run checks: the browsers and widths, the shards, whether references are drawn and
@@ -379,9 +377,6 @@ jobs:
           --health-retries 10
     env:
       E2E_BROWSERS: ${{ needs.plan.outputs.e2e-scope == 'full' && 'chromium firefox' || 'chromium' }}
-      # The runner's image holds what Chromium needs; Firefox's system packages come from apt,
-      # whose mirrors took up to three minutes (issue #115).
-      E2E_DEPS: ${{ needs.plan.outputs.e2e-scope == 'full' && '--with-deps' || '' }}
       E2E_PROJECTS: ${{ needs.plan.outputs.e2e-scope != 'full' && '--project=chromium-desktop' || '' }}
       SHARD: ${{ matrix.shard }}/${{ needs.plan.outputs.e2e-total }}
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/gousset
@@ -396,13 +391,17 @@ jobs:
           cache: pnpm
       - name: Install
         run: pnpm install --frozen-lockfile
+      # The runner's image holds what both browsers need: no system package from apt, whose mirrors
+      # took up to five minutes (issue #115).
       - name: Playwright's browsers
-        run: pnpm --dir apps/e2e exec playwright install $E2E_DEPS $E2E_BROWSERS
+        run: pnpm --dir apps/e2e exec playwright install $E2E_BROWSERS
       # The suite runs the built app.
       - name: Build
         run: pnpm run build
       - name: End-to-end tests, shard ${{ matrix.shard }}
-        run: pnpm e2e --shard=$SHARD --workers=$E2E_WORKERS $E2E_PROJECTS
+        # The configuration's two workers: four on a runner's four cores made no shard faster, and
+        # broke the tests that time a motion or a scroll in Firefox and at a phone's width.
+        run: pnpm e2e --shard=$SHARD $E2E_PROJECTS
       - name: Keep the trace, video and screenshots
         if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -636,8 +635,10 @@ jobs:
   # The monthly review's four motions filmed in Chromium, light and dark, desktop and phone (issue
   # #10): the `motion-*` projects of apps/e2e, whose every test records a video. The videos are
   # kept as the `motion-recordings` artifact of the run, whatever its result. Not a required check.
+  # Not in a run with every browser and width, whose e2e shards run the `motion-*` projects too.
   motion:
-    if: github.event_name == 'pull_request'
+    needs: plan
+    if: github.event_name == 'pull_request' && needs.plan.outputs.e2e-scope != 'full'
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -728,8 +729,9 @@ jobs:
           cache: pnpm
       - name: Install
         run: pnpm install --frozen-lockfile
+      # No system package from apt (e2e-shard says why).
       - name: Playwright's browsers
-        run: pnpm --dir apps/e2e exec playwright install --with-deps chromium firefox
+        run: pnpm --dir apps/e2e exec playwright install chromium firefox
       - name: Build
         run: pnpm run build
       - name: The review's scenarios, Chromium and Firefox
