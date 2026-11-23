@@ -776,10 +776,10 @@ describe("proposing a profile from a CSV file", () => {
 });
 
 // The import screen's preview (#19): the top of the file as a profile splits it, and a test read.
-describe("previewing a CSV file with a profile", () => {
-  const preview = (bytes: Uint8Array, profile: CsvProfile) =>
-    Effect.runSync(previewCsvRows(csvFile(bytes), profile));
+const preview = (bytes: Uint8Array, profile: CsvProfile) =>
+  Effect.runSync(previewCsvRows(csvFile(bytes), profile));
 
+describe("previewing a CSV file with a profile", () => {
   test("gives the header and the first five rows as written, past the lines skipped", () => {
     const rows = preview(csvSamples.csvDebitCredit.bytes, debitCredit);
 
