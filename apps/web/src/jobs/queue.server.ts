@@ -1,5 +1,5 @@
 import { annotate, withSpan } from "@gousset/telemetry";
-import { Context, Effect, Layer, Option, PubSub, Schema } from "effect";
+import { Context, Effect, Layer, Option, PubSub, Schedule, Schema } from "effect";
 import { PgBoss } from "pg-boss";
 import type { JobResult, JobWithMetadata } from "pg-boss";
 
@@ -36,6 +36,13 @@ const STOP_GRACE_MS = 5000;
  * the end on its row, so that a page never reads the row as it was before.
  */
 const ENDED_KEPT_MS = 60_000;
+
+/** How many changes a stream that stops reading may hold before the oldest go. */
+const CHANGES_KEPT = 256;
+
+/** pg-boss's job ids. */
+const isJobId = (id: string) =>
+  /^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i.test(id);
 
 /** How many jobs the development panel lists. */
 const LISTED_JOBS = 20;
@@ -163,35 +170,58 @@ export class JobQueue extends Context.Service<
       JobQueue,
       Effect.gen(function* () {
         const registered = new Map(jobs.map((job) => [job.name, job]));
-        const changes = yield* PubSub.unbounded<JobView>();
+        // Each stream reads every change and keeps its job's: one that stops reading loses the
+        // oldest, which its next read of the row makes up for, rather than holding them all.
+        const changes = yield* PubSub.sliding<JobView>(CHANGES_KEPT);
 
         // The views of the attempts this process runs, and of those that ended moments ago.
         const live = new Map<string, { owner: string; view: JobView; endedAt: number | null }>();
 
+        // A database that does not answer at boot (a compose start where it comes up late) is
+        // waited for: a failed start would otherwise stay failed in the runtime until a restart.
+        const startBoss = Effect.tryPromise({
+          try: async () => {
+            const created = new PgBoss({
+              connectionString,
+              schema: BOSS_SCHEMA,
+              application_name: "gousset-jobs",
+              // A worker gone silent (a crash) is found within two passes: its attempt is retried.
+              superviseIntervalSeconds: HEARTBEAT_SECONDS,
+              monitorIntervalSeconds: HEARTBEAT_SECONDS,
+              // Gousset opens its own spans; pg-boss's would go to OpenTelemetry's global
+              // provider, which nothing registers.
+              openTelemetry: { enabled: false },
+            });
+
+            // An `error` event nobody listens to would end the process.
+            created.on("error", (error) => {
+              telemetry.runFork(Effect.logError("The job queue reported an error", error));
+            });
+
+            try {
+              return await created.start();
+            } catch (error) {
+              // Its pool closed before the next try opens another.
+              await created.stop({ graceful: false }).catch(() => undefined);
+              throw error;
+            }
+          },
+          catch: () => new JobQueueUnavailable(),
+        });
+
         const boss = yield* Effect.acquireRelease(
-          Effect.tryPromise({
-            try: async () => {
-              const created = new PgBoss({
-                connectionString,
-                schema: BOSS_SCHEMA,
-                application_name: "gousset-jobs",
-                // A worker gone silent (a crash) is found within two passes: its attempt is retried.
-                superviseIntervalSeconds: HEARTBEAT_SECONDS,
-                monitorIntervalSeconds: HEARTBEAT_SECONDS,
-                // Gousset opens its own spans; pg-boss's would go to OpenTelemetry's global
-                // provider, which nothing registers.
-                openTelemetry: { enabled: false },
-              });
-
-              // An `error` event nobody listens to would end the process.
-              created.on("error", (error) => {
-                telemetry.runFork(Effect.logError("The job queue reported an error", error));
-              });
-
-              return created.start({ attempts: 5 });
-            },
-            catch: () => new JobQueueUnavailable(),
-          }),
+          startBoss.pipe(
+            Effect.tapError(() =>
+              Effect.sync(() =>
+                telemetry.runFork(
+                  Effect.logWarning("The job queue cannot reach the database yet: it tries again."),
+                ),
+              ),
+            ),
+            Effect.retry(
+              Schedule.min([Schedule.exponential("1 second"), Schedule.spaced("30 seconds")]),
+            ),
+          ),
           (started) =>
             Effect.promise(async () => started.stop({ graceful: true, timeout: STOP_GRACE_MS })),
         );
@@ -341,7 +371,19 @@ export class JobQueue extends Context.Service<
                 return known.owner === owner ? known.view : null;
               }
 
+              // pg-boss's ids are UUIDs: anything else is no job, not a query Postgres refuses.
+              if (!isJobId(id)) {
+                return null;
+              }
+
               const row = yield* findRow(id);
+
+              // An attempt that started while the row was read is newer than the row.
+              const started = live.get(id);
+
+              if (started !== undefined) {
+                return started.owner === owner ? started.view : null;
+              }
 
               return row !== null && row.owner === owner ? row.view : null;
             }),

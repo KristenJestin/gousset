@@ -33,10 +33,14 @@ export const jobEvents = (id: string, owner: string) =>
       return null;
     }
 
-    // A row that cannot be read for a moment, or that retention removed, keeps the last view.
-    const now = queue.view(id, owner).pipe(
-      Effect.map((view) => view ?? first),
-      Effect.orElseSucceed(() => first),
+    // A row that cannot be read for a moment, or that retention removed, keeps the last view sent.
+    let last = first;
+
+    const now = Effect.suspend(() =>
+      queue.view(id, owner).pipe(
+        Effect.map((view) => view ?? last),
+        Effect.orElseSucceed(() => last),
+      ),
     );
 
     const views = Stream.concat(
@@ -45,7 +49,15 @@ export const jobEvents = (id: string, owner: string) =>
         Stream.fromPubSub(queue.changes).pipe(Stream.filter((view) => view.id === id)),
         Stream.tick(RECONCILE_EVERY).pipe(Stream.mapEffect(() => now)),
       ),
-    ).pipe(Stream.changesWith(sameView), Stream.takeUntil(isOver));
+    ).pipe(
+      Stream.changesWith(sameView),
+      Stream.tap((view) =>
+        Effect.sync(() => {
+          last = view;
+        }),
+      ),
+      Stream.takeUntil(isOver),
+    );
 
     const lines = Stream.concat(
       Stream.make(`retry: ${RECONNECT_MS}\n\n`),
