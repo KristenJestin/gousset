@@ -1,3 +1,4 @@
+import { m } from "@gousset/i18n/messages";
 import { Button } from "@gousset/ui/components/button";
 import { Card } from "@gousset/ui/components/card";
 import { FormMessage } from "@gousset/ui/components/form-message";
@@ -8,7 +9,6 @@ import { useState } from "react";
 import type { FormEvent } from "react";
 
 import { errorMessage } from "@/i18n/messages";
-import { useMessages } from "@/i18n/use-messages";
 import { authClient } from "@/lib/auth-client";
 import { formText } from "@/lib/form";
 import { whileBusy } from "@/lib/while-busy";
@@ -25,7 +25,6 @@ export const Route = createFileRoute("/setup")({
 });
 
 function Setup() {
-  const messages = useMessages();
   const navigate = useNavigate();
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
@@ -44,7 +43,7 @@ function Setup() {
     );
 
     if (refusal) {
-      setError(errorMessage(messages, refusal.code));
+      setError(errorMessage(refusal.code));
 
       return;
     }
@@ -55,18 +54,18 @@ function Setup() {
 
   return (
     <Screen>
-      <Card title={messages.setup.title} description={messages.setup.description}>
+      <Card title={m.setupTitle()} description={m.setupDescription()}>
         <Form onSubmit={(event) => void submit(event)} onInput={() => setError(undefined)}>
-          <TextField label={messages.fields.name} name="name" autoComplete="name" required />
+          <TextField label={m.fieldName()} name="name" autoComplete="name" required />
           <TextField
-            label={messages.fields.email}
+            label={m.fieldEmail()}
             name="email"
             type="email"
             autoComplete="email"
             required
           />
           <TextField
-            label={messages.fields.password}
+            label={m.fieldPassword()}
             name="password"
             type="password"
             autoComplete="new-password"
@@ -75,7 +74,7 @@ function Setup() {
           />
           <FormMessage message={error} />
           <Button type="submit" loading={busy}>
-            {messages.setup.submit}
+            {m.setupSubmit()}
           </Button>
         </Form>
       </Card>

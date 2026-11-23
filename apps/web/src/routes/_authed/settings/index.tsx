@@ -1,13 +1,17 @@
+import { m } from "@gousset/i18n/messages";
+import { getLocale, locales, setLocale } from "@gousset/i18n/runtime";
+import type { Locale } from "@gousset/i18n/runtime";
+import { Block } from "@gousset/ui/components/app-shell";
 import { Button } from "@gousset/ui/components/button";
-import { Card } from "@gousset/ui/components/card";
+import { ColorSchemePicker } from "@gousset/ui/components/color-scheme-picker";
 import { FormMessage } from "@gousset/ui/components/form-message";
 import { List, ListItem } from "@gousset/ui/components/list";
-import { Actions, Screen } from "@gousset/ui/components/screen";
+import { Actions } from "@gousset/ui/components/screen";
+import { SegmentedChoice } from "@gousset/ui/components/segmented-choice";
 import { StatusMessage } from "@gousset/ui/components/status-message";
 import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { useState } from "react";
 
-import { AppLink } from "@/components/app-link";
 import {
   getConnectedClients,
   getMcpDoor,
@@ -15,22 +19,56 @@ import {
   setMcpDoor,
 } from "@/functions/mcp";
 import { errorMessage } from "@/i18n/messages";
-import { useMessages } from "@/i18n/use-messages";
 import { refusalOf } from "@/lib/refusal";
 import { whileBusy } from "@/lib/while-busy";
 
-/** A user's settings: the MCP clients they allowed; for the administrator, the MCP door itself. */
-export const Route = createFileRoute("/_authed/settings")({
+/** Each language, in its own words: the same in every language. */
+const LANGUAGE_NAMES = {
+  en: m.languageEnglish,
+  fr: m.languageFrench,
+} satisfies { [locale in Locale]: () => string };
+
+/**
+ * The general settings: how the interface looks and speaks, the MCP clients the user allowed and,
+ * for the administrator, the MCP door itself. The blocks to come land here, one under the other:
+ * the colour scheme kept on the account (#50), turning off the single-key shortcuts (#54).
+ */
+export const Route = createFileRoute("/_authed/settings/")({
   loader: async () => {
     const [clients, door] = await Promise.all([getConnectedClients(), getMcpDoor()]);
 
     return { clients, door };
   },
-  component: Settings,
+  component: GeneralSettings,
 });
 
-function Settings() {
-  const messages = useMessages();
+function GeneralSettings() {
+  return (
+    <>
+      <Block title={m.settingsLanguageTitle()} description={m.settingsLanguageDescription()}>
+        <SegmentedChoice
+          label={m.settingsLanguageTitle()}
+          value={getLocale()}
+          choices={locales.map((locale) => ({ value: locale, label: LANGUAGE_NAMES[locale]() }))}
+          onChange={(locale) => void setLocale(locale)}
+        />
+      </Block>
+      <Block title={m.settingsColorSchemeTitle()} description={m.settingsColorSchemeDescription()}>
+        <ColorSchemePicker
+          label={m.settingsColorSchemeTitle()}
+          choices={{
+            system: m.colorSchemeSystem(),
+            light: m.colorSchemeLight(),
+            dark: m.colorSchemeDark(),
+          }}
+        />
+      </Block>
+      <McpSettings />
+    </>
+  );
+}
+
+function McpSettings() {
   const router = useRouter();
   const { clients, door } = Route.useLoaderData();
   const [revoked, setRevoked] = useState<string>();
@@ -47,13 +85,13 @@ function Settings() {
     // "revoked", and no reload that would take the message away.
     if (refusal !== undefined) {
       setRevoked(undefined);
-      setClientsError(errorMessage(messages, refusal));
+      setClientsError(errorMessage(refusal));
 
       return;
     }
 
     setClientsError(undefined);
-    setRevoked(messages.settings.revoked(name));
+    setRevoked(m.mcpRevoked({ client: name }));
     await router.invalidate();
   }
 
@@ -61,7 +99,7 @@ function Settings() {
     const refusal = await whileBusy(setBusy, () => refusalOf(() => setMcpDoor({ data: { open } })));
 
     if (refusal !== undefined) {
-      setDoorError(errorMessage(messages, refusal));
+      setDoorError(errorMessage(refusal));
 
       return;
     }
@@ -72,36 +110,36 @@ function Settings() {
 
   const doorState = door.servable
     ? door.open
-      ? messages.settings.doorOpen
-      : messages.settings.doorClosed
-    : messages.settings.doorUnavailable;
+      ? m.mcpDoorOpen()
+      : m.mcpDoorClosed()
+    : m.mcpDoorUnavailable();
 
   return (
-    <Screen>
-      <Card
-        title={messages.settings.clientsTitle}
-        description={messages.settings.clientsDescription(door.endpoint)}
+    <>
+      <Block
+        title={m.mcpClientsTitle()}
+        description={m.mcpClientsDescription({ endpoint: door.endpoint })}
       >
         {clients.length === 0 ? (
-          <StatusMessage message={messages.settings.noClients} />
+          <StatusMessage message={m.mcpNoClients()} />
         ) : (
-          <List label={messages.settings.clientsTitle}>
+          <List label={m.mcpClientsTitle()}>
             {clients.map((client) => (
               <ListItem
                 key={client.clientId}
                 title={client.name}
                 description={
-                  client.host === null ? undefined : messages.settings.clientFrom(client.host)
+                  client.host === null ? undefined : m.mcpClientFrom({ host: client.host })
                 }
-                tags={[client.canWrite ? messages.settings.readWrite : messages.settings.readOnly]}
+                tags={[client.canWrite ? m.mcpReadWrite() : m.mcpReadOnly()]}
                 action={
                   <Button
                     variant="secondary"
                     loading={busy}
-                    aria-label={messages.settings.revokeLabel(client.name)}
+                    aria-label={m.mcpRevokeLabel({ client: client.name })}
                     onClick={() => void revoke(client.clientId, client.name)}
                   >
-                    {messages.settings.revoke}
+                    {m.mcpRevoke()}
                   </Button>
                 }
               />
@@ -110,22 +148,19 @@ function Settings() {
         )}
         <StatusMessage message={revoked} />
         <FormMessage message={clientsError} />
-      </Card>
+      </Block>
       {door.canManage ? (
-        <Card title={messages.settings.doorTitle} description={doorState}>
+        <Block title={m.mcpDoorTitle()} description={doorState}>
           {door.servable ? (
             <Actions>
               <Button variant="secondary" loading={busy} onClick={() => void turn(!door.open)}>
-                {door.open ? messages.settings.turnOff : messages.settings.turnOn}
+                {door.open ? m.mcpTurnOff() : m.mcpTurnOn()}
               </Button>
             </Actions>
           ) : null}
           <FormMessage message={doorError} />
-        </Card>
+        </Block>
       ) : null}
-      <Actions>
-        <AppLink to="/">{messages.settings.back}</AppLink>
-      </Actions>
-    </Screen>
+    </>
   );
 }

@@ -55,6 +55,8 @@ test-results
 playwright-report
 # Pages the lint scenario writes and removes (packages/ui/e2e/lint-probe.ts)
 apps/web/src/lint-probe-*
+# ...and in the shared components, for the text scenario (same file)
+packages/ui/src/components/lint-probe-*
 
 # Misc
 *.tgz

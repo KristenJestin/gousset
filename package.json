@@ -30,7 +30,8 @@
     "docker:down": "docker compose down",
     "docker:logs": "docker compose logs -f",
     "env:generate": "varlock codegen --path ./apps/web/ && varlock codegen --path ./packages/db/",
-    "postinstall": "varlock codegen --path ./apps/web/ && varlock codegen --path ./packages/db/",
+    "i18n:compile": "pnpm --dir packages/i18n run compile",
+    "postinstall": "varlock codegen --path ./apps/web/ && varlock codegen --path ./packages/db/ && pnpm --dir packages/i18n run compile",
     "auth:generate": "cd apps/web && pnpm run auth:generate"
   },
   "devDependencies": {
