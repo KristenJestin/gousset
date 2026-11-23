@@ -1,5 +1,5 @@
 import { request as apiRequest } from "@playwright/test";
-import type { Browser, Page, Request } from "@playwright/test";
+import type { Browser, Locator, Page, Request } from "@playwright/test";
 import { Schema } from "effect";
 
 import { addUser, createUser, hasLiveSession, signIn, signInStatus } from "../src/auth";
@@ -15,6 +15,15 @@ import { expect, fixDay, test, visit } from "../src/test";
 
 // A client asking only to read gets a single "Allow" on the consent page.
 const allow = (page: Page) => page.getByRole("button", { name: "Allow", exact: true }).click();
+
+/**
+ * Clicks a button of a page the browser loaded by itself (a redirect, `location.assign`): before
+ * the page hydrates, a click does nothing and is lost (#97), so it waits for the button to work.
+ */
+async function clickOnceHydrated(button: Locator) {
+  await expect(button).toHaveAttribute("data-hydrated");
+  await button.click();
+}
 
 const SessionUser = Schema.Struct({ user: Schema.Struct({ mustChangePassword: Schema.Boolean }) });
 
@@ -589,7 +598,7 @@ test("signing in for an MCP client on a temporary password goes to the change, t
 
     await page.getByLabel("E-mail").fill(person.email);
     await page.getByLabel("Password", { exact: true }).fill(person.password);
-    await page.getByRole("button", { name: "Sign in" }).click();
+    await clickOnceHydrated(page.getByRole("button", { name: "Sign in" }));
 
     // The change first, not an error on the sign-in page.
     await expect(page).toHaveURL(/\/change-password\?/);
@@ -597,14 +606,120 @@ test("signing in for an MCP client on a temporary password goes to the change, t
 
     await page.getByLabel("Current password").fill(person.password);
     await page.getByLabel("New password").fill("lia-own-password-e2e");
-    await page.getByRole("button", { name: "Change the password" }).click();
+    await clickOnceHydrated(page.getByRole("button", { name: "Change the password" }));
 
     // Then the authorization goes on, to the consent and back to the client with its code.
-    await page.getByRole("button", { name: "Allow", exact: true }).click();
+    await clickOnceHydrated(page.getByRole("button", { name: "Allow", exact: true }));
 
     const returned = (await callback).searchParams;
 
     await page.waitForURL(`${TEST_REDIRECT_URL}**`);
+    expect(returned.get("code")).not.toBeNull();
+    expect(returned.get("state")).toBe("e2e-state");
+  } finally {
+    await context.close();
+  }
+});
+
+/** The app's own scripts, whatever bundle they come from. */
+const APP_SCRIPTS = /\.m?js(\?.*)?$/;
+
+/**
+ * Holds back the scripts a page at `path` asks for, until the returned function is called: the page
+ * stays as the server drew it, before hydration, as a slow phone shows it for a while.
+ */
+async function holdScriptsOf(page: Page, path: string) {
+  const { promise: released, resolve: release } = Promise.withResolvers<void>();
+
+  await page.route(APP_SCRIPTS, async (route) => {
+    if (new URL(route.request().frame().url()).pathname === path) {
+      await released;
+    }
+
+    await route.fallback();
+  });
+
+  return () => release();
+}
+
+test("the forced change and the consent say when their buttons work, and send nothing before, so the resumed authorization loses no tap", async ({
+  browser,
+  app,
+  user,
+  mcpClientId,
+}) => {
+  test.setTimeout(60_000);
+  expect(mcpClientId).toBe(TEST_CLIENT_ID);
+
+  // A user on the administrator's temporary password, signed in for their agent: the sign-in sent
+  // them to the change, the authorization to resume in its address (#97).
+  const person = {
+    name: "Noa Example",
+    email: "noa.reset@example.com",
+    password: "noa-temporary-e2e",
+  };
+
+  await createUser(app.baseURL, user, person);
+
+  const held = await signIn(app.baseURL, { ...person, cookies: [] });
+  const resume = new URL(authorizeUrl(app.baseURL)).searchParams.toString();
+  const context = await browser.newContext({ baseURL: app.baseURL });
+
+  try {
+    await context.addCookies([...held.cookies]);
+
+    const page = await context.newPage();
+
+    const callback = new Promise<URL>((resolve) => {
+      void page.route(`${TEST_REDIRECT_URL}**`, async (route) => {
+        resolve(new URL(route.request().url()));
+        await route.fulfill({
+          contentType: "text/html",
+          body: '<!doctype html><html lang="en"><title>Connected</title><main><h1>Connected</h1></main></html>',
+        });
+      });
+    });
+
+    const sent: Array<string> = [];
+
+    page.on("request", (request) => {
+      if (new URL(request.url()).searchParams.has("currentPassword")) {
+        sent.push(request.url());
+      }
+    });
+
+    const releaseChange = await holdScriptsOf(page, "/change-password");
+    const releaseConsent = await holdScriptsOf(page, "/consent");
+
+    // Before its scripts run, the change is a plain button that says it does not work yet: a click
+    // sends no form, which would carry the passwords in the address and lose the authorization.
+    const address = `/change-password?${new URLSearchParams({ resume }).toString()}`;
+
+    await page.goto(address, { waitUntil: "commit" });
+
+    const change = page.getByRole("button", { name: "Change the password" });
+
+    await page.getByLabel("Current password").fill(person.password);
+    await page.getByLabel("New password").fill("noa-own-password-e2e");
+    await expect(change).toHaveAttribute("type", "button");
+    await expect(change).not.toHaveAttribute("data-hydrated");
+    await change.click();
+    expect(sent).toEqual([]);
+    expect(new URL(page.url()).searchParams.get("resume")).toBe(resume);
+
+    releaseChange();
+    await clickOnceHydrated(change);
+
+    // Before its scripts run, the consent says its answers do not work yet: the click waits.
+    const allow = page.getByRole("button", { name: "Allow", exact: true });
+
+    await expect(allow).toBeVisible();
+    await expect(allow).not.toHaveAttribute("data-hydrated");
+    releaseConsent();
+    await clickOnceHydrated(allow);
+
+    const returned = (await callback).searchParams;
+
     expect(returned.get("code")).not.toBeNull();
     expect(returned.get("state")).toBe("e2e-state");
   } finally {
