@@ -1,4 +1,4 @@
-import type { Imports, Ledger } from "@gousset/core";
+import type { ImportProfiles, Imports, Ledger } from "@gousset/core";
 
 import { INSTRUCTIONS } from "./instructions";
 import type { ServerDefinition } from "./server";
@@ -7,7 +7,7 @@ import { importsTool } from "./tools/imports";
 import { monthTool } from "./tools/month";
 
 /** The services Gousset's tools need: the app's runner provides them. */
-export type GoussetServices = Ledger | Imports;
+export type GoussetServices = Ledger | Imports | ImportProfiles;
 
 /**
  * Gousset's tools, in the order `tools/list` gives them: one family per concept
