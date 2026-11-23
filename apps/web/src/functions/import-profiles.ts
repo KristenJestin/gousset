@@ -35,6 +35,21 @@ export const listImportProfiles = createServerFn({ method: "GET" })
   );
 
 /**
+ * The profiles that read a CSV import's file (by its header, then by a test read) and the one it
+ * used; `null` for no such import.
+ */
+export const getImportProfilesFor = createServerFn({ method: "GET" })
+  .middleware([signedIn])
+  .validator(Schema.toStandardSchemaV1(Schema.Struct({ importId: Schema.String })))
+  .handler(({ data, context }) =>
+    runCore(
+      ImportProfiles.use((profiles) => profiles.forImport(context.owner, data.importId)).pipe(
+        Effect.catchTag("ImportNotFound", () => Effect.succeed(null)),
+      ),
+    ),
+  );
+
+/**
  * Saves a profile made from a preview: its name, the institution or `null`, how it reads, and the
  * header of the file it was made on (normalised, as the CSV questions give it), or `null`.
  */

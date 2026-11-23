@@ -1,3 +1,4 @@
+import { MAX_PROFILE_NAME, MAX_PROFILES } from "@gousset/core/imports";
 import type { ImportFormat, ImportStep, ImportSummary } from "@gousset/core/imports";
 import { m } from "@gousset/i18n/messages";
 
@@ -85,7 +86,30 @@ export function importFailureMessage(code: string | null): string {
       return m.importFailureReadTimeout();
     case "READ_CRASHED":
       return m.importFailureReadCrashed();
+    case "PROFILE_NOT_FOUND":
+      return m.importRefusedProfileNotFound();
+    case "PROFILE_UNREADABLE":
+      return m.importRefusedProfileUnreadable();
+    case "PROFILE_NAME_MISSING":
+      return m.importRefusedProfileName();
+    case "INVALID_PROFILE_FILE":
+      return m.importRefusedProfileFile();
     default:
       return m.importFailureOther();
+  }
+}
+
+/** Why a profile was not kept, exported or read: its refusal, with the limit it names. */
+export function profileRefusalMessage(refusal: {
+  readonly refused: string;
+  readonly limit?: number;
+}): string {
+  switch (refusal.refused) {
+    case "TOO_MANY_PROFILES":
+      return m.importRefusedProfileTooMany({ limit: refusal.limit ?? MAX_PROFILES });
+    case "PROFILE_TOO_LONG":
+      return m.importRefusedProfileTooLong({ limit: refusal.limit ?? MAX_PROFILE_NAME });
+    default:
+      return importFailureMessage(refusal.refused);
   }
 }
