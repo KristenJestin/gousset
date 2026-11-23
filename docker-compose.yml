@@ -21,7 +21,7 @@
 name: gousset
 
 x-gousset: &gousset
-  image: ghcr.io/kristenjestin/gousset:${GOUSSET_VERSION:-latest}
+  image: ghcr.io/gousset-finance/gousset:${GOUSSET_VERSION:-latest}
   # In a clone of the repository, `docker compose up --build` builds the image instead.
   build: .
   init: true

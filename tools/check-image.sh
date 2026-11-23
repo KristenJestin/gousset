@@ -6,12 +6,12 @@
 # app's container and reaches the database; then that the app is not healthy
 # without BETTER_AUTH_SECRET, nor with a wrong database password. The database password holds every
 # character a URL reserves. Removes everything it started, whatever happened.
-#   tools/check-image.sh <tag>   a tag of ghcr.io/kristenjestin/gousset, local or pulled
-#   docker build -t ghcr.io/kristenjestin/gousset:local . && tools/check-image.sh local
+#   tools/check-image.sh <tag>   a tag of ghcr.io/gousset-finance/gousset, local or pulled
+#   docker build -t ghcr.io/gousset-finance/gousset:local . && tools/check-image.sh local
 # GOUSSET_PORT chooses the port on the loopback (3901 by default).
 set -euo pipefail
 
-tag=${1:?check-image.sh: give the tag of ghcr.io/kristenjestin/gousset to check}
+tag=${1:?check-image.sh: give the tag of ghcr.io/gousset-finance/gousset to check}
 port=${GOUSSET_PORT:-3901}
 root=$(cd "$(dirname "$0")/.." && pwd)
 work=$(mktemp -d)
@@ -77,7 +77,7 @@ probe() { # <name> <host port> <docker run arguments>…
   docker run --detach --name "$name" --network "${project}_default" \
     --publish "127.0.0.1:$published:3001" --env "BETTER_AUTH_URL=http://localhost:$published" \
     --env DATABASE_URL=postgresql://gousset@postgres:5432/gousset "$@" \
-    "ghcr.io/kristenjestin/gousset:$tag" > /dev/null
+    "ghcr.io/gousset-finance/gousset:$tag" > /dev/null
   for _ in $(seq 60); do
     code=$(curl --silent --max-time 5 --write-out '%{http_code}' --output /dev/null \
       "http://127.0.0.1:$published/health") || true

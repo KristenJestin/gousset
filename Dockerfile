@@ -30,7 +30,7 @@ FROM node:26.13.1-slim
 ARG VERSION=local
 LABEL org.opencontainers.image.title="Gousset" \
   org.opencontainers.image.description="Self-hosted personal finance: where did my money go?" \
-  org.opencontainers.image.source="https://github.com/KristenJestin/gousset" \
+  org.opencontainers.image.source="https://github.com/gousset-finance/gousset" \
   org.opencontainers.image.licenses="AGPL-3.0-only" \
   org.opencontainers.image.version="$VERSION"
 # Varlock's CLI sends usage statistics unless told not to: nothing leaves an installation.

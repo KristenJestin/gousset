@@ -8,7 +8,7 @@ whoever installs it. Two branches publish, each with a version that says where i
 | `dev`  | `0.1.3-beta.12`, `sha-<commit>`, `beta` | each push, once its `verify` passed (`beta.yml`)  |
 | `main` | `0.1.3`, `latest`, tag `v0.1.3` | a release pull request `dev → main`, then the `Release` workflow (`release.yml`) |
 
-The image is `ghcr.io/kristenjestin/gousset`. A published version is never replaced: a run again
+The image is `ghcr.io/gousset-finance/gousset`. A published version is never replaced: a run again
 publishes only what is missing. `beta` and `latest` move; a version stays. `sha-<commit>` (the
 full SHA) records the image of each commit of `dev`: the release takes the image by it, never by a
 name computed again.
@@ -45,7 +45,7 @@ checks it against `apps/web/.env.schema`), never at build time: the build needs 
 To build it and try it as an installation would, in a clone:
 
 ```sh
-docker build -t ghcr.io/kristenjestin/gousset:local .
+docker build -t ghcr.io/gousset-finance/gousset:local .
 tools/check-image.sh local
 ```
 
@@ -65,7 +65,7 @@ port of the host; only the app is.
 
 ```sh
 mkdir gousset && cd gousset
-curl -fsSLO https://raw.githubusercontent.com/KristenJestin/gousset/main/docker-compose.yml
+curl -fsSLO https://raw.githubusercontent.com/gousset-finance/gousset/main/docker-compose.yml
 mkdir -p secrets
 openssl rand -base64 32 > secrets/postgres_password
 openssl rand -base64 32 > secrets/better_auth_secret
@@ -404,7 +404,7 @@ It removes everything it started, whatever happened. To run it on a clone, with 
 fetched (`git fetch --tags`):
 
 ```sh
-docker build -t ghcr.io/kristenjestin/gousset:local .
+docker build -t ghcr.io/gousset-finance/gousset:local .
 tools/check-upgrade.sh local
 ```
 
@@ -432,7 +432,7 @@ Then, under **All changes**, every Angular subject, grouped by type.
 
 In the repository's settings, never in the repository:
 
-1. **The package is public.** The first beta creates `ghcr.io/kristenjestin/gousset` as a private
+1. **The package is public.** The first beta creates `ghcr.io/gousset-finance/gousset` as a private
    package: in its settings, make it public, so that an installation pulls it without signing in.
 2. **`main`'s ruleset blocks deletion and non-fast-forward, nothing more.** The release moves
    `main` with the workflow's own token, through the API, to a commit whose checks passed and

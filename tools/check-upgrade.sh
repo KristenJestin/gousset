@@ -9,7 +9,7 @@
 # holds their rows as they were. Removes everything it started, whatever happened.
 #   tools/check-upgrade.sh <tag>                   from the last release (the highest tag vX.Y.Z)
 #   tools/check-upgrade.sh --from 0.1.1 <tag>
-#   docker build -t ghcr.io/kristenjestin/gousset:local . && tools/check-upgrade.sh local
+#   docker build -t ghcr.io/gousset-finance/gousset:local . && tools/check-upgrade.sh local
 # Needs the release's tag in the clone (git fetch --tags), docker compose, curl, jq and unzip.
 # GOUSSET_PORT chooses the port on the loopback (3911 by default).
 set -euo pipefail
@@ -19,7 +19,7 @@ if [ "${1:-}" = --from ]; then
   from=${2:?check-upgrade.sh: --from takes a version, as 0.1.1}
   shift 2
 fi
-tag=${1:?check-upgrade.sh: give the tag of ghcr.io/kristenjestin/gousset to update to}
+tag=${1:?check-upgrade.sh: give the tag of ghcr.io/gousset-finance/gousset to update to}
 port=${GOUSSET_PORT:-3911}
 root=$(cd "$(dirname "$0")/.." && pwd)
 

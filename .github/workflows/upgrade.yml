@@ -50,7 +50,7 @@ jobs:
         with:
           context: .
           load: true
-          tags: ghcr.io/kristenjestin/gousset:upgrade
+          tags: ghcr.io/gousset-finance/gousset:upgrade
 
       - name: The last release updates to it, losing and changing nothing
         run: tools/check-upgrade.sh upgrade

@@ -1,5 +1,5 @@
 # The beta of each push to dev (docs/releases.md, "Betas"): once the `verify` job of that push's
-# `ci` run passed, the image ghcr.io/kristenjestin/gousset:X.Y.Z-beta.N, checked by installing it
+# `ci` run passed, the image ghcr.io/gousset-finance/gousset:X.Y.Z-beta.N, checked by installing it
 # as docker-compose.yml does, recorded as sha-<commit>, and the tag `beta` while the commit is still
 # dev's head.
 #
@@ -18,7 +18,7 @@ permissions: {}
 # never get its beta. Each run publishes its own commit; `beta` moves only to dev's head.
 
 env:
-  IMAGE: ghcr.io/kristenjestin/gousset
+  IMAGE: ghcr.io/gousset-finance/gousset
 
 jobs:
   # The branch's code runs here, with a token that can only read.

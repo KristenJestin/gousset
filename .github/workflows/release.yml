@@ -25,7 +25,7 @@ concurrency:
   group: release
 
 env:
-  IMAGE: ghcr.io/kristenjestin/gousset
+  IMAGE: ghcr.io/gousset-finance/gousset
 
 jobs:
   # Reads only: what is released, its version and its notes.
