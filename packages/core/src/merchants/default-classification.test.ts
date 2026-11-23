@@ -80,6 +80,66 @@ describe("a merchant's default category", () => {
     ).toEqual([{ entryId: "a", categoryId: "other-expense" }]);
   });
 
+  test("after a merge into a merchant of its own default, the merged one's entries follow the kept one's; the user's stay", () => {
+    // Corner Cafe (default Groceries) merged into Greenmarket (default Bakery): its cleaned
+    // labels, so its entries, are Greenmarket's now, and Greenmarket kept its own default.
+    const bakery: MerchantDefault = { categoryId: "bakery", kind: "expense", archived: false };
+
+    expect(
+      defaultCategoryMoves(
+        [
+          entry({ id: "cafe", categoryId: "groceries" }),
+          entry({ id: "kept", categoryId: "bakery" }),
+          entry({ id: "chosen", categoryId: "groceries", classifiedBy: "user" }),
+        ],
+        defaults(["greenmarket", bakery]),
+        FALLBACKS,
+      ),
+    ).toEqual([{ entryId: "cafe", categoryId: "bakery" }]);
+  });
+
+  test("after a merge into a merchant of none, which takes the merged one's, every entry goes in it", () => {
+    // Greenmarket (no default) took Corner Cafe's, Groceries, with its cleaned labels.
+    expect(
+      defaultCategoryMoves(
+        [
+          entry({ id: "cafe", categoryId: "groceries" }),
+          entry({ id: "own" }),
+          entry({ id: "chosen", classifiedBy: "user" }),
+        ],
+        defaults(["greenmarket", groceries]),
+        FALLBACKS,
+      ),
+    ).toEqual([{ entryId: "own", categoryId: "groceries" }]);
+  });
+
+  test("a cleaned label moved: its entries follow their new merchant's default, or its fallback", () => {
+    const moved = [
+      entry({ id: "to-fuelstop", merchantId: "fuelstop", categoryId: "groceries" }),
+      entry({ id: "to-new", merchantId: "new-shop", categoryId: "groceries" }),
+      entry({
+        id: "chosen",
+        merchantId: "new-shop",
+        categoryId: "groceries",
+        classifiedBy: "user",
+      }),
+    ];
+
+    expect(
+      defaultCategoryMoves(
+        moved,
+        defaults(
+          ["greenmarket", groceries],
+          ["fuelstop", { categoryId: "fuel", kind: "expense", archived: false }],
+        ),
+        FALLBACKS,
+      ),
+    ).toEqual([
+      { entryId: "to-fuelstop", categoryId: "fuel" },
+      { entryId: "to-new", categoryId: "other-expense" },
+    ]);
+  });
+
   test("archived, it classifies nothing new, and keeps the entries it has", () => {
     const archived = defaults(["greenmarket", { ...groceries, archived: true }]);
 
