@@ -1,4 +1,4 @@
-import { AnimatePresence, motion } from "motion/react";
+import { AnimatePresence, domMax, LazyMotion, m } from "motion/react";
 import { useState } from "react";
 
 import { useUiMessages } from "../hooks/use-ui-messages";
@@ -85,51 +85,54 @@ export function ReviewLines({
     first.has(id) ? {} : { initial: { opacity: 0 }, animate: { opacity: 1 } };
 
   return (
-    <ul aria-label={label} data-slot="review-lines" className="relative flex flex-col">
-      {/* The line that leaves is taken out of the flow at once; the others move up by layout. */}
-      <AnimatePresence initial={false} mode="popLayout">
-        {lines.slice(0, shown).map((line) => (
-          <motion.li
-            key={line.id}
-            data-slot="review-line"
-            layout="position"
-            className="border-b bg-card last:border-b-0"
-            {...unfolds(line.id)}
-            exit={{ opacity: 0 }}
-            transition={transition.base}
-          >
-            <div className="flex h-16 items-center gap-3">
-              <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-                <span className="truncate font-mono text-xs text-muted-foreground">
-                  {line.label}
-                </span>
-                <span className="flex min-w-0 items-center gap-2 text-sm">
-                  <span className="truncate font-medium">{line.title}</span>
-                  {line.tags.map((tag) => (
-                    <span
-                      key={tag}
-                      className="hidden shrink-0 rounded-md bg-muted px-1.5 py-0.5 text-xs text-muted-foreground sm:inline"
-                    >
-                      {tag}
-                    </span>
-                  ))}
-                </span>
+    // Layout moves need Motion's `domMax` features, loaded here only.
+    <LazyMotion features={domMax}>
+      <ul aria-label={label} data-slot="review-lines" className="relative flex flex-col">
+        {/* The line that leaves is taken out of the flow at once; the others move up by layout. */}
+        <AnimatePresence initial={false} mode="popLayout">
+          {lines.slice(0, shown).map((line) => (
+            <m.li
+              key={line.id}
+              data-slot="review-line"
+              layout="position"
+              className="border-b bg-card last:border-b-0"
+              {...unfolds(line.id)}
+              exit={{ opacity: 0 }}
+              transition={transition.base}
+            >
+              <div className="flex h-16 items-center gap-3">
+                <div className="flex min-w-0 flex-1 flex-col gap-0.5">
+                  <span className="truncate font-mono text-xs text-muted-foreground">
+                    {line.label}
+                  </span>
+                  <span className="flex min-w-0 items-center gap-2 text-sm">
+                    <span className="truncate font-medium">{line.title}</span>
+                    {line.tags.map((tag) => (
+                      <span
+                        key={tag}
+                        className="hidden shrink-0 rounded-md bg-muted px-1.5 py-0.5 text-xs text-muted-foreground sm:inline"
+                      >
+                        {tag}
+                      </span>
+                    ))}
+                  </span>
+                </div>
+                <Amount value={line.amount} size="sm" roll={false} locale={locale} />
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  aria-label={approveLabel(line)}
+                  onClick={() => onApprove(line.id)}
+                >
+                  {approveText}
+                </Button>
               </div>
-              <Amount value={line.amount} size="sm" roll={false} locale={locale} />
-              <Button
-                variant="secondary"
-                size="sm"
-                aria-label={approveLabel(line)}
-                onClick={() => onApprove(line.id)}
-              >
-                {approveText}
-              </Button>
-            </div>
-          </motion.li>
-        ))}
-      </AnimatePresence>
-      {hidden > 0 ? <More count={hidden} onMore={onMore} /> : null}
-    </ul>
+            </m.li>
+          ))}
+        </AnimatePresence>
+        {hidden > 0 ? <More count={hidden} onMore={onMore} /> : null}
+      </ul>
+    </LazyMotion>
   );
 }
 
