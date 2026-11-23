@@ -11,6 +11,7 @@ import { CsvProfile, detectCsvProfile } from "@gousset/import";
 import { and, count, eq, gte, inArray, isNotNull, isNull, lte, ne, or } from "drizzle-orm";
 import { Effect, Schema } from "effect";
 
+import { entriesForLines } from "../entries";
 import { ImportFailed } from "./errors";
 import { dedupKeys, NEAR_DAYS, nearDuplicates } from "./keys";
 import type { ExistingLine, ImportFormat, ReadLine } from "./keys";
@@ -379,8 +380,8 @@ export function runImport(
     for (let start = 0; start < planned.length; start += CHUNK) {
       const chunk = planned.slice(start, start + CHUNK);
 
-      yield* whileRunning((transaction) =>
-        transaction
+      yield* whileRunning(async (transaction) => {
+        const added = await transaction
           .insert(statementLine)
           .values(
             chunk.map((line) => ({
@@ -403,8 +404,17 @@ export function runImport(
           )
           // Another import running at once may have added the same line meanwhile: it is a
           // duplicate, counted as one below.
-          .onConflictDoNothing({ target: [statementLine.accountId, statementLine.dedupKey] }),
-      );
+          .onConflictDoNothing({ target: [statementLine.accountId, statementLine.dedupKey] })
+          .returning({ id: statementLine.id });
+
+        // Each counted line this chunk added gets its entry in the same transaction: no line is
+        // ever counted without one, and an attempt run again adds neither twice.
+        await entriesForLines(
+          transaction,
+          owner,
+          added.map((line) => line.id),
+        );
+      });
 
       yield* progress("save", {
         done: Math.min(start + CHUNK, planned.length),

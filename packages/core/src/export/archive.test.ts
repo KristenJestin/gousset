@@ -17,6 +17,9 @@ import type { ExportData, ExportRow } from "./archive";
 import {
   ACCOUNTS,
   ACCOUNT_BALANCES,
+  CATEGORIES,
+  ENTRIES,
+  ENTRY_PARTS,
   EXPORT_TABLES,
   IMPORTS,
   IMPORT_PROFILES,
@@ -52,6 +55,25 @@ function madeUpExport(): ExportData {
   const balances: Array<ExportRow> = [];
   const files: Array<ExportData["files"][number]> = [];
   const accountIds = new Map<string, string>();
+  const entries: Array<ExportRow> = [];
+  const parts: Array<ExportRow> = [];
+
+  // Each kind's fallback, where the import puts every line's entry.
+  const categories = (["expense", "income"] as const).map((kind, position) =>
+    row(CATEGORIES, {
+      id: nextId(),
+      user_id: OWNER,
+      kind,
+      name: "Other",
+      position,
+      benchmark_mode: "automatic",
+      is_fallback: true,
+      created_at: "2026-09-01T08:00:00+00:00",
+      updated_at: "2026-09-01T08:00:00+00:00",
+    }),
+  );
+
+  const [expenseFallback, incomeFallback] = categories;
 
   for (const account of madeUpAccounts) {
     const id = nextId();
@@ -106,9 +128,35 @@ function madeUpExport(): ExportData {
       files.push({ importId, fileName, content: strToU8(`OFXHEADER:100 ${account.id} ${month}`) });
 
       for (const line of ofAccount) {
+        const lineId = nextId();
+        const entryId = nextId();
+        const fallback = line.amountMinor < 0 ? expenseFallback : incomeFallback;
+
+        entries.push(
+          row(ENTRIES, {
+            id: entryId,
+            user_id: OWNER,
+            kind: line.amountMinor < 0 ? "expense" : "income",
+            happened_on: line.bookedOn,
+            category_id: fallback?.["id"] ?? null,
+            classified_by: "default",
+            created_at: `${month}-28T10:00:00+00:00`,
+            updated_at: `${month}-28T10:00:00+00:00`,
+          }),
+        );
+        parts.push(
+          row(ENTRY_PARTS, {
+            id: nextId(),
+            user_id: OWNER,
+            entry_id: entryId,
+            line_id: lineId,
+            role: "payment",
+            amount_minor: Math.abs(line.amountMinor),
+          }),
+        );
         lines.push(
           row(STATEMENT_LINES, {
-            id: nextId(),
+            id: lineId,
             user_id: OWNER,
             account_id: accountId,
             import_id: importId,
@@ -155,6 +203,9 @@ function madeUpExport(): ExportData {
     [STATEMENT_LINES, lines],
     [IMPORTS, imports],
     [IMPORT_PROFILES, profiles],
+    [CATEGORIES, categories],
+    [ENTRIES, entries],
+    [ENTRY_PARTS, parts],
   ]);
 
   return {

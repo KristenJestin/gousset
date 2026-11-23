@@ -7,6 +7,7 @@
     ".": "./src/index.ts",
     "./values": "./src/values.ts",
     "./account-values": "./src/account-values.ts",
+    "./default-categories": "./src/default-categories.ts",
     "./imports": "./src/imports/summary.ts",
     "./read": "./src/imports/read.ts"
   },
