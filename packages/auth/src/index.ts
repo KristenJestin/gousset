@@ -236,6 +236,15 @@ export function createAuth(env: AuthConfig, database: Database) {
         if (ctx.path === "/change-password") {
           const passwords = passwordsOf(ctx.body);
 
+          // No password longer than the maximum exists: a current one that long is wrong, and said
+          // so under its own field. better-auth answers it with the new password's "too long".
+          if (
+            Option.isSome(passwords) &&
+            passwords.value.currentPassword.length > PASSWORD_LENGTH.max
+          ) {
+            throw APIError.from("BAD_REQUEST", BASE_ERROR_CODES.INVALID_PASSWORD);
+          }
+
           if (
             Option.isSome(passwords) &&
             passwords.value.newPassword === passwords.value.currentPassword

@@ -148,7 +148,11 @@ test("a temporary password too short says so on the users page, and keeps the na
   expect(await hasUser(app.database, "wren@example.com")).toBe(false);
 });
 
-test("a new password too long says so when changing the password", async ({ page, app, user }) => {
+test("a new password too long says so when changing the password, a current one under its own field", async ({
+  page,
+  app,
+  user,
+}) => {
   const person = personOfItsOwn("tarn");
 
   await createUser(app.baseURL, user, person);
@@ -174,6 +178,16 @@ test("a new password too long says so when changing the password", async ({ page
     kept: [],
     emptied: ["Current password", "New password"],
   });
+
+  // A current password that long is a wrong one: said under Current password, not New password.
+  const currentPassword = page.getByLabel("Current password", { exact: true });
+
+  await currentPassword.fill("c".repeat(129));
+  await newPassword.fill("tarn-own-password");
+  await page.getByRole("button", { name: "Change the password" }).click();
+  await expect(currentPassword).toHaveAttribute("aria-invalid", "true");
+  await expect(newPassword).not.toHaveAttribute("aria-invalid", "true");
+  await expect(page.getByText(TOO_LONG, { exact: true })).toHaveCount(0);
 
   // Still temporary: nothing else opens.
   await page.goto("/");
