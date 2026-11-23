@@ -6,8 +6,19 @@
 # Actions are pinned by commit, the version beside it (as in ci.yml).
 name: upgrade
 
+# A pull request runs it only when it touches what an update runs through (the migrations and
+# schema, the auth tables, the image and its installation) or the job itself: an image build on
+# every pull request would slow them all. Every push to dev and next/** runs it whatever changed.
 on:
   pull_request:
+    paths:
+      - packages/db/**
+      - packages/auth/**
+      - Dockerfile
+      - docker-compose*.yml
+      - tools/docker-entrypoint.sh
+      - tools/check-upgrade.*
+      - .github/workflows/upgrade.yml
   push:
     branches: [dev, "next/**"]
 

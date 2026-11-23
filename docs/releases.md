@@ -318,8 +318,9 @@ review; it is never merged with the button, and GitHub shows it merged once `mai
 ## Every release is an upgrade
 
 From v0.2 on, installations hold real data, and an update must keep every row of it (#102).
-`.github/workflows/upgrade.yml` runs on every pull request and every push to `dev` and `next/**`:
-it builds the commit's image and runs `tools/check-upgrade.sh` on it, which, on a fresh project
+`.github/workflows/upgrade.yml` runs on every push to `dev` and `next/**`, and on a pull request that
+touches what an update runs through (`packages/db`, `packages/auth`, the `Dockerfile`, the compose
+files, the entry point) or the job itself: it builds the commit's image and runs `tools/check-upgrade.sh` on it, which, on a fresh project
 and volume:
 
 1. installs **the last release** (the highest tag `vX.Y.Z`, `--from` to choose another) with that
