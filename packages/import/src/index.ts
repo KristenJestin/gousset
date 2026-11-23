@@ -12,9 +12,13 @@ export { readCamt053 } from "./camt053";
 
 export { readMt940 } from "./mt940";
 
-export { normalizeHeader, readCsv, readCsvHeader } from "./csv";
+export { matchCsvHeader, normalizeHeader, readCsv, readCsvHeader, testReadCsv } from "./csv";
 
-export type { CsvOptions } from "./csv";
+export type { CsvCandidate, CsvOptions } from "./csv";
+
+export { SHIPPED_PROFILES, shippedProfile } from "./csv-shipped";
+
+export type { ShippedProfile } from "./csv-shipped";
 
 export { detectCsvProfile } from "./csv-detect";
 

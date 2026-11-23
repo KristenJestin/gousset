@@ -125,7 +125,29 @@ is the file a user exports to share a profile, decoded by the `CsvProfile` schem
 The name, the institution and the kind (`statement`, or a broker's `operations` from v0.6) are the
 table's columns, not the definition's. `normalizeHeader` and `readCsvHeader` give the header row as
 `import_profile.header` keeps it (trimmed, lower case, joined by `;`), for the import to choose the
-user's profile whose header a file has.
+user's profile whose header a file has. `readCsvHeader` parses the file's first row only.
+`matchCsvHeader(bytes, candidates)` gives the first of the candidates (a definition and its header)
+whose header the file has, each read with its own profile; `testReadCsv(bytes, profile, currency)`
+reads the file's first 50 lines as `readCsv` would, and succeeds when the profile fits them (with
+no currency, amounts are read with up to four decimals and the currency column goes unchecked):
+how a profile without a header is tried on a file.
+
+**Shipped profiles** (`SHIPPED_PROFILES`, `src/csv-shipped.ts`): common styles of bank export, each
+with a stable `key` (what `import.shipped_profile` keeps), an English name, the kind `statement`,
+the header its files have and its definition. They are named by a style, never by a bank, and
+cover what detection cannot settle alone: a statement whose days are all the 12th or before reads
+day first and month first, and columns such as `Paid out` and `Paid in` say no direction
+detection knows.
+
+| Key               | Style                                                                                             | Header                                                     |
+| ----------------- | ------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| `fr-debit-credit` | `;`, Windows-1252, three lines above the table, `DD/MM/YYYY`, `,`, a value date, debit and credit | `Date;Date de valeur;Libellé;Débit;Crédit`                 |
+| `de-signed`       | `;`, Windows-1252, `DD.MM.YYYY`, `,`, a value date, one signed amount, a currency                 | `Buchungstag;Wertstellung;Verwendungszweck;Betrag;Währung` |
+| `uk-paid-out-in`  | `,`, UTF-8, `DD/MM/YYYY`, `.`, paid out and paid in, a balance left aside                         | `Date,Type,Description,Paid out,Paid in,Balance`           |
+| `us-signed`       | `,`, UTF-8, `MM/DD/YYYY`, `.`, one signed amount, a running balance left aside                    | `Date,Description,Amount,Running Bal.`                     |
+
+An ISO style (`YYYY-MM-DD`) is not shipped: its dates are never ambiguous, and detection reads it.
+`shippedProfile(key)` finds one; a key no longer shipped gives `undefined`.
 
 **Detection** (`detectCsvProfile`, `src/csv-detect.ts`) proposes a profile for a file it has none
 for, which the import screen shows over the preview, from the top of the file (200 rows, within
@@ -148,7 +170,7 @@ the label is `NotAStatement`; the user then picks every column.
 
 Not handled yet: a currency symbol inside an amount (`12,34 €`), a trailing minus (`12,34-`), a
 column saying the direction (`D`/`C`) beside an unsigned amount, a balance column, a footer of
-totals (its date cannot be read: refused at its line), and profiles shipped for named banks.
+totals (its date cannot be read: refused at its line).
 
 ## Errors
 

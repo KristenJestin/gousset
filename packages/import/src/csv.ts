@@ -5,7 +5,7 @@ import type { AmountSyntax, FieldText } from "./amount";
 import { dateExample, dayReader, lastColumn } from "./csv-profile";
 import type { CsvProfile, DayReader } from "./csv-profile";
 import { decodeCsv, parseRows, skipLines } from "./csv-parse";
-import type { CsvCell, CsvRow } from "./csv-parse";
+import type { CsvCell, CsvRow, ParseLimit } from "./csv-parse";
 import { InvalidOption, MalformedFile, MissingField, UnsupportedContent } from "./errors";
 import type { InvalidField, ReadError } from "./errors";
 import type { Statement, StatementLine } from "./statement";
@@ -200,12 +200,12 @@ function checkDebitSigns(read: ReadonlyArray<Read>): Effect.Effect<void, Unsuppo
   );
 }
 
-/** The rows of the file past the lines the profile skips, blank ones left out. */
-const readRows = (bytes: Uint8Array, profile: CsvProfile) =>
+/** The rows of the file past the lines the profile skips, blank ones left out; all, or `limit`. */
+const readRows = (bytes: Uint8Array, profile: CsvProfile, limit?: ParseLimit) =>
   Effect.gen(function* () {
     const text = yield* decodeCsv(bytes, profile.encoding);
     const { rest, line } = skipLines(text, profile.skipRows);
-    const rows = yield* parseRows(rest, profile.separator, line);
+    const rows = yield* parseRows(rest, profile.separator, line, limit);
 
     return { rows, line };
   });
@@ -225,7 +225,7 @@ export const readCsvHeader = (
   profile: CsvProfile,
 ): Effect.Effect<string | null, ReadError> =>
   Effect.gen(function* () {
-    const { rows } = yield* readRows(bytes, profile);
+    const { rows } = yield* readRows(bytes, profile, FIRST_ROW);
     const [header] = rows;
 
     if (!profile.headerRow || header === undefined) {
@@ -234,6 +234,61 @@ export const readCsvHeader = (
 
     return normalizeHeader(header.cells.map((cell) => cell.text));
   });
+
+/** Only the first row that holds something: a header is read without the rows under it. */
+const FIRST_ROW: ParseLimit = {
+  rows: 1,
+  lines: Number.POSITIVE_INFINITY,
+  characters: Number.POSITIVE_INFINITY,
+};
+
+/** What a profile is matched by: its definition, and the header of the files it reads, if kept. */
+export type CsvCandidate = { readonly header: string | null; readonly profile: CsvProfile };
+
+/**
+ * The first of `candidates` whose `header` is the file's header row as its own profile reads it
+ * (`readCsvHeader`): the profile that recognises the file. A candidate with no header, or whose
+ * profile cannot read the file's top (another encoding), is passed over; `undefined` when none
+ * matches. Only the top of the file is parsed, once per candidate.
+ */
+export const matchCsvHeader = <Candidate extends CsvCandidate>(
+  bytes: Uint8Array,
+  candidates: ReadonlyArray<Candidate>,
+): Effect.Effect<Candidate | undefined> =>
+  Effect.gen(function* () {
+    for (const candidate of candidates) {
+      if (candidate.header === null) {
+        continue;
+      }
+
+      const header = yield* readCsvHeader(bytes, candidate.profile).pipe(
+        Effect.match({ onFailure: () => null, onSuccess: (read) => read }),
+      );
+
+      if (header === candidate.header) {
+        return candidate;
+      }
+    }
+
+    return undefined;
+  });
+
+/** An account's currency as `readCsv` takes it, upper case, or `InvalidOption`. */
+function currencyOf(text: string): Effect.Effect<string, InvalidOption> {
+  const currency = text.toUpperCase();
+
+  if (!/^[A-Z]{3}$/.test(currency)) {
+    return Effect.fail(
+      new InvalidOption({
+        option: "currency",
+        text: excerpt(text),
+        expected: "a currency's ISO 4217 code, such as EUR",
+      }),
+    );
+  }
+
+  return Effect.succeed(currency);
+}
 
 /**
  * Reads a CSV file with an import profile: one account's lines, in `options.currency`, in the
@@ -249,18 +304,46 @@ export const readCsv = (
   profile: CsvProfile,
   options: CsvOptions,
 ): Effect.Effect<Statement, ReadError> =>
+  Effect.flatMap(currencyOf(options.currency), (currency) => readTable(bytes, profile, currency));
+
+/**
+ * The rows a test read reads: enough to find a profile that does not fit a file, few enough that
+ * trying several profiles on a large file costs little.
+ */
+const SAMPLE: ParseLimit = { rows: 51, lines: 2000, characters: 1024 * 1024 };
+
+/**
+ * Reads the top of a file with a profile, as `readCsv` reads it whole: its first 50 lines, past the
+ * header. Fails with what `readCsv` would fail with there; succeeds when the profile fits the file,
+ * as far as its top tells. With no `currency` (an import whose account is not chosen yet), amounts
+ * are read with up to four decimals and the currency column is not checked.
+ */
+export const testReadCsv = (
+  bytes: Uint8Array,
+  profile: CsvProfile,
+  currency: string | null,
+): Effect.Effect<void, ReadError> => {
+  if (currency !== null) {
+    return Effect.asVoid(
+      Effect.flatMap(currencyOf(currency), (code) => readTable(bytes, profile, code, SAMPLE)),
+    );
+  }
+
+  // The currency with four minor digits, as detection reads amounts: no account to say better.
+  const unchecked = { ...profile, columns: { ...profile.columns, currency: null } };
+
+  return Effect.asVoid(readTable(bytes, unchecked, "CLF", SAMPLE));
+};
+
+/** The lines of the file, or of its top with `limit`, in `currency` (checked by the caller). */
+const readTable = (
+  bytes: Uint8Array,
+  profile: CsvProfile,
+  currency: string,
+  limit?: ParseLimit,
+): Effect.Effect<Statement, ReadError> =>
   Effect.gen(function* () {
-    const currency = options.currency.toUpperCase();
-
-    if (!/^[A-Z]{3}$/.test(currency)) {
-      return yield* new InvalidOption({
-        option: "currency",
-        text: excerpt(options.currency),
-        expected: "a currency's ISO 4217 code, such as EUR",
-      });
-    }
-
-    const { rows, line } = yield* readRows(bytes, profile);
+    const { rows, line } = yield* readRows(bytes, profile, limit);
     const [header, ...data] = rows;
 
     if (profile.headerRow) {
