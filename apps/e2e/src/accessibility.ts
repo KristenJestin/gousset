@@ -26,10 +26,25 @@ const WCAG_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"];
 const FIREFOX_CRASHING_RULES = ["label", "button-name", "label-content-name-mismatch"];
 
 /**
- * Runs axe on the screen as it is now; any violation fails the test, listed by rule, then each
- * element it found with what axe says of it: a CI log is enough to find and fix it.
+ * Waits for the screen's entrance animations to end: text still fading in is half transparent, and
+ * axe would measure its contrast mid-fade. Endless animations (a loader, a skeleton) are not
+ * waited for.
+ */
+const ENTRANCES_DONE = `Promise.all(
+  document
+    .getAnimations()
+    .filter((animation) => Number.isFinite(animation.effect?.getComputedTiming().endTime))
+    .map((animation) => animation.finished.catch(() => undefined)),
+).then(() => undefined)`;
+
+/**
+ * Runs axe on the screen once its entrance animations ended; any violation fails the test, listed
+ * by rule, then each element it found with what axe says of it: a CI log is enough to find and
+ * fix it.
  */
 export async function expectAccessible(page: Page): Promise<void> {
+  await page.evaluate(ENTRANCES_DONE);
+
   const builder = new AxeBuilder({ page }).withTags(WCAG_TAGS);
 
   if (page.context().browser()?.browserType().name() === "firefox") {

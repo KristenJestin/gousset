@@ -15,10 +15,8 @@ export class FileTooLarge extends Schema.TaggedError<FileTooLarge>()("FileTooLar
 /** Nothing in the file says which format it is in, and none was named. */
 export class UnknownFormat extends Schema.TaggedError<UnknownFormat>()("UnknownFormat", {}) {}
 
-/** No account of the user's has this id. */
-export class AccountNotFound extends Schema.TaggedError<AccountNotFound>()("AccountNotFound", {
-  accountId: Schema.String,
-}) {}
+// No account of the user's has this id: the accounts' own error, one class for both.
+export { AccountNotFound } from "../errors";
 
 /** No import of the user's has this id. */
 export class ImportNotFound extends Schema.TaggedError<ImportNotFound>()("ImportNotFound", {

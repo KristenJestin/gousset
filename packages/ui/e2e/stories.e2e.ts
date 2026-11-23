@@ -70,6 +70,14 @@ const SHOTS: ReadonlyArray<Shot> = [
   { id: "layout-app-shell--desktop" },
   { id: "layout-user-menu--default", open: "click" },
   { id: "inputs-segmented-choice--default" },
+  { id: "forms-moneyfield--default" },
+  { id: "data-chip--several" },
+  { id: "accounts-overview--default" },
+  { id: "accounts-accountfigures--default" },
+  { id: "accounts-balancecheck--disagrees" },
+  { id: "accounts-balancechart--default" },
+  { id: "accounts-accountsettings--card" },
+  { id: "accounts-accountlines--with-show-older" },
 ];
 
 async function openPopup(page: Page, open: Shot["open"]) {

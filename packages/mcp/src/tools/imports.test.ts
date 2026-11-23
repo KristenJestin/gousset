@@ -8,6 +8,7 @@ import {
   ImportProfiles,
   Imports,
   UnknownFormat,
+  memoryAccountStore,
 } from "@gousset/core";
 import type {
   ImportAccount,
@@ -163,11 +164,14 @@ function importsOf(state: Fake) {
   });
 }
 
-/** The app's runtime for these tests: the made-up ledger, and the fake imports. */
+/** The app's runtime for these tests: the made-up ledger, no accounts, and the fake imports. */
 function runnerOf(state: Fake): Runner<GoussetServices> {
   return (effect) =>
     Effect.runPromiseExit(
-      Effect.provide(effect, Layer.mergeAll(FixtureLedger, importsOf(state), profilesOf(state))),
+      Effect.provide(
+        effect,
+        Layer.mergeAll(FixtureLedger, memoryAccountStore(), importsOf(state), profilesOf(state)),
+      ),
     );
 }
 
@@ -185,7 +189,13 @@ function runnerWithTime(state: Fake): Runner<GoussetServices> {
         return yield* Fiber.join(fiber);
       }).pipe(
         Effect.provide(
-          Layer.mergeAll(FixtureLedger, importsOf(state), profilesOf(state), TestClock.layer()),
+          Layer.mergeAll(
+            FixtureLedger,
+            memoryAccountStore(),
+            importsOf(state),
+            profilesOf(state),
+            TestClock.layer(),
+          ),
         ),
       ),
     );
