@@ -2,7 +2,7 @@ import type { Page } from "@playwright/test";
 import { Schema } from "effect";
 
 import { APP_HOST } from "../src/app-server";
-import { onPhone, openAccountMenu } from "../src/frame";
+import { onPhone, openAccountMenu, textSight } from "../src/frame";
 import {
   addUser,
   animationsDone,
@@ -206,6 +206,39 @@ test("the sidebar names every screen, the current one marked", async ({ userPage
   await expect(userPage.getByText("No rule yet")).toBeVisible();
   // The screen reached fades in: axe checks it once drawn.
   await animationsDone(userPage);
+});
+
+// Issue #81: the current item's mark was painted over its label in the wide sidebar.
+test("the current item's label is visible", async ({ userPage }) => {
+  await visit(userPage, "/operations");
+
+  // The sidebar's on a desktop, the tab bar's on a phone: the one navigation shown.
+  const current = userPage
+    .getByRole("navigation", { name: "Main" })
+    .getByRole("link", { name: "Operations" });
+
+  const label = current.getByText("Operations", { exact: true });
+
+  await expect(current).toHaveAttribute("aria-current", "page");
+
+  for (const scheme of ["light", "dark"] as const) {
+    await userPage.emulateMedia({ colorScheme: scheme, reducedMotion: "reduce" });
+
+    // The user keeps the system's scheme: the page follows it.
+    if (scheme === "dark") {
+      await expect(userPage.locator("html")).toHaveClass(/\bdark\b/);
+    } else {
+      await expect(userPage.locator("html")).not.toHaveClass(/\bdark\b/);
+    }
+
+    await expect(label).toBeVisible();
+
+    const sight = await textSight(label);
+
+    expect(sight.onTop, `${scheme}: nothing is painted over the label`).toBe(true);
+    // WCAG AA for text of its size.
+    expect(sight.contrast, `${scheme}: the label's contrast`).toBeGreaterThanOrEqual(4.5);
+  }
 });
 
 test("on a phone, a tab bar holds review, operations, accounts and more", async ({
