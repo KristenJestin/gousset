@@ -35,12 +35,18 @@ const withLines = (kept: ReadonlyArray<StatementLine>): Statement => ({
   lines: kept,
 });
 
+// A CSV file's days must tell the day from the month (one after the 12th), or its import waits
+// for the user to say which comes first: the last test shows it.
 const coffee: StatementLine = {
-  bookedOn: "2026-10-07",
+  bookedOn: "2026-10-17",
   amountMinor: -250,
-  label: "CB CAFE DU PORT 06/10",
+  label: "CB CAFE DU PORT 16/10",
   reference: "COFFEE",
 };
+
+/** A line as every format keeps it: some cut a long label (OFX's `NAME`, 32 characters). */
+const dayAndAmount = (line: { bookedOn: string; amountMinor: number }) =>
+  `${line.bookedOn} ${String(line.amountMinor)}`;
 
 test("the same file twice adds nothing", async () => {
   for (const format of ["ofx", "csv"] as const) {
@@ -69,18 +75,27 @@ test("the same file twice adds nothing", async () => {
 test("overlapping files add only the new lines", async () => {
   for (const format of ["ofx", "qif", "csv"] as const) {
     const accountId = await imports.createAccount(owner, `Overlap ${format}`);
-    const early = statementFile(format, withLines(lines.slice(0, 4)), `early.${format}`);
-    const late = statementFile(format, withLines(lines.slice(2)), `late.${format}`);
+    const early = statementFile(format, withLines(lines.slice(0, 5)), `early.${format}`);
+    const late = statementFile(format, withLines(lines.slice(3)), `late.${format}`);
 
-    expect((await imports.importFile(owner, accountId, early)).linesAdded).toBe(4);
+    expect(await imports.importFile(owner, accountId, early), format).toMatchObject({
+      status: "done",
+      linesAdded: 5,
+    });
 
     const second = await imports.importFile(owner, accountId, late);
 
-    expect(second).toMatchObject({ linesRead: 4, linesAdded: 2, linesDuplicate: 2, linesHeld: 0 });
+    expect(second, format).toMatchObject({
+      status: "done",
+      linesRead: 3,
+      linesAdded: 1,
+      linesDuplicate: 2,
+      linesHeld: 0,
+    });
 
     const saved = await imports.linesOf(owner, accountId);
 
-    expect(saved.map((line) => line.label)).toEqual(lines.map((line) => line.label));
+    expect(saved.map(dayAndAmount), format).toEqual(lines.map(dayAndAmount));
   }
 });
 
@@ -90,7 +105,7 @@ test("identical lines of one day are kept", async () => {
 
   const first = await imports.importFile(owner, accountId, statementFile("csv", twice, "a.csv"));
 
-  expect(first.linesAdded).toBe(2);
+  expect(first).toMatchObject({ status: "done", linesAdded: 2 });
 
   // A day read again with a third coffee adds that one only.
   const thrice = withLines([coffee, coffee, coffee]);
@@ -102,17 +117,17 @@ test("identical lines of one day are kept", async () => {
 
 test("a near duplicate is held for review", async () => {
   const accountId = await imports.createAccount(owner, "Near duplicates");
-  const payment = lines[3];
+  const payment = lines[4];
 
   if (payment === undefined) {
-    throw new Error("The example statement has no fourth line.");
+    throw new Error("The example statement has no fifth line.");
   }
 
   await imports.importFile(owner, accountId, statementFile("ofx", withLines([payment])));
 
   // The same payment read from a CSV: booked a day later, its label written otherwise.
   const readAgain = withLines([
-    { ...payment, bookedOn: "2026-10-10", label: "MARCHE DE LA PLACE ET CIE" },
+    { ...payment, bookedOn: "2026-10-16", label: "PRLV STREAMFLIX ABONNEMENT" },
   ]);
 
   const second = await imports.importFile(owner, accountId, statementFile("csv", readAgain));
@@ -250,4 +265,15 @@ test("a file that names its account goes to it", async () => {
   const waiting = await imports.importFile(owner, null, statementFile("qif", exampleStatement));
 
   expect(waiting).toMatchObject({ status: "waiting", waitingFor: "account" });
+});
+
+test("a CSV file whose dates read both ways waits for the user to say which", async () => {
+  const accountId = await imports.createAccount(owner, "Dates both ways");
+
+  // Every day of these is the 12th or before: 03/10 may be the 3rd of October or the 10th of March.
+  const early = withLines(lines.slice(0, 3));
+  const waiting = await imports.importFile(owner, accountId, statementFile("csv", early));
+
+  expect(waiting).toMatchObject({ status: "waiting", waitingFor: "profile", linesAdded: 0 });
+  expect(await imports.linesOf(owner, accountId)).toEqual([]);
 });
