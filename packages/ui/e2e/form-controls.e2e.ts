@@ -167,6 +167,56 @@ test.describe("Combobox", () => {
   });
 });
 
+test.describe("NameField", () => {
+  test("a name field offers the names that contain the text, and a chosen one fills it", async ({
+    page,
+  }) => {
+    await page.goto(story("namefield", "default"));
+
+    const input = page.getByRole("combobox", { name: "Merchant" });
+
+    await input.pressSequentially("green");
+    await expect(page.getByRole("option")).toHaveText(["Greenmarket", "Greenway Bakery"]);
+    await page.getByRole("option", { name: "Greenway Bakery" }).click();
+    await expect(input).toHaveValue("Greenway Bakery");
+  });
+
+  test("a name no suggestion has is kept as typed", async ({ page }) => {
+    await page.goto(story("namefield", "default"));
+
+    const input = page.getByRole("combobox", { name: "Merchant" });
+
+    await input.pressSequentially("Juniper Florist");
+    await expect(page.getByRole("option")).toHaveCount(0);
+    await input.press("Tab");
+    await expect(input).toHaveValue("Juniper Florist");
+  });
+
+  test("a name field's error is announced", async ({ page }) => {
+    await page.goto(story("namefield", "error"));
+
+    const input = page.getByRole("combobox", { name: "Merchant" });
+
+    await expect(input).toHaveAttribute("aria-invalid", "true");
+    await expect(input).toHaveAccessibleDescription("Give the merchant a name.");
+  });
+
+  test("a disabled name field cannot change", async ({ page }) => {
+    await page.goto(story("namefield", "disabled"));
+
+    const input = page.getByRole("combobox", { name: "Merchant" });
+
+    await expect(input).toBeDisabled();
+    await expect(input).toHaveValue("Harbor Books");
+  });
+
+  test("the suggestions fade in, and not under reduced motion", async ({ page }) => {
+    await page.goto(story("namefield", "default"));
+    await page.getByRole("combobox", { name: "Merchant" }).pressSequentially("h");
+    await expectPopupMotion(page, page.locator('[data-slot="autocomplete-content"]'));
+  });
+});
+
 test.describe("Checkbox", () => {
   test("a checkbox toggles with Space and with its label", async ({ page }) => {
     await page.goto(story("checkbox", "with-description"));
