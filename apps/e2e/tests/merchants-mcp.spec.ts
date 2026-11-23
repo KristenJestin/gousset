@@ -359,6 +359,10 @@ test("a merchant's default category classifies its lines' entries, still to revi
 
   const search = async () => (await call("lines", { action: "search", text: "emberwood" })).text;
 
+  /** The lines to review: a plain search marks none, the to_review search marks each. */
+  const toReview = async () =>
+    (await call("lines", { action: "search", text: "emberwood", to_review: true })).text;
+
   await upload(EMBERWOOD.slice(0, 2));
 
   // The user puts the second line in a category of their own choosing.
@@ -387,15 +391,25 @@ test("a merchant's default category classifies its lines' entries, still to revi
   // The line not classified yet goes in the default, and is still to review; the other stays.
   const afterSet = await search();
 
-  expect(rowOf(afterSet, EMBERWOOD[0].label).row).toContain("in Groceries > Bakery, to review;");
+  expect(rowOf(afterSet, EMBERWOOD[0].label).row).toContain("in Groceries > Bakery;");
   expect(rowOf(afterSet, EMBERWOOD[1].label).row).toContain("in Groceries > Supermarket;");
+
+  const reviewAfterSet = await toReview();
+
+  expect(rowOf(reviewAfterSet, EMBERWOOD[0].label).row).toContain(
+    "in Groceries > Bakery, to review;",
+  );
+  expect(rowOf(reviewAfterSet, EMBERWOOD[1].label).row).toBe("");
 
   // A line of the merchant imported afterwards goes in its default category at once.
   await upload(EMBERWOOD.slice(2));
 
   const afterImport = await search();
 
-  expect(rowOf(afterImport, EMBERWOOD[2].label).row).toContain("in Groceries > Bakery, to review;");
+  expect(rowOf(afterImport, EMBERWOOD[2].label).row).toContain("in Groceries > Bakery;");
+  expect(rowOf(await toReview(), EMBERWOOD[2].label).row).toContain(
+    "in Groceries > Bakery, to review;",
+  );
   expect(rowOf(afterImport, EMBERWOOD[1].label).row).toContain("in Groceries > Supermarket;");
 });
 
@@ -528,7 +542,7 @@ test("merging merchants and moving a label keep their entries in the right defau
   const afterFirst = await rows();
 
   for (const label of [...SHOPS.lantern, SHOPS.kettle[0]]) {
-    expect(afterFirst(label)).toContain("in Groceries > Bakery, to review;");
+    expect(afterFirst(label)).toContain("in Groceries > Bakery;");
   }
 
   expect(afterFirst(SHOPS.kettle[1])).toContain("in Groceries > Supermarket;");
@@ -545,7 +559,7 @@ test("merging merchants and moving a label keep their entries in the right defau
   const afterSecond = await rows();
 
   for (const label of [...SHOPS.lantern, SHOPS.kettle[0], ...SHOPS.tinder]) {
-    expect(afterSecond(label)).toContain("in Eating out > Cafés and bars, to review;");
+    expect(afterSecond(label)).toContain("in Eating out > Cafés and bars;");
   }
 
   expect(afterSecond(SHOPS.kettle[1])).toContain("in Groceries > Supermarket;");
@@ -563,8 +577,8 @@ test("merging merchants and moving a label keep their entries in the right defau
 
   const afterMove = await rows();
 
-  expect(afterMove(SHOPS.kettle[0])).toContain("in Groceries > Market, to review;");
-  expect(afterMove(SHOPS.mossgate[0])).toContain("in Groceries > Market, to review;");
-  expect(afterMove(SHOPS.lantern[0])).toContain("in Eating out > Cafés and bars, to review;");
+  expect(afterMove(SHOPS.kettle[0])).toContain("in Groceries > Market;");
+  expect(afterMove(SHOPS.mossgate[0])).toContain("in Groceries > Market;");
+  expect(afterMove(SHOPS.lantern[0])).toContain("in Eating out > Cafés and bars;");
   expect(afterMove(SHOPS.kettle[1])).toContain("in Groceries > Supermarket;");
 });
