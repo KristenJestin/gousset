@@ -3,11 +3,11 @@ import { Effect } from "effect";
 import { invalidField, readAmount } from "./amount";
 import type { FieldText } from "./amount";
 import { earliest, latest } from "./balances";
-import { mt940Day, mt940EntryDay } from "./dates";
+import { dayBefore, mt940Day, mt940EntryDay } from "./dates";
 import { MissingField, NotAStatement, UnsupportedContent } from "./errors";
 import type { ReadError } from "./errors";
 import type { Balance, Counterparty, Statement, StatementLine } from "./statement";
-import { cleanValue, decodeText, ibanOf, nonEmpty, splitLines } from "./text";
+import { cleanValue, decodeText, ibanOf, nonEmpty } from "./text";
 
 // SWIFT MT940, the customer statement message: fields of a tag and a value (`:61:` a line, `:86:`
 // what the bank says of it), a field's value running on over the lines that start no field. A file
@@ -26,12 +26,49 @@ type Mt940Field = {
 
 const TAG = /^:(\d{2}[A-Z]?):(.*)$/;
 
-/** The file's fields, in order; SWIFT's block headers and trailers read past. */
+/**
+ * How many fields a file may hold. A statement line takes two, and years of a bank's daily
+ * statements are some tens of thousands; refusing more keeps the reader's memory well under the
+ * engine's heap, which a file of 64 MiB of `:20:` lines would pass.
+ */
+const MAX_FIELDS = 1_000_000;
+
+/** How many of the text's lines start with `:`, as a field does: counted before any is made. */
+function countFieldStarts(text: string): number {
+  let count = text.startsWith(":") ? 1 : 0;
+
+  for (const lineEnd of ["\n:", "\r:"]) {
+    let at = text.indexOf(lineEnd);
+
+    while (at !== -1) {
+      count += 1;
+      at = text.indexOf(lineEnd, at + 2);
+    }
+  }
+
+  return count;
+}
+
+/**
+ * The file's fields, in order; SWIFT's block headers and trailers read past. Its lines, whatever
+ * ends them (`\r\n`, `\n`, a lone `\r`), are visited one by one, never held in an array.
+ */
 function readFields(text: string): Array<Mt940Field> {
   const fields: Array<Mt940Field> = [];
+  const lineEnds = /\r\n|\r|\n/g;
   let current: Mt940Field | undefined;
+  let start = 0;
+  let line = 0;
 
-  for (const [index, written] of splitLines(text).entries()) {
+  while (start <= text.length) {
+    lineEnds.lastIndex = start;
+
+    const lineEnd = lineEnds.exec(text);
+    const written = text.slice(start, lineEnd?.index ?? text.length);
+
+    start = lineEnd === null ? text.length + 1 : lineEnd.index + lineEnd[0].length;
+    line += 1;
+
     const block = written.indexOf("{4:");
     const content = block === -1 ? written : written.slice(block + 3);
     const trimmed = content.trim();
@@ -46,7 +83,7 @@ function readFields(text: string): Array<Mt940Field> {
     const tag = TAG.exec(content);
 
     if (tag !== null) {
-      current = { tag: tag[1] ?? "", line: index + 1, text: tag[2] ?? "" };
+      current = { tag: tag[1] ?? "", line, text: tag[2] ?? "" };
       fields.push(current);
     } else if (current !== undefined && trimmed !== "") {
       current.text += `\n${content}`;
@@ -311,6 +348,34 @@ const readLine = (field: Mt940Field, information: Mt940Field | undefined, curren
     return line;
   });
 
+/** A statement's balance among `tags` (`60F` or `60M`), in the account's currency. */
+const readBalanceIn = (statement: Mt940Statement, tags: ReadonlyArray<string>, currency: string) =>
+  Effect.gen(function* () {
+    const field = yield* required(statement, tags);
+    const read = yield* readBalance(field);
+
+    if (read.currency !== currency) {
+      return yield* new UnsupportedContent({
+        line: field.line,
+        problem: `A balance in ${read.currency}, while the account is in ${currency}.`,
+      });
+    }
+
+    return { tag: field.tag, balance: read.balance };
+  });
+
+/**
+ * A statement's opening balance (`:60F:`) as a `Balance`, the end of a day. SWIFT dates it as the
+ * previous statement's closing balance, the end of that day; many banks date it on the statement's
+ * own first day instead, before that day's lines. When the statement books a line on or before its
+ * day, it is the second: the balance at the end of the day before.
+ */
+function openingOf(balance: Balance, booked: ReadonlyArray<StatementLine>): Balance {
+  return booked.some((line) => line.bookedOn <= balance.on)
+    ? { amountMinor: balance.amountMinor, on: dayBefore(balance.on) }
+    : balance;
+}
+
 /** The statements of the file, each from its `:20:`; fields before the first are read past. */
 function readStatements(fields: ReadonlyArray<Mt940Field>): Array<Mt940Statement> {
   const statements: Array<Mt940Statement> = [];
@@ -334,12 +399,22 @@ function readStatements(fields: ReadonlyArray<Mt940Field>): Array<Mt940Statement
  *
  * Amounts are signed by their mark (`D` and `RC` out, `C` and `RD` in). `:86:` is read in its three
  * forms: free text, the German banks' `?` subfields, and the `/CODE/` form. The opening balance is
- * the earliest `:60F:` or `:60M:`, the closing balance the latest `:62F:` or `:62M:`; each is the
- * balance at the end of its day, as SWIFT defines them.
+ * the earliest `:60F:` (`openingOf`), the closing balance the latest `:62F:`; a page's balances
+ * (`:60M:`, `:62M:`), struck in the middle of a day, are checked and read past.
  */
 export const readMt940 = (bytes: Uint8Array): Effect.Effect<Statement, ReadError> =>
   Effect.gen(function* () {
-    const statements = readStatements(readFields(yield* decodeText(bytes)));
+    const text = yield* decodeText(bytes);
+
+    // Counted before any field is made, so that refusing costs no memory.
+    if (countFieldStarts(text) > MAX_FIELDS) {
+      return yield* new UnsupportedContent({
+        line: 1,
+        problem: "More than a million fields: no statement holds that many.",
+      });
+    }
+
+    const statements = readStatements(readFields(text));
     const [first] = statements;
 
     if (first === undefined) {
@@ -365,29 +440,29 @@ export const readMt940 = (bytes: Uint8Array): Effect.Effect<Statement, ReadError
         });
       }
 
-      for (const [tags, balances] of [
-        [["60F", "60M"], openings],
-        [["62F", "62M"], closings],
-      ] as const) {
-        const field = yield* required(statement, tags);
-        const read = yield* readBalance(field);
-
-        if (read.currency !== currency) {
-          return yield* new UnsupportedContent({
-            line: field.line,
-            problem: `A balance in ${read.currency}, while the account is in ${currency}.`,
-          });
-        }
-
-        balances.push(read.balance);
-      }
+      const opening = yield* readBalanceIn(statement, ["60F", "60M"], currency);
+      const closing = yield* readBalanceIn(statement, ["62F", "62M"], currency);
+      const booked: Array<StatementLine> = [];
 
       for (const [index, field] of statement.fields.entries()) {
         const next = statement.fields[index + 1];
 
         if (field.tag === "61") {
-          lines.push(yield* readLine(field, next?.tag === "86" ? next : undefined, currency));
+          booked.push(yield* readLine(field, next?.tag === "86" ? next : undefined, currency));
         }
+      }
+
+      if (opening.tag === "60F") {
+        openings.push(openingOf(opening.balance, booked));
+      }
+
+      if (closing.tag === "62F") {
+        closings.push(closing.balance);
+      }
+
+      // One by one: a spread of a great many lines would pass the engine's argument limit.
+      for (const line of booked) {
+        lines.push(line);
       }
     }
 

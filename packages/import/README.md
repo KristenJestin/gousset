@@ -68,7 +68,8 @@ the file's line, counted from 1:
 - `UnsupportedContent` (`line`, `problem`): an investment statement, several accounts in one file,
   a line in another currency than the account's, an amount whose direction its type does not say, a
   QIF balance too large to be held exactly, a file of more than 64 MiB, a camt.052 report or a
-  camt.054 notification, an XML document type declaration;
+  camt.054 notification, an XML document type declaration, more than a million CAMT.053 elements
+  or MT940 fields;
 - `InvalidOption` (`option`, `text`, `expected`): the caller's option cannot be used (`readQif`'s
   `currency` is no ISO 4217 code), whatever the file holds.
 
@@ -93,7 +94,13 @@ file's size.
 **CAMT.053 is read by a small XML reader of the package's own** (`src/xml.ts`), not a library: a
 statement needs elements, attributes, text, the five entities and character references, and CDATA.
 It refuses any document type declaration (`<!DOCTYPE`), so that no entity can be defined, let alone
-expanded ("billion laughs"), and no external one fetched; it caps nesting at 64.
+expanded ("billion laughs"), and no external one fetched; it caps nesting at 64, and scans tags and
+attributes by hand, never by a regex that could backtrack.
+
+**Memory is bounded too**: a CAMT.053 file of more than a million elements, or an MT940 file of more
+than a million fields, is `UnsupportedContent`, counted before anything is built (a year of daily
+statements holds some tens of thousands). 64 MiB of `<a/>` would otherwise make more objects than
+the engine's heap holds.
 
 ## CAMT.053
 
@@ -146,10 +153,15 @@ expanded ("billion laughs"), and no external one fetched; it caps nesting at 64.
   without `:86:` takes its supplementary details (`:61:`'s next lines) as its label.
 
 - **Bank id**: the bank's reference (after `//`), else the account owner's unless it is `NONREF`.
-- **Balances**: `:60F:` (or a page's `:60M:`) and `:62F:` (or `:62M:`), each the balance at the end
-  of its day as SWIFT defines them: `:60F:` repeats the previous statement's `:62F:`, its date
-  included. Both are required: a statement without its closing balance may have been cut short
-  (`MissingField`). `:64:` and `:65:` (available, forward) are read past.
+- **Balances**: `:62F:` is the closing balance, the end of its day. `:60F:` is, as SWIFT defines it,
+  the previous statement's `:62F:`, its date included: the end of that day. Many banks date it on
+  the statement's own first day instead, before that day's lines; so when the statement books a
+  line on or before its date, it is the balance at the end of the day before (`:60F:` dated 30
+  December, with a line booked that day, is the balance at the end of 29 December). A page's
+  balances (`:60M:`, `:62M:`), struck in the middle of a day, are checked and read past. Each
+  statement needs its opening and its closing balance (`:60F:` or `:60M:`, `:62F:` or `:62M:`): one
+  without may have been cut short (`MissingField`). `:64:` and `:65:` (available, forward) are read
+  past.
 - **Several statements, or pages, of one account** are read as one, as for CAMT.053. A statement of
   another account (`:25:`) or another currency is refused.
 

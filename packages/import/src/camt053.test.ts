@@ -315,6 +315,35 @@ describe("refusing a CAMT.053 file", () => {
     expect(refusal(wide)).toEqual(new MissingField({ line: 1, field: "Stmt" }));
   });
 
+  test("reads a tag of a million characters without an attribute in linear time", () => {
+    expect(refusal(`<Document x${"b".repeat(1_000_000)}/>`)).toEqual(
+      new NotAStatement({ format: "camt053" }),
+    );
+  });
+
+  test("reads attributes in either quotes, a > inside a value, and past what is no attribute", () => {
+    const text = camt(entry("12.30", "DBIT", "2026-10-02")).replace(
+      'Ccy="EUR"',
+      "stray = Note='a > b' Ccy = 'USD'",
+    );
+
+    expect(refusal(text)).toEqual(
+      new UnsupportedContent({
+        line: 7,
+        problem: 'An amount in "USD", while the account is in EUR.',
+      }),
+    );
+  });
+
+  test("refuses more elements than any statement holds before reading them, with a typed error", () => {
+    expect(refusal(`<Document>${"<a/>".repeat(1_000_001)}</Document>`)).toEqual(
+      new UnsupportedContent({
+        line: 1,
+        problem: "More than a million elements: no statement holds that many.",
+      }),
+    );
+  });
+
   test("names the line of a closing tag that closes another element", () => {
     expect(refusal(camt(["<Ntry>", '<Amt Ccy="EUR">1.00</Ntry>']))).toEqual(
       new MalformedFile({

@@ -58,15 +58,16 @@ export type Balance = {
 /** One account's statement, read from one file. */
 export type Statement = {
   /**
-   * The ISO 4217 code every amount is in: OFX `CURDEF`; for QIF, which names none, the currency
-   * the caller gave.
+   * The ISO 4217 code every amount is in: OFX `CURDEF`, CAMT.053 `Acct/Ccy` (or its amounts'
+   * `Ccy`), MT940's balances; for QIF, which names none, the currency the caller gave.
    */
   currency: string;
   /** In the file's order. */
   lines: ReadonlyArray<StatementLine>;
   /**
-   * The balance before the statement's first line, as the file gives it (CAMT.053, MT940); `null`
-   * otherwise. Its day is the one before the statement's, whose end it is (README).
+   * The balance before the statement's first line, at the end of the day `on`, as the file gives it
+   * (CAMT.053, MT940); `null` otherwise. Each format's date is read into that day its own way
+   * (README): CAMT.053's `OPBD` is the start of its day, so `on` is the day before.
    */
   openingBalance: Balance | null;
   /**

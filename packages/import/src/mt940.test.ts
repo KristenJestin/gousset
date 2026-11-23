@@ -9,6 +9,7 @@ import { Effect } from "effect";
 import fc from "fast-check";
 import { describe, expect, test } from "vite-plus/test";
 
+import { dayBefore } from "./dates";
 import { InvalidField, MissingField, NotAStatement, UnsupportedContent } from "./errors";
 import { readMt940 } from "./mt940";
 import type { Statement } from "./statement";
@@ -23,9 +24,12 @@ const IBAN = "DE39999999990012345678";
 
 /**
  * What `writeMt940` writes: the label as `:86:`, the reference as the bank's, the value date the
- * entry date, `:60F:` on the first day.
+ * entry date, `:60F:` on the first day: the end of the day before when a line is booked on it or
+ * earlier.
  */
 function writtenByWriteMt940(statement: MadeUpStatement): Statement {
+  const startOfFirstDay = statement.lines.some((line) => line.bookedOn <= statement.from);
+
   return {
     currency: statement.account.currency,
     lines: statement.lines.map((line) => ({
@@ -37,7 +41,10 @@ function writtenByWriteMt940(statement: MadeUpStatement): Statement {
       bankId: line.reference,
       counterparty: null,
     })),
-    openingBalance: { amountMinor: statement.openingBalanceMinor, on: statement.from },
+    openingBalance: {
+      amountMinor: statement.openingBalanceMinor,
+      on: startOfFirstDay ? dayBefore(statement.from) : statement.from,
+    },
     balance: { amountMinor: closingBalanceMinor(statement), on: statement.to },
   };
 }
@@ -114,7 +121,8 @@ describe("reading MT940 files", () => {
           memo: "GEBÜHREN",
         },
       ],
-      openingBalance: { amountMinor: 200_000, on: "2026-12-30" },
+      // `:60F:` is dated 30 December, a day with a line: the balance at its start.
+      openingBalance: { amountMinor: 200_000, on: "2026-12-29" },
       balance: { amountMinor: 439_160, on: "2027-01-02" },
     });
   });
@@ -166,6 +174,15 @@ function mt940(...lines: ReadonlyArray<string>): string {
 }
 
 describe("refusing an MT940 file", () => {
+  test("refuses more fields than any statement holds before reading them, with a typed error", () => {
+    expect(refusal(":20:EX\n".repeat(1_000_001))).toEqual(
+      new UnsupportedContent({
+        line: 1,
+        problem: "More than a million fields: no statement holds that many.",
+      }),
+    );
+  });
+
   test("refuses a file with no :20: field", () => {
     expect(refusal("Date;Label;Amount\n02/10/2026;CB;-4,20\n")).toEqual(
       new NotAStatement({ format: "mt940" }),
