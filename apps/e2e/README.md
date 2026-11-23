@@ -68,6 +68,16 @@ Import `test` and `expect` from `src/test.ts`, never from `@playwright/test`.
 | `fixDay(page, "2026-10-15")`       | Fixes the browser's clock to noon UTC that day, and the server's day for this page's context (below). |
 | `slowServerFunctions(page, ms)`    | Holds the browser's server function calls, for loading and skeleton scenarios.                        |
 | `connectMcp({ baseURL, page, … })` | The official MCP client through the real OAuth flow. Not run yet: `/mcp` comes with #39.              |
+| `app.restart()`                    | Stops the worker's app as `docker stop` does (SIGTERM) and starts it again on its port and database.  |
+
+## Background jobs
+
+The harness starts every app with `GOUSSET_E2E_JOBS=on`: the app then registers a test job and
+serves its page, `/e2e/jobs`, which sends it and follows its progress (`tests/jobs.spec.ts`).
+Without the variable, as in an installation, neither exists. The job counts items at the pace
+asked, fails its first attempts when asked, and says it touched October 2026. `app.restart()`
+gives a scenario an app that stops while a job runs and starts again on the same database, where
+pg-boss resumes it; the worker's later tests share the restarted app.
 
 A visual test compares its screenshots with `toHaveScreenshot("<screen>-<theme>.png")`, light and
 dark, in each project; a changed screenshot is reviewed in the pull request, never updated

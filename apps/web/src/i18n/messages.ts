@@ -1,5 +1,19 @@
 import { m } from "@gousset/i18n/messages";
 
+/** What a failed job says, by its failure's code (`JobFailed`, `FAILURES`): what to do. */
+export function jobFailureMessage(code: string | null): string {
+  switch (code) {
+    case "INTERRUPTED":
+      return m.jobFailureInterrupted();
+    case "INVALID_INPUT":
+      return m.jobFailureInvalidInput();
+    case "TEST_FAILURE":
+      return m.jobFailureTest();
+    default:
+      return m.jobFailureUnexpected();
+  }
+}
+
 /** The message for a refusal of better-auth or of Gousset, by its code. */
 export function errorMessage(code: string | undefined): string {
   switch (code) {
