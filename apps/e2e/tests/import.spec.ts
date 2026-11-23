@@ -144,6 +144,8 @@ test("a file of no known format is refused, saying why", async ({ userPage }, te
   await expect(
     userPage.getByText("photo.png: Gousset cannot tell this file's format"),
   ).toBeVisible();
+  // Its row gone, the empty list's state comes back, fading in: axe reads it once settled.
+  await expect(userPage.getByRole("cell", { name: "Uploading" })).toHaveCount(0);
   await animationsDone(userPage);
 });
 
