@@ -330,6 +330,16 @@ describe("imports upload", () => {
     expect(exampleOf(neither.text).action).toBe("upload");
     expect(state.uploads).toHaveLength(0);
   });
+
+  test("a request too large never reaches the tool: the SDK refuses it unread", async () => {
+    const state = fake();
+    const huge = "A".repeat(5 * 1024 * 1024);
+
+    await expect(
+      imports(state, { action: "upload", file_name: "big.csv", content: huge }),
+    ).rejects.toThrow("Payload Too Large");
+    expect(state.uploads).toHaveLength(0);
+  });
 });
 
 describe("imports with a read-only connection", () => {

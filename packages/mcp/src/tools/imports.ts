@@ -64,7 +64,7 @@ Actions:
 - list (reads): the imports, newest first, 50 a page.
 - undo (writes, destructive): removes exactly the lines one import added; lines of other imports it held count again.
 
-Refused: an empty file, a file over 10 MB, a format not recognised, an account name matching none or several of the user's accounts (the refusal names them), an import id the user does not have, and undoing an import still running. A CSV file's columns are confirmed on Gousset's import screen. Writes need a connection allowed to read and write.
+Refused: an empty file, a file over 10 MB (through MCP a request carries 4 MB at most, about 3 MB of file in base64: import a larger file on Gousset's import screen), a format not recognised, an account name matching none or several of the user's accounts (the refusal names them), an import id the user does not have, and undoing an import still running. A CSV file's columns are confirmed on Gousset's import screen. Writes need a connection allowed to read and write.
 
 Examples:
 {"action":"upload","file_name":"october.ofx","content":"OFXHEADER:100..."}
