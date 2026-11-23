@@ -15,6 +15,10 @@ type Shot = {
   id: string;
   /** What to do before the screenshot, for a popup that opens from its trigger. */
   open?: "click" | "focus";
+  /** The trigger's name, when it is not the story's first button. */
+  trigger?: string;
+  /** The screenshot's name, when a story is shot twice. */
+  name?: string;
   /** A phone's width, for a story whose layout is the phone's (its `Phone` story). */
   width?: number;
 };
@@ -27,6 +31,8 @@ const SHOTS: ReadonlyArray<Shot> = [
   { id: "actions-textlink--in-text" },
   { id: "forms-textfield--error" },
   { id: "forms-select--chosen" },
+  // The list over a block: a floating surface stands out from the card (#104).
+  { id: "forms-select--in-a-card", open: "click" },
   { id: "forms-combobox--chosen" },
   { id: "forms-namefield--typed" },
   { id: "forms-checkbox--checked" },
@@ -82,6 +88,13 @@ const SHOTS: ReadonlyArray<Shot> = [
   { id: "charts-bar-chart--default" },
   { id: "brand-brand--with-wordmark" },
   { id: "layout-app-shell--desktop" },
+  // The user's menu opened over the sidebar: a floating surface stands out from it (#104).
+  {
+    id: "layout-app-shell--desktop",
+    open: "click",
+    trigger: "Ada Example",
+    name: "layout-app-shell--desktop-user-menu",
+  },
   { id: "layout-user-menu--default", open: "click" },
   { id: "inputs-segmented-choice--default" },
   { id: "forms-moneyfield--default" },
@@ -105,8 +118,11 @@ const SHOTS: ReadonlyArray<Shot> = [
   { id: "operations-linedetail--with-category" },
 ];
 
-async function openPopup(page: Page, open: Shot["open"]) {
-  const trigger = page.locator("#storybook-root button").first();
+async function openPopup(page: Page, open: Shot["open"], name: Shot["trigger"]) {
+  const trigger =
+    name === undefined
+      ? page.locator("#storybook-root button").first()
+      : page.getByRole("button", { name, exact: true });
 
   if (open === "click") {
     await trigger.click();
@@ -121,7 +137,9 @@ test.beforeEach(async ({ page }) => {
 
 for (const scheme of ["light", "dark"] as const) {
   for (const shot of SHOTS) {
-    test(`${shot.id}, ${scheme}`, async ({ page }, testInfo) => {
+    const name = shot.name ?? shot.id;
+
+    test(`${name}, ${scheme}`, async ({ page }, testInfo) => {
       test.skip(testInfo.project.name !== "chromium", "Screenshotted on the desktop Chromium");
 
       await page.emulateMedia({ colorScheme: scheme, reducedMotion: "reduce" });
@@ -137,19 +155,19 @@ for (const scheme of ["light", "dark"] as const) {
       });
 
       if (shot.open !== undefined) {
-        await openPopup(page, shot.open);
+        await openPopup(page, shot.open, shot.trigger);
         // The visible popup: a trigger's own tooltip sits closed and hidden in the page too.
         await expect(
           page
             .locator(
-              '[role="dialog"], [role="menu"], [role="tooltip"], [data-slot$="-content"][data-open]',
+              '[role="dialog"], [role="menu"], [role="tooltip"], [role="listbox"], [data-slot$="-content"][data-open]',
             )
             .filter({ visible: true })
             .first(),
         ).toBeVisible();
       }
 
-      await expect(page).toHaveScreenshot(`${shot.id}-${scheme}.png`);
+      await expect(page).toHaveScreenshot(`${name}-${scheme}.png`);
     });
   }
 }

@@ -1,4 +1,5 @@
 // The look the form controls share (TextField, Select, Combobox, DatePicker), set once here.
+import { floatingSurfaceClasses } from "./overlay-classes";
 import { cn } from "./utils";
 
 /** The surface of every control that holds a value: input, select, combobox, date. */
@@ -27,11 +28,12 @@ export const groupFocusRing =
   "focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-ring";
 
 /**
- * A popup's surface (a select's list, a combobox's, a calendar): a border, no shadow, entering
+ * A popup's surface (a select's list, a combobox's, a calendar): the floating surface, entering
  * and leaving with a short fade and a slight scale from where it opens (150 ms, ease-out).
  */
 export const popupClasses = cn(
-  "m-0 rounded-lg border border-border bg-popover p-1 text-sm text-popover-foreground",
+  "m-0 rounded-lg p-1 text-sm",
+  floatingSurfaceClasses,
   "origin-(--transform-origin) transition duration-150 ease-out",
   "data-starting-style:scale-95 data-starting-style:opacity-0",
   "data-ending-style:scale-95 data-ending-style:opacity-0",

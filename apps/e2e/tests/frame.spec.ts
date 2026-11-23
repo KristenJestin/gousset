@@ -2,6 +2,7 @@ import type { Page } from "@playwright/test";
 import { Schema } from "effect";
 
 import { APP_HOST } from "../src/app-server";
+import { colorSchemeOf } from "../src/database";
 import { onPhone, openAccountMenu, textSight } from "../src/frame";
 import {
   addUser,
@@ -29,16 +30,11 @@ const SCREENS = [
   { path: "/subjects", name: "subjects", en: "Subjects", fr: "Sujets" },
   { path: "/import", name: "import", en: "Import", fr: "Import" },
   { path: "/settings", name: "settings", en: "Settings", fr: "Réglages" },
+  { path: "/settings/account", name: "account", en: "Settings", fr: "Réglages" },
   { path: "/settings/categories", name: "categories", en: "Settings", fr: "Réglages" },
   { path: "/settings/rules", name: "rules", en: "Settings", fr: "Réglages" },
   { path: "/settings/data", name: "data", en: "Settings", fr: "Réglages" },
   { path: "/settings/users", name: "users", en: "Settings", fr: "Réglages" },
-  {
-    path: "/change-password",
-    name: "change-password",
-    en: "Change your password",
-    fr: "Changer de mot de passe",
-  },
 ] as const;
 
 const WIDTHS = [
@@ -256,16 +252,16 @@ test("on a phone, a tab bar holds review, operations, accounts and more", async 
 
   const menu = await openAccountMenu(userPage, user.name);
 
+  // The other screens, then the account as the user's menu holds it (#105).
   await expect(menu.getByRole("menuitem")).toHaveText([
     "Investments",
     "Subjects",
     "Import",
     "Settings",
-    "Change password",
-    "Users",
     "Keyboard shortcuts",
     "Sign out",
   ]);
+  await expect(menu.getByRole("group")).toContainText(user.email);
 
   await menu.getByRole("menuitem", { name: "Subjects" }).click();
   await expect(userPage).toHaveURL(/\/subjects$/);
@@ -362,30 +358,64 @@ test.describe("in French", () => {
   });
 });
 
-test("the user's menu changes the language and the colour scheme", async ({ page, app, user }) => {
-  test.skip(onPhone(page), "On a phone, the language and the scheme are in Settings.");
+// Issue #105: the user's menu holds only what the settings do not.
+test("the user's menu holds only its four items: who is signed in, settings, shortcuts, sign out", async ({
+  userPage,
+  user,
+}) => {
+  test.skip(onPhone(userPage), "The phone's More holds the screens too; its own test checks it.");
+  await visit(userPage, "/");
 
+  const menu = await openAccountMenu(userPage, user.name);
+  const account = menu.getByRole("group");
+
+  // Their name and e-mail at its top, naming the account's actions.
+  await expect(account).toHaveAccessibleName(new RegExp(user.name));
+  await expect(account).toContainText(user.email);
+  await expect(menu.getByRole("menuitem")).toHaveText([
+    "Settings",
+    "Keyboard shortcuts",
+    "Sign out",
+  ]);
+  await expect(menu.getByRole("menuitemradio")).toHaveCount(0);
+
+  await menu.getByRole("menuitem", { name: "Settings" }).click();
+  await expect(userPage).toHaveURL(/\/settings$/);
+  await expect(userPage.getByRole("heading", { level: 1, name: "Settings" })).toBeVisible();
+  // The menu fades out and the screen in: axe checks the screen once they are drawn.
+  await animationsDone(userPage);
+});
+
+test("the language and the colour scheme are changed from the settings", async ({
+  page,
+  app,
+  user,
+}) => {
   // The scheme is kept on the account: a user of the test's own, so that the worker's shared one
   // keeps the system's.
   const ezra = await addUser(app.baseURL, user, personOfItsOwn("ezra"));
 
   await page.context().addCookies([...ezra.cookies]);
-  await visit(page, "/");
+  await visit(page, "/settings");
 
-  const menu = await openAccountMenu(page, ezra.name);
-
-  await menu.getByRole("menuitemradio", { name: "Dark" }).click();
+  // Applied at once, without a reload, and kept on the account.
+  await page.getByRole("radio", { name: "Dark" }).click();
   await expect(page.locator("html")).toHaveAttribute("data-color-scheme", "dark");
+  await expect.poll(() => colorSchemeOf(app.database, ezra.email)).toBe("dark");
 
-  // A radio choice keeps the menu open, as a menu's radios do: the language is chosen in it too.
-  await expect(menu.getByRole("menuitemradio", { name: "English" })).toBeChecked();
-  await menu.getByRole("menuitemradio", { name: "Français" }).click();
+  // Nothing chosen yet: the language follows the browser, and no cookie keeps one.
+  await expect(page.getByRole("radio", { name: "English" })).toBeChecked();
+  expect(await languageCookie(page)).toBeUndefined();
+  await page.getByRole("radio", { name: "Français" }).click();
 
-  await expect(page.getByRole("heading", { level: 1, name: "Bilan du mois" })).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: "Réglages" })).toBeVisible();
   await expect(page.locator("html")).toHaveAttribute("lang", "fr");
+  expect(await languageCookie(page)).toBe("fr");
   // The new language reloads the page; the server paints it in the scheme just picked, which
   // reached the account first.
   await expect(page.locator("html")).toHaveAttribute("data-color-scheme", "dark");
+  // The screen reached fades in: axe checks it once drawn.
+  await animationsDone(page);
 });
 
 test("moving between screens fades the screen, the current item slides, empty states fade in", async ({

@@ -142,6 +142,27 @@ test.describe("the spending chart", () => {
         formatMoney({ minor: shown?.previous ?? 0, currency: "EUR" }, { locale: "en" }),
       );
     }
+
+    // Bklit's panel around it is a floating surface: its own edge and a shadow (#104).
+    const panel = tooltip.locator(
+      "xpath=ancestor::*[contains(concat(' ', normalize-space(@class), ' '), ' shadow-popover ')][1]",
+    );
+
+    const edge = await page.evaluate(() => {
+      const probe = document.createElement("span");
+
+      probe.style.color = "var(--popover-border)";
+      document.body.append(probe);
+
+      const color = getComputedStyle(probe).color;
+
+      probe.remove();
+
+      return color;
+    });
+
+    await expect(panel).toHaveCSS("border-top-color", edge);
+    await expect(panel).not.toHaveCSS("box-shadow", "none");
   });
 
   test("the skeleton is as tall as the chart", async ({ page }) => {
