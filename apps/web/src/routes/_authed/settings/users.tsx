@@ -63,8 +63,9 @@ function Users() {
 
 /**
  * The "Create a user" button and its dialog. A refusal keeps the dialog open, said under the field
- * at fault; once the user is created the list is read again, the dialog closes (focus back on the
- * button) and the page says who can now sign in.
+ * at fault; once the user is created the dialog closes (focus back on the button), the page says
+ * who can now sign in and the list is read again. While a request runs the dialog stays open: its
+ * answer always lands on the form that sent it.
  */
 function CreateUser({ announce }: { announce: (message: string | undefined) => void }) {
   const router = useRouter();
@@ -95,10 +96,11 @@ function CreateUser({ announce }: { announce: (message: string | undefined) => v
       return;
     }
 
+    // Closed before the list is read again: the filled form cannot be sent a second time.
     setRefusal(undefined);
-    await router.invalidate();
     setOpen(false);
     announce(m.usersCreated({ name: result.name }));
+    await router.invalidate();
   }
 
   return (
@@ -106,6 +108,10 @@ function CreateUser({ announce }: { announce: (message: string | undefined) => v
       trigger={<Button icon="add">{m.usersCreateTitle()}</Button>}
       open={open}
       onOpenChange={(next) => {
+        if (!next && busy) {
+          return;
+        }
+
         setOpen(next);
         setRefusal(undefined);
 

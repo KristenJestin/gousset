@@ -256,7 +256,7 @@ test("the users page is a section of the settings, reached from the user's menu 
   await expect(userPage).toHaveURL(/\/settings$/);
   await sections.getByRole("link", { name: "Users" }).click();
   await expect(userPage).toHaveURL(/\/settings\/users$/);
-  await expect(userPage.getByRole("heading", { level: 2, name: "Create a user" })).toBeVisible();
+  await expect(userPage.getByRole("button", { name: "Create a user" })).toBeVisible();
   // The screen reached fades in: axe checks it once drawn.
   await animationsDone(userPage);
 
