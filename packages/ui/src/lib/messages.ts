@@ -53,6 +53,12 @@ function uiMessages(locale: Locale) {
       /** The language of the amounts, days and months a chart writes. */
       locale,
       empty: m.uiChartEmpty({}, options),
+      /** The button under a chart that opens its figures as a table. */
+      showFigures: m.uiChartShowFigures({}, options),
+      hideFigures: m.uiChartHideFigures({}, options),
+      /** The table's first column. */
+      day: m.uiChartDay({}, options),
+      month: m.uiMonth({}, options),
     },
     notify: {
       /** The toasts' landmark, reached with F6. */

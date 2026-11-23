@@ -1,4 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
+import { useEffect, useRef } from "react";
+import { hydrateRoot } from "react-dom/client";
+import { renderToString } from "react-dom/server";
 
 import { MERCHANTS } from "../stories/made-up";
 import { MerchantLogo } from "./merchant-logo";
@@ -36,6 +39,49 @@ export const WithLogo: Story = { args: { name: "Greenmarket", src: MADE_UP_LOGO 
 
 /** The logo's address answers nothing: the initials take its place. */
 export const BrokenLogo: Story = { args: { name: "Fuelstop", src: "/made-up-logos/fuelstop.png" } };
+
+const BROKEN = "/made-up-logos/fuelstop.png";
+
+/**
+ * As a page rendered on the server meets it: the markup arrives, its image fails, and only then
+ * does React hydrate it, too late to hear the error.
+ */
+function HydratedAfterTheFailure() {
+  const host = useRef<HTMLSpanElement>(null);
+
+  useEffect(() => {
+    const element = host.current;
+
+    if (element === null) {
+      return;
+    }
+
+    const logo = <MerchantLogo name="Fuelstop" src={BROKEN} />;
+
+    element.innerHTML = renderToString(logo);
+
+    const image = element.querySelector("img");
+    let root: ReturnType<typeof hydrateRoot> | undefined;
+
+    const hydrate = () => {
+      root = hydrateRoot(element, logo);
+    };
+
+    if (image === null || image.complete) {
+      hydrate();
+    } else {
+      image.addEventListener("error", hydrate, { once: true });
+      image.addEventListener("load", hydrate, { once: true });
+    }
+
+    return () => root?.unmount();
+  }, []);
+
+  return <span ref={host} data-testid="hydrated-after-failure" />;
+}
+
+/** The logo failed before the page hydrated: the initials still take its place. */
+export const BrokenBeforeHydration: Story = { render: () => <HydratedAfterTheFailure /> };
 
 export const Round: Story = { args: { corners: "round" } };
 

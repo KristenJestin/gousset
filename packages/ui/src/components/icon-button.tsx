@@ -33,6 +33,11 @@ export type IconButtonProps = TriggerProps & {
    */
   loading?: boolean;
   disabled?: boolean;
+  /**
+   * Keeps the button in the tab order while disabled (`aria-disabled`), for a button that turns
+   * disabled under the user's focus (Next on the latest month): the focus stays where it was.
+   */
+  focusableWhenDisabled?: boolean;
   type?: "button" | "submit" | "reset";
 };
 
@@ -50,6 +55,7 @@ export function IconButton({
   size = "md",
   loading = false,
   disabled = false,
+  focusableWhenDisabled = false,
   type = "button",
   ...props
 }: IconButtonProps) {
@@ -62,7 +68,7 @@ export function IconButton({
           <ButtonPart
             type={type}
             disabled={disabled || loading}
-            focusableWhenDisabled={loading}
+            focusableWhenDisabled={loading || focusableWhenDisabled}
             aria-busy={loading || undefined}
             className={cn(buttonClasses(variant, size), "px-0!", size === "sm" ? "w-8" : "w-9")}
           />
