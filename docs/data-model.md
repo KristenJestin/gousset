@@ -246,6 +246,7 @@ So a near duplicate is always a line read in another way than the one it looks l
 - Keys: unique `(user_id, id)`. A user has a handful of profiles: no other index.
 - **`definition` is decoded by an Effect `Schema` in `packages/import`**, the only place that knows its shape; the database stores it whole. Its `version` lets that schema read an older shape. The same JSON is the file a user exports to share a profile, and imports.
 - **Profiles shipped with Gousset live in code** (`packages/import`), in the same shape, named by a key: a fix to one arrives with an update, with no migration of anyone's data. A user who wants to change one copies it into their own.
+- **Which profile reads a CSV** (#19): with none chosen, the import takes the user's statement profile whose `header` is the file's header row as that profile reads it (the most recently saved first), then a shipped one whose header is, then detection; it records which in `import.profile_id` or `import.shipped_profile`, neither for detection or a definition given by hand. A profile chosen on resuming the import is recorded the same way.
 - **No default profile on the account**: a CSV with no account in it goes, as a proposal, to the account last imported with the same profile, read from the imports.
 
 ## Diagram: v0.2

@@ -1,9 +1,11 @@
-import { IMPORT_STEPS, Imports } from "@gousset/core";
+import { IMPORT_STEPS, ImportProfiles, Imports } from "@gousset/core";
 import type {
   ImportAccount,
   ImportFormat,
   ImportPage,
+  ImportProfileEntry,
   ImportSummary,
+  ProfilesForImport,
   Started,
   Undone,
 } from "@gousset/core";
@@ -14,9 +16,9 @@ import { ToolRefusal, defineTool } from "../tool";
 const FORMATS = ["ofx", "qfx", "qif", "camt053", "mt940", "csv"] as const;
 
 const ImportsInput = Schema.Struct({
-  action: Schema.Literals(["upload", "status", "list", "undo"]).annotate({
+  action: Schema.Literals(["upload", "status", "list", "undo", "profiles"]).annotate({
     description:
-      "upload: import a statement file. status: where one import stands. list: the imports, newest first. undo: remove what one import added.",
+      "upload: import a statement file. status: where one import stands. list: the imports, newest first. undo: remove what one import added. profiles: the CSV import profiles, or those that read one import's file.",
   }),
   file_name: Schema.optional(
     Schema.String.annotate({
@@ -44,7 +46,8 @@ const ImportsInput = Schema.Struct({
   ),
   import: Schema.optional(
     Schema.String.annotate({
-      description: "status, undo: the import's id, as upload and list give it.",
+      description:
+        "status, undo: the import's id, as upload and list give it. profiles: a CSV import's id, to see which profiles read its file.",
     }),
   ),
   before: Schema.optional(
@@ -63,6 +66,7 @@ Actions:
 - status (reads): one import's state, step and counts.
 - list (reads): the imports, newest first, 50 a page.
 - undo (writes, destructive): removes exactly the lines one import added; lines of other imports it held count again.
+- profiles (reads): the CSV import profiles, the user's and those shipped with Gousset, and how each reads a file. With import (a CSV import's id): those that read its file, and the one it used.
 
 Refused: an empty file, a file over 10 MB (through MCP a request carries 4 MB at most, about 3 MB of file in base64: import a larger file on Gousset's import screen), a format not recognised, an account name matching none or several of the user's accounts (the refusal names them), an import id the user does not have, and undoing an import still running. A CSV file's columns are confirmed on Gousset's import screen. Writes need a connection allowed to read and write.
 
@@ -455,15 +459,124 @@ function undoText({ undone, linesRemoved, linesGivenBack, laterOverlapping, mont
     .join("\n");
 }
 
+/** How a profile reads a file: `@gousset/import`'s `CsvProfile`, as core lists it. */
+type CsvProfile = NonNullable<ImportProfileEntry["definition"]>;
+
+const SEPARATORS = {
+  ";": "semicolons",
+  ",": "commas",
+  "\t": "tabs",
+  "|": "pipes",
+} satisfies { readonly [separator in CsvProfile["separator"]]: string };
+
+/** How a profile reads a file, in a few words: what an agent needs to choose one. */
+function readsText(profile: CsvProfile): string {
+  const { amount } = profile.columns;
+  const header = profile.headerRow ? "a header row" : "no header row";
+
+  const top = profile.skipRows === 0 ? header : `${profile.skipRows} lines skipped above ${header}`;
+
+  const amounts =
+    amount.kind === "signed"
+      ? `one signed amount in column ${amount.column}`
+      : `debit in column ${amount.debit} and credit in column ${amount.credit}`;
+
+  return [
+    `separated by ${SEPARATORS[profile.separator]}`,
+    `encoded ${profile.encoding}`,
+    top,
+    `dates ${profile.dateFormat}`,
+    profile.decimalMark === "," ? "decimal comma" : "decimal point",
+    amounts,
+  ].join(", ");
+}
+
+/** A profile by its name: whose it is, and the institution it reads. */
+function profileName(entry: ImportProfileEntry): string {
+  const institution = entry.institution === null ? "" : ` (${clip(entry.institution, 60)})`;
+  const whose = entry.source === "stored" ? "the user's" : "shipped with Gousset";
+  const operations = entry.kind === "operations" ? ", for a broker's operations" : "";
+
+  return `${clip(entry.name, 100)}${institution}, ${whose}${operations}`;
+}
+
+const PROFILES_OF_IMPORT = call({ action: "profiles", import: "<a CSV import's id>" });
+
+function profilesText(entries: ReadonlyArray<ImportProfileEntry>): string {
+  const lines = entries.map((entry) =>
+    entry.definition === null
+      ? `- ${profileName(entry)}: its definition can no longer be read; the user saves it again on Gousset's import screen.`
+      : `- ${profileName(entry)}: ${readsText(entry.definition)}.`,
+  );
+
+  return [
+    "CSV import profiles, the user's first, then those shipped with Gousset. A CSV file whose header row is a profile's is read with it on upload.",
+    ...lines,
+    "",
+    `Which of them read one CSV import's file: ${PROFILES_OF_IMPORT}`,
+  ].join("\n");
+}
+
+function usedText(found: ProfilesForImport): string {
+  if (found.used !== null) {
+    return `This import read its file with ${clip(found.used.name, 100)}.`;
+  }
+
+  return found.status === "done"
+    ? "This import names no profile Gousset still has: its columns were detected or confirmed on Gousset's import screen, or the profile it used was deleted since or is no longer shipped."
+    : `No profile has read it yet (it is ${found.status}).`;
+}
+
+function profilesForText(found: ProfilesForImport): string {
+  const fileName = clip(found.fileName, 100);
+
+  const lines = found.fitting.map(
+    ({ profile, by }) =>
+      `- ${profileName(profile)}: ${by === "header" ? "its header row is the file's" : "a test read of the file's first lines succeeds"}.`,
+  );
+
+  return [
+    lines.length === 0
+      ? `No profile reads ${fileName}: Gousset's import screen proposes its columns from the file, and the user can save them as a profile there.`
+      : `Profiles that read ${fileName}:\n${lines.join("\n")}`,
+    usedText(found),
+  ].join("\n");
+}
+
+function profiles(input: ImportsInput, owner: string) {
+  const importId = input.import;
+
+  return Effect.gen(function* () {
+    const service = yield* ImportProfiles;
+
+    return importId === undefined
+      ? profilesText(yield* service.list(owner))
+      : profilesForText(yield* service.forImport(owner, importId));
+  }).pipe(
+    Effect.catchTags({
+      ImportNotFound: () =>
+        refuse(
+          `The user has no CSV import with the id ${clip(importId ?? "", 60)}, or its file was removed by an undo. List the imports to find a CSV one's id, or leave import out to list every profile.`,
+          { action: "list" },
+        ),
+      QueryFailed: failure,
+    }),
+  );
+}
+
 /** The imports family (docs/mcp.md, "Tools"): statements in, without duplicates, and undone. */
-export const importsTool = defineTool<ImportsInput, typeof ImportsInput.Encoded, Imports>({
+export const importsTool = defineTool<
+  ImportsInput,
+  typeof ImportsInput.Encoded,
+  Imports | ImportProfiles
+>({
   name: "imports",
   title: "Statement imports",
   description: DESCRIPTION,
   idempotent: false,
   input: ImportsInput,
   example: { action: "list" },
-  access: { upload: "write", status: "read", list: "read", undo: "write" },
+  access: { upload: "write", status: "read", list: "read", undo: "write", profiles: "read" },
   run: (input, caller) => {
     const owner = caller.userId;
 
@@ -525,6 +638,10 @@ export const importsTool = defineTool<ImportsInput, typeof ImportsInput.Encoded,
             QueryFailed: failure,
           }),
         );
+      }
+
+      case "profiles": {
+        return profiles(input, owner);
       }
     }
   },

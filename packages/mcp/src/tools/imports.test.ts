@@ -5,11 +5,20 @@ import {
   IMPORTS_LISTED,
   ImportBusy,
   ImportNotFound,
+  ImportProfiles,
   Imports,
   UnknownFormat,
   memoryAccountStore,
 } from "@gousset/core";
-import type { ImportAccount, ImportSummary, Started, Undone, Upload } from "@gousset/core";
+import type {
+  ImportAccount,
+  ImportProfileEntry,
+  ImportSummary,
+  ProfilesForImport,
+  Started,
+  Undone,
+  Upload,
+} from "@gousset/core";
 import { Effect, Fiber, Layer, Schema } from "effect";
 import { TestClock } from "effect/testing";
 import { describe, expect, test } from "vite-plus/test";
@@ -76,6 +85,10 @@ type Fake = {
   sameFile: Started["sameFile"];
   startFailure: EmptyFile | FileTooLarge | UnknownFormat | null;
   undoCounts: Omit<Undone, "undone">;
+  /** The user's profiles and the shipped ones, as `ImportProfiles.list` gives them. */
+  profiles: ReadonlyArray<ImportProfileEntry>;
+  /** What `ImportProfiles.forImport` answers, by import id. */
+  profilesFor: { [importId: string]: ProfilesForImport };
 };
 
 function fake(changes: Partial<Fake> = {}): Fake {
@@ -88,8 +101,24 @@ function fake(changes: Partial<Fake> = {}): Fake {
     sameFile: null,
     startFailure: null,
     undoCounts: { linesRemoved: 6, linesGivenBack: 0, laterOverlapping: 0, months: ["2026-10"] },
+    profiles: [],
+    profilesFor: {},
     ...changes,
   };
+}
+
+/** `ImportProfiles` over the fake's lists: no database, no file read. */
+function profilesOf(state: Fake) {
+  return Layer.mock(ImportProfiles, {
+    list: () => Effect.succeed(state.profiles),
+    forImport: (_owner, importId) => {
+      const found = state.profilesFor[importId];
+
+      return found === undefined
+        ? Effect.fail(new ImportNotFound({ importId }))
+        : Effect.succeed(found);
+    },
+  });
 }
 
 /** `Imports` over the fake's in-memory list: no database. */
@@ -139,7 +168,10 @@ function importsOf(state: Fake) {
 function runnerOf(state: Fake): Runner<GoussetServices> {
   return (effect) =>
     Effect.runPromiseExit(
-      Effect.provide(effect, Layer.mergeAll(FixtureLedger, memoryAccountStore(), importsOf(state))),
+      Effect.provide(
+        effect,
+        Layer.mergeAll(FixtureLedger, memoryAccountStore(), importsOf(state), profilesOf(state)),
+      ),
     );
 }
 
@@ -157,7 +189,13 @@ function runnerWithTime(state: Fake): Runner<GoussetServices> {
         return yield* Fiber.join(fiber);
       }).pipe(
         Effect.provide(
-          Layer.mergeAll(FixtureLedger, memoryAccountStore(), importsOf(state), TestClock.layer()),
+          Layer.mergeAll(
+            FixtureLedger,
+            memoryAccountStore(),
+            importsOf(state),
+            profilesOf(state),
+            TestClock.layer(),
+          ),
         ),
       ),
     );
@@ -193,7 +231,7 @@ function exampleOf(text: string) {
 }
 
 const Example = Schema.Struct({
-  action: Schema.Literals(["upload", "status", "list", "undo"]),
+  action: Schema.Literals(["upload", "status", "list", "undo", "profiles"]),
   account: Schema.optional(Schema.String),
   format: Schema.optional(Schema.String),
   import: Schema.optional(Schema.String),
@@ -490,6 +528,7 @@ describe("imports refusals", () => {
     ["bad base64", {}, { action: "upload", file_name: "a.ofx", content_base64: "%%%" }, "base64"],
     ["status without an import", {}, { action: "status" }, "needs import"],
     ["undo of an unknown import", {}, { action: "undo", import: "nope" }, "no import"],
+    ["profiles of an unknown import", {}, { action: "profiles", import: "nope" }, "no CSV import"],
   ];
 
   for (const [name, changes, args, says] of cases) {
@@ -505,5 +544,165 @@ describe("imports refusals", () => {
 });
 
 function expectValidExample(text: string) {
-  expect(exampleOf(text).action).toMatch(/^(upload|status|list|undo)$/);
+  expect(exampleOf(text).action).toMatch(/^(upload|status|list|undo|profiles)$/);
 }
+
+type CsvProfile = NonNullable<ImportProfileEntry["definition"]>;
+
+const DEBIT_CREDIT: CsvProfile = {
+  version: 1,
+  separator: ";",
+  encoding: "windows-1252",
+  skipRows: 3,
+  headerRow: true,
+  dateFormat: "DD/MM/YYYY",
+  decimalMark: ",",
+  columns: {
+    bookedOn: 1,
+    valueOn: 2,
+    amount: { kind: "debit-credit", debit: 4, credit: 5 },
+    label: 3,
+    memo: null,
+    bankId: null,
+    currency: null,
+  },
+};
+
+const RIVERSIDE: ImportProfileEntry = {
+  source: "stored",
+  id: idOf(500),
+  name: "Riverside current account",
+  institution: "Riverside Bank",
+  kind: "statement",
+  header: "date;date de valeur;libellé;débit;crédit",
+  definition: DEBIT_CREDIT,
+};
+
+const BROKEN: ImportProfileEntry = {
+  source: "stored",
+  id: idOf(501),
+  name: "Old card export",
+  institution: null,
+  kind: "statement",
+  header: null,
+  definition: null,
+};
+
+const US_STYLE: ImportProfileEntry = {
+  source: "shipped",
+  key: "us-signed",
+  name: "US style: one signed amount, month first",
+  institution: null,
+  kind: "statement",
+  header: "date;description;amount;running bal.",
+  definition: {
+    ...DEBIT_CREDIT,
+    separator: ",",
+    encoding: "utf8",
+    skipRows: 0,
+    dateFormat: "MM/DD/YYYY",
+    decimalMark: ".",
+    columns: { ...DEBIT_CREDIT.columns, valueOn: null, amount: { kind: "signed", column: 3 } },
+  },
+};
+
+const SHIPPED: ReadonlyArray<ImportProfileEntry> = [US_STYLE];
+
+describe("imports profiles", () => {
+  test("lists the user's profiles and the shipped ones, by name, with what each reads", async () => {
+    const state = fake({ profiles: [RIVERSIDE, BROKEN, ...SHIPPED] });
+    const { text, isError } = await imports(state, { action: "profiles" }, reader);
+
+    expect(isError).toBe(false);
+    expect(text).toContain(
+      "- Riverside current account (Riverside Bank), the user's: separated by semicolons, encoded windows-1252, 3 lines skipped above a header row, dates DD/MM/YYYY, decimal comma, debit in column 4 and credit in column 5.",
+    );
+    expect(text).toContain("- Old card export, the user's: its definition can no longer be read");
+    expect(text).toContain(
+      "- US style: one signed amount, month first, shipped with Gousset: separated by commas, encoded utf8, a header row, dates MM/DD/YYYY, decimal point, one signed amount in column 3.",
+    );
+    expect(text).toContain('imports {"action":"profiles","import":"<a CSV import\'s id>"}');
+    expect(text).not.toContain(idOf(500));
+  });
+
+  test("with an import, says which profiles read its file, and the one it used", async () => {
+    const [french] = SHIPPED;
+
+    if (french === undefined) {
+      throw new Error("No profile is shipped.");
+    }
+
+    const state = fake({
+      profilesFor: {
+        [idOf(3)]: {
+          fileName: "export.csv",
+          status: "done",
+          used: RIVERSIDE,
+          fitting: [
+            { profile: RIVERSIDE, by: "header" },
+            { profile: french, by: "header" },
+            { profile: { ...BROKEN, definition: DEBIT_CREDIT }, by: "test-read" },
+          ],
+        },
+      },
+    });
+
+    const { text, isError } = await imports(state, { action: "profiles", import: idOf(3) }, reader);
+
+    expect(isError).toBe(false);
+    expect(text).toContain("Profiles that read export.csv:");
+    expect(text).toContain(
+      "- Riverside current account (Riverside Bank), the user's: its header row is the file's.",
+    );
+    expect(text).toContain(`- ${french.name}, shipped with Gousset: its header row is the file's.`);
+    expect(text).toContain(
+      "- Old card export, the user's: a test read of the file's first lines succeeds.",
+    );
+    expect(text).toContain("This import read its file with Riverside current account.");
+  });
+
+  test("with an import no profile reads, says the import screen proposes its columns", async () => {
+    const state = fake({
+      profilesFor: {
+        [idOf(4)]: { fileName: "odd.csv", status: "waiting", used: null, fitting: [] },
+      },
+    });
+
+    const { text, isError } = await imports(state, { action: "profiles", import: idOf(4) });
+
+    expect(isError).toBe(false);
+    expect(text).toContain("No profile reads odd.csv");
+    expect(text).toContain("import screen");
+    expect(text).toContain("No profile has read it yet (it is waiting).");
+  });
+
+  test("with a done import that names no profile, says it may have used one deleted since", async () => {
+    const state = fake({
+      profilesFor: {
+        [idOf(5)]: { fileName: "gone.csv", status: "done", used: null, fitting: [] },
+      },
+    });
+
+    const { text, isError } = await imports(state, { action: "profiles", import: idOf(5) });
+
+    expect(isError).toBe(false);
+    expect(text).toContain(
+      "This import names no profile Gousset still has: its columns were detected or confirmed on Gousset's import screen, or the profile it used was deleted since or is no longer shipped.",
+    );
+  });
+
+  test("a long list stays under the limit, in parts that write the next call", async () => {
+    const many = Array.from({ length: 400 }, (_, n) => ({
+      ...RIVERSIDE,
+      id: idOf(1000 + n),
+      name: `${"A profile with a very long name ".repeat(6)}${n}`,
+      institution: "An institution with a long name ".repeat(4),
+    }));
+
+    const { text, isError } = await imports(fake({ profiles: many }), { action: "profiles" });
+
+    expect(isError).toBe(false);
+    expect(text.length).toBeLessThan(RESULT_LIMIT);
+    expect(text).toContain('"cursor"');
+  });
+});

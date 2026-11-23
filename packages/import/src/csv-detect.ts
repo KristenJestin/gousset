@@ -3,7 +3,7 @@ import { Effect, Exit } from "effect";
 import { readAmount } from "./amount";
 import type { AmountSyntax } from "./amount";
 import { normalizeHeader } from "./csv";
-import { dayReader } from "./csv-profile";
+import { dayReader, MAX_SKIP_ROWS } from "./csv-profile";
 import type { CsvProfile } from "./csv-profile";
 import { decodeDetected, parseRows } from "./csv-parse";
 import type { CsvRow, ParseLimit } from "./csv-parse";
@@ -104,8 +104,19 @@ type Column = {
   marks: Array<"." | ",">;
 };
 
-/** The rows of the text, as one separator cuts them, from the first row of the widest table. */
-type Table = { separator: Separator; rows: Array<CsvRow>; width: number };
+/**
+ * The rows of the text, as one separator cuts them, from the first row of the widest table, and
+ * the lines a profile skips to reach it: through the last row above it that holds something, since
+ * the reader leaves out blank lines by itself.
+ */
+type Table = { separator: Separator; rows: Array<CsvRow>; width: number; skipped: number };
+
+/** The line a row ends on: the line its last value starts on, and the breaks quoted inside it. */
+function lastLineOf(row: CsvRow): number {
+  const last = row.cells.at(-1);
+
+  return last === undefined ? row.line : last.line + (last.text.match(/\r\n|\r|\n/g)?.length ?? 0);
+}
 
 function tableOf(text: string, separator: Separator): Table | undefined {
   const parsed = Effect.runSyncExit(parseRows(text, separator, 1, SAMPLE));
@@ -136,11 +147,13 @@ function tableOf(text: string, separator: Separator): Table | undefined {
   }
 
   const first = rows.findIndex((row) => row.cells.length === width);
+  const above = rows[first - 1];
 
   return {
     separator,
     rows: rows.slice(first).filter((row) => row.cells.length === width),
     width,
+    skipped: above === undefined ? 0 : lastLineOf(above),
   };
 }
 
@@ -335,7 +348,8 @@ export const detectCsvProfile = (bytes: Uint8Array): Effect.Effect<CsvProposal, 
     const table = bestTable(text);
     const notCsv = new NotAStatement({ format: "csv" });
 
-    if (table === undefined) {
+    // A table under more lines than a profile skips is no statement a bank writes.
+    if (table === undefined || table.skipped > MAX_SKIP_ROWS) {
       return yield* notCsv;
     }
 
@@ -414,7 +428,7 @@ export const detectCsvProfile = (bytes: Uint8Array): Effect.Effect<CsvProposal, 
         version: 1,
         separator: table.separator,
         encoding,
-        skipRows: firstRow.line - 1,
+        skipRows: table.skipped,
         headerRow,
         dateFormat,
         decimalMark,
