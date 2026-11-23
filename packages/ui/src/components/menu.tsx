@@ -1,12 +1,8 @@
 import {
   Menu as MenuRoot,
   MenuContent,
-  MenuGroupLabel,
   MenuItem as MenuItemPart,
   MenuItemIcon,
-  MenuItemIndicator,
-  MenuRadioGroup,
-  MenuRadioItem,
   MenuSeparator as MenuSeparatorPart,
   MenuTrigger,
 } from "@ui-sdk/react/menu";
@@ -86,54 +82,6 @@ export function MenuItem({
       )}
       {children}
     </MenuItemPart>
-  );
-}
-
-export type MenuChoicesProps<Value extends string> = {
-  /** What is chosen ("Language"): the group's heading. */
-  label: string;
-  value: Value;
-  /** Each choice, in order, with its words. */
-  choices: ReadonlyArray<{ value: Value; label: string }>;
-  onChange: (value: Value) => void;
-};
-
-/** One choice among a few, inside a menu: the current one ticked (`menuitemradio`). */
-export function MenuChoices<Value extends string>({
-  label,
-  value,
-  choices,
-  onChange,
-}: MenuChoicesProps<Value>) {
-  return (
-    <MenuRadioGroup
-      value={value}
-      onValueChange={(next) => {
-        const chosen = choices.find((choice) => choice.value === next);
-
-        if (chosen !== undefined) {
-          onChange(chosen.value);
-        }
-      }}
-    >
-      <MenuGroupLabel className="px-2 py-1 text-xs font-medium text-muted-foreground">
-        {label}
-      </MenuGroupLabel>
-      {choices.map((choice) => (
-        <MenuRadioItem
-          key={choice.value}
-          value={choice.value}
-          className="flex h-8 cursor-pointer items-center gap-2 rounded-md px-2 text-sm outline-none select-none data-highlighted:bg-muted"
-        >
-          <span className="flex size-4">
-            <MenuItemIndicator className="flex">
-              <Icon name="check" />
-            </MenuItemIndicator>
-          </span>
-          {choice.label}
-        </MenuRadioItem>
-      ))}
-    </MenuRadioGroup>
   );
 }
 

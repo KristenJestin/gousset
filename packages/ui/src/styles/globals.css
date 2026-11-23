@@ -56,6 +56,15 @@
   --card-foreground: var(--foreground);
   --popover: light-dark(oklch(1 0 0), oklch(0.24 0.006 75));
   --popover-foreground: var(--foreground);
+  /* Floating surfaces (menus, popovers, lists, tooltips, toasts, dialogs) stand out from the page
+     (docs/design.md, "Floating surfaces"): an edge darker than the blocks' border in light and
+     lighter in dark, 1.7:1 or more on the page, the blocks, the sidebar and their own inside
+     (`src/lib/contrast.test.ts`); and a shadow that is deeper in dark, where a soft one is lost
+     on the near-black page. */
+  --popover-border: light-dark(oklch(0.8 0.008 85), oklch(0.4 0.008 75));
+  --popover-shadow:
+    0 1px 2px light-dark(oklch(0.21 0.01 75 / 0.08), oklch(0 0 0 / 0.4)),
+    0 10px 28px -6px light-dark(oklch(0.21 0.01 75 / 0.18), oklch(0 0 0 / 0.7));
   --primary: light-dark(var(--brand-light), var(--brand-dark));
   --primary-foreground: light-dark(oklch(1 0 0), oklch(0.17 0.006 75));
   --secondary: light-dark(oklch(0.945 0.005 85), oklch(0.26 0.006 75));
@@ -138,6 +147,8 @@
   --color-card-foreground: var(--card-foreground);
   --color-popover: var(--popover);
   --color-popover-foreground: var(--popover-foreground);
+  --color-popover-border: var(--popover-border);
+  --shadow-popover: var(--popover-shadow);
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
   --color-secondary: var(--secondary);

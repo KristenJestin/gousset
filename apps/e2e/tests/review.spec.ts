@@ -19,6 +19,77 @@ function centsIn(text: string): number {
   return match?.[1] === undefined ? 0 : Math.round(Number(match[1].replaceAll(",", "")) * 100);
 }
 
+/**
+ * Presses "Previous month" and, from that press, samples at every frame whether a digit column
+ * draws two digits inside its own box (by at least a pixel), as it does while it rolls: returns
+ * how many frames did. It samples until 500 ms after the switcher announces `month`: the digits
+ * roll once that month's data is on screen, which may be long after the press; the roll lasts
+ * 200 ms.
+ *
+ * Sampled from the press, not polled after it: a poll's first look comes after the switcher's
+ * own wait and a round trip, often past the roll's end when the month's data comes late (seen in
+ * Firefox). What is drawn, not what is in the DOM: a leaving digit stays in the DOM until
+ * Motion's exit ends and React renders again, which measures React's scheduling, not the roll.
+ */
+async function rollingFramesTo(page: Page, month: string) {
+  const frames = page.evaluate(
+    ({ columns, announced, after, cap }) => {
+      // Whether any column draws two digits at once.
+      const rollingNow = () =>
+        [...document.querySelectorAll(columns)].some((column) => {
+          const box = column.getBoundingClientRect();
+
+          const drawn = [...column.children].filter((digit) => {
+            const inner = digit.getBoundingClientRect();
+
+            return Math.min(box.bottom, inner.bottom) - Math.max(box.top, inner.top) >= 1;
+          });
+
+          return drawn.length > 1;
+        });
+
+      return new Promise<number>((resolve) => {
+        document.addEventListener(
+          "pointerdown",
+          () => {
+            const start = performance.now();
+            let shownAt: number | null = null;
+            let rolling = 0;
+
+            const sample = () => {
+              const now = performance.now();
+
+              if (rollingNow()) {
+                rolling += 1;
+              }
+
+              const label = document.querySelector('[data-slot="month-switcher"] [aria-live]');
+
+              if (shownAt === null && label?.textContent?.includes(announced) === true) {
+                shownAt = now;
+              }
+
+              if ((shownAt !== null && now - shownAt > after) || now - start > cap) {
+                resolve(rolling);
+              } else {
+                requestAnimationFrame(sample);
+              }
+            };
+
+            requestAnimationFrame(sample);
+          },
+          { once: true, capture: true },
+        );
+      });
+    },
+    { columns: '[data-slot="rolling-digit"]', announced: month, after: 500, cap: 10_000 },
+  );
+
+  await monthSwitcher(page).getByRole("button", { name: "Previous month" }).click();
+
+  return frames;
+}
+
 /** A row of "Where the money goes", by its name: a button that opens its detail. */
 const spendingRow = (page: Page, name: string) =>
   block(page, "Where the money goes").getByRole("button", { name: new RegExp(`^${name}`) });
@@ -121,13 +192,10 @@ test("changing month moves the bars and amounts to the next month, the digits ro
   const received = block(page, "The month").locator('[data-slot="amount"]').first();
   const october = await received.textContent();
 
-  await monthSwitcher(page).getByRole("button", { name: "Previous month" }).click();
+  // While a digit rolls, its column draws the old digit and the new one; an instant change never
+  // draws both.
+  expect(await rollingFramesTo(page, "September 2026")).toBeGreaterThan(0);
   await expect(monthSwitcher(page)).toContainText("September 2026");
-
-  // While a digit rolls, its column holds the old digit and the new one.
-  await expect
-    .poll(async () => page.locator('[data-slot="rolling-digit"]:has(> :nth-child(2))').count())
-    .toBeGreaterThan(0);
   await animationsDone(page);
   expect(await received.textContent()).not.toBe(october);
 });

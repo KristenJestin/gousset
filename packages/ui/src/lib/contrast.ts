@@ -41,6 +41,20 @@ export const TEXT_PAIRS = [
   ["--chart-tooltip-muted", "--chart-tooltip-background"],
 ] as const;
 
+/**
+ * The edge of a floating surface (menu, popover, list, tooltip, toast, dialog), against every
+ * surface it opens over and its own inside (docs/design.md, "Floating surfaces").
+ */
+export const EDGE_PAIRS = [
+  ["--popover-border", "--background"],
+  ["--popover-border", "--card"],
+  ["--popover-border", "--sidebar"],
+  ["--popover-border", "--popover"],
+] as const;
+
+/** The least contrast of a floating surface's edge, in both schemes. */
+export const EDGE_MINIMUM = 1.7;
+
 /** The colours of money, which the accent must never be read as. */
 export const MONEY_COLORS = [
   "--money-spent",
@@ -193,6 +207,18 @@ export type MeasuredPair = {
 
 /** The contrast of every text pair, in both schemes. */
 export function measureTextPairs(css: string): ReadonlyArray<MeasuredPair> {
+  return measurePairs(css, TEXT_PAIRS);
+}
+
+/** The contrast of a floating surface's edge on every surface around it, in both schemes. */
+export function measureEdgePairs(css: string): ReadonlyArray<MeasuredPair> {
+  return measurePairs(css, EDGE_PAIRS);
+}
+
+function measurePairs(
+  css: string,
+  pairs: ReadonlyArray<readonly [string, string]>,
+): ReadonlyArray<MeasuredPair> {
   const declarations = readDeclarations(css);
 
   const ratio = (text: string, surface: string, scheme: ColorScheme) =>
@@ -201,7 +227,7 @@ export function measureTextPairs(css: string): ReadonlyArray<MeasuredPair> {
       toLinearRgb(resolveColor(declarations, surface, scheme)),
     );
 
-  return TEXT_PAIRS.map(([text, surface]) => ({
+  return pairs.map(([text, surface]) => ({
     text,
     surface,
     light: ratio(text, surface, "light"),
