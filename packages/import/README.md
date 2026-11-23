@@ -112,8 +112,9 @@ expanded ("billion laughs"), and no external one fetched; it caps nesting at 64.
 - **Counterparty**: for money out, the creditor (`RltdPties/Cdtr`, `CdtrAcct/Id/IBAN`); for money
   in, the debtor. A reversal keeps the parties of the payment it reverses: a reversed debit names
   its creditor.
-- **Bank id**: `AcctSvcrRef` of the entry, else of its one transaction (`TxDtls/Refs`). `NtryRef` is
-  not taken: ISO 20022 makes it unique within one statement only.
+- **Bank id**: the entry's `AcctSvcrRef`, the id the import trusts as unique (`docs/data-model.md`).
+  `NtryRef` is not taken, being often a sequence number within one statement, nor a transaction's
+  own reference (`TxDtls/Refs`).
 - **Balances**: `OPBD` is the balance at the start of its day, so the opening balance is the end of
   the day before (`OPBD` dated 1 November is the balance at the end of 31 October); `PRCD`, the
   previous statement's closing balance, is the end of its own day; `CLBD` the closing balance. The

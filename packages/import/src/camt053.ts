@@ -249,17 +249,15 @@ const readEntry = (entry: XmlElement, currency: string) =>
     const remittance = transaction === undefined ? null : readRemittance(transaction);
     const additional = textAt(entry, "AddtlNtryInf");
 
-    const bankId =
-      textAt(entry, "AcctSvcrRef") ??
-      (transaction === undefined ? null : textAt(transaction, "Refs", "AcctSvcrRef"));
-
     const line: StatementLine = {
       bookedOn,
       valueOn,
       amountMinor,
       label: additional ?? remittance ?? counterparty?.name ?? "",
       memo: additional === null || remittance === additional ? null : remittance,
-      bankId,
+      // The entry's own, which the import trusts as unique (docs/data-model.md); `NtryRef`, unique
+      // within one statement only, and the transactions' references are not taken.
+      bankId: textAt(entry, "AcctSvcrRef"),
       counterparty,
     };
 
