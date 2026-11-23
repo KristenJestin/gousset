@@ -1,0 +1,1 @@
+CREATE INDEX "statement_line_user_id_booked_on_id_idx" ON "statement_line" ("user_id","booked_on","id");

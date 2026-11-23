@@ -126,6 +126,70 @@ export const PREVIOUS_CATEGORIES: ReadonlyArray<MadeUpCategory> = CATEGORIES.map
   spent: eur(PREVIOUS_SPENT.get(category.id) ?? 0),
 }));
 
+/** A statement line on the operations screen, its day and account already worded. */
+export type MadeUpOperation = {
+  id: string;
+  day: string;
+  label: string;
+  account: string;
+  amount: MadeUpMoney;
+  toReview?: boolean;
+};
+
+/** The raw labels the made-up lines take, with their account and usual amount, in cents. */
+const STATEMENT_LINES = [
+  { label: "CB GREENMARKET 2110 RIVERTON", account: "Current account", minor: -5200 },
+  { label: "MEALCARD GREENMARKET RIVERTON", account: "MealCard", minor: -2800 },
+  { label: "PAYLINK *PIXELPLAY", account: "Current account", minor: -1499 },
+  { label: "CB FUELSTOP 19/10", account: "Current account", minor: -5870 },
+  { label: "PRLV SEPA STREAMLY", account: "Current account", minor: -949 },
+  { label: "CB CORNER BISTRO 12/10", account: "Current account", minor: -5600 },
+  { label: "PRLV HARBOR SAVINGS LOAN", account: "Current account", minor: -61_000 },
+  { label: "VIR NORTHWIND SALARY", account: "Current account", minor: 312_000 },
+  { label: "CB CORNER PHARMACY", account: "Current account", minor: -1960 },
+  { label: "VIR LIVRET A INTERETS", account: "Livret A", minor: 1840 },
+] as const;
+
+const MONTHS = [
+  "Jan.",
+  "Feb.",
+  "Mar.",
+  "Apr.",
+  "May",
+  "Jun.",
+  "Jul.",
+  "Aug.",
+  "Sep.",
+  "Oct.",
+  "Nov.",
+  "Dec.",
+];
+
+/**
+ * `count` made-up statement lines, newest first from 31 October 2026, about three a day: the same
+ * lines for the same count, so that screenshots stay still. Every seventh is held for review.
+ */
+export function madeUpOperations(count: number): Array<MadeUpOperation> {
+  return Array.from({ length: count }, (_, index) => {
+    const line =
+      STATEMENT_LINES[(index * 7 + Math.floor(index / 3)) % STATEMENT_LINES.length] ??
+      STATEMENT_LINES[0];
+
+    const date = new Date(Date.UTC(2026, 9, 31 - Math.floor(index / 3)));
+    // A spread around the usual amount, the same each time: 70% to 130%.
+    const spread = 70 + ((index * 37) % 61);
+
+    return {
+      id: `line-${index}`,
+      day: `${date.getUTCDate()} ${MONTHS[date.getUTCMonth()] ?? ""}`,
+      label: line.label,
+      account: line.account,
+      amount: eur(Math.round((line.minor * spread) / 100)),
+      toReview: index % 7 === 3,
+    };
+  });
+}
+
 /** A month where more went out than came in: a car repair on top of the usual. */
 export const OVERSPENT_FIGURES = {
   received: eur(312_000),

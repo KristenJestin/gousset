@@ -5,8 +5,8 @@ import type { FieldText } from "./amount";
 import { ofxDay } from "./dates";
 import { MalformedFile, MissingField, NotAStatement, UnsupportedContent } from "./errors";
 import type { InvalidField, ReadError } from "./errors";
-import type { Balance, Statement, StatementLine } from "./statement";
-import { cleanValue, decodeEntities, decodeText, quote } from "./text";
+import type { Balance, Statement, StatementAccount, StatementLine } from "./statement";
+import { cleanValue, decodeEntities, decodeText, ibanOf, quote, statementAccount } from "./text";
 
 // OFX 1.x is SGML: an element that holds a value may go without its closing tag (`<TRNAMT>-12.34`
 // then the next tag). OFX 2.x is XML, every element closed. QFX is OFX with a few tags of Intuit's
@@ -392,6 +392,14 @@ function signByType(transaction: Transaction): Effect.Effect<StatementLine, Unsu
   }
 }
 
+/** The account (`BANKACCTFROM` or `CCACCTFROM`): `ACCTID` as written, and as an IBAN when shaped as one. */
+function readAccount(statement: OfxElement): StatementAccount | null {
+  const from = child(statement, "BANKACCTFROM") ?? child(statement, "CCACCTFROM");
+  const number = from === undefined ? null : (field(from, "ACCTID")?.text ?? null);
+
+  return statementAccount(ibanOf(number), number);
+}
+
 const readBalance = (statement: OfxElement, currency: string) =>
   Effect.gen(function* () {
     const ledger = child(statement, "LEDGERBAL");
@@ -470,5 +478,12 @@ export const readOfx = (
 
     const balance = yield* readBalance(statement, currency);
 
-    return { currency, lines, openingBalance: null, balance, amountSigns };
+    return {
+      account: readAccount(statement),
+      currency,
+      lines,
+      openingBalance: null,
+      balance,
+      amountSigns,
+    };
   });

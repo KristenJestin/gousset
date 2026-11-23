@@ -10,7 +10,9 @@ import { defaultStatements } from "better-auth/plugins/admin/access";
  * - `user:create`: the administrator creates the other users (#5);
  * - `user:ban`: a ban shuts a user out, MCP clients included (docs/mcp.md), and gives no access.
  *
- * Every other admin route answers 403, to the administrator as to anyone.
+ * Every other admin route answers 403, to the administrator as to anyone. A user who forgot their
+ * password gets a temporary one through Gousset's own reset (password-reset.ts), which the user
+ * must replace and which ends their sessions, never through `set-user-password`.
  */
 const accessControl = createAccessControl(defaultStatements);
 

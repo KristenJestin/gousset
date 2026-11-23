@@ -1,7 +1,12 @@
+import { minorDigits } from "@gousset/currency";
 import { Effect } from "effect";
 
 import { InvalidField } from "./errors";
 import { excerpt, quote } from "./text";
+
+// The one ISO 4217 table (packages/currency): the web form, the MCP door and the imports agree on
+// every currency's minor units.
+export { minorDigits } from "@gousset/currency";
 
 /**
  * A field's text and where it stands in the file, for the error that names it: its line, and its
@@ -44,45 +49,6 @@ const DECIMAL = {
 } satisfies { [syntax in DecimalSyntax]: RegExp };
 
 const SEPARATORS = /[.,'   ]/;
-
-// ISO 4217's minor units, where they are not two. Intl's figures come from CLDR, which differ for
-// some (IQD 0 there, ALL 0) and from one engine's version to the next; a bank writes ISO's.
-const NO_MINOR_UNIT = new Set([
-  "BIF",
-  "CLP",
-  "DJF",
-  "GNF",
-  "ISK",
-  "JPY",
-  "KMF",
-  "KRW",
-  "PYG",
-  "RWF",
-  "UGX",
-  "UYI",
-  "VND",
-  "VUV",
-  "XAF",
-  "XOF",
-  "XPF",
-]);
-
-const THREE_MINOR_DIGITS = new Set(["BHD", "IQD", "JOD", "KWD", "LYD", "OMR", "TND"]);
-
-const FOUR_MINOR_DIGITS = new Set(["CLF", "UYW"]);
-
-/** How many minor units a currency has, as ISO 4217 gives them: EUR 2, JPY 0, KWD 3. */
-export function minorDigits(currency: string): number {
-  if (NO_MINOR_UNIT.has(currency)) {
-    return 0;
-  }
-
-  if (THREE_MINOR_DIGITS.has(currency)) {
-    return 3;
-  }
-
-  return FOUR_MINOR_DIGITS.has(currency) ? 4 : 2;
-}
 
 type Split = { whole: string; fraction: string } | { expected: string };
 

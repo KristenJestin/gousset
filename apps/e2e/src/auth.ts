@@ -65,7 +65,8 @@ async function ensureOk(answer: Promise<APIResponse>, what: string) {
   const response = await answer;
 
   if (!response.ok()) {
-    throw new Error(`${what} answered ${response.status()}.`);
+    // The refusal's own words (better-auth's code), so that a CI log says why.
+    throw new Error(`${what} answered ${response.status()}: ${await response.text()}`);
   }
 }
 

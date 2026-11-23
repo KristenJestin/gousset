@@ -55,8 +55,27 @@ export type Balance = {
   on: string;
 };
 
+/**
+ * The account a statement is of, as the file names it, for the import to tell which of the user's
+ * accounts it belongs to. At least one of the two is given.
+ */
+export type StatementAccount = {
+  /** Upper case without spaces (`FR7699999000010001234567809`); `null` unless shaped as an IBAN. */
+  iban: string | null;
+  /**
+   * The account's number as the file writes it, tidied (OFX `ACCTID`, CAMT.053 `Acct/Id/Othr/Id`,
+   * MT940's `:25:` when no IBAN); `null` otherwise.
+   */
+  number: string | null;
+};
+
 /** One account's statement, read from one file. */
 export type Statement = {
+  /**
+   * The account, when the file names it: OFX `ACCTID`, CAMT.053 `Acct/Id`, MT940 `:25:`; `null`
+   * for QIF and CSV, which name none.
+   */
+  account: StatementAccount | null;
   /**
    * The ISO 4217 code every amount is in: OFX `CURDEF`, CAMT.053 `Acct/Ccy` (or its amounts'
    * `Ccy`), MT940's balances; for QIF, which names none, the currency the caller gave.

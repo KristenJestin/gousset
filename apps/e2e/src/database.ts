@@ -52,6 +52,11 @@ export function workerDatabaseName(parallelIndex: number, run = currentRunId()):
   return `gousset_e2e_${run}_worker_${parallelIndex}`;
 }
 
+/** Where a worker's test restores a backup: an empty database, as a new installation's is. */
+export function restoredDatabaseName(parallelIndex: number, run = currentRunId()): string {
+  return `gousset_e2e_${run}_restored_${parallelIndex}`;
+}
+
 /** The harness's server URL, pointed at one of its databases. */
 export function databaseUrl(database: string): string {
   const url = new URL(harness.databaseUrl);
@@ -204,6 +209,73 @@ export async function sessionsOf(
   } finally {
     await client.end();
   }
+}
+
+/**
+ * Sets or clears the temporary-password flag of the user with this e-mail, straight in its table:
+ * for a state no route reaches, a flagged user whose MCP tokens are still live.
+ */
+export async function setMustChangePassword(
+  database: string,
+  email: string,
+  flagged: boolean,
+): Promise<void> {
+  const client = new pg.Client({ connectionString: databaseUrl(database) });
+
+  await client.connect();
+
+  try {
+    await client.query('UPDATE "auth_user" SET must_change_password = $1 WHERE email = $2', [
+      flagged,
+      email,
+    ]);
+  } finally {
+    await client.end();
+  }
+}
+
+/**
+ * Makes the administrator's reset land in the middle of the next password change of the user with
+ * this e-mail: as soon as the change writes the new password, a trigger sets the flag and the
+ * reset's time, as a reset committed then would. A race no request can time; gives what removes it.
+ */
+export async function resetDuringNextChange(
+  database: string,
+  email: string,
+): Promise<() => Promise<void>> {
+  const client = new pg.Client({ connectionString: databaseUrl(database) });
+  const target = `'${email.replaceAll("'", "''")}'`;
+
+  await client.connect();
+
+  try {
+    await client.query(`
+      CREATE FUNCTION e2e_reset_during_change() RETURNS trigger LANGUAGE plpgsql AS $$
+      BEGIN
+        UPDATE "auth_user" SET must_change_password = true, password_reset_at = now()
+          WHERE id = NEW.user_id AND email = ${target};
+        RETURN NEW;
+      END
+      $$`);
+    await client.query(
+      'CREATE TRIGGER e2e_reset_during_change AFTER UPDATE OF password ON "auth_account" FOR EACH ROW EXECUTE FUNCTION e2e_reset_during_change()',
+    );
+  } finally {
+    await client.end();
+  }
+
+  return async () => {
+    const cleanup = new pg.Client({ connectionString: databaseUrl(database) });
+
+    await cleanup.connect();
+
+    try {
+      await cleanup.query('DROP TRIGGER IF EXISTS e2e_reset_during_change ON "auth_account"');
+      await cleanup.query("DROP FUNCTION IF EXISTS e2e_reset_during_change()");
+    } finally {
+      await cleanup.end();
+    }
+  };
 }
 
 /** The colour scheme kept on the account of the user with this e-mail, read straight from its table. */

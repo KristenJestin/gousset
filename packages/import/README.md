@@ -6,6 +6,7 @@ no clock: the import job (#20) stores what they return.
 ```ts
 import {
   detectCsvProfile,
+  detectFormat,
   readCamt053,
   readCsv,
   readMt940,
@@ -13,6 +14,8 @@ import {
   readQif,
 } from "@gousset/import";
 import { Effect } from "effect";
+
+const format = detectFormat(bytes, fileName); // "ofx", "qfx", "qif", "camt053", "mt940", "csv" or null
 
 const program = Effect.gen(function* () {
   const statement = yield* readOfx(bytes); // OFX 1.x (SGML), OFX 2.x (XML), QFX
@@ -34,6 +37,16 @@ a tab or line break inside one (NEL, U+2028 and U+2029 included) becomes a space
 characters no label shows are dropped (NUL and the other control codes, half surrogate pairs, bidi
 controls):
 
+- `account`: `{ iban, number }`, the account the file names, for the import to tell which of the
+  user's accounts it is, or `null` (always for QIF and CSV, which name none); at least one of the
+  two is given. The IBAN is upper case without spaces, given only when shaped as one; the number is
+  as written, tidied like any text:
+  - OFX: `ACCTID` (`BANKACCTFROM` or `CCACCTFROM`) is the number, and the IBAN too when shaped as
+    one;
+  - CAMT.053: `Acct/Id/IBAN` the IBAN, `Acct/Id/Othr/Id` the number;
+  - MT940: `:25:`, after the bank's identifier when one comes first (`BEXAFRPPXXX/…`, a bank code
+    `99999999/…`), is the IBAN when shaped as one, else the number. The account's currency some
+    banks write after the IBAN (`FR76…809EUR`) is dropped.
 - `currency`: the ISO 4217 code every amount is in. OFX gives it (`CURDEF`), CAMT.053 too (`Acct/Ccy`,
   or its amounts' `Ccy`), MT940 in its balances; QIF does not, and the caller passes the account's. Its minor units are ISO 4217's (EUR 2, JPY 0, KWD 3, CLF 4), not
   Intl's, whose CLDR figures differ for a few currencies.
@@ -69,6 +82,19 @@ CSV: `bookedOn`, `valueOn`, the amount, `label`, `memo` and `bankId` come from t
 profile names; `bankId` is whatever the bank put there, which nothing makes unique. A CSV file
 gives no counterparty and no balance, opening or closing.
 
+## Which format
+
+`detectFormat(bytes, fileName)` (`src/format.ts`) proposes a file's format (`StatementFormat`, the
+values of the database's `import_format`) from its first 4 KiB, decoded leniently (a byte order mark
+dropped), and its name's extension; it runs no reader and never fails. In this order: OFX, an
+`OFXHEADER` header or an `<OFX>` element, is `qfx` when the name ends in `.qfx` or the file holds
+Intuit's `INTU.BID`, `ofx` otherwise; `camt053` for `BkToCstmrStmt` or a `camt.053` namespace;
+`qif` for a file that starts with `!Type:` or `!Account` (Quicken's `!Option:` may come first);
+`mt940` for SWIFT's `{1:` block, or a line starting `:20:` followed by `:25:`, `:28C:`, `:60F:`,
+`:60M:` or `:61:`; then `csv` for a name ending in `.csv` or `.txt`, or a first line holding `;`,
+`,`, a tab or `|`; `null` otherwise, an empty file included. A wrong guess costs nothing: the reader
+refuses the file with a typed error.
+
 ## CSV and import profiles
 
 A CSV file is read with an import profile (`CsvProfile`, `src/csv-profile.ts`), the definition
@@ -82,7 +108,8 @@ is the file a user exports to share a profile, decoded by the `CsvProfile` schem
 - `encoding`: `utf8` or `windows-1252` (which also reads Latin-1). A byte order mark is dropped;
   bytes that are not UTF-8 in a file said to be are `MalformedFile`, at their line, rather than
   read with replacement characters;
-- `skipRows`: the lines read past before the table (an account's name, a period); `headerRow`:
+- `skipRows`: the lines read past before the table (an account's name, a period), 100 at most
+  (`MAX_SKIP_ROWS`: blank lines need no skipping, the reader leaves them out); `headerRow`:
   whether the table's first row names its columns;
 - `dateFormat`: `DD`, `MM`, and `YYYY` or `YY`, day, month, year or month, day, year or year, month,
   day, separated by `/`, `.`, `-`, a space or nothing (`DD/MM/YYYY`, `MM/DD/YY`, `YYYY-MM-DD`,
@@ -99,12 +126,45 @@ is the file a user exports to share a profile, decoded by the `CsvProfile` schem
 The name, the institution and the kind (`statement`, or a broker's `operations` from v0.6) are the
 table's columns, not the definition's. `normalizeHeader` and `readCsvHeader` give the header row as
 `import_profile.header` keeps it (trimmed, lower case, joined by `;`), for the import to choose the
-user's profile whose header a file has.
+user's profile whose header a file has. These read a `CsvFile` (`csvFile(bytes)`), which decodes
+the file once per encoding however many profiles are tried on it. `readCsvHeader` parses the
+file's first row only, and looks for it within 64 KiB of text for the lines skipped and 100 lines
+and 64 KiB past them: a header further down is none, so that trying every profile on a large file
+costs what its top costs. `matchCsvHeader(file, candidates)` gives the first of the candidates (a
+definition and its header) whose header the file has, each read with its own profile;
+`testReadCsv(file, profile, currency)` reads the file's first 50 lines (within 200 lines and 64 KiB
+past those skipped, as the header search does) as `readCsv` would, and
+succeeds with them when the profile fits them (with no currency, amounts are read with up to four
+decimals, in `CLF`, and the lines' currency goes unchecked, though the header must still have its
+column): how a profile without a header is tried on a file, and the import screen's test read.
+`previewCsvRows(file, profile)` gives the file's first six rows as the profile splits them (its
+encoding, separator and lines skipped), each value as written: the preview where the user maps
+each column.
+
+**Shipped profiles** (`SHIPPED_PROFILES`, `src/csv-shipped.ts`): common styles of bank export, each
+with a stable `key` (what `import.shipped_profile` keeps), an English name, the kind `statement`,
+the header its files have and its definition. They are named by a style, never by a bank, and
+cover what detection cannot settle alone: a statement whose days are all the 12th or before reads
+day first and month first, and columns such as `Paid out` and `Paid in` say no direction
+detection knows.
+
+| Key               | Style                                                                                             | Header                                                     |
+| ----------------- | ------------------------------------------------------------------------------------------------- | ---------------------------------------------------------- |
+| `fr-debit-credit` | `;`, Windows-1252, three lines above the table, `DD/MM/YYYY`, `,`, a value date, debit and credit | `Date;Date de valeur;Libellé;Débit;Crédit`                 |
+| `de-signed`       | `;`, Windows-1252, `DD.MM.YYYY`, `,`, a value date, one signed amount, a currency                 | `Buchungstag;Wertstellung;Verwendungszweck;Betrag;Währung` |
+| `uk-paid-out-in`  | `,`, UTF-8, `DD/MM/YYYY`, `.`, paid out and paid in, a balance left aside                         | `Date,Type,Description,Paid out,Paid in,Balance`           |
+| `us-signed`       | `,`, UTF-8, `MM/DD/YYYY`, `.`, one signed amount, a running balance left aside                    | `Date,Description,Amount,Running Bal.`                     |
+
+An ISO style (`YYYY-MM-DD`) is not shipped: its dates are never ambiguous, and detection reads it.
+`shippedProfile(key)` finds one; a key no longer shipped gives `undefined`.
 
 **Detection** (`detectCsvProfile`, `src/csv-detect.ts`) proposes a profile for a file it has none
 for, which the import screen shows over the preview, from the top of the file (200 rows, within
 2,000 lines and a mebibyte): UTF-8 when the bytes are, Windows-1252 otherwise; the separator most rows agree on (the widest table on a tie); the lines before the
-first row of that table; a header when no value of the first row is a date; the columns whose every
+first row of that table, through the last that holds something (more than 100 and the file is
+`NotAStatement`, as it is when `readCsvHeader` would not find the proposed header again with the
+profile proposed: under more blank lines or text than its search reads, a saved profile would
+never recognise its own files); a header when no value of the first row is a date; the columns whose every
 value is a date, an amount (with a decimal mark or a sign somewhere: digits alone may be a
 reference) or a currency code (only under a header saying `Devise` or `Currency`: three capital
 letters may be a type, `VIR`, `CHQ`). A column whose header says Debit or Credit is an amount
@@ -122,7 +182,7 @@ the label is `NotAStatement`; the user then picks every column.
 
 Not handled yet: a currency symbol inside an amount (`12,34 €`), a trailing minus (`12,34-`), a
 column saying the direction (`D`/`C`) beside an unsigned amount, a balance column, a footer of
-totals (its date cannot be read: refused at its line), and profiles shipped for named banks.
+totals (its date cannot be read: refused at its line).
 
 ## Errors
 
@@ -304,8 +364,8 @@ proportion to the file's size, at most some tens of times it for a crafted file 
 - **One account per file.** OFX can hold several statements and QIF several accounts; a reader
   refuses the second one, and the user exports one account per file. CAMT.053 and MT940 read several
   statements of the same account as one.
-- **Read past**, and not returned: the account's identifiers (`BANKID`, `ACCTID`, CAMT.053's
-  `Acct/Id`, MT940's `:25:`), OFX `DTUSER`, `TRNTYPE`, `CHECKNUM`, `SIC`, the available balance, QIF
+- **Read past**, and not returned: the bank's identifiers (OFX `BANKID` and `BRANCHID`, CAMT.053's
+  `Svcr`, the BIC or bank code before MT940's account), OFX `DTUSER`, `TRNTYPE`, `CHECKNUM`, `SIC`, the available balance, QIF
   categories (`L`), cleared status (`C`) and addresses (`A`), CAMT.053's bank transaction codes and
   amounts in another currency (`AmtDtls`), MT940's transaction types and statement numbers. Nothing
   in the issue asks for them yet; adding one is a field here.

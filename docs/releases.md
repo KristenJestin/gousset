@@ -22,6 +22,8 @@ One `Dockerfile`, at the root of the repository, makes one image for everything 
 - **`migrate`**: applies Drizzle's migrations (`packages/db/src/migrations`) to `DATABASE_URL`,
   as the tables' owner, then lets the app's role `gousset_app` log in, and exits. It is safe to
   run again: what is applied is not applied twice.
+- **`recover-admin <e-mail>`**: gives the administrator who forgot their password a temporary
+  one (below, "Recovering the administrator"), as the tables' owner, and exits.
 - **The app logs in to the database as `gousset_app`**, never as the owner `DATABASE_URL` names
   (`docs/data-model.md`, "Ownership and isolation"): no superuser, it owns no table and cannot
   step past row-level security. Its password is derived from the owner's, so `migrate` and the app
@@ -101,7 +103,10 @@ Variables, from the shell or a `.env` file beside `docker-compose.yml`:
 statistics of Varlock's command line (`VARLOCK_TELEMETRY_DISABLED`): nothing leaves an
 installation unless its owner wants it to.
 
-**Updating**: `docker compose pull && docker compose up -d`; `migrate` runs again before the app.
+**Updating**: back up first ([Backing up and restoring](#backing-up-and-restoring): a dump and
+`secrets/`), then `docker compose pull && docker compose up -d`; `migrate` runs again before the
+app. Migrations only go forward: an update is undone by restoring that dump under the previous
+image ([Going back](#going-back)), never by running the previous image on the updated database.
 An installation made before the app had a role of its own (#66) needs nothing more: its next
 `migrate` makes `gousset_app`, hands
 pg-boss's schema over to it and lets it log in, and the app then logs in as it, with the same
@@ -122,10 +127,123 @@ docker compose up -d --force-recreate
 
 (or start over on a fresh volume, `docker compose down --volumes`, which deletes all the data).
 
+**Recovering the administrator.** In the app, the administrator resets any user's password but
+their own. If the administrator forgets it, whoever runs the installation gives them a temporary
+one from the server, in the running app's container:
+
+```sh
+docker compose exec web gousset recover-admin admin@example.com
+```
+
+The command (`packages/auth/src/recover-admin.ts`) does what the administrator's reset of a user
+does (#70): the password becomes a temporary one, drawn at random and printed once on its output,
+which the administrator must replace with their own at the next sign-in, before anything else;
+every session of theirs ends, and every MCP client they allowed loses its access. The old password
+no longer works. It is refused, changing nothing, for any e-mail but the administrator's, and then
+names the administrator's. `gousset` is the image's entry point: called this way, it reads the
+database password from its secret, as the app does, and the command logs in as the tables' owner,
+like `migrate`. It logs nothing: the temporary password stays in the terminal it was run from,
+and is kept nowhere but as its hash. Without Compose, `docker run --rm` the image with the same
+`DATABASE_URL` and password, and `recover-admin <e-mail>` as its command.
+
 In a clone, `docker compose up --build` builds the image instead of pulling it. The database of
 development is another file, `docker-compose.dev.yml` (`pnpm db:start`): another Compose project
 (`gousset-dev`) with its own volume, on `127.0.0.1:5432`, so that it never shares a database, and
 so a password, with an installation.
+
+## Backing up and restoring
+
+An installation is its database and its two secrets. Each user takes their own data away from
+Settings, Data: an archive of JSON and CSV files, readable without Gousset, which a backup does
+not replace and which Gousset does not import back. The administrator backs up the whole
+installation, every user's data, password and connected MCP clients, from the folder of
+`docker-compose.yml`.
+
+**The secrets**: keep `secrets/` with every backup, away from the machine. `better_auth_secret`
+signs the sessions, and better-auth encrypts with it the keys the MCP door signs its tokens with:
+a database restored beside another secret keeps its users and passwords, but nobody's session or
+MCP client works until they sign in and connect again. `postgres_password` is the password of the
+tables' owner (`gousset`), from which `migrate` derives `gousset_app`'s.
+
+**A dump** (`pg_dump`), made while the app serves (it reads one consistent snapshot):
+
+```sh
+docker compose exec -T postgres pg_dump -U gousset -d gousset --format=custom > gousset-$(date +%F).dump
+```
+
+`-T` gives no terminal, so that the binary dump comes out whole. A dump holds the tables, their
+rows, pg-boss's jobs and the grants, never the roles: `gousset_app` and `gousset_user` belong to
+the Postgres server, not to one database, and the restore makes them first.
+
+**Restoring a dump** into an empty installation (a new machine, or a lost volume): the same
+`docker-compose.yml`, the same `secrets/`, and the `GOUSSET_VERSION` the dump was made with
+(update afterwards, as always).
+
+```sh
+docker compose up -d postgres
+docker compose run --rm migrate                  # makes the roles gousset_app and gousset_user
+docker compose exec -T postgres dropdb -U gousset gousset
+docker compose exec -T postgres createdb -U gousset gousset
+docker compose exec -T postgres pg_restore -U gousset -d gousset --exit-on-error --single-transaction < gousset-2026-11-23.dump
+docker compose up -d                             # migrate again (it lets gousset_app log in), then the app
+```
+
+`migrate` makes the roles on the new server, then the database it filled gives way to an empty one,
+so that the dump comes in whole, in one transaction: a restore that fails leaves the database
+empty, never half restored. Over an installation that still has its volume, `docker compose down`
+first: the same steps then replace its database, and every row in it, with the dump's.
+
+The end-to-end test `apps/e2e/tests/backup.spec.ts` runs these `pg_dump` and `pg_restore` options
+against a database the migrations' roles already exist for, starts an app on it, signs a user in
+with their password and finds their export unchanged.
+
+**A copy of the volume**, the other way: stop the installation, so that Postgres writes nothing
+during the copy, then copy the volume `gousset_postgres` with Postgres's image, which is already
+there:
+
+```sh
+docker compose stop
+docker run --rm -v gousset_postgres:/data:ro -v "$PWD":/backup postgres:18.7 tar -czf /backup/gousset-volume.tgz -C /data .
+docker compose start
+```
+
+It restores into an empty volume of the same name (`tar -xzf … -C /data`, the installation
+stopped), on the same major version of Postgres only (18): a dump is the one that moves to a later
+Postgres. This copy is not tested.
+
+### Going back
+
+An update that goes wrong is undone with the dump made just before it, under the image that made
+it. The previous image never runs on a database a later `migrate` changed: its code does not know
+the new columns and tables, and nothing removes them (`docs/data-model.md`, "Migrations").
+
+One line at a time, stopping at the first that fails; `<dump>` is the file of that dump, as
+`gousset-$(date +%F).dump` named it, and `<version>` the version it was made with:
+
+```sh
+test -s <dump> && echo found                     # the dump is there and not empty: go on only then
+docker compose down                              # the app and migrate stop; the volume stays
+echo GOUSSET_VERSION=<version> >> .env           # the previous image, as 0.1.1
+docker compose up -d postgres
+docker compose exec -T postgres dropdb -U gousset gousset
+docker compose exec -T postgres createdb -U gousset gousset
+docker compose exec -T postgres pg_restore -U gousset -d gousset --exit-on-error --single-transaction < <dump>
+```
+
+Only once `pg_restore` ended without an error, start the previous image's `migrate` (nothing to
+apply) and its app:
+
+```sh
+docker compose up -d
+```
+
+If `pg_restore` failed, the database is empty: do not start the app, which would offer `/setup` to
+whoever reaches it first. Mend what failed and run the last three lines again.
+
+The roles are there already: the same server keeps them. What was written after the dump, under
+the new version, is lost with it. Take `GOUSSET_VERSION` out of `.env` to follow `latest` again
+once a fixed release is out. These are the restore's steps above, on a server that has its roles;
+the end-to-end test of the restore runs them, not this way back as a whole.
 
 ## The version
 
@@ -219,7 +337,9 @@ and a squash add a commit `dev` does not have; GitHub's rebase always writes new
   to `dev` (every job, the full matrix of `ui` and `e2e` included, where the beta needs only
   `verify`), and the pull request's own `ci` and `pull-request` runs on that commit
   (`react-doctor`, `privacy`, the commit messages); each workflow's last run counts, at its last
-  attempt, and one not finished is refused like one that failed. Then, before writing anything,
+  attempt, and one not finished is refused like one that failed. And **the `upgrade` job passed
+  on the commit's push to `dev`** ([Every release is an upgrade](#every-release-is-an-upgrade)).
+  Then, before writing anything,
   that **the beta of that commit was published** (`sha-<commit>`): a release is never built again.
   Any of these refused, nothing moves and the run fails, saying why.
 - **Then**, in this order: `main` moves forward to the commit through GitHub's API, not forced
@@ -244,6 +364,56 @@ and a squash add a commit `dev` does not have; GitHub's rebase always writes new
   `dev` whose every check passed, on its push and on the release pull request, and GitHub keeps a
   check by commit, not by branch; on `main`, `ci.yml` would run that same `verify` again and
   nothing else, and `beta.yml` follows `dev` only.
+
+## Every release is an upgrade
+
+From v0.2 on, installations hold real data, and an update must keep every row of it (#102).
+`.github/workflows/upgrade.yml` runs on every push to `dev` and `next/**`, and on a pull request that
+touches what an update runs through (`packages/db`, `packages/auth`, the `Dockerfile`, the compose
+files, `tools/docker-entrypoint.sh`) or the job itself (`tools/check-upgrade.*`, the workflow): it
+builds the commit's image and runs `tools/check-upgrade.sh` on it, which, on a fresh project
+and volume:
+
+1. installs **the last release** (the highest tag `vX.Y.Z`, `--from` to choose another) with that
+   release's own `docker-compose.yml`, its image pulled from the registry;
+2. fills it with invented data, **through the app's API where the release has one**: the
+   administrator by sign-up, a user given a temporary password who replaced it with her own,
+   one still on her temporary password, one banned; and **through the tables' owner
+   (`tools/check-upgrade.sql`) for what the release offers no route for**: 0.1.1 has neither an
+   accounts screen nor an import route, so two users' accounts of every kind, balances, an import
+   with its file and its lines (a held duplicate, a foreign currency, a discarded line), a CSV
+   profile, and an MCP client with its consent and tokens are written as the app would write them;
+3. stops the app, as an update does, and reads every row of every table of the `public` schema;
+4. puts the image under test in its place, as the [update](#installing) does, the compose file
+   unchanged: **`migrate` runs and ends**, and has recorded every migration of the commit; run
+   again, it applies nothing and changes nothing;
+5. reads every row again: **every table and column of before is still there, and every row is
+   identical**, but in the columns and tables the new migrations add (those of the commit's
+   `packages/db/src/migrations` the release did not have), each of which must be named in them
+   (`ALTER TABLE "t" ADD COLUMN "c"`, `CREATE TABLE "t"`);
+6. starts the app: `/health` answers 200; **the administrator and both users sign in with the same
+   passwords**, the temporary one still has to be replaced, the banned one is still refused, and a
+   session made before the update still works;
+7. downloads the user's **export** (#22, `/api/export`), which the last release may not have: each
+   of its tables holds that user's rows exactly as the release held them, and each imported file
+   its bytes;
+8. migrates an empty database beside it with the same image: **the updated schema is a fresh
+   installation's**, to the column order and the grant.
+
+It removes everything it started, whatever happened. To run it on a clone, with the release's tag
+fetched (`git fetch --tags`):
+
+```sh
+docker build -t ghcr.io/kristenjestin/gousset:local .
+tools/check-upgrade.sh local
+```
+
+The Release workflow refuses a commit whose push to `dev` did not pass the job (the run's last
+attempt), as it refuses one without a beta. **When a release changes the tables
+`tools/check-upgrade.sql` writes, or gives them a route of their own, that file changes in the
+same pull request**: from a release with the import route, the lines come through it. A commit
+released after an earlier commit of `dev` was released since its push was tested from the release
+before that one only.
 
 ## The notes
 

@@ -132,11 +132,53 @@ const noTextOutsideMessages = defineRule({
   },
 });
 
+/** Whether a node is `<anything>.api.getSession`: better-auth's session read, on its API. */
+function isSessionRead(node: ESTree.Node): boolean {
+  return (
+    node.type === "MemberExpression" &&
+    !node.computed &&
+    node.property.type === "Identifier" &&
+    node.property.name === "getSession" &&
+    node.object.type === "MemberExpression" &&
+    !node.object.computed &&
+    node.object.property.type === "Identifier" &&
+    node.object.property.name === "api"
+  );
+}
+
+/**
+ * A server function or a route reads the session through `usableSession`
+ * (apps/web/src/lib/session.server.ts), never through better-auth's `getSession` directly: a
+ * session held for a temporary password's change reaches nothing but that change (#70, #79), and a
+ * new route that read the session itself would forget it.
+ */
+const noDirectSessionRead = defineRule({
+  meta: {
+    type: "problem",
+    docs: {
+      description: "The session is read through `usableSession`, which refuses a held session.",
+    },
+    messages: {
+      read: 'Read the session with `usableSession` from "@/lib/session.server": it refuses a session held for a temporary password\'s change.',
+    },
+  },
+  createOnce(context) {
+    return {
+      CallExpression(node) {
+        if (isSessionRead(node.callee)) {
+          context.report({ node, messageId: "read" });
+        }
+      },
+    };
+  },
+});
+
 /** Gousset's own lint rules, for what no upstream preset checks. */
 const goussetPlugin = eslintCompatPlugin({
   meta: { name: "gousset" },
   rules: {
     "no-text-outside-messages": noTextOutsideMessages,
+    "no-direct-session-read": noDirectSessionRead,
   },
 });
 

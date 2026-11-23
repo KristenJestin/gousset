@@ -9,6 +9,7 @@
   "devDependencies": {
     "@axe-core/playwright": "4.14.0",
     "@gousset/config": "workspace:*",
+    "@gousset/core": "workspace:*",
     "@gousset/db": "workspace:*",
     "@gousset/fixture": "workspace:*",
     "@gousset/telemetry": "workspace:*",
@@ -19,6 +20,7 @@
     "drizzle-kit": "1.0.0-rc.6",
     "drizzle-orm": "catalog:",
     "effect": "catalog:",
+    "fflate": "0.8.3",
     "pg": "^8.23.1",
     "typescript": "catalog:"
   }

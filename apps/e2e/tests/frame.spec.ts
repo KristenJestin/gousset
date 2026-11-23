@@ -31,6 +31,7 @@ const SCREENS = [
   { path: "/settings", name: "settings", en: "Settings", fr: "Réglages" },
   { path: "/settings/categories", name: "categories", en: "Settings", fr: "Réglages" },
   { path: "/settings/rules", name: "rules", en: "Settings", fr: "Réglages" },
+  { path: "/settings/data", name: "data", en: "Settings", fr: "Réglages" },
   { path: "/settings/users", name: "users", en: "Settings", fr: "Réglages" },
   {
     path: "/change-password",
@@ -298,8 +299,14 @@ test("the month is kept in the url and moves with the switcher", async ({ userPa
     userPage.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Review" }),
   ).toHaveAttribute("aria-current", "page");
 
+  // The operations read the older address's month as its first to last day.
   await visit(userPage, "/operations?month=2025-02");
-  await expect(userPage.getByRole("group", { name: "Month" })).toContainText("February 2025");
+  await expect(userPage.getByRole("textbox", { name: "From", exact: true })).toHaveValue(
+    "02/01/2025",
+  );
+  await expect(userPage.getByRole("textbox", { name: "To", exact: true })).toHaveValue(
+    "02/28/2025",
+  );
 
   // A month that cannot be read is the current one, not an error.
   await visit(userPage, "/?month=2026-13");
@@ -385,7 +392,7 @@ test("moving between screens fades the screen, the current item slides, empty st
   userPage,
 }) => {
   test.skip(onPhone(userPage), "The sidebar is the desktop's.");
-  await visit(userPage, "/accounts");
+  await visit(userPage, "/investments");
 
   // The empty state fades in through CSS, 200 ms.
   const block = userPage.locator('[data-slot="screen-block"]');
@@ -409,9 +416,9 @@ test("moving between screens fades the screen, the current item slides, empty st
   // Cut under reduced motion: the screen shows at once, the mark is at once on its item.
   await userPage.emulateMedia({ reducedMotion: "reduce" });
 
-  const cut = await moveTo(userPage, "Accounts");
+  const cut = await moveTo(userPage, "Investments");
 
-  await expect(userPage.getByRole("link", { name: "Accounts" })).toHaveAttribute(
+  await expect(userPage.getByRole("link", { name: "Investments" })).toHaveAttribute(
     "aria-current",
     "page",
   );

@@ -109,6 +109,55 @@ function uiMessages(locale: Locale) {
       /** What an investment's gain is measured against: its net contributions. */
       putIn: m.uiMoneyPutIn({}, options),
     },
+    accounts: {
+      /** The "Tracking" column and the settings' value: how the account is followed. */
+      trackingLines: m.uiAccountsTrackingLines({}, options),
+      trackingBalance: m.uiAccountsTrackingBalance({}, options),
+      /** How far statements go, when there is none yet. */
+      noStatement: m.uiAccountsNoStatement({}, options),
+      /** Beside the date, when the import lags behind the month (⚠). */
+      importBehind: m.uiAccountsImportBehind({}, options),
+      closed: (count: number) =>
+        pluralRules[locale].select(count) === "one"
+          ? m.uiAccountsClosedOne({ count }, options)
+          : m.uiAccountsClosedOther({ count }, options),
+      showOlderLines: m.uiAccountsShowOlderLines({}, options),
+      noLines: m.uiAccountsNoLines({}, options),
+      balanceChecked: m.uiAccountsBalanceChecked({}, options),
+      balanceMismatch: m.uiAccountsBalanceMismatch({}, options),
+      balanceAgrees: (app: string, statement: string, day: string) =>
+        m.uiAccountsBalanceAgrees({ app, statement, day }, options),
+      balanceDisagrees: (app: string, statement: string, day: string, difference: string) =>
+        m.uiAccountsBalanceDisagrees({ app, statement, day, difference }, options),
+      balanceNoStatement: m.uiAccountsBalanceNoStatement({}, options),
+      /** Before the earlier statement balances that disagree, once the latest check is shown. */
+      balanceAlsoDiffers: m.uiAccountsBalanceAlsoDiffers({}, options),
+      balanceOnDay: (day: string) => m.uiAccountsBalanceOnDay({ day }, options),
+      inPeriod: (period: string) => m.uiAccountsInPeriod({ period }, options),
+      outPeriod: (period: string) => m.uiAccountsOutPeriod({ period }, options),
+      settingsKind: m.uiAccountsSettingsKind({}, options),
+      settingsTracking: m.uiAccountsSettingsTracking({}, options),
+      settingsCurrency: m.uiAccountsSettingsCurrency({}, options),
+      settingsOpenedOn: m.uiAccountsSettingsOpenedOn({}, options),
+      settingsInstitution: m.uiAccountsSettingsInstitution({}, options),
+      settingsSettlesInto: m.uiAccountsSettingsSettlesInto({}, options),
+      settingsNotSet: m.uiAccountsSettingsNotSet({}, options),
+      /** A benefit account's setting: the order its credits are used in. */
+      settingsCreditOrder: m.uiAccountsSettingsCreditOrder({}, options),
+      /** `BenefitCredits`: a benefit account's credits and when they expire. */
+      creditsTitle: m.uiAccountsCreditsTitle({}, options),
+      creditsExpiring: m.uiAccountsCreditsExpiring({}, options),
+      creditsExpiredOn: (day: string) => m.uiAccountsCreditsExpiredOn({ day }, options),
+      /** A credit's chip: "expires 31 Dec." */
+      creditsExpires: (day: string) => m.uiAccountsCreditsExpires({ day }, options),
+      /** After what is left of a credit: "of €200.00". */
+      creditsOf: (amount: string) => m.uiAccountsCreditsOf({ amount }, options),
+      creditsEditExpiry: m.uiAccountsCreditsEditExpiry({}, options),
+      /** The expiry button's name, unique on the page: "Expiry date of MEALCARD CREDIT". */
+      creditsEditExpiryOf: (label: string) => m.uiAccountsCreditsEditExpiryOf({ label }, options),
+      creditsUncovered: (amount: string) => m.uiAccountsCreditsUncovered({ amount }, options),
+      creditsEmpty: m.uiAccountsCreditsEmpty({}, options),
+    },
     jobs: {
       /** A background job's state, beside its title. */
       waiting: m.uiJobWaiting({}, options),
@@ -121,6 +170,53 @@ function uiMessages(locale: Locale) {
       /** How much of a step is done: "312 of 1,204". */
       counts: (done: string, total: string) => m.uiJobCounts({ done, total }, options),
       retry: m.uiJobRetry({}, options),
+    },
+    imports: {
+      /** The file drop's button, which opens the file picker. */
+      chooseFiles: m.uiImportChooseFiles({}, options),
+      /** Said in place of the dash of a value the import has not found yet. */
+      notKnown: m.uiImportNotKnown({}, options),
+    },
+    operations: {
+      /** The chip on a line held for review. */
+      toReview: m.uiOperationsToReview({}, options),
+      empty: m.uiOperationsEmpty({}, options),
+      loadingMore: m.uiOperationsLoadingMore({}, options),
+      columns: {
+        day: m.uiOperationsColumnDay({}, options),
+        label: m.uiOperationsColumnLabel({}, options),
+        account: m.uiOperationsColumnAccount({}, options),
+        amount: m.uiOperationsColumnAmount({}, options),
+      },
+      /** How many lines match, the count already written: "1,234 lines". */
+      lines: (count: number, written: string) =>
+        pluralRules[locale].select(count) === "one"
+          ? m.uiOperationsLinesOne({ count: written }, options)
+          : m.uiOperationsLinesOther({ count: written }, options),
+      filters: m.uiOperationsFilters({}, options),
+      search: m.uiOperationsSearch({}, options),
+      searchPlaceholder: m.uiOperationsSearchPlaceholder({}, options),
+      account: m.uiOperationsColumnAccount({}, options),
+      allAccounts: m.uiOperationsAllAccounts({}, options),
+      from: m.uiOperationsFrom({}, options),
+      to: m.uiOperationsTo({}, options),
+      min: m.uiOperationsMin({}, options),
+      max: m.uiOperationsMax({}, options),
+      onlyToReview: m.uiOperationsOnlyToReview({}, options),
+      clear: m.uiOperationsClear({}, options),
+      bookedOn: m.uiOperationsBookedOn({}, options),
+      valueOn: m.uiOperationsValueOn({}, options),
+      rawLabel: m.uiOperationsRawLabel({}, options),
+      memo: m.uiOperationsMemo({}, options),
+      counterparty: m.uiOperationsCounterparty({}, options),
+      originalAmount: m.uiOperationsOriginalAmount({}, options),
+      expiresOn: m.uiOperationsExpiresOn({}, options),
+      looksLike: (line: string) => m.uiOperationsLooksLike({ line }, options),
+      source: m.uiOperationsSource({}, options),
+      importedFrom: m.uiOperationsImportedFrom({}, options),
+      importedOn: m.uiOperationsImportedOn({}, options),
+      period: m.uiOperationsPeriod({}, options),
+      enteredByHand: m.uiOperationsEnteredByHand({}, options),
     },
   };
 }

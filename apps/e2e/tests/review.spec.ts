@@ -82,7 +82,7 @@ async function rollingFramesTo(page: Page, month: string) {
         );
       });
     },
-    { columns: '[data-slot="amount-digit"]', announced: month, after: 500, cap: 10_000 },
+    { columns: '[data-slot="rolling-digit"]', announced: month, after: 500, cap: 10_000 },
   );
 
   await monthSwitcher(page).getByRole("button", { name: "Previous month" }).click();

@@ -1,10 +1,15 @@
 import {
+  DataExport,
   FixtureLedger,
+  ImportProfiles,
+  Imports,
   Ledger,
   flags,
   importState,
   investments,
   linesToReview,
+  memoryAccountStore,
+  memoryLineStore,
   monthOverview,
   movements,
   spending,
@@ -15,6 +20,7 @@ import { TestClock } from "effect/testing";
 import { describe, expect, test } from "vite-plus/test";
 
 import { goussetServer } from "../gousset";
+import type { GoussetServices } from "../gousset";
 import { RESULT_LIMIT } from "../results";
 import { breakdown } from "./month";
 import { callText, connectInProcess } from "../test-client";
@@ -23,14 +29,27 @@ import type { Runner } from "../tool";
 const TODAY = "2026-11-22";
 
 /** A ledger, the made-up one by default, on a fixed day, as the app's runtime provides it. */
-function onDay(day: string, ledger: Layer.Layer<Ledger> = FixtureLedger): Runner<Ledger> {
+function onDay(day: string, ledger: Layer.Layer<Ledger> = FixtureLedger): Runner<GoussetServices> {
   return (effect) =>
     Effect.runPromiseExit(
       Effect.gen(function* () {
         yield* TestClock.setTime(Date.parse(`${day}T12:00:00Z`));
 
         return yield* effect;
-      }).pipe(Effect.provide(Layer.mergeAll(ledger, TestClock.layer()))),
+      }).pipe(
+        // month never reaches the imports nor the export.
+        Effect.provide(
+          Layer.mergeAll(
+            ledger,
+            memoryAccountStore(),
+            memoryLineStore(),
+            Layer.mock(Imports, {}),
+            Layer.mock(ImportProfiles, {}),
+            Layer.mock(DataExport, {}),
+            TestClock.layer(),
+          ),
+        ),
+      ),
     );
 }
 
