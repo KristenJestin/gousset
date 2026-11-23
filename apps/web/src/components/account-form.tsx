@@ -2,6 +2,7 @@ import type { AccountChoice, AccountMode } from "@gousset/core/account-values";
 import { ACCOUNT_CHOICES } from "@gousset/core/account-values";
 import { m } from "@gousset/i18n/messages";
 import { Button } from "@gousset/ui/components/button";
+import { Combobox } from "@gousset/ui/components/combobox";
 import { DatePicker } from "@gousset/ui/components/date-picker";
 import { Dialog, DialogClose } from "@gousset/ui/components/dialog";
 import { FormMessage } from "@gousset/ui/components/form-message";
@@ -10,6 +11,7 @@ import { Select } from "@gousset/ui/components/select";
 import type { ChoiceItem } from "@gousset/ui/components/select";
 import { TextField } from "@gousset/ui/components/text-field";
 import { useUiMessages } from "@gousset/ui/hooks/use-ui-messages";
+import { CURRENCY_CODES } from "@gousset/ui/lib/money";
 import { useId, useState } from "react";
 
 import { accountRefusalMessage } from "@/i18n/messages";
@@ -45,6 +47,12 @@ const MODE_SET: ReadonlySet<string> = new Set([
 function isAccountMode(value: string): value is AccountMode {
   return MODE_SET.has(value);
 }
+
+/** Every currency an account can be opened in, by its ISO 4217 code alone. */
+const CURRENCY_ITEMS: ReadonlyArray<ChoiceItem> = CURRENCY_CODES.map((code) => ({
+  value: code,
+  label: code,
+}));
 
 /** `AccountFormValues` as `createAccount` and `editAccount` take them (`AccountInput`'s shape). */
 export function accountFormInput(values: AccountFormValues) {
@@ -95,6 +103,7 @@ export function AccountForm({
   const [choice, setChoice] = useState<AccountChoice>(initial.choice);
   const [institution, setInstitution] = useState(initial.institution);
   const [currency, setCurrency] = useState(initial.currency);
+  const [openingBalanceInvalid, setOpeningBalanceInvalid] = useState(false);
   const [mode, setMode] = useState<AccountMode>(initial.mode);
   const [openingBalanceMinor, setOpeningBalanceMinor] = useState(initial.openingBalanceMinor);
   const [openedOn, setOpenedOn] = useState<string | null>(initial.openedOn);
@@ -134,6 +143,10 @@ export function AccountForm({
   }
 
   async function submit() {
+    if (openingBalanceInvalid) {
+      return;
+    }
+
     const result = await whileBusy(setBusy, () =>
       onSubmit({
         name,
@@ -204,14 +217,12 @@ export function AccountForm({
           onChange={(event) => setInstitution(event.target.value)}
           autoComplete="off"
         />
-        <TextField
+        <Combobox
           label={m.fieldCurrency()}
-          description={m.fieldCurrencyHelp()}
+          placeholder={m.fieldCurrencyPlaceholder()}
+          items={CURRENCY_ITEMS}
           value={currency}
-          onChange={(event) => setCurrency(event.target.value.toUpperCase())}
-          minLength={3}
-          maxLength={3}
-          autoComplete="off"
+          onValueChange={(value) => setCurrency(value ?? currency)}
           required
         />
         <Select
@@ -225,7 +236,14 @@ export function AccountForm({
           label={m.fieldOpeningBalance()}
           currency={currency}
           value={openingBalanceMinor}
-          onValueChange={(minor) => setOpeningBalanceMinor(minor ?? 0)}
+          error={openingBalanceInvalid ? m.fieldOpeningBalanceInvalid() : undefined}
+          onValueChange={(minor) => {
+            setOpeningBalanceInvalid(minor === null);
+
+            if (minor !== null) {
+              setOpeningBalanceMinor(minor);
+            }
+          }}
         />
         <DatePicker label={m.fieldOpenedOn()} value={openedOn} onValueChange={setOpenedOn} />
         {choice === "card" ? (

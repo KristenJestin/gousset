@@ -145,7 +145,8 @@ test("editing an account refuses a new currency once it has a line", async ({ us
 
   const dialog = page.getByRole("dialog", { name: "Edit the account" });
 
-  await dialog.getByRole("textbox", { name: "Currency" }).fill("USD");
+  await dialog.getByRole("combobox", { name: "Currency" }).click();
+  await page.getByRole("option", { name: "USD", exact: true }).click();
   await dialog.getByRole("button", { name: "Save" }).click();
 
   await expect(dialog).toContainText(
