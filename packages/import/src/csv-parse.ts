@@ -118,12 +118,17 @@ export function decodeCsv(
   });
 }
 
-/** The text past its first `count` lines, whatever ends them. */
-export function skipLines(text: string, count: number): Skipped {
+/**
+ * The text past its first `count` lines, whatever ends them. With `within`, those lines are looked
+ * for in the text's first `within` characters only: past them, nothing is left, as if the text
+ * ended there.
+ */
+export function skipLines(text: string, count: number, within = Number.POSITIVE_INFINITY): Skipped {
+  const end = Math.min(text.length, within);
   let index = 0;
   let skipped = 0;
 
-  while (skipped < count && index < text.length) {
+  while (skipped < count && index < end) {
     const character = text[index];
 
     index += 1;
@@ -135,6 +140,10 @@ export function skipLines(text: string, count: number): Skipped {
 
       skipped += 1;
     }
+  }
+
+  if (skipped < count && end < text.length) {
+    return { rest: "", line: skipped + 1 };
   }
 
   return { rest: text.slice(index), line: skipped + 1 };

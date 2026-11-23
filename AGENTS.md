@@ -33,19 +33,20 @@ file is how to work.
 
 ## Layout
 
-| Path                                | What                                                                  |
-| ----------------------------------- | --------------------------------------------------------------------- |
-| `apps/web`                          | The app: TanStack Start (pages, server functions, API, jobs, `/mcp`)  |
-| `packages/ui`                       | Every component and the theme, each described in Storybook            |
-| `packages/core`                     | The logic (the month's figures, reviews) the app and `/mcp` both call |
-| `packages/db`                       | The Drizzle schema and migrations                                     |
-| `packages/auth`                     | better-auth, wired to the database; the MCP door's OAuth              |
-| `packages/mcp`                      | The MCP tool framework, its guards, the instructions and the tools    |
-| `packages/fixture`                  | The shared made-up data                                               |
-| `packages/config`                   | The shared TypeScript configuration                                   |
-| `tools/oxlint`                      | Lint rules vendored from upstream (see [Lint](#lint))                 |
-| `.agents/skills`                    | Skills for agents, vendored from upstream                             |
-| `packages/ui/src/components/charts` | Bklit's charts, vendored from its shadcn registry (see [Lint](#lint)) |
+| Path                                | What                                                                    |
+| ----------------------------------- | ----------------------------------------------------------------------- |
+| `apps/web`                          | The app: TanStack Start (pages, server functions, API, jobs, `/mcp`)    |
+| `packages/ui`                       | Every component and the theme, each described in Storybook              |
+| `packages/core`                     | The logic (the month's figures, reviews) the app and `/mcp` both call   |
+| `packages/db`                       | The Drizzle schema and migrations                                       |
+| `packages/auth`                     | better-auth, wired to the database; the MCP door's OAuth                |
+| `packages/mcp`                      | The MCP tool framework, its guards, the instructions and the tools      |
+| `packages/fixture`                  | The shared made-up data                                                 |
+| `packages/currency`                 | The one ISO 4217 table: minor units and the codes an account picks from |
+| `packages/config`                   | The shared TypeScript configuration                                     |
+| `tools/oxlint`                      | Lint rules vendored from upstream (see [Lint](#lint))                   |
+| `.agents/skills`                    | Skills for agents, vendored from upstream                               |
+| `packages/ui/src/components/charts` | Bklit's charts, vendored from its shadcn registry (see [Lint](#lint))   |
 
 ## Commands
 
@@ -105,7 +106,8 @@ The whole toolchain is vite-plus: no ESLint, no Prettier, no Jest beside it.
   `tailwind-merge`); only the theme's variables (`docs/architecture.md`, "Shared components").
 - **Every UI issue states its motion, and tests it** (`docs/design.md`, "Motion"): what moves,
   how long, and that it is cut under reduced motion.
-- **A feature is reachable from the MCP server in the same pull request** (see [MCP](#mcp)).
+- **A feature is reachable from the MCP server in the same pull request** (see [MCP](#mcp)),
+  but the administration of users, which has no tool.
 
 ## Lint
 
@@ -177,7 +179,10 @@ wrapper lives beside them, linted like the rest.
 The app serves MCP at `/mcp` (`docs/mcp.md`). For every change to its tools:
 
 - **A feature ships with its tool**: its family tool and actions, in the same pull request, with
-  end-to-end tests through a real MCP client.
+  end-to-end tests through a real MCP client. **One exception: the administration of users**
+  (creating one, a ban, a password reset) has no tool and stays on the users page: an agent
+  holding the administrator's token could otherwise reset a user's password and sign in with the
+  temporary one before the user does, unattended (`docs/mcp.md`, "Tools").
 - **One family tool per concept, with actions** (`accounts` with `list`, `show`…), never one tool
   per verb; about ten tools in all.
 - **Every tool has a `title`, a description and annotations**: the description says what it does,
@@ -228,6 +233,27 @@ The lead reviews every change to the tools against `docs/mcp.md` before merging.
   moved by the release alone, to a commit of `dev` whose checks passed (`docs/releases.md`,
   "Releasing"); this is a convention: its ruleset only blocks deletion and non-fast-forward, and
   asks for no check.
+
+## Migrations
+
+From v0.2 on, installations hold real data: an update must never lose, duplicate or change a row
+(`docs/data-model.md`, "Migrations", says why and how).
+
+- **Forward only**: a migration on `dev` or `next/x.y` is never edited, and none is undone.
+- **A destructive change takes two releases**: a drop, a rename, a narrowed type or a `not null`
+  on a column with rows first adds the new column or table and copies into it; the next release
+  removes the old one.
+- **Every migration runs in a transaction and is safe to run again** on a database that has it:
+  nothing that must run outside a transaction; what Drizzle does not write is idempotent.
+- **Its timestamp follows every migration of its target branch** when it lands: after merging
+  `origin/dev` (or `origin/next/x.y`), a migration of yours that is no longer the last is
+  generated again.
+- **The `upgrade` workflow** (`tools/check-upgrade.sh`) updates the last release, filled with
+  invented data, to the commit, on every push to `dev` and `next/**` and on a pull request that
+  touches what an update runs through (`packages/db`, `packages/auth`, the image, its compose
+  files and entry point, or the job; `docs/releases.md` lists them), and compares every row before and after; the release refuses a commit whose push to `dev` did not
+  pass it. A column or a table the new migrations add is expected by name (`ALTER TABLE "t" ADD
+  COLUMN "c"`, `CREATE TABLE "t"`); any other difference fails it.
 
 ## How the work is organised
 

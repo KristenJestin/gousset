@@ -1,0 +1,70 @@
+{
+  "type": "diff",
+  "version": "10",
+  "dialect": "postgres",
+  "id": "34a963e3-563d-4d2d-b25a-250d1fb48596",
+  "prevIds": ["a89e879a-f3c5-407c-af6e-f4569e87e7f2", "c0f3b36a-5f77-4b9e-9bd4-3e9e4e2ca544"],
+  "footprints": [
+    {
+      "statementType": "create_index",
+      "statementTarget": [
+        "index",
+        "public",
+        "statement_line",
+        "statement_line_user_id_booked_on_id_idx"
+      ],
+      "writes": [
+        "s|idx|public.statement_line_user_id_booked_on_id_idx",
+        "n|idx|public.statement_line_user_id_booked_on_id_idx",
+        "e|idx|public.statement_line_user_id_booked_on_id_idx",
+        "n|rel|public.statement_line_user_id_booked_on_id_idx"
+      ],
+      "reads": [
+        "n|tbl|public.statement_line",
+        "n|sch|public",
+        "n|col|public.statement_line.user_id",
+        "n|col|public.statement_line.booked_on",
+        "n|col|public.statement_line.id"
+      ]
+    }
+  ],
+  "deltas": [
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "statement_line",
+        "name": "statement_line_user_id_booked_on_id_idx",
+        "nameExplicit": true,
+        "columns": [
+          {
+            "value": "user_id",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          },
+          {
+            "value": "booked_on",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          },
+          {
+            "value": "id",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          }
+        ],
+        "isUnique": false,
+        "where": null,
+        "with": "",
+        "method": "btree",
+        "entityType": "indexes"
+      }
+    }
+  ]
+}

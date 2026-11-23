@@ -3,7 +3,7 @@ import { Effect } from "effect";
 
 import { jobEvents } from "../../../../jobs/events.server";
 import { jobs } from "../../../../jobs/runtime.server";
-import { auth } from "../../../../services";
+import { usableSession } from "../../../../lib/session.server";
 
 const NO_STORE = { "Cache-Control": "no-store" };
 
@@ -16,10 +16,18 @@ export const Route = createFileRoute("/api/jobs/$jobId/events")({
   server: {
     handlers: {
       GET: async ({ request, params }) => {
-        const session = await auth.api.getSession({ headers: request.headers });
+        const { session, refusal } = await usableSession(request.headers);
 
-        if (!session) {
+        if (refusal === "SIGN_IN_REQUIRED") {
           return new Response("Sign in to follow a job.", { status: 401, headers: NO_STORE });
+        }
+
+        // A temporary password follows no job: someone else chose it (#70, #79).
+        if (session === undefined) {
+          return new Response("Change your temporary password first.", {
+            status: 403,
+            headers: NO_STORE,
+          });
         }
 
         const body = await jobs.runPromise(
@@ -37,6 +45,13 @@ export const Route = createFileRoute("/api/jobs/$jobId/events")({
 
         if (body === null) {
           return new Response("No job of yours has this id.", { status: 404, headers: NO_STORE });
+        }
+
+        if (body === "busy") {
+          return new Response("You follow too many jobs at once: close a page that follows one.", {
+            status: 429,
+            headers: { ...NO_STORE, "Retry-After": "5" },
+          });
         }
 
         return new Response(body, {

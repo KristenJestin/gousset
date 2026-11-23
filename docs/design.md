@@ -85,7 +85,7 @@ A page shows things; it does not hold an action's form.
 - **On a phone** (below 768 px, where the tab bar shows) both are a **sheet** along the bottom edge, its whole width: the dialog, and the side sheet.
 - The dialog's actions are Cancel, then the submit button. While the form is sent the dialog stays open, its button busy. A refusal keeps the dialog open and says why under the field at fault; once the form is accepted the dialog closes, focus goes back to the button that opened it, and the page shows the result (the new line in its list, a sentence saying what was done).
 - **Settings that apply at once** (a switch, a choice, a button that turns something on) stay inline in the page: they ask for nothing to fill in.
-- A screen that is itself the task (signing in, the first setup, changing a temporary password, an MCP client's consent) is not a page that shows things: its form is the screen.
+- A screen that is itself the task (signing in, the first setup, changing a temporary password, an MCP client's consent, importing a statement) is not a page that shows things: its form is the screen. On the import screen, what an import asks before it goes on (the account a file is for, a CSV file's columns) stays under its row, a step of that import.
 
 Motion: the dialog fades and grows in 200 ms, ease-out, and on a phone slides up from the bottom edge; it leaves the same way. Cut under reduced motion.
 

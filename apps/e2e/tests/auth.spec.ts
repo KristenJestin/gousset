@@ -164,7 +164,8 @@ test("a created user must change their password", async ({ userPage, browser, ap
 
   // The confirmation's live region is there, empty, before the confirmation comes, so that a
   // screen reader announces it.
-  // In the page itself: the toaster keeps live regions of its own beside it.
+  // In the page itself, for a creation and a reset alike: the toaster keeps live regions of its
+  // own beside it.
   const status = userPage.getByRole("main").locator('[role="status"]');
 
   await expect(status).toHaveCount(1);
@@ -197,6 +198,8 @@ test("a created user must change their password", async ({ userPage, browser, ap
 
     await expect(page).toHaveURL(/\/change-password$/);
     await expect(page.getByText("Your password is temporary")).toBeVisible();
+    // Created, not reset: nothing to say about a reset.
+    await expect(page.getByText(/reset your password/)).toHaveCount(0);
     await expectAccessible(page);
 
     // Nothing else opens before the password is changed.
@@ -285,7 +288,7 @@ test("the users page is a section of the settings, reached from the settings", a
   await visit(secondUserPage, "/settings");
   await expect(
     secondUserPage.getByRole("navigation", { name: "Settings" }).getByRole("link"),
-  ).toHaveText(["General", "Account", "Categories", "Rules"]);
+  ).toHaveText(["General", "Account", "Categories", "Rules", "Data"]);
 });
 
 test("a new password equal to the current one is refused", async ({ page, app, user }) => {

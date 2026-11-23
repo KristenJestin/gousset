@@ -1,3 +1,7 @@
+import { minorDigits } from "@gousset/currency";
+
+export { CURRENCY_CODES, minorDigits } from "@gousset/currency";
+
 // Money as Gousset holds it: an integer of the currency's minor units, with its currency, never a
 // float. This file turns it into text for a locale, compares it to a reference, and lays out the
 // bars that show it. Pure functions; the components in `components/` draw what they return.
@@ -43,16 +47,14 @@ function cached(locale: string, options: Intl.NumberFormatOptions) {
   return created;
 }
 
-/** How many minor units the currency has, as Intl knows it: EUR 2, JPY 0, KWD 3. */
-export function minorDigits(currency: string): number {
-  const digits = cached("en", { style: "currency", currency }).resolvedOptions()
-    .maximumFractionDigits;
-
-  if (digits === undefined) {
-    throw new RangeError(`Intl gives no minor units for ${currency}.`);
-  }
-
-  return digits;
+/**
+ * A currency as Intl's `style: "currency"` takes it: three letters, or the constructor throws
+ * (`""`, `"U"`, `"US"`). Never what the form's `Combobox` sends (`CURRENCY_CODES`), but a stray
+ * value (bad data, an account from before #15) falls back to `XXX`, ISO 4217's own "no currency",
+ * so it is shown plainly rather than losing the page.
+ */
+function safeCurrencyCode(currency: string): string {
+  return /^[A-Za-z]{3}$/.test(currency) ? currency : "XXX";
 }
 
 /**
@@ -92,7 +94,7 @@ export function moneyParts(money: Money, format: MoneyFormat): Array<Intl.Number
 
   const formatter = cached(format.locale, {
     style: "currency",
-    currency: money.currency,
+    currency: safeCurrencyCode(money.currency),
     minimumFractionDigits: fraction,
     maximumFractionDigits: fraction,
     roundingMode: "halfExpand",
@@ -262,6 +264,78 @@ export function monthBarLayout(figures: {
     receivedMark: overspent ? share(received, whole) : null,
     overspent,
   };
+}
+
+/** The locale's group and decimal separators, read from a sample it formats itself. */
+function inputSeparators(locale: string) {
+  const parts = cached(locale, { style: "decimal", minimumFractionDigits: 1 }).formatToParts(
+    1111.1,
+  );
+
+  return {
+    group: parts.find((part) => part.type === "group")?.value ?? ",",
+    decimal: parts.find((part) => part.type === "decimal")?.value ?? ".",
+  };
+}
+
+/**
+ * Minor units as text to edit (an opening balance typed into a form): no currency symbol, the
+ * locale's separators, as many decimals as the currency takes. The counterpart a user reads while
+ * typing; `formatMoney` is for display.
+ */
+export function formatMoneyInput(minor: number, options: { locale: string; currency: string }) {
+  const digits = minorDigits(options.currency);
+
+  const formatter = cached(options.locale, {
+    style: "decimal",
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+    roundingMode: "halfExpand",
+  });
+
+  return trueMinus(formatter.formatToParts(asNumeric(toDecimalString(minor, digits))))
+    .map((part) => part.value)
+    .join("");
+}
+
+/**
+ * Minor units parsed back from typed text, in the locale's separators (a typed hyphen-minus
+ * counts as the true minus): `null` for empty or unreadable text. Extra decimals are cut, not
+ * rounded; `Number.isSafeInteger` guards the largest amounts.
+ */
+export function parseMoneyInput(
+  text: string,
+  options: { locale: string; currency: string },
+): number | null {
+  const trimmed = text.trim();
+
+  if (trimmed === "") {
+    return null;
+  }
+
+  const negative = trimmed.startsWith("-") || trimmed.startsWith(MINUS);
+  const body = negative ? trimmed.slice(1) : trimmed;
+  const { group, decimal } = inputSeparators(options.locale);
+  // Every locale's group separator is some kind of space or a comma/dot; stripping whitespace
+  // outright reads a value typed with a plain space even where the locale uses a narrow one.
+  const withoutSpaces = body.replaceAll(/[\s  ]/gu, "");
+  const withoutGroups = group.trim() === "" ? withoutSpaces : withoutSpaces.split(group).join("");
+  const normalized = withoutGroups.split(decimal).join(".");
+
+  if (!/^\d+(?:\.\d+)?$/.test(normalized)) {
+    return null;
+  }
+
+  const digits = minorDigits(options.currency);
+  const [whole, fraction = ""] = normalized.split(".");
+  const fractionDigits = `${fraction}${"0".repeat(digits)}`.slice(0, digits);
+  const minor = Number(`${whole}${fractionDigits}`);
+
+  if (!Number.isSafeInteger(minor)) {
+    return null;
+  }
+
+  return negative ? -minor : minor;
 }
 
 export type BreakdownBar = {

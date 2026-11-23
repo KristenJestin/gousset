@@ -52,6 +52,9 @@ export type ButtonProps = {
  * with no submit button, Enter sends no form of two text fields or more (HTML's implicit
  * submission).
  *
+ * Until then a click on any button does nothing and is lost: `data-hydrated` marks the button once
+ * it works, what a scenario waits for before clicking a page it did not load itself (#97).
+ *
  * Motion: colours change in 150 ms on hover, it presses in slightly (scale 0.97) and back; cut
  * under reduced motion.
  */
@@ -75,6 +78,7 @@ export function Button({
       disabled={disabled || loading}
       focusableWhenDisabled={loading}
       aria-busy={loading || undefined}
+      data-hydrated={hydrated ? "" : undefined}
       className={buttonClasses(variant, size)}
     >
       {(state) => (

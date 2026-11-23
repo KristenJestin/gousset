@@ -177,6 +177,9 @@ export function openUserData(database: string) {
     }).pipe(Effect.provide(layer));
 
   return {
+    /** `UserData` on this database, for the packages' own logic (`@gousset/core`) to run on. */
+    layer,
+
     /** Runs `work` in a transaction of `owner`'s, as every server function does. */
     asUser: <A>(owner: string, work: (transaction: UserTransaction) => Promise<A>): Promise<A> =>
       Effect.runPromise(transaction(owner, work)),
@@ -333,6 +336,16 @@ export function openUserData(database: string) {
         where c.table_schema = 'public' and c.column_name = 'user_id'
           and t.table_type = 'BASE TABLE' and c.table_name not like 'auth\\_%'
         order by 1`);
+
+      return decodeKeys(result).rows.map((row) => row.key);
+    },
+
+    /** The columns of a table of the public schema, in their order. */
+    async columnsOf(table: string): Promise<ReadonlyArray<string>> {
+      const result = await catalog.execute(sql`
+        select column_name::text as key from information_schema.columns
+        where table_schema = 'public' and table_name = ${table}
+        order by ordinal_position`);
 
       return decodeKeys(result).rows.map((row) => row.key);
     },

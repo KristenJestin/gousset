@@ -16,25 +16,29 @@ import { getRequestHeaders } from "@tanstack/react-start/server";
 import { Effect, Schema } from "effect";
 
 import { devLatency } from "@/lib/dev-latency";
-import { auth, runCore } from "@/services";
+import { usableSession } from "@/lib/session.server";
+import { runCore } from "@/services";
 
 /** Only a signed-in user reads data, and only their own: the session says whose. */
 export const signedIn = createMiddleware({ type: "function" }).server(async ({ next }) => {
-  const session = await auth.api.getSession({ headers: getRequestHeaders() });
+  const { session, refusal } = await usableSession(getRequestHeaders());
 
-  if (!session) {
-    throw new Error("Sign in to read your data.");
+  // A temporary password reaches no data: someone else chose it (#70, #79).
+  if (session === undefined) {
+    throw new Error(refusal === "SIGN_IN_REQUIRED" ? "Sign in to read your data." : refusal);
   }
 
   return next({ context: { owner: session.user.id } });
 });
 
 /** In development, the latency `GOUSSET_DEV_LATENCY_MS` asks for (`@/lib/dev-latency`). */
-const slowedInDevelopment = createMiddleware({ type: "function" }).server(async ({ next }) => {
-  await Effect.runPromise(devLatency);
+export const slowedInDevelopment = createMiddleware({ type: "function" }).server(
+  async ({ next }) => {
+    await Effect.runPromise(devLatency);
 
-  return next();
-});
+    return next();
+  },
+);
 
 const MonthInput = Schema.toStandardSchemaV1(Schema.Struct({ month: Month }));
 

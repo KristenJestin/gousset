@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vite-plus/test";
 
-import { monthBars, spendingRows, toChartValue } from "./chart-amounts";
+import { formatChartDay, monthBars, spendingRows, toChartValue } from "./chart-amounts";
 
 const day = (date: number, current: number | null, previous: number | null) => ({
   date: new Date(2026, 9, date),
@@ -14,6 +14,15 @@ const month = (year: number, index: number) => ({
 });
 
 describe("chart amounts", () => {
+  it("formats a bank day in UTC: a day west of UTC never reads a day earlier", () => {
+    // A bank day is parsed as UTC midnight (docs/data-model.md, "Dates"): this `Date` is
+    // 2026-10-31 in any zone west of UTC, so a test that relied on the machine's own zone would
+    // not reveal the bug `balance-chart.tsx` passing "UTC" fixes.
+    const bankDay = new Date("2026-11-01T00:00:00Z");
+
+    expect(formatChartDay(bankDay, "en", "UTC")).toBe("Nov 1");
+  });
+
   it("draws cents as euros, and a currency without minor units as it is", () => {
     expect(toChartValue({ minor: 123_456, currency: "EUR" })).toBe(1234.56);
     expect(toChartValue({ minor: 1500, currency: "JPY" })).toBe(1500);

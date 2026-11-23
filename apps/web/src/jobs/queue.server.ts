@@ -111,7 +111,9 @@ export function register<Input, Encoded>(definition: JobDefinition<Input, Encode
     attempt: (claimed) =>
       Schema.decodeUnknownEffect(envelope)(claimed.data).pipe(
         Effect.mapError(invalidInput),
-        Effect.flatMap(({ owner, input }) => definition.run(input, owner)),
+        Effect.flatMap(({ owner, input }) =>
+          definition.run(input, owner, { last: claimed.retryCount >= claimed.retryLimit }),
+        ),
         Effect.map((touched): AttemptOutcome => ({ touched })),
         Effect.catchTag("JobFailed", (failed) =>
           Effect.succeed({ failure: failed.code, retry: failed.retry }),

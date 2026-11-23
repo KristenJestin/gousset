@@ -484,6 +484,48 @@ test.describe("Sheet", () => {
     await expect(sheet).toBeHidden();
   });
 
+  test("a form sheet stays open on a refusal, and closes once accepted, focus back on its button", async ({
+    page,
+  }) => {
+    await page.goto(story("overlays-sheet", "with-form"));
+
+    const trigger = page.getByRole("button", { name: "New account" });
+    const sheet = page.getByRole("dialog", { name: "New account" });
+
+    await trigger.focus();
+    await page.keyboard.press("Enter");
+    await expect(sheet).toBeVisible();
+    // Its actions: Cancel, then the submit button, last.
+    await expect(sheet.getByRole("button", { name: /^(Cancel|Create the account)$/ })).toHaveText([
+      "Cancel",
+      "Create the account",
+    ]);
+
+    // Enter in the field sends the form; the refusal shows under it, the sheet stays.
+    const name = sheet.getByLabel("Name");
+
+    await name.focus();
+    await page.keyboard.press("Enter");
+    await expect(name).toHaveAttribute("aria-invalid", "true");
+    await expect(sheet).toBeVisible();
+
+    // Typing takes the refusal away.
+    await page.keyboard.type("Joint account");
+    await expect(name).not.toHaveAttribute("aria-invalid", "true");
+    await page.keyboard.press("Enter");
+    await expect(sheet).toBeHidden();
+    await expect(trigger).toBeFocused();
+    await expect(page.getByText("Created", { exact: true })).toBeVisible();
+
+    // Cancel sends nothing.
+    await page.keyboard.press("Enter");
+    await expect(sheet).toBeVisible();
+    await sheet.getByRole("button", { name: "Cancel" }).focus();
+    await page.keyboard.press("Enter");
+    await expect(sheet).toBeHidden();
+    await expect(trigger).toBeFocused();
+  });
+
   test("it slides in, and only fades under reduced motion", async ({ page, hasTouch }) => {
     const positions = async () => {
       await page.goto(story("overlays-sheet", "default"));

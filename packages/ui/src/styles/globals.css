@@ -280,6 +280,26 @@
   height: 1em;
 }
 
+/* Restricted money (docs/design.md, "Hatching for money apart"): a diagonal hatch over a faint
+   tint of `--money-restricted`, never a colour of its own, so it reads as "yours, but not the
+   same" without being mistaken for a `--money-*` role. */
+@utility bg-hatched-restricted {
+  background-color: color-mix(in oklab, var(--color-money-restricted) 10%, transparent);
+  background-image: repeating-linear-gradient(
+    135deg,
+    color-mix(in oklab, var(--color-money-restricted) 45%, transparent) 0 1px,
+    transparent 1px 6px
+  );
+}
+
+/* `ImportFiles`' columns on a wide screen: file, format, account, period, new, already known,
+   state. The texts share what is left; the counts take their own width. */
+@utility grid-cols-import-files {
+  grid-template-columns:
+    minmax(0, 2fr) minmax(0, 1.25fr) minmax(0, 1.75fr) minmax(0, 1fr)
+    auto auto minmax(0, 1fr);
+}
+
 @layer base {
   * {
     @apply border-border outline-ring;

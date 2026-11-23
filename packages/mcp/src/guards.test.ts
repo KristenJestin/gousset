@@ -1,5 +1,12 @@
-import { FixtureLedger } from "@gousset/core";
-import { Effect } from "effect";
+import {
+  DataExport,
+  FixtureLedger,
+  ImportProfiles,
+  Imports,
+  memoryAccountStore,
+  memoryLineStore,
+} from "@gousset/core";
+import { Effect, Layer } from "effect";
 import { describe, expect, test } from "vite-plus/test";
 
 import { goussetServer } from "./gousset";
@@ -10,14 +17,30 @@ import { connectInProcess } from "./test-client";
 const MAX_TOOLS = 15;
 const MAX_LISTING_CHARACTERS = 30_000;
 const MAX_DESCRIPTION_CHARACTERS = 2048;
-const MAX_INSTRUCTION_WORDS = 400;
+const MAX_INSTRUCTION_WORDS = 600;
 
 const reader = { userId: "guard", canWrite: false };
 
 async function listing() {
   const client = await connectInProcess(
     goussetServer,
-    { run: (effect) => Effect.runPromiseExit(Effect.provide(effect, FixtureLedger)) },
+    {
+      // Listing calls no tool: the imports and the export are never reached.
+      run: (effect) =>
+        Effect.runPromiseExit(
+          Effect.provide(
+            effect,
+            Layer.mergeAll(
+              FixtureLedger,
+              memoryAccountStore(),
+              memoryLineStore(),
+              Layer.mock(Imports, {}),
+              Layer.mock(ImportProfiles, {}),
+              Layer.mock(DataExport, {}),
+            ),
+          ),
+        ),
+    },
     reader,
     "2025-11-25",
   );

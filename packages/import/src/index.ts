@@ -12,9 +12,21 @@ export { readCamt053 } from "./camt053";
 
 export { readMt940 } from "./mt940";
 
-export { normalizeHeader, readCsv, readCsvHeader } from "./csv";
+export {
+  csvFile,
+  matchCsvHeader,
+  normalizeHeader,
+  previewCsvRows,
+  readCsv,
+  readCsvHeader,
+  testReadCsv,
+} from "./csv";
 
-export type { CsvOptions } from "./csv";
+export type { CsvCandidate, CsvFile, CsvOptions } from "./csv";
+
+export { SHIPPED_PROFILES, shippedProfile } from "./csv-shipped";
+
+export type { ShippedProfile } from "./csv-shipped";
 
 export { detectCsvProfile } from "./csv-detect";
 
@@ -24,7 +36,19 @@ export { CsvProfile } from "./csv-profile";
 
 export type { DateOrder } from "./dates";
 
-export type { Balance, Counterparty, Statement, StatementLine } from "./statement";
+export { minorDigits } from "./amount";
+
+export type {
+  Balance,
+  Counterparty,
+  Statement,
+  StatementAccount,
+  StatementLine,
+} from "./statement";
+
+export { detectFormat } from "./format";
+
+export type { StatementFormat } from "./format";
 
 export {
   InvalidField,

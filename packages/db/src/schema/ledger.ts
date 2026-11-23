@@ -205,6 +205,9 @@ export const statementImport = pgTable.withRLS(
     linesHeld: integer("lines_held").default(0).notNull(),
     // Why it failed, as a code; never the file's content.
     errorCode: text("error_code"),
+    // The pg-boss job that runs it, so that the import screen follows it again after a reload. No
+    // foreign key: pg-boss keeps its tables in a schema of its own, and purges old jobs.
+    jobId: uuid("job_id"),
     createdAt: createdAt(),
     finishedAt: timestamp("finished_at", { withTimezone: true }),
     undoneAt: timestamp("undone_at", { withTimezone: true }),
@@ -332,6 +335,8 @@ export const statementLine = pgTable.withRLS(
       table.bookedOn,
       table.id,
     ),
+    // Every line of every account in order, as the operations page lists them (#21).
+    index("statement_line_user_id_booked_on_id_idx").on(table.userId, table.bookedOn, table.id),
     index("statement_line_import_id_idx").on(table.importId),
     index("statement_line_duplicate_of_line_id_idx").on(table.duplicateOfLineId),
     check(

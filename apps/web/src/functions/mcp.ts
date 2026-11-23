@@ -10,7 +10,8 @@ import { getRequestHeaders } from "@tanstack/react-start/server";
 import { Effect, Schema } from "effect";
 
 import { mcpAddress } from "@/lib/mcp-door";
-import { auth, db } from "@/services";
+import { usableSession } from "@/lib/session.server";
+import { db } from "@/services";
 
 /** The codes these functions refuse with; the interface translates them (`errorMessage`). */
 export const McpRefusal = {
@@ -20,10 +21,11 @@ export const McpRefusal = {
 
 /** The signed-in user; the pages' guards send everyone else to sign in. */
 export const signedIn = createMiddleware({ type: "function" }).server(async ({ next }) => {
-  const session = await auth.api.getSession({ headers: getRequestHeaders() });
+  const { session, refusal } = await usableSession(getRequestHeaders());
 
-  if (session === null) {
-    throw new Error(McpRefusal.signInRequired);
+  // A temporary password reaches no setting of the user's: someone else chose it (#70, #79).
+  if (session === undefined) {
+    throw new Error(refusal === "SIGN_IN_REQUIRED" ? McpRefusal.signInRequired : refusal);
   }
 
   return next({ context: { userId: session.user.id, isAdmin: session.user.role === "admin" } });

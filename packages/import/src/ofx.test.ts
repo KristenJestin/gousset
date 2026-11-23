@@ -32,6 +32,7 @@ const refusal = (text: string) =>
 /** What `writeOfx` writes: `NAME` the label cut to 32 characters, `MEMO` the whole label. */
 function writtenByWriteOfx(statement: MadeUpStatement): OfxStatement {
   return {
+    account: { iban: null, number: statement.account.number },
     currency: statement.account.currency,
     lines: statement.lines.map((line) => ({
       bookedOn: line.bookedOn,
@@ -48,6 +49,9 @@ function writtenByWriteOfx(statement: MadeUpStatement): OfxStatement {
   };
 }
 
+/** The samples' bank account (`BANKACCTFROM`), a domestic account number. */
+const DOMESTIC_ACCOUNT = { iban: null, number: "00012345678" };
+
 /** A line with neither value date nor memo. */
 function bare(bookedOn: string, amountMinor: number, label: string, bankId: string) {
   return { bookedOn, valueOn: null, amountMinor, label, memo: null, bankId, counterparty: null };
@@ -61,6 +65,7 @@ describe("reading OFX and QFX files", () => {
 
   test("reads ofx-sgml-windows-1252.ofx (OFX 1.02, SGML, Windows-1252, value dates)", () => {
     expect(read(statementSamples.ofxSgmlWindows1252.bytes)).toEqual({
+      account: DOMESTIC_ACCOUNT,
       currency: "EUR",
       lines: [
         {
@@ -108,6 +113,7 @@ describe("reading OFX and QFX files", () => {
 
   test("reads ofx-sgml-dates.ofx (decimal commas, times and zones, a payee, no balance)", () => {
     expect(read(statementSamples.ofxSgmlDates.bytes)).toEqual({
+      account: DOMESTIC_ACCOUNT,
       currency: "EUR",
       lines: [
         {
@@ -155,6 +161,7 @@ describe("reading OFX and QFX files", () => {
 
   test("reads ofx-unsigned.ofx (amounts without their sign, signed by their type)", () => {
     expect(read(statementSamples.ofxUnsigned.bytes)).toEqual({
+      account: DOMESTIC_ACCOUNT,
       currency: "EUR",
       lines: [
         bare("2026-11-03", -2500, "CB LIBRAIRIE EXEMPLE", "EX2026110301"),
@@ -171,6 +178,7 @@ describe("reading OFX and QFX files", () => {
 
   test("reads ofx-unsigned-no-debit.ofx (unsigned, no DEBIT: cheques and fees go out)", () => {
     expect(read(statementSamples.ofxUnsignedNoDebit.bytes)).toEqual({
+      account: DOMESTIC_ACCOUNT,
       currency: "EUR",
       lines: [
         bare("2026-11-02", 180_000, "VIR SEPA ACME SALAIRE", "EX2026110201"),
@@ -186,6 +194,7 @@ describe("reading OFX and QFX files", () => {
 
   test("reads qfx-credit-card.qfx (QFX, a card in US dollars, what is owed)", () => {
     expect(read(statementSamples.qfxCreditCard.bytes)).toEqual({
+      account: { iban: null, number: "EXAMPLECARD0001" },
       currency: "USD",
       lines: [
         {
@@ -220,6 +229,22 @@ describe("reading OFX and QFX files", () => {
       balance: { amountMinor: -31_240, on: "2026-10-31" },
       amountSigns: AS_WRITTEN,
     });
+  });
+
+  test("gives an ACCTID shaped as an IBAN as the account's IBAN too", () => {
+    const spaced = ofx([]).replace(
+      "<BANKTRANLIST>",
+      "<BANKACCTFROM>\n<ACCTID> fr76 9999 9000 0100 0123 4567 809 \n</BANKACCTFROM>\n$&",
+    );
+
+    expect(read(encode(spaced)).account).toEqual({
+      iban: "FR7699999000010001234567809",
+      number: "fr76 9999 9000 0100 0123 4567 809",
+    });
+  });
+
+  test("gives no account when the file names none", () => {
+    expect(read(encode(ofx([]))).account).toBeNull();
   });
 
   test("reads back any statement writeOfx writes", () => {

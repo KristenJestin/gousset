@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@gousset/core": "workspace:*",
+    "@gousset/import": "workspace:*",
     "@modelcontextprotocol/server": "2.4.0",
     "effect": "catalog:"
   },

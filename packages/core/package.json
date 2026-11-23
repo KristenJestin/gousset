@@ -5,17 +5,25 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./values": "./src/values.ts"
+    "./values": "./src/values.ts",
+    "./account-values": "./src/account-values.ts",
+    "./imports": "./src/imports/summary.ts",
+    "./read": "./src/imports/read.ts"
   },
   "scripts": {
     "check-types": "tsc --noEmit"
   },
   "dependencies": {
+    "@gousset/db": "workspace:*",
     "@gousset/fixture": "workspace:*",
-    "effect": "catalog:"
+    "@gousset/import": "workspace:*",
+    "drizzle-orm": "catalog:",
+    "effect": "catalog:",
+    "fflate": "0.8.3"
   },
   "devDependencies": {
     "@gousset/config": "workspace:*",
+    "fast-check": "catalog:",
     "typescript": "catalog:"
   }
 }
