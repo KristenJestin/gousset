@@ -33,19 +33,20 @@ file is how to work.
 
 ## Layout
 
-| Path                                | What                                                                  |
-| ----------------------------------- | --------------------------------------------------------------------- |
-| `apps/web`                          | The app: TanStack Start (pages, server functions, API, jobs, `/mcp`)  |
-| `packages/ui`                       | Every component and the theme, each described in Storybook            |
-| `packages/core`                     | The logic (the month's figures, reviews) the app and `/mcp` both call |
-| `packages/db`                       | The Drizzle schema and migrations                                     |
-| `packages/auth`                     | better-auth, wired to the database; the MCP door's OAuth              |
-| `packages/mcp`                      | The MCP tool framework, its guards, the instructions and the tools    |
-| `packages/fixture`                  | The shared made-up data                                               |
-| `packages/config`                   | The shared TypeScript configuration                                   |
-| `tools/oxlint`                      | Lint rules vendored from upstream (see [Lint](#lint))                 |
-| `.agents/skills`                    | Skills for agents, vendored from upstream                             |
-| `packages/ui/src/components/charts` | Bklit's charts, vendored from its shadcn registry (see [Lint](#lint)) |
+| Path                                | What                                                                    |
+| ----------------------------------- | ----------------------------------------------------------------------- |
+| `apps/web`                          | The app: TanStack Start (pages, server functions, API, jobs, `/mcp`)    |
+| `packages/ui`                       | Every component and the theme, each described in Storybook              |
+| `packages/core`                     | The logic (the month's figures, reviews) the app and `/mcp` both call   |
+| `packages/db`                       | The Drizzle schema and migrations                                       |
+| `packages/auth`                     | better-auth, wired to the database; the MCP door's OAuth                |
+| `packages/mcp`                      | The MCP tool framework, its guards, the instructions and the tools      |
+| `packages/fixture`                  | The shared made-up data                                                 |
+| `packages/currency`                 | The one ISO 4217 table: minor units and the codes an account picks from |
+| `packages/config`                   | The shared TypeScript configuration                                     |
+| `tools/oxlint`                      | Lint rules vendored from upstream (see [Lint](#lint))                   |
+| `.agents/skills`                    | Skills for agents, vendored from upstream                               |
+| `packages/ui/src/components/charts` | Bklit's charts, vendored from its shadcn registry (see [Lint](#lint))   |
 
 ## Commands
 
