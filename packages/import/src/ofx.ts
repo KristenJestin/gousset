@@ -6,7 +6,7 @@ import { ofxDay } from "./dates";
 import { MalformedFile, MissingField, NotAStatement, UnsupportedContent } from "./errors";
 import type { InvalidField, ReadError } from "./errors";
 import type { Balance, Statement, StatementLine } from "./statement";
-import { cleanValue, decodeText, quote } from "./text";
+import { cleanValue, decodeEntities, decodeText, quote } from "./text";
 
 // OFX 1.x is SGML: an element that holds a value may go without its closing tag (`<TRNAMT>-12.34`
 // then the next tag). OFX 2.x is XML, every element closed. QFX is OFX with a few tags of Intuit's
@@ -21,30 +21,6 @@ type OfxElement = {
   value: string | undefined;
   children: Array<OfxElement>;
 };
-
-const ENTITIES = new Map([
-  ["amp", "&"],
-  ["lt", "<"],
-  ["gt", ">"],
-  ["quot", '"'],
-  ["apos", "'"],
-  ["nbsp", " "],
-]);
-
-/** XML's entities and the few SGML files use; a bare `&`, as some banks write, stays as it is. */
-function decodeEntities(text: string): string {
-  return text.replaceAll(/&(#x[\da-f]+|#\d+|[a-z]+);/gi, (entity: string, name: string) => {
-    if (!name.startsWith("#")) {
-      return ENTITIES.get(name.toLowerCase()) ?? entity;
-    }
-
-    const hexadecimal = name.startsWith("#x") || name.startsWith("#X");
-    const code = Number.parseInt(name.slice(hexadecimal ? 2 : 1), hexadecimal ? 16 : 10);
-
-    // Unicode's last code point, U+10FFFF: anything above is no character.
-    return code <= 1_114_111 ? String.fromCodePoint(code) : entity;
-  });
-}
 
 function countNewlines(text: string): number {
   return text.split("\n").length - 1;
@@ -380,6 +356,7 @@ const readTransaction = (element: OfxElement, currency: string) =>
       label: (name ?? memo)?.text ?? "",
       memo: name === undefined ? null : (memo?.text ?? null),
       bankId: field(element, "FITID")?.text ?? null,
+      counterparty: null,
     };
 
     return { element, type: field(element, "TRNTYPE"), line };
@@ -491,5 +468,7 @@ export const readOfx = (
         ? yield* Effect.forEach(transactions, signByType)
         : transactions.map((transaction) => transaction.line);
 
-    return { currency, lines, balance: yield* readBalance(statement, currency), amountSigns };
+    const balance = yield* readBalance(statement, currency);
+
+    return { currency, lines, openingBalance: null, balance, amountSigns };
   });

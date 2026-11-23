@@ -70,6 +70,44 @@ describe("reading an amount", () => {
     );
   });
 
+  test("reads any amount a CSV profile's decimal mark names, its thousands grouped or not", () => {
+    const styles = fc.constantFrom<{ syntax: AmountSyntax; mark: string; grouping: string }>(
+      { syntax: "decimal-point", mark: ".", grouping: "," },
+      { syntax: "decimal-point", mark: ".", grouping: "'" },
+      { syntax: "decimal-point", mark: ".", grouping: "" },
+      { syntax: "decimal-comma", mark: ",", grouping: "." },
+      { syntax: "decimal-comma", mark: ",", grouping: " " },
+      { syntax: "decimal-comma", mark: ",", grouping: " " },
+      { syntax: "decimal-comma", mark: ",", grouping: " " },
+      { syntax: "decimal-comma", mark: ",", grouping: "" },
+    );
+
+    fc.assert(
+      fc.property(anyMinor, currencies, styles, (minor, money, style) => {
+        const text = written(minor, money.digits, style.mark, style.grouping);
+
+        expect(read(text, money.currency, style.syntax)).toBe(minor);
+      }),
+    );
+  });
+
+  test("reads a CSV amount's three decimals as a thousand when the mark is not the decimal one", () => {
+    // The profile says which mark is the decimal one: `1,234` is no longer ambiguous.
+    expect(read("1,234", "EUR", "decimal-point")).toBe(123_400);
+    expect(read("1.234", "EUR", "decimal-comma")).toBe(123_400);
+    expect(read("-,50", "EUR", "decimal-comma")).toBe(-50);
+  });
+
+  test("refuses a CSV amount that groups badly or uses the other decimal mark", () => {
+    for (const text of ["12,34", "1,23.45", "12.3.4", "1.234,56", "12 EUR", ""]) {
+      expect(refusal(text, "EUR", "decimal-point")).toBeInstanceOf(InvalidField);
+    }
+
+    for (const text of ["12.34", "1 23,45", "1,2,3", "1,234.56", "€12", "-"]) {
+      expect(refusal(text, "EUR", "decimal-comma")).toBeInstanceOf(InvalidField);
+    }
+  });
+
   test("takes a leading plus, trailing zeros and a missing whole part", () => {
     expect(read("+45,00", "EUR", "ofx")).toBe(4500);
     expect(read("12.340", "EUR", "ofx")).toBe(1234);

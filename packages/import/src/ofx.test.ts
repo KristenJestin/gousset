@@ -40,7 +40,9 @@ function writtenByWriteOfx(statement: MadeUpStatement): OfxStatement {
       label: line.label.slice(0, 32).trim(),
       memo: line.label,
       bankId: line.reference,
+      counterparty: null,
     })),
+    openingBalance: null,
     balance: { amountMinor: closingBalanceMinor(statement), on: statement.to },
     amountSigns: AS_WRITTEN,
   };
@@ -48,7 +50,7 @@ function writtenByWriteOfx(statement: MadeUpStatement): OfxStatement {
 
 /** A line with neither value date nor memo. */
 function bare(bookedOn: string, amountMinor: number, label: string, bankId: string) {
-  return { bookedOn, valueOn: null, amountMinor, label, memo: null, bankId };
+  return { bookedOn, valueOn: null, amountMinor, label, memo: null, bankId, counterparty: null };
 }
 
 // One test per sample file: the lines read are the lines the file holds.
@@ -68,6 +70,7 @@ describe("reading OFX and QFX files", () => {
           label: "CB PÂTISSERIE DU MARCHÉ 31/10",
           memo: "PAIEMENT PAR CARTE",
           bankId: "EX2026110201",
+          counterparty: null,
         },
         {
           bookedOn: "2026-11-02",
@@ -76,6 +79,7 @@ describe("reading OFX and QFX files", () => {
           label: "VIR SEPA CAMILLE EXEMPLE",
           memo: "REMBOURSEMENT NOËL",
           bankId: "EX2026110202",
+          counterparty: null,
         },
         {
           bookedOn: "2026-11-03",
@@ -84,6 +88,7 @@ describe("reading OFX and QFX files", () => {
           label: "PRLV SEPA ÉLEC & GAZ EXEMPLE",
           memo: null,
           bankId: "EX2026110301",
+          counterparty: null,
         },
         {
           bookedOn: "2026-11-04",
@@ -92,8 +97,10 @@ describe("reading OFX and QFX files", () => {
           label: "COTISATION CARTE 2,50 €",
           memo: "FRAIS",
           bankId: "EX2026110401",
+          counterparty: null,
         },
       ],
+      openingBalance: null,
       balance: { amountMinor: 123_456, on: "2026-11-04" },
       amountSigns: AS_WRITTEN,
     });
@@ -110,6 +117,7 @@ describe("reading OFX and QFX files", () => {
           label: "PRLV SEPA SCI DES GLYCINES",
           memo: "LOYER OCTOBRE ÉCHÉANCE 10",
           bankId: "EX2026100501",
+          counterparty: null,
         },
         {
           bookedOn: "2026-10-06",
@@ -118,6 +126,7 @@ describe("reading OFX and QFX files", () => {
           label: "CAMILLE EXEMPLE",
           memo: "PART DU CADEAU",
           bankId: null,
+          counterparty: null,
         },
         {
           bookedOn: "2026-10-07",
@@ -126,6 +135,7 @@ describe("reading OFX and QFX files", () => {
           label: "CB APPLI EXEMPLE",
           memo: null,
           bankId: "EX2026100701",
+          counterparty: null,
         },
         {
           bookedOn: "2026-10-08",
@@ -134,8 +144,10 @@ describe("reading OFX and QFX files", () => {
           label: "REMISE CHEQUE R&D EXEMPLE",
           memo: null,
           bankId: "EX2026100801",
+          counterparty: null,
         },
       ],
+      openingBalance: null,
       balance: null,
       amountSigns: AS_WRITTEN,
     });
@@ -151,6 +163,7 @@ describe("reading OFX and QFX files", () => {
         bare("2026-11-30", 310, "INTÉRÊTS", "EX2026113001"),
         bare("2026-11-30", -300, "FRAIS DE TENUE DE COMPTE", "EX2026113002"),
       ],
+      openingBalance: null,
       balance: { amountMinor: 432_109, on: "2026-11-30" },
       amountSigns: { signs: "by-type", decidedBy: "default" },
     });
@@ -165,6 +178,7 @@ describe("reading OFX and QFX files", () => {
         bare("2026-11-30", 125, "INTERETS", "EX2026113001"),
         bare("2026-11-30", -800, "COTISATION CARTE", "EX2026113002"),
       ],
+      openingBalance: null,
       balance: { amountMinor: 250_000, on: "2026-11-30" },
       amountSigns: { signs: "by-type", decidedBy: "default" },
     });
@@ -181,6 +195,7 @@ describe("reading OFX and QFX files", () => {
           label: "EXAMPLE GROCERY MARKET",
           memo: null,
           bankId: "2026100401EXAMPLE",
+          counterparty: null,
         },
         {
           bookedOn: "2026-10-12",
@@ -189,6 +204,7 @@ describe("reading OFX and QFX files", () => {
           label: "PAYMENT - THANK YOU",
           memo: null,
           bankId: "2026101201EXAMPLE",
+          counterparty: null,
         },
         {
           bookedOn: "2026-10-20",
@@ -197,8 +213,10 @@ describe("reading OFX and QFX files", () => {
           label: "EXAMPLE STREAMING SERVICE",
           memo: "MONTHLY PLAN",
           bankId: "2026102001EXAMPLE",
+          counterparty: null,
         },
       ],
+      openingBalance: null,
       balance: { amountMinor: -31_240, on: "2026-10-31" },
       amountSigns: AS_WRITTEN,
     });
@@ -429,6 +447,7 @@ describe("reading what an OFX file may hold besides plain text", () => {
         label: "CB R&D > SHOP",
         memo: null,
         bankId: null,
+        counterparty: null,
       },
     ]);
   });
@@ -456,6 +475,7 @@ describe("reading what an OFX file may hold besides plain text", () => {
         label: "CB ACME 01/10",
         memo: "ONE TWO",
         bankId: "EX01",
+        counterparty: null,
       },
     ]);
   });

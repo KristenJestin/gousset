@@ -19,7 +19,7 @@ export const McpRefusal = {
 } as const;
 
 /** The signed-in user; the pages' guards send everyone else to sign in. */
-const signedIn = createMiddleware({ type: "function" }).server(async ({ next }) => {
+export const signedIn = createMiddleware({ type: "function" }).server(async ({ next }) => {
   const session = await auth.api.getSession({ headers: getRequestHeaders() });
 
   if (session === null) {

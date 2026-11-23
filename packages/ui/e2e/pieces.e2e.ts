@@ -110,19 +110,40 @@ test.describe("MerchantLogo", () => {
 /** The month as it is announced. */
 const month = (page: Page) => page.locator('[data-slot="month-switcher"] [aria-live]');
 
-/** Presses previous and counts, a few frames later, the labels drawn: two while they slide. */
-async function labelsWhileSwitching(page: Page) {
+/**
+ * Presses previous and, at every frame for 500 ms, counts the labels drawn (not fully
+ * transparent): returns how many frames drew two at once, as they do while they slide.
+ *
+ * What is drawn, not what is in the DOM: a leaving label stays in the DOM until Motion's exit
+ * ends and React renders again, a frame or two later even when reduced motion skips the exit
+ * (it is made transparent at once), so counting labels would measure React's scheduling, not
+ * the motion.
+ */
+async function framesWithTwoLabels(page: Page) {
   return page.getByRole("button", { name: "Previous month", exact: true }).evaluate(
     (button) =>
       new Promise<number>((resolve) => {
+        const start = performance.now();
+        let frames = 0;
+
+        const sample = () => {
+          const drawn = [...document.querySelectorAll('[data-slot="month-label"]')].filter(
+            (label) => Number(getComputedStyle(label).opacity) > 0,
+          );
+
+          if (drawn.length > 1) {
+            frames += 1;
+          }
+
+          if (performance.now() - start < 500) {
+            requestAnimationFrame(sample);
+          } else {
+            resolve(frames);
+          }
+        };
+
         button.dispatchEvent(new MouseEvent("click", { bubbles: true }));
-        requestAnimationFrame(() =>
-          requestAnimationFrame(() =>
-            requestAnimationFrame(() =>
-              resolve(document.querySelectorAll('[data-slot="month-label"]').length),
-            ),
-          ),
-        );
+        requestAnimationFrame(sample);
       }),
   );
 }
@@ -198,12 +219,13 @@ test.describe("MonthSwitcher", () => {
 
   test("the label slides, and changes at once under reduced motion", async ({ page }) => {
     await page.goto(story("data-monthswitcher--default"));
-    expect(await labelsWhileSwitching(page)).toBe(2);
+    // The slide lasts 200 ms: most of its dozen frames draw both labels.
+    expect(await framesWithTwoLabels(page)).toBeGreaterThan(4);
     await expect(page.locator('[data-slot="month-label"]')).toHaveCount(1);
 
     await page.emulateMedia({ reducedMotion: "reduce" });
     await page.reload();
-    expect(await labelsWhileSwitching(page)).toBe(1);
+    expect(await framesWithTwoLabels(page)).toBe(0);
     await expect(month(page)).toHaveText("September 2026");
   });
 });
