@@ -38,6 +38,8 @@ export function errorMessage(code: string | undefined): string {
       return m.errorSignInRequired();
     case "ADMIN_ONLY":
       return m.errorAdminOnly();
+    case "CANNOT_RESET_ADMINISTRATOR":
+      return m.errorCannotResetAdministrator();
     default:
       return m.errorUnknown();
   }

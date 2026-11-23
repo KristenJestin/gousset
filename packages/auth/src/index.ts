@@ -56,11 +56,14 @@ const authorizeQueryOf = Schema.decodeUnknownOption(
   }),
 );
 
-/** The user an administrator's action is about (ban, new password). */
+/** The user an administrator's action is about (a ban). */
 const targetUserOf = Schema.decodeUnknownOption(Schema.Struct({ userId: Schema.String }));
 
-/** The administrator's actions after which a user's MCP clients lose their access. */
-const CUTTING_ADMIN_ACTIONS = new Set(["/admin/ban-user", "/admin/set-user-password"]);
+/**
+ * The admin plugin's routes after which a user's MCP clients lose their access. The administrator's
+ * password reset is Gousset's own (password-reset.ts), which revokes them itself.
+ */
+const CUTTING_ADMIN_ACTIONS = new Set(["/admin/ban-user"]);
 
 /**
  * The MCP door's authorization server (docs/mcp.md): OAuth 2.1 with tokens bound to the `/mcp`

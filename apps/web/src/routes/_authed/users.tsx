@@ -1,17 +1,18 @@
 import { m } from "@gousset/i18n/messages";
 import { Button } from "@gousset/ui/components/button";
 import { Card } from "@gousset/ui/components/card";
+import { Dialog, DialogClose } from "@gousset/ui/components/dialog";
 import { FormMessage } from "@gousset/ui/components/form-message";
 import { List, ListItem } from "@gousset/ui/components/list";
 import { Actions, Form, Screen } from "@gousset/ui/components/screen";
 import { StatusMessage } from "@gousset/ui/components/status-message";
 import { TextField } from "@gousset/ui/components/text-field";
 import { createFileRoute, redirect, useRouter } from "@tanstack/react-router";
-import { useState } from "react";
+import { useId, useState } from "react";
 import type { FormEvent } from "react";
 
 import { AppLink } from "@/components/app-link";
-import { createUser, listUsers } from "@/functions/users";
+import { createUser, listUsers, resetPassword } from "@/functions/users";
 import { errorMessage } from "@/i18n/messages";
 import { formText } from "@/lib/form";
 import { whileBusy } from "@/lib/while-busy";
@@ -33,7 +34,13 @@ function Users() {
   const users = Route.useLoaderData();
   const [error, setError] = useState<string>();
   const [created, setCreated] = useState<string>();
+  const [reset, setReset] = useState<string>();
   const [busy, setBusy] = useState(false);
+
+  async function confirmReset(name: string) {
+    setReset(m.usersResetDone({ name }));
+    await router.invalidate();
+  }
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -77,9 +84,14 @@ function Users() {
                 ...(user.isAdmin ? [m.usersAdministrator()] : []),
                 ...(user.mustChangePassword ? [m.usersMustChangePassword()] : []),
               ]}
+              action={
+                // The administrator changes their own password themselves, knowing the current one.
+                user.isAdmin ? undefined : <ResetPassword user={user} onReset={confirmReset} />
+              }
             />
           ))}
         </List>
+        <StatusMessage message={reset} />
       </Card>
       <Card title={m.usersCreateTitle()} description={m.usersCreateDescription()}>
         <Form onSubmit={(event) => void submit(event)} onInput={() => setError(undefined)}>
@@ -104,5 +116,91 @@ function Users() {
         </Form>
       </Card>
     </Screen>
+  );
+}
+
+/**
+ * The dialog that gives one user a new temporary password, from their row: they change it at the
+ * next sign-in, and every device and MCP client signed in as them is signed out. Motion: the
+ * shared `Dialog`'s, 200 ms in and out, cut under reduced motion.
+ */
+function ResetPassword({
+  user,
+  onReset,
+}: {
+  user: { id: string; name: string };
+  onReset: (name: string) => Promise<void>;
+}) {
+  const formId = useId();
+  const [open, setOpen] = useState(false);
+  const [error, setError] = useState<string>();
+  const [busy, setBusy] = useState(false);
+
+  function follow(next: boolean) {
+    setOpen(next);
+    setError(undefined);
+  }
+
+  async function submit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+
+    const form = new FormData(event.currentTarget);
+
+    const result = await whileBusy(setBusy, () =>
+      resetPassword({ data: { userId: user.id, password: formText(form, "password") } }),
+    );
+
+    if (!result.reset) {
+      setError(errorMessage(result.code));
+
+      return;
+    }
+
+    follow(false);
+    await onReset(user.name);
+  }
+
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={follow}
+      title={m.usersResetTitle({ name: user.name })}
+      description={m.usersResetDescription()}
+      trigger={
+        <Button
+          variant="secondary"
+          size="sm"
+          aria-label={m.usersResetPasswordOf({ name: user.name })}
+        >
+          {m.usersResetPassword()}
+        </Button>
+      }
+      actions={
+        <>
+          <DialogClose>
+            <Button variant="secondary">{m.uiCancel()}</Button>
+          </DialogClose>
+          <Button type="submit" form={formId} loading={busy}>
+            {m.usersResetPassword()}
+          </Button>
+        </>
+      }
+    >
+      <Form
+        id={formId}
+        onSubmit={(event) => void submit(event)}
+        onInput={() => setError(undefined)}
+      >
+        <TextField
+          label={m.fieldTemporaryPassword()}
+          name="password"
+          type="text"
+          autoComplete="off"
+          minLength={8}
+          required
+        />
+        <FormMessage message={error} />
+      </Form>
+    </Dialog>
   );
 }

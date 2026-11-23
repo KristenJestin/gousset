@@ -128,10 +128,16 @@ export async function revokeClient(
  * allowed before keeps reaching their data.
  */
 export async function revokeAllClients(database: Database, userId: string): Promise<void> {
-  await database.transaction(async (transaction) => {
-    await transaction.delete(authOauthConsent).where(eq(authOauthConsent.userId, userId));
-    await revokeTokens(transaction, userId);
-  });
+  await database.transaction((transaction) => revokeAllClientsWithin(transaction, userId));
+}
+
+/** `revokeAllClients` inside a transaction the caller holds, with its other changes. */
+export async function revokeAllClientsWithin(
+  transaction: Pick<Database, "delete" | "update">,
+  userId: string,
+): Promise<void> {
+  await transaction.delete(authOauthConsent).where(eq(authOauthConsent.userId, userId));
+  await revokeTokens(transaction, userId);
 }
 
 /**
