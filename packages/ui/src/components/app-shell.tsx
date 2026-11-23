@@ -1,4 +1,4 @@
-import { motion } from "motion/react";
+import { domAnimation, domMax, LazyMotion, m } from "motion/react";
 import { useState, useSyncExternalStore } from "react";
 import type { AnchorHTMLAttributes, ButtonHTMLAttributes, ReactNode, Ref } from "react";
 
@@ -116,13 +116,16 @@ function CurrentMark({ layoutId, place }: { layoutId: string; place: "nav" | "ta
     return <span data-slot="current-mark" className={className} />;
   }
 
+  // A shared layout needs layout projection: `domMax`, not `domAnimation`.
   return (
-    <motion.span
-      data-slot="current-mark"
-      layoutId={layoutId}
-      transition={transition.base}
-      className={className}
-    />
+    <LazyMotion features={domMax}>
+      <m.span
+        data-slot="current-mark"
+        layoutId={layoutId}
+        transition={transition.base}
+        className={className}
+      />
+    </LazyMotion>
   );
 }
 
@@ -207,16 +210,18 @@ export function ScreenTransition({ id, children }: { id: string; children: React
   }
 
   return (
-    <motion.div
-      key={id}
-      data-slot="screen"
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      transition={transition.base}
-      className="flex min-w-0 flex-1 flex-col"
-    >
-      {children}
-    </motion.div>
+    <LazyMotion features={domAnimation}>
+      <m.div
+        key={id}
+        data-slot="screen"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={transition.base}
+        className="flex min-w-0 flex-1 flex-col"
+      >
+        {children}
+      </m.div>
+    </LazyMotion>
   );
 }
 
