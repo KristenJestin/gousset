@@ -4,6 +4,7 @@ import type { Page } from "@playwright/test";
 
 import { openAccountMenu } from "../src/frame";
 import { SERVER_FUNCTIONS } from "../src/latency";
+import { closeBlock, openBlock } from "../src/review";
 import {
   SKELETON,
   animationsDone,
@@ -121,7 +122,7 @@ test("under reduced motion a skeleton appears without its fade", async ({ userPa
 test("a refused mutation rolls back", async ({ userPage: page }) => {
   await visit(page, MONTH);
 
-  const toReview = block(page, "To review");
+  const toReview = await openBlock(page, "To review");
   const approve = toReview.getByRole("button", { name: /^Approve / }).first();
   const name = (await approve.getAttribute("aria-label")) ?? "";
   const line = toReview.getByRole("listitem").filter({ has: page.getByRole("button", { name }) });
@@ -145,6 +146,9 @@ test("a refused mutation rolls back", async ({ userPage: page }) => {
   // Folded away at once, before the server answers…
   await expect(line).toHaveCount(0);
 
+  // On a phone, the page's toast is read with the sheet closed.
+  await closeBlock(page);
+
   // …then put back, with a message that says so: an error toast in the Notifications landmark
   // (packages/ui's toaster; ui-sdk announces it assertively through its own live region).
   const toast = errorToast(page);
@@ -152,6 +156,7 @@ test("a refused mutation rolls back", async ({ userPage: page }) => {
   await expect(toast).toContainText("Something went wrong");
   await expect(toast).toContainText("The line could not be approved; it is back in the list.");
   await expect(toast.getByRole("button", { name: "Retry" })).toBeVisible();
+  await openBlock(page, "To review");
   await expect(line).toHaveCount(1);
 });
 
@@ -183,7 +188,10 @@ test("an error stays in its block, with a retry, and the rest of the page works"
   });
   // The other blocks have their data, and their actions still work.
   await expect(block(page, "The month")).toContainText("received");
-  await expect(block(page, "To review").getByRole("button", { name: /^Approve / })).toHaveCount(3);
+  await expect(
+    (await openBlock(page, "To review")).getByRole("button", { name: /^Approve / }),
+  ).toHaveCount(3);
+  await closeBlock(page);
 
   failing = false;
   await spending.getByRole("button", { name: "Try again" }).click();
@@ -250,7 +258,9 @@ test("a line already reviewed elsewhere is refused, and stays reviewed", async (
         response.request().method() === "POST" && response.url().includes("/_serverFn/"),
     );
 
-    await block(other, "To review")
+    await (
+      await openBlock(other, "To review")
+    )
       .getByRole("button", { name: /^Approve / })
       .first()
       .click();
@@ -260,10 +270,13 @@ test("a line already reviewed elsewhere is refused, and stays reviewed", async (
   }
 
   // This tab still shows it: the server refuses, says why, and the line stays away.
-  await toReview
+  await (
+    await openBlock(page, "To review")
+  )
     .getByRole("button", { name: /^Approve / })
     .first()
     .click();
+  await closeBlock(page);
 
   await expect(errorToast(page)).toContainText("This line was already reviewed elsewhere.");
   await expect(toReview).toContainText("Show the other 2");
@@ -294,11 +307,14 @@ test("a user who signs in after another in the same tab never sees the other's d
     (response) => response.request().method() === "POST" && response.url().includes("/_serverFn/"),
   );
 
-  await toReview
+  await (
+    await openBlock(page, "To review")
+  )
     .getByRole("button", { name: /^Approve / })
     .first()
     .click();
   await approved;
+  await closeBlock(page);
   await expect(toReview).toContainText("Show the other 2");
 
   // They sign out, and the second user signs in, in the same tab: no reload anywhere.

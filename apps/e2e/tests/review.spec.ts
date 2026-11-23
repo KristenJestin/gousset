@@ -1,6 +1,7 @@
-import type { Locator, Page } from "@playwright/test";
+import type { Page } from "@playwright/test";
 
 import { onPhone } from "../src/frame";
+import { block, openBlock } from "../src/review";
 import { animationsDone, expect, test, visit } from "../src/test";
 
 // The scenarios of issue #10, the monthly review on made-up data: what the screen shows, block by
@@ -9,8 +10,6 @@ import { animationsDone, expect, test, visit } from "../src/test";
 
 const OCTOBER = "/?month=2026-10";
 
-const block = (page: Page, title: string) => page.getByRole("region", { name: title });
-
 const monthSwitcher = (page: Page) => page.getByRole("group", { name: "Month", exact: true });
 
 /** The first amount a text holds, in cents: "Housing €690 benchmark €690" gives 69000. */
@@ -18,26 +17,6 @@ function centsIn(text: string): number {
   const match = /€([\d,]+(?:\.\d{2})?)/.exec(text);
 
   return match?.[1] === undefined ? 0 : Math.round(Number(match[1].replaceAll(",", "")) * 100);
-}
-
-/**
- * A secondary block's content: in its block on a wide screen; on a phone the block is one line,
- * which opens it in a sheet.
- */
-async function openBlock(page: Page, title: string): Promise<Locator> {
-  if (!onPhone(page)) {
-    return block(page, title);
-  }
-
-  await block(page, title)
-    .getByRole("button", { name: new RegExp(`^${title}`) })
-    .click();
-
-  const sheet = page.getByRole("dialog", { name: title });
-
-  await expect(sheet).toBeVisible();
-
-  return sheet;
 }
 
 /** A row of "Where the money goes", by its name: a button that opens its detail. */
@@ -241,29 +220,42 @@ test("hovering the chart moves its crosshair, and the value slides to the day un
   await animationsDone(page);
 
   // The plot itself: the last drawing of the figure, under its legend.
-  const box = await chart
+  const plot = chart
     .locator("svg")
     .filter({ has: page.locator("g") })
-    .last()
-    .boundingBox();
-
-  if (box === null) {
-    throw new Error("The chart has no plot to hover.");
-  }
+    .last();
 
   const tooltip = page.locator('[data-slot="spending-tooltip"]');
-  const y = box.y + box.height / 2;
+
+  /**
+   * A point of the plot, across its width, as the page shows it now: in view, measured again each
+   * time, since a pointer outside the window or at a stale place reaches nothing.
+   */
+  const pointAt = async (across: number) => {
+    await plot.scrollIntoViewIfNeeded();
+
+    const box = await plot.boundingBox();
+
+    if (box === null) {
+      throw new Error("The chart has no plot to hover.");
+    }
+
+    return { x: box.x + box.width * across, y: box.y + box.height / 2 };
+  };
 
   // Bklit's line chart listens to the pointer once its lines are drawn.
   await expect(async () => {
-    await page.mouse.move(box.x + box.width * 0.2, y);
-    await page.mouse.move(box.x + box.width * 0.2 + 2, y);
+    const start = await pointAt(0.2);
+
+    await page.mouse.move(start.x, start.y);
+    await page.mouse.move(start.x + 2, start.y);
     await expect(tooltip).toBeVisible({ timeout: 500 });
   }).toPass({ timeout: 5000 });
 
   const early = await tooltip.textContent();
+  const end = await pointAt(0.9);
 
-  await page.mouse.move(box.x + box.width * 0.9, y, { steps: 8 });
+  await page.mouse.move(end.x, end.y, { steps: 8 });
   await expect.poll(async () => tooltip.textContent()).not.toBe(early);
   await page.mouse.move(0, 0);
   await animationsDone(page);
