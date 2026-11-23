@@ -266,7 +266,12 @@ test("the month is kept in the url and moves with the switcher", async ({ userPa
 test.describe("in French", () => {
   test.use({ locale: "fr-FR" });
 
-  test("the language follows the browser, and the user changes it", async ({ userPage }) => {
+  test("the language follows the browser, and the user changes it", async ({
+    userPage,
+    browser,
+    baseURL,
+    viewport,
+  }) => {
     await fixDay(userPage, "2026-11-15");
     await visit(userPage, "/");
 
@@ -277,12 +282,23 @@ test.describe("in French", () => {
     // Following the browser saves nothing: the browser's next language still wins.
     expect(await languageCookie(userPage)).toBeUndefined();
 
-    // The browser now asks for English: the next page is in English.
-    await userPage.setExtraHTTPHeaders({ "Accept-Language": "en-US,en;q=0.9" });
-    await userPage.reload();
-    await expect(userPage.locator("html")).toHaveAttribute("lang", "en");
-    await expect(userPage.getByRole("heading", { level: 1, name: "Monthly review" })).toBeVisible();
-    await userPage.setExtraHTTPHeaders({ "Accept-Language": "fr-FR,fr;q=0.9" });
+    // The same browser, its cookies kept, now set to English: the next visit is in English.
+    const english = await browser.newContext({
+      baseURL,
+      viewport,
+      locale: "en-US",
+      storageState: await userPage.context().storageState(),
+    });
+
+    try {
+      const page = await english.newPage();
+
+      await page.goto("/");
+      await expect(page.locator("html")).toHaveAttribute("lang", "en");
+      await expect(page.getByRole("heading", { level: 1, name: "Monthly review" })).toBeVisible();
+    } finally {
+      await english.close();
+    }
 
     await visit(userPage, "/settings");
     await userPage.getByRole("radio", { name: "English" }).click();
