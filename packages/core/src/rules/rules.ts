@@ -614,11 +614,12 @@ export const showRule = (owner: string, ruleId: string) =>
 
 /**
  * What a rule not saved yet would do to the lines already there, as the editor shows it while the
- * rule is written. Refused as `createRule` refuses it.
+ * rule is written; with `ruleId`, as a change of that saved rule, whose own lines need no change.
+ * Refused as `createRule` refuses it.
  */
 export const previewRule = (
   owner: string,
-  draft: RuleEffect & { readonly conditions: Conditions },
+  draft: RuleEffect & { readonly conditions: Conditions; readonly ruleId?: string | null },
 ) =>
   Effect.gen(function* () {
     const userData = yield* UserData;
@@ -635,7 +636,7 @@ export const previewRule = (
         }
 
         return Result.succeed(
-          await reachOf(transaction, "", draft.conditions, {
+          await reachOf(transaction, draft.ruleId ?? "", draft.conditions, {
             setMerchantId: draft.merchantId,
             setCategoryId: draft.categoryId,
           }),

@@ -3,34 +3,22 @@
   "version": "10",
   "dialect": "postgres",
   "id": "30fe1a65-efac-426c-bbd9-18a7f704a13d",
-  "prevIds": [
-    "da4f8b87-f8f0-43b2-bda3-68e57ba3d716"
-  ],
+  "prevIds": ["da4f8b87-f8f0-43b2-bda3-68e57ba3d716"],
   "footprints": [
     {
       "statementType": "create_enum",
-      "statementTarget": [
-        "enum",
-        "public",
-        "rule_origin"
-      ],
+      "statementTarget": ["enum", "public", "rule_origin"],
       "writes": [
         "s|enum|public.rule_origin",
         "n|enum|public.rule_origin",
         "e|enum|public.rule_origin",
         "n|type|public.rule_origin"
       ],
-      "reads": [
-        "n|sch|public"
-      ]
+      "reads": ["n|sch|public"]
     },
     {
       "statementType": "create_table",
-      "statementTarget": [
-        "table",
-        "public",
-        "rule"
-      ],
+      "statementTarget": ["table", "public", "rule"],
       "writes": [
         "s|tbl|public.rule",
         "n|tbl|public.rule",
@@ -40,134 +28,75 @@
         "n|rel|public.rule_pkey",
         "n|rel|public.rule_user_id_id_key"
       ],
-      "reads": [
-        "n|sch|public",
-        "n|enum|public.rule_origin"
-      ]
+      "reads": ["n|sch|public", "n|enum|public.rule_origin"]
     },
     {
       "statementType": "add_column",
-      "statementTarget": [
-        "column",
-        "public",
-        "entry",
-        "merchant_id"
-      ],
+      "statementTarget": ["column", "public", "entry", "merchant_id"],
       "writes": [
         "s|col|public.entry.merchant_id",
         "n|col|public.entry.merchant_id",
         "e|col|public.entry.merchant_id"
       ],
-      "reads": [
-        "n|tbl|public.entry",
-        "n|sch|public"
-      ]
+      "reads": ["n|tbl|public.entry", "n|sch|public"]
     },
     {
       "statementType": "add_column",
-      "statementTarget": [
-        "column",
-        "public",
-        "entry",
-        "rule_id"
-      ],
+      "statementTarget": ["column", "public", "entry", "rule_id"],
       "writes": [
         "s|col|public.entry.rule_id",
         "n|col|public.entry.rule_id",
         "e|col|public.entry.rule_id"
       ],
-      "reads": [
-        "n|tbl|public.entry",
-        "n|sch|public"
-      ]
+      "reads": ["n|tbl|public.entry", "n|sch|public"]
     },
     {
       "statementType": "create_index",
-      "statementTarget": [
-        "index",
-        "public",
-        "entry",
-        "entry_merchant_id_idx"
-      ],
+      "statementTarget": ["index", "public", "entry", "entry_merchant_id_idx"],
       "writes": [
         "s|idx|public.entry_merchant_id_idx",
         "n|idx|public.entry_merchant_id_idx",
         "e|idx|public.entry_merchant_id_idx",
         "n|rel|public.entry_merchant_id_idx"
       ],
-      "reads": [
-        "n|tbl|public.entry",
-        "n|sch|public",
-        "n|col|public.entry.merchant_id"
-      ]
+      "reads": ["n|tbl|public.entry", "n|sch|public", "n|col|public.entry.merchant_id"]
     },
     {
       "statementType": "create_index",
-      "statementTarget": [
-        "index",
-        "public",
-        "entry",
-        "entry_rule_id_idx"
-      ],
+      "statementTarget": ["index", "public", "entry", "entry_rule_id_idx"],
       "writes": [
         "s|idx|public.entry_rule_id_idx",
         "n|idx|public.entry_rule_id_idx",
         "e|idx|public.entry_rule_id_idx",
         "n|rel|public.entry_rule_id_idx"
       ],
-      "reads": [
-        "n|tbl|public.entry",
-        "n|sch|public",
-        "n|col|public.entry.rule_id"
-      ]
+      "reads": ["n|tbl|public.entry", "n|sch|public", "n|col|public.entry.rule_id"]
     },
     {
       "statementType": "create_index",
-      "statementTarget": [
-        "index",
-        "public",
-        "rule",
-        "rule_set_merchant_id_idx"
-      ],
+      "statementTarget": ["index", "public", "rule", "rule_set_merchant_id_idx"],
       "writes": [
         "s|idx|public.rule_set_merchant_id_idx",
         "n|idx|public.rule_set_merchant_id_idx",
         "e|idx|public.rule_set_merchant_id_idx",
         "n|rel|public.rule_set_merchant_id_idx"
       ],
-      "reads": [
-        "n|tbl|public.rule",
-        "n|sch|public",
-        "n|col|public.rule.set_merchant_id"
-      ]
+      "reads": ["n|tbl|public.rule", "n|sch|public", "n|col|public.rule.set_merchant_id"]
     },
     {
       "statementType": "create_index",
-      "statementTarget": [
-        "index",
-        "public",
-        "rule",
-        "rule_set_category_id_idx"
-      ],
+      "statementTarget": ["index", "public", "rule", "rule_set_category_id_idx"],
       "writes": [
         "s|idx|public.rule_set_category_id_idx",
         "n|idx|public.rule_set_category_id_idx",
         "e|idx|public.rule_set_category_id_idx",
         "n|rel|public.rule_set_category_id_idx"
       ],
-      "reads": [
-        "n|tbl|public.rule",
-        "n|sch|public",
-        "n|col|public.rule.set_category_id"
-      ]
+      "reads": ["n|tbl|public.rule", "n|sch|public", "n|col|public.rule.set_category_id"]
     },
     {
       "statementType": "create_fk",
-      "statementTarget": [
-        "table",
-        "public",
-        "rule"
-      ],
+      "statementTarget": ["table", "public", "rule"],
       "writes": [
         "s|fk|public.rule.rule_user_id_auth_user_id_fkey",
         "n|fk|public.rule.rule_user_id_auth_user_id_fkey",
@@ -186,21 +115,13 @@
     },
     {
       "statementType": "create_policy",
-      "statementTarget": [
-        "table",
-        "public",
-        "rule"
-      ],
+      "statementTarget": ["table", "public", "rule"],
       "writes": [
         "s|pol|public.rule.rule_own_rows_only",
         "n|pol|public.rule.rule_own_rows_only",
         "e|pol|public.rule.rule_own_rows_only"
       ],
-      "reads": [
-        "n|tbl|public.rule",
-        "n|sch|public",
-        "e|rls|public.rule"
-      ]
+      "reads": ["n|tbl|public.rule", "n|sch|public", "e|rls|public.rule"]
     }
   ],
   "deltas": [
@@ -218,10 +139,7 @@
       "row": {
         "schema": "public",
         "name": "rule_origin",
-        "values": [
-          "correction",
-          "user"
-        ],
+        "values": ["correction", "user"],
         "entityType": "enums"
       }
     },
@@ -532,14 +450,10 @@
         "table": "rule",
         "name": "rule_user_id_auth_user_id_fkey",
         "nameExplicit": false,
-        "columns": [
-          "user_id"
-        ],
+        "columns": ["user_id"],
         "schemaTo": "public",
         "tableTo": "auth_user",
-        "columnsTo": [
-          "id"
-        ],
+        "columnsTo": ["id"],
         "onUpdate": "NO ACTION",
         "onDelete": "CASCADE",
         "entityType": "fks"
@@ -551,9 +465,7 @@
         "schema": "public",
         "table": "rule",
         "name": "rule_pkey",
-        "columns": [
-          "id"
-        ],
+        "columns": ["id"],
         "nameExplicit": false,
         "entityType": "pks"
       }
@@ -565,10 +477,7 @@
         "table": "rule",
         "name": "rule_user_id_id_key",
         "nameExplicit": true,
-        "columns": [
-          "user_id",
-          "id"
-        ],
+        "columns": ["user_id", "id"],
         "nullsNotDistinct": false,
         "entityType": "uniques"
       }
@@ -581,9 +490,7 @@
         "name": "rule_own_rows_only",
         "as": "PERMISSIVE",
         "for": "ALL",
-        "roles": [
-          "public"
-        ],
+        "roles": ["public"],
         "using": "\"user_id\" = current_setting('gousset.user_id', true)",
         "withCheck": "\"user_id\" = current_setting('gousset.user_id', true)",
         "entityType": "policies"
