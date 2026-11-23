@@ -332,6 +332,27 @@ describe("assigning keys to merchants", () => {
     ]);
   });
 
+  test("tens of thousands of new keys are each matched by lookups, not against every other", () => {
+    // Invented stalls STALLAAAA, STALLAAAB…: letters only, no X (which reads as a masked card).
+    const letters = "ABCDEFGHIJKLMNOPQRSTUVWYZ";
+
+    const keys = Array.from({ length: 40_000 }, (_unused, index) => {
+      const code = Array.from(
+        { length: 4 },
+        (_digit, place) =>
+          letters[Math.floor(index / letters.length ** (3 - place)) % letters.length] ?? "A",
+      ).join("");
+
+      return `STALL${code}`;
+    });
+
+    const assigned = assignMerchants(keys, [{ key: "STALLAAAA", merchantId: "known" }]);
+
+    expect(assigned).toHaveLength(40_000);
+    expect(assigned[0]).toEqual({ alias: "STALLAAAA", merchant: { id: "known" } });
+    expect(new Set(assigned.map((each) => JSON.stringify(each.merchant))).size).toBe(40_000);
+  });
+
   test("two spellings of one name become one merchant", () => {
     expect(assignMerchants(["L ATELIER", "L'ATELIER"], [])).toEqual([
       { alias: "L'ATELIER", merchant: { name: "L'Atelier" } },

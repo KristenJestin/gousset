@@ -442,36 +442,45 @@ function prefixesOf(key: MerchantKey): ReadonlyArray<string> {
   return words.slice(1).map((_word, index) => compactOf(words.slice(0, index + 1).join(" ")));
 }
 
-/** A known key; its owner is `id:<merchant id>` or `new:<name>` for a merchant of this batch. */
-type Entry = {
-  readonly compact: string;
-  readonly prefixes: ReadonlyArray<string>;
-  readonly owner: string;
+/**
+ * The known keys' owners (`id:<merchant id>`, or `new:<name>` for a merchant of this batch), by
+ * each key's compact form and by each of its word prefixes: a key is matched by lookups, never by
+ * reading every known key, so that a recognition of tens of thousands of keys stays linear.
+ */
+type Known = {
+  readonly byCompact: Map<string, Set<string>>;
+  readonly byPrefix: Map<string, Set<string>>;
 };
 
-function entryOf(key: MerchantKey, owner: string): Entry {
-  return { compact: compactOf(key), prefixes: prefixesOf(key), owner };
+function add(index: Map<string, Set<string>>, form: string, owner: string): void {
+  const owners = index.get(form);
+
+  if (owners === undefined) {
+    index.set(form, new Set([owner]));
+  } else {
+    owners.add(owner);
+  }
 }
 
-/** The owners of the entries that pass, sorted, so that a choice never hangs on input order. */
-function ownersWhere(entries: ReadonlyArray<Entry>, passes: (entry: Entry) => boolean) {
-  const owners = new Set<string>();
+function learn(known: Known, key: MerchantKey, owner: string): void {
+  add(known.byCompact, compactOf(key), owner);
 
-  for (const entry of entries) {
-    if (passes(entry)) {
-      owners.add(entry.owner);
-    }
+  for (const prefix of prefixesOf(key)) {
+    add(known.byPrefix, prefix, owner);
   }
+}
 
-  return [...owners].toSorted();
+/** The owners known by a form, sorted, so that a choice never hangs on input order. */
+function ownersOf(index: Map<string, Set<string>>, form: string): ReadonlyArray<string> {
+  return [...(index.get(form) ?? [])].toSorted();
 }
 
 const MIN_PREFIX = 4;
 
-/** The owner a key goes to among the entries, or undefined for a new merchant. */
-function ownerOf(key: MerchantKey, entries: ReadonlyArray<Entry>): string | undefined {
+/** The owner a key goes to among the known keys, or undefined for a new merchant. */
+function ownerOf(key: MerchantKey, known: Known): string | undefined {
   const compact = compactOf(key);
-  const [equal] = ownersWhere(entries, (entry) => entry.compact === compact);
+  const [equal] = ownersOf(known.byCompact, compact);
 
   if (equal !== undefined) {
     return equal;
@@ -487,7 +496,7 @@ function ownerOf(key: MerchantKey, entries: ReadonlyArray<Entry>): string | unde
       continue;
     }
 
-    const owners = ownersWhere(entries, (entry) => entry.compact === prefix);
+    const owners = ownersOf(known.byCompact, prefix);
 
     if (owners.length > 0) {
       return owners.length === 1 ? owners[0] : undefined;
@@ -496,7 +505,7 @@ function ownerOf(key: MerchantKey, entries: ReadonlyArray<Entry>): string | unde
 
   // The new key starts the keys of exactly one merchant.
   if (compact.length >= MIN_PREFIX) {
-    const owners = ownersWhere(entries, (entry) => entry.prefixes.includes(compact));
+    const owners = ownersOf(known.byPrefix, compact);
 
     if (owners.length === 1) {
       return owners[0];
@@ -529,7 +538,11 @@ export function assignMerchants(
   keys: ReadonlyArray<MerchantKey>,
   known: ReadonlyArray<KnownKey>,
 ): ReadonlyArray<Assignment> {
-  const entries = known.map(({ key, merchantId }) => entryOf(key, `id:${merchantId}`));
+  const index: Known = { byCompact: new Map(), byPrefix: new Map() };
+
+  for (const { key, merchantId } of known) {
+    learn(index, key, `id:${merchantId}`);
+  }
 
   const merchants = new Map<string, Assignment["merchant"]>(
     known.map(({ merchantId }) => [`id:${merchantId}`, { id: merchantId }]),
@@ -539,12 +552,12 @@ export function assignMerchants(
 
   for (const key of [...new Set(keys)].toSorted(shortestFirst)) {
     const name = merchantName(key);
-    const owner = ownerOf(key, entries) ?? `new:${name}`;
+    const owner = ownerOf(key, index) ?? `new:${name}`;
     const merchant = merchants.get(owner) ?? { name };
 
     // Each key assigned is known for the next, as it will be once its alias is written.
     merchants.set(owner, merchant);
-    entries.push(entryOf(key, owner));
+    learn(index, key, owner);
     assignments.push({ alias: key, merchant });
   }
 
