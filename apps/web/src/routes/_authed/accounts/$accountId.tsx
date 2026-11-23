@@ -7,6 +7,7 @@ import { AccountSettings, AccountSettingsSkeleton } from "@gousset/ui/components
 import { Page, ScreenBlock } from "@gousset/ui/components/app-shell";
 import { BalanceChart, BalanceChartSkeleton } from "@gousset/ui/components/balance-chart";
 import { BalanceCheck, BalanceCheckSkeleton } from "@gousset/ui/components/balance-check";
+import { BenefitCredits, BenefitCreditsSkeleton } from "@gousset/ui/components/benefit-credits";
 import { Button } from "@gousset/ui/components/button";
 import { DatePicker } from "@gousset/ui/components/date-picker";
 import { Dialog, DialogClose } from "@gousset/ui/components/dialog";
@@ -28,10 +29,17 @@ import {
   getAccount,
   noteAccountBalance,
   reopenAccount,
+  setCreditExpiry,
 } from "@/functions/accounts";
 import { accountRefusalMessage } from "@/i18n/messages";
 import { longDay, monthLabel, shortDay } from "@/lib/account-day";
 import { accountChoiceLabel, accountGroupLabel } from "@/lib/account-labels";
+import {
+  OPENING_CREDIT_ID,
+  benefitCreditsOf,
+  creditExpiryTag,
+  creditOrderLabel,
+} from "@/lib/benefit-credits";
 import { whileBusy } from "@/lib/while-busy";
 import { accountQueries, invalidateAccounts } from "@/queries/accounts";
 
@@ -89,6 +97,9 @@ function AccountPage() {
   const [closeError, setCloseError] = useState<string>();
   const [reopenBusy, setReopenBusy] = useState(false);
   const [reopenError, setReopenError] = useState<string>();
+  const [noteOpen, setNoteOpen] = useState(false);
+  const [noteOpened, setNoteOpened] = useState(0);
+  const [noteSaved, setNoteSaved] = useState<string>();
 
   const { data: list } = useSuspenseQuery(accountQueries.list());
 
@@ -150,25 +161,38 @@ function AccountPage() {
     <Page
       title={account.name}
       actions={
-        account.closedOn === null ? (
-          <Button
-            variant="secondary"
-            loading={closeBusy}
-            onClick={() => {
-              setClosedOn(detail.day);
-              setCloseOpen(true);
-            }}
-          >
-            {m.accountClose()}
-          </Button>
-        ) : (
-          <Button variant="secondary" loading={reopenBusy} onClick={() => void handleReopen()}>
-            {m.accountReopen()}
-          </Button>
-        )
+        <>
+          {account.mode === "balance" ? (
+            <Button
+              onClick={() => {
+                setNoteOpened((count) => count + 1);
+                setNoteOpen(true);
+              }}
+            >
+              {m.accountBlockNoteBalance()}
+            </Button>
+          ) : null}
+          {account.closedOn === null ? (
+            <Button
+              variant="secondary"
+              loading={closeBusy}
+              onClick={() => {
+                setClosedOn(detail.day);
+                setCloseOpen(true);
+              }}
+            >
+              {m.accountClose()}
+            </Button>
+          ) : (
+            <Button variant="secondary" loading={reopenBusy} onClick={() => void handleReopen()}>
+              {m.accountReopen()}
+            </Button>
+          )}
+        </>
       }
     >
       {account.closedOn === null ? null : <FormMessage message={reopenError} />}
+      <StatusMessage message={noteSaved} />
       <DataBlock
         title={m.accountBlockFigures()}
         skeleton={<AccountFiguresSkeleton />}
@@ -183,6 +207,20 @@ function AccountPage() {
       >
         <Check accountId={accountId} />
       </DataBlock>
+      {detail.credits === null ? null : (
+        <DataBlock
+          title={m.accountBlockCredits()}
+          skeleton={
+            <BenefitCreditsSkeleton
+              expiring={detail.credits.expiring.length}
+              credits={detail.credits.open.length}
+            />
+          }
+          resetKey={accountId}
+        >
+          <Credits accountId={accountId} />
+        </DataBlock>
+      )}
       <DataBlock
         title={m.accountBlockChart()}
         skeleton={<BalanceChartSkeleton />}
@@ -205,7 +243,16 @@ function AccountPage() {
         <Lines accountId={accountId} />
       </DataBlock>
       {account.mode === "balance" ? (
-        <NoteBalance accountId={accountId} currency={account.currency} day={detail.day} />
+        <NoteBalanceDialog
+          // Each opening starts from today's day and an empty amount, with no past refusal.
+          key={noteOpened}
+          open={noteOpen}
+          onOpenChange={setNoteOpen}
+          accountId={accountId}
+          currency={account.currency}
+          day={detail.day}
+          onSaved={setNoteSaved}
+        />
       ) : null}
       <AccountForm
         key={account.id}
@@ -222,6 +269,7 @@ function AccountPage() {
           openingBalanceMinor: account.openingBalance.minor,
           openedOn: account.openedOn,
           settlesIntoAccountId: account.settlesInto?.id ?? null,
+          creditOrder: account.creditOrder,
         }}
         settlesIntoChoices={settlesIntoChoices}
         onSubmit={handleEdit}
@@ -313,6 +361,7 @@ function Figures({ accountId }: { accountId: string }) {
       out={detail.monthOut}
       institution={account.institution ?? undefined}
       groupLabel={accountGroupLabel(account.group)}
+      restricted={account.kind === "benefit"}
     />
   );
 }
@@ -372,6 +421,134 @@ function Chart({ accountId }: { accountId: string }) {
   );
 }
 
+/** What a credit's expiry dialog edits: the credit as it was when its button was pressed. */
+type ExpiryTarget = { lineId: string; label: string; expiresOn: string | null; opened: number };
+
+/** A benefit account kept by its lines: its credits, and the dialog that sets one's expiry. */
+function Credits({ accountId }: { accountId: string }) {
+  const detail = useAccountDetail(accountId);
+  const locale = usePageLanguage();
+  const [target, setTarget] = useState<ExpiryTarget>();
+  const [open, setOpen] = useState(false);
+
+  if (detail.credits === null) {
+    return null;
+  }
+
+  const { open: credits } = detail.credits;
+  const shown = benefitCreditsOf(detail.credits, detail.day, locale);
+
+  function editExpiry(id: string) {
+    const credit = credits.find((each) => each.lineId === id);
+
+    if (id === OPENING_CREDIT_ID || credit === undefined || credit.lineId === null) {
+      return;
+    }
+
+    setTarget({
+      lineId: credit.lineId,
+      label: credit.label ?? "",
+      expiresOn: credit.expiresOn,
+      opened: (target?.opened ?? 0) + 1,
+    });
+    setOpen(true);
+  }
+
+  return (
+    <>
+      <BenefitCredits
+        order={shown.order}
+        expiring={shown.expiring}
+        credits={shown.credits}
+        uncovered={shown.uncovered}
+        onEditExpiry={editExpiry}
+      />
+      {target === undefined ? null : (
+        <ExpiryDialog
+          // Each opening starts from the credit's expiry as it is then, with no past refusal.
+          key={target.opened}
+          open={open}
+          onOpenChange={setOpen}
+          lineId={target.lineId}
+          label={target.label}
+          initial={target.expiresOn}
+        />
+      )}
+    </>
+  );
+}
+
+function ExpiryDialog({
+  open,
+  onOpenChange,
+  lineId,
+  label,
+  initial,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  lineId: string;
+  label: string;
+  initial: string | null;
+}) {
+  const queryClient = useQueryClient();
+  const formId = useId();
+  const [expiresOn, setExpiresOn] = useState(initial);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string>();
+
+  async function save() {
+    const result = await whileBusy(setBusy, () =>
+      setCreditExpiry({ data: { lineId, expiresOn } }).then(
+        (answer) => answer,
+        () => ({ ok: false as const, code: "UNKNOWN" }),
+      ),
+    );
+
+    if (!result.ok) {
+      setError(accountRefusalMessage(result.code));
+
+      return;
+    }
+
+    setError(undefined);
+    await invalidateAccounts(queryClient);
+    onOpenChange(false);
+  }
+
+  return (
+    <Dialog
+      title={m.accountCreditExpiryTitle({ label })}
+      description={m.accountCreditExpiryDescription()}
+      open={open}
+      onOpenChange={onOpenChange}
+      actions={
+        <>
+          <DialogClose>
+            <Button type="button" variant="secondary">
+              {m.uiCancel()}
+            </Button>
+          </DialogClose>
+          <Button type="submit" form={formId} loading={busy}>
+            {m.accountCreditExpirySubmit()}
+          </Button>
+        </>
+      }
+    >
+      <form
+        id={formId}
+        onSubmit={(event) => {
+          event.preventDefault();
+          void save();
+        }}
+      >
+        <DatePicker label={m.fieldExpiresOn()} value={expiresOn} onValueChange={setExpiresOn} />
+        <FormMessage message={error} />
+      </form>
+    </Dialog>
+  );
+}
+
 function Settings({ accountId, onEdit }: { accountId: string; onEdit: () => void }) {
   const { account } = useAccountDetail(accountId);
   const locale = usePageLanguage();
@@ -384,6 +561,7 @@ function Settings({ accountId, onEdit }: { accountId: string; onEdit: () => void
       openedOn={account.openedOn === null ? null : longDay(account.openedOn, locale)}
       institution={account.institution ?? undefined}
       settlesInto={account.settlesInto?.name}
+      creditOrder={account.kind === "benefit" ? creditOrderLabel(account.creditOrder) : undefined}
       action={
         <Button variant="secondary" size="sm" icon="edit" onClick={onEdit}>
           {m.accountEdit()}
@@ -393,13 +571,14 @@ function Settings({ accountId, onEdit }: { accountId: string; onEdit: () => void
   );
 }
 
-function toRow(line: AccountLine, locale: string): AccountLineRow {
+function toRow(line: AccountLine, today: string, locale: string): AccountLineRow {
   return {
     id: line.id,
     day: shortDay(line.bookedOn, locale),
     label: line.label,
     amount: line.amount,
     balanceAfter: line.balanceAfter ?? undefined,
+    tag: creditExpiryTag(line.expiresOn, today, locale),
   };
 }
 
@@ -449,7 +628,7 @@ function Lines({ accountId }: { accountId: string }) {
     }
   }
 
-  const rows = [...detail.lines, ...older].map((line) => toRow(line, locale));
+  const rows = [...detail.lines, ...older].map((line) => toRow(line, detail.day, locale));
 
   return (
     <AccountLines
@@ -462,15 +641,24 @@ function Lines({ accountId }: { accountId: string }) {
   );
 }
 
-/** A balance-mode account's page: note its balance at the end of a day, one a day. */
-function NoteBalance({
+/**
+ * A balance-mode account: note its balance at the end of a day, one a day, in a dialog the page's
+ * "Note a balance" button opens (an action that asks for input never sits inline in a page).
+ */
+function NoteBalanceDialog({
+  open,
+  onOpenChange,
   accountId,
   currency,
   day,
+  onSaved,
 }: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
   accountId: string;
   currency: string;
   day: string;
+  onSaved: (message: string) => void;
 }) {
   const queryClient = useQueryClient();
   const formId = useId();
@@ -478,9 +666,7 @@ function NoteBalance({
   const [noteDay, setNoteDay] = useState(day);
   const [balanceMinor, setBalanceMinor] = useState<number | null>(null);
   const [error, setError] = useState<string>();
-  const [saved, setSaved] = useState<string>();
   const [busy, setBusy] = useState(false);
-  const [resetKey, setResetKey] = useState(0);
 
   async function submit() {
     if (balanceMinor === null) {
@@ -492,57 +678,58 @@ function NoteBalance({
     );
 
     if (!result.ok) {
-      setSaved(undefined);
       setError(accountRefusalMessage(result.code));
 
       return;
     }
 
     setError(undefined);
-    setSaved(m.accountNoteBalanceSaved({ day: shortDay(noteDay, locale) }));
-    setBalanceMinor(null);
-    setResetKey((key) => key + 1);
+    onSaved(m.accountNoteBalanceSaved({ day: shortDay(noteDay, locale) }));
     await invalidateAccounts(queryClient);
+    onOpenChange(false);
   }
 
   return (
-    <DataBlock
+    <Dialog
       title={m.accountBlockNoteBalance()}
-      skeleton={
-        <p className="text-sm text-muted-foreground">{m.accountNoteBalanceDescription()}</p>
-      }
-      resetKey={accountId}
-    >
-      <div className="flex flex-col gap-4">
-        <p className="text-sm text-muted-foreground">{m.accountNoteBalanceDescription()}</p>
-        <form
-          id={formId}
-          onSubmit={(event) => {
-            event.preventDefault();
-            void submit();
-          }}
-          className="flex flex-wrap items-end gap-3"
-        >
-          <DatePicker
-            label={m.fieldDay()}
-            value={noteDay}
-            onValueChange={(value) => setNoteDay(value ?? noteDay)}
-            required
-          />
-          <MoneyField
-            key={resetKey}
-            label={m.fieldAmount()}
-            currency={currency}
-            onValueChange={setBalanceMinor}
-            required
-          />
-          <Button type="submit" loading={busy}>
+      description={m.accountNoteBalanceDescription()}
+      open={open}
+      onOpenChange={onOpenChange}
+      actions={
+        <>
+          <DialogClose>
+            <Button type="button" variant="secondary">
+              {m.uiCancel()}
+            </Button>
+          </DialogClose>
+          <Button type="submit" form={formId} loading={busy}>
             {m.accountNoteBalanceSubmit()}
           </Button>
-        </form>
+        </>
+      }
+    >
+      <form
+        id={formId}
+        onSubmit={(event) => {
+          event.preventDefault();
+          void submit();
+        }}
+        className="flex flex-col gap-4"
+      >
+        <DatePicker
+          label={m.fieldDay()}
+          value={noteDay}
+          onValueChange={(value) => setNoteDay(value ?? noteDay)}
+          required
+        />
+        <MoneyField
+          label={m.fieldAmount()}
+          currency={currency}
+          onValueChange={setBalanceMinor}
+          required
+        />
         <FormMessage message={error} />
-        <StatusMessage message={saved} />
-      </div>
-    </DataBlock>
+      </form>
+    </Dialog>
   );
 }

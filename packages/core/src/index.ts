@@ -10,10 +10,12 @@ export {
   BalanceAlreadyNoted,
   CurrencyLocked,
   DayRangeRefused,
+  ExpiryBeforeCredit,
   LineAlreadyReviewed,
   LineNotFound,
   LineSearchRefused,
   MonthOutOfRange,
+  NotACredit,
   SettlementRefused,
 } from "./errors";
 
@@ -49,10 +51,13 @@ export {
   listAccounts,
   noteBalance,
   reopenAccount,
+  setCreditExpiry,
   showAccount,
 } from "./accounts";
 
 export type {
+  AccountCredit,
+  AccountCredits,
   AccountDetail,
   AccountGroupList,
   AccountLine,
@@ -66,7 +71,11 @@ export type {
 
 export { AccountStore } from "./account-store";
 
-export type { AccountRecord } from "./account-store";
+export type { AccountRecord, LineExpiry } from "./account-store";
+
+export { creditsLeft, expiringOf } from "./credits";
+
+export type { CountedLine, CreditLeft, CreditOrder, CreditsLeft } from "./credits";
 
 export { DatabaseAccountStore } from "./account-store-database";
 

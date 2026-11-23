@@ -1,4 +1,4 @@
-import type { AccountChoice, AccountMode } from "@gousset/core/account-values";
+import type { AccountChoice, AccountMode, CreditOrder } from "@gousset/core/account-values";
 import { ACCOUNT_CHOICES } from "@gousset/core/account-values";
 import { m } from "@gousset/i18n/messages";
 import { Button } from "@gousset/ui/components/button";
@@ -16,6 +16,7 @@ import { useId, useState } from "react";
 
 import { accountRefusalMessage } from "@/i18n/messages";
 import { accountChoiceLabel } from "@/lib/account-labels";
+import { creditOrderLabel } from "@/lib/benefit-credits";
 import { whileBusy } from "@/lib/while-busy";
 
 /** What the create and edit forms send: `AccountInput`'s shape, with `institution` never `undefined`. */
@@ -28,6 +29,11 @@ export type AccountFormValues = {
   openingBalanceMinor: number;
   openedOn: string | null;
   settlesIntoAccountId: string | null;
+  /**
+   * A benefit account's order of use; `null` when it is not known (a benefit account kept by its
+   * balance), which leaves it as it is.
+   */
+  creditOrder: CreditOrder | null;
 };
 
 /** What a submit answers: the id of the account written (new, or the one edited), or a refusal. */
@@ -48,6 +54,17 @@ function isAccountMode(value: string): value is AccountMode {
   return MODE_SET.has(value);
 }
 
+const CREDIT_ORDERS = [
+  "oldest_first",
+  "expiring_first",
+] as const satisfies ReadonlyArray<CreditOrder>;
+
+const CREDIT_ORDER_SET: ReadonlySet<string> = new Set(CREDIT_ORDERS);
+
+function isCreditOrder(value: string): value is CreditOrder {
+  return CREDIT_ORDER_SET.has(value);
+}
+
 /** Every currency an account can be opened in, by its ISO 4217 code alone. */
 const CURRENCY_ITEMS: ReadonlyArray<ChoiceItem> = CURRENCY_CODES.map((code) => ({
   value: code,
@@ -65,6 +82,7 @@ export function accountFormInput(values: AccountFormValues) {
     openingBalanceMinor: values.openingBalanceMinor,
     openedOn: values.openedOn ?? undefined,
     settlesIntoAccountId: values.settlesIntoAccountId ?? undefined,
+    creditOrder: values.choice === "benefit" ? (values.creditOrder ?? undefined) : undefined,
   };
 }
 
@@ -84,7 +102,7 @@ export type AccountFormProps = {
 /**
  * The account create and edit form, a `Dialog` composed of `packages/ui` fields: name, kind,
  * institution, currency, tracking, opening balance, opened on and, for a card, the current account
- * it settles into. `key`d by the account's id (or "new") at the call site so that editing another
+ * it settles into; for a benefit account, the order its credits are used in. `key`d by the account's id (or "new") at the call site so that editing another
  * account starts from its own values.
  */
 export function AccountForm({
@@ -112,6 +130,7 @@ export function AccountForm({
     initial.settlesIntoAccountId,
   );
 
+  const [creditOrder, setCreditOrder] = useState<CreditOrder | null>(initial.creditOrder);
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
 
@@ -124,6 +143,11 @@ export function AccountForm({
     { value: "lines", label: messages.accounts.trackingLines },
     { value: "balance", label: messages.accounts.trackingBalance },
   ];
+
+  const creditOrderItems: ReadonlyArray<ChoiceItem> = CREDIT_ORDERS.map((value) => ({
+    value,
+    label: creditOrderLabel(value),
+  }));
 
   const settlesItems: ReadonlyArray<ChoiceItem> = settlesIntoChoices.map((account) => ({
     value: account.id,
@@ -142,6 +166,12 @@ export function AccountForm({
     }
   }
 
+  function onCreditOrderChange(value: string | null) {
+    if (value !== null && isCreditOrder(value)) {
+      setCreditOrder(value);
+    }
+  }
+
   async function submit() {
     if (openingBalanceInvalid) {
       return;
@@ -157,6 +187,7 @@ export function AccountForm({
         openingBalanceMinor,
         openedOn,
         settlesIntoAccountId: choice === "card" ? settlesIntoAccountId : null,
+        creditOrder: choice === "benefit" ? creditOrder : null,
       }),
     );
 
@@ -253,6 +284,14 @@ export function AccountForm({
             value={settlesIntoAccountId}
             onValueChange={setSettlesIntoAccountId}
             required
+          />
+        ) : null}
+        {choice === "benefit" ? (
+          <Select
+            label={m.fieldCreditOrder()}
+            items={creditOrderItems}
+            value={creditOrder}
+            onValueChange={onCreditOrderChange}
           />
         ) : null}
         <FormMessage message={error} />

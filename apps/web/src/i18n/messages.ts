@@ -37,6 +37,12 @@ export function accountRefusalMessage(code: string): string {
       return m.accountRefusalBalanceAlreadyNoted();
     case "DAY_RANGE_INVALID":
       return m.accountRefusalDayRangeInvalid();
+    case "LINE_NOT_FOUND":
+      return m.accountRefusalLineNotFound();
+    case "NOT_A_CREDIT":
+      return m.accountRefusalNotACredit();
+    case "EXPIRY_BEFORE_CREDIT":
+      return m.accountRefusalExpiryBeforeCredit();
     default:
       return m.errorUnknown();
   }

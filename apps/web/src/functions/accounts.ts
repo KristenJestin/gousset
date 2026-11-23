@@ -5,11 +5,13 @@ import {
   listAccounts,
   noteBalance,
   reopenAccount as reopenCoreAccount,
+  setCreditExpiry as setCoreCreditExpiry,
   showAccount,
 } from "@gousset/core";
 import {
   AccountId,
   AccountInput,
+  CreditExpiryInput,
   Day,
   MAX_LINES,
   NotedBalanceInput,
@@ -35,7 +37,10 @@ export type AccountRefusalCode =
   | "ACCOUNT_NOT_CLOSED"
   | "ACCOUNT_KEPT_BY_LINES"
   | "BALANCE_ALREADY_NOTED"
-  | "DAY_RANGE_INVALID";
+  | "DAY_RANGE_INVALID"
+  | "LINE_NOT_FOUND"
+  | "NOT_A_CREDIT"
+  | "EXPIRY_BEFORE_CREDIT";
 
 const refused = (code: AccountRefusalCode) => Effect.succeed({ ok: false as const, code });
 
@@ -162,6 +167,26 @@ export const noteAccountBalance = createServerFn({ method: "POST" })
           AccountNotFound: () => refused("ACCOUNT_NOT_FOUND"),
           AccountKeptByLines: () => refused("ACCOUNT_KEPT_BY_LINES"),
           BalanceAlreadyNoted: () => refused("BALANCE_ALREADY_NOTED"),
+        }),
+      ),
+    ),
+  );
+
+/**
+ * Sets the day a benefit account's credit expires, or takes it away with `null`. Refused with a
+ * code: a line the user does not have, a line that is no credit, a day before the one credited.
+ */
+export const setCreditExpiry = createServerFn({ method: "POST" })
+  .middleware([signedIn, slowedInDevelopment])
+  .validator(Schema.toStandardSchemaV1(CreditExpiryInput))
+  .handler(({ data, context }) =>
+    runCore(
+      setCoreCreditExpiry(context.owner, data.lineId, data.expiresOn).pipe(
+        Effect.map(() => ({ ok: true as const })),
+        Effect.catchTags({
+          LineNotFound: () => refused("LINE_NOT_FOUND"),
+          NotACredit: () => refused("NOT_A_CREDIT"),
+          ExpiryBeforeCredit: () => refused("EXPIRY_BEFORE_CREDIT"),
         }),
       ),
     ),

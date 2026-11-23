@@ -24,6 +24,11 @@ export type AccountSettingsProps = {
   institution?: string;
   /** A card's deferred-debit account, as the user names it; left out for every other kind. */
   settlesInto?: string;
+  /**
+   * A benefit account's order of use for its credits, already worded ("Oldest first"); left out
+   * for every other kind.
+   */
+  creditOrder?: string;
   /** The "Edit" action, opening the account's form. */
   action?: ReactNode;
 };
@@ -31,7 +36,7 @@ export type AccountSettingsProps = {
 /**
  * An account's settings, read only (docs/wireframes, screen 7, block 4): its kind, how it is
  * tracked, its currency, when it was opened, its institution and, for a card, what it settles
- * into. `action` holds the "Edit" button that opens the form.
+ * into; for a benefit account, the order its credits are used in. `action` holds the "Edit" button that opens the form.
  */
 export function AccountSettings({
   kind,
@@ -40,6 +45,7 @@ export function AccountSettings({
   openedOn,
   institution,
   settlesInto,
+  creditOrder,
   action,
 }: AccountSettingsProps) {
   const messages = useUiMessages().accounts;
@@ -59,6 +65,9 @@ export function AccountSettings({
         <SettingsRow label={messages.settingsInstitution} value={institution ?? notSet} />
         {settlesInto === undefined ? null : (
           <SettingsRow label={messages.settingsSettlesInto} value={settlesInto} />
+        )}
+        {creditOrder === undefined ? null : (
+          <SettingsRow label={messages.settingsCreditOrder} value={creditOrder} />
         )}
       </dl>
     </div>

@@ -15,6 +15,7 @@ import {
   listAccounts,
   noteBalance,
   reopenAccount,
+  setCreditExpiry,
   showAccount,
 } from "./accounts";
 
@@ -50,6 +51,7 @@ function accountOf(
     openedOn: null,
     closedOn: null,
     settlesIntoAccountId: null,
+    creditOrder: "oldest_first",
     ...change,
   };
 }
@@ -486,6 +488,199 @@ describe("writes", () => {
     expect(outcome.twice._tag).toBe("BalanceAlreadyNoted");
     expect(outcome.byLines._tag).toBe("AccountKeptByLines");
     expect(outcome.list.groups[3]?.totals).toEqual([{ minor: -8_950_000, currency: "EUR" }]);
+  });
+});
+
+const credit = (accountId: string, bookedOn: string, amountMinor: number, expiresOn: string) => ({
+  ...line(accountId, bookedOn, amountMinor, "MEALCARD CREDIT"),
+  expiresOn,
+});
+
+describe("benefit accounts", () => {
+  test("a benefit account kept by its lines gives its credits left, in order of use, and what expires when", async () => {
+    const meal = accountOf("MealCard", "benefit", { institution: "MealCard" });
+    const older = credit(meal.id, "2026-01-05", 10_000, "2027-01-31");
+    const newer = credit(meal.id, "2026-02-05", 10_000, "2026-12-31");
+
+    const rows: MemoryRows = {
+      accounts: [meal],
+      lines: [older, newer, line(meal.id, "2026-02-10", -12_500, "CB GREENMARKET")],
+    };
+
+    const detail = await inOrder(rows, showAccount(ADA, meal.id));
+
+    expect(detail.credits).toEqual({
+      order: "oldest_first",
+      open: [
+        {
+          lineId: newer.id,
+          creditedOn: "2026-02-05",
+          label: "MEALCARD CREDIT",
+          amount: { minor: 10_000, currency: "EUR" },
+          left: { minor: 7500, currency: "EUR" },
+          expiresOn: "2026-12-31",
+        },
+      ],
+      expiring: [{ day: "2026-12-31", amount: { minor: 7500, currency: "EUR" } }],
+      uncovered: { minor: 0, currency: "EUR" },
+    });
+    expect(detail.lines.find((each) => each.id === newer.id)?.expiresOn).toBe("2026-12-31");
+
+    const issuer = await inOrder(
+      { ...rows, accounts: [{ ...meal, creditOrder: "expiring_first" }] },
+      showAccount(ADA, meal.id),
+    );
+
+    expect(issuer.credits?.order).toBe("expiring_first");
+    expect(issuer.credits?.open.map((each) => [each.creditedOn, each.left.minor])).toEqual([
+      ["2026-01-05", 7500],
+    ]);
+  });
+
+  test("never counts a credit booked after today", async () => {
+    const meal = accountOf("MealCard", "benefit");
+
+    const detail = await inOrder(
+      { accounts: [meal], lines: [credit(meal.id, "2026-12-01", 5000, "2027-12-31")] },
+      showAccount(ADA, meal.id),
+    );
+
+    expect(detail.credits?.open).toEqual([]);
+  });
+
+  test("no credits for a benefit account kept by its balance, nor for another kind", async () => {
+    const kept = accountOf("Gift card", "benefit", { mode: "balance" });
+    const current = accountOf("Current account", "current");
+    const rows: MemoryRows = { accounts: [kept, current] };
+
+    expect((await inOrder(rows, showAccount(ADA, kept.id))).credits).toBeNull();
+    expect((await inOrder(rows, showAccount(ADA, current.id))).credits).toBeNull();
+  });
+
+  test("an account's page gives its order of use, even kept by its balance", async () => {
+    const kept = accountOf("Gift card", "benefit", {
+      mode: "balance",
+      creditOrder: "expiring_first",
+    });
+
+    const detail = await inOrder({ accounts: [kept] }, showAccount(ADA, kept.id));
+
+    expect(detail.account.creditOrder).toBe("expiring_first");
+  });
+
+  test("an account's credit order is oldest first unless given, and kept by an edit that leaves it out", async () => {
+    const outcome = await inOrder(
+      {},
+      Effect.gen(function* () {
+        const plain = yield* createAccount(ADA, input("benefit"));
+
+        const issuer = yield* createAccount(
+          ADA,
+          input("benefit", { creditOrder: "expiring_first" }),
+        );
+
+        const kept = yield* editAccount(ADA, issuer.id, input("benefit", { name: "Renamed" }));
+
+        const changed = yield* editAccount(
+          ADA,
+          issuer.id,
+          input("benefit", { creditOrder: "oldest_first" }),
+        );
+
+        return { plain, issuer, kept, changed };
+      }),
+    );
+
+    expect(outcome.plain.creditOrder).toBe("oldest_first");
+    expect(outcome.issuer.creditOrder).toBe("expiring_first");
+    expect(outcome.kept.creditOrder).toBe("expiring_first");
+    expect(outcome.changed.creditOrder).toBe("oldest_first");
+  });
+
+  test("moving money from the current account to a benefit account moves it from available to restricted", async () => {
+    const current = accountOf("Current account", "current", { openingBalanceMinor: 100_000 });
+    const meal = accountOf("MealCard", "benefit");
+    const before = await inOrder({ accounts: [current, meal] }, listAccounts(ADA));
+
+    const after = await inOrder(
+      {
+        accounts: [current, meal],
+        lines: [
+          line(current.id, "2026-11-10", -5000, "TRANSFER TO MEALCARD"),
+          line(meal.id, "2026-11-10", 5000, "TOP-UP FROM CURRENT ACCOUNT"),
+        ],
+      },
+      listAccounts(ADA),
+    );
+
+    const totals = (list: typeof before, group: string) =>
+      list.groups.find((each) => each.group === group)?.totals[0]?.minor ?? 0;
+
+    expect(totals(after, "available")).toBe(totals(before, "available") - 5000);
+    expect(totals(after, "restricted")).toBe(totals(before, "restricted") + 5000);
+  });
+
+  describe("setCreditExpiry", () => {
+    const meal = accountOf("MealCard", "benefit");
+    const current = accountOf("Current account", "current");
+    const topUp = line(meal.id, "2026-11-02", 18_000, "MEALCARD CREDIT");
+    const payment = line(meal.id, "2026-11-05", -1200, "CB CORNER CAFE");
+
+    const held = {
+      ...line(meal.id, "2026-11-06", 18_000, "MEALCARD CREDIT"),
+      state: "held" as const,
+    };
+
+    const salary = line(current.id, "2026-11-01", 250_000, "SALARY");
+    const rows: MemoryRows = { accounts: [meal, current], lines: [topUp, payment, held, salary] };
+
+    const outcome = (lineId: string, expiresOn: string | null, owner = ADA) =>
+      inOrder(
+        rows,
+        setCreditExpiry(owner, lineId, expiresOn).pipe(
+          Effect.match({
+            onSuccess: (set) => set.expiresOn ?? "none",
+            onFailure: (error) => error._tag,
+          }),
+        ),
+      );
+
+    test("sets a credit's expiry, shown on its line and among what expires, and takes it away", async () => {
+      const shown = await inOrder(
+        rows,
+        Effect.gen(function* () {
+          yield* setCreditExpiry(ADA, topUp.id, "2027-01-31");
+
+          const set = yield* showAccount(ADA, meal.id);
+
+          yield* setCreditExpiry(ADA, topUp.id, null);
+
+          return { set, cleared: yield* showAccount(ADA, meal.id) };
+        }),
+      );
+
+      expect(shown.set.lines.find((each) => each.id === topUp.id)?.expiresOn).toBe("2027-01-31");
+      expect(shown.set.credits?.expiring).toEqual([
+        { day: "2027-01-31", amount: { minor: 16_800, currency: "EUR" } },
+      ]);
+      expect(shown.cleared.credits?.expiring).toEqual([]);
+    });
+
+    test("an expiry may be the day credited, never before it", async () => {
+      expect(await outcome(topUp.id, "2026-11-02")).toBe("2026-11-02");
+      expect(await outcome(topUp.id, "2026-11-01")).toBe("ExpiryBeforeCredit");
+    });
+
+    test("refuses a line that is no credit of a benefit account", async () => {
+      expect(await outcome(payment.id, "2027-01-31")).toBe("NotACredit");
+      expect(await outcome(held.id, "2027-01-31")).toBe("NotACredit");
+      expect(await outcome(salary.id, "2027-01-31")).toBe("NotACredit");
+    });
+
+    test("refuses a line the user does not have", async () => {
+      expect(await outcome(memoryId(), "2027-01-31")).toBe("LineNotFound");
+      expect(await outcome(topUp.id, "2027-01-31", "grace")).toBe("LineNotFound");
+    });
   });
 });
 

@@ -3,15 +3,21 @@ import { Effect, Layer } from "effect";
 import { AccountStore } from "./account-store";
 import type { AccountFacts, AccountRecord, StatementBalanceAt, StoredLine } from "./account-store";
 import type { DayBalance } from "./balances";
-import { AccountNotFound, BalanceAlreadyNoted } from "./errors";
+import { AccountNotFound, BalanceAlreadyNoted, LineNotFound } from "./errors";
 
 // An in-memory `AccountStore`, for tests: the same reads and writes as the database's, on arrays,
 // one user's rows apart from another's. A restart forgets them.
 
-/** A line of the memory store: counted unless said otherwise. */
-export type MemoryLine = StoredLine & {
+/** A line of the memory store: counted unless said otherwise, with no expiry unless given. */
+export type MemoryLine = Omit<StoredLine, "expiresOn"> & {
   readonly accountId: string;
   readonly state?: "counted" | "held" | "discarded";
+  readonly expiresOn?: string | null;
+};
+
+type HeldLine = StoredLine & {
+  readonly accountId: string;
+  readonly state: "counted" | "held" | "discarded";
 };
 
 /** A balance of the memory store, given by a statement or noted by the user. */
@@ -37,7 +43,7 @@ export type MemoryRows = {
 
 type Rows = {
   accounts: Array<AccountRecord>;
-  lines: Array<MemoryLine>;
+  lines: Array<HeldLine>;
   balances: Array<MemoryBalance>;
   imports: Array<MemoryImport>;
 };
@@ -57,7 +63,7 @@ export function memoryId(): string {
 const byOrder = (a: StoredLine, b: StoredLine) =>
   a.bookedOn.localeCompare(b.bookedOn) || a.id.localeCompare(b.id);
 
-const sum = (lines: ReadonlyArray<MemoryLine>) =>
+const sum = (lines: ReadonlyArray<HeldLine>) =>
   lines.reduce((total, line) => total + line.amountMinor, 0);
 
 /** An `AccountStore` holding each user's rows in memory, starting from `rows` (by owner). */
@@ -68,7 +74,11 @@ export function memoryAccountStore(rows: ReadonlyMap<string, MemoryRows> = new M
     for (const [owner, given] of rows) {
       owners.set(owner, {
         accounts: [...(given.accounts ?? [])],
-        lines: [...(given.lines ?? [])],
+        lines: (given.lines ?? []).map((line) => ({
+          ...line,
+          state: line.state ?? "counted",
+          expiresOn: line.expiresOn ?? null,
+        })),
         balances: [...(given.balances ?? [])],
         imports: [...(given.imports ?? [])],
       });
@@ -84,9 +94,7 @@ export function memoryAccountStore(rows: ReadonlyMap<string, MemoryRows> = new M
 
     const counted = (owner: string, accountId: string) =>
       of(owner)
-        .lines.filter(
-          (line) => line.accountId === accountId && (line.state ?? "counted") === "counted",
-        )
+        .lines.filter((line) => line.accountId === accountId && line.state === "counted")
         .sort(byOrder);
 
     const factsOf = (owner: string, account: AccountRecord, day: string): AccountFacts => {
@@ -197,6 +205,19 @@ export function memoryAccountStore(rows: ReadonlyMap<string, MemoryRows> = new M
           return { inMinor, outMinor };
         }),
 
+      countedLines: (owner, accountId, day) =>
+        Effect.sync(() =>
+          counted(owner, accountId)
+            .filter((line) => line.bookedOn <= day)
+            .map(({ id, bookedOn, amountMinor, label, expiresOn }) => ({
+              id,
+              bookedOn,
+              amountMinor,
+              label,
+              expiresOn,
+            })),
+        ),
+
       create: (owner, decide) =>
         Effect.gen(function* () {
           const own = of(owner);
@@ -256,6 +277,23 @@ export function memoryAccountStore(rows: ReadonlyMap<string, MemoryRows> = new M
           own.balances.push({ ...noted, accountId, source: "noted" });
 
           return noted;
+        }),
+
+      setLineExpiry: (owner, lineId, decide) =>
+        Effect.gen(function* () {
+          const own = of(owner);
+          const found = own.lines.find((line) => line.id === lineId);
+          const account = found === undefined ? undefined : find(owner, found.accountId);
+
+          if (found === undefined || account === undefined) {
+            return yield* new LineNotFound({ lineId });
+          }
+
+          const expiresOn = yield* Effect.fromResult(decide({ ...found, account }));
+
+          own.lines = own.lines.map((line) => (line.id === lineId ? { ...line, expiresOn } : line));
+
+          return { lineId, accountId: account.id, expiresOn };
         }),
     };
   });

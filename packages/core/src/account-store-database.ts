@@ -10,11 +10,13 @@ import type {
   AccountFacts,
   AccountRecord,
   EditFacts,
+  LineExpiry,
+  LineFacts,
   NewAccount,
   StatementBalanceAt,
 } from "./account-store";
 import type { DayBalance } from "./balances";
-import { AccountNotFound, BalanceAlreadyNoted } from "./errors";
+import { AccountNotFound, BalanceAlreadyNoted, LineNotFound } from "./errors";
 
 // The accounts in the database, through `UserData` only (docs/data-model.md, "Ownership and
 // isolation"): each call is one transaction of the user's, which row-level security keeps to their
@@ -34,6 +36,7 @@ const record = (row: AccountRow): AccountRecord => ({
   openedOn: row.openedOn,
   closedOn: row.closedOn,
   settlesIntoAccountId: row.settlesIntoAccountId,
+  creditOrder: row.creditOrder,
 });
 
 /** A uuid, as the database writes them: anything else names no row, and would fail the query. */
@@ -218,6 +221,7 @@ export const DatabaseAccountStore = Layer.effect(
               label: statementLine.label,
               memo: statementLine.memo,
               counterpartyName: statementLine.counterpartyName,
+              expiresOn: statementLine.expiresOn,
             })
             .from(statementLine)
             .where(and(counted(accountId), lte(statementLine.bookedOn, day), older))
@@ -287,6 +291,25 @@ export const DatabaseAccountStore = Layer.effect(
             );
 
           return { inMinor: row?.inMinor ?? 0, outMinor: row?.outMinor ?? 0 };
+        }),
+
+      countedLines: (owner, accountId, day) =>
+        userData.transaction(owner, async (transaction) => {
+          if (!isId(accountId)) {
+            return [];
+          }
+
+          return transaction
+            .select({
+              id: statementLine.id,
+              bookedOn: statementLine.bookedOn,
+              amountMinor: statementLine.amountMinor,
+              label: statementLine.label,
+              expiresOn: statementLine.expiresOn,
+            })
+            .from(statementLine)
+            .where(and(counted(accountId), lte(statementLine.bookedOn, day)))
+            .orderBy(asc(statementLine.bookedOn), asc(statementLine.id));
         }),
 
       create: <E>(
@@ -408,6 +431,61 @@ export const DatabaseAccountStore = Layer.effect(
             },
           )
           // Two calls noting the same day at once: the unique index refuses the second (23505).
+          .pipe(Effect.flatMap(Effect.fromResult)),
+
+      setLineExpiry: <E>(
+        owner: string,
+        lineId: string,
+        decide: (line: LineFacts) => Result.Result<string | null, E>,
+      ) =>
+        userData
+          .transaction(
+            owner,
+            async (transaction): Promise<Result.Result<LineExpiry, E | LineNotFound>> => {
+              if (!isId(lineId)) {
+                return Result.fail(new LineNotFound({ lineId }));
+              }
+
+              // Row-level security keeps another user's line out: as good as unknown. The line is
+              // locked until the write, so that a concurrent change of it waits.
+              const [found] = await transaction
+                .select({
+                  id: statementLine.id,
+                  bookedOn: statementLine.bookedOn,
+                  amountMinor: statementLine.amountMinor,
+                  state: statementLine.state,
+                  expiresOn: statementLine.expiresOn,
+                  account,
+                })
+                .from(statementLine)
+                .innerJoin(account, eq(account.id, statementLine.accountId))
+                .where(eq(statementLine.id, lineId))
+                .for("update", { of: statementLine });
+
+              if (found === undefined) {
+                return Result.fail(new LineNotFound({ lineId }));
+              }
+
+              const decided = decide({ ...found, account: record(found.account) });
+
+              if (Result.isFailure(decided)) {
+                return Result.fail(decided.failure);
+              }
+
+              const [changed] = await transaction
+                .update(statementLine)
+                .set({ expiresOn: decided.success })
+                .where(eq(statementLine.id, lineId))
+                .returning({
+                  accountId: statementLine.accountId,
+                  expiresOn: statementLine.expiresOn,
+                });
+
+              return changed === undefined
+                ? Result.fail(new LineNotFound({ lineId }))
+                : Result.succeed({ lineId, ...changed });
+            },
+          )
           .pipe(Effect.flatMap(Effect.fromResult)),
     };
   }),

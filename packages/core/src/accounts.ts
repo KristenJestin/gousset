@@ -18,6 +18,7 @@ import type {
   AccountInput,
   AccountKind,
   AccountMode,
+  CreditOrder,
 } from "./account-values";
 import {
   addDays,
@@ -29,6 +30,7 @@ import {
   groupAccounts,
 } from "./balances";
 import type { DayBalance } from "./balances";
+import { creditsLeft, expiringOf } from "./credits";
 import {
   AccountAlreadyClosed,
   AccountKeptByLines,
@@ -38,6 +40,8 @@ import {
   AccountNotFound,
   CurrencyLocked,
   DayRangeRefused,
+  ExpiryBeforeCredit,
+  NotACredit,
   SettlementRefused,
 } from "./errors";
 import type { Money } from "./month";
@@ -94,6 +98,32 @@ export type AccountLine = {
   readonly amount: Money;
   /** Null for an account kept by its balance, whose noted balances are what it holds. */
   readonly balanceAfter: Money | null;
+  /** A credit of a benefit account: the day it expires. */
+  readonly expiresOn: string | null;
+};
+
+/** A credit of a benefit account with something left on it. */
+export type AccountCredit = {
+  /** Null for the opening balance, the oldest credit, which is no line. */
+  readonly lineId: string | null;
+  /** Null for the opening balance. */
+  readonly creditedOn: string | null;
+  /** Null for the opening balance. */
+  readonly label: string | null;
+  readonly amount: Money;
+  readonly left: Money;
+  readonly expiresOn: string | null;
+};
+
+/** What is left of a benefit account's credits, computed on read in its order of use. */
+export type AccountCredits = {
+  readonly order: CreditOrder;
+  /** The credits with something left, in order of use: the first is the next one used. */
+  readonly open: ReadonlyArray<AccountCredit>;
+  /** What is left on the credits with an expiry, summed by expiry day, soonest first. */
+  readonly expiring: ReadonlyArray<{ readonly day: string; readonly amount: Money }>;
+  /** What the outgoing lines took beyond every credit before them, until a later credit covers it. */
+  readonly uncovered: Money;
 };
 
 /** The account's balance against one statement balance, at the end of its day. */
@@ -118,6 +148,8 @@ export type AccountDetail = {
     readonly envelope: AccountEnvelope | null;
     readonly openingBalance: Money;
     readonly openedOn: string | null;
+    /** In which order a benefit account's credits are used; read for a benefit account only. */
+    readonly creditOrder: CreditOrder;
     /** A card's current account. */
     readonly settlesInto: { readonly id: string; readonly name: string } | null;
   };
@@ -139,6 +171,8 @@ export type AccountDetail = {
   };
   /** Null when no statement gave a balance. */
   readonly check: StatementCheck | null;
+  /** Null unless the account is a benefit account kept by its lines. */
+  readonly credits: AccountCredits | null;
 };
 
 /** What an account's page reads beyond its settings. */
@@ -181,6 +215,42 @@ function summaryOf(facts: AccountFacts, day: string): AccountSummary {
     closedOn: account.closedOn,
   };
 }
+
+/** A benefit account's credits as of `day`, replayed from its counted lines up to then. */
+const creditsOf = (owner: string, account: AccountRecord, day: string) =>
+  Effect.gen(function* () {
+    const store = yield* AccountStore;
+    const lines = yield* store.countedLines(owner, account.id, day);
+
+    const { credits, uncoveredMinor } = creditsLeft(
+      account.openingBalanceMinor,
+      lines,
+      account.creditOrder,
+    );
+
+    const open = credits
+      .filter((credit) => credit.leftMinor > 0)
+      .map((credit): AccountCredit => ({
+        lineId: credit.lineId,
+        creditedOn: credit.creditedOn,
+        label: credit.label,
+        amount: money(credit.amountMinor, account.currency),
+        left: money(credit.leftMinor, account.currency),
+        expiresOn: credit.expiresOn,
+      }));
+
+    const detail: AccountCredits = {
+      order: account.creditOrder,
+      open,
+      expiring: expiringOf(credits).map(({ day: expiresOn, minor }) => ({
+        day: expiresOn,
+        amount: money(minor, account.currency),
+      })),
+      uncovered: money(uncoveredMinor, account.currency),
+    };
+
+    return detail;
+  });
 
 const readFacts = (owner: string) =>
   Effect.gen(function* () {
@@ -270,11 +340,15 @@ export const showAccount = (owner: string, accountId: string, view: AccountView 
     const settlesInto = facts.find((each) => each.account.id === account.settlesIntoAccountId);
     const last = page.lines.at(-1);
 
+    const credits =
+      account.kind === "benefit" && byLines ? yield* creditsOf(owner, account, day) : null;
+
     const detail: AccountDetail = {
       account: {
         ...summaryOf(found, day),
         envelope: account.envelope,
         openingBalance: money(account.openingBalanceMinor, account.currency),
+        creditOrder: account.creditOrder,
         openedOn: account.openedOn,
         settlesInto:
           settlesInto === undefined
@@ -294,6 +368,7 @@ export const showAccount = (owner: string, accountId: string, view: AccountView 
         counterpartyName: line.counterpartyName,
         amount: money(line.amountMinor, account.currency),
         balanceAfter: byLines ? money(after[index] ?? 0, account.currency) : null,
+        expiresOn: line.expiresOn,
       })),
       olderBefore: page.more && last !== undefined ? last.id : null,
       daily: {
@@ -307,6 +382,7 @@ export const showAccount = (owner: string, accountId: string, view: AccountView 
         ),
       },
       check: checkOf(found),
+      credits,
     };
 
     return detail;
@@ -395,7 +471,11 @@ function settlement(
 }
 
 /** The settings an input sets, the choice stored as its kind and envelope. */
-function settingsOf(input: AccountInput, settlesIntoAccountId: string | null) {
+function settingsOf(
+  input: AccountInput,
+  settlesIntoAccountId: string | null,
+  creditOrder: CreditOrder,
+) {
   const { kind, envelope } = storedAs(input.choice);
 
   return {
@@ -409,11 +489,13 @@ function settingsOf(input: AccountInput, settlesIntoAccountId: string | null) {
     openingBalanceMinor: input.openingBalanceMinor,
     openedOn: input.openedOn ?? null,
     settlesIntoAccountId,
+    creditOrder: input.creditOrder ?? creditOrder,
   };
 }
 
 /**
- * Creates an account. Fails with `SettlementRefused` when a card does not name one of the user's
+ * Creates an account; a benefit account's credits are used oldest first unless the input says
+ * otherwise. Fails with `SettlementRefused` when a card does not name one of the user's
  * open current accounts, or another kind names one.
  */
 export const createAccount = (owner: string, input: AccountInput) =>
@@ -422,14 +504,15 @@ export const createAccount = (owner: string, input: AccountInput) =>
 
     return yield* store.create(owner, (accounts) =>
       Result.map(settlement(input, accounts, undefined), (settlesInto): NewAccount => ({
-        ...settingsOf(input, settlesInto),
+        ...settingsOf(input, settlesInto, "oldest_first"),
         closedOn: null,
       })),
     );
   });
 
 /**
- * Changes an account's settings, all at once, as the edit form sends them. Fails with
+ * Changes an account's settings, all at once, as the edit form sends them; a credit order left
+ * out stays as it is. Fails with
  * `AccountNotFound`, `CurrencyLocked` (a new currency once the account has a line or a balance)
  * or `SettlementRefused`.
  */
@@ -450,7 +533,7 @@ export const editAccount = (owner: string, accountId: string, input: AccountInpu
         }
 
         return Result.map(settlement(input, accounts, accountId), (settlesInto): AccountChange =>
-          settingsOf(input, settlesInto),
+          settingsOf(input, settlesInto, account.creditOrder),
         );
       },
     );
@@ -495,5 +578,34 @@ export const noteBalance = (owner: string, accountId: string, day: string, balan
       account.mode === "balance"
         ? Result.succeed({ day, minor: balanceMinor })
         : Result.fail(new AccountKeptByLines({ accountId })),
+    );
+  });
+
+/**
+ * Sets the day a credit of a benefit account expires, or takes it away with `null`. Fails with
+ * `LineNotFound` (no line of the user's), `NotACredit` (not a counted positive line of a benefit
+ * account) or `ExpiryBeforeCredit` (a day before the one credited). It moves no money: what
+ * expires leaves the balance when a line says so (docs/data-model.md, "Accounts").
+ */
+export const setCreditExpiry = (owner: string, lineId: string, expiresOn: string | null) =>
+  Effect.gen(function* () {
+    const store = yield* AccountStore;
+
+    return yield* store.setLineExpiry(
+      owner,
+      lineId,
+      (line): Result.Result<string | null, NotACredit | ExpiryBeforeCredit> => {
+        if (line.account.kind !== "benefit" || line.state !== "counted" || line.amountMinor <= 0) {
+          return Result.fail(new NotACredit({ lineId }));
+        }
+
+        if (expiresOn !== null && expiresOn < line.bookedOn) {
+          return Result.fail(
+            new ExpiryBeforeCredit({ lineId, creditedOn: line.bookedOn, expiresOn }),
+          );
+        }
+
+        return Result.succeed(expiresOn);
+      },
     );
   });

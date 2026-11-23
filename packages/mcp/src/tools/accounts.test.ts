@@ -37,11 +37,18 @@ function account(name: string, change: Partial<AccountRecord> = {}): AccountReco
     openedOn: null,
     closedOn: null,
     settlesIntoAccountId: null,
+    creditOrder: "oldest_first",
     ...change,
   };
 }
 
-function line(accountId: string, bookedOn: string, amountMinor: number, label: string): MemoryLine {
+function line(
+  accountId: string,
+  bookedOn: string,
+  amountMinor: number,
+  label: string,
+  expiresOn: string | null = null,
+): MemoryLine {
   return {
     id: memoryId(),
     accountId,
@@ -51,6 +58,7 @@ function line(accountId: string, bookedOn: string, amountMinor: number, label: s
     label,
     memo: null,
     counterpartyName: null,
+    expiresOn,
   };
 }
 
@@ -391,7 +399,121 @@ describe("accounts show", () => {
   });
 });
 
+describe("accounts show, a benefit account", () => {
+  const card = account("MealCard", { kind: "benefit", institution: "MealCard" });
+
+  const credits = [
+    line(card.id, "2026-01-05", 10_000, "MEALCARD CREDIT JANUARY", "2026-10-31"),
+    line(card.id, "2026-02-05", 10_000, "MEALCARD CREDIT FEBRUARY", "2026-12-31"),
+    line(card.id, "2026-03-05", 5000, "WORKS COUNCIL GIFT"),
+    line(card.id, "2026-02-10", -2500, "CB GREENMARKET"),
+  ];
+
+  const rows: MemoryRows = { accounts: [card], lines: credits };
+
+  test("says its money is restricted, the order of use, what expires when and the credits left", async () => {
+    const { text, isError } = await accounts({ action: "show", name: "MealCard" }, rows);
+
+    expect(isError).toBe(false);
+    expect(text).toContain(
+      "Benefit account: its money is restricted, not counted in the money available.",
+    );
+    expect(text).toContain("Credits are used oldest first.");
+    expect(text).toContain("What expires when:");
+    expect(text).toContain(
+      "- 2026-10-31: 75.00 EUR expired on that day; it still counts until a line takes it out.",
+    );
+    expect(text).toContain("- 2026-12-31: 100.00 EUR expires.");
+    expect(text).toContain("Credits left, in order of use:");
+
+    const january = text.indexOf(
+      "- credited on 2026-01-05, MEALCARD CREDIT JANUARY: 75.00 EUR left of 100.00 EUR, expired on 2026-10-31 and still counted.",
+    );
+
+    const gift = text.indexOf(
+      "- credited on 2026-03-05, WORKS COUNCIL GIFT: 50.00 EUR left of 50.00 EUR, no expiry.",
+    );
+
+    expect(january).toBeGreaterThan(0);
+    expect(gift).toBeGreaterThan(january);
+    // A credit line of the lines list says its expiry.
+    expect(text).toContain(
+      "- 2026-02-05: 100.00 EUR, balance 200.00 EUR, MEALCARD CREDIT FEBRUARY, expires on 2026-12-31",
+    );
+  });
+
+  test("follows the issuer's order, soonest expiry first", async () => {
+    const { text } = await accounts(
+      { action: "show", name: "MealCard" },
+      { ...rows, accounts: [{ ...card, creditOrder: "expiring_first" }] },
+    );
+
+    expect(text).toContain("Credits are used soonest expiry first, as the issuer does.");
+    expect(text).toContain("- 2026-10-31: 75.00 EUR expired on that day");
+  });
+
+  test("names the opening balance as a credit", async () => {
+    const { text } = await accounts(
+      { action: "show", name: "MealCard" },
+      { accounts: [{ ...card, openingBalanceMinor: 4000 }] },
+    );
+
+    expect(text).toContain("- the opening balance: 40.00 EUR left of 40.00 EUR, no expiry.");
+    expect(text).toContain("What expires when: no credit left has an expiry.");
+  });
+
+  test("lists at most 30 credits, then how many more and what they hold", async () => {
+    const many = Array.from({ length: 45 }, (_, index) =>
+      line(
+        card.id,
+        `2026-0${1 + Math.floor(index / 9)}-1${index % 9}`,
+        1000,
+        `CREDIT ${index + 1}`,
+      ),
+    );
+
+    const { text, isError } = await accounts(
+      { action: "show", name: "MealCard" },
+      { accounts: [card], lines: many },
+    );
+
+    expect(isError).toBe(false);
+    expect(text).toContain("CREDIT 30:");
+    expect(text).not.toContain("CREDIT 31:");
+    expect(text).toContain(
+      'and 15 more credits, used after these, 150.00 EUR left in all; "What expires when" counts them all.',
+    );
+  });
+
+  test("kept by its balance, says its balance is restricted and its credits not followed", async () => {
+    const { text, isError } = await accounts(
+      { action: "show", name: "Gift card" },
+      { accounts: [account("Gift card", { kind: "benefit", mode: "balance" })] },
+    );
+
+    expect(isError).toBe(false);
+    expect(text).toContain(
+      "Benefit account kept by its balance: its balance is restricted, not counted in the money available. Credits and their expiries are not followed in balance mode.",
+    );
+    expect(text).not.toContain("What expires when");
+  });
+
+  test("another kind of account says nothing of credits", async () => {
+    const { text } = await accounts({ action: "show", name: "Current account" });
+
+    expect(text).not.toContain("Benefit account");
+    expect(text).not.toContain("Credits");
+  });
+});
+
 describe("the accounts tool", () => {
+  test("tells an agent that show answers what expires when", async () => {
+    const { tools } = await (await client()).listTools();
+    const tool = tools.find((each) => each.name === "accounts");
+
+    expect(tool?.description).toContain("what expires when on my meal vouchers?");
+  });
+
   test("only reads, and says so", async () => {
     const { tools } = await (await client()).listTools();
     const tool = tools.find((each) => each.name === "accounts");

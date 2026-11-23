@@ -39,6 +39,7 @@ const NEW_ACCOUNT: AccountFormValues = {
   openingBalanceMinor: 0,
   openedOn: null,
   settlesIntoAccountId: null,
+  creditOrder: "oldest_first",
 };
 
 function AccountsPage() {
