@@ -133,9 +133,12 @@ and 64 KiB past them: a header further down is none, so that trying every profil
 costs what its top costs. `matchCsvHeader(file, candidates)` gives the first of the candidates (a
 definition and its header) whose header the file has, each read with its own profile;
 `testReadCsv(file, profile, currency)` reads the file's first 50 lines as `readCsv` would, and
-succeeds when the profile fits them (with no currency, amounts are read with up to four decimals
-and the lines' currency goes unchecked, though the header must still have its column): how a
-profile without a header is tried on a file.
+succeeds with them when the profile fits them (with no currency, amounts are read with up to four
+decimals, in `CLF`, and the lines' currency goes unchecked, though the header must still have its
+column): how a profile without a header is tried on a file, and the import screen's test read.
+`previewCsvRows(file, profile)` gives the file's first six rows as the profile splits them (its
+encoding, separator and lines skipped), each value as written: the preview where the user maps
+each column.
 
 **Shipped profiles** (`SHIPPED_PROFILES`, `src/csv-shipped.ts`): common styles of bank export, each
 with a stable `key` (what `import.shipped_profile` keeps), an English name, the kind `statement`,
