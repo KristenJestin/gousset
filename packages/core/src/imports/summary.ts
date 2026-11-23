@@ -39,6 +39,11 @@ export type ImportSummary = {
   readonly linesAdded: number;
   readonly linesDuplicate: number;
   readonly linesHeld: number;
+  /**
+   * The file stated a balance of zero that the account's lines contradict on its day: it looked
+   * empty and was not recorded, so the account is not checked against it (#130).
+   */
+  readonly balanceIgnored: boolean;
   /** Why it failed, as a code: a reader's error (`MalformedFile`), `CURRENCY_MISMATCH`… */
   readonly errorCode: string | null;
   /** The job that runs it, for the screen to follow. */

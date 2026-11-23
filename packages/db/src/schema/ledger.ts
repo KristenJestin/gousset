@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import {
   bigint,
+  boolean,
   bytea,
   check,
   date,
@@ -203,6 +204,9 @@ export const statementImport = pgTable.withRLS(
     linesAdded: integer("lines_added").default(0).notNull(),
     linesDuplicate: integer("lines_duplicate").default(0).notNull(),
     linesHeld: integer("lines_held").default(0).notNull(),
+    // The file stated a balance of zero that the account's lines contradict on its day: it looked
+    // empty and was not recorded (#130).
+    balanceIgnored: boolean("balance_ignored").default(false).notNull(),
     // Why it failed, as a code; never the file's content.
     errorCode: text("error_code"),
     // The pg-boss job that runs it, so that the import screen follows it again after a reload. No
