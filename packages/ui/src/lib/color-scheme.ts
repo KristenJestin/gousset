@@ -1,14 +1,29 @@
 import { createColorScheme, createLocalStorage } from "@ui-sdk/core";
+import type { ColorSchemeValue } from "@ui-sdk/core";
+
+/** Where this browser keeps the choice: the one used before anyone signs in. */
+const STORAGE_KEY = "gousset-color-scheme";
 
 /**
  * The colour scheme: "system" by default, "light" or "dark" by choice. ui-sdk keeps the choice
  * and puts it on `<html data-color-scheme>`, which `globals.css` maps to `color-scheme`; the
- * choice is saved in this browser and applied before the first paint.
+ * choice is saved in this browser and applied before the first paint. Signed in, the account's
+ * choice takes its place (`ThemeProvider`'s `accountScheme`).
  */
 export const colorScheme = createColorScheme({
-  storage: createLocalStorage("gousset-color-scheme"),
+  storage: createLocalStorage(STORAGE_KEY),
   global: true,
 });
+
+/**
+ * The inline script that puts the account's choice in this browser's place, rendered by the
+ * server just before ui-sdk's own, which then paints it from the start: another user's choice
+ * left in this browser never shows, not even for a frame. The value is one of the three choices;
+ * JSON quotes it.
+ */
+export function accountSchemeScript(scheme: ColorSchemeValue): string {
+  return `try{localStorage.setItem(${JSON.stringify(STORAGE_KEY)},${JSON.stringify(scheme)})}catch(e){}`;
+}
 
 /**
  * Keeps `.dark` on `root` while the scheme shows dark, so code that looks for the class (Bklit's

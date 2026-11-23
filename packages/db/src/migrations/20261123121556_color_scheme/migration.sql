@@ -1,0 +1,1 @@
+ALTER TABLE "auth_user" ADD COLUMN "color_scheme" text DEFAULT 'system' NOT NULL;

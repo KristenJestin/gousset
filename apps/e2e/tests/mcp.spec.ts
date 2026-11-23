@@ -493,7 +493,11 @@ test("a failure in the settings is said, and the client stays listed", async ({
   await userPage.context().clearCookies();
   await userPage.getByRole("button", { name: "Revoke Gousset end-to-end tests" }).click();
 
-  await expect(userPage.getByText("Your session has ended: sign in again.")).toBeVisible();
+  const error = userPage.getByText("Your session has ended: sign in again.");
+
+  await expect(error).toBeVisible();
+  // Faded in: axe measures its contrast at the end of the test.
+  await expect(error).toHaveCSS("opacity", "1");
   await expect(userPage.getByRole("list", { name: "Connected clients" })).toContainText(
     "Gousset end-to-end tests",
   );

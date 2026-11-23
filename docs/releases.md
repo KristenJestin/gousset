@@ -45,8 +45,9 @@ tools/check-image.sh local
 `tools/check-image.sh <tag>` installs that image with `docker-compose.yml` on a fresh project and
 volume, with secrets made for the run (the database password holds `/ # ? @ : % + = &` and a
 space), checks that `migrate` succeeded, that `/health` answers 200 and that the app serves its
-page, then that the image is not healthy without `BETTER_AUTH_SECRET`, nor with a wrong database
-password; it removes everything it started, whatever happened. The beta workflow runs it on every
+page (`tools/check-page.sh`: without a session nor an administrator yet, `/` redirects to `/setup`,
+which answers Gousset's page), then that the image is not healthy without `BETTER_AUTH_SECRET`,
+nor with a wrong database password; it removes everything it started, whatever happened. The beta workflow runs it on every
 beta before publishing it.
 
 ## Installing
