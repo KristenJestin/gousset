@@ -1,6 +1,6 @@
 import { createAuth } from "@gousset/auth";
-import { FixtureLedger, Today, importsLayer } from "@gousset/core";
-import type { Imports, Ledger } from "@gousset/core";
+import { FixtureLedger, Today, dataExportLayer, importsLayer } from "@gousset/core";
+import type { DataExport, Imports, Ledger } from "@gousset/core";
 import { getCookie } from "@tanstack/react-start/server";
 import { Effect, Layer, ManagedRuntime } from "effect";
 
@@ -21,11 +21,12 @@ const core = ManagedRuntime.make(
   Layer.mergeAll(
     FixtureLedger,
     importsLayer.pipe(Layer.provide(Layer.mergeAll(userData, importJobs))),
+    dataExportLayer.pipe(Layer.provide(userData)),
   ),
 );
 
-/** What core logic may need: the made-up ledger (v0.1) and the imports (#20). */
-export type CoreServices = Ledger | Imports;
+/** What core logic may need: the made-up ledger (v0.1), the imports (#20) and the export (#22). */
+export type CoreServices = Ledger | Imports | DataExport;
 
 /**
  * Runs core logic for the current request. Core reads today from the server's own `today`, which

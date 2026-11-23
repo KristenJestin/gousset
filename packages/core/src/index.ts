@@ -75,3 +75,15 @@ export type { ImportFormat, ImportStatus, ImportStep, ImportSummary } from "./im
 export { ImportJobInput, markFailed, runImport } from "./imports/run";
 
 export type { ImportProgress, ImportRun } from "./imports/run";
+
+export { DataExport, dataExportLayer } from "./export/export";
+
+export type { ExportContents } from "./export/export";
+
+export { EXPORT_FORMAT, EXPORT_VERSION, MANIFEST } from "./export/archive";
+
+export type { ExportArchive } from "./export/archive";
+
+export { EXPORT_TABLES, IMPORT_FILES_FOLDER } from "./export/tables";
+
+export type { ExportTable } from "./export/tables";

@@ -1,4 +1,5 @@
 import {
+  DataExport,
   FixtureLedger,
   Imports,
   Ledger,
@@ -24,7 +25,10 @@ import type { Runner } from "../tool";
 const TODAY = "2026-11-22";
 
 /** A ledger, the made-up one by default, on a fixed day, as the app's runtime provides it. */
-function onDay(day: string, ledger: Layer.Layer<Ledger> = FixtureLedger): Runner<Ledger | Imports> {
+function onDay(
+  day: string,
+  ledger: Layer.Layer<Ledger> = FixtureLedger,
+): Runner<Ledger | Imports | DataExport> {
   return (effect) =>
     Effect.runPromiseExit(
       Effect.gen(function* () {
@@ -32,8 +36,15 @@ function onDay(day: string, ledger: Layer.Layer<Ledger> = FixtureLedger): Runner
 
         return yield* effect;
       }).pipe(
-        // month never reaches the imports.
-        Effect.provide(Layer.mergeAll(ledger, Layer.mock(Imports, {}), TestClock.layer())),
+        // month never reaches the imports nor the export.
+        Effect.provide(
+          Layer.mergeAll(
+            ledger,
+            Layer.mock(Imports, {}),
+            Layer.mock(DataExport, {}),
+            TestClock.layer(),
+          ),
+        ),
       ),
     );
 }

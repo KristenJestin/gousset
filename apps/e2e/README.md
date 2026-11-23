@@ -77,6 +77,9 @@ Import `test` and `expect` from `src/test.ts`, never from `@playwright/test`.
 | `slowServerFunctions(page, ms)`    | Holds the browser's server function calls, for loading and skeleton scenarios.                                                                                           |
 | `connectMcp({ baseURL, page, … })` | The official MCP client through the real OAuth flow. Not run yet: `/mcp` comes with #39.                                                                                 |
 | `openUserData(app.database)`       | A worker's database through `UserData`, as a user's transaction sees it; `seed` writes the made-up data, `attempt` tries a write and rolls it back (`src/user-data.ts`). |
+| `startApp(slot, database, log)`    | Another app, on a database already prepared (a backup restored into it); stopping it drops the database.                                                                 |
+| `downloadExport`, `readArchive`    | A user's export downloaded from `/api/export`, and its archive unzipped: its files, its manifest, a table's rows (`src/export.ts`).                                      |
+| `dumpDatabase`, `restoreDatabase`  | `pg_dump` and `pg_restore` as the administrator's documentation runs them, from the `postgres:18` image (Docker): their version is the server's (`src/export.ts`).       |
 | `app.restart()`                    | Stops the worker's app as `docker stop` does (SIGTERM) and starts it again on its port and database.                                                                     |
 
 ## Background jobs

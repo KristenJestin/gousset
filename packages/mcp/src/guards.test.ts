@@ -1,4 +1,4 @@
-import { FixtureLedger, Imports } from "@gousset/core";
+import { DataExport, FixtureLedger, Imports } from "@gousset/core";
 import { Effect, Layer } from "effect";
 import { describe, expect, test } from "vite-plus/test";
 
@@ -18,10 +18,13 @@ async function listing() {
   const client = await connectInProcess(
     goussetServer,
     {
-      // Listing calls no tool: the imports are never reached.
+      // Listing calls no tool: the imports and the export are never reached.
       run: (effect) =>
         Effect.runPromiseExit(
-          Effect.provide(effect, Layer.merge(FixtureLedger, Layer.mock(Imports, {}))),
+          Effect.provide(
+            effect,
+            Layer.mergeAll(FixtureLedger, Layer.mock(Imports, {}), Layer.mock(DataExport, {})),
+          ),
         ),
     },
     reader,

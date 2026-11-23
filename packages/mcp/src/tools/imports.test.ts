@@ -1,4 +1,5 @@
 import {
+  DataExport,
   EmptyFile,
   FileTooLarge,
   FixtureLedger,
@@ -137,7 +138,12 @@ function importsOf(state: Fake) {
 /** The app's runtime for these tests: the made-up ledger, and the fake imports. */
 function runnerOf(state: Fake): Runner<GoussetServices> {
   return (effect) =>
-    Effect.runPromiseExit(Effect.provide(effect, Layer.merge(FixtureLedger, importsOf(state))));
+    Effect.runPromiseExit(
+      Effect.provide(
+        effect,
+        Layer.mergeAll(FixtureLedger, importsOf(state), Layer.mock(DataExport, {})),
+      ),
+    );
 }
 
 /** The same, on a test clock moved 40 seconds on: an upload that waits gives up meanwhile. */
@@ -152,7 +158,16 @@ function runnerWithTime(state: Fake): Runner<GoussetServices> {
         }
 
         return yield* Fiber.join(fiber);
-      }).pipe(Effect.provide(Layer.mergeAll(FixtureLedger, importsOf(state), TestClock.layer()))),
+      }).pipe(
+        Effect.provide(
+          Layer.mergeAll(
+            FixtureLedger,
+            importsOf(state),
+            Layer.mock(DataExport, {}),
+            TestClock.layer(),
+          ),
+        ),
+      ),
     );
 }
 
