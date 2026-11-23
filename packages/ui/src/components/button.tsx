@@ -2,6 +2,7 @@ import { Button as ButtonPart } from "@ui-sdk/react/button";
 import type { ButtonActionDetails } from "@ui-sdk/react/button";
 import type { MouseEvent, ReactNode } from "react";
 
+import { useHydrated } from "../hooks/use-hydrated";
 import { useUnhurried } from "../hooks/use-unhurried";
 import { buttonClasses } from "../lib/button-classes";
 import type { ButtonSize, ButtonVariant } from "../lib/button-classes";
@@ -45,6 +46,10 @@ export type ButtonProps = {
 /**
  * A button on ui-sdk's `Button`: native `<button>`, `type="button"` unless told otherwise.
  *
+ * A submit button stays disabled until the page hydrates: before, the browser alone would send
+ * its form to the page's own address, the fields (a password too) in the query, and draw the page
+ * again with the form empty.
+ *
  * Motion: colours change in 150 ms on hover, it presses in slightly (scale 0.97) and back; cut
  * under reduced motion.
  */
@@ -56,12 +61,16 @@ export function Button({
   loading = false,
   loadingLabel,
   disabled = false,
+  type,
   ...props
 }: ButtonProps) {
+  const hydrated = useHydrated();
+
   return (
     <ButtonPart
       {...props}
-      disabled={disabled || loading}
+      type={type}
+      disabled={disabled || loading || (type === "submit" && !hydrated)}
       focusableWhenDisabled={loading}
       aria-busy={loading || undefined}
       className={buttonClasses(variant, size)}
