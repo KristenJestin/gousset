@@ -15,6 +15,7 @@ const line = (
 ): PairableLine => ({
   id,
   accountId,
+  accountKind: "current",
   currency: "EUR",
   bookedOn,
   valueOn: null,
@@ -116,6 +117,62 @@ describe("clear pairs", () => {
         }
       }),
     );
+  });
+});
+
+/** A line on a savings account of its own. */
+const savings = (id: string, bookedOn: string, amountMinor: number) =>
+  line(id, `savings-${id}`, bookedOn, amountMinor, { accountKind: "savings" });
+
+describe("a savings account dates by the fortnight", () => {
+  test("an outflow on a fortnight's first day and the inflow at the next boundary pair", () => {
+    const out = line("out", "current", "2026-10-01", -30_000);
+    const into = savings("in", "2026-10-16", 30_000);
+
+    expect(isCandidate(out, into)).toBe(true);
+    expect(clearPairs([out, into], [out, into])).toEqual([{ outLineId: "out", inLineId: "in" }]);
+  });
+
+  test("the same gap between two current accounts does not", () => {
+    const out = line("out", "current", "2026-10-01", -30_000);
+    const into = line("in", "other-current", "2026-10-16", 30_000);
+
+    expect(isCandidate(out, into)).toBe(false);
+    expect(clearPairs([out, into], [out, into])).toEqual([]);
+  });
+
+  test("two candidates in a fortnight go to review", () => {
+    const out = line("out", "current", "2026-10-01", -30_000);
+    const pool = [out, savings("in", "2026-10-16", 30_000), savings("in-2", "2026-10-09", 30_000)];
+
+    expect(clearPairs(pool, pool)).toEqual([]);
+  });
+
+  test("the window ends a few days after the next boundary, whichever side comes first", () => {
+    const out = line("out", "current", "2026-10-01", -30_000);
+
+    expect(isCandidate(out, savings("in", "2026-10-20", 30_000))).toBe(true);
+    expect(isCandidate(out, savings("in", "2026-10-21", 30_000))).toBe(false);
+
+    // From the 16th, the next fortnight starts on the 1st of the next month.
+    const late = line("late", "current", "2026-10-16", -30_000);
+
+    expect(isCandidate(late, savings("in", "2026-11-05", 30_000))).toBe(true);
+    expect(isCandidate(late, savings("in", "2026-11-06", 30_000))).toBe(false);
+
+    // Money out of the savings account, dated before the current account's line.
+    const withdrawn = savings("out", "2026-10-16", -30_000);
+
+    expect(isCandidate(withdrawn, line("in", "current", "2026-10-30", 30_000))).toBe(true);
+    expect(isCandidate(withdrawn, line("in", "current", "2026-11-06", 30_000))).toBe(false);
+  });
+
+  test("value dates count by the fortnight too", () => {
+    const out = line("out", "current", "2026-09-28", -30_000, { valueOn: "2026-10-01" });
+    const into = savings("in", "2026-10-19", 30_000);
+
+    expect(isCandidate(out, into)).toBe(false);
+    expect(isCandidate(out, { ...into, valueOn: "2026-10-16" })).toBe(true);
   });
 });
 

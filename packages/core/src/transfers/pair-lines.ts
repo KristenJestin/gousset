@@ -7,8 +7,8 @@ import type { SQL, SQLWrapper } from "drizzle-orm";
 import { dropEntriesOfTransferSides } from "../entries";
 import {
   CARD_DAYS,
+  LONGEST_TRANSFER_DAYS,
   REPLACE_DAYS,
-  TRANSFER_DAYS,
   candidateFinder,
   cardDebits,
   clearPairs,
@@ -21,7 +21,7 @@ import type { CardLedger, Pair, PairableLine } from "./pairing";
 // Every value goes in as a parameter; every row is the user's, through `UserData`.
 
 /** How many days around a line its candidates are looked for: value dates may be further apart. */
-export const POOL_DAYS = TRANSFER_DAYS + 14;
+export const POOL_DAYS = LONGEST_TRANSFER_DAYS + 14;
 
 /** A line that is no side of any transfer yet. */
 export const notPaired = sql`not exists (select 1 from ${transfer} where ${transfer.outLineId} = ${statementLine.id} or ${transfer.inLineId} = ${statementLine.id})`;
@@ -60,6 +60,7 @@ export function pairableLines(
     .select({
       id: statementLine.id,
       accountId: statementLine.accountId,
+      accountKind: account.kind,
       currency: account.currency,
       bookedOn: statementLine.bookedOn,
       valueOn: statementLine.valueOn,
@@ -128,6 +129,7 @@ function madeSides(transaction: UserTransaction, where: SQL | undefined) {
     .select({
       id: statementLine.id,
       accountId: statementLine.accountId,
+      accountKind: account.kind,
       currency: account.currency,
       bookedOn: statementLine.bookedOn,
       valueOn: statementLine.valueOn,
