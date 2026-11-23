@@ -6,7 +6,7 @@ whoever installs it. Two branches publish, each with a version that says where i
 | Branch | Image tags (example)           | Made by                                                    |
 | ------ | ------------------------------ | ---------------------------------------------------------- |
 | `dev`  | `0.1.3-beta.12`, `sha-<commit>`, `beta` | each push, once its `verify` passed (`beta.yml`)  |
-| `main` | `0.1.3`, `latest`, tag `v0.1.3` | the `Release` workflow, started by hand (`release.yml`)   |
+| `main` | `0.1.3`, `latest`, tag `v0.1.3` | a release pull request `dev → main`, then the `Release` workflow (`release.yml`) |
 
 The image is `ghcr.io/kristenjestin/gousset`. A published version is never replaced: a run again
 publishes only what is missing. `beta` and `latest` move; a version stays. `sha-<commit>` (the
@@ -163,6 +163,16 @@ Computed, never typed: `tools/version.sh stable|beta|base [--at <commit>]`, for 
 The first release is `0.0.1` unless a commit says otherwise: the one that closes milestone
 v0.1 carries `Release-As: 0.1.0`.
 
+### Versions per milestone
+
+- **`dev` carries the current minor**, `0.1` today: what is merged there is released as its patches,
+  `0.1.1`, `0.1.2`…, each one **a coherent batch**, released when what `dev` holds since the last
+  release makes sense together, not at each merge.
+- **`next/x.y` carries the next minor's milestone**, `next/0.2` today: its pull requests target it
+  (by squash, as into `dev`), and its CI runs every browser and width on each push, as `dev`'s
+  does. It has no beta and no release of its own: its versions come once it is in `dev`, where a
+  `Release-As: 0.2.0` footer moves the minor (above).
+
 ## Betas
 
 `.github/workflows/beta.yml` runs when the `ci` workflow (`ci.yml`) completes on a push to `dev`.
@@ -181,32 +191,59 @@ concurrency group, which would cancel a waiting run: every push gets its beta.
 
 Branches reach `dev` by squash. A release does not: **`main` moves forward to a commit of `dev`**
 (a fast-forward), and is then that very commit, with no squash and no merge commit of its own.
-`main` is always an ancestor of `dev`.
+`main` is always an ancestor of `dev`. None of GitHub's merge buttons can do that (a merge commit
+and a squash add a commit `dev` does not have; GitHub's rebase always writes new commits), so the
+`Release` workflow moves `main` itself.
 
-```sh
-gh workflow run release.yml --ref dev                     # dev's head
-gh workflow run release.yml --ref dev -f commit=<full SHA of dev>
-```
+1. **The release pull request `dev → main`** is opened (by the lead): it is the release's review,
+   its diff is what the release brings, and its checks run on its head, `dev`'s commit. Its
+   description says what the batch is; the release's notes are built from the merged pull
+   requests' `Note:` lines (below).
+2. **The maintainer says yes on it.** It is never merged with the button.
+3. **The `Release` workflow is started from `dev` with its number**, by the maintainer, or by the
+   lead once the maintainer said yes:
 
-(or "Run workflow" on its page, from `dev`). A release pull request `dev → main` may be opened for
-review; it is never merged with the button, and GitHub shows it merged once `main` is its head.
+   ```sh
+   gh workflow run release.yml --ref dev -f pull_request=<number>
+   ```
 
-- **What it checks first**, reading only: it runs from `dev`; the commit is a full SHA or `dev`,
-  and a commit of `dev`; `main`, when it exists, is its ancestor; something was committed since the
-  last release. Then, before writing anything, that `RELEASE_TOKEN` is set and that **the beta of
-  that commit was published** (`sha-<commit>`): a beta exists only once `verify` passed on its
-  push, so a release is never a commit no `verify` passed on, and is never built again. Any of these refused, nothing moves and the run fails,
-  saying why.
-- **Then**, in this order: `main` moves forward to the commit through GitHub's API with
-  `RELEASE_TOKEN`, not forced (GitHub refuses anything but a fast-forward; before the first
-  release, `main` is made there);
+   (or "Run workflow" on its page, from `dev`). It releases the pull request's head, and GitHub
+   shows the pull request merged once `main` is that commit. The first release alone, while
+   `main` does not exist and no pull request into it can be opened, is started with no number: it
+   releases `dev`'s head and makes `main` there.
+
+- **What it checks first**, reading only: it runs from `dev`; once `main` exists, a pull request is
+  given, it is of `dev` into `main` in this repository, open (or merged already, `main` at its head:
+  a run again), and its head is a commit of `dev` that `main` is an ancestor of; something was
+  committed since the last release. **Its checks passed**: the whole `ci` run of the commit's push
+  to `dev` (every job, the full matrix of `ui` and `e2e` included, where the beta needs only
+  `verify`), and the pull request's own `ci` and `pull-request` runs on that commit
+  (`react-doctor`, `privacy`, the commit messages); each workflow's last run counts, at its last
+  attempt, and one not finished is refused like one that failed. Then, before writing anything,
+  that **the beta of that commit was published** (`sha-<commit>`): a release is never built again.
+  Any of these refused, nothing moves and the run fails, saying why.
+- **Then**, in this order: `main` moves forward to the commit through GitHub's API, not forced
+  (GitHub refuses anything but a fast-forward; before the first release, `main` is made there);
   the beta image is published again, unchanged, as `X.Y.Z` and `latest`; last, the GitHub release
-  `vX.Y.Z`, marked latest, which makes the tag on that commit. Run again after a failure, it does
-  what is left: the tag comes last, so the version is still the same. A version already published
-  as another commit's image is refused, never replaced: a run again with `commit=dev` after `dev`
-  moved on fails there, and is started again with the SHA of the commit first released.
-- The job that holds the tokens writing `main`, the tags and the images runs no code of any
-  branch: no checkout, only `gh` and `docker` on what the reading job decided.
+  `vX.Y.Z`, marked latest, which makes the tag on that commit. Run again after a failure (its
+  failed job again, or a new run with the same pull request), it does what is left: the tag comes
+  last, so the version is still the same. A version already published as another commit's image
+  is refused, never replaced.
+- **A commit pushed to `dev` while the pull request is open becomes its head**, and is what a run
+  releases: the pull request is read when the run starts, and the maintainer's yes is for the
+  batch it shows then.
+- **Everything is written with the workflow's own token** (`contents: write` for `main`, the
+  release and its tag, `packages: write` for the images): no secret, no environment. GitHub
+  refuses that token a `git push` that changes `.github/workflows`, not a ref moved through the API
+  to a commit already in the repository, so a release that carries a change of the workflows moves
+  `main` all the same.
+- The job that holds that token runs no code of any branch: no checkout, only `gh` and `docker` on
+  what the reading job decided.
+- **`main` runs no CI of its own after a release**, and the release starts none: a ref moved with
+  the workflow's token starts no workflow, and nothing is left to check. `main` is then a commit of
+  `dev` whose every check passed, on its push and on the release pull request, and GitHub keeps a
+  check by commit, not by branch; on `main`, `ci.yml` would run that same `verify` again and
+  nothing else, and `beta.yml` follows `dev` only.
 
 ## The notes
 
@@ -227,16 +264,15 @@ In the repository's settings, never in the repository:
 
 1. **The package is public.** The first beta creates `ghcr.io/kristenjestin/gousset` as a private
    package: in its settings, make it public, so that an installation pulls it without signing in.
-2. **The environment `release` and its secret `RELEASE_TOKEN`.** Create the environment before
-   the first release (Settings, Environments, New environment: `release`; a job naming one that
-   does not exist creates it unprotected). In it, *Deployment branches and tags*, *Selected
-   branches and tags*, and only `dev`. Then, as an *environment secret* (not a repository secret,
-   which any branch's workflow can read), `RELEASE_TOKEN`: a fine-grained personal access token
-   for this repository only, with the permissions **Contents: read and write** and **Workflows:
-   read and write**. Optionally, *Required reviewers* on the environment, to approve each release. `main` moves with it: GitHub refuses the workflow's
-   own token any push that changes `.github/workflows`, and its documentation does not say a ref
-   moved through the API is spared. Without the secret, the release fails at once, saying so,
-   before anything is written. If `main` has a ruleset or a branch protection, it lets this token
-   update it, by fast-forward only; nobody else pushes to it.
-3. The beta follows the workflow named `ci` and its job named `verify`: renaming either means
-   changing `beta.yml` with it.
+2. **`main`'s ruleset blocks deletion and non-fast-forward, nothing more.** The release moves
+   `main` with the workflow's own token, through the API, to a commit whose checks passed and
+   whose beta exists: the checks are enforced by the release's guards and on `dev`, and a rule
+   asking for a pull request or for status checks on `main` would refuse the release's
+   fast-forward, every time, and the first release's making of `main`. That `main` moves only by
+   the release is a convention, not a guarantee: the ruleset protects it against deletion and a
+   force, nothing else, so whoever may write to the repository, and any branch's workflow given
+   `contents: write`, can fast-forward it too. The release then fails while `main` is not an
+   ancestor of `dev`. The release needs no secret and no environment.
+3. The beta follows the workflow named `ci` and its job named `verify`, and the release reads the
+   runs of `ci.yml` and `pull-request.yml`: renaming one means changing `beta.yml` and
+   `release.yml` with it.
