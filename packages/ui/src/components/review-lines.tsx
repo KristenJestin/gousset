@@ -133,19 +133,24 @@ export function ReviewLines({
   );
 }
 
-/** `ReviewLines` on its way: as many lines as it will show and, with `more`, the last line. */
+/**
+ * `ReviewLines` on its way: as many lines as it will show and, with `more`, the last line. Each
+ * line is drawn as a loaded one is, its border under its 64 px, so that the heights match.
+ */
 export function ReviewLinesSkeleton({ rows = 3, more = false }: { rows?: number; more?: boolean }) {
   return (
     <SkeletonFrame>
-      <ul className="flex flex-col divide-y">
+      <ul className="flex flex-col">
         {Array.from({ length: rows }, (_, index) => (
-          <li key={index} className="flex h-16 items-center gap-3">
-            <span className="flex flex-1 flex-col gap-1.5">
-              <Skeleton className="h-3 w-40" />
-              <Skeleton className="h-4 w-28" />
-            </span>
-            <AmountSkeleton size="sm" />
-            <Skeleton className="h-8 w-20" />
+          <li key={index} className="border-b last:border-b-0">
+            <div className="flex h-16 items-center gap-3">
+              <span className="flex flex-1 flex-col gap-1.5">
+                <Skeleton className="h-3 w-40" />
+                <Skeleton className="h-4 w-28" />
+              </span>
+              <AmountSkeleton size="sm" />
+              <Skeleton className="h-8 w-20" />
+            </div>
           </li>
         ))}
         {more ? (
