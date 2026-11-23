@@ -1,0 +1,47 @@
+{
+  "20261123223101_decode_label_entities": [
+    {
+      "why": "#132: a label 0.2.0 decoded once is decoded until no entity is left; its bank key stays",
+      "table": "statement_line",
+      "where": { "label": "CB CAFE DE L&apos;EXEMPLE", "dedup_key": "bank:EX2026110201" },
+      "set": { "label": "CB CAFE DE L'EXEMPLE" }
+    },
+    {
+      "why": "#132: decoded, and its content key computed again from the decoded label, its occurrence kept",
+      "table": "statement_line",
+      "where": {
+        "label": "BOULANGERIE L&apos;EPI D&apos;EXEMPLE",
+        "dedup_key": "content:d748edab169e5007aa1ff471dad2e775d50b577b5e8039f1a09a2586d86d8ca7#1"
+      },
+      "set": {
+        "label": "BOULANGERIE L'EPI D'EXEMPLE",
+        "dedup_key": "content:54c347bc4c470134458e3fff43d68d4e173b56cbdedb8a2e702360d8aee381bb#1"
+      }
+    },
+    {
+      "why": "#132: the second identical line of the day keeps its second occurrence",
+      "table": "statement_line",
+      "where": {
+        "label": "BOULANGERIE L&apos;EPI D&apos;EXEMPLE",
+        "dedup_key": "content:d748edab169e5007aa1ff471dad2e775d50b577b5e8039f1a09a2586d86d8ca7#2"
+      },
+      "set": {
+        "label": "BOULANGERIE L'EPI D'EXEMPLE",
+        "dedup_key": "content:54c347bc4c470134458e3fff43d68d4e173b56cbdedb8a2e702360d8aee381bb#2"
+      }
+    },
+    {
+      "why": "#132: an ampersand and a memo's quotes encoded twice",
+      "table": "statement_line",
+      "where": {
+        "label": "PRLV SEPA ELEC &amp; GAZ EXEMPLE",
+        "dedup_key": "content:1e467e718e773fdfc6dfe252dea8a9d2d81b69c028e45801c4864eda9e4a0d28#1"
+      },
+      "set": {
+        "label": "PRLV SEPA ELEC & GAZ EXEMPLE",
+        "memo": "ECHEANCE \"NOVEMBRE\"",
+        "dedup_key": "content:0ed9eec6279a398b247bc1b58a17cbcf76a88d781735c561514156a1691d7558#1"
+      }
+    }
+  ]
+}

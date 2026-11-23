@@ -253,7 +253,9 @@ From v0.2 on, installations hold real data: an update must never lose, duplicate
   touches what an update runs through (`packages/db`, `packages/auth`, the image, its compose
   files and entry point, or the job; `docs/releases.md` lists them), and compares every row before and after; the release refuses a commit whose push to `dev` did not
   pass it. A column or a table the new migrations add is expected by name (`ALTER TABLE "t" ADD
-  COLUMN "c"`, `CREATE TABLE "t"`); any other difference fails it.
+  COLUMN "c"`, `CREATE TABLE "t"`); a migration that must change rows declares each change in
+  `tools/check-upgrade.changes.json` (which rows, the values they take, why); any other difference
+  fails it.
 
 ## How the work is organised
 
