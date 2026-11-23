@@ -1,3 +1,8 @@
+-- The migrator runs every pending migration in one transaction: on an update from v0.2, v0.3's
+-- `*_categories_isolation` gives every line its entry, whose keys on `category` are checked at
+-- commit (`deferrable initially deferred`). Postgres refuses to alter `entry` while those checks
+-- wait, so they are run now; it changes nothing the second time.
+SET CONSTRAINTS ALL IMMEDIATE;--> statement-breakpoint
 CREATE TYPE "rule_origin" AS ENUM('correction', 'user');--> statement-breakpoint
 CREATE TABLE "rule" (
 	"id" uuid PRIMARY KEY DEFAULT uuidv7(),
