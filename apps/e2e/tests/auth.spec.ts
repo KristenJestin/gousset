@@ -232,10 +232,15 @@ test("a new password equal to the current one is refused", async ({ page, app, u
   await page.getByLabel("New password").fill(person.password);
   await page.getByRole("button", { name: "Change the password" }).click();
 
-  const error = page.getByRole("main").getByRole("alert");
+  // Under the field at fault (#80), the passwords emptied to be typed again.
+  const message = "The new password must differ from the current one.";
+  const newPassword = page.getByLabel("New password", { exact: true });
 
-  await expect(error).toHaveText("The new password must differ from the current one.");
-  await expect(error).toHaveCSS("opacity", "1");
+  await expect(page.getByText(message, { exact: true })).toBeVisible();
+  await expect(newPassword).toHaveAccessibleDescription(
+    new RegExp(message.replaceAll(".", String.raw`\.`)),
+  );
+  await expect(newPassword).toHaveValue("");
 
   // Still temporary: nothing else opens.
   await page.goto("/");
