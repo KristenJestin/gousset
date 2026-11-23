@@ -63,9 +63,14 @@ function readDay(
   return Effect.succeed(day);
 }
 
+/** The currency a table is read in, and whether a currency column's lines are checked against it. */
+type TableCurrency = { readonly code: string; readonly checked: boolean };
+
 type Reading = {
   profile: CsvProfile;
   currency: string;
+  /** Whether a line's currency is checked against `currency`. */
+  checkCurrency: boolean;
   syntax: AmountSyntax;
   read: DayReader;
 };
@@ -155,7 +160,7 @@ const readLine = (row: CsvRow, reading: Reading): Effect.Effect<Read, ReadError>
     const { amountMinor, debit } = yield* readLineAmount(row, reading);
     const lineCurrency = optionalText(row, columns.currency);
 
-    if (columns.currency !== null && lineCurrency !== null) {
+    if (reading.checkCurrency && columns.currency !== null && lineCurrency !== null) {
       if (lineCurrency.toUpperCase() !== reading.currency) {
         return yield* new UnsupportedContent({
           line: cellAt(row, columns.currency).line,
@@ -347,8 +352,8 @@ export const readCsv = (
   profile: CsvProfile,
   options: CsvOptions,
 ): Effect.Effect<Statement, ReadError> =>
-  Effect.flatMap(currencyOf(options.currency), (currency) =>
-    readTable(csvFile(bytes), profile, currency),
+  Effect.flatMap(currencyOf(options.currency), (code) =>
+    readTable(csvFile(bytes), profile, { code, checked: true }),
   );
 
 /**
@@ -361,7 +366,8 @@ const SAMPLE: ParseLimit = { rows: 51, lines: 2000, characters: 1024 * 1024 };
  * Reads the top of a file with a profile, as `readCsv` reads it whole: its first 50 lines, past the
  * header. Fails with what `readCsv` would fail with there; succeeds when the profile fits the file,
  * as far as its top tells. With no `currency` (an import whose account is not chosen yet), amounts
- * are read with up to four decimals and the currency column is not checked.
+ * are read with up to four decimals and the lines' currency is not checked; the header must still
+ * have the currency column.
  */
 export const testReadCsv = (
   file: CsvFile,
@@ -370,21 +376,21 @@ export const testReadCsv = (
 ): Effect.Effect<void, ReadError> => {
   if (currency !== null) {
     return Effect.asVoid(
-      Effect.flatMap(currencyOf(currency), (code) => readTable(file, profile, code, SAMPLE)),
+      Effect.flatMap(currencyOf(currency), (code) =>
+        readTable(file, profile, { code, checked: true }, SAMPLE),
+      ),
     );
   }
 
   // The currency with four minor digits, as detection reads amounts: no account to say better.
-  const unchecked = { ...profile, columns: { ...profile.columns, currency: null } };
-
-  return Effect.asVoid(readTable(file, unchecked, "CLF", SAMPLE));
+  return Effect.asVoid(readTable(file, profile, { code: "CLF", checked: false }, SAMPLE));
 };
 
-/** The lines of the file, or of its top with `limit`, in `currency` (checked by the caller). */
+/** The lines of the file, or of its top with `limit`, in `currency` (its code checked by the caller). */
 const readTable = (
   file: CsvFile,
   profile: CsvProfile,
-  currency: string,
+  currency: TableCurrency,
   limit?: ParseLimit,
 ): Effect.Effect<Statement, ReadError> =>
   Effect.gen(function* () {
@@ -411,7 +417,8 @@ const readTable = (
 
     const reading: Reading = {
       profile,
-      currency,
+      currency: currency.code,
+      checkCurrency: currency.checked,
       syntax: profile.decimalMark === "." ? "decimal-point" : "decimal-comma",
       read: dayReader(profile.dateFormat),
     };
@@ -423,7 +430,7 @@ const readTable = (
 
     return {
       account: null,
-      currency,
+      currency: currency.code,
       lines: read.map((entry) => entry.line),
       openingBalance: null,
       balance: null,

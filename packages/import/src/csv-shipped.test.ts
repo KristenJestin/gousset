@@ -260,6 +260,23 @@ describe("a test read of a file's top", () => {
     expect(passes(csvSamples.csvSemicolon.bytes, semicolon, "USD")).toBe(false);
   });
 
+  test("with no account's currency, still refuses a currency column past the header's last", () => {
+    // A profile kept without a header, whose currency column the file's six columns do not have.
+    const wide: CsvProfile = {
+      ...tabNoHeader,
+      separator: ";",
+      headerRow: true,
+      dateFormat: "DD/MM/YYYY",
+      columns: { ...tabNoHeader.columns, currency: 7 },
+    };
+
+    const bytes = utf8.encode("Date;Label;Amount;A;B;C\n02/10/2026;EXAMPLE SHOP;-1,00;;;\n");
+
+    expect(passes(bytes, wide, "EUR")).toBe(false);
+    expect(passes(bytes, wide, null)).toBe(false);
+    expect(passes(bytes, { ...wide, columns: { ...wide.columns, currency: 6 } }, null)).toBe(true);
+  });
+
   test("reads the top of the file only: a wrong line further down does not count", () => {
     const top = Array.from({ length: 60 }, (_, n) => `0${String((n % 9) + 1)}.10.26\tA\t-1,00`);
     const bytes = utf8.encode(ended([...top, "oops\tB\t-1,00"], "\n"));
