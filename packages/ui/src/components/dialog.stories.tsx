@@ -65,7 +65,8 @@ function DeleteRule() {
         confirmLabel="Delete"
         destructive
         onConfirm={async () => {
-          await wait(800);
+          // Long enough to see the loader, which shows only after 300 ms.
+          await wait(2000);
           setDeleted(true);
         }}
       />

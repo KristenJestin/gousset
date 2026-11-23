@@ -339,7 +339,7 @@ test.describe("Dialog", () => {
     await expect(confirm).toHaveAttribute("aria-disabled", "true");
     await expect(confirm).toHaveAttribute("aria-busy", "true");
     await expect(confirm.locator('[data-slot="loader"]')).toBeVisible();
-    await expect(dialog).toBeHidden({ timeout: 3000 });
+    await expect(dialog).toBeHidden();
     await expect(page.getByText("Deleted")).toBeVisible();
   });
 });

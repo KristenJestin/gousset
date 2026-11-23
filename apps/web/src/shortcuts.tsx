@@ -1,3 +1,4 @@
+import { m } from "@gousset/i18n/messages";
 import { Dialog } from "@gousset/ui/components/dialog";
 import { ShortcutList } from "@gousset/ui/components/shortcut-list";
 import {
@@ -8,12 +9,10 @@ import {
 } from "@tanstack/react-hotkeys";
 import { useState } from "react";
 
-import { useMessages } from "./i18n/use-messages";
-
 /**
  * Every shortcut of the app, declared once: the `?` list is built from here, and the user's
  * rebinding (later) is keyed by these ids, which therefore never change. Each id has its label in
- * the messages, under `shortcuts.hotkeys`.
+ * `hotkeyLabels`.
  */
 export const appHotkeys = defineAppHotkeys({
   "shortcuts.show": { hotkey: "?", meta: { name: "Show keyboard shortcuts" } },
@@ -26,18 +25,23 @@ declare module "@tanstack/react-hotkeys" {
   }
 }
 
+/** Each shortcut's label in the messages, by its id. */
+const hotkeyLabels = {
+  "shortcuts.show": m.shortcutShow,
+  "search.open": m.shortcutSearch,
+} satisfies { [id in keyof typeof appHotkeys]: () => string };
+
 /** The dialogs the global shortcuts open; one at a time. */
 type Open = "shortcuts" | "search" | null;
 
 /** The app-wide shortcuts and the dialogs they open: the shortcuts list, and the search. */
 export function Shortcuts() {
   const [open, setOpen] = useState<Open>(null);
-  const messages = useMessages();
   const formatForDisplay = useFormatForDisplay();
 
   const shortcuts = useAppHotkeyList().map(({ appHotkey }) => ({
     id: appHotkey.id,
-    label: messages.shortcuts.hotkeys[appHotkey.id],
+    label: hotkeyLabels[appHotkey.id](),
     keys: appHotkey.hotkey === null ? "" : formatForDisplay(appHotkey.hotkey),
   }));
 
@@ -61,15 +65,15 @@ export function Shortcuts() {
       <Dialog
         open={open === "shortcuts"}
         onOpenChange={follow("shortcuts")}
-        title={messages.shortcuts.title}
+        title={m.shortcutsTitle()}
       >
         <ShortcutList shortcuts={shortcuts} />
       </Dialog>
       <Dialog
         open={open === "search"}
         onOpenChange={follow("search")}
-        title={messages.search.title}
-        description={messages.search.empty}
+        title={m.searchTitle()}
+        description={m.searchEmpty()}
       />
     </>
   );

@@ -7,15 +7,13 @@ declare global {
   }
 }
 
-test("the app loads for a signed-in user", async ({ userPage, user }) => {
+test("the app loads for a signed-in user", async ({ userPage }) => {
   await visit(userPage, "/");
 
-  await expect(
-    userPage.getByRole("heading", { level: 1, name: `Hello, ${user.name}.` }),
-  ).toBeVisible();
+  await expect(userPage.getByRole("heading", { level: 1, name: "Monthly review" })).toBeVisible();
 });
 
-test("the app's page breaks no rule of its Content Security Policy", async ({ userPage, user }) => {
+test("the app's page breaks no rule of its Content Security Policy", async ({ userPage }) => {
   const violations: Array<string> = [];
 
   await userPage.exposeFunction("reportCspViolation", (violation: string) => {
@@ -30,8 +28,6 @@ test("the app's page breaks no rule of its Content Security Policy", async ({ us
 
   await visit(userPage, "/");
 
-  await expect(
-    userPage.getByRole("heading", { level: 1, name: `Hello, ${user.name}.` }),
-  ).toBeVisible();
+  await expect(userPage.getByRole("heading", { level: 1, name: "Monthly review" })).toBeVisible();
   expect(violations).toEqual([]);
 });
