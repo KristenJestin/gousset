@@ -1,6 +1,6 @@
 import type { Database } from "@gousset/db";
 import { authAccount, authSession, authUser } from "@gousset/db/schema/auth";
-import { and, eq } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { Effect, Schema } from "effect";
 
 import type { Auth } from "./index";
@@ -22,6 +22,28 @@ export class PasswordResetRefused extends Schema.TaggedError<PasswordResetRefuse
   "PasswordResetRefused",
   { code: PasswordResetCode },
 ) {}
+
+/**
+ * The user chose their own password: the temporary one is no longer held, and the reset's date
+ * goes. Only as the change found it (`resetAt`, read with the session before the change): a reset
+ * the administrator committed meanwhile keeps its flag, or the user could end up on a password
+ * the administrator chose, with nothing asking them to change it.
+ */
+export async function clearTemporaryPassword(
+  database: Database,
+  userId: string,
+  resetAt: Date | null,
+): Promise<void> {
+  await database
+    .update(authUser)
+    .set({ mustChangePassword: false, passwordResetAt: null })
+    .where(
+      and(
+        eq(authUser.id, userId),
+        resetAt === null ? isNull(authUser.passwordResetAt) : eq(authUser.passwordResetAt, resetAt),
+      ),
+    );
+}
 
 /** The database or the password hashing failed: nothing was changed, the transaction is whole. */
 export class PasswordResetFailed extends Schema.TaggedError<PasswordResetFailed>()(

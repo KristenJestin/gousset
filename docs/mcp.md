@@ -128,7 +128,7 @@ They are not a number to trim to. **A tool keeps the description and the example
 
 ### Every feature ticket adds its tools
 
-A feature is reachable from the MCP server in the same pull request that builds it: its family tool and actions, following this file, with end-to-end tests through a real MCP client.
+A feature is reachable from the MCP server in the same pull request that builds it: its family tool and actions, following this file, with end-to-end tests through a real MCP client. The one exception is the administration of users, which has no tool (rule 7, under the planned families).
 
 ### Review of every tool change
 

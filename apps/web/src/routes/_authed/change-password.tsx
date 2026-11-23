@@ -6,16 +6,22 @@ import { FormMessage } from "@gousset/ui/components/form-message";
 import { Actions, Form, Screen } from "@gousset/ui/components/screen";
 import { TextField } from "@gousset/ui/components/text-field";
 import { createFileRoute, useNavigate, useRouter } from "@tanstack/react-router";
+import { Schema } from "effect";
 import { useState } from "react";
 import type { FormEvent } from "react";
 
 import { AppLink } from "@/components/app-link";
 import { errorMessage } from "@/i18n/messages";
 import { authClient } from "@/lib/auth-client";
+import { AUTHORIZE_PATH } from "@/lib/authorization";
 import { formText } from "@/lib/form";
 import { whileBusy } from "@/lib/while-busy";
 
 export const Route = createFileRoute("/_authed/change-password")({
+  // An MCP client's authorization the sign-in was for, resumed once the password is changed.
+  validateSearch: Schema.toStandardSchemaV1(
+    Schema.Struct({ resume: Schema.optional(Schema.String) }),
+  ),
   component: ChangePassword,
 });
 
@@ -47,6 +53,7 @@ function ChangePassword() {
   const navigate = useNavigate();
   const router = useRouter();
   const { user } = Route.useRouteContext();
+  const { resume } = Route.useSearch();
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
 
@@ -65,6 +72,14 @@ function ChangePassword() {
 
     if (refusal) {
       setError(errorMessage(refusal.code));
+
+      return;
+    }
+
+    // Back to the authorization server, which goes on to the consent: a page of the server, not a
+    // route of the app, so the browser loads it.
+    if (resume !== undefined) {
+      window.location.assign(`${AUTHORIZE_PATH}?${resume}`);
 
       return;
     }

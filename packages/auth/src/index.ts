@@ -16,6 +16,7 @@ import { CLIENT_ADDRESS_HEADER } from "./client-address";
 import { CONSENT_PATH, ISSUED_AT_MS_CLAIM, McpScope, SIGN_IN_PATH, mcpResourceOf } from "./mcp";
 import { alignTokensWithConsents, currentGrant, revokeAllClients } from "./mcp-door";
 import { isMetadataDocumentClient, redirectBoundToClient, withReadForWrite } from "./mcp-guards";
+import { clearTemporaryPassword } from "./password-reset";
 
 export { guardAttempt } from "./attempt-guard";
 
@@ -74,6 +75,16 @@ const authorizeQueryOf = Schema.decodeUnknownOption(
 const flaggedSessionOf = Schema.decodeUnknownOption(
   Schema.Struct({
     user: Schema.Struct({ mustChangePassword: Schema.optional(Schema.NullOr(Schema.Boolean)) }),
+  }),
+);
+
+/** Who changes their password, and the reset their temporary one came from, if any. */
+const changerOf = Schema.decodeUnknownOption(
+  Schema.Struct({
+    id: Schema.String,
+    passwordResetAt: Schema.optional(
+      Schema.NullOr(Schema.Union([Schema.Date, Schema.String, Schema.Number])),
+    ),
   }),
 );
 
@@ -276,15 +287,21 @@ export function createAuth(env: AuthConfig, database: Database) {
         }
 
         if (ctx.path === "/change-password") {
-          const userId = ctx.context.session?.user.id;
+          // The session as the change found it, read from the database before the new password.
+          const changer = changerOf(ctx.context.session?.user);
 
-          if (userId !== undefined) {
-            await ctx.context.internalAdapter.updateUser(userId, {
-              mustChangePassword: false,
-              passwordResetAt: null,
-            });
+          if (Option.isSome(changer)) {
+            const { id, passwordResetAt } = changer.value;
+
+            await clearTemporaryPassword(
+              database,
+              id,
+              passwordResetAt === undefined || passwordResetAt === null
+                ? null
+                : new Date(passwordResetAt),
+            );
             // A new password ends what the old one allowed, MCP clients included.
-            await revokeAllClients(database, userId);
+            await revokeAllClients(database, id);
           }
         }
 

@@ -47,6 +47,7 @@
   "errorInvalidEmail": "Cet e-mail n'est pas valide.",
   "errorSignInRequired": "Votre session a pris fin : reconnectez-vous.",
   "errorAdminOnly": "Seul l'administrateur peut faire cela.",
+  "errorPasswordChangeRequired": "Changez d'abord votre mot de passe provisoire.",
   "errorPasswordTooLong": "Le mot de passe peut faire au plus 128 caractères.",
   "errorUserNotFound": "Cet utilisateur n'existe plus. Rechargez la page.",
   "errorCannotResetAdministrator": "L'administrateur change son propre mot de passe depuis le menu de son compte.",

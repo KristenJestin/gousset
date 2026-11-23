@@ -47,6 +47,7 @@
   "errorInvalidEmail": "This e-mail is not valid.",
   "errorSignInRequired": "Your session has ended: sign in again.",
   "errorAdminOnly": "Only the administrator can do this.",
+  "errorPasswordChangeRequired": "Change your temporary password first.",
   "errorPasswordTooLong": "The password can have at most 128 characters.",
   "errorUserNotFound": "This user no longer exists. Reload the page.",
   "errorCannotResetAdministrator": "The administrator changes their own password from their account menu.",

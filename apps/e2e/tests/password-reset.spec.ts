@@ -4,7 +4,7 @@ import { Schema } from "effect";
 
 import { addUser, createUser, hasLiveSession, signIn, signInStatus } from "../src/auth";
 import type { TestUser } from "../src/auth";
-import { sessionsOf, setMustChangePassword } from "../src/database";
+import { resetDuringNextChange, sessionsOf, setMustChangePassword } from "../src/database";
 import { authorizeByHand, clientWithToken, refreshStatus } from "../src/oauth-by-hand";
 import { TEST_CLIENT_ID, TEST_REDIRECT_URL } from "../src/oauth-client";
 import { expect, fixDay, test, visit } from "../src/test";
@@ -17,6 +17,22 @@ import { expect, fixDay, test, visit } from "../src/test";
 const allow = (page: Page) => page.getByRole("button", { name: "Allow", exact: true }).click();
 
 const SessionUser = Schema.Struct({ user: Schema.Struct({ mustChangePassword: Schema.Boolean }) });
+
+/** An authorization the harness's MCP client starts, asking to read; its code is never exchanged. */
+function authorizeUrl(baseURL: string) {
+  const query = new URLSearchParams({
+    response_type: "code",
+    client_id: TEST_CLIENT_ID,
+    redirect_uri: TEST_REDIRECT_URL,
+    scope: "read",
+    state: "e2e-state",
+    code_challenge: "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
+    code_challenge_method: "S256",
+    resource: `${baseURL}/mcp`,
+  });
+
+  return `${baseURL}/api/auth/oauth2/authorize?${query.toString()}`;
+}
 
 /** Read-only MCP tokens, a refresh token among them, `person` allowed from a page of their own. */
 async function agentTokens(browser: Browser, baseURL: string, person: TestUser) {
@@ -483,18 +499,7 @@ test("a temporary password authorizes no MCP client, and a held user's tokens re
   await createUser(app.baseURL, user, person);
 
   const held = await signIn(app.baseURL, { ...person, cookies: [] });
-
-  const query = new URLSearchParams({
-    response_type: "code",
-    client_id: TEST_CLIENT_ID,
-    redirect_uri: TEST_REDIRECT_URL,
-    scope: "read",
-    state: "e2e-state",
-    code_challenge: "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
-    code_challenge_method: "S256",
-  });
-
-  const authorize = { url: `/api/auth/oauth2/authorize?${query.toString()}`, method: "GET" };
+  const authorize = { url: authorizeUrl(app.baseURL), method: "GET" };
   const refused = await answerTo(app.baseURL, held.cookies, authorize);
 
   expect(refused.status).toBe(403);
@@ -528,4 +533,103 @@ test("a temporary password authorizes no MCP client, and a held user's tokens re
   // The flag alone held them: cleared, the same token works again.
   await setMustChangePassword(app.database, member.email, false);
   expect(await agentGetsIn(app.baseURL, tokens.access_token)).toBe(true);
+});
+
+test("signing in for an MCP client on a temporary password goes to the change, then the authorization resumes", async ({
+  browser,
+  app,
+  user,
+  mcpClientId,
+}) => {
+  test.setTimeout(60_000);
+  expect(mcpClientId).toBe(TEST_CLIENT_ID);
+
+  // A user on the administrator's temporary password, whose agent asks for access: what follows a
+  // reset, which ends every client, and a new user's first connection.
+  const person = {
+    name: "Lia Example",
+    email: "lia.reset@example.com",
+    password: "lia-temporary-e2e",
+  };
+
+  await createUser(app.baseURL, user, person);
+
+  const context = await browser.newContext({ baseURL: app.baseURL });
+  const page = await context.newPage();
+
+  try {
+    const callback = new Promise<URL>((resolve) => {
+      void page.route(`${TEST_REDIRECT_URL}**`, async (route) => {
+        resolve(new URL(route.request().url()));
+        await route.fulfill({
+          contentType: "text/html",
+          body: '<!doctype html><html lang="en"><title>Connected</title><main><h1>Connected</h1></main></html>',
+        });
+      });
+    });
+
+    // Signed out: the authorization sends the browser to sign in, for that client.
+    await page.goto(authorizeUrl(app.baseURL));
+    await expect(page).toHaveURL(/\/sign-in\?.*client_id=/);
+
+    await page.getByLabel("E-mail").fill(person.email);
+    await page.getByLabel("Password", { exact: true }).fill(person.password);
+    await page.getByRole("button", { name: "Sign in" }).click();
+
+    // The change first, not an error on the sign-in page.
+    await expect(page).toHaveURL(/\/change-password\?/);
+    await expect(page.getByText("Your password is temporary")).toBeVisible();
+
+    await page.getByLabel("Current password").fill(person.password);
+    await page.getByLabel("New password").fill("lia-own-password-e2e");
+    await page.getByRole("button", { name: "Change the password" }).click();
+
+    // Then the authorization goes on, to the consent and back to the client with its code.
+    await page.getByRole("button", { name: "Allow", exact: true }).click();
+
+    const returned = (await callback).searchParams;
+
+    await page.waitForURL(`${TEST_REDIRECT_URL}**`);
+    expect(returned.get("code")).not.toBeNull();
+    expect(returned.get("state")).toBe("e2e-state");
+  } finally {
+    await context.close();
+  }
+});
+
+test("a reset that lands during the user's own change keeps its flag", async ({ app, user }) => {
+  const person = await addUser(app.baseURL, user, {
+    name: "Kai Example",
+    email: "kai.reset@example.com",
+    password: "kai-password-e2e",
+  });
+
+  // The administrator's reset commits between the change's new password and the clearing of the
+  // flag that follows it.
+  const stopResetting = await resetDuringNextChange(app.database, person.email);
+
+  try {
+    const changed = await answerTo(app.baseURL, person.cookies, {
+      url: "/api/auth/change-password",
+      method: "POST",
+      body: JSON.stringify({
+        currentPassword: person.password,
+        newPassword: "kai-own-password-e2e",
+      }),
+    });
+
+    expect(changed.status).toBe(200);
+  } finally {
+    await stopResetting();
+  }
+
+  // The change did not clear the reset it never saw: the next page still asks for a change.
+  const session = await answerTo(app.baseURL, person.cookies, {
+    url: "/api/auth/get-session",
+    method: "GET",
+  });
+
+  expect(
+    Schema.decodeUnknownSync(SessionUser)(JSON.parse(session.text)).user.mustChangePassword,
+  ).toBe(true);
 });

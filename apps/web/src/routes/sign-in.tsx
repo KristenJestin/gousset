@@ -4,12 +4,13 @@ import { Card } from "@gousset/ui/components/card";
 import { FormMessage } from "@gousset/ui/components/form-message";
 import { Form, Screen } from "@gousset/ui/components/screen";
 import { TextField } from "@gousset/ui/components/text-field";
-import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
+import { createFileRoute, redirect, useLocation, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import type { FormEvent } from "react";
 
 import { errorMessage } from "@/i18n/messages";
 import { authClient } from "@/lib/auth-client";
+import { authorizationToResume } from "@/lib/authorization";
 import { formText } from "@/lib/form";
 import { whileBusy } from "@/lib/while-busy";
 
@@ -30,6 +31,7 @@ export const Route = createFileRoute("/sign-in")({
 
 function SignIn() {
   const navigate = useNavigate();
+  const { searchStr } = useLocation();
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
 
@@ -44,6 +46,22 @@ function SignIn() {
         password: formText(form, "password"),
       }),
     );
+
+    // Signed in on a temporary password for an MCP client's authorization: the session opens
+    // nothing but the change, so the resumed authorization is refused. The change comes first, and
+    // the authorization resumes after it (#70).
+    if (refusal?.code === "PASSWORD_CHANGE_REQUIRED") {
+      const resume = authorizationToResume(searchStr);
+
+      // A page of its own, loaded with the session the sign-in just set.
+      window.location.assign(
+        resume === undefined
+          ? "/change-password"
+          : `/change-password?${new URLSearchParams({ resume }).toString()}`,
+      );
+
+      return;
+    }
 
     if (refusal) {
       setError(errorMessage(refusal.code));
