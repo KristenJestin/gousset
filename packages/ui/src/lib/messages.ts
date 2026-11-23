@@ -122,6 +122,8 @@ function uiMessages(locale: Locale) {
       balanceDisagrees: (app: string, statement: string, day: string, difference: string) =>
         m.uiAccountsBalanceDisagrees({ app, statement, day, difference }, options),
       balanceNoStatement: m.uiAccountsBalanceNoStatement({}, options),
+      /** Before the earlier statement balances that disagree, once the latest check is shown. */
+      balanceAlsoDiffers: m.uiAccountsBalanceAlsoDiffers({}, options),
       balanceOnDay: (day: string) => m.uiAccountsBalanceOnDay({ day }, options),
       inPeriod: (period: string) => m.uiAccountsInPeriod({ period }, options),
       outPeriod: (period: string) => m.uiAccountsOutPeriod({ period }, options),

@@ -5,6 +5,7 @@ import { cn } from "../lib/utils";
 import { Amount } from "./amount";
 import { Button } from "./button";
 import { Chip } from "./chip";
+import { FormMessage } from "./form-message";
 import { Skeleton, SkeletonFrame } from "./skeleton";
 
 export type AccountLineRow = {
@@ -17,8 +18,8 @@ export type AccountLineRow = {
   /** A transfer, which does not count: greyed, as the operations screen shows it. */
   muted?: boolean;
   amount: Money;
-  /** The account's balance once this line is counted. */
-  balanceAfter: Money;
+  /** The account's balance once this line is counted; left out on an account kept by its balance. */
+  balanceAfter?: Money;
 };
 
 export type AccountLinesProps = {
@@ -26,6 +27,10 @@ export type AccountLinesProps = {
   rows: ReadonlyArray<AccountLineRow>;
   /** "Show older lines": left out, every line already shown is the account's lot. */
   onShowOlder?: () => void;
+  /** While a page of older lines is loading: the button shows a spinner and is disabled. */
+  loadingOlder?: boolean;
+  /** Shown under the button when loading older lines failed. */
+  olderError?: string;
   /** The page's own words for an empty account; a general sentence otherwise. */
   emptyText?: string;
   locale?: string;
@@ -35,7 +40,14 @@ export type AccountLinesProps = {
  * An account's lines (docs/wireframes, screen 7, block 5): the day, the label, the amount and the
  * balance once it is counted, newest first. `onShowOlder` adds a button under the list.
  */
-export function AccountLines({ rows, onShowOlder, emptyText, locale }: AccountLinesProps) {
+export function AccountLines({
+  rows,
+  onShowOlder,
+  loadingOlder,
+  olderError,
+  emptyText,
+  locale,
+}: AccountLinesProps) {
   const messages = useUiMessages();
   const pageLocale = usePageLanguage();
   const writtenIn = locale ?? pageLocale;
@@ -68,16 +80,19 @@ export function AccountLines({ rows, onShowOlder, emptyText, locale }: AccountLi
               <Amount value={row.amount} size="sm" locale={writtenIn} />
             </span>
             <span className="w-24 shrink-0 text-right text-muted-foreground">
-              <Amount value={row.balanceAfter} size="sm" locale={writtenIn} roll={false} />
+              {row.balanceAfter === undefined ? null : (
+                <Amount value={row.balanceAfter} size="sm" locale={writtenIn} roll={false} />
+              )}
             </span>
           </li>
         ))}
       </ul>
       {onShowOlder === undefined ? null : (
-        <div className="flex justify-start">
-          <Button variant="secondary" size="sm" onClick={onShowOlder}>
+        <div className="flex flex-col items-start gap-2">
+          <Button variant="secondary" size="sm" onClick={onShowOlder} loading={loadingOlder}>
             {messages.accounts.showOlderLines}
           </Button>
+          <FormMessage message={olderError} />
         </div>
       )}
     </div>

@@ -62,6 +62,21 @@ export const Default: Story = {};
 
 export const WithShowOlder: Story = { args: { onShowOlder: () => undefined } };
 
+export const ShowOlderLoading: Story = {
+  args: { onShowOlder: () => undefined, loadingOlder: true },
+};
+
+export const ShowOlderFailed: Story = {
+  args: { onShowOlder: () => undefined, olderError: "Older lines could not be loaded." },
+};
+
+/** An account kept by its balance: no balance-after column, since noted balances are what it holds. */
+export const BalanceMode: Story = {
+  args: {
+    rows: ROWS.map(({ id, day, label, amount }) => ({ id, day, label, amount })),
+  },
+};
+
 /** A balance-mode account with nothing entered yet. */
 export const Empty: Story = { args: { rows: [] } };
 

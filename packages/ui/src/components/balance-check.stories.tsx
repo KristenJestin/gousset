@@ -37,6 +37,19 @@ export const Disagrees: Story = {
   },
 };
 
+/** The latest statement agrees, but an earlier one does not: shown below, not hidden. */
+export const AgreesWithAnEarlierMismatch: Story = {
+  args: {
+    state: "agrees",
+    app: eur(186_000),
+    statement: eur(186_000),
+    day: "31 Oct.",
+    earlierMismatches: [
+      { day: "30 Sep.", app: eur(172_000), statement: eur(170_500), difference: eur(1500) },
+    ],
+  },
+};
+
 export const NoStatement: Story = { args: { state: "no-statement" } };
 
 export const Loading: Story = {
