@@ -4,6 +4,7 @@ import type { Page } from "@playwright/test";
 
 import { openAccountMenu } from "../src/frame";
 import { SERVER_FUNCTIONS } from "../src/latency";
+import { closeBlock, openBlock } from "../src/review";
 import {
   SKELETON,
   animationsDone,
@@ -23,8 +24,12 @@ import {
 const MONTH = "/?month=2026-10";
 const BLOCKS = ["The month", "Where the money goes", "To review"];
 const LATENCY_MS = 1500;
+const SLOW_MONTH_MS = 6000;
 
 const block = (page: Page, title: string) => page.getByRole("region", { name: title });
+
+/** The month switcher beside the page's title. */
+const monthSwitcher = (page: Page) => page.getByRole("group", { name: "Month", exact: true });
 
 const errorToast = (page: Page) =>
   page
@@ -117,7 +122,7 @@ test("under reduced motion a skeleton appears without its fade", async ({ userPa
 test("a refused mutation rolls back", async ({ userPage: page }) => {
   await visit(page, MONTH);
 
-  const toReview = block(page, "To review");
+  const toReview = await openBlock(page, "To review");
   const approve = toReview.getByRole("button", { name: /^Approve / }).first();
   const name = (await approve.getAttribute("aria-label")) ?? "";
   const line = toReview.getByRole("listitem").filter({ has: page.getByRole("button", { name }) });
@@ -141,6 +146,9 @@ test("a refused mutation rolls back", async ({ userPage: page }) => {
   // Folded away at once, before the server answers…
   await expect(line).toHaveCount(0);
 
+  // On a phone, the page's toast is read with the sheet closed.
+  await closeBlock(page);
+
   // …then put back, with a message that says so: an error toast in the Notifications landmark
   // (packages/ui's toaster; ui-sdk announces it assertively through its own live region).
   const toast = errorToast(page);
@@ -148,6 +156,7 @@ test("a refused mutation rolls back", async ({ userPage: page }) => {
   await expect(toast).toContainText("Something went wrong");
   await expect(toast).toContainText("The line could not be approved; it is back in the list.");
   await expect(toast.getByRole("button", { name: "Retry" })).toBeVisible();
+  await openBlock(page, "To review");
   await expect(line).toHaveCount(1);
 });
 
@@ -178,8 +187,11 @@ test("an error stays in its block, with a retry, and the rest of the page works"
     timeout: 10_000,
   });
   // The other blocks have their data, and their actions still work.
-  await expect(block(page, "The month")).toContainText("Received");
-  await expect(block(page, "To review").getByRole("button", { name: /^Approve / })).toHaveCount(3);
+  await expect(block(page, "The month")).toContainText("received");
+  await expect(
+    (await openBlock(page, "To review")).getByRole("button", { name: /^Approve / }),
+  ).toHaveCount(3);
+  await closeBlock(page);
 
   failing = false;
   await spending.getByRole("button", { name: "Try again" }).click();
@@ -215,11 +227,9 @@ test("a block that failed shows the next month once the month changes", async ({
 
   await expect(spending.getByRole("alert")).toBeVisible({ timeout: 10_000 });
 
-  await page.getByRole("button", { name: "Previous month" }).click();
+  await monthSwitcher(page).getByRole("button", { name: "Previous month" }).click();
 
-  await expect(page.getByRole("group", { name: "Month" })).toContainText("September 2026", {
-    timeout: 10_000,
-  });
+  await expect(monthSwitcher(page)).toContainText("September 2026", { timeout: 10_000 });
   await expect(spending).toContainText("Housing");
   await expect(spending.getByRole("alert")).toHaveCount(0);
   await animationsDone(page);
@@ -235,7 +245,7 @@ test("a line already reviewed elsewhere is refused, and stays reviewed", async (
 
   const toReview = block(page, "To review");
 
-  await expect(toReview).toContainText("+ 3 more");
+  await expect(toReview).toContainText("Show the other 3");
 
   // The same line, approved first in another tab of the same session.
   const other = await page.context().newPage();
@@ -248,7 +258,9 @@ test("a line already reviewed elsewhere is refused, and stays reviewed", async (
         response.request().method() === "POST" && response.url().includes("/_serverFn/"),
     );
 
-    await block(other, "To review")
+    await (
+      await openBlock(other, "To review")
+    )
       .getByRole("button", { name: /^Approve / })
       .first()
       .click();
@@ -258,13 +270,16 @@ test("a line already reviewed elsewhere is refused, and stays reviewed", async (
   }
 
   // This tab still shows it: the server refuses, says why, and the line stays away.
-  await toReview
+  await (
+    await openBlock(page, "To review")
+  )
     .getByRole("button", { name: /^Approve / })
     .first()
     .click();
+  await closeBlock(page);
 
   await expect(errorToast(page)).toContainText("This line was already reviewed elsewhere.");
-  await expect(toReview).toContainText("+ 2 more");
+  await expect(toReview).toContainText("Show the other 2");
 });
 
 test("a user who signs in after another in the same tab never sees the other's data", async ({
@@ -285,19 +300,22 @@ test("a user who signs in after another in the same tab never sees the other's d
 
   const toReview = block(page, "To review");
 
-  await expect(toReview).toContainText("+ 3 more");
+  await expect(toReview).toContainText("Show the other 3");
 
   // The first user approves a line: their list has one line less.
   const approved = page.waitForResponse(
     (response) => response.request().method() === "POST" && response.url().includes("/_serverFn/"),
   );
 
-  await toReview
+  await (
+    await openBlock(page, "To review")
+  )
     .getByRole("button", { name: /^Approve / })
     .first()
     .click();
   await approved;
-  await expect(toReview).toContainText("+ 2 more");
+  await closeBlock(page);
+  await expect(toReview).toContainText("Show the other 2");
 
   // They sign out, and the second user signs in, in the same tab: no reload anywhere.
   await page.evaluate(() => {
@@ -315,7 +333,7 @@ test("a user who signs in after another in the same tab never sees the other's d
   expect(await page.evaluate(() => document.documentElement.dataset.e2eNoReload)).toBe("yes");
 
   // Their own July: every line still to review, not the first user's list.
-  await expect(toReview).toContainText("+ 3 more");
+  await expect(toReview).toContainText("Show the other 3");
   await animationsDone(page);
 });
 
@@ -324,31 +342,30 @@ test("changing month keeps the current data on screen while the next one loads",
 }) => {
   const counts = await watchLoading(page);
 
+  // The first paint is the server's; the browser's calls, September's among them, are slowed.
+  // Long enough for the press to come while September is still on its way.
+  await slowServerFunctions(page, SLOW_MONTH_MS);
   await visit(page, MONTH);
 
   const spending = block(page, "Where the money goes");
   const october = await spending.textContent();
 
-  await slowServerFunctions(page, LATENCY_MS);
-  const month = page.getByRole("group", { name: "Month" });
-
-  await month.getByRole("button", { name: "Previous month" }).click();
+  // September is on its way (the page asked for it ahead, slowed down); October stays on screen,
+  // without a skeleton, and so does its name.
+  await monthSwitcher(page).getByRole("button", { name: "Previous month" }).click();
   await expect(page).toHaveURL(/month=2026-09/);
-
-  // September is on its way; October stays on screen, without a skeleton, and the switcher still
-  // names the month shown.
   expect(await spending.textContent()).toBe(october);
-  await expect(month).toContainText("October 2026");
+  await expect(monthSwitcher(page)).toContainText("October 2026");
 
-  await expect(month).toContainText("September 2026", { timeout: 10_000 });
+  await expect(monthSwitcher(page)).toContainText("September 2026", {
+    timeout: SLOW_MONTH_MS + 10_000,
+  });
   expect(await spending.textContent()).not.toBe(october);
   expect((await counts()).skeletons).toBe(0);
 });
 
-/** Opens a screen without the review's data, and records the server functions asked after. */
-async function fromAccounts(page: Page) {
-  await visit(page, "/accounts");
-
+/** Records the server functions a page asks for from now on. */
+function recordAsked(page: Page) {
   const asked: Array<string> = [];
 
   page.on("request", (request) => {
@@ -358,6 +375,27 @@ async function fromAccounts(page: Page) {
   });
 
   return asked;
+}
+
+test("the months either side are loaded before the switcher is pressed", async ({
+  userPage: page,
+}) => {
+  const asked = recordAsked(page);
+
+  await visit(page, MONTH);
+
+  await expect.poll(() => asked.some((url) => url.includes("2026-09"))).toBe(true);
+  await expect.poll(() => asked.some((url) => url.includes("2026-11"))).toBe(true);
+
+  // Nothing was pressed: still October.
+  await expect(page).toHaveURL(/month=2026-10/);
+});
+
+/** Opens a screen without the review's data, and records the server functions asked after. */
+async function fromAccounts(page: Page) {
+  await visit(page, "/accounts");
+
+  return recordAsked(page);
 }
 
 test("a link preloads its route on hover and on focus", async ({ userPage: page }) => {

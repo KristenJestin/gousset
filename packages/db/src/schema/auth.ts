@@ -34,6 +34,11 @@ export const authUser = pgTable("auth_user", {
   // When the administrator last gave the user a temporary password (#70), shown to the user on the
   // forced change; cleared once they choose their own.
   passwordResetAt: timestamp("password_reset_at"),
+  // The colour scheme the user chose ("system", "light" or "dark"), kept on the account so that it
+  // follows them from one browser to the next; the server reads it for the first paint.
+  colorScheme: text("color_scheme", { enum: ["system", "light", "dark"] })
+    .default("system")
+    .notNull(),
   // The user created by sign-up on a fresh install. Two sign-ups at once could both see no user
   // yet: a unique index lets only one of them be written. That index is not declared here, since
   // `pnpm auth:generate` rewrites this file, but in a custom migration of its own

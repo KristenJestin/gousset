@@ -19,6 +19,6 @@ Gousset's words, used in every result:
 - benchmark: a suggested monthly mark for a category, not a budget.
 
 Which tool answers what:
-- \`month\`: a month's summary (received, spent, set aside, left) and where the money went, by category and by merchant. Use it for "how much did I spend last month, and where?".
+- \`month\`: a month's summary (received, spent, set aside, left) and where the money went, by category, merchant and subject, against benchmarks; or the month's review (imports, lines to review, movements between accounts, investments, flags); or one row day by day, against the month before. Use it for "how much did I spend last month, and where?", "what is left to check this month?" and "how is my Groceries spending going compared with last month?".
 
 Results are text, with names rather than ids. A long result comes in parts: its last line writes the next call to make. An error says what to do and gives a valid call. A write needs the connection to have been allowed to read and write; a refusal says how to get it.`;

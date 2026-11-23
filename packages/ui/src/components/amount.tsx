@@ -152,6 +152,43 @@ export function Amount({
   );
 }
 
+const countFormats = new Map<string, Intl.NumberFormat>();
+
+function countFormat(locale: string) {
+  const known = countFormats.get(locale) ?? new Intl.NumberFormat(locale);
+
+  countFormats.set(locale, known);
+
+  return known;
+}
+
+/**
+ * A count (lines to review, flags) whose digits roll as `Amount`'s do: down when it drops, up
+ * when it grows. Tabular figures; the page's language for the separators.
+ *
+ * Motion: each changing digit rolls to its new one in 200 ms (ease-out); cut under reduced motion.
+ */
+export function Count({ value, locale }: { value: number; locale?: string }) {
+  const pageLocale = usePageLanguage();
+  const parts = countFormat(locale ?? pageLocale).formatToParts(value);
+  const [last, setLast] = useState(value);
+  const [trend, setTrend] = useState(0);
+
+  if (value !== last) {
+    setLast(value);
+    setTrend(Math.sign(value - last));
+  }
+
+  return (
+    <span data-slot="count" className="inline-flex tabular-nums">
+      <span className="sr-only">{parts.map((part) => part.value).join("")}</span>
+      <span aria-hidden="true" className="inline-flex">
+        <Rolling slots={rollSlots(parts)} trend={trend} />
+      </span>
+    </span>
+  );
+}
+
 /** An amount on its way: the same height as `Amount` of that size, for a block's skeleton. */
 export function AmountSkeleton({ size = "md" }: { size?: AmountSize }) {
   return (

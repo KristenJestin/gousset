@@ -45,6 +45,17 @@ export function madeUpUser(role: "first" | "second", slot: number): Person {
   };
 }
 
+/**
+ * A made-up person for one test alone, named by `local` ("jules" is Jules Example): a test that
+ * changes what an account keeps, like its colour scheme, uses one, so that the worker's shared
+ * users stay as every other test expects them. Each test picks a name no other test uses.
+ */
+export function personOfItsOwn(local: string): Person {
+  const name = `${local.charAt(0).toUpperCase()}${local.slice(1)} Example`;
+
+  return { name, email: `${local}@example.com`, password: `e2e-${local}-password` };
+}
+
 /** A request context speaking to the app as its own pages do. */
 function appRequest(baseURL: string, headers: Record<string, string> = {}) {
   return request.newContext({ baseURL, extraHTTPHeaders: { Origin: baseURL, ...headers } });

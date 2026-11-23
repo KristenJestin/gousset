@@ -10,8 +10,8 @@ export const Month = Schema.String.check(
   }),
 );
 
-/** What spending is grouped by. */
-export const SpendingGroup = Schema.Literals(["category", "merchant"]);
+/** What spending is grouped by: the tabs of "Where the money goes". */
+export const SpendingGroup = Schema.Literals(["category", "merchant", "subject"]);
 
 export type SpendingGroup = typeof SpendingGroup.Type;
 
