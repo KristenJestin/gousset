@@ -9,6 +9,7 @@
   "devDependencies": {
     "@axe-core/playwright": "4.14.0",
     "@gousset/config": "workspace:*",
+    "@gousset/db": "workspace:*",
     "@gousset/fixture": "workspace:*",
     "@gousset/telemetry": "workspace:*",
     "@modelcontextprotocol/client": "2.4.0",
