@@ -7,6 +7,7 @@ import type { Touched } from "@/jobs/view";
 import { accountKeys } from "./account-keys";
 import { invalidateApproval, invalidateTouched } from "./invalidate";
 import { lineKeys } from "./line-keys";
+import { merchantKeys } from "./merchant-keys";
 import { monthKeys } from "./month-keys";
 
 const isInvalidated = (client: QueryClient, queryKey: QueryKey) =>
@@ -26,6 +27,8 @@ function clientWith(keys: ReadonlyArray<QueryKey>) {
 const SEARCH = lineKeys.search({ text: "greenmarket" });
 const DETAIL = lineKeys.detail("6f1c2a4e-0d5b-4c3e-9a7f-2b8d1e4c5a60");
 const ACCOUNTS = accountKeys.list();
+const MERCHANTS = merchantKeys.list("");
+const MERCHANT = merchantKeys.detail("0b6e3f9a-4c2d-4e8b-9f1a-7d5c3b2e1a90");
 
 describe("invalidateTouched", () => {
   test("reads the operations and the accounts again, after an import or its undo", async () => {
@@ -40,6 +43,15 @@ describe("invalidateTouched", () => {
       expect(isInvalidated(client, DETAIL)).toBe(true);
       expect(isInvalidated(client, ACCOUNTS)).toBe(true);
     }
+  });
+
+  test("reads the merchants again: an import recognises those of its lines, an undo leaves them", async () => {
+    const client = clientWith([MERCHANTS, MERCHANT]);
+
+    await invalidateTouched(client, { months: ["2026-10"] });
+
+    expect(isInvalidated(client, MERCHANTS)).toBe(true);
+    expect(isInvalidated(client, MERCHANT)).toBe(true);
   });
 });
 

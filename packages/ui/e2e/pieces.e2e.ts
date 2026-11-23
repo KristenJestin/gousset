@@ -244,6 +244,30 @@ test.describe("List", () => {
       "true",
     );
   });
+
+  test("a linked row is one link, named by its title first", async ({ page }) => {
+    await page.goto(story("data-list--links"));
+
+    const list = page.getByRole("list", { name: "Merchants" });
+
+    await expect(list.getByRole("link")).toHaveCount(3);
+    await expect(list.getByRole("link", { name: /^Greenmarket 3 labels/ })).toHaveAttribute(
+      "href",
+      "#greenmarket",
+    );
+  });
+
+  test("a linked row's background moves in 150 ms, and not under reduced motion", async ({
+    page,
+  }) => {
+    await page.goto(story("data-list--links"));
+
+    const link = page.getByRole("link", { name: /^Harbor Books/ });
+
+    await expect(link).toHaveCSS("transition-duration", "0.15s");
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await expect(link).toHaveCSS("transition-duration", "0s");
+  });
 });
 
 test.describe("AccountChip", () => {

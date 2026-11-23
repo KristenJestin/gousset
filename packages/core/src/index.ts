@@ -179,6 +179,41 @@ export { ImportJobInput, markFailed, runImport } from "./imports/run";
 export type { ImportProgress, ImportRun } from "./imports/run";
 
 export {
+  MerchantAliasNotFound,
+  MerchantMergeRefused,
+  MerchantNameRefused,
+  MerchantNameTaken,
+  MerchantNameUnknown,
+  MerchantNotFound,
+} from "./merchants/errors";
+
+export { merchantKey, merchantName } from "./merchants/labels";
+
+export {
+  DEFAULT_MERCHANTS_LISTED,
+  MAX_MERCHANT_NAME,
+  MAX_MERCHANTS_LISTED,
+  MERCHANT_LINES_SCANNED,
+  MERCHANT_LINES_SHOWN,
+  Merchants,
+  listMerchants,
+  merchantsLayer,
+  recogniseMerchants,
+  showMerchant,
+} from "./merchants/merchants";
+
+export type {
+  AliasMoved,
+  MerchantDetail,
+  MerchantLine,
+  MerchantPage,
+  MerchantSearch,
+  MerchantSummary,
+  Merged,
+  Recognised,
+} from "./merchants/merchants";
+
+export {
   Transfers,
   lineTransferOf,
   pairEveryLine,

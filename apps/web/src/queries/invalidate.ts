@@ -5,17 +5,20 @@ import type { Touched } from "@/jobs/view";
 
 import { accountKeys } from "./account-keys";
 import { lineKeys } from "./line-keys";
+import { merchantKeys } from "./merchant-keys";
 import { monthKeys } from "./month-keys";
 
 /**
  * Invalidates the queries of what a job or an action touched (docs/architecture.md): the
  * interface refetches what is on screen and drops the rest. A job's end carries it (`useJob`).
- * Whatever touched months touched their lines too, which the operations and the accounts show.
+ * Whatever touched months touched their lines too, which the operations and the accounts show, and
+ * the merchants an import recognises from them (#24).
  */
 export async function invalidateTouched(queryClient: QueryClient, touched: Touched): Promise<void> {
   const linesAndAccounts = [
     queryClient.invalidateQueries({ queryKey: lineKeys.all }),
     queryClient.invalidateQueries({ queryKey: accountKeys.all }),
+    queryClient.invalidateQueries({ queryKey: merchantKeys.all }),
   ];
 
   if ("everyMonth" in touched) {

@@ -3,6 +3,7 @@ import {
   FixtureLedger,
   ImportProfiles,
   Imports,
+  Merchants,
   Transfers,
   memoryAccountStore,
   memoryId,
@@ -121,6 +122,7 @@ function onToday(rows: MemoryLineRows): Runner<GoussetServices> {
     Layer.mock(Imports, {}),
     Layer.mock(ImportProfiles, {}),
     Layer.mock(DataExport, {}),
+    Layer.mock(Merchants, {}),
     // No line of these is a transfer; transfers are tried end to end (#26, lines-transfers.spec).
     Layer.mock(Transfers, {
       ofLine: () => Effect.succeed({ paired: null, candidates: [] }),
@@ -474,7 +476,7 @@ describe("the lines tool", () => {
     }
   });
 
-  test("writes transfers, and says so, last in the fixed order", async () => {
+  test("writes transfers, and says so, in the fixed order", async () => {
     const client = await connectInProcess(
       goussetServer,
       { run: onToday(ROWS) },
@@ -491,6 +493,7 @@ describe("the lines tool", () => {
       "accounts",
       "data",
       "lines",
+      "merchants",
     ]);
     expect(tool?.title).toBe("Lines");
     expect(tool?.annotations).toEqual({

@@ -164,6 +164,32 @@ export const IMPORT_PROFILES: ExportTable = {
   ],
 };
 
+export const MERCHANTS: ExportTable = {
+  table: "merchant",
+  file: "merchants",
+  holds: "who you paid or were paid by, cleaned from the banks' labels",
+  columns: [
+    ID,
+    OWNER,
+    { name: "name", holds: "the merchant's name, as you see it" },
+    CREATED_AT,
+    UPDATED_AT,
+  ],
+};
+
+export const MERCHANT_ALIASES: ExportTable = {
+  table: "merchant_alias",
+  file: "merchant-aliases",
+  holds: "the cleaned labels that name each merchant: a line whose label cleans to one is its",
+  columns: [
+    ID,
+    OWNER,
+    { name: "merchant_id", holds: "the merchant it names (merchants.id)" },
+    { name: "alias", holds: "the cleaned label, upper case" },
+    CREATED_AT,
+  ],
+};
+
 export const TRANSFERS: ExportTable = {
   table: "transfer",
   file: "transfers",
@@ -185,6 +211,8 @@ export const EXPORT_TABLES: ReadonlyArray<ExportTable> = [
   IMPORTS,
   IMPORT_PROFILES,
   TRANSFERS,
+  MERCHANTS,
+  MERCHANT_ALIASES,
 ];
 
 /** Where the files imported go: one folder per import, named by its id. */
