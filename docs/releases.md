@@ -390,7 +390,10 @@ and volume:
 5. reads every row again: **every table and column of before is still there, and every row is
    identical**, but in the columns and tables the new migrations add (those of the commit's
    `packages/db/src/migrations` the release did not have), each of which must be named in them
-   (`ALTER TABLE "t" ADD COLUMN "c"`, `CREATE TABLE "t"`);
+   (`ALTER TABLE "t" ADD COLUMN "c"`, `CREATE TABLE "t"`), and the rows a new migration
+   removes on purpose, which `tools/check-upgrade.removed` names by migration, table and id: each
+   must be there before and gone after (#130 drops the statement balances of zero that looked
+   empty);
 6. starts the app: `/health` answers 200; **the administrator and both users sign in with the same
    passwords**, the temporary one still has to be replaced, the banned one is still refused, and a
    session made before the update still works;

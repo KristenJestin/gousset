@@ -30,7 +30,11 @@ values
 insert into import (id, user_id, account_id, file_name, file_sha256, format, profile_id, shipped_profile, status, period_from, period_to, lines_read, lines_added, lines_duplicate, lines_held, error_code, created_at, finished_at, undone_at)
 values
   ('019a0000-0000-7000-8000-000000000301', :'camille', '019a0000-0000-7000-8000-000000000101', 'releve-octobre.csv', '5d41402abc4b2a76b9719d911017c592aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'csv', '019a0000-0000-7000-8000-000000000001', null, 'done', '2026-10-01', '2026-10-31', 4, 3, 0, 1, null, '2026-11-01 10:00:00+00', '2026-11-01 10:00:04+00', null),
-  ('019a0000-0000-7000-8000-000000000302', :'camille', '019a0000-0000-7000-8000-000000000101', 'releve-septembre.ofx', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'ofx', null, null, 'failed', null, null, 0, 0, 0, 0, 'unreadable', '2026-11-01 10:05:00+00', '2026-11-01 10:05:01+00', null);
+  ('019a0000-0000-7000-8000-000000000302', :'camille', '019a0000-0000-7000-8000-000000000101', 'releve-septembre.ofx', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'ofx', null, null, 'failed', null, null, 0, 0, 0, 0, 'unreadable', '2026-11-01 10:05:00+00', '2026-11-01 10:05:01+00', null),
+  -- Two files that state a closing balance of 0.00 (#130): the current account's lines contradict
+  -- the first, the empty card's agree with the second.
+  ('019a0000-0000-7000-8000-000000000303', :'camille', '019a0000-0000-7000-8000-000000000101', 'releve-quinzaine.ofx', 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb', 'ofx', null, null, 'done', '2026-10-01', '2026-10-15', 3, 0, 3, 0, null, '2026-11-02 09:00:00+00', '2026-11-02 09:00:02+00', null),
+  ('019a0000-0000-7000-8000-000000000304', :'camille', '019a0000-0000-7000-8000-000000000102', 'carte-octobre.ofx', 'cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc', 'ofx', null, null, 'done', '2026-10-31', '2026-10-31', 0, 0, 0, 0, null, '2026-11-02 09:05:00+00', '2026-11-02 09:05:01+00', null);
 
 insert into import_file (import_id, user_id, content)
 values
@@ -52,7 +56,11 @@ insert into account_balance (id, user_id, account_id, day, balance_minor, source
 values
   ('019a0000-0000-7000-8000-000000000501', :'camille', '019a0000-0000-7000-8000-000000000101', '2026-09-30', 125043, 'statement', '019a0000-0000-7000-8000-000000000301'),
   ('019a0000-0000-7000-8000-000000000502', :'camille', '019a0000-0000-7000-8000-000000000101', '2026-10-31', 334624, 'statement', '019a0000-0000-7000-8000-000000000301'),
-  ('019a0000-0000-7000-8000-000000000503', :'camille', '019a0000-0000-7000-8000-000000000103', '2026-10-31', 1230000, 'noted', null);
+  ('019a0000-0000-7000-8000-000000000503', :'camille', '019a0000-0000-7000-8000-000000000103', '2026-10-31', 1230000, 'noted', null),
+  -- 0.00 while the account holds 3 376,24 € at the end of 15 October: it looks empty, and the
+  -- update drops it (tools/check-upgrade.removed). The empty card's 0.00 is true, and stays.
+  ('019a0000-0000-7000-8000-000000000504', :'camille', '019a0000-0000-7000-8000-000000000101', '2026-10-15', 0, 'statement', '019a0000-0000-7000-8000-000000000303'),
+  ('019a0000-0000-7000-8000-000000000505', :'camille', '019a0000-0000-7000-8000-000000000102', '2026-10-31', 0, 'statement', '019a0000-0000-7000-8000-000000000304');
 
 -- An MCP client Camille allowed, with its tokens, as the MCP door writes them (docs/mcp.md).
 insert into auth_oauth_client (id, client_id, disabled, skip_consent, scopes, user_id, created_at, updated_at, name, uri, redirect_uris, token_endpoint_auth_method, grant_types, response_types, require_pkce, metadata)

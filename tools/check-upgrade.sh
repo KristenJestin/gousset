@@ -3,7 +3,8 @@
 # "Every release is an upgrade"): the release's image with its own docker-compose.yml, filled with
 # invented data, then the image under test in its place. Checks that `migrate` runs and ends, twice
 # with the same result; that no row of any table changed, went or came, but in the columns and
-# tables the new migrations add, which must be named in them; that the upgraded schema is the one
+# tables the new migrations add, which must be named in them, and the rows a new migration removes
+# on purpose (tools/check-upgrade.removed), which must be gone; that the upgraded schema is the one
 # a fresh installation gets; that the app answers, that every user signs in with the same password
 # (a banned one still cannot), that a session made before still works, and that a user's export
 # holds their rows as they were. Removes everything it started, whatever happened.
@@ -202,6 +203,22 @@ cut -f 1 "$work/added" | uniq | grep -vxF -f "$work/tables-before" | sed 's/^/ch
 
 # Every row, but in the columns added, as it was.
 dump "$work/columns-before" "$work/added" "$work/after"
+
+# But the rows a new migration removes on purpose: there before, gone after, and out of what the
+# rest compares.
+while IFS=$'\t' read -r migration table id; do
+  case $migration in '' | '#'*) continue ;; esac
+  grep -qxF "$migration" "$work/old-migrations" && continue
+  key="\"id\": \"$id\""
+  [ "$(awk -F '\t' -v t="$table" -v k="$key" '$1 == t && index($2, k)' "$work/before" | wc -l)" = 1 ] ||
+    fail "tools/check-upgrade.removed names $table $id, which tools/check-upgrade.sql does not fill."
+  [ "$(awk -F '\t' -v t="$table" -v k="$key" '$1 == t && index($2, k)' "$work/after" | wc -l)" = 0 ] ||
+    fail "$migration should remove $table $id, and the row is still there."
+  awk -F '\t' -v t="$table" -v k="$key" '!($1 == t && index($2, k))' "$work/before" > "$work/kept"
+  mv "$work/kept" "$work/before"
+  say "  removed by $migration, as expected: $table $id"
+done < "$root/tools/check-upgrade.removed"
+
 if ! diff "$work/before" "$work/after" > "$work/rows.diff"; then
   echo "check-upgrade.sh: rows changed (< before the update, > after), the first lines:" >&2
   head -n 20 "$work/rows.diff" | cut -c 1-300 >&2
