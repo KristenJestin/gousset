@@ -1,12 +1,9 @@
-import { AnimatePresence, motion } from "motion/react";
-import type { Variants } from "motion/react";
-import { useState } from "react";
-
 import { usePageLanguage } from "../hooks/use-page-language";
+import { useTrend } from "../hooks/use-trend";
 import { moneyParts, rollSlots } from "../lib/money";
-import type { Money, RollSlot } from "../lib/money";
-import { transition } from "../lib/motion";
+import type { Money } from "../lib/money";
 import { cn } from "../lib/utils";
+import { RollingDigits } from "./rolling-digits";
 import { Skeleton } from "./skeleton";
 
 export type AmountSize = "sm" | "md" | "lg";
@@ -30,70 +27,6 @@ export type AmountProps = {
   roll?: boolean;
 };
 
-/** A digit comes in from below when the amount grows, from above when it shrinks. */
-const digitMotion: Variants = {
-  enter: (trend: number) => ({ y: trend < 0 ? "-100%" : "100%" }),
-  shown: { y: "0%" },
-  leave: (trend: number) => ({ y: trend < 0 ? "100%" : "-100%" }),
-};
-
-/**
- * One digit's column. Until its value first changes it is plain text, so the server's markup
- * carries no `style` attribute (the Content Security Policy forbids them); from then on each new
- * digit slides in while the old one slides out, in the same grid cell.
- */
-function DigitColumn({ digit, trend }: { digit: number; trend: number }) {
-  const [shown, setShown] = useState(digit);
-  const [turns, setTurns] = useState(0);
-
-  if (digit !== shown) {
-    setShown(digit);
-    setTurns(turns + 1);
-  }
-
-  return (
-    <span data-slot="amount-digit" className="inline-grid overflow-hidden">
-      <AnimatePresence initial={false} custom={trend}>
-        {turns === 0 ? (
-          <motion.span
-            key={0}
-            className="col-start-1 row-start-1"
-            custom={trend}
-            variants={digitMotion}
-            exit="leave"
-            transition={transition.base}
-          >
-            {digit}
-          </motion.span>
-        ) : (
-          <motion.span
-            key={turns}
-            className="col-start-1 row-start-1"
-            custom={trend}
-            variants={digitMotion}
-            initial="enter"
-            animate="shown"
-            exit="leave"
-            transition={transition.base}
-          >
-            {digit}
-          </motion.span>
-        )}
-      </AnimatePresence>
-    </span>
-  );
-}
-
-function Rolling({ slots, trend }: { slots: Array<RollSlot>; trend: number }) {
-  return slots.map((slot) =>
-    slot.digit === null ? (
-      <span key={slot.key}>{slot.text}</span>
-    ) : (
-      <DigitColumn key={slot.key} digit={slot.digit} trend={trend} />
-    ),
-  );
-}
-
 function amountClasses(size: AmountSize, tone: AmountTone) {
   return cn(
     "inline-flex whitespace-pre tabular-nums",
@@ -112,7 +45,8 @@ function amountClasses(size: AmountSize, tone: AmountTone) {
  * separators, in tabular figures so amounts line up.
  *
  * Motion: when the value changes, each digit that changes rolls to its new one in 200 ms
- * (ease-out), up when the amount grows, down when it shrinks. Cut under reduced motion.
+ * (ease-out), up when the amount grows, down when it shrinks (`RollingDigits`). Cut under reduced
+ * motion.
  */
 export function Amount({
   value,
@@ -126,13 +60,7 @@ export function Amount({
   const pageLocale = usePageLanguage();
   const parts = moneyParts(value, { locale: locale ?? pageLocale, sign, whole });
   const text = parts.map((part) => part.value).join("");
-  const [last, setLast] = useState(value.minor);
-  const [trend, setTrend] = useState(0);
-
-  if (value.minor !== last) {
-    setLast(value.minor);
-    setTrend(Math.sign(value.minor - last));
-  }
+  const trend = useTrend(value.minor);
 
   if (!roll) {
     return (
@@ -146,7 +74,7 @@ export function Amount({
     <span data-slot="amount" className={amountClasses(size, tone)}>
       <span className="sr-only">{text}</span>
       <span aria-hidden="true" className="inline-flex">
-        <Rolling slots={rollSlots(parts)} trend={trend} />
+        <RollingDigits slots={rollSlots(parts)} trend={trend} />
       </span>
     </span>
   );

@@ -269,6 +269,14 @@
   height: 1em;
 }
 
+/* `ImportFiles`' columns on a wide screen: file, format, account, period, new, already known,
+   state. The texts share what is left; the counts take their own width. */
+@utility grid-cols-import-files {
+  grid-template-columns:
+    minmax(0, 2fr) minmax(0, 1.25fr) minmax(0, 1.75fr) minmax(0, 1fr)
+    auto auto minmax(0, 1fr);
+}
+
 @layer base {
   * {
     @apply border-border outline-ring;

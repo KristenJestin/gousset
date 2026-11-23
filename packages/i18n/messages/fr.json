@@ -187,6 +187,8 @@
   "uiJobFailedAfter": "Échec après {attempts} tentatives",
   "uiJobCounts": "{done} sur {total}",
   "uiJobRetry": "Réessayer",
+  "uiImportChooseFiles": "Choisir des fichiers",
+  "uiImportNotKnown": "Pas encore connu",
   "jobFailureInterrupted": "La tâche a été arrêtée avant la fin : l'application s'est arrêtée, ou elle a pris trop de temps. Réessayez.",
   "jobFailureUnexpected": "Un problème est survenu dans la tâche. Réessayez ; si elle échoue encore, le journal de l'application dit où.",
   "jobFailureInvalidInput": "La tâche a reçu quelque chose qu'elle ne sait pas lire. Relancez-la depuis sa page.",
