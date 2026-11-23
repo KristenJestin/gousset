@@ -5,7 +5,7 @@ import type { AmountSyntax } from "./amount";
 import { normalizeHeader } from "./csv";
 import { dayReader } from "./csv-profile";
 import type { CsvProfile } from "./csv-profile";
-import { decodeCsv, isBlank, isUtf8, parseRows } from "./csv-parse";
+import { checkSize, decodeCsv, isUtf8, parseRows } from "./csv-parse";
 import type { CsvRow } from "./csv-parse";
 import { NotAStatement } from "./errors";
 import type { ReadError } from "./errors";
@@ -80,6 +80,17 @@ const MEMO = [
 
 const REFERENCE = ["reference", "ref", "id", "fitid"];
 
+// Three capital letters may be a type (`VIR`, `PRL`, `CHQ`) as well as a currency: only a header
+// saying so makes such a column the currency's, which `readCsv` checks every line against.
+const CURRENCY = ["devise", "currency", "ccy", "wahrung", "monnaie"];
+
+/**
+ * The rows detection reads from the top of the file, under each separator: enough to tell the
+ * table, its header and its columns, and few enough that a large file costs no more than a small
+ * one.
+ */
+const SAMPLE_ROWS = 200;
+
 type Kind = "date" | "amount" | "currency" | "text";
 
 type Column = {
@@ -97,13 +108,13 @@ type Column = {
 type Table = { separator: Separator; rows: Array<CsvRow>; width: number };
 
 function tableOf(text: string, separator: Separator): Table | undefined {
-  const parsed = Effect.runSyncExit(parseRows(text, separator, 1));
+  const parsed = Effect.runSyncExit(parseRows(text, separator, 1, SAMPLE_ROWS));
 
   if (Exit.isFailure(parsed)) {
     return undefined;
   }
 
-  const rows = parsed.value.filter((row) => !isBlank(row));
+  const rows = parsed.value;
   const counts = new Map<number, number>();
 
   for (const row of rows) {
@@ -301,11 +312,14 @@ function averageLength(column: Column): number {
  * (`Libellé`, `Date de valeur`, `Debit`, `Transaction ID`) say which column is which; without one,
  * the first date column is the booking date and the longest text the label.
  *
- * Fails with `NotAStatement` when no table with a date and an amount column is found: the user then
- * picks every column from the preview.
+ * Only the first rows are read (`SAMPLE_ROWS`). Fails with `NotAStatement` when no table with a
+ * date, an amount and a text column for the label is found: the user then picks every column from
+ * the preview.
  */
 export const detectCsvProfile = (bytes: Uint8Array): Effect.Effect<CsvProposal, ReadError> =>
   Effect.gen(function* () {
+    yield* checkSize(bytes);
+
     const encoding = isUtf8(bytes) ? "utf8" : "windows-1252";
     const text = yield* decodeCsv(bytes, encoding);
     const table = bestTable(text);
@@ -370,7 +384,7 @@ export const detectCsvProfile = (bytes: Uint8Array): Effect.Effect<CsvProposal, 
       return yield* notCsv;
     }
 
-    const currency = columns.find((column) => column.kind === "currency");
+    const currency = columns.find((column) => column.kind === "currency" && says(column, CURRENCY));
     const unsure: Array<CsvUnsure> = [];
 
     if (formats.length !== 1) {

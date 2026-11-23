@@ -388,11 +388,18 @@ describe("refusing a CSV file", () => {
   });
 
   test("refuses a file with no header row where the profile reads one", () => {
-    expect(refusal("")).toEqual(
-      new MalformedFile({
-        line: 1,
-        problem: "No header row: the file holds nothing past the lines the profile skips.",
-      }),
+    const none = new MalformedFile({
+      line: 1,
+      problem: "No header row: the file holds nothing past the lines the profile skips.",
+    });
+
+    expect(refusal("")).toEqual(none);
+
+    // A file of line breaks alone builds no row (README, "Errors"), however large it is.
+    const blank = new Uint8Array(8 * 1024 * 1024).fill(0x0a);
+
+    expect(Effect.runSync(Effect.flip(readCsv(blank, semicolon, { currency: "EUR" })))).toEqual(
+      none,
     );
   });
 
@@ -545,6 +552,7 @@ describe("proposing a profile from a CSV file", () => {
   test("says which of two unnamed amount columns is the debit only when their signs tell", () => {
     const unnamed = "Date;Label;Out;In\n02/11/2026;A;12,00;\n13/11/2026;B;;3,00\n";
     const signed = "Date;Label;Out;In\n02/11/2026;A;-12,00;\n13/11/2026;B;;3,00\n";
+
     expect(detectText(unnamed).profile.columns.amount).toEqual({
       kind: "debit-credit",
       debit: 3,
@@ -560,11 +568,32 @@ describe("proposing a profile from a CSV file", () => {
       statementSamples.ofxXml.bytes,
       statementSamples.qifDayFirst.bytes,
       utf8.encode("Name;Town\nA;B\nC;D\n"),
+      utf8.encode("Date;Amount\n02/11/2026;-12,50\n"),
       utf8.encode(""),
+      new Uint8Array(2 * 1024 * 1024).fill(0x0a),
     ]) {
       expect(Effect.runSync(Effect.flip(detectCsvProfile(bytes)))).toEqual(
         new NotAStatement({ format: "csv" }),
       );
     }
+  });
+
+  test("takes three capital letters for a currency only under a header that says so", () => {
+    const types = "Date;Type;Libellé;Montant\n02/11/2026;VIR;A;12,00\n03/11/2026;PRL;B;-3,00\n";
+    const currencies = "Date;Devise;Libellé;Montant\n02/11/2026;EUR;A;12,00\n";
+
+    expect(detectText(types).profile.columns.currency).toBeNull();
+    expect(detectText(currencies).profile.columns.currency).toBe(2);
+  });
+
+  test("refuses a file of more than 64 MiB before decoding it", () => {
+    const bytes = new Uint8Array(64 * 1024 * 1024 + 1).fill(0x41);
+
+    expect(Effect.runSync(Effect.flip(detectCsvProfile(bytes)))).toEqual(
+      new UnsupportedContent({
+        line: 1,
+        problem: "A file of more than 64 MiB: no statement is that large.",
+      }),
+    );
   });
 });

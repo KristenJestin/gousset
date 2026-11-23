@@ -4,7 +4,7 @@ import { invalidField, readAmount } from "./amount";
 import type { AmountSyntax, FieldText } from "./amount";
 import { dateExample, dayReader, lastColumn } from "./csv-profile";
 import type { CsvProfile, DayReader } from "./csv-profile";
-import { decodeCsv, isBlank, parseRows, skipLines } from "./csv-parse";
+import { decodeCsv, parseRows, skipLines } from "./csv-parse";
 import type { CsvCell, CsvRow } from "./csv-parse";
 import { InvalidOption, MalformedFile, MissingField, UnsupportedContent } from "./errors";
 import type { InvalidField, ReadError } from "./errors";
@@ -198,7 +198,7 @@ const readRows = (bytes: Uint8Array, profile: CsvProfile) =>
     const { rest, line } = skipLines(text, profile.skipRows);
     const rows = yield* parseRows(rest, profile.separator, line);
 
-    return { rows: rows.filter((row) => !isBlank(row)), line };
+    return { rows, line };
   });
 
 /** A header row as a profile keeps it to recognise its files: lower case, trimmed, by `;`. */

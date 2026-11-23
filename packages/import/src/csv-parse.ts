@@ -64,14 +64,10 @@ function withoutBom(bytes: Uint8Array): Uint8Array {
 }
 
 /**
- * A CSV file's text in the profile's encoding, its byte order mark dropped (an editor may write
- * one before Windows-1252 text). A file said to be UTF-8 that is not is refused at the line of its
- * first wrong bytes, rather than read with replacement characters in its labels.
+ * Refuses a file of more than 64 MiB before anything reads it whole: decoding past the engine's
+ * longest string would throw.
  */
-export function decodeCsv(
-  bytes: Uint8Array,
-  encoding: CsvEncoding,
-): Effect.Effect<string, MalformedFile | UnsupportedContent> {
+export function checkSize(bytes: Uint8Array): Effect.Effect<void, UnsupportedContent> {
   if (bytes.length > MAX_FILE_BYTES) {
     return Effect.fail(
       new UnsupportedContent({
@@ -81,22 +77,37 @@ export function decodeCsv(
     );
   }
 
-  const body = withoutBom(bytes);
+  return Effect.void;
+}
 
-  if (encoding === "windows-1252") {
-    return Effect.succeed(windows1252.decode(body));
-  }
+/**
+ * A CSV file's text in the profile's encoding, its byte order mark dropped (an editor may write
+ * one before Windows-1252 text). A file said to be UTF-8 that is not is refused at the line of its
+ * first wrong bytes, rather than read with replacement characters in its labels.
+ */
+export function decodeCsv(
+  bytes: Uint8Array,
+  encoding: CsvEncoding,
+): Effect.Effect<string, MalformedFile | UnsupportedContent> {
+  return Effect.flatMap(checkSize(bytes), () => {
+    const body = withoutBom(bytes);
 
-  try {
-    return Effect.succeed(utf8.decode(body));
-  } catch {
-    return Effect.fail(
-      new MalformedFile({
-        line: firstLineNotUtf8(body),
-        problem: "Bytes that are not UTF-8, in a file the profile says is: it may be Windows-1252.",
-      }),
-    );
-  }
+    if (encoding === "windows-1252") {
+      return Effect.succeed(windows1252.decode(body));
+    }
+
+    try {
+      return Effect.succeed(utf8.decode(body));
+    } catch {
+      return Effect.fail(
+        new MalformedFile({
+          line: firstLineNotUtf8(body),
+          problem:
+            "Bytes that are not UTF-8, in a file the profile says is: it may be Windows-1252.",
+        }),
+      );
+    }
+  });
 }
 
 /** The text past its first `count` lines, whatever ends them. */
@@ -127,25 +138,70 @@ function endsLine(text: string, index: number): boolean {
   return character === "\n" || (character === "\r" && text[index + 1] !== "\n");
 }
 
+/** The most values a row may hold: a bank's export has a few dozen columns at most. */
+const MAX_ROW_VALUES = 1000;
+
 /**
- * The rows of a CSV text, each value with the line and the column it starts at; `firstLine` is the
- * number of the text's first line in the file. Linear in the text's length, whatever it holds.
+ * The most values a file may hold, every row counted: years of a bank's statements hold some
+ * hundred thousand. A file of line breaks or separators alone, under 64 MiB, would otherwise build
+ * tens of millions of objects and run the server out of memory.
+ */
+const MAX_VALUES = 1_000_000;
+
+/** A row with nothing in it: a blank line, or separators alone. */
+export function isBlank(row: CsvRow): boolean {
+  return row.cells.every((cell) => cell.text.trim() === "");
+}
+
+/**
+ * The rows of a CSV text that hold something, blank ones left out as they are read, each value
+ * with the line and the column it starts at; `firstLine` is the number of the text's first line in
+ * the file. It stops after `limit` rows, and reads at most a thousand values a row and a million in
+ * all (`UnsupportedContent` past them). Linear in the length it reads, whatever the text holds.
  */
 export function parseRows(
   text: string,
   separator: string,
   firstLine: number,
-): Effect.Effect<Array<CsvRow>, MalformedFile> {
+  limit = Number.POSITIVE_INFINITY,
+): Effect.Effect<Array<CsvRow>, MalformedFile | UnsupportedContent> {
   const rows: Array<CsvRow> = [];
   let cells: Array<CsvCell> = [];
+  let values = 0;
   let rowLine = firstLine;
   let line = firstLine;
   let index = 0;
 
-  while (index < text.length) {
+  const keep = (row: CsvRow) => {
+    if (!isBlank(row)) {
+      rows.push(row);
+      values += row.cells.length;
+    }
+  };
+
+  while (index < text.length && rows.length < limit) {
     const column = cells.length + 1;
     const cellLine = line;
     let value = "";
+
+    if (column > MAX_ROW_VALUES) {
+      return Effect.fail(
+        new UnsupportedContent({
+          line: rowLine,
+          column,
+          problem: `A row of more than ${String(MAX_ROW_VALUES)} values: no bank writes so many columns.`,
+        }),
+      );
+    }
+
+    if (values + cells.length >= MAX_VALUES) {
+      return Effect.fail(
+        new UnsupportedContent({
+          line: rowLine,
+          problem: "More than a million values in the file: no statement is that large.",
+        }),
+      );
+    }
 
     if (text[index] === '"') {
       index += 1;
@@ -215,7 +271,7 @@ export function parseRows(
       continue;
     }
 
-    rows.push({ line: rowLine, cells });
+    keep({ line: rowLine, cells });
     cells = [];
     index += text[index] === "\r" && text[index + 1] === "\n" ? 2 : 1;
     line += 1;
@@ -225,13 +281,8 @@ export function parseRows(
   // A separator ends the text: the row's last value is empty.
   if (cells.length > 0) {
     cells.push({ text: "", line, column: cells.length + 1 });
-    rows.push({ line: rowLine, cells });
+    keep({ line: rowLine, cells });
   }
 
   return Effect.succeed(rows);
-}
-
-/** A row with nothing in it: a blank line, or separators alone. */
-export function isBlank(row: CsvRow): boolean {
-  return row.cells.every((cell) => cell.text.trim() === "");
 }

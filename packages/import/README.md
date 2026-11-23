@@ -83,19 +83,20 @@ table's columns, not the definition's. `normalizeHeader` and `readCsvHeader` giv
 user's profile whose header a file has.
 
 **Detection** (`detectCsvProfile`, `src/csv-detect.ts`) proposes a profile for a file it has none
-for, which the import screen shows over the preview: UTF-8 when the bytes are, Windows-1252
-otherwise; the separator most rows agree on (the widest table on a tie); the lines before the
+for, which the import screen shows over the preview, from the file's first 200 rows: UTF-8 when
+the bytes are, Windows-1252 otherwise; the separator most rows agree on (the widest table on a tie); the lines before the
 first row of that table; a header when no value of the first row is a date; the columns whose every
 value is a date, an amount (with a decimal mark or a sign somewhere: digits alone may be a
-reference) or a currency code. A header's words, accents and case left out, say which is which
+reference) or a currency code (only under a header saying `Devise` or `Currency`: three capital
+letters may be a type, `VIR`, `CHQ`). A header's words, accents and case left out, say which is which
 (`Date de valeur`, `Libellé`, `Débit`, `Crédit`, `Memo`, `Transaction ID`, `Booking date`, in
 English, French and German); without them, the first date column is the booking date, two amount
 columns of which no row fills both are a debit and a credit, and the longest text is the label.
 `unsure` names what the file left open, for the screen to ask: `dateFormat` (every date reads day
 first and month first: day first was taken), `decimalMark` (no amount tells: `,` was taken beside
 `;` and tabs, `.` beside `,` and `|`), `amount` (several amount columns and no header word, or no
-sign, says which). A file with no table of a date and an amount column is `NotAStatement`; the user
-then picks every column.
+sign, says which). A file with no table of a date column, an amount column and a text column for
+the label is `NotAStatement`; the user then picks every column.
 
 Not handled yet: a currency symbol inside an amount (`12,34 €`), a trailing minus (`12,34-`), a
 column saying the direction (`D`/`C`) beside an unsigned amount, a balance column, a footer of
@@ -109,16 +110,17 @@ is at fault (a row that starts on one line and holds a quoted line break names e
 line):
 
 - `NotAStatement`: no `<OFX>` element, no QIF header before the first record, or no CSV table in
-  which detection finds a date and an amount column;
+  which detection finds a date, an amount and a label column;
 - `MalformedFile` (`line`, `problem`): the structure is broken, or the file was cut short;
 - `MissingField` (`line`, `field`): a required field is missing from the record starting there;
 - `InvalidField` (`line`, `field`, `text`, `expected`): a value cannot be read;
 - `UnsupportedContent` (`line`, `problem`): an investment statement, several accounts in one file,
   a line in another currency than the account's, an amount whose direction its type does not say, a
   QIF balance too large to be held exactly, a file of more than 64 MiB; in CSV, a line with both a
-  debit and a credit, and debits signed both ways in one file;
+  debit and a credit, debits signed both ways in one file, a row of more than 1,000 values, a file
+  of more than a million;
 - `InvalidOption` (`option`, `text`, `expected`): the caller's option cannot be used (`readQif`'s
-  `currency` is no ISO 4217 code), whatever the file holds.
+  or `readCsv`'s `currency` is no ISO 4217 code), whatever the file holds.
 
 `field` is the format's own name (`TRNAMT`, `DTPOSTED`; QIF's letter, `T`, `D`); in CSV, which has
 none, the profile's (`bookedOn`, `valueOn`, `amount`, `debit`, `credit`), the header being the file's
@@ -138,7 +140,10 @@ log records the error by its tag, with `line`, `field`, `format` or `option` at 
 
 No file makes a reader die: a file of more than 64 MiB is `UnsupportedContent` before it is decoded
 (past the engine's longest string, decoding would throw), an OFX file nested more than 64 deep (a
-statement nests about eight) is `MalformedFile`, and every step is linear in the file's size.
+statement nests about eight) is `MalformedFile`, and every step is linear in the file's size. A CSV
+file's blank rows are dropped as they are read, and a row of more than 1,000 values or a file of
+more than a million is `UnsupportedContent`: 64 MiB of line breaks or separators would otherwise
+build tens of millions of objects. Detection reads 200 rows at most under each separator.
 
 ## Decisions
 
