@@ -10,13 +10,14 @@ import { asc, eq } from "drizzle-orm";
 import { addUser } from "../src/auth";
 import type { TestUser } from "../src/auth";
 import { importsOn, statementFile } from "../src/imports";
-import { animationsDone, connectMcp, expect, test, visit } from "../src/test";
+import { animationsDone, connectMcp, expect, fixDay, test, visit } from "../src/test";
 import { openUserData } from "../src/user-data";
 
 // Issue #130, "How to verify": some banks write a closing balance of 0.00 although the account is
 // not empty. A balance of zero that the account's lines contradict on its day is treated as not
 // given: no statement balance is recorded, and the import's summary says so, on the screen and
-// through the MCP door. A file whose lines do make zero keeps its zero balance. Each test imports
+// through the MCP door. A file whose lines do make zero keeps its zero balance. Such a balance an
+// earlier import kept stays in its table, and the account's check reads past it. Each test imports
 // into accounts of its own, of a user of its own, through `@gousset/core` as the import job runs it.
 
 /** The example statement from an empty account, with a closing balance its lines contradict. */
@@ -139,6 +140,56 @@ test("a file whose lines sum to zero keeps its zero balance", async ({ app, user
   } finally {
     await data.close();
   }
+});
+
+test("an empty balance an earlier import kept shows no false gap on the account's page", async ({
+  app,
+  user,
+  page,
+}) => {
+  const person = await importer(app, user, "kept");
+  const data = openUserData(app.database);
+  let accountId = "";
+
+  try {
+    const imports = importsOn(data);
+    const owner = await data.ownerOf(person.email);
+
+    accountId = await imports.createAccount(owner, "Kept balances");
+
+    const summary = await imports.importFile(owner, accountId, statementFile("ofx", emptyBalance));
+
+    // As an import before #130 kept them: the bank's 0.00 of 31 October, which the account's
+    // lines contradict, and a balance of 21 October that they agree with.
+    await data.asUser(owner, (transaction) =>
+      transaction.insert(accountBalance).values([
+        {
+          userId: owner,
+          accountId,
+          day: "2026-10-21",
+          balanceMinor: 155_544,
+          source: "statement",
+          importId: summary.id,
+        },
+        {
+          userId: owner,
+          accountId,
+          day: "2026-10-31",
+          balanceMinor: 0,
+          source: "statement",
+          importId: summary.id,
+        },
+      ]),
+    );
+  } finally {
+    await data.close();
+  }
+
+  await page.context().addCookies([...person.cookies]);
+  await fixDay(page, "2026-10-31");
+  await visit(page, `/accounts/${accountId}`);
+  await expect(page.getByText("Balance checked")).toBeVisible();
+  await expect(page.getByText("Balance does not match")).toHaveCount(0);
 });
 
 /** A file's summary on the import screen, by its name. */
