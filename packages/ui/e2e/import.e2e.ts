@@ -78,6 +78,13 @@ async function draggedFiles(page: Page) {
   });
 }
 
+/**
+ * Playwright's Firefox kills the page's content process when a synthetic drag carries a
+ * `DataTransfer` handle ("Page crashed", on every drag check): a crash of the browser under test,
+ * not of the zone. Chromium and the phone run them.
+ */
+const NO_SYNTHETIC_DRAG = "Playwright's Firefox crashes on a synthetic drag with files";
+
 const FILES = [
   { name: "statement_october.ofx", mimeType: "application/x-ofx", buffer: Buffer.from("OFX") },
   { name: "savings.qif", mimeType: "application/qif", buffer: Buffer.from("!Type:Bank") },
@@ -117,7 +124,8 @@ test.describe("FileDrop", () => {
 
   test("files dragged over it light the zone up, and dropping them hands them over", async ({
     page,
-  }) => {
+  }, testInfo) => {
+    test.skip(testInfo.project.name === "firefox", NO_SYNTHETIC_DRAG);
     await page.goto(story("file-drop", "default"));
 
     const zone = page.getByRole("group", { name: "Drop your statements here" });
@@ -136,7 +144,8 @@ test.describe("FileDrop", () => {
     );
   });
 
-  test("files dragged away leave the zone as it was", async ({ page }) => {
+  test("files dragged away leave the zone as it was", async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name === "firefox", NO_SYNTHETIC_DRAG);
     await page.goto(story("file-drop", "default"));
 
     const zone = page.getByRole("group", { name: "Drop your statements here" });
@@ -154,7 +163,8 @@ test.describe("FileDrop", () => {
     await expect(page.locator('[data-slot="file-drop"]')).toHaveCSS("transition-duration", "0s");
   });
 
-  test("disabled, it takes no file", async ({ page }) => {
+  test("disabled, it takes no file", async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name === "firefox", NO_SYNTHETIC_DRAG);
     await page.goto(story("file-drop", "disabled"));
     await expect(page.getByRole("button", { name: "Choose files" })).toBeDisabled();
 
