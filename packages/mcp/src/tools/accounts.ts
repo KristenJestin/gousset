@@ -1,5 +1,7 @@
 import { accountNamed, listAccounts, showAccount } from "@gousset/core";
 import type {
+  AccountCredit,
+  AccountCredits,
   AccountDetail,
   AccountGroupList,
   AccountList,
@@ -18,6 +20,9 @@ import { ToolRefusal, defineTool } from "../tool";
 /** The lines `show` gives when none are asked for, and the most it gives. */
 const DEFAULT_LINES = 20;
 const MAX_LINES = 100;
+
+/** The credits of a benefit account `show` lists before saying how many more remain. */
+const MAX_CREDITS = 30;
 
 const AccountsInput = Schema.Struct({
   action: Schema.Literals(["list", "show"]).annotate({
@@ -45,9 +50,9 @@ const AccountsInput = Schema.Struct({
   ),
 });
 
-const DESCRIPTION = `The user's accounts and their balances. \`list\` gives every open account by group: available (current accounts, deferred debit cards), restricted (benefit accounts: meal vouchers, gift cards), savings and investments, owed (loans), each with its balance today and how far its statements go, and each group's totals per currency (never converted); then the closed accounts, apart and out of the totals. \`show\` gives one account: its balance today, its last lines newest first with the balance after each, and the check of its balance against its latest statement balance, with the difference when they disagree.
+const DESCRIPTION = `The user's accounts and their balances. \`list\` gives every open account by group: available (current accounts, deferred debit cards), restricted (benefit accounts: meal vouchers, gift cards), savings and investments, owed (loans), each with its balance today and how far its statements go, and each group's totals per currency (never converted); then the closed accounts, apart and out of the totals. \`show\` gives one account: its balance today, its last lines newest first with the balance after each, and the check of its balance against its latest statement balance, with the difference when they disagree. On a benefit account kept by its lines, \`show\` adds its credits: the order they are used in, what is left on each, and what expires when.
 
-Use \`list\` for "how much do I have, and where?", \`show\` for one account's latest lines or "does my balance match my bank's?". Both only read.
+Use \`list\` for "how much do I have, and where?", \`show\` for one account's latest lines, "does my balance match my bank's?" or "what expires when on my meal vouchers?". Both only read.
 
 \`show\` names the account by \`name\`, as \`list\` writes it (case does not matter); when two accounts share a name, add \`institution\`, the bank written after the name in \`list\`. An unknown or ambiguous name is refused with the names to choose from. \`lines\` says how many of the last lines to give (1 to ${MAX_LINES}, ${DEFAULT_LINES} by default); when more remain, the result gives the exact call to read on with \`before\`.
 
@@ -203,6 +208,8 @@ function showText(detail: AccountDetail, linesCount: number): string {
   const settles =
     account.settlesInto === null ? [] : [`Debited each month from: ${account.settlesInto.name}.`];
 
+  const credits = creditsText(detail);
+
   const lines =
     detail.lines.length === 0
       ? ["No line yet."]
@@ -212,7 +219,9 @@ function showText(detail: AccountDetail, linesCount: number): string {
             const after =
               line.balanceAfter === null ? "" : `, balance ${amount(line.balanceAfter)}`;
 
-            return `- ${line.bookedOn}: ${amount(line.amount)}${after}, ${line.label === "" ? "(no label)" : line.label}`;
+            const expiry = line.expiresOn === null ? "" : `, expires on ${line.expiresOn}`;
+
+            return `- ${line.bookedOn}: ${amount(line.amount)}${after}, ${line.label === "" ? "(no label)" : line.label}${expiry}`;
           }),
         ];
 
@@ -237,8 +246,76 @@ function showText(detail: AccountDetail, linesCount: number): string {
       ...settles,
     ].join("\n"),
     checkText(detail),
+    ...(credits === null ? [] : [credits]),
     [...lines, ...older].join("\n"),
   ].join("\n\n");
+}
+
+const ORDER_TEXT = {
+  oldest_first: "Credits are used oldest first.",
+  expiring_first: "Credits are used soonest expiry first, as the issuer does.",
+} as const satisfies { readonly [Order in AccountCredits["order"]]: string };
+
+function creditLine(credit: AccountCredit): string {
+  const which =
+    credit.creditedOn === null
+      ? "the opening balance"
+      : `credited on ${credit.creditedOn}, ${credit.label === null || credit.label === "" ? "(no label)" : credit.label}`;
+
+  const expiry = credit.expiresOn === null ? "no expiry" : `expires on ${credit.expiresOn}`;
+
+  return `- ${which}: ${amount(credit.left)} left of ${amount(credit.amount)}, ${expiry}.`;
+}
+
+/** A benefit account's credits, in Gousset's words; null for every other account. */
+function creditsText(detail: AccountDetail): string | null {
+  if (detail.account.kind !== "benefit") {
+    return null;
+  }
+
+  const { credits } = detail;
+
+  if (credits === null) {
+    return "Benefit account kept by its balance: its balance is restricted, not counted in the money available. Credits and their expiries are not followed in balance mode.";
+  }
+
+  const expiring =
+    credits.expiring.length === 0
+      ? ["What expires when: no credit left has an expiry."]
+      : [
+          "What expires when:",
+          ...credits.expiring.map((each) =>
+            each.day < detail.day
+              ? `- ${each.day}: ${amount(each.amount)} expired on that day; it still counts until a line takes it out.`
+              : `- ${each.day}: ${amount(each.amount)} expires.`,
+          ),
+        ];
+
+  const more = credits.open.length - MAX_CREDITS;
+
+  const open =
+    credits.open.length === 0
+      ? ["No credit has anything left."]
+      : [
+          "Credits left, in order of use:",
+          ...credits.open.slice(0, MAX_CREDITS).map(creditLine),
+          ...(more > 0 ? [`and ${more} more.`] : []),
+        ];
+
+  const uncovered =
+    credits.uncovered.minor > 0
+      ? [
+          `Spent beyond every credit so far: ${amount(credits.uncovered)}, taken from the next credit.`,
+        ]
+      : [];
+
+  return [
+    "Benefit account: its money is restricted, not counted in the money available.",
+    ORDER_TEXT[credits.order],
+    ...expiring,
+    ...open,
+    ...uncovered,
+  ].join("\n");
 }
 
 const call = (input: typeof AccountsInput.Encoded) => `accounts ${JSON.stringify(input)}`;

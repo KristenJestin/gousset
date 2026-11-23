@@ -81,6 +81,17 @@ export class BalanceAlreadyNoted extends Schema.TaggedError<BalanceAlreadyNoted>
   { accountId: Schema.String, day: Schema.String },
 ) {}
 
+/** The line is no credit: only a counted positive line of a benefit account has an expiry. */
+export class NotACredit extends Schema.TaggedError<NotACredit>()("NotACredit", {
+  lineId: Schema.String,
+}) {}
+
+/** A credit cannot expire before the day it was credited. */
+export class ExpiryBeforeCredit extends Schema.TaggedError<ExpiryBeforeCredit>()(
+  "ExpiryBeforeCredit",
+  { lineId: Schema.String, creditedOn: Schema.String, expiresOn: Schema.String },
+) {}
+
 /** The days asked for a chart run backwards, or over more days than a chart covers. */
 export class DayRangeRefused extends Schema.TaggedError<DayRangeRefused>()("DayRangeRefused", {
   from: Schema.String,

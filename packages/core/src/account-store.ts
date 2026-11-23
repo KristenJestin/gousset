@@ -2,9 +2,10 @@ import type { QueryFailed } from "@gousset/db/user-data";
 import { Context } from "effect";
 import type { Effect, Result } from "effect";
 
-import type { AccountEnvelope, AccountKind, AccountMode } from "./account-values";
+import type { AccountEnvelope, AccountKind, AccountMode, CreditOrder } from "./account-values";
 import type { DayBalance } from "./balances";
-import type { AccountNotFound, BalanceAlreadyNoted } from "./errors";
+import type { CountedLine } from "./credits";
+import type { AccountNotFound, BalanceAlreadyNoted, LineNotFound } from "./errors";
 
 /** An account's row, as the logic reads it. */
 export type AccountRecord = {
@@ -19,6 +20,8 @@ export type AccountRecord = {
   readonly openedOn: string | null;
   readonly closedOn: string | null;
   readonly settlesIntoAccountId: string | null;
+  /** Read for a benefit account only: in which order its credits are used. */
+  readonly creditOrder: CreditOrder;
 };
 
 /** What a write sets on an account; the rest stays. */
@@ -60,6 +63,25 @@ export type StoredLine = {
   readonly label: string;
   readonly memo: string | null;
   readonly counterpartyName: string | null;
+  /** A credit of a benefit account: the day it expires. */
+  readonly expiresOn: string | null;
+};
+
+/** A line of the user's, as a change of its expiry is decided from, with its account. */
+export type LineFacts = {
+  readonly id: string;
+  readonly bookedOn: string;
+  readonly amountMinor: number;
+  readonly state: "counted" | "held" | "discarded";
+  readonly expiresOn: string | null;
+  readonly account: AccountRecord;
+};
+
+/** A line's expiry, as a write left it. */
+export type LineExpiry = {
+  readonly lineId: string;
+  readonly accountId: string;
+  readonly expiresOn: string | null;
 };
 
 /** Counted lines of an account, newest first (booked on, then id). */
@@ -133,6 +155,15 @@ export class AccountStore extends Context.Service<
       accountId: string,
       range: { readonly from: string; readonly to: string },
     ) => Effect.Effect<InOut, QueryFailed>;
+    /**
+     * Every counted line of an account booked on or before `day`, oldest first (booked on, then
+     * id): what a benefit account's credits are replayed from.
+     */
+    readonly countedLines: (
+      owner: string,
+      accountId: string,
+      day: string,
+    ) => Effect.Effect<ReadonlyArray<CountedLine>, QueryFailed>;
     /** Creates the account `decide` makes from the user's accounts, in one transaction. */
     readonly create: <E>(
       owner: string,
@@ -150,5 +181,11 @@ export class AccountStore extends Context.Service<
       accountId: string,
       decide: (account: AccountRecord) => Result.Result<DayBalance, E>,
     ) => Effect.Effect<DayBalance, E | AccountNotFound | BalanceAlreadyNoted | QueryFailed>;
+    /** Sets the expiry `decide` gives a line from what it read, in one transaction. */
+    readonly setLineExpiry: <E>(
+      owner: string,
+      lineId: string,
+      decide: (line: LineFacts) => Result.Result<string | null, E>,
+    ) => Effect.Effect<LineExpiry, E | LineNotFound | QueryFailed>;
   }
 >()("@gousset/core/AccountStore") {}

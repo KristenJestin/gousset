@@ -35,6 +35,14 @@ export const AccountMode = Schema.Literals(["lines", "balance"]);
 
 export type AccountMode = typeof AccountMode.Type;
 
+/**
+ * In which order a benefit account's credits are used up: `oldest_first`, by the day credited, or
+ * `expiring_first`, by expiry date, as some issuers do (docs/data-model.md, "Accounts").
+ */
+export const CreditOrder = Schema.Literals(["oldest_first", "expiring_first"]);
+
+export type CreditOrder = typeof CreditOrder.Type;
+
 type Stored = { readonly kind: AccountKind; readonly envelope: AccountEnvelope | null };
 
 const STORED = {
@@ -157,9 +165,24 @@ export const AccountInput = Schema.Struct({
   openingBalanceMinor: MinorAmount,
   openedOn: Schema.optional(Day),
   settlesIntoAccountId: Schema.optional(AccountId),
+  /** Read for a benefit account only. Left out: `oldest_first` on create, unchanged on edit. */
+  creditOrder: Schema.optional(CreditOrder),
 });
 
 export type AccountInput = typeof AccountInput.Type;
+
+/** A line's id, as the database makes them. */
+export const LineId = Schema.String.check(
+  Schema.isUUID(undefined, { message: "A line is named by its id, a UUID." }),
+);
+
+/** The expiry of a benefit account's credit: a day, or null to take it away. */
+export const CreditExpiryInput = Schema.Struct({
+  lineId: LineId,
+  expiresOn: Schema.NullOr(Day),
+});
+
+export type CreditExpiryInput = typeof CreditExpiryInput.Type;
 
 /** A balance noted by hand on a balance-mode account: the balance at the end of `day`. */
 export const NotedBalanceInput = Schema.Struct({
