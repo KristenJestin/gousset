@@ -167,7 +167,10 @@ function PartContent({
         />
       </span>
       <span
-        className={cn("h-4 truncate text-xs", over ? "text-destructive" : "text-muted-foreground")}
+        className={cn(
+          "h-4 max-w-full truncate text-xs",
+          over ? "text-destructive" : "text-muted-foreground",
+        )}
       >
         {over ? messages.overspent : label}
       </span>
@@ -175,15 +178,22 @@ function PartContent({
   );
 }
 
+const LEGEND_CLASSES = "flex gap-6";
+
+// Only the last key gives way on a narrow screen: its name is the one that grows ("left, €153
+// restricted"), and the amounts before it are never cut.
 const PART_CLASSES =
-  "-mx-1 flex min-w-0 flex-col items-start rounded-md px-1 text-left transition-colors duration-150";
+  "-mx-1 flex shrink-0 flex-col items-start rounded-md px-1 text-left transition-colors duration-150 last:min-w-0 last:shrink";
 
 /**
  * The month in one bar (docs/wireframes, screen 1, block 1): the money received, cut into spent,
- * set aside and left, each in its role's colour, with its amount under it and the total above.
- * Each part is a button when `onSelect` is given. When more went out than came in, the bar
- * stretches to what went out, a dark mark shows where the money received ended, and the part
- * left says by how much the month is overspent, in red. With `restricted`, the end of the part
+ * set aside and left, each in its role's colour, the total above and a legend under it. The
+ * legend's keys (dot, amount, name) sit side by side from the bar's start rather than under their
+ * parts: a part can be a sliver too narrow for its key, and the parts' widths move with the month
+ * while the keys stay put. On one line on every width, a long name cut short, so the block's
+ * height never changes. Each key is a button when `onSelect` is given. When more went out than
+ * came in, the bar stretches to what went out, a dark mark shows where the money received ended,
+ * and the part left says by how much the month is overspent, in red. With `restricted`, the end of the part
  * left is hatched (benefit accounts' money) and its label says how much of it.
  *
  * Motion: when the month changes, the parts grow or shrink to their new widths in 200 ms
@@ -220,7 +230,7 @@ export function MonthBar({
         {comparison === undefined ? null : <span className="ml-auto shrink-0">{comparison}</span>}
       </div>
       <Bar layout={layout} />
-      <div role="group" aria-label={messages.parts} className="grid grid-cols-3 gap-2">
+      <div role="group" aria-label={messages.parts} className={LEGEND_CLASSES}>
         {layout.parts.map(({ role }) =>
           onSelect === undefined ? (
             <div key={role} data-role={role} className={PART_CLASSES}>
@@ -278,7 +288,7 @@ export function MonthBarSkeleton() {
           <Skeleton className="h-4 w-32" />
         </div>
         <Skeleton className="h-6" />
-        <div className="grid grid-cols-3 gap-2">
+        <div className={LEGEND_CLASSES}>
           <PartSkeleton />
           <PartSkeleton />
           <PartSkeleton />

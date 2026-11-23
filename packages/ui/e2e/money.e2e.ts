@@ -258,6 +258,59 @@ test.describe("MonthBar", () => {
     await expect(page.getByTestId("chosen")).toHaveText("Chosen: left");
   });
 
+  // Under its parts, the legend sat at fixed thirds that matched none of them (#83): it is a
+  // compact one, its keys side by side from the bar's start, whatever the parts' widths.
+  // The phone story at the narrowest phone it is drawn for (Storybook's `mobile1`).
+  for (const { name, width } of [
+    { name: "default", width: null },
+    { name: "narrow-part", width: null },
+    { name: "phone", width: 320 },
+  ]) {
+    test(`its legend sits side by side from the bar's start (${name})`, async ({ page }) => {
+      if (width !== null) {
+        await page.setViewportSize({ width, height: 568 });
+      }
+
+      await page.goto(story("month-bar", name));
+
+      const bar = await page.locator('[data-slot="month-bar-drawing"]').boundingBox();
+
+      // Where each key's text is drawn (its two lines), not its box: a box can stretch to a column
+      // wider than what it holds.
+      const keys = await page
+        .getByRole("group", { name: "What came in, by part" })
+        .evaluate((group) =>
+          [...group.children].map((key) => {
+            const lines = [...key.children].map((line) => line.getBoundingClientRect());
+
+            return {
+              top: key.getBoundingClientRect().top,
+              left: Math.min(...lines.map((line) => line.left)),
+              right: Math.max(...lines.map((line) => line.right)),
+            };
+          }),
+        );
+
+      expect(bar).not.toBeNull();
+      expect(keys).toHaveLength(3);
+
+      const [first, ...others] = keys;
+      const barLeft = bar?.x ?? 0;
+
+      expect(Math.abs((first?.left ?? 0) - barLeft)).toBeLessThanOrEqual(1);
+
+      for (const [index, key] of others.entries()) {
+        const gap = key.left - (keys[index]?.right ?? 0);
+
+        expect(key.top).toBe(first?.top);
+        expect(gap).toBeGreaterThanOrEqual(8);
+        expect(gap).toBeLessThanOrEqual(32);
+      }
+
+      expect(keys.at(-1)?.right ?? 0).toBeLessThanOrEqual(barLeft + (bar?.width ?? 0));
+    });
+  }
+
   test("an overspent month says by how much, and marks where the money received ended", async ({
     page,
   }) => {

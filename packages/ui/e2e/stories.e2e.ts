@@ -14,6 +14,8 @@ type Shot = {
   id: string;
   /** What to do before the screenshot, for a popup that opens from its trigger. */
   open?: "click" | "focus";
+  /** A phone's width, for a story whose layout is the phone's (its `Phone` story). */
+  width?: number;
 };
 
 const SHOTS: ReadonlyArray<Shot> = [
@@ -52,6 +54,9 @@ const SHOTS: ReadonlyArray<Shot> = [
   { id: "money-delta--spending-up" },
   { id: "money-month-bar--default" },
   { id: "money-month-bar--overspent" },
+  { id: "money-month-bar--narrow-part" },
+  // The legend on one line at the narrowest phone (#83), Storybook's `mobile1`.
+  { id: "money-month-bar--phone", width: 320 },
   { id: "money-breakdown--default" },
   { id: "money-breakdown--loading" },
   { id: "money-amount--counting" },
@@ -89,6 +94,11 @@ for (const scheme of ["light", "dark"] as const) {
       test.skip(testInfo.project.name !== "chromium", "Screenshotted on the desktop Chromium");
 
       await page.emulateMedia({ colorScheme: scheme, reducedMotion: "reduce" });
+
+      if (shot.width !== undefined) {
+        await page.setViewportSize({ width: shot.width, height: 568 });
+      }
+
       await page.goto(`/iframe.html?id=${shot.id}&viewMode=story`);
       await page.locator("#storybook-root > *").first().waitFor();
       await page.evaluate(async () => {

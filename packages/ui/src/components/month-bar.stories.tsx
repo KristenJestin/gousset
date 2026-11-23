@@ -59,9 +59,10 @@ function SwitchingMonths() {
 
 /**
  * The month in one bar (screen 1, block 1): the money received, cut into spent, set aside and
- * left, each in its role's colour (`--money-spent`, `--money-saved`, `--money-left`), with each
- * part's amount under it and the total above. With `onSelect`, each part is a button (Tab, Enter)
- * that opens the operations behind it. When more went out than came in, the bar stretches to
+ * left, each in its role's colour (`--money-spent`, `--money-saved`, `--money-left`), the total
+ * above and a legend under it: each part's dot, amount and name, side by side from the bar's
+ * start, so that a narrow part still has its key. With `onSelect`, each key is a button (Tab,
+ * Enter) that opens the operations behind it. When more went out than came in, the bar stretches to
  * what went out, a dark mark shows where the money received ended, and the last part says by how
  * much the month is overspent, in red.
  *
@@ -89,6 +90,22 @@ export const Default: Story = { render: () => <Choosing /> };
 
 /** Without `onSelect`: nothing to click. */
 export const ReadOnly: Story = { args: { note: "salary and meal vouchers" } };
+
+/**
+ * A sliver set aside, and most of what is left on the meal voucher card (hatched): the legend
+ * keeps its keys side by side, never squeezed under a part too narrow for them.
+ */
+export const NarrowPart: Story = {
+  args: {
+    received: { minor: 312_000, currency: "EUR" },
+    spent: { minor: 288_000, currency: "EUR" },
+    saved: { minor: 4000, currency: "EUR" },
+    left: { minor: 20_000, currency: "EUR" },
+    restricted: { minor: 15_300, currency: "EUR" },
+    note: "salary and meal vouchers",
+    onSelect: () => undefined,
+  },
+};
 
 /** More went out than came in. */
 export const Overspent: Story = {
@@ -121,6 +138,7 @@ export const French: Story = {
 /** Loading: the skeleton, shaped like the bar. */
 export const Loading: Story = { render: () => <MonthBarSkeleton /> };
 
+/** On the narrowest phone: the legend still fits on one line under the bar. */
 export const Phone: Story = {
   globals: { viewport: { value: "mobile1", isRotated: false } },
   render: () => <Choosing />,
