@@ -185,6 +185,18 @@ const UNDOABLE: ReadonlySet<ImportStatus> = new Set(["done", "waiting", "failed"
 /** What an import says while its job runs it. */
 const UNDER_WAY: ReadonlySet<ImportStatus> = new Set(["queued", "reading", "saving"]);
 
+/**
+ * The row as an action read it: its status among `statuses`, and the same job, so that two
+ * actions on one import never both pass (a resume clears the job id it replaces).
+ */
+function asRead(importId: string, found: ImportSummary, statuses: Array<ImportStatus>) {
+  return and(
+    eq(statementImport.id, importId),
+    inArray(statementImport.status, statuses),
+    found.jobId === null ? isNull(statementImport.jobId) : eq(statementImport.jobId, found.jobId),
+  );
+}
+
 /** `Imports` on the database (`UserData`) and the app's job queue (`ImportJobs`). */
 export const importsLayer = Layer.effect(
   Imports,
@@ -207,7 +219,8 @@ export const importsLayer = Layer.effect(
     /**
      * The statuses an action accepts for this import, and which the transaction checks again under
      * the row's lock (the job takes the same one): `accepted`, and the status of an import whose job
-     * is over though the import still says it runs.
+     * is over though the import still says it runs. An import with no job yet is never stuck: it is
+     * being started or resumed this very moment, and its job id comes next.
      */
     const statusesFor = (
       owner: string,
@@ -217,7 +230,8 @@ export const importsLayer = Layer.effect(
       Effect.gen(function* () {
         const stuck =
           UNDER_WAY.has(found.status) &&
-          (found.jobId === null || (yield* jobs.isOver(owner, found.jobId)));
+          found.jobId !== null &&
+          (yield* jobs.isOver(owner, found.jobId));
 
         return stuck ? [...accepted, found.status] : [...accepted];
       });
@@ -230,7 +244,8 @@ export const importsLayer = Layer.effect(
             transaction
               .update(statementImport)
               .set({ status: "failed", errorCode: "QUEUE_UNAVAILABLE" })
-              .where(eq(statementImport.id, importId)),
+              // Unless it was undone or answered meanwhile.
+              .where(and(eq(statementImport.id, importId), eq(statementImport.status, "queued"))),
           ).pipe(Effect.ignore),
         ),
         Effect.flatMap((jobId) =>
@@ -341,9 +356,7 @@ export const importsLayer = Layer.effect(
             const [claimed] = await transaction
               .update(statementImport)
               .set({ status: "undone", undoneAt: new Date() })
-              .where(
-                and(eq(statementImport.id, importId), inArray(statementImport.status, statuses)),
-              )
+              .where(asRead(importId, found, statuses))
               .returning({ id: statementImport.id });
 
             if (claimed === undefined) {
@@ -430,10 +443,10 @@ export const importsLayer = Layer.effect(
                 status: "queued",
                 errorCode: null,
                 accountId: accountId ?? found.account?.id ?? null,
+                // The job it replaces is forgotten at once: the new one's id comes with its send.
+                jobId: null,
               })
-              .where(
-                and(eq(statementImport.id, importId), inArray(statementImport.status, statuses)),
-              )
+              .where(asRead(importId, found, statuses))
               .returning({ id: statementImport.id });
 
             return claimed === undefined ? ("busy" as const) : ("queued" as const);

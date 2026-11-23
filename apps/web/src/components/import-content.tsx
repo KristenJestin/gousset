@@ -41,12 +41,13 @@ function useRefreshImports() {
 
 /**
  * The import's job, followed live: its steps move with its real progress. A job over for good
- * whose import still says it runs (its last attempt could not say how it ended) can be run again.
+ * whose import still says it runs (its last attempt could not say how it ended) can be run again;
+ * one the queue no longer has is shown as a failure, to run again or undo.
  */
 function Running({ summary }: { summary: Import }) {
-  const { view } = useJob(summary.jobId ?? undefined);
+  const { view, gone } = useJob(summary.jobId ?? undefined);
   const queryClient = useQueryClient();
-  const { resume } = useResume(summary);
+  const { resume, refused } = useResume(summary);
   const over = view !== undefined && isOver(view);
 
   // Once the job is over the import's own row says how it ended (written with its last lines,
@@ -57,21 +58,28 @@ function Running({ summary }: { summary: Import }) {
     }
   }, [over, queryClient]);
 
+  if (gone) {
+    return <Failed summary={summary} />;
+  }
+
   return (
-    <JobProgress
-      title={m.importJobTitle({ file: summary.fileName })}
-      steps={STEPS}
-      phase={view?.phase ?? "waiting"}
-      step={view?.step ?? null}
-      done={view?.done ?? null}
-      total={view?.total ?? null}
-      attempt={view?.attempt ?? 1}
-      attempts={view?.attempts ?? 1}
-      failure={jobFailureMessage(view?.failure ?? null)}
-      result={m.importJobDone()}
-      locale={getLocale()}
-      onRetry={view?.phase === "failed" ? async () => resume(null, null) : undefined}
-    />
+    <>
+      <JobProgress
+        title={m.importJobTitle({ file: summary.fileName })}
+        steps={STEPS}
+        phase={view?.phase ?? "waiting"}
+        step={view?.step ?? null}
+        done={view?.done ?? null}
+        total={view?.total ?? null}
+        attempt={view?.attempt ?? 1}
+        attempts={view?.attempts ?? 1}
+        failure={jobFailureMessage(view?.failure ?? null)}
+        result={m.importJobDone()}
+        locale={getLocale()}
+        onRetry={view?.phase === "failed" ? async () => resume(null, null) : undefined}
+      />
+      <FormMessage message={refused} />
+    </>
   );
 }
 
@@ -229,14 +237,12 @@ function ConfirmColumns({ summary }: { summary: Import }) {
   );
 }
 
-/** The import's summary, before moving on to the review; it can be undone from here. */
-function Done({ summary }: { summary: Import }) {
+/** Undoes the import, saying what it removed, or why it could not. */
+function useUndo(summary: Import) {
   const queryClient = useQueryClient();
   const refresh = useRefreshImports();
-  const [busy, setBusy] = useState(false);
-  const month = (summary.periodTo ?? summary.createdAt).slice(0, 7);
 
-  async function undo() {
+  return async () => {
     const answer = await undoImport({ data: { importId: summary.id } });
 
     if ("refused" in answer) {
@@ -257,7 +263,14 @@ function Done({ summary }: { summary: Import }) {
     }
 
     await refresh();
-  }
+  };
+}
+
+/** The import's summary, before moving on to the review; it can be undone from here. */
+function Done({ summary }: { summary: Import }) {
+  const undo = useUndo(summary);
+  const [busy, setBusy] = useState(false);
+  const month = (summary.periodTo ?? summary.createdAt).slice(0, 7);
 
   return (
     <ImportSummary
@@ -286,10 +299,12 @@ function Done({ summary }: { summary: Import }) {
   );
 }
 
-/** Why the import failed, and a second try. */
+/** Why the import failed, and a second try; or undo, to take back what it saved. */
 function Failed({ summary }: { summary: Import }) {
   const { resume, refused } = useResume(summary);
+  const undo = useUndo(summary);
   const [busy, setBusy] = useState(false);
+  const [undoing, setUndoing] = useState(false);
 
   return (
     <Form
@@ -302,6 +317,15 @@ function Failed({ summary }: { summary: Import }) {
       <Actions>
         <Button type="submit" variant="secondary" icon="retry" loading={busy}>
           {m.importTryAgain()}
+        </Button>
+        <Button
+          type="button"
+          variant="secondary"
+          icon="undo"
+          loading={undoing}
+          onClick={() => void whileBusy(setUndoing, undo)}
+        >
+          {m.importUndo()}
         </Button>
       </Actions>
     </Form>
