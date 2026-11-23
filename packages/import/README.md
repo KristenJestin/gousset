@@ -58,8 +58,8 @@ controls):
 - `openingBalance`: `{ amountMinor, on }`, the balance before the statement's first line, at the end
   of the day `on`, or `null`: CAMT.053 and MT940 only (below).
 - `balance`: `{ amountMinor, on }`, the closing balance, at the end of the day `on`, or `null`. OFX:
-  the ledger balance (`LEDGERBAL`), never the available one. CAMT.053: `CLBD`. MT940: `:62F:` (or
-  `:62M:`). QIF: see below.
+  the ledger balance (`LEDGERBAL`), never the available one. CAMT.053: `CLBD`. MT940: `:62F:`, never a
+  page's `:62M:`. QIF: see below.
 
 `readOfx` adds `amountSigns` (`OfxAmountSigns`): how the file's amounts were signed. `readQif` adds
 `dateOrder` (`QifDateOrder`): how the file's dates were read. `readCsv` adds nothing: its profile
@@ -141,7 +141,7 @@ line):
   a line in another currency than the account's, an amount whose direction its type does not say, a
   QIF balance too large to be held exactly, a file of more than 64 MiB, a camt.052 report or a
   camt.054 notification, an XML document type declaration, more than a million CAMT.053 elements
-  or MT940 fields; in CSV, a line with both a debit and a credit, debits signed both ways in one
+  or MT940 fields and lines, an MT940 field of more than 10,000 characters; in CSV, a line with both a debit and a credit, debits signed both ways in one
   file, a row of more than 1,000 values, a file of more than a million;
 - `InvalidOption` (`option`, `text`, `expected`): the caller's option cannot be used (`readQif`'s
   or `readCsv`'s `currency` is no ISO 4217 code), whatever the file holds.
@@ -178,10 +178,13 @@ It refuses any document type declaration (`<!DOCTYPE`), so that no entity can be
 expanded ("billion laughs"), and no external one fetched; it caps nesting at 64, and scans tags and
 attributes by hand, never by a regex that could backtrack.
 
-**Memory is bounded too**: a CAMT.053 file of more than a million elements, or an MT940 file of more
-than a million fields, is `UnsupportedContent`, counted before anything is built (a year of daily
-statements holds some tens of thousands). 64 MiB of `<a/>` would otherwise make more objects than
-the engine's heap holds.
+**How many objects a file makes is capped**: a CAMT.053 file of more than a million elements
+(counted before any is built), an MT940 file of more than a million fields and continuation lines
+(counted as they are read), or an MT940 field of more than 10,000 characters (SWIFT's `:86:` holds 390) is `UnsupportedContent`; a year of daily statements holds some tens of thousands. 64 MiB of
+`<a/>`, of `:20:` lines or of one-letter lines would otherwise make more objects than the engine's
+heap holds. What one XML element holds (its attributes, its text) is not capped: it stays in
+proportion to the file's size, at most some tens of times it for a crafted file (a megabyte of
+`&#1;`), which the 64 MiB limit bounds.
 
 ## CAMT.053
 
@@ -240,7 +243,9 @@ the engine's heap holds.
 - **Balances**: `:62F:` is the closing balance, the end of its day. `:60F:` is, as SWIFT defines it,
   the previous statement's `:62F:`, its date included: the end of that day. Many banks date it on
   the statement's own first day instead, before that day's lines; so when the statement books a
-  line on or before its date, it is the balance at the end of the day before (`:60F:` dated 30
+  line, by its entry date, on or before its date, it is the balance at the end of the day before.
+  A line without an entry date does not count: its day is its value date, which a back-valued
+  line puts days earlier (`:60F:` dated 30
   December, with a line booked that day, is the balance at the end of 29 December). A page's
   balances (`:60M:`, `:62M:`), struck in the middle of a day, are checked and read past. Each
   statement needs its opening and its closing balance (`:60F:` or `:60M:`, `:62F:` or `:62M:`): one

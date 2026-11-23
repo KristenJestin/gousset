@@ -71,6 +71,46 @@ const inTwoDigitYears = madeUpStatements.filter((statement) =>
   ),
 );
 
+describe("reading what an MT940 file may hold besides plain text", () => {
+  test("keeps a field whole when its value holds a line or paragraph separator", () => {
+    const statement = read(
+      new TextEncoder().encode(
+        mt940(
+          ":61:261002D10,00NTRFNONREF//A",
+          ":86:one",
+          ":61:261003D20,00NTRFNONREF X//B",
+          ":86:166?00GUTSCHRIFT?20Rent Oct?32ACME",
+        ),
+      ),
+    );
+
+    expect(statement.lines).toEqual([
+      line("2026-10-02", -1000, "one", "A"),
+      {
+        ...line("2026-10-03", -2000, "Rent Oct", "B"),
+        memo: "GUTSCHRIFT",
+        counterparty: { name: "ACME", iban: null },
+      },
+    ]);
+  });
+
+  test("reads :60F: as SWIFT dates it when only a back-valued line, without entry date, is before it", () => {
+    const text = [
+      ":20:S1",
+      `:25:${IBAN}`,
+      ":60F:C261001EUR1000,00",
+      ":61:261002D10,00NTRFNONREF//A",
+      ":61:260929D5,00NMSCNONREF//B",
+      ":62F:C261002EUR985,00",
+    ].join("\n");
+
+    expect(read(new TextEncoder().encode(text)).openingBalance).toEqual({
+      amountMinor: 100_000,
+      on: "2026-10-01",
+    });
+  });
+});
+
 // One test per sample file: the lines read are the lines the file holds.
 describe("reading MT940 files", () => {
   test("reads mt940-plain.sta (CRLF, free text, the example statement)", () => {
@@ -174,11 +214,34 @@ function mt940(...lines: ReadonlyArray<string>): string {
 }
 
 describe("refusing an MT940 file", () => {
-  test("refuses more fields than any statement holds before reading them, with a typed error", () => {
-    expect(refusal(":20:EX\n".repeat(1_000_001))).toEqual(
+  test("refuses more fields than any statement holds, wherever they start, with a typed error", () => {
+    const tooMany = new UnsupportedContent({
+      line: 1,
+      problem: "More than a million fields and lines: no statement holds that many.",
+    });
+
+    expect(refusal(":20:EX\n".repeat(1_000_001))).toEqual(tooMany);
+    expect(refusal("{4::20:\n".repeat(1_000_001))).toEqual(tooMany);
+  });
+
+  test("refuses a field longer than any bank writes, before splitting it", () => {
+    const text = mt940(":61:261002D4,20NTRFNONREF", `:86:${"/BIC/".repeat(2001)}`);
+
+    expect(refusal(text)).toEqual(
       new UnsupportedContent({
-        line: 1,
-        problem: "More than a million fields: no statement holds that many.",
+        line: 5,
+        problem: "A :86: field of more than 10,000 characters: no statement writes one.",
+      }),
+    );
+
+    expect(
+      refusal(
+        mt940(":61:261002D4,20NTRFNONREF", ":86:x", ...Array.from({ length: 5001 }, () => "a")),
+      ),
+    ).toEqual(
+      new UnsupportedContent({
+        line: 5,
+        problem: "A :86: field of more than 10,000 characters: no statement writes one.",
       }),
     );
   });
