@@ -130,12 +130,8 @@ const UNIQUE_VIOLATION = "23505";
  * A name the database's unique key refuses at commit, taken by a change of another session: the
  * name taken it is, as the rules would have said.
  */
-const takenAtCommit = (name: () => string) =>
-  Effect.catchTag("QueryFailed", (failed: QueryFailed) =>
-    failed.code === UNIQUE_VIOLATION
-      ? Effect.fail(new CategoryNameTaken({ name: name() }))
-      : Effect.fail(failed),
-  );
+const takenAtCommit = (failed: QueryFailed, name: string) =>
+  Effect.fail(failed.code === UNIQUE_VIOLATION ? new CategoryNameTaken({ name }) : failed);
 
 /** A change that would archive or delete a fallback, which names it. */
 const fallbackRefused = (fallback: CategoryRecord) =>
@@ -361,58 +357,60 @@ export const createCategory = (owner: string, input: CategoryInput) =>
     const store = yield* CategoryStore;
     let name = input.name.trim();
 
-    const change = yield* store.change(
-      owner,
-      (
-        categories,
-      ): Result.Result<
-        ReadonlyArray<CategoryStep>,
-        CategoryRefused | CategoryNameTaken | CategoryNotFound
-      > =>
-        Result.gen(function* () {
-          name = yield* nameOf(input.name);
+    const change = yield* store
+      .change(
+        owner,
+        (
+          categories,
+        ): Result.Result<
+          ReadonlyArray<CategoryStep>,
+          CategoryRefused | CategoryNameTaken | CategoryNotFound
+        > =>
+          Result.gen(function* () {
+            name = yield* nameOf(input.name);
 
-          const benchmark = yield* benchmarkOf(input.benchmark ?? { mode: "automatic" });
-          const icon = yield* iconOf(input.icon ?? null);
-          const parentId = input.parentId ?? null;
+            const benchmark = yield* benchmarkOf(input.benchmark ?? { mode: "automatic" });
+            const icon = yield* iconOf(input.icon ?? null);
+            const parentId = input.parentId ?? null;
 
-          if (categories.length >= MAX_CATEGORIES) {
-            return yield* refused("too_many");
-          }
+            if (categories.length >= MAX_CATEGORIES) {
+              return yield* refused("too_many");
+            }
 
-          if (parentId !== null) {
-            yield* parentFor(categories, parentId, input.kind, undefined);
-          }
+            if (parentId !== null) {
+              yield* parentFor(categories, parentId, input.kind, undefined);
+            }
 
-          if (nameTaken(categories, input.kind, parentId, name, undefined)) {
-            return yield* Result.fail(new CategoryNameTaken({ name }));
-          }
+            if (nameTaken(categories, input.kind, parentId, name, undefined)) {
+              return yield* Result.fail(new CategoryNameTaken({ name }));
+            }
 
-          const siblings = categories.filter(
-            (each) => each.kind === input.kind && each.parentId === parentId,
-          );
+            const siblings = categories.filter(
+              (each) => each.kind === input.kind && each.parentId === parentId,
+            );
 
-          const position =
-            input.position === undefined
-              ? lastPosition(siblings)
-              : yield* positionOf(input.position);
+            const position =
+              input.position === undefined
+                ? lastPosition(siblings)
+                : yield* positionOf(input.position);
 
-          const step: CategoryStep = {
-            step: "insert",
-            category: {
-              parentId,
-              kind: input.kind,
-              name,
-              icon,
-              position,
-              benchmark,
-              fallback: false,
-            },
-          };
+            const step: CategoryStep = {
+              step: "insert",
+              category: {
+                parentId,
+                kind: input.kind,
+                name,
+                icon,
+                position,
+                benchmark,
+                fallback: false,
+              },
+            };
 
-          return [step];
-        }),
-    ).pipe(takenAtCommit(() => name));
+            return [step];
+          }),
+      )
+      .pipe(Effect.catchTag("QueryFailed", (failed) => takenAtCommit(failed, name)));
 
     const [id] = change.inserted;
 
@@ -435,58 +433,62 @@ export const editCategory = (owner: string, categoryId: string, edit: CategoryEd
     const store = yield* CategoryStore;
     let taken = edit.name?.trim() ?? "";
 
-    const change = yield* store.change(
-      owner,
-      (
-        categories,
-      ): Result.Result<
-        ReadonlyArray<CategoryStep>,
-        CategoryRefused | CategoryNameTaken | CategoryNotFound
-      > =>
-        Result.gen(function* () {
-          const category = yield* found(categories, categoryId);
-          const name = edit.name === undefined ? category.name : yield* nameOf(edit.name);
+    const change = yield* store
+      .change(
+        owner,
+        (
+          categories,
+        ): Result.Result<
+          ReadonlyArray<CategoryStep>,
+          CategoryRefused | CategoryNameTaken | CategoryNotFound
+        > =>
+          Result.gen(function* () {
+            const category = yield* found(categories, categoryId);
+            const name = edit.name === undefined ? category.name : yield* nameOf(edit.name);
 
-          taken = name;
-          const parentId = edit.parentId === undefined ? category.parentId : edit.parentId;
-          const moved = parentId !== category.parentId;
+            taken = name;
+            const parentId = edit.parentId === undefined ? category.parentId : edit.parentId;
+            const moved = parentId !== category.parentId;
 
-          if (moved && parentId !== null) {
-            yield* parentFor(categories, parentId, category.kind, category);
-          }
+            if (moved && parentId !== null) {
+              yield* parentFor(categories, parentId, category.kind, category);
+            }
 
-          if (nameTaken(categories, category.kind, parentId, name, category.id)) {
-            return yield* Result.fail(new CategoryNameTaken({ name }));
-          }
+            if (nameTaken(categories, category.kind, parentId, name, category.id)) {
+              return yield* Result.fail(new CategoryNameTaken({ name }));
+            }
 
-          const siblings = categories.filter(
-            (each) =>
-              each.kind === category.kind && each.parentId === parentId && each.id !== category.id,
-          );
+            const siblings = categories.filter(
+              (each) =>
+                each.kind === category.kind &&
+                each.parentId === parentId &&
+                each.id !== category.id,
+            );
 
-          const position =
-            edit.position === undefined
-              ? moved
-                ? lastPosition(siblings)
-                : category.position
-              : yield* positionOf(edit.position);
+            const position =
+              edit.position === undefined
+                ? moved
+                  ? lastPosition(siblings)
+                  : category.position
+                : yield* positionOf(edit.position);
 
-          const patch: CategoryPatch = {
-            name,
-            parentId,
-            position,
-            icon: edit.icon === undefined ? category.icon : yield* iconOf(edit.icon),
-            benchmark:
-              edit.benchmark === undefined
-                ? category.benchmark
-                : yield* benchmarkOf(edit.benchmark),
-          };
+            const patch: CategoryPatch = {
+              name,
+              parentId,
+              position,
+              icon: edit.icon === undefined ? category.icon : yield* iconOf(edit.icon),
+              benchmark:
+                edit.benchmark === undefined
+                  ? category.benchmark
+                  : yield* benchmarkOf(edit.benchmark),
+            };
 
-          const step: CategoryStep = { step: "update", id: category.id, patch };
+            const step: CategoryStep = { step: "update", id: category.id, patch };
 
-          return [step];
-        }),
-    ).pipe(takenAtCommit(() => taken));
+            return [step];
+          }),
+      )
+      .pipe(Effect.catchTag("QueryFailed", (failed) => takenAtCommit(failed, taken)));
 
     return yield* Effect.fromResult(found(change.categories, categoryId));
   });

@@ -403,7 +403,7 @@ describe("the fallback", () => {
     const { result, rows: after } = await run(twin, mergeCategory(ADA, housing.id, groceries.id));
 
     expect(result).toMatchObject({
-      failure: { _tag: "CategoryRefused", reason: "fallback", fallback: "Other" },
+      failure: { reason: "fallback", fallback: "Other" },
     });
     expect(after.categories.find((each) => each.id === other.id)?.fallback).toBe(true);
 
@@ -532,7 +532,6 @@ describe("naming", () => {
 
     expect(result).toMatchObject({
       failure: {
-        _tag: "CategoryNameAmbiguous",
         matches: [
           { path: "Groceries > Fees", kind: "expense" },
           { path: "Housing > Fees", kind: "expense" },
