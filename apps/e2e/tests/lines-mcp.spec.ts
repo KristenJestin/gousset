@@ -91,9 +91,10 @@ test("an MCP client searches the lines by text and account, reads on with the ne
 
     expect(isError, text).toBe(false);
     expect(text).toContain('containing "acme consulting", in Current account (Riverside Bank)');
+    // Each row names its line's category: the import's fallback, unless a spec classified it.
     expect(text).toMatch(
       new RegExp(
-        String.raw`\n- \d{4}-\d\d-\d\d, Current account \(Riverside Bank\): ${AMOUNT}, "SEPA TRF ACME CONSULTING SALARY"; line: \S+`,
+        String.raw`\n- \d{4}-\d\d-\d\d, Current account \(Riverside Bank\): ${AMOUNT}, "SEPA TRF ACME CONSULTING SALARY", in [^;\n]+; line: \S+`,
       ),
     );
 
