@@ -132,10 +132,14 @@ file's first row only, and looks for it within 64 KiB of text for the lines skip
 and 64 KiB past them: a header further down is none, so that trying every profile on a large file
 costs what its top costs. `matchCsvHeader(file, candidates)` gives the first of the candidates (a
 definition and its header) whose header the file has, each read with its own profile;
-`testReadCsv(file, profile, currency)` reads the file's first 50 lines as `readCsv` would, and
-succeeds when the profile fits them (with no currency, amounts are read with up to four decimals
-and the lines' currency goes unchecked, though the header must still have its column): how a
-profile without a header is tried on a file.
+`testReadCsv(file, profile, currency)` reads the file's first 50 lines (within 200 lines and 64 KiB
+past those skipped, as the header search does) as `readCsv` would, and
+succeeds with them when the profile fits them (with no currency, amounts are read with up to four
+decimals, in `CLF`, and the lines' currency goes unchecked, though the header must still have its
+column): how a profile without a header is tried on a file, and the import screen's test read.
+`previewCsvRows(file, profile)` gives the file's first six rows as the profile splits them (its
+encoding, separator and lines skipped), each value as written: the preview where the user maps
+each column.
 
 **Shipped profiles** (`SHIPPED_PROFILES`, `src/csv-shipped.ts`): common styles of bank export, each
 with a stable `key` (what `import.shipped_profile` keeps), an English name, the kind `statement`,
@@ -158,7 +162,9 @@ An ISO style (`YYYY-MM-DD`) is not shipped: its dates are never ambiguous, and d
 for, which the import screen shows over the preview, from the top of the file (200 rows, within
 2,000 lines and a mebibyte): UTF-8 when the bytes are, Windows-1252 otherwise; the separator most rows agree on (the widest table on a tie); the lines before the
 first row of that table, through the last that holds something (more than 100 and the file is
-`NotAStatement`); a header when no value of the first row is a date; the columns whose every
+`NotAStatement`, as it is when `readCsvHeader` would not find the proposed header again with the
+profile proposed: under more blank lines or text than its search reads, a saved profile would
+never recognise its own files); a header when no value of the first row is a date; the columns whose every
 value is a date, an amount (with a decimal mark or a sign somewhere: digits alone may be a
 reference) or a currency code (only under a header saying `Devise` or `Currency`: three capital
 letters may be a type, `VIR`, `CHQ`). A column whose header says Debit or Credit is an amount

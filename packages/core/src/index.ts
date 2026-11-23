@@ -140,6 +140,7 @@ export { ReadFailed, ReadRequest, StatementReader, inlineStatementReader } from 
 export {
   IMPORT_STEPS,
   MAX_FILE_BYTES,
+  TEST_READ_SHOWN,
   MAX_PROFILE_FILE,
   MAX_PROFILE_HEADER,
   MAX_PROFILE_NAME,
@@ -147,6 +148,9 @@ export {
 } from "./imports/summary";
 
 export type {
+  CsvPreview,
+  CsvReadRefusal,
+  CsvTestLine,
   ImportFormat,
   ImportProfileEntry,
   ImportStatus,

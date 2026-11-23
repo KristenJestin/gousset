@@ -42,11 +42,23 @@ describe("a CSV profile sent by the import screen", () => {
     expect(renamable("n".repeat(100))).toBe(true);
   });
 
-  test("is refused with a longer name, institution or header", () => {
-    expect(savable({ ...draft, name: "n".repeat(101) })).toBe(false);
-    expect(savable({ ...draft, institution: "i".repeat(101) })).toBe(false);
+  test("is taken with a name of 100 characters and spaces around it, which core trims", () => {
+    expect(savable({ ...draft, name: ` ${"n".repeat(100)} ` })).toBe(true);
+    expect(savable({ ...draft, institution: `${"i".repeat(100)}  ` })).toBe(true);
+    expect(renamable(`${"n".repeat(100)} `)).toBe(true);
+  });
+
+  test("leaves a longer name or institution to core, which refuses it with a code the screen says", () => {
+    expect(savable({ ...draft, name: "n".repeat(101) })).toBe(true);
+    expect(savable({ ...draft, institution: "i".repeat(101) })).toBe(true);
+    expect(renamable("n".repeat(101))).toBe(true);
+  });
+
+  test("is refused with a name, an institution or a header no screen sends", () => {
+    expect(savable({ ...draft, name: "n".repeat(1001) })).toBe(false);
+    expect(savable({ ...draft, institution: "i".repeat(1001) })).toBe(false);
     expect(savable({ ...draft, header: "h".repeat(10_001) })).toBe(false);
-    expect(renamable("n".repeat(101))).toBe(false);
+    expect(renamable("n".repeat(1001))).toBe(false);
   });
 
   test("is refused as a file of more than 64 KiB, before its JSON is parsed", () => {
