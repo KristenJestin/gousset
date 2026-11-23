@@ -32,11 +32,13 @@ export const signedIn = createMiddleware({ type: "function" }).server(async ({ n
 });
 
 /** In development, the latency `GOUSSET_DEV_LATENCY_MS` asks for (`@/lib/dev-latency`). */
-const slowedInDevelopment = createMiddleware({ type: "function" }).server(async ({ next }) => {
-  await Effect.runPromise(devLatency);
+export const slowedInDevelopment = createMiddleware({ type: "function" }).server(
+  async ({ next }) => {
+    await Effect.runPromise(devLatency);
 
-  return next();
-});
+    return next();
+  },
+);
 
 const MonthInput = Schema.toStandardSchemaV1(Schema.Struct({ month: Month }));
 

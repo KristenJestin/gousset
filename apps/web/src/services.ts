@@ -1,6 +1,6 @@
 import { createAuth } from "@gousset/auth";
-import { FixtureLedger, Today, importsLayer } from "@gousset/core";
-import type { Imports, Ledger } from "@gousset/core";
+import { DatabaseAccountStore, FixtureLedger, Today, importsLayer } from "@gousset/core";
+import type { AccountStore, Imports, Ledger } from "@gousset/core";
 import { getCookie } from "@tanstack/react-start/server";
 import { Effect, Layer, ManagedRuntime } from "effect";
 
@@ -14,18 +14,23 @@ export { db } from "./database.server";
 export const auth = createAuth(ENV, db);
 
 /**
+ * What Gousset's logic needs: the made-up month (v0.1), the user's accounts in the database and the
+ * imports (#20).
+ */
+export type CoreServices = Ledger | AccountStore | Imports;
+
+/**
  * Gousset's logic (`@gousset/core`) runs on one runtime for the whole process, so that the server
- * functions and the MCP door read and change the same ledger, and import through the same queue.
+ * functions and the MCP door read and change the same ledger and the same accounts, and import
+ * through the same queue.
  */
 const core = ManagedRuntime.make(
   Layer.mergeAll(
     FixtureLedger,
+    Layer.provide(DatabaseAccountStore, userData),
     importsLayer.pipe(Layer.provide(Layer.mergeAll(userData, importJobs))),
   ),
 );
-
-/** What core logic may need: the made-up ledger (v0.1) and the imports (#20). */
-export type CoreServices = Ledger | Imports;
 
 /**
  * Runs core logic for the current request. Core reads today from the server's own `today`, which

@@ -4,12 +4,14 @@ import { describe, expect, it } from "vite-plus/test";
 import {
   compare,
   formatMoney,
+  formatMoneyInput,
   formatPercent,
   breakdownBars,
   isSteady,
   minorDigits,
   monthBarLayout,
   moneyParts,
+  parseMoneyInput,
   rollSlots,
   toDecimalString,
 } from "./money";
@@ -28,10 +30,16 @@ const currencies = fc.constantFrom("EUR", "USD", "JPY", "KWD", "GBP", "CHF");
 const locales = fc.constantFrom("en", "fr", "de", "en-GB", "fr-CH");
 
 describe("minor units", () => {
-  it("reads each currency's own minor units from Intl", () => {
+  it("reads each currency's own minor units from ISO 4217", () => {
     expect(minorDigits("EUR")).toBe(2);
     expect(minorDigits("JPY")).toBe(0);
     expect(minorDigits("KWD")).toBe(3);
+  });
+
+  it("never throws for a malformed or unknown currency: two digits by default", () => {
+    expect(minorDigits("")).toBe(2);
+    expect(minorDigits("U")).toBe(2);
+    expect(minorDigits("US")).toBe(2);
   });
 
   it("writes minor units as an exact decimal", () => {
@@ -41,6 +49,11 @@ describe("minor units", () => {
     expect(toDecimalString(1234, 0)).toBe("1234");
     expect(toDecimalString(-0, 2)).toBe("0.00");
     expect(toDecimalString(Number.MAX_SAFE_INTEGER, 2)).toBe("90071992547409.91");
+  });
+
+  it("never throws formatting a malformed currency: shown with no currency rather than lost", () => {
+    expect(() => formatMoney({ minor: 1234, currency: "" }, { locale: "en" })).not.toThrow();
+    expect(() => formatMoney({ minor: 1234, currency: "US" }, { locale: "en" })).not.toThrow();
   });
 
   it("refuses a minor amount that is not a safe integer", () => {
@@ -323,5 +336,58 @@ describe("the bars", () => {
     expect(bars[1]?.mark).toBeCloseTo(23.19, 2);
     expect(bars[2]).toEqual({ width: 0, mark: null, over: false });
     expect(breakdownBars([{ amount: eur(0), benchmark: eur(0) }])[0]?.width).toBe(0);
+  });
+});
+
+describe("money typed into a form", () => {
+  it("writes minor units with the locale's separators, no currency symbol", () => {
+    expect(formatMoneyInput(186_000, { locale: "en", currency: "EUR" })).toBe("1,860.00");
+    expect(formatMoneyInput(186_000, { locale: "fr", currency: "EUR" })).toBe(
+      `1${NARROW_NO_BREAK_SPACE}860,00`,
+    );
+    expect(formatMoneyInput(-186_000, { locale: "en", currency: "EUR" })).toBe(`${MINUS}1,860.00`);
+  });
+
+  it("follows the currency's minor units", () => {
+    expect(formatMoneyInput(3200, { locale: "en", currency: "JPY" })).toBe("3,200");
+    expect(formatMoneyInput(1234, { locale: "en", currency: "KWD" })).toBe("1.234");
+  });
+
+  it("reads an amount back, group separators and all", () => {
+    expect(parseMoneyInput("1,860.00", { locale: "en", currency: "EUR" })).toBe(186_000);
+    expect(parseMoneyInput("1 860,00", { locale: "fr", currency: "EUR" })).toBe(186_000);
+    expect(
+      parseMoneyInput(`1${NARROW_NO_BREAK_SPACE}860,00`, { locale: "fr", currency: "EUR" }),
+    ).toBe(186_000);
+  });
+
+  it("reads a plain hyphen-minus as the true minus", () => {
+    expect(parseMoneyInput("-80", { locale: "en", currency: "EUR" })).toBe(-8000);
+    expect(parseMoneyInput(`${MINUS}80`, { locale: "en", currency: "EUR" })).toBe(-8000);
+  });
+
+  it("pads a short fraction and cuts a long one", () => {
+    expect(parseMoneyInput("80", { locale: "en", currency: "EUR" })).toBe(8000);
+    expect(parseMoneyInput("80.5", { locale: "en", currency: "EUR" })).toBe(8050);
+    expect(parseMoneyInput("80.567", { locale: "en", currency: "EUR" })).toBe(8056);
+  });
+
+  it("gives null for empty or unreadable text", () => {
+    expect(parseMoneyInput("", { locale: "en", currency: "EUR" })).toBeNull();
+    expect(parseMoneyInput("   ", { locale: "en", currency: "EUR" })).toBeNull();
+    expect(parseMoneyInput("abc", { locale: "en", currency: "EUR" })).toBeNull();
+    expect(parseMoneyInput("12.34.56", { locale: "en", currency: "EUR" })).toBeNull();
+  });
+
+  it("round-trips every amount a ledger can hold, for every currency and locale", () => {
+    const reasonable = fc.integer({ min: -1_000_000_000_000, max: 1_000_000_000_000 });
+
+    fc.assert(
+      fc.property(reasonable, currencies, locales, (minor, currency, locale) => {
+        const text = formatMoneyInput(minor, { locale, currency });
+
+        expect(parseMoneyInput(text, { locale, currency })).toBe(minor);
+      }),
+    );
   });
 });
