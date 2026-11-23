@@ -1,6 +1,7 @@
 import { minorDigits } from "@gousset/import";
 import { Effect, Result } from "effect";
 
+import type { LineCategory } from "./category-store";
 import { LineNotFound, LineSearchRefused } from "./errors";
 import { LineStore } from "./line-store";
 import type { AmountBounds, FoundLine, LineQuery } from "./line-store";
@@ -56,6 +57,11 @@ export type LineRow = {
   readonly account: LineAccount;
   /** Held as a near duplicate, waiting for the user. */
   readonly toReview: boolean;
+  /**
+   * The category of its one entry (with its parent's name, for a child); null for a line with none
+   * (held, of no amount) or split across several.
+   */
+  readonly category: LineCategory | null;
 };
 
 export type LinePage = {
@@ -262,6 +268,7 @@ function rowOf(line: FoundLine): LineRow {
       institution: line.account.institution,
     },
     toReview: line.state === "held",
+    category: line.category,
   };
 }
 

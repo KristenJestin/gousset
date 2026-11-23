@@ -409,6 +409,8 @@ describe("showLine", () => {
       amount: { minor: -4200, currency: "EUR" },
       account: { id: euro.id, name: "Current account", institution: "Riverside Bank" },
       toReview: true,
+      // Held, it has no entry yet: no category.
+      category: null,
       originalAmount: { minor: -4500, currency: "USD" },
       counterpartyIban: "FR7699999000010001234567809",
       expiresOn: null,
@@ -428,6 +430,18 @@ describe("showLine", () => {
         periodTo: "2026-11-19",
       },
     });
+  });
+
+  test("gives the category of a line's one entry, with its parent's name", async () => {
+    const classified = line(euro.id, "2026-11-04", -380, "CB LE FOURNIL", {
+      category: { id: "bakery", name: "Bakery", parentName: "Groceries", kind: "expense" },
+    });
+
+    const page = await inOrder({ ...rows, lines: [classified] }, searchLines(ADA, {}));
+
+    expect(page.lines.map((each) => each.category)).toEqual([
+      { id: "bakery", name: "Bakery", parentName: "Groceries", kind: "expense" },
+    ]);
   });
 
   const tagOf = (owner: string, lineId: string) =>

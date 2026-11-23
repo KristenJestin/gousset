@@ -1,6 +1,7 @@
 import { Effect, Layer } from "effect";
 
 import type { MemoryImport, MemoryLine, MemoryRows } from "./account-store-memory";
+import type { LineCategory } from "./category-store";
 import type { ImportFormat } from "./imports/summary";
 import { LineStore } from "./line-store";
 import type { FoundLine, FoundLineDetail, LineQuery } from "./line-store";
@@ -17,6 +18,8 @@ export type MemoryLineDetail = MemoryLine & {
   readonly counterpartyIban?: string;
   readonly duplicateOfLineId?: string;
   readonly expiresOn?: string;
+  /** The category of its one entry. */
+  readonly category?: LineCategory;
 };
 
 /** An import of the memory store, as a line's detail names it. */
@@ -88,6 +91,7 @@ function withAccount(own: MemoryLineRows, line: MemoryLineDetail): FoundLine | u
       institution: owned.institution,
       currency: owned.currency,
     },
+    category: line.category ?? null,
   };
 }
 

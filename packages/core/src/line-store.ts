@@ -2,6 +2,7 @@ import type { QueryFailed } from "@gousset/db/user-data";
 import { Context } from "effect";
 import type { Effect } from "effect";
 
+import type { LineCategory } from "./category-store";
 import type { ImportFormat } from "./imports/summary";
 
 /**
@@ -47,6 +48,8 @@ export type FoundLine = {
     readonly institution: string | null;
     readonly currency: string;
   };
+  /** The category of its one entry; null for a line with none (held, of no amount) or split. */
+  readonly category: LineCategory | null;
 };
 
 /** A line with all that its detail shows. */
