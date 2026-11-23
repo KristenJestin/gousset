@@ -1,9 +1,17 @@
-import { account, merchant, merchantAlias, statementLine } from "@gousset/db/schema/ledger";
+import {
+  account,
+  category,
+  merchant,
+  merchantAlias,
+  statementLine,
+} from "@gousset/db/schema/ledger";
 import { UserData } from "@gousset/db/user-data";
 import type { QueryFailed, UserTransaction } from "@gousset/db/user-data";
 import { and, asc, count, desc, eq, exists, gt, inArray, lte, ne, or, sql } from "drizzle-orm";
+import { alias as aliasOf } from "drizzle-orm/pg-core";
 import { Context, Effect, Layer, Result } from "effect";
 
+import type { LineCategory } from "../category-store";
 import { isId } from "../imports/rows";
 import type { Money } from "../month";
 import { today } from "../today";
@@ -21,7 +29,8 @@ import type { KnownKey } from "./labels";
 // The merchants (#24): who was paid, recognised from the lines' raw labels (`./labels`), each
 // user's own, renamed, merged and split by the user. A line is a merchant's when its label cleans
 // to one of the merchant's aliases; the line itself is never changed (docs/data-model.md, v0.3).
-// Once entries exist (#23), an entry carries its merchant, and a merge moves the entries too.
+// A merchant may have a default category (#23), which a merge of categories moves and archiving
+// keeps (`../categories`, `setMerchantDefaultCategory` sets it).
 
 /**
  * The longest name a merchant may have, once trimmed: the longest a key may be, so that a merchant
@@ -81,10 +90,15 @@ export type MerchantLine = {
   };
 };
 
+/** A merchant's default category, archived or not: it keeps one archived after it was chosen. */
+export type MerchantDefaultCategory = LineCategory & { readonly archived: boolean };
+
 /** A merchant with all that names it, and its latest lines. */
 export type MerchantDetail = {
   readonly id: string;
   readonly name: string;
+  /** The category its entries go in by default; null for none. */
+  readonly defaultCategory: MerchantDefaultCategory | null;
   /** The cleaned labels that name it, in alphabetical order. */
   readonly aliases: ReadonlyArray<string>;
   /** Its latest counted lines, newest first, among the `MERCHANT_LINES_SCANNED` newest lines. */
@@ -392,6 +406,7 @@ async function show(
     .orderBy(asc(merchantAlias.alias));
 
   const names = new Set(aliases.map((row) => row.alias));
+  const defaultCategory = await defaultCategoryOf(transaction, found.id);
 
   const scanned =
     names.size === 0
@@ -455,7 +470,36 @@ async function show(
         ];
   });
 
-  return { id: found.id, name: found.name, aliases: [...names], lines };
+  return { id: found.id, name: found.name, defaultCategory, aliases: [...names], lines };
+}
+
+const parentCategory = aliasOf(category, "parent");
+
+/** The merchant's default category, with its parent's name; null for none. */
+async function defaultCategoryOf(
+  transaction: UserTransaction,
+  merchantId: string,
+): Promise<MerchantDefaultCategory | null> {
+  const [row] = await transaction
+    .select({
+      id: category.id,
+      name: category.name,
+      parentName: parentCategory.name,
+      kind: category.kind,
+      archivedAt: category.archivedAt,
+    })
+    .from(merchant)
+    .innerJoin(category, eq(category.id, merchant.defaultCategoryId))
+    .leftJoin(parentCategory, eq(parentCategory.id, category.parentId))
+    .where(eq(merchant.id, merchantId));
+
+  if (row === undefined) {
+    return null;
+  }
+
+  const { archivedAt, ...shown } = row;
+
+  return { ...shown, archived: archivedAt !== null };
 }
 
 /** A name as the user gave it, trimmed, or why it is refused. */
@@ -634,6 +678,15 @@ export const merchantsLayer = Layer.effect(
                 .set({ merchantId: into.id })
                 .where(eq(merchantAlias.merchantId, from.id))
                 .returning({ id: merchantAlias.id });
+
+              // The merchant kept keeps its default category, and takes the merged one's when it
+              // has none.
+              await transaction
+                .update(merchant)
+                .set({
+                  defaultCategoryId: sql`coalesce(${merchant.defaultCategoryId}, (select m.default_category_id from ${merchant} m where m.id = ${from.id}))`,
+                })
+                .where(eq(merchant.id, into.id));
 
               await transaction.delete(merchant).where(eq(merchant.id, from.id));
 

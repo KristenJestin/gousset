@@ -10,6 +10,7 @@ import type {
   LineCategory,
 } from "./category-store";
 import { CategoryNotFound, LineNotFound } from "./errors";
+import { MerchantNotFound } from "./merchants/errors";
 
 // An in-memory `CategoryStore`, for tests: each user's categories, entries with their parts, and
 // lines, changed in place. A change that fails, or would leave an entry or a child pointing to a
@@ -32,12 +33,20 @@ export type MemoryEntry = {
   readonly parts: ReadonlyArray<MemoryPart>;
 };
 
+/** A merchant, with the category its entries go in by default. */
+export type MemoryMerchant = {
+  readonly id: string;
+  readonly defaultCategoryId: string | null;
+};
+
 /** One user's rows. */
 export type MemoryCategoryRows = {
   categories: Array<CategoryRecord>;
   entries: Array<MemoryEntry>;
   /** The lines that exist, by id, with their amount, and whether each is a side of a transfer. */
   lines: Array<{ readonly id: string; readonly amountMinor: number; readonly paired?: boolean }>;
+  /** The merchants; none when left out. */
+  merchants?: Array<MemoryMerchant>;
 };
 
 /** A category of the memory store: top-level, in use, automatic, unless said otherwise. */
@@ -66,6 +75,7 @@ function applied(
 ): { readonly rows: MemoryCategoryRows; readonly inserted: ReadonlyArray<string> } | undefined {
   let categories = [...rows.categories];
   let entries = [...rows.entries];
+  let merchants = [...(rows.merchants ?? [])];
   const inserted: Array<string> = [];
 
   for (const step of steps) {
@@ -92,8 +102,19 @@ function applied(
         break;
       }
 
+      case "move_defaults": {
+        merchants = merchants.map((each) =>
+          each.defaultCategoryId === step.from ? { ...each, defaultCategoryId: step.into } : each,
+        );
+        break;
+      }
+
       case "delete": {
         categories = categories.filter((each) => each.id !== step.id);
+        // As the key's `on delete set null (default_category_id)`.
+        merchants = merchants.map((each) =>
+          each.defaultCategoryId === step.id ? { ...each, defaultCategoryId: null } : each,
+        );
         break;
       }
     }
@@ -106,7 +127,7 @@ function applied(
     entries.some((each) => !ids.has(each.categoryId)) ||
     categories.some((each) => each.parentId !== null && !ids.has(each.parentId));
 
-  return dangling ? undefined : { rows: { ...rows, categories, entries }, inserted };
+  return dangling ? undefined : { rows: { ...rows, categories, entries, merchants }, inserted };
 }
 
 /** A `CategoryStore` holding each user's rows in memory, `rows` by owner, changed in place. */
@@ -200,6 +221,41 @@ export function memoryCategoryStore(rows: Map<string, MemoryCategoryRows> = new 
               : each,
           ),
         });
+
+        const parent = own.categories.find((each) => each.id === category.parentId);
+
+        const shown: LineCategory = {
+          id: category.id,
+          name: category.name,
+          parentName: parent?.name ?? null,
+          kind: category.kind,
+        };
+
+        return shown;
+      }),
+
+    setMerchantDefault: (owner, merchantId, decide) =>
+      Effect.gen(function* () {
+        const own = of(owner);
+        const merchants = own.merchants ?? [];
+
+        if (!merchants.some((each) => each.id === merchantId)) {
+          return yield* new MerchantNotFound({ merchantId });
+        }
+
+        const categoryId = yield* Effect.fromResult(decide(own.categories));
+        const category = own.categories.find((each) => each.id === categoryId);
+
+        rows.set(owner, {
+          ...own,
+          merchants: merchants.map((each) =>
+            each.id === merchantId ? { ...each, defaultCategoryId: category?.id ?? null } : each,
+          ),
+        });
+
+        if (category === undefined) {
+          return null;
+        }
 
         const parent = own.categories.find((each) => each.id === category.parentId);
 

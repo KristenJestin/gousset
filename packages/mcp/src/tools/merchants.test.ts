@@ -139,6 +139,7 @@ function merchantsOf(state: Store) {
       Effect.map(byId(merchantId), (found) => ({
         id: found.id,
         name: found.name,
+        defaultCategory: null,
         aliases: found.aliases.toSorted(),
         lines: state.lines.get(found.id) ?? [],
       })),

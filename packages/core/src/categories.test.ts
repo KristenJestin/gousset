@@ -14,11 +14,12 @@ import {
   MAX_CATEGORIES,
   mergeCategory,
   restoreCategory,
+  setMerchantDefaultCategory,
 } from "./categories";
 import { CategoryStore } from "./category-store";
 import type { CategoryRecord, EntryKind } from "./category-store";
 import { memoryCategory, memoryCategoryStore } from "./category-store-memory";
-import type { MemoryCategoryRows, MemoryEntry } from "./category-store-memory";
+import type { MemoryCategoryRows, MemoryEntry, MemoryMerchant } from "./category-store-memory";
 
 const TODAY = "2026-11-23";
 const ADA = "ada";
@@ -614,5 +615,115 @@ describe("classifying a line", () => {
     expect(await outcome(rows, classifyLine(ADA, side, { categoryId: bakery.id }))).toBe(
       "LineNotClassifiable:transfer",
     );
+  });
+});
+
+/** A merchant of Ada's, with its default category, if any. */
+function merchantIn(rows: MemoryCategoryRows, defaultCategory?: CategoryRecord): MemoryMerchant {
+  const made: MemoryMerchant = { id: memoryId(), defaultCategoryId: defaultCategory?.id ?? null };
+
+  rows.merchants = [...(rows.merchants ?? []), made];
+
+  return made;
+}
+
+const defaultOf = (rows: MemoryCategoryRows, merchant: MemoryMerchant) =>
+  rows.merchants?.find((each) => each.id === merchant.id)?.defaultCategoryId;
+
+describe("a merchant's default category", () => {
+  test("is set to a category in use, of either kind, and cleared", async () => {
+    const { rows, bakery, salary } = startingRows();
+    const shop = merchantIn(rows);
+
+    const { result, rows: set } = await run(
+      rows,
+      setMerchantDefaultCategory(ADA, shop.id, bakery.id),
+    );
+
+    expect(result).toMatchObject({
+      success: { id: bakery.id, name: "Bakery", parentName: "Groceries", kind: "expense" },
+    });
+    expect(defaultOf(set, shop)).toBe(bakery.id);
+
+    // An employer's default may be an income category.
+    const { rows: income } = await run(set, setMerchantDefaultCategory(ADA, shop.id, salary.id));
+
+    expect(defaultOf(income, shop)).toBe(salary.id);
+
+    const { result: cleared, rows: after } = await run(
+      income,
+      setMerchantDefaultCategory(ADA, shop.id, null),
+    );
+
+    expect(cleared).toMatchObject({ success: null });
+    expect(defaultOf(after, shop)).toBeNull();
+  });
+
+  test("an archived or unknown category, or an unknown merchant, is refused", async () => {
+    const { rows, groceries, bakery } = startingRows();
+    const shop = merchantIn(rows);
+    const { rows: archived } = await run(rows, archiveCategory(ADA, groceries.id));
+
+    expect(await outcome(archived, setMerchantDefaultCategory(ADA, shop.id, bakery.id))).toBe(
+      "CategoryRefused:archived",
+    );
+    expect(await outcome(archived, setMerchantDefaultCategory(ADA, shop.id, memoryId()))).toBe(
+      "CategoryNotFound",
+    );
+    expect(await outcome(archived, setMerchantDefaultCategory(ADA, memoryId(), null))).toBe(
+      "MerchantNotFound",
+    );
+    expect(defaultOf(archived, shop)).toBeNull();
+  });
+
+  test("archiving its category keeps it", async () => {
+    const { rows, groceries, bakery } = startingRows();
+    const shop = merchantIn(rows, bakery);
+    const { rows: after } = await run(rows, archiveCategory(ADA, groceries.id));
+
+    expect(defaultOf(after, shop)).toBe(bakery.id);
+  });
+
+  test("merging its category moves it to the target, as the entries go", async () => {
+    const { rows, housing, groceries, bakery } = startingRows();
+    const baker = merchantIn(rows, bakery);
+    const grocer = merchantIn(rows, groceries);
+    const untouched = merchantIn(rows, housing);
+    const { rows: merged } = await run(rows, mergeCategory(ADA, bakery.id, groceries.id));
+
+    expect(defaultOf(merged, baker)).toBe(groceries.id);
+    expect(defaultOf(merged, grocer)).toBe(groceries.id);
+    expect(defaultOf(merged, untouched)).toBe(housing.id);
+  });
+
+  test("a child merged into the target's child of its name takes its defaults there", async () => {
+    const { rows, housing, groceries, bakery } = startingRows();
+    const homeBakery = memoryCategory("expense", "Bakery", { parentId: housing.id, position: 2 });
+
+    rows.categories.push(homeBakery);
+    const baker = merchantIn(rows, bakery);
+    const grocer = merchantIn(rows, groceries);
+    const { rows: merged } = await run(rows, mergeCategory(ADA, groceries.id, housing.id));
+
+    expect(defaultOf(merged, baker)).toBe(homeBakery.id);
+    expect(defaultOf(merged, grocer)).toBe(housing.id);
+  });
+
+  test("a deleted category clears it, as its key does", async () => {
+    const { rows, energy, rent } = startingRows();
+    const cleared = merchantIn(rows, energy);
+    const kept = merchantIn(rows, rent);
+
+    const { rows: after } = await run(
+      rows,
+      Effect.gen(function* () {
+        const store = yield* CategoryStore;
+
+        return yield* store.change(ADA, () => Result.succeed([{ step: "delete", id: energy.id }]));
+      }),
+    );
+
+    expect(defaultOf(after, cleared)).toBeNull();
+    expect(defaultOf(after, kept)).toBe(rent.id);
   });
 });

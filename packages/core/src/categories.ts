@@ -494,8 +494,8 @@ export const editCategory = (owner: string, categoryId: string, edit: CategoryEd
   });
 
 /**
- * Merges a category into another of its kind, in one transaction: every entry of the merged one
- * moves to the target; a merged parent's children go under the target, which must then be
+ * Merges a category into another of its kind, in one transaction: every entry of the merged one,
+ * and every merchant's default category on it, moves to the target; a merged parent's children go under the target, which must then be
  * top-level, and one whose name a child of the target already has is merged into that child; the
  * merged category is then deleted. Fails with `CategoryNotFound` or `CategoryRefused` (`itself`,
  * `parent_kind`, `archived` for an archived target, `fallback` for a fallback merged away, itself
@@ -572,6 +572,7 @@ export const mergeCategory = (owner: string, categoryId: string, intoId: string)
 
             return [
               { step: "move_entries", from: child.id, into: same.id },
+              { step: "move_defaults", from: child.id, into: same.id },
               { step: "delete", id: child.id },
             ];
           });
@@ -579,6 +580,7 @@ export const mergeCategory = (owner: string, categoryId: string, intoId: string)
           return [
             ...childSteps,
             { step: "move_entries", from: merged.id, into: into.id },
+            { step: "move_defaults", from: merged.id, into: into.id },
             { step: "delete", id: merged.id },
           ];
         }),
@@ -721,6 +723,35 @@ export const categoryNamed = (owner: string, name: string, kind?: EntryKind) =>
     }
 
     return only;
+  });
+
+/**
+ * Sets the category a merchant's entries go in by default: one in use, of either kind (a merchant
+ * may be paid or pay, an employer say); null clears it. Archiving the category later keeps it;
+ * merging the category moves it to the target. Fails with `MerchantNotFound`, `CategoryNotFound`
+ * or `CategoryRefused` (`archived`).
+ */
+export const setMerchantDefaultCategory = (
+  owner: string,
+  merchantId: string,
+  categoryId: string | null,
+) =>
+  Effect.gen(function* () {
+    const store = yield* CategoryStore;
+
+    return yield* store.setMerchantDefault(
+      owner,
+      merchantId,
+      (categories): Result.Result<string | null, CategoryNotFound | CategoryRefused> => {
+        if (categoryId === null) {
+          return Result.succeed(null);
+        }
+
+        return Result.flatMap(found(categories, categoryId), (category) =>
+          category.archivedAt === null ? Result.succeed(category.id) : refused("archived"),
+        );
+      },
+    );
   });
 
 /** What a line is put in: a category, or its kind's fallback ("Other") when none is named. */

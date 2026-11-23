@@ -105,6 +105,7 @@ export {
   editCategory,
   listCategories,
   mergeCategory,
+  setMerchantDefaultCategory,
   restoreCategory,
 } from "./categories";
 
@@ -126,7 +127,12 @@ export { DatabaseCategoryStore } from "./category-store-database";
 
 export { memoryCategory, memoryCategoryStore } from "./category-store-memory";
 
-export type { MemoryCategoryRows, MemoryEntry, MemoryPart } from "./category-store-memory";
+export type {
+  MemoryCategoryRows,
+  MemoryEntry,
+  MemoryMerchant,
+  MemoryPart,
+} from "./category-store-memory";
 
 export {
   DEFAULT_CATEGORIES,
@@ -254,6 +260,7 @@ export {
 
 export type {
   AliasMoved,
+  MerchantDefaultCategory,
   MerchantDetail,
   MerchantLine,
   MerchantPage,

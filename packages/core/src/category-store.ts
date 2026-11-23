@@ -3,6 +3,7 @@ import { Context } from "effect";
 import type { Effect, Result } from "effect";
 
 import type { CategoryNotFound, LineNotFound } from "./errors";
+import type { MerchantNotFound } from "./merchants/errors";
 
 /** An entry's kind, and its category's: money out or money in. */
 export type EntryKind = "expense" | "income";
@@ -40,13 +41,15 @@ export type CategoryPatch = Partial<
 
 /**
  * One step of a change to the categories, applied in order in one transaction: a category made, a
- * category's columns set, every entry of one category moved to another, a category deleted (once
- * nothing uses it: the database refuses it otherwise, at commit).
+ * category's columns set, every entry of one category moved to another, every merchant's default
+ * category moved from one to another, a category deleted (once no entry uses it: the database
+ * refuses it otherwise, at commit; a merchant's default on it is cleared, as its key does).
  */
 export type CategoryStep =
   | { readonly step: "insert"; readonly category: NewCategory }
   | { readonly step: "update"; readonly id: string; readonly patch: CategoryPatch }
   | { readonly step: "move_entries"; readonly from: string; readonly into: string }
+  | { readonly step: "move_defaults"; readonly from: string; readonly into: string }
   | { readonly step: "delete"; readonly id: string };
 
 /** The categories as a change left them, and the ids of those it made, in its steps' order. */
@@ -125,5 +128,16 @@ export class CategoryStore extends Context.Service<
         facts: LineEntries,
       ) => Result.Result<{ readonly entryId: string; readonly categoryId: string }, E>,
     ) => Effect.Effect<LineCategory, E | LineNotFound | CategoryNotFound | QueryFailed>;
+    /**
+     * Sets a merchant's default category to the one `decide` gives from the user's categories, or
+     * clears it (null), in one transaction that takes its turn with the changes of the categories.
+     * Gives the category set, null when cleared. Fails with `MerchantNotFound` for no merchant of
+     * the user's.
+     */
+    readonly setMerchantDefault: <E>(
+      owner: string,
+      merchantId: string,
+      decide: (categories: ReadonlyArray<CategoryRecord>) => Result.Result<string | null, E>,
+    ) => Effect.Effect<LineCategory | null, E | MerchantNotFound | QueryFailed>;
   }
 >()("@gousset/core/CategoryStore") {}

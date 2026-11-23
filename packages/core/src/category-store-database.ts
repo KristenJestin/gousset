@@ -1,4 +1,11 @@
-import { account, category, entry, entryPart, statementLine } from "@gousset/db/schema/ledger";
+import {
+  account,
+  category,
+  entry,
+  entryPart,
+  merchant,
+  statementLine,
+} from "@gousset/db/schema/ledger";
 import { transfer } from "@gousset/db/schema/transfers";
 import { UserData } from "@gousset/db/user-data";
 import type { UserTransaction } from "@gousset/db/user-data";
@@ -17,6 +24,7 @@ import type {
   LineEntries,
 } from "./category-store";
 import { CategoryNotFound, LineNotFound } from "./errors";
+import { MerchantNotFound } from "./merchants/errors";
 
 // The categories, through `UserData` only (docs/data-model.md, "Ownership and isolation"). Every
 // value goes in as a parameter, never into the SQL's text.
@@ -124,8 +132,17 @@ async function apply(
         break;
       }
 
+      case "move_defaults": {
+        await transaction
+          .update(merchant)
+          .set({ defaultCategoryId: step.into })
+          .where(eq(merchant.defaultCategoryId, step.from));
+        break;
+      }
+
       case "delete": {
-        // A category still in use, or with children, is refused by its kept references at commit.
+        // A category still in use, or with children, is refused by its kept references at commit;
+        // a merchant's default on it is cleared by its key.
         await transaction.delete(category).where(eq(category.id, step.id));
         break;
       }
@@ -139,6 +156,31 @@ const parent = alias(category, "parent");
 
 /** The first key of the lock a user's changes of the categories take, the user's the second. */
 const CHANGE_LOCK = "gousset.category.change";
+
+/** Takes the user's turn among the changes of the categories, until the transaction ends. */
+const takeTurn = (transaction: UserTransaction, owner: string) =>
+  transaction.execute(
+    sql`select pg_advisory_xact_lock(hashtext(${CHANGE_LOCK}), hashtext(${owner}))`,
+  );
+
+/** A category with its parent's name, as a line's or a merchant's default shows it. */
+async function shownCategory(
+  transaction: UserTransaction,
+  categoryId: string,
+): Promise<LineCategory | undefined> {
+  const [shown] = await transaction
+    .select({
+      id: category.id,
+      name: category.name,
+      parentName: parent.name,
+      kind: category.kind,
+    })
+    .from(category)
+    .leftJoin(parent, eq(parent.id, category.parentId))
+    .where(eq(category.id, categoryId));
+
+  return shown;
+}
 
 /** `CategoryStore` on the user's tables, through `UserData`. */
 export const DatabaseCategoryStore = Layer.effect(
@@ -195,9 +237,7 @@ export const DatabaseCategoryStore = Layer.effect(
             // A user's changes of the categories take turns until the transaction ends, so that
             // each decides on what the other left (a name taken, the cap, a parent archived): a
             // lock on the existing rows would let two inserts through at once.
-            await transaction.execute(
-              sql`select pg_advisory_xact_lock(hashtext(${CHANGE_LOCK}), hashtext(${owner}))`,
-            );
+            await takeTurn(transaction, owner);
 
             const rows = await transaction.select().from(category).for("update");
             const decided = decide(rows.map(record));
@@ -272,20 +312,62 @@ export const DatabaseCategoryStore = Layer.effect(
                 .set({ categoryId, classifiedBy: "user" })
                 .where(eq(entry.id, entryId));
 
-              const [chosen] = await transaction
-                .select({
-                  id: category.id,
-                  name: category.name,
-                  parentName: parent.name,
-                  kind: category.kind,
-                })
-                .from(category)
-                .leftJoin(parent, eq(parent.id, category.parentId))
-                .where(eq(category.id, categoryId));
+              const chosen = await shownCategory(transaction, categoryId);
 
               return chosen === undefined
                 ? Result.fail(new CategoryNotFound({ categoryId }))
                 : Result.succeed(chosen);
+            },
+          )
+          .pipe(Effect.flatMap(Effect.fromResult)),
+
+      setMerchantDefault: <E>(
+        owner: string,
+        merchantId: string,
+        decide: (categories: ReadonlyArray<CategoryRecord>) => Result.Result<string | null, E>,
+      ) =>
+        userData
+          .transaction(
+            owner,
+            async (
+              transaction,
+            ): Promise<Result.Result<LineCategory | null, E | MerchantNotFound>> => {
+              if (!UUID.test(merchantId)) {
+                return Result.fail(new MerchantNotFound({ merchantId }));
+              }
+
+              // Its turn among the changes of the categories: the category chosen is not archived
+              // nor merged away before it commits.
+              await takeTurn(transaction, owner);
+
+              const [found] = await transaction
+                .select({ id: merchant.id })
+                .from(merchant)
+                .where(eq(merchant.id, merchantId))
+                .for("update");
+
+              if (found === undefined) {
+                return Result.fail(new MerchantNotFound({ merchantId }));
+              }
+
+              const decided = decide(await readAll(transaction));
+
+              if (Result.isFailure(decided)) {
+                return Result.fail(decided.failure);
+              }
+
+              const categoryId = decided.success;
+
+              await transaction
+                .update(merchant)
+                .set({ defaultCategoryId: categoryId })
+                .where(eq(merchant.id, found.id));
+
+              return Result.succeed(
+                categoryId === null
+                  ? null
+                  : ((await shownCategory(transaction, categoryId)) ?? null),
+              );
             },
           )
           .pipe(Effect.flatMap(Effect.fromResult)),
