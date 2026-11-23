@@ -51,8 +51,14 @@ export {
   ImportFailed,
   ImportNotFound,
   ImportUnavailable,
+  InvalidProfileFile,
+  ProfileNameMissing,
+  ProfileNotFound,
+  ProfileUnreadable,
   UnknownFormat,
 } from "./imports/errors";
+
+export { ImportProfiles, importProfilesLayer } from "./imports/profiles";
 
 export { IMPORTS_LISTED, ImportJobs, Imports, importsLayer } from "./imports/imports";
 
@@ -70,7 +76,18 @@ export { ReadFailed, ReadRequest, StatementReader, inlineStatementReader } from 
 
 export { IMPORT_STEPS, MAX_FILE_BYTES } from "./imports/summary";
 
-export type { ImportFormat, ImportStatus, ImportStep, ImportSummary } from "./imports/summary";
+export type {
+  ImportFormat,
+  ImportProfileEntry,
+  ImportStatus,
+  ImportStep,
+  ImportSummary,
+  ProfileChoice,
+  ProfileDraft,
+  ProfileFile,
+  ProfileFit,
+  ProfilesForImport,
+} from "./imports/summary";
 
 export { ImportJobInput, markFailed, runImport } from "./imports/run";
 
