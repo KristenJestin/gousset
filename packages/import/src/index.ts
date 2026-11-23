@@ -36,7 +36,7 @@ export { CsvProfile } from "./csv-profile";
 
 export type { DateOrder } from "./dates";
 
-export { minorDigits } from "./amount";
+export { minorDigits, readAmount } from "./amount";
 
 export type {
   Balance,

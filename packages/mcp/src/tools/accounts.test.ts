@@ -514,7 +514,7 @@ describe("the accounts tool", () => {
     expect(tool?.description).toContain("what expires when on my meal vouchers?");
   });
 
-  test("only reads, and says so", async () => {
+  test("comes third in the list, and says it writes (issue #124)", async () => {
     const { tools } = await (await client()).listTools();
     const tool = tools.find((each) => each.name === "accounts");
 
@@ -527,9 +527,9 @@ describe("the accounts tool", () => {
     ]);
     expect(tool?.title).toBe("Accounts");
     expect(tool?.annotations).toEqual({
-      readOnlyHint: true,
-      destructiveHint: false,
-      idempotentHint: true,
+      readOnlyHint: false,
+      destructiveHint: true,
+      idempotentHint: false,
       openWorldHint: false,
     });
   });

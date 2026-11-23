@@ -1,3 +1,4 @@
+import { isKnownCurrency } from "@gousset/currency";
 import { Schema } from "effect";
 
 // The accounts' values the interface sends and checks, without the logic: the browser may import
@@ -144,6 +145,17 @@ export const Currency = Schema.String.check(
   }),
 );
 
+/**
+ * An account's currency: one of the ISO 4217 codes an account is opened in (`CURRENCY_CODES`), the
+ * list the web form picks from, so that the MCP door refuses what the form never offers.
+ */
+export const AccountCurrency = Currency.check(
+  Schema.makeFilter((currency: string) => isKnownCurrency(currency), {
+    message:
+      "This is not a currency an account is opened in: give its ISO 4217 code, as EUR, USD or JPY.",
+  }),
+);
+
 /** An account's id, as the database makes them. */
 export const AccountId = Schema.String.check(
   Schema.isUUID(undefined, { message: "An account is named by its id, a UUID." }),
@@ -160,7 +172,7 @@ export const AccountInput = Schema.Struct({
   name: Schema.Trim.check(Schema.isNonEmpty({ message: "An account needs a name." })),
   choice: AccountChoice,
   institution: Schema.optional(Schema.Trim),
-  currency: Currency,
+  currency: AccountCurrency,
   mode: AccountMode,
   openingBalanceMinor: MinorAmount,
   openedOn: Schema.optional(Day),
