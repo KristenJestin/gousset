@@ -6,6 +6,7 @@ no clock: the import job (#20) stores what they return.
 ```ts
 import {
   detectCsvProfile,
+  detectFormat,
   readCamt053,
   readCsv,
   readMt940,
@@ -13,6 +14,8 @@ import {
   readQif,
 } from "@gousset/import";
 import { Effect } from "effect";
+
+const format = detectFormat(bytes, fileName); // "ofx", "qfx", "qif", "camt053", "mt940", "csv" or null
 
 const program = Effect.gen(function* () {
   const statement = yield* readOfx(bytes); // OFX 1.x (SGML), OFX 2.x (XML), QFX
@@ -34,6 +37,16 @@ a tab or line break inside one (NEL, U+2028 and U+2029 included) becomes a space
 characters no label shows are dropped (NUL and the other control codes, half surrogate pairs, bidi
 controls):
 
+- `account`: `{ iban, number }`, the account the file names, for the import to tell which of the
+  user's accounts it is, or `null` (always for QIF and CSV, which name none); at least one of the
+  two is given. The IBAN is upper case without spaces, given only when shaped as one; the number is
+  as written, tidied like any text:
+  - OFX: `ACCTID` (`BANKACCTFROM` or `CCACCTFROM`) is the number, and the IBAN too when shaped as
+    one;
+  - CAMT.053: `Acct/Id/IBAN` the IBAN, `Acct/Id/Othr/Id` the number;
+  - MT940: `:25:`, after the bank's identifier when one comes first (`BEXAFRPPXXX/…`, a bank code
+    `99999999/…`), is the IBAN when shaped as one, else the number. The account's currency some
+    banks write after the IBAN (`FR76…809EUR`) is dropped.
 - `currency`: the ISO 4217 code every amount is in. OFX gives it (`CURDEF`), CAMT.053 too (`Acct/Ccy`,
   or its amounts' `Ccy`), MT940 in its balances; QIF does not, and the caller passes the account's. Its minor units are ISO 4217's (EUR 2, JPY 0, KWD 3, CLF 4), not
   Intl's, whose CLDR figures differ for a few currencies.
@@ -68,6 +81,19 @@ said how to read everything.
 CSV: `bookedOn`, `valueOn`, the amount, `label`, `memo` and `bankId` come from the columns the
 profile names; `bankId` is whatever the bank put there, which nothing makes unique. A CSV file
 gives no counterparty and no balance, opening or closing.
+
+## Which format
+
+`detectFormat(bytes, fileName)` (`src/format.ts`) proposes a file's format (`StatementFormat`, the
+values of the database's `import_format`) from its first 4 KiB, decoded leniently (a byte order mark
+dropped), and its name's extension; it runs no reader and never fails. In this order: OFX, an
+`OFXHEADER` header or an `<OFX>` element, is `qfx` when the name ends in `.qfx` or the file holds
+Intuit's `INTU.BID`, `ofx` otherwise; `camt053` for `BkToCstmrStmt` or a `camt.053` namespace;
+`qif` for a file that starts with `!Type:` or `!Account` (Quicken's `!Option:` may come first);
+`mt940` for SWIFT's `{1:` block, or a line starting `:20:` followed by `:25:`, `:28C:`, `:60F:`,
+`:60M:` or `:61:`; then `csv` for a name ending in `.csv` or `.txt`, or a first line holding `;`,
+`,`, a tab or `|`; `null` otherwise, an empty file included. A wrong guess costs nothing: the reader
+refuses the file with a typed error.
 
 ## CSV and import profiles
 
@@ -304,8 +330,8 @@ proportion to the file's size, at most some tens of times it for a crafted file 
 - **One account per file.** OFX can hold several statements and QIF several accounts; a reader
   refuses the second one, and the user exports one account per file. CAMT.053 and MT940 read several
   statements of the same account as one.
-- **Read past**, and not returned: the account's identifiers (`BANKID`, `ACCTID`, CAMT.053's
-  `Acct/Id`, MT940's `:25:`), OFX `DTUSER`, `TRNTYPE`, `CHECKNUM`, `SIC`, the available balance, QIF
+- **Read past**, and not returned: the bank's identifiers (OFX `BANKID` and `BRANCHID`, CAMT.053's
+  `Svcr`, the BIC or bank code before MT940's account), OFX `DTUSER`, `TRNTYPE`, `CHECKNUM`, `SIC`, the available balance, QIF
   categories (`L`), cleared status (`C`) and addresses (`A`), CAMT.053's bank transaction codes and
   amounts in another currency (`AmtDtls`), MT940's transaction types and statement numbers. Nothing
   in the issue asks for them yet; adding one is a field here.

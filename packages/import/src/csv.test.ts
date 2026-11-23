@@ -158,6 +158,7 @@ const DEBIT_CREDIT_HEADER = "Date;Valeur;Libellé;Débit;Crédit";
 describe("reading CSV files with a profile", () => {
   test("reads csv-semicolon.csv (UTF-8, semicolons, a currency column, the bank's ids)", () => {
     expect(read(csvSamples.csvSemicolon.bytes, semicolon)).toEqual({
+      account: null,
       currency: "EUR",
       lines: exampleStatement.lines.map((madeUp) => ({
         ...line(madeUp.bookedOn, madeUp.amountMinor, madeUp.label),
@@ -170,6 +171,7 @@ describe("reading CSV files with a profile", () => {
 
   test("reads csv-debit-credit.csv (Windows-1252, lines skipped, debit and credit, value dates)", () => {
     expect(read(csvSamples.csvDebitCredit.bytes, debitCredit)).toEqual({
+      account: null,
       currency: "EUR",
       lines: [
         { ...line("2026-11-02", -2390, "CB PÂTISSERIE DU MARCHÉ 31/10"), valueOn: "2026-10-31" },
@@ -188,6 +190,7 @@ describe("reading CSV files with a profile", () => {
 
   test("reads csv-comma.csv (a byte order mark, month first, quotes, a line break in a memo)", () => {
     expect(read(csvSamples.csvComma.bytes, comma, "USD")).toEqual({
+      account: null,
       currency: "USD",
       lines: [
         {
@@ -210,6 +213,7 @@ describe("reading CSV files with a profile", () => {
 
   test("reads csv-tab-no-header.csv (tabs, no header, two-digit years, 1.234,56)", () => {
     expect(read(csvSamples.csvTabNoHeader.bytes, tabNoHeader)).toEqual({
+      account: null,
       currency: "EUR",
       lines: [
         line("2026-10-01", -123_456, "REISEBÜRO BEISPIEL"),
@@ -223,6 +227,7 @@ describe("reading CSV files with a profile", () => {
 
   test("reads csv-pipe.csv (pipes, ISO dates, lone CRs, negative debits, a zero credit)", () => {
     expect(read(csvSamples.csvPipe.bytes, pipe)).toEqual({
+      account: null,
       currency: "EUR",
       lines: [
         {
@@ -267,6 +272,7 @@ describe("reading CSV files with a profile", () => {
     fc.assert(
       fc.property(madeUpStatements, (statement) => {
         expect(read(utf8.encode(writeCsv(statement)), semicolon)).toEqual({
+          account: null,
           currency: "EUR",
           lines: statement.lines.map((madeUp) => ({
             ...line(madeUp.bookedOn, madeUp.amountMinor, madeUp.label),

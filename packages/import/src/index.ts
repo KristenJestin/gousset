@@ -24,7 +24,17 @@ export { CsvProfile } from "./csv-profile";
 
 export type { DateOrder } from "./dates";
 
-export type { Balance, Counterparty, Statement, StatementLine } from "./statement";
+export type {
+  Balance,
+  Counterparty,
+  Statement,
+  StatementAccount,
+  StatementLine,
+} from "./statement";
+
+export { detectFormat } from "./format";
+
+export type { StatementFormat } from "./format";
 
 export {
   InvalidField,

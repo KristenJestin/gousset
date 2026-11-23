@@ -23,6 +23,7 @@ const refusal = (text: string) =>
 /** What `writeQif` writes: the label as `P`, the reference as `N`, no memo and no balance. */
 function writtenByWriteQif(statement: MadeUpStatement): Omit<QifStatement, "dateOrder"> {
   return {
+    account: null,
     currency: statement.account.currency,
     lines: statement.lines.map((madeUp) => ({
       bookedOn: madeUp.bookedOn,
@@ -61,6 +62,7 @@ describe("reading QIF files", () => {
 
   test("reads qif-quicken.qif (month first, Quicken's years, grouped thousands, a balance)", () => {
     expect(read(statementSamples.qifQuicken.bytes, { currency: "USD" })).toEqual({
+      account: null,
       currency: "USD",
       lines: [
         {
@@ -79,6 +81,7 @@ describe("reading QIF files", () => {
 
   test("reads qif-windows-1252.qif (Windows-1252, decimal commas, two-digit years)", () => {
     expect(read(statementSamples.qifWindows1252.bytes, { currency: "EUR" })).toEqual({
+      account: null,
       currency: "EUR",
       lines: [
         {
@@ -119,6 +122,7 @@ describe("reading QIF files", () => {
 
   test("reads qif-dot-dates.qif (a card, dates with dots, 1.234,56)", () => {
     expect(read(statementSamples.qifDotDates.bytes, { currency: "EUR" })).toEqual({
+      account: null,
       currency: "EUR",
       lines: [
         line("2026-10-01", -123_456, "REISEBÜRO BEISPIEL"),

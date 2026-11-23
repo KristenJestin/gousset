@@ -22,6 +22,9 @@ const refusal = (text: string) =>
 
 const IBAN = "DE39999999990012345678";
 
+/** The samples' account (`:25:`), an IBAN. */
+const ACCOUNT = { iban: "FR7699999000010001234567809", number: null };
+
 /**
  * What `writeMt940` writes: the label as `:86:`, the reference as the bank's, the value date the
  * entry date, `:60F:` on the first day: the end of the day before when a line is booked on it or
@@ -31,6 +34,7 @@ function writtenByWriteMt940(statement: MadeUpStatement): Statement {
   const startOfFirstDay = statement.lines.some((line) => line.bookedOn <= statement.from);
 
   return {
+    account: { iban: statement.account.iban, number: null },
     currency: statement.account.currency,
     lines: statement.lines.map((line) => ({
       bookedOn: line.bookedOn,
@@ -119,6 +123,7 @@ describe("reading MT940 files", () => {
 
   test("reads mt940-swift-blocks.sta (SWIFT blocks, reversals, funds codes, NONREF)", () => {
     expect(read(statementSamples.mt940SwiftBlocks.bytes)).toEqual({
+      account: ACCOUNT,
       currency: "EUR",
       lines: [
         line("2026-11-02", -2390, "CB PATISSERIE DU MARCHE 31/10", null),
@@ -142,6 +147,8 @@ describe("reading MT940 files", () => {
 
   test("reads mt940-structured.sta (Windows-1252, ? subfields, across the year's end)", () => {
     expect(read(statementSamples.mt940Structured.bytes)).toEqual({
+      // `:25:` is the bank's code, then the account's number.
+      account: { iban: null, number: "0012345678" },
       currency: "EUR",
       lines: [
         {
@@ -169,6 +176,8 @@ describe("reading MT940 files", () => {
 
   test("reads mt940-multi-statement.sta (three messages, pages, /CODE/ information)", () => {
     expect(read(statementSamples.mt940MultiStatement.bytes)).toEqual({
+      // `:25:` is the IBAN followed by the account's currency.
+      account: ACCOUNT,
       currency: "EUR",
       lines: [
         {
@@ -191,6 +200,13 @@ describe("reading MT940 files", () => {
     });
   });
 
+  test("reads :25: as a BIC and an account, or an account alone, spaced or not", () => {
+    expect(withAccount("BEXAFRPPXXX/FR7699999000010001234567809")).toEqual(ACCOUNT);
+    expect(withAccount("fr76 9999 9000 0100 0123 4567 809")).toEqual(ACCOUNT);
+    expect(withAccount("12345678")).toEqual({ iban: null, number: "12345678" });
+    expect(withAccount("BEXAFRPPXXX/12345678")).toEqual({ iban: null, number: "12345678" });
+  });
+
   test("reads back any statement writeMt940 writes", () => {
     fc.assert(
       fc.property(inTwoDigitYears, (statement) => {
@@ -201,6 +217,13 @@ describe("reading MT940 files", () => {
     );
   });
 });
+
+/** The account read from `mt940()`'s statement with `:25:` holding `account`. */
+function withAccount(account: string) {
+  const text = mt940().replace(":25:FR7699999000010001234567809", `:25:${account}`);
+
+  return read(new TextEncoder().encode(text)).account;
+}
 
 /** A statement in euros whose lines start on line 4. */
 function mt940(...lines: ReadonlyArray<string>): string {
