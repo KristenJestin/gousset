@@ -523,7 +523,9 @@ describe("categories merge and archive", () => {
     fresh.categories = fresh.categories.map((each) =>
       each.id === other.id ? { ...each, parentId: housing.id, position: 2 } : each,
     );
-    fresh.categories.push(memoryCategory("expense", "Other", { parentId: groceries.id, position: 2 }));
+    fresh.categories.push(
+      memoryCategory("expense", "Other", { parentId: groceries.id, position: 2 }),
+    );
 
     const rows = new Map([[writer.userId, fresh]]);
 
