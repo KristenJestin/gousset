@@ -7,6 +7,7 @@ import { AccountSettings, AccountSettingsSkeleton } from "@gousset/ui/components
 import { Page, ScreenBlock } from "@gousset/ui/components/app-shell";
 import { BalanceChart, BalanceChartSkeleton } from "@gousset/ui/components/balance-chart";
 import { BalanceCheck, BalanceCheckSkeleton } from "@gousset/ui/components/balance-check";
+import { BenefitCredits, BenefitCreditsSkeleton } from "@gousset/ui/components/benefit-credits";
 import { Button } from "@gousset/ui/components/button";
 import { DatePicker } from "@gousset/ui/components/date-picker";
 import { Dialog, DialogClose } from "@gousset/ui/components/dialog";
@@ -28,10 +29,17 @@ import {
   getAccount,
   noteAccountBalance,
   reopenAccount,
+  setCreditExpiry,
 } from "@/functions/accounts";
 import { accountRefusalMessage } from "@/i18n/messages";
 import { longDay, monthLabel, shortDay } from "@/lib/account-day";
 import { accountChoiceLabel, accountGroupLabel } from "@/lib/account-labels";
+import {
+  OPENING_CREDIT_ID,
+  benefitCreditsOf,
+  creditExpiryTag,
+  creditOrderLabel,
+} from "@/lib/benefit-credits";
 import { whileBusy } from "@/lib/while-busy";
 import { accountQueries, invalidateAccounts } from "@/queries/accounts";
 
@@ -183,6 +191,20 @@ function AccountPage() {
       >
         <Check accountId={accountId} />
       </DataBlock>
+      {detail.credits === null ? null : (
+        <DataBlock
+          title={m.accountBlockCredits()}
+          skeleton={
+            <BenefitCreditsSkeleton
+              expiring={detail.credits.expiring.length}
+              credits={detail.credits.open.length}
+            />
+          }
+          resetKey={accountId}
+        >
+          <Credits accountId={accountId} />
+        </DataBlock>
+      )}
       <DataBlock
         title={m.accountBlockChart()}
         skeleton={<BalanceChartSkeleton />}
@@ -222,6 +244,7 @@ function AccountPage() {
           openingBalanceMinor: account.openingBalance.minor,
           openedOn: account.openedOn,
           settlesIntoAccountId: account.settlesInto?.id ?? null,
+          creditOrder: detail.credits?.order ?? null,
         }}
         settlesIntoChoices={settlesIntoChoices}
         onSubmit={handleEdit}
@@ -313,6 +336,7 @@ function Figures({ accountId }: { accountId: string }) {
       out={detail.monthOut}
       institution={account.institution ?? undefined}
       groupLabel={accountGroupLabel(account.group)}
+      restricted={account.kind === "benefit"}
     />
   );
 }
@@ -372,8 +396,136 @@ function Chart({ accountId }: { accountId: string }) {
   );
 }
 
+/** What a credit's expiry dialog edits: the credit as it was when its button was pressed. */
+type ExpiryTarget = { lineId: string; label: string; expiresOn: string | null; opened: number };
+
+/** A benefit account kept by its lines: its credits, and the dialog that sets one's expiry. */
+function Credits({ accountId }: { accountId: string }) {
+  const detail = useAccountDetail(accountId);
+  const locale = usePageLanguage();
+  const [target, setTarget] = useState<ExpiryTarget>();
+  const [open, setOpen] = useState(false);
+
+  if (detail.credits === null) {
+    return null;
+  }
+
+  const { open: credits } = detail.credits;
+  const shown = benefitCreditsOf(detail.credits, detail.day, locale);
+
+  function editExpiry(id: string) {
+    const credit = credits.find((each) => each.lineId === id);
+
+    if (id === OPENING_CREDIT_ID || credit === undefined || credit.lineId === null) {
+      return;
+    }
+
+    setTarget({
+      lineId: credit.lineId,
+      label: credit.label ?? "",
+      expiresOn: credit.expiresOn,
+      opened: (target?.opened ?? 0) + 1,
+    });
+    setOpen(true);
+  }
+
+  return (
+    <>
+      <BenefitCredits
+        order={shown.order}
+        expiring={shown.expiring}
+        credits={shown.credits}
+        uncovered={shown.uncovered}
+        onEditExpiry={editExpiry}
+      />
+      {target === undefined ? null : (
+        <ExpiryDialog
+          // Each opening starts from the credit's expiry as it is then, with no past refusal.
+          key={target.opened}
+          open={open}
+          onOpenChange={setOpen}
+          lineId={target.lineId}
+          label={target.label}
+          initial={target.expiresOn}
+        />
+      )}
+    </>
+  );
+}
+
+function ExpiryDialog({
+  open,
+  onOpenChange,
+  lineId,
+  label,
+  initial,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  lineId: string;
+  label: string;
+  initial: string | null;
+}) {
+  const queryClient = useQueryClient();
+  const formId = useId();
+  const [expiresOn, setExpiresOn] = useState(initial);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string>();
+
+  async function save() {
+    const result = await whileBusy(setBusy, () =>
+      setCreditExpiry({ data: { lineId, expiresOn } }).then(
+        (answer) => answer,
+        () => ({ ok: false as const, code: "UNKNOWN" }),
+      ),
+    );
+
+    if (!result.ok) {
+      setError(accountRefusalMessage(result.code));
+
+      return;
+    }
+
+    setError(undefined);
+    await invalidateAccounts(queryClient);
+    onOpenChange(false);
+  }
+
+  return (
+    <Dialog
+      title={m.accountCreditExpiryTitle({ label })}
+      description={m.accountCreditExpiryDescription()}
+      open={open}
+      onOpenChange={onOpenChange}
+      actions={
+        <>
+          <DialogClose>
+            <Button type="button" variant="secondary">
+              {m.uiCancel()}
+            </Button>
+          </DialogClose>
+          <Button type="submit" form={formId} loading={busy}>
+            {m.accountCreditExpirySubmit()}
+          </Button>
+        </>
+      }
+    >
+      <form
+        id={formId}
+        onSubmit={(event) => {
+          event.preventDefault();
+          void save();
+        }}
+      >
+        <DatePicker label={m.fieldExpiresOn()} value={expiresOn} onValueChange={setExpiresOn} />
+        <FormMessage message={error} />
+      </form>
+    </Dialog>
+  );
+}
+
 function Settings({ accountId, onEdit }: { accountId: string; onEdit: () => void }) {
-  const { account } = useAccountDetail(accountId);
+  const { account, credits } = useAccountDetail(accountId);
   const locale = usePageLanguage();
 
   return (
@@ -384,6 +536,7 @@ function Settings({ accountId, onEdit }: { accountId: string; onEdit: () => void
       openedOn={account.openedOn === null ? null : longDay(account.openedOn, locale)}
       institution={account.institution ?? undefined}
       settlesInto={account.settlesInto?.name}
+      creditOrder={credits === null ? undefined : creditOrderLabel(credits.order)}
       action={
         <Button variant="secondary" size="sm" icon="edit" onClick={onEdit}>
           {m.accountEdit()}
@@ -400,6 +553,7 @@ function toRow(line: AccountLine, locale: string): AccountLineRow {
     label: line.label,
     amount: line.amount,
     balanceAfter: line.balanceAfter ?? undefined,
+    tag: creditExpiryTag(line.expiresOn, locale),
   };
 }
 
