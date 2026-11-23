@@ -12,11 +12,12 @@ import { expect, test, visit } from "../src/test";
 // new temporary password from the users page; the user must change it at the next sign-in, and
 // everything the old password allowed ends, MCP clients included.
 
-const allowReadOnly = (page: Page) => page.getByRole("button", { name: "Allow read only" }).click();
+// A client asking only to read gets a single "Allow" on the consent page.
+const allow = (page: Page) => page.getByRole("button", { name: "Allow", exact: true }).click();
 
 const SessionUser = Schema.Struct({ user: Schema.Struct({ mustChangePassword: Schema.Boolean }) });
 
-/** Read-only MCP tokens `person` allowed from a page of their own. */
+/** Read-only MCP tokens, a refresh token among them, `person` allowed from a page of their own. */
 async function agentTokens(browser: Browser, baseURL: string, person: TestUser) {
   const context = await browser.newContext({ baseURL });
 
@@ -26,8 +27,8 @@ async function agentTokens(browser: Browser, baseURL: string, person: TestUser) 
     return await authorizeByHand({
       baseURL,
       page: await context.newPage(),
-      scope: "read",
-      consent: allowReadOnly,
+      scope: "read offline_access",
+      consent: allow,
     });
   } finally {
     await context.close();
@@ -87,6 +88,7 @@ test("reset by the administrator, the old password refused, the temporary one le
   const tokens = await agentTokens(browser, app.baseURL, person);
 
   expect(await agentGetsIn(app.baseURL, tokens.access_token)).toBe(true);
+  expect(tokens.refresh_token).toBeDefined();
   expect((await sessionsOf(app.database, person.email)).all).toBeGreaterThanOrEqual(2);
 
   const dialog = await openReset(userPage, person);
