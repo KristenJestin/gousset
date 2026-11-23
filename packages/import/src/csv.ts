@@ -172,6 +172,7 @@ const readLine = (row: CsvRow, reading: Reading): Effect.Effect<Read, ReadError>
         label: optionalText(row, columns.label) ?? "",
         memo: optionalText(row, columns.memo),
         bankId: optionalText(row, columns.bankId),
+        counterparty: null,
       },
       debit,
     };
@@ -292,5 +293,10 @@ export const readCsv = (
 
     yield* checkDebitSigns(read);
 
-    return { currency, lines: read.map((entry) => entry.line), balance: null };
+    return {
+      currency,
+      lines: read.map((entry) => entry.line),
+      openingBalance: null,
+      balance: null,
+    };
   });

@@ -1,5 +1,5 @@
 import { exampleStatement } from "./example";
-import { writeOfx, writeQif } from "./formats";
+import { writeCamt053, writeMt940, writeOfx, writeQif } from "./formats";
 
 /** A statement file as a bank hands it over: its name and its bytes, in its own encoding. */
 export type SampleFile = { fileName: string; bytes: Uint8Array };
@@ -503,10 +503,356 @@ const qifDotDates = lf([
   "^",
 ]);
 
+/** A CAMT.053 entry, indented as a bank writes it, around what tells it apart. */
+function camtEntry(amount: string, indicator: "CRDT" | "DBIT", inside: ReadonlyArray<string>) {
+  return [
+    "      <Ntry>",
+    `        <Amt Ccy="EUR">${amount}</Amt>`,
+    `        <CdtDbtInd>${indicator}</CdtDbtInd>`,
+    ...inside.map((line) => `        ${line}`),
+    "      </Ntry>",
+  ];
+}
+
+function camtBalance(code: string, amount: string, indicator: "CRDT" | "DBIT", date: string) {
+  return [
+    "      <Bal>",
+    `        <Tp><CdOrPrtry><Cd>${code}</Cd></CdOrPrtry></Tp>`,
+    `        <Amt Ccy="EUR">${amount}</Amt>`,
+    `        <CdtDbtInd>${indicator}</CdtDbtInd>`,
+    `        <Dt>${date}</Dt>`,
+    "      </Bal>",
+  ];
+}
+
+const camtAccount = [
+  "      <Acct>",
+  "        <Id><IBAN>FR7699999000010001234567809</IBAN></Id>",
+  "        <Ccy>EUR</Ccy>",
+  "        <Ownr><Nm>Dominique Exemple</Nm></Ownr>",
+  "      </Acct>",
+];
+
+/**
+ * CAMT.053 version 001.02 as a French bank writes it: the status as text (`<Sts>BOOK</Sts>`), the
+ * bank's label in `AddtlNtryInf` and the remittance information beside it, a debtor's name and
+ * spaced IBAN (`Dbtr/Nm`), a creditor named without an account, a reversed direct debit
+ * (`RvslInd`), a booking date with a time, a pending entry, the opening balance as the previous
+ * closing one (`PRCD`) and an available balance beside the booked ones.
+ */
+const camt053Version02 = lf([
+  '<?xml version="1.0" encoding="UTF-8"?>',
+  '<Document xmlns="urn:iso:std:iso:20022:tech:xsd:camt.053.001.02" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">',
+  "  <BkToCstmrStmt>",
+  "    <GrpHdr>",
+  "      <MsgId>EX20261130</MsgId>",
+  "      <CreDtTm>2026-11-30T22:00:00+01:00</CreDtTm>",
+  "    </GrpHdr>",
+  "    <Stmt>",
+  "      <Id>EX-2026-11</Id>",
+  "      <CreDtTm>2026-11-30T22:00:00+01:00</CreDtTm>",
+  "      <FrToDt><FrDtTm>2026-11-01T00:00:00+01:00</FrDtTm><ToDtTm>2026-11-30T23:59:59+01:00</ToDtTm></FrToDt>",
+  ...camtAccount,
+  ...camtBalance("PRCD", "1520.30", "CRDT", "<Dt>2026-10-31</Dt>"),
+  ...camtBalance("CLBD", "1646.40", "CRDT", "<DtTm>2026-11-30T23:59:59+01:00</DtTm>"),
+  ...camtBalance("CLAV", "1600.00", "CRDT", "<Dt>2026-11-30</Dt>"),
+  ...camtEntry("23.90", "DBIT", [
+    "<Sts>BOOK</Sts>",
+    "<BookgDt><Dt>2026-11-02</Dt></BookgDt>",
+    "<ValDt><Dt>2026-10-31</Dt></ValDt>",
+    "<AcctSvcrRef>EX2026110201</AcctSvcrRef>",
+    "<BkTxCd><Domn><Cd>PMNT</Cd><Fmly><Cd>CCRD</Cd><SubFmlyCd>POSD</SubFmlyCd></Fmly></Domn></BkTxCd>",
+    "<NtryDtls><TxDtls><Refs><EndToEndId>NOTPROVIDED</EndToEndId></Refs></TxDtls></NtryDtls>",
+    "<AddtlNtryInf>CB PÂTISSERIE DU MARCHÉ 31/10</AddtlNtryInf>",
+  ]),
+  ...camtEntry("150.00", "CRDT", [
+    "<Sts>BOOK</Sts>",
+    "<BookgDt><DtTm>2026-11-03T09:12:00+01:00</DtTm></BookgDt>",
+    "<ValDt><Dt>2026-11-03</Dt></ValDt>",
+    "<AcctSvcrRef>EX2026110301</AcctSvcrRef>",
+    "<NtryDtls>",
+    "  <TxDtls>",
+    "    <Refs><EndToEndId>EX-E2E-0001</EndToEndId></Refs>",
+    "    <RltdPties>",
+    "      <Dbtr><Nm>CAMILLE EXEMPLE</Nm></Dbtr>",
+    "      <DbtrAcct><Id><IBAN>DE39 9999 9999 0012 3456 78</IBAN></Id></DbtrAcct>",
+    "    </RltdPties>",
+    "    <RmtInf><Ustrd>REMBOURSEMENT NOËL</Ustrd><Ustrd>PART DU CADEAU</Ustrd></RmtInf>",
+    "  </TxDtls>",
+    "</NtryDtls>",
+    "<AddtlNtryInf>VIR SEPA RECU /DE CAMILLE EXEMPLE</AddtlNtryInf>",
+  ]),
+  ...camtEntry("64.12", "DBIT", [
+    "<Sts>BOOK</Sts>",
+    "<BookgDt><Dt>2026-11-05</Dt></BookgDt>",
+    "<ValDt><Dt>2026-11-05</Dt></ValDt>",
+    "<AcctSvcrRef>EX2026110501</AcctSvcrRef>",
+    "<NtryDtls><TxDtls>",
+    "  <RltdPties><Cdtr><Nm>ÉLEC &amp; GAZ EXEMPLE</Nm></Cdtr></RltdPties>",
+    "  <RmtInf><Ustrd>ECHEANCE NOVEMBRE</Ustrd></RmtInf>",
+    "</TxDtls></NtryDtls>",
+    "<AddtlNtryInf>PRLV SEPA ÉLEC &amp; GAZ EXEMPLE</AddtlNtryInf>",
+  ]),
+  ...camtEntry("64.12", "CRDT", [
+    "<RvslInd>true</RvslInd>",
+    "<Sts>BOOK</Sts>",
+    "<BookgDt><Dt>2026-11-09</Dt></BookgDt>",
+    "<ValDt><Dt>2026-11-05</Dt></ValDt>",
+    "<AcctSvcrRef>EX2026110901</AcctSvcrRef>",
+    "<NtryDtls><TxDtls>",
+    "  <RltdPties><Cdtr><Nm>ÉLEC &amp; GAZ EXEMPLE</Nm></Cdtr></RltdPties>",
+    "</TxDtls></NtryDtls>",
+    "<AddtlNtryInf>RETOUR PRLV SEPA ÉLEC &amp; GAZ EXEMPLE</AddtlNtryInf>",
+  ]),
+  ...camtEntry("9.99", "DBIT", [
+    "<Sts>PDNG</Sts>",
+    "<ValDt><Dt>2026-12-01</Dt></ValDt>",
+    "<AddtlNtryInf>CB STREAMFLIX</AddtlNtryInf>",
+  ]),
+  "    </Stmt>",
+  "  </BkToCstmrStmt>",
+  "</Document>",
+]);
+
+/**
+ * CAMT.053 version 001.04 with an overdrawn opening balance (`OPBD` and `DBIT`): a batch entry of
+ * two direct debits booked as one line (`Btch`, two `TxDtls`), a salary with its remittance
+ * information and no bank label, a payment whose only text is its creditor's name, a structured
+ * reference (`Strd`) alone, and a fee with no details at all.
+ */
+const camt053Batch = lf([
+  '<?xml version="1.0" encoding="UTF-8"?>',
+  '<Document xmlns="urn:iso:std:iso:20022:tech:xsd:camt.053.001.04">',
+  "  <BkToCstmrStmt>",
+  "    <GrpHdr><MsgId>EX20261130B</MsgId><CreDtTm>2026-11-30T20:00:00</CreDtTm></GrpHdr>",
+  "    <Stmt>",
+  "      <Id>EX-2026-11-B</Id>",
+  "      <CreDtTm>2026-11-30T20:00:00</CreDtTm>",
+  ...camtAccount,
+  ...camtBalance("OPBD", "35.20", "DBIT", "<Dt>2026-11-01</Dt>"),
+  ...camtBalance("CLBD", "1578.40", "CRDT", "<Dt>2026-11-30</Dt>"),
+  ...camtEntry("1800.00", "CRDT", [
+    "<Sts>BOOK</Sts>",
+    "<BookgDt><Dt>2026-11-02</Dt></BookgDt>",
+    "<ValDt><Dt>2026-11-02</Dt></ValDt>",
+    "<AcctSvcrRef>EX2026110201</AcctSvcrRef>",
+    "<NtryDtls><TxDtls>",
+    "  <RltdPties>",
+    "    <Dbtr><Nm>ACME CONSEIL</Nm></Dbtr>",
+    "    <DbtrAcct><Id><IBAN>DE39999999990012345678</IBAN></Id></DbtrAcct>",
+    "  </RltdPties>",
+    "  <RmtInf><Ustrd>SALAIRE NOVEMBRE 2026</Ustrd></RmtInf>",
+    "</TxDtls></NtryDtls>",
+  ]),
+  ...camtEntry("120.00", "DBIT", [
+    "<Sts>BOOK</Sts>",
+    "<BookgDt><Dt>2026-11-05</Dt></BookgDt>",
+    "<ValDt><Dt>2026-11-05</Dt></ValDt>",
+    "<AcctSvcrRef>EX2026110501</AcctSvcrRef>",
+    "<NtryDtls>",
+    "  <Btch><NbOfTxs>2</NbOfTxs></Btch>",
+    "  <TxDtls>",
+    '    <Amt Ccy="EUR">80.00</Amt><CdtDbtInd>DBIT</CdtDbtInd>',
+    "    <RltdPties><Cdtr><Nm>ÉCOLE DE MUSIQUE EXEMPLE</Nm></Cdtr></RltdPties>",
+    "    <RmtInf><Ustrd>COTISATION TRIMESTRIELLE</Ustrd></RmtInf>",
+    "  </TxDtls>",
+    "  <TxDtls>",
+    '    <Amt Ccy="EUR">40.00</Amt><CdtDbtInd>DBIT</CdtDbtInd>',
+    "    <RltdPties><Cdtr><Nm>CLUB DE SPORT EXEMPLE</Nm></Cdtr></RltdPties>",
+    "    <RmtInf><Ustrd>ABONNEMENT NOVEMBRE</Ustrd></RmtInf>",
+    "  </TxDtls>",
+    "</NtryDtls>",
+    "<AddtlNtryInf>PRLV SEPA REMISE DE 2 OPERATIONS</AddtlNtryInf>",
+  ]),
+  ...camtEntry("18.90", "DBIT", [
+    "<Sts>BOOK</Sts>",
+    "<BookgDt><Dt>2026-11-12</Dt></BookgDt>",
+    "<AcctSvcrRef>EX2026111201</AcctSvcrRef>",
+    "<NtryDtls><TxDtls>",
+    "  <RltdPties><Cdtr><Nm>LIBRAIRIE EXEMPLE</Nm></Cdtr></RltdPties>",
+    "</TxDtls></NtryDtls>",
+  ]),
+  ...camtEntry("45.00", "DBIT", [
+    "<Sts>BOOK</Sts>",
+    "<BookgDt><Dt>2026-11-20</Dt></BookgDt>",
+    "<AcctSvcrRef>EX2026112001</AcctSvcrRef>",
+    "<NtryDtls><TxDtls>",
+    "  <RmtInf><Strd><CdtrRefInf><Ref>FACTURE 2026-0042</Ref></CdtrRefInf></Strd></RmtInf>",
+    "</TxDtls></NtryDtls>",
+  ]),
+  ...camtEntry("2.50", "DBIT", [
+    "<Sts>BOOK</Sts>",
+    "<BookgDt><Dt>2026-11-30</Dt></BookgDt>",
+    "<NtryRef>EX-FRAIS-11</NtryRef>",
+    "<AddtlNtryInf>FRAIS TENUE DE COMPTE</AddtlNtryInf>",
+  ]),
+  "    </Stmt>",
+  "  </BkToCstmrStmt>",
+  "</Document>",
+]);
+
+/**
+ * CAMT.053 version 001.10, its elements under a namespace prefix (`camt:`), with two daily
+ * statements of the same account: the status as a code (`Sts/Cd`), the parties' names under `Pty`,
+ * a comment, a CDATA section and a closing balance that is owed.
+ */
+/** CAMT.053's elements under the namespace prefix `camt:`, as some banks write them. */
+function prefixed(lines: ReadonlyArray<string>): Array<string> {
+  return lines.map((line) => line.replaceAll(/<(\/?)(?=[A-Z])/g, "<$1camt:"));
+}
+
+const camt053Daily = lf([
+  '<?xml version="1.0" encoding="UTF-8"?>',
+  ...prefixed([
+    '<Document xmlns:camt="urn:iso:std:iso:20022:tech:xsd:camt.053.001.10">',
+    "  <BkToCstmrStmt>",
+    "    <GrpHdr><MsgId>EX20261202</MsgId><CreDtTm>2026-12-02T21:00:00Z</CreDtTm></GrpHdr>",
+    "    <Stmt>",
+    "      <Id>EX-2026-12-01</Id>",
+    ...camtAccount,
+    "      <!-- Opening and closing booked balances of the day. -->",
+    ...camtBalance("OPBD", "500.00", "CRDT", "<Dt>2026-12-01</Dt>"),
+    ...camtBalance("CLBD", "525.00", "CRDT", "<Dt>2026-12-01</Dt>"),
+    ...camtEntry("25.00", "CRDT", [
+      "<Sts><Cd>BOOK</Cd></Sts>",
+      "<BookgDt><Dt>2026-12-01</Dt></BookgDt>",
+      "<ValDt><Dt>2026-12-01</Dt></ValDt>",
+      "<AcctSvcrRef>EX2026120101</AcctSvcrRef>",
+      "<NtryDtls><TxDtls>",
+      "  <RltdPties>",
+      "    <Dbtr><Pty><Nm>CAMILLE EXEMPLE</Nm></Pty></Dbtr>",
+      "    <DbtrAcct><Id><IBAN>DE39999999990012345678</IBAN></Id></DbtrAcct>",
+      "  </RltdPties>",
+      "  <RmtInf><Ustrd><![CDATA[REMBOURSEMENT CINÉMA & POP-CORN]]></Ustrd></RmtInf>",
+      "</TxDtls></NtryDtls>",
+    ]),
+    "    </Stmt>",
+    "    <Stmt>",
+    "      <Id>EX-2026-12-02</Id>",
+    ...camtAccount,
+    "      <!-- Opening and closing booked balances of the day. -->",
+    ...camtBalance("OPBD", "525.00", "CRDT", "<Dt>2026-12-02</Dt>"),
+    ...camtBalance("CLBD", "329.20", "DBIT", "<Dt>2026-12-02</Dt>"),
+    ...camtEntry("4.20", "DBIT", [
+      "<Sts><Cd>BOOK</Cd></Sts>",
+      "<BookgDt><Dt>2026-12-02</Dt></BookgDt>",
+      "<ValDt><Dt>2026-12-01</Dt></ValDt>",
+      "<AcctSvcrRef>EX2026120201</AcctSvcrRef>",
+      "<NtryDtls><TxDtls>",
+      "  <RltdPties><Cdtr><Pty><Nm>LE FOURNIL DES TILLEULS</Nm></Pty></Cdtr></RltdPties>",
+      "</TxDtls></NtryDtls>",
+      "<AddtlNtryInf>CB LE FOURNIL DES TILLEULS 01/12</AddtlNtryInf>",
+    ]),
+    ...camtEntry("850.00", "DBIT", [
+      "<Sts><Cd>BOOK</Cd></Sts>",
+      "<BookgDt><Dt>2026-12-02</Dt></BookgDt>",
+      "<ValDt><Dt>2026-12-02</Dt></ValDt>",
+      "<AcctSvcrRef>EX2026120202</AcctSvcrRef>",
+      "<NtryDtls><TxDtls>",
+      "  <RltdPties><Cdtr><Pty><Nm>SCI DES GLYCINES</Nm></Pty></Cdtr></RltdPties>",
+      "  <RmtInf><Ustrd>LOYER DECEMBRE</Ustrd></RmtInf>",
+      "</TxDtls></NtryDtls>",
+      "<AddtlNtryInf>PRLV SEPA SCI DES GLYCINES</AddtlNtryInf>",
+    ]),
+    "    </Stmt>",
+    "  </BkToCstmrStmt>",
+    "</Document>",
+  ]),
+]);
+
+/**
+ * MT940 in SWIFT's blocks (`{1:…}{2:…}{4:` to `-}`), LF: a line without entry date, funds codes
+ * (`CR`, `DR`), a reversed debit and a reversed credit (`RD`, `RC`), an amount without decimals
+ * (`150,`), supplementary details, an owner's reference alone and `NONREF`, a free-text `:86:` on
+ * two lines, the available and forward balances and the statement's own `:86:`.
+ */
+const mt940SwiftBlocks = lf([
+  "{1:F01BEXAFRPPAXXX0000000000}{2:O9401200261105BEXAFRPPAXXX00000000002611051200N}{3:{108:EX0001}}{4:",
+  ":20:EX20261105",
+  ":25:FR7699999000010001234567809",
+  ":28C:00042/001",
+  ":60F:C261031EUR1520,30",
+  ":61:261102D23,90NMSCNONREF",
+  ":86:CB PATISSERIE DU MARCHE 31/10",
+  ":61:2611021103CR150,NTRFNONREF//EX2026110301",
+  "/OCMT/EUR150,00/",
+  ":86:VIR SEPA RECU DE CAMILLE EXEMPLE",
+  "REMBOURSEMENT NOEL",
+  ":61:2611031103DR64,12NDDTPRLV-EX-0042//EX2026110302",
+  ":86:PRLV SEPA ELEC ET GAZ EXEMPLE",
+  ":61:2611051105RD64,12NDDTPRLV-EX-0042//EX2026110501",
+  ":86:RETOUR PRLV SEPA ELEC ET GAZ EXEMPLE",
+  ":61:2611051105RC150,00NTRFVIR-EX-0007",
+  ":86:ANNULATION VIR SEPA CAMILLE EXEMPLE",
+  ":62F:C261105EUR1496,40",
+  ":64:C261105EUR1496,40",
+  ":65:C261106EUR1496,40",
+  ":86:SOLDE AU 05/11",
+  "-}{5:{CHK:0123456789AB}}",
+]);
+
+/**
+ * MT940 as a German bank writes it: Windows-1252, CRLF, a domestic account (`:25:` bank code and
+ * number), `:86:` in `?` subfields cut anywhere (`Tan` then `kstelle`, a line break inside a name),
+ * a counterparty's IBAN and a
+ * domestic account number, entry dates across the year's end (value 31 December, entry 2 January,
+ * and the other way round).
+ */
+const mt940Structured = crlf([
+  ":20:STARTUMSE",
+  ":25:99999999/0012345678",
+  ":28C:00012/001",
+  ":60F:C261230EUR2000,00",
+  ":61:2612301230DR45,90NDDTNONREF//EX2026123001",
+  ":86:105?00LASTSCHRIFT?100123?20SVWZ+Rechnung 2026-12 Tan",
+  "?21kstelle Beispiel?30BEXADEFFXXX?31DE39999999990012345678?32TANKSTELLE BEI",
+  "SPIEL G?33MBH",
+  ":61:2612310102CR2450,00NTRFNONREF//EX2027010201",
+  ":86:166?00GUTSCHRIFT?20Gehalt Dezember?3099999999?310012345678?32ACME BERATUNG",
+  ":61:2701021231DR12,50NMSCNONREF",
+  ":86:806?00GEBÜHREN?20Kontoführung Dezember",
+  ":62F:C270102EUR4391,60",
+  "-",
+]);
+
+/**
+ * MT940 with three messages for two days: the first day's statement on two pages (`:62M:` then
+ * `:60M:`), each message ended by `-`; `:86:` in the `/CODE/` form, cut in the middle of a name,
+ * with the counterparty as `/NAME/` and `/IBAN/` or as `/CNTP/`, and `/REMI/` with or without
+ * `USTD//`.
+ */
+const mt940MultiStatement = lf([
+  ":20:EX20261201",
+  ":25:FR7699999000010001234567809EUR",
+  ":28C:00340/001",
+  ":60F:C261130EUR500,00",
+  ":61:2612011201C25,00NTRFNONREF//EX2026120101",
+  ":86:/TRTP/SEPA CREDIT TRANSFER/IBAN/DE39999999990012345678/BIC/BEXADEFFXXX/NAME/CAMILLE EXEM",
+  "PLE/REMI/USTD//REMBOURSEMENT CINEMA/EREF/NOTPROVIDED",
+  ":62M:C261201EUR525,00",
+  "-",
+  ":20:EX20261201",
+  ":25:FR7699999000010001234567809EUR",
+  ":28C:00340/002",
+  ":60M:C261201EUR525,00",
+  ":61:2612011201D4,20NMSCNONREF//EX2026120102",
+  ":86:/CNTP/DE39999999990012345678/BEXADEFFXXX/LE FOURNIL DES TILLEULS/EXEMPLEVILLE///REMI/USTD//CB LE FOURNIL 01/12/",
+  ":62F:C261201EUR520,80",
+  "-",
+  ":20:EX20261202",
+  ":25:FR7699999000010001234567809EUR",
+  ":28C:00341/001",
+  ":60F:C261201EUR520,80",
+  ":61:2612021202D850,00NDDTNONREF//EX2026120201",
+  ":86:/TRTP/SEPA DIRECT DEBIT/NAME/SCI DES GLYCINES/REMI/LOYER DECEMBRE/",
+  ":62F:D261202EUR329,20",
+  "-",
+]);
+
 /**
  * Invented statement files, one per variant the readers meet (packages/import): encodings, sign
- * conventions, date formats, SGML and XML OFX, QFX, QIF. The accounts, people and banks do not
- * exist.
+ * conventions, date formats, SGML and XML OFX, QFX, QIF, CAMT.053's versions and MT940's forms.
+ * The accounts, people and banks do not exist.
  */
 export const statementSamples = {
   /** OFX 2.2, XML, UTF-8: the example statement as `writeOfx` writes it. */
@@ -527,4 +873,23 @@ export const statementSamples = {
   qifQuicken: { fileName: "qif-quicken.qif", bytes: utf8.encode(qifQuicken) },
   qifWindows1252: { fileName: "qif-windows-1252.qif", bytes: encodeWindows1252(qifWindows1252) },
   qifDotDates: { fileName: "qif-dot-dates.qif", bytes: utf8.encode(qifDotDates) },
+  /** CAMT.053 001.08: the example statement as `writeCamt053` writes it. */
+  camt053Version08: {
+    fileName: "camt053-version-08.xml",
+    bytes: utf8.encode(writeCamt053(exampleStatement)),
+  },
+  camt053Version02: { fileName: "camt053-version-02.xml", bytes: utf8.encode(camt053Version02) },
+  camt053Batch: { fileName: "camt053-batch.xml", bytes: utf8.encode(camt053Batch) },
+  camt053Daily: { fileName: "camt053-daily.xml", bytes: utf8.encode(camt053Daily) },
+  /** MT940, CRLF, free-text `:86:`: the example statement as `writeMt940` writes it. */
+  mt940Plain: { fileName: "mt940-plain.sta", bytes: utf8.encode(writeMt940(exampleStatement)) },
+  mt940SwiftBlocks: { fileName: "mt940-swift-blocks.sta", bytes: utf8.encode(mt940SwiftBlocks) },
+  mt940Structured: {
+    fileName: "mt940-structured.sta",
+    bytes: encodeWindows1252(mt940Structured),
+  },
+  mt940MultiStatement: {
+    fileName: "mt940-multi-statement.sta",
+    bytes: utf8.encode(mt940MultiStatement),
+  },
 };

@@ -14,10 +14,11 @@ const column = Schema.optionalKey(Schema.Number);
 
 /**
  * The bytes are not a statement of the format asked for: no `<OFX>` element, no QIF header, no
- * CSV table in which a date and an amount column can be told.
+ * CAMT.053 `BkToCstmrStmt`, no MT940 `:20:` field, no CSV table in which a date and an amount
+ * column can be told.
  */
 export class NotAStatement extends Schema.TaggedError<NotAStatement>()("NotAStatement", {
-  format: Schema.Literals(["ofx", "qif", "csv"]),
+  format: Schema.Literals(["ofx", "qif", "camt053", "mt940", "csv"]),
 }) {}
 
 /**

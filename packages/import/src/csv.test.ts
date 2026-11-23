@@ -131,7 +131,15 @@ const detect = (bytes: Uint8Array) => Effect.runSync(detectCsvProfile(bytes));
 const detectText = (text: string) => detect(utf8.encode(text));
 
 function line(bookedOn: string, amountMinor: number, label: string) {
-  return { bookedOn, valueOn: null, amountMinor, label, memo: null, bankId: null };
+  return {
+    bookedOn,
+    valueOn: null,
+    amountMinor,
+    label,
+    memo: null,
+    bankId: null,
+    counterparty: null,
+  };
 }
 
 const HEADER = "Date;Libelle;Montant;Devise;Reference";
@@ -155,6 +163,7 @@ describe("reading CSV files with a profile", () => {
         ...line(madeUp.bookedOn, madeUp.amountMinor, madeUp.label),
         bankId: madeUp.reference,
       })),
+      openingBalance: null,
       balance: null,
     });
   });
@@ -172,6 +181,7 @@ describe("reading CSV files with a profile", () => {
         { ...line("2026-11-10", 245_000, "VIR SEPA ACME CONSEIL SALAIRE"), valueOn: "2026-11-10" },
         { ...line("2026-11-30", -250, "COTISATION CARTE 2,50 €"), valueOn: "2026-11-30" },
       ],
+      openingBalance: null,
       balance: null,
     });
   });
@@ -193,6 +203,7 @@ describe("reading CSV files with a profile", () => {
         },
         { ...line("2026-10-20", -999, "EXAMPLE STREAMING SERVICE"), bankId: "TX0004" },
       ],
+      openingBalance: null,
       balance: null,
     });
   });
@@ -205,6 +216,7 @@ describe("reading CSV files with a profile", () => {
         line("2026-10-15", -4590, "TANKSTELLE BEISPIEL"),
         line("2026-10-31", 128_046, "ZAHLUNG DANKE"),
       ],
+      openingBalance: null,
       balance: null,
     });
   });
@@ -219,6 +231,7 @@ describe("reading CSV files with a profile", () => {
           label: "EXAMPLE BOOKSHOP",
           memo: "Card payment",
           bankId: "REF-0001",
+          counterparty: null,
         },
         {
           ...days("2026-11-05", "2026-11-04"),
@@ -226,6 +239,7 @@ describe("reading CSV files with a profile", () => {
           label: "ACME BONUS",
           memo: null,
           bankId: "REF-0002",
+          counterparty: null,
         },
         {
           ...days("2026-11-12", "2026-11-12"),
@@ -233,6 +247,7 @@ describe("reading CSV files with a profile", () => {
           label: "CHEQUE 0001234",
           memo: "Cheque",
           bankId: "REF-0003",
+          counterparty: null,
         },
         {
           ...days("2026-11-30", "2026-11-30"),
@@ -240,8 +255,10 @@ describe("reading CSV files with a profile", () => {
           label: "INTEREST",
           memo: "Monthly interest",
           bankId: "REF-0004",
+          counterparty: null,
         },
       ],
+      openingBalance: null,
       balance: null,
     });
   });
@@ -255,6 +272,7 @@ describe("reading CSV files with a profile", () => {
             ...line(madeUp.bookedOn, madeUp.amountMinor, madeUp.label),
             bankId: madeUp.reference,
           })),
+          openingBalance: null,
           balance: null,
         });
       }),
