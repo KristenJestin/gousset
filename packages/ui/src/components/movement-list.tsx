@@ -38,7 +38,8 @@ function Arrow() {
 /**
  * The month's movements between the user's own accounts, and what came in (docs/wireframes,
  * screen 1, block 3): one "from → to" row each, the account reached in bold, its amount at the
- * end. A transfer followed by a purchase of securities fits on one row: "→ buy World index ETF",
+ * end. A row is one line, its names cut short when they do not fit: every row has the same
+ * height, so that the skeleton takes their exact place. A transfer followed by a purchase of securities fits on one row: "→ buy World index ETF",
  * its amount "€350 → €335". Neither spending nor income: no colour.
  *
  * Motion: when the month changes, the amounts roll (200 ms, ease-out); cut under reduced motion.
@@ -53,8 +54,8 @@ export function MovementList({ movements, label, emptyText, locale }: MovementLi
   return (
     <ul aria-label={label} data-slot="movement-list" className="flex flex-col divide-y">
       {movements.map((movement) => (
-        <li key={movement.id} className="flex min-h-10 items-center gap-3 py-2 text-sm">
-          <span className="flex min-w-0 flex-1 flex-wrap items-center gap-x-1.5">
+        <li key={movement.id} className="flex h-10 items-center gap-3 text-sm">
+          <span className="flex min-w-0 flex-1 items-center gap-1.5">
             <span className="truncate">{movement.from}</span>
             <Arrow />
             <span className="truncate font-medium">{movement.to}</span>
@@ -89,7 +90,7 @@ export function MovementListSkeleton({ rows = 4 }: { rows?: number }) {
     <SkeletonFrame>
       <ul className="flex flex-col divide-y">
         {Array.from({ length: rows }, (_, index) => (
-          <li key={index} className="flex min-h-10 items-center gap-3 py-2">
+          <li key={index} className="flex h-10 items-center gap-3">
             <span className="flex flex-1">
               <Skeleton className="h-4 w-48 max-w-full" />
             </span>
