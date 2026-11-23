@@ -11,6 +11,7 @@ import { CsvProfile, detectCsvProfile } from "@gousset/import";
 import { and, count, eq, gte, inArray, isNotNull, isNull, lte, ne, or } from "drizzle-orm";
 import { Effect, Schema } from "effect";
 
+import { recogniseIn } from "../merchants/merchants";
 import { ImportFailed } from "./errors";
 import { dedupKeys, NEAR_DAYS, nearDuplicates } from "./keys";
 import type { ExistingLine, ImportFormat, ReadLine } from "./keys";
@@ -440,6 +441,10 @@ export function runImport(
         .from(statementLine)
         .where(eq(statementLine.importId, importId))
         .groupBy(statementLine.state);
+
+      // The merchants of the lines just added, and of any line whose label names none yet (the
+      // lines of v0.2, kept before merchants existed, at the first import after the update).
+      await recogniseIn(transaction, owner);
 
       const of = (state: string) => states.find((row) => row.state === state)?.lines ?? 0;
       const added = of("counted");
