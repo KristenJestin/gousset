@@ -46,7 +46,7 @@ function More({ count, onMore }: { count: number; onMore: (() => void) | undefin
       ) : (
         <button
           type="button"
-          className="-mx-2 cursor-pointer rounded-md px-2 transition-colors duration-150 hover:bg-muted hover:text-foreground"
+          className="-mx-2 flex h-8 cursor-pointer items-center rounded-md px-2 transition-colors duration-150 hover:bg-muted hover:text-foreground"
           onClick={onMore}
         >
           {messages.showOtherRows(count)}
