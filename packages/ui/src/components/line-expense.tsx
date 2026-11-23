@@ -1,5 +1,5 @@
 import { Radio, RadioGroup, RadioIndicator } from "@ui-sdk/react/radio";
-import { useId, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import type { ReactNode } from "react";
 
 import { usePageLanguage } from "../hooks/use-page-language";
@@ -12,7 +12,7 @@ import { Amount } from "./amount";
 import { Button } from "./button";
 import { CategoryPicker } from "./category-picker";
 import type { CategoryChoice } from "./category-picker";
-import { AlertDialog, Dialog, DialogClose } from "./dialog";
+import { AlertDialog, Dialog } from "./dialog";
 import { FormMessage } from "./form-message";
 import { Icon } from "./icon";
 import { IconButton } from "./icon-button";
@@ -322,11 +322,9 @@ export function LinkLine({
   error,
   locale,
 }: LinkLineProps) {
-  const messages = useUiMessages();
-  const words = messages.operations;
+  const words = useUiMessages().operations;
   const pageLocale = usePageLanguage();
   const writtenIn = locale ?? pageLocale;
-  const formId = useId();
   const [open, setOpen] = useState(false);
   const [chosen, setChosen] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -366,68 +364,56 @@ export function LinkLine({
         description={words.linkDescription}
         open={open}
         onOpenChange={setOpen}
+        onSubmit={(event) => {
+          event.preventDefault();
+          void link();
+        }}
         actions={
-          <>
-            <DialogClose>
-              <Button type="button" variant="secondary">
-                {messages.overlays.cancel}
-              </Button>
-            </DialogClose>
-            <Button type="submit" form={formId} loading={busy} disabled={!offered}>
-              {words.link}
-            </Button>
-          </>
+          <Button type="submit" loading={busy} disabled={!offered}>
+            {words.link}
+          </Button>
         }
       >
-        <form
-          id={formId}
-          className="flex flex-col gap-3"
-          onSubmit={(event) => {
-            event.preventDefault();
-            void link();
-          }}
-        >
-          <TextField
-            label={words.linkSearch}
-            type="search"
-            value={search}
-            onChange={(event) => onSearchChange(event.target.value)}
-          />
-          {candidates.length === 0 ? (
-            <p className="text-sm text-muted-foreground">{words.linkNone}</p>
-          ) : (
-            <RadioGroup
-              aria-label={words.expenseLine}
-              value={offered ? chosen : null}
-              onValueChange={(next) => {
-                if (next !== null) {
-                  setChosen(next);
-                }
-              }}
-              className="flex max-h-72 flex-col gap-2 overflow-y-auto"
-            >
-              {candidates.map((candidate) => (
-                <label
-                  key={candidate.id}
-                  className="flex cursor-pointer items-center gap-3 rounded-md border px-3 py-2"
+        <TextField
+          label={words.linkSearch}
+          type="search"
+          value={search}
+          onChange={(event) => onSearchChange(event.target.value)}
+        />
+        {candidates.length === 0 ? (
+          <p className="text-sm text-muted-foreground">{words.linkNone}</p>
+        ) : (
+          <RadioGroup
+            aria-label={words.expenseLine}
+            value={offered ? chosen : null}
+            onValueChange={(next) => {
+              if (next !== null) {
+                setChosen(next);
+              }
+            }}
+            className="flex max-h-72 flex-col gap-2 overflow-y-auto"
+          >
+            {candidates.map((candidate) => (
+              <label
+                key={candidate.id}
+                className="flex cursor-pointer items-center gap-3 rounded-md border px-3 py-2"
+              >
+                <Radio
+                  value={candidate.id}
+                  className={cn(
+                    "flex size-4 shrink-0 items-center justify-center rounded-full border border-input bg-card",
+                    "transition-colors duration-150 ease-out data-checked:border-primary motion-reduce:transition-none",
+                    focusRing,
+                  )}
                 >
-                  <Radio
-                    value={candidate.id}
-                    className={cn(
-                      "flex size-4 shrink-0 items-center justify-center rounded-full border border-input bg-card",
-                      "transition-colors duration-150 ease-out data-checked:border-primary motion-reduce:transition-none",
-                      focusRing,
-                    )}
-                  >
-                    <RadioIndicator className="size-2 rounded-full bg-primary" />
-                  </Radio>
-                  <Side side={candidate} locale={writtenIn} />
-                </label>
-              ))}
-            </RadioGroup>
-          )}
-          <FormMessage message={error} />
-        </form>
+                  <RadioIndicator className="size-2 rounded-full bg-primary" />
+                </Radio>
+                <Side side={candidate} locale={writtenIn} />
+              </label>
+            ))}
+          </RadioGroup>
+        )}
+        <FormMessage message={error} />
       </Dialog>
     </>
   );
@@ -474,7 +460,6 @@ export function SplitLine({
   const words = useUiMessages().operations;
   const pageLocale = usePageLanguage();
   const writtenIn = locale ?? pageLocale;
-  const formId = useId();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   // The next share's key: read in handlers only, never drawn.
@@ -537,83 +522,78 @@ export function SplitLine({
         description={words.splitDescription(formatMoney(total, { locale: writtenIn }))}
         open={open}
         onOpenChange={setOpen}
+        onSubmit={(event) => {
+          event.preventDefault();
+          void save();
+        }}
         actions={
-          <Button type="submit" form={formId} loading={busy} disabled={!ready}>
+          <Button type="submit" loading={busy} disabled={!ready}>
             {words.splitSave}
           </Button>
         }
       >
-        <form
-          id={formId}
-          className="flex flex-col gap-4"
-          onSubmit={(event) => {
-            event.preventDefault();
-            void save();
-          }}
-        >
-          <ol className="flex flex-col gap-3">
-            {drafts.map((draft, index) => (
-              <li
-                key={draft.key}
-                data-slot="split-share"
-                className="flex items-end gap-2 rounded-md border p-3"
-              >
-                <div className="flex min-w-0 flex-1 flex-col gap-2">
-                  <CategoryPicker
-                    label={words.shareCategory(index + 1)}
-                    size="sm"
-                    categories={categories}
-                    value={draft.categoryId}
-                    onValueChange={(categoryId) => change(draft.key, { categoryId })}
-                  />
-                  <MoneyField
-                    label={words.shareAmount(index + 1)}
-                    size="sm"
-                    currency={total.currency}
-                    defaultValue={draft.minor}
-                    onValueChange={(minor) => change(draft.key, { minor })}
-                    locale={writtenIn}
-                  />
-                </div>
-                {drafts.length > 1 ? (
-                  <IconButton
-                    icon="delete"
-                    size="sm"
-                    label={words.shareRemove(index + 1)}
-                    onClick={() =>
-                      setDrafts((current) => current.filter((each) => each.key !== draft.key))
-                    }
-                  />
-                ) : null}
-              </li>
-            ))}
-          </ol>
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              disabled={drafts.length >= max}
-              onClick={() => {
-                setDrafts((current) => [
-                  ...current,
-                  { key: next.current, categoryId: null, minor: left > 0 ? left : null },
-                ]);
-                next.current += 1;
-              }}
+        <ol className="flex flex-col gap-3">
+          {drafts.map((draft, index) => (
+            <li
+              key={draft.key}
+              data-slot="split-share"
+              className="flex items-end gap-2 rounded-md border p-3"
             >
-              {words.splitAdd}
-            </Button>
-            <p
-              data-slot="split-left"
-              aria-live="polite"
-              className={cn("text-sm", left === 0 ? "text-muted-foreground" : "text-foreground")}
-            >
-              {leftText}
-            </p>
-          </div>
-          <FormMessage message={error} />
-        </form>
+              <div className="flex min-w-0 flex-1 flex-col gap-2">
+                <CategoryPicker
+                  label={words.shareCategory(index + 1)}
+                  size="sm"
+                  categories={categories}
+                  value={draft.categoryId}
+                  onValueChange={(categoryId) => change(draft.key, { categoryId })}
+                />
+                <MoneyField
+                  label={words.shareAmount(index + 1)}
+                  size="sm"
+                  currency={total.currency}
+                  defaultValue={draft.minor}
+                  onValueChange={(minor) => change(draft.key, { minor })}
+                  locale={writtenIn}
+                />
+              </div>
+              {drafts.length > 1 ? (
+                <IconButton
+                  icon="delete"
+                  size="sm"
+                  label={words.shareRemove(index + 1)}
+                  onClick={() =>
+                    setDrafts((current) => current.filter((each) => each.key !== draft.key))
+                  }
+                />
+              ) : null}
+            </li>
+          ))}
+        </ol>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            disabled={drafts.length >= max}
+            onClick={() => {
+              setDrafts((current) => [
+                ...current,
+                { key: next.current, categoryId: null, minor: left > 0 ? left : null },
+              ]);
+              next.current += 1;
+            }}
+          >
+            {words.splitAdd}
+          </Button>
+          <p
+            data-slot="split-left"
+            aria-live="polite"
+            className={cn("text-sm", left === 0 ? "text-muted-foreground" : "text-foreground")}
+          >
+            {leftText}
+          </p>
+        </div>
+        <FormMessage message={error} />
       </Sheet>
     </>
   );
