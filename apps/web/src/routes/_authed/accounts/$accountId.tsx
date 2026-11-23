@@ -10,7 +10,7 @@ import { BalanceCheck, BalanceCheckSkeleton } from "@gousset/ui/components/balan
 import { BenefitCredits, BenefitCreditsSkeleton } from "@gousset/ui/components/benefit-credits";
 import { Button } from "@gousset/ui/components/button";
 import { DatePicker } from "@gousset/ui/components/date-picker";
-import { Dialog, DialogClose } from "@gousset/ui/components/dialog";
+import { Dialog } from "@gousset/ui/components/dialog";
 import { EmptyState } from "@gousset/ui/components/empty-state";
 import { FormMessage } from "@gousset/ui/components/form-message";
 import { MoneyField } from "@gousset/ui/components/money-field";
@@ -18,7 +18,7 @@ import { StatusMessage } from "@gousset/ui/components/status-message";
 import { usePageLanguage } from "@gousset/ui/hooks/use-page-language";
 import { useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { createFileRoute, notFound } from "@tanstack/react-router";
-import { useId, useState } from "react";
+import { useState } from "react";
 
 import { AccountForm, accountFormInput } from "@/components/account-form";
 import type { AccountFormResult, AccountFormValues } from "@/components/account-form";
@@ -307,42 +307,29 @@ function CloseDialog({
   error: string | undefined;
   onConfirm: () => void;
 }) {
-  const formId = useId();
-
   return (
     <Dialog
       title={m.accountCloseTitle({ name })}
       description={m.accountCloseDescription()}
       open={open}
       onOpenChange={onOpenChange}
+      onSubmit={(event) => {
+        event.preventDefault();
+        onConfirm();
+      }}
       actions={
-        <>
-          <DialogClose>
-            <Button type="button" variant="secondary">
-              {m.uiCancel()}
-            </Button>
-          </DialogClose>
-          <Button type="submit" form={formId} loading={busy}>
-            {m.accountCloseSubmit()}
-          </Button>
-        </>
+        <Button type="submit" loading={busy}>
+          {m.accountCloseSubmit()}
+        </Button>
       }
     >
-      <form
-        id={formId}
-        onSubmit={(event) => {
-          event.preventDefault();
-          onConfirm();
-        }}
-      >
-        <DatePicker
-          label={m.fieldClosedOn()}
-          value={closedOn}
-          onValueChange={(day) => onClosedOnChange(day ?? closedOn)}
-          required
-        />
-        <FormMessage message={error} />
-      </form>
+      <DatePicker
+        label={m.fieldClosedOn()}
+        value={closedOn}
+        onValueChange={(day) => onClosedOnChange(day ?? closedOn)}
+        required
+      />
+      <FormMessage message={error} />
     </Dialog>
   );
 }
@@ -492,7 +479,6 @@ function ExpiryDialog({
   initial: string | null;
 }) {
   const queryClient = useQueryClient();
-  const formId = useId();
   const [expiresOn, setExpiresOn] = useState(initial);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string>();
@@ -522,29 +508,18 @@ function ExpiryDialog({
       description={m.accountCreditExpiryDescription()}
       open={open}
       onOpenChange={onOpenChange}
+      onSubmit={(event) => {
+        event.preventDefault();
+        void save();
+      }}
       actions={
-        <>
-          <DialogClose>
-            <Button type="button" variant="secondary">
-              {m.uiCancel()}
-            </Button>
-          </DialogClose>
-          <Button type="submit" form={formId} loading={busy}>
-            {m.accountCreditExpirySubmit()}
-          </Button>
-        </>
+        <Button type="submit" loading={busy}>
+          {m.accountCreditExpirySubmit()}
+        </Button>
       }
     >
-      <form
-        id={formId}
-        onSubmit={(event) => {
-          event.preventDefault();
-          void save();
-        }}
-      >
-        <DatePicker label={m.fieldExpiresOn()} value={expiresOn} onValueChange={setExpiresOn} />
-        <FormMessage message={error} />
-      </form>
+      <DatePicker label={m.fieldExpiresOn()} value={expiresOn} onValueChange={setExpiresOn} />
+      <FormMessage message={error} />
     </Dialog>
   );
 }
@@ -661,7 +636,6 @@ function NoteBalanceDialog({
   onSaved: (message: string) => void;
 }) {
   const queryClient = useQueryClient();
-  const formId = useId();
   const locale = usePageLanguage();
   const [noteDay, setNoteDay] = useState(day);
   const [balanceMinor, setBalanceMinor] = useState<number | null>(null);
@@ -695,41 +669,29 @@ function NoteBalanceDialog({
       description={m.accountNoteBalanceDescription()}
       open={open}
       onOpenChange={onOpenChange}
+      onSubmit={(event) => {
+        event.preventDefault();
+        void submit();
+      }}
       actions={
-        <>
-          <DialogClose>
-            <Button type="button" variant="secondary">
-              {m.uiCancel()}
-            </Button>
-          </DialogClose>
-          <Button type="submit" form={formId} loading={busy}>
-            {m.accountNoteBalanceSubmit()}
-          </Button>
-        </>
+        <Button type="submit" loading={busy}>
+          {m.accountNoteBalanceSubmit()}
+        </Button>
       }
     >
-      <form
-        id={formId}
-        onSubmit={(event) => {
-          event.preventDefault();
-          void submit();
-        }}
-        className="flex flex-col gap-4"
-      >
-        <DatePicker
-          label={m.fieldDay()}
-          value={noteDay}
-          onValueChange={(value) => setNoteDay(value ?? noteDay)}
-          required
-        />
-        <MoneyField
-          label={m.fieldAmount()}
-          currency={currency}
-          onValueChange={setBalanceMinor}
-          required
-        />
-        <FormMessage message={error} />
-      </form>
+      <DatePicker
+        label={m.fieldDay()}
+        value={noteDay}
+        onValueChange={(value) => setNoteDay(value ?? noteDay)}
+        required
+      />
+      <MoneyField
+        label={m.fieldAmount()}
+        currency={currency}
+        onValueChange={setBalanceMinor}
+        required
+      />
+      <FormMessage message={error} />
     </Dialog>
   );
 }
