@@ -21,6 +21,7 @@ import {
   IMPORTS,
   IMPORT_PROFILES,
   STATEMENT_LINES,
+  TRANSFERS,
 } from "./tables";
 import type { ExportTable } from "./tables";
 
@@ -50,8 +51,10 @@ function madeUpExport(): ExportData {
   const imports: Array<ExportRow> = [];
   const lines: Array<ExportRow> = [];
   const balances: Array<ExportRow> = [];
+  const transfers: Array<ExportRow> = [];
   const files: Array<ExportData["files"][number]> = [];
   const accountIds = new Map<string, string>();
+  const lineIds = new Map<string, string>();
 
   for (const account of madeUpAccounts) {
     const id = nextId();
@@ -106,9 +109,12 @@ function madeUpExport(): ExportData {
       files.push({ importId, fileName, content: strToU8(`OFXHEADER:100 ${account.id} ${month}`) });
 
       for (const line of ofAccount) {
+        const id = nextId();
+
+        lineIds.set(line.id, id);
         lines.push(
           row(STATEMENT_LINES, {
-            id: nextId(),
+            id,
             user_id: OWNER,
             account_id: accountId,
             import_id: importId,
@@ -137,6 +143,25 @@ function madeUpExport(): ExportData {
     }
   }
 
+  // The made-up transfers, paired as the import pairs them.
+  for (const month of MONTHS) {
+    for (const line of madeUpMonth(month).lines) {
+      const other = line.counterpartLineId;
+
+      if (line.amountMinor < 0 && other !== null) {
+        transfers.push(
+          row(TRANSFERS, {
+            id: nextId(),
+            user_id: OWNER,
+            out_line_id: lineIds.get(line.id) ?? null,
+            in_line_id: lineIds.get(other) ?? null,
+            paired_by: "import",
+          }),
+        );
+      }
+    }
+  }
+
   const profiles = [
     row(IMPORT_PROFILES, {
       id: nextId(),
@@ -155,6 +180,7 @@ function madeUpExport(): ExportData {
     [STATEMENT_LINES, lines],
     [IMPORTS, imports],
     [IMPORT_PROFILES, profiles],
+    [TRANSFERS, transfers],
   ]);
 
   return {

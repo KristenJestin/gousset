@@ -253,6 +253,7 @@
   "importContinue": "Passer à la revue",
   "importUndoneTitle": "Import annulé",
   "importUndoneDescription": "Lignes retirées : {removed}. Lignes d'autres imports de nouveau comptées : {givenBack}.",
+  "importUndoneTransfers": "Virements défaits avec elles : {count} ; leurs autres côtés attendent d'être de nouveau appariés.",
   "importUndoneOverlap": "Des imports plus récents de ce compte le chevauchent : les lignes qu'ils ont écartées comme déjà connues sont parties aussi. Importez de nouveau ce fichier pour les retrouver.",
   "importSameFile": "{file} a déjà été importé, le {date} : rien n'est ajouté deux fois.",
   "importAccountLabel": "Compte de {file}",

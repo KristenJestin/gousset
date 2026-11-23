@@ -1,0 +1,372 @@
+{
+  "type": "diff",
+  "version": "10",
+  "dialect": "postgres",
+  "id": "e6d827d4-c529-4bab-99c3-2e88f9760a56",
+  "prevIds": ["34a963e3-563d-4d2d-b25a-250d1fb48596", "3489e807-c6d9-45a4-a738-0a439b5ccede"],
+  "footprints": [
+    {
+      "statementType": "create_enum",
+      "statementTarget": ["enum", "public", "review_state"],
+      "writes": [
+        "s|enum|public.review_state",
+        "n|enum|public.review_state",
+        "e|enum|public.review_state",
+        "n|type|public.review_state"
+      ],
+      "reads": ["n|sch|public"]
+    },
+    {
+      "statementType": "create_enum",
+      "statementTarget": ["enum", "public", "paired_by"],
+      "writes": [
+        "s|enum|public.paired_by",
+        "n|enum|public.paired_by",
+        "e|enum|public.paired_by",
+        "n|type|public.paired_by"
+      ],
+      "reads": ["n|sch|public"]
+    },
+    {
+      "statementType": "create_table",
+      "statementTarget": ["table", "public", "transfer"],
+      "writes": [
+        "s|tbl|public.transfer",
+        "n|tbl|public.transfer",
+        "e|tbl|public.transfer",
+        "n|rel|public.transfer",
+        "n|type|public.transfer",
+        "n|rel|public.transfer_pkey",
+        "n|rel|public.transfer_user_id_id_key",
+        "n|rel|public.transfer_out_line_id_key",
+        "n|rel|public.transfer_in_line_id_key"
+      ],
+      "reads": ["n|sch|public", "n|enum|public.paired_by"]
+    },
+    {
+      "statementType": "add_column",
+      "statementTarget": ["column", "public", "statement_line", "review_state"],
+      "writes": [
+        "s|col|public.statement_line.review_state",
+        "n|col|public.statement_line.review_state",
+        "e|col|public.statement_line.review_state"
+      ],
+      "reads": ["n|tbl|public.statement_line", "n|sch|public", "n|enum|public.review_state"]
+    },
+    {
+      "statementType": "create_fk",
+      "statementTarget": ["table", "public", "transfer"],
+      "writes": [
+        "s|fk|public.transfer.transfer_user_id_auth_user_id_fkey",
+        "n|fk|public.transfer.transfer_user_id_auth_user_id_fkey",
+        "e|fk|public.transfer.transfer_user_id_auth_user_id_fkey",
+        "n|con|public.transfer.transfer_user_id_auth_user_id_fkey"
+      ],
+      "reads": [
+        "n|tbl|public.transfer",
+        "n|sch|public",
+        "n|tbl|public.auth_user",
+        "n|sch|public",
+        "n|col|public.transfer.user_id",
+        "n|col|public.auth_user.id",
+        "e|uniqueness|public.auth_user.id"
+      ]
+    },
+    {
+      "statementType": "create_fk",
+      "statementTarget": ["table", "public", "transfer"],
+      "writes": [
+        "s|fk|public.transfer.transfer_out_line_fk",
+        "n|fk|public.transfer.transfer_out_line_fk",
+        "e|fk|public.transfer.transfer_out_line_fk",
+        "n|con|public.transfer.transfer_out_line_fk"
+      ],
+      "reads": [
+        "n|tbl|public.transfer",
+        "n|sch|public",
+        "n|tbl|public.statement_line",
+        "n|sch|public",
+        "n|col|public.transfer.user_id",
+        "n|col|public.transfer.out_line_id",
+        "n|col|public.statement_line.user_id",
+        "n|col|public.statement_line.id",
+        "e|uniqueness|public.statement_line.id.user_id"
+      ]
+    },
+    {
+      "statementType": "create_fk",
+      "statementTarget": ["table", "public", "transfer"],
+      "writes": [
+        "s|fk|public.transfer.transfer_in_line_fk",
+        "n|fk|public.transfer.transfer_in_line_fk",
+        "e|fk|public.transfer.transfer_in_line_fk",
+        "n|con|public.transfer.transfer_in_line_fk"
+      ],
+      "reads": [
+        "n|tbl|public.transfer",
+        "n|sch|public",
+        "n|tbl|public.statement_line",
+        "n|sch|public",
+        "n|col|public.transfer.user_id",
+        "n|col|public.transfer.in_line_id",
+        "n|col|public.statement_line.user_id",
+        "n|col|public.statement_line.id",
+        "e|uniqueness|public.statement_line.id.user_id"
+      ]
+    },
+    {
+      "statementType": "create_policy",
+      "statementTarget": ["table", "public", "transfer"],
+      "writes": [
+        "s|pol|public.transfer.transfer_own_rows_only",
+        "n|pol|public.transfer.transfer_own_rows_only",
+        "e|pol|public.transfer.transfer_own_rows_only"
+      ],
+      "reads": ["n|tbl|public.transfer", "n|sch|public", "e|rls|public.transfer"]
+    }
+  ],
+  "deltas": [
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "name": "transfer",
+        "isRlsEnabled": true,
+        "entityType": "tables"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "name": "review_state",
+        "values": ["to_review", "done"],
+        "entityType": "enums"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "name": "paired_by",
+        "values": ["import", "rule", "user"],
+        "entityType": "enums"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "statement_line",
+        "name": "review_state",
+        "type": "review_state",
+        "typeSchema": "public",
+        "notNull": true,
+        "dimensions": 0,
+        "default": "'to_review'",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "transfer",
+        "name": "id",
+        "type": "uuid",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "uuidv7()",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "transfer",
+        "name": "user_id",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "transfer",
+        "name": "out_line_id",
+        "type": "uuid",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "transfer",
+        "name": "in_line_id",
+        "type": "uuid",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "transfer",
+        "name": "paired_by",
+        "type": "paired_by",
+        "typeSchema": "public",
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "transfer",
+        "name": "transfer_user_id_auth_user_id_fkey",
+        "nameExplicit": false,
+        "columns": ["user_id"],
+        "schemaTo": "public",
+        "tableTo": "auth_user",
+        "columnsTo": ["id"],
+        "onUpdate": "NO ACTION",
+        "onDelete": "CASCADE",
+        "entityType": "fks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "transfer",
+        "name": "transfer_out_line_fk",
+        "nameExplicit": true,
+        "columns": ["user_id", "out_line_id"],
+        "schemaTo": "public",
+        "tableTo": "statement_line",
+        "columnsTo": ["user_id", "id"],
+        "onUpdate": "NO ACTION",
+        "onDelete": "CASCADE",
+        "entityType": "fks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "transfer",
+        "name": "transfer_in_line_fk",
+        "nameExplicit": true,
+        "columns": ["user_id", "in_line_id"],
+        "schemaTo": "public",
+        "tableTo": "statement_line",
+        "columnsTo": ["user_id", "id"],
+        "onUpdate": "NO ACTION",
+        "onDelete": "CASCADE",
+        "entityType": "fks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "transfer",
+        "name": "transfer_pkey",
+        "columns": ["id"],
+        "nameExplicit": false,
+        "entityType": "pks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "transfer",
+        "name": "transfer_user_id_id_key",
+        "nameExplicit": true,
+        "columns": ["user_id", "id"],
+        "nullsNotDistinct": false,
+        "entityType": "uniques"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "transfer",
+        "name": "transfer_out_line_id_key",
+        "nameExplicit": true,
+        "columns": ["out_line_id"],
+        "nullsNotDistinct": false,
+        "entityType": "uniques"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "transfer",
+        "name": "transfer_in_line_id_key",
+        "nameExplicit": true,
+        "columns": ["in_line_id"],
+        "nullsNotDistinct": false,
+        "entityType": "uniques"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "transfer",
+        "name": "transfer_two_lines",
+        "value": "\"out_line_id\" <> \"in_line_id\"",
+        "entityType": "checks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "transfer",
+        "name": "transfer_own_rows_only",
+        "as": "PERMISSIVE",
+        "for": "ALL",
+        "roles": ["public"],
+        "using": "\"user_id\" = current_setting('gousset.user_id', true)",
+        "withCheck": "\"user_id\" = current_setting('gousset.user_id', true)",
+        "entityType": "policies"
+      }
+    }
+  ]
+}

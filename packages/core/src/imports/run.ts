@@ -17,6 +17,7 @@ import type { ExistingLine, ImportFormat, ReadLine } from "./keys";
 import { StatementReader } from "./read";
 import type { ReadStatement } from "./read";
 import { matchProfile, profileCandidates } from "./profiles";
+import { pairTransfers } from "../transfers/pair-lines";
 import { isId } from "./rows";
 import type { ImportStep } from "./summary";
 
@@ -334,6 +335,9 @@ export function runImport(
                 and(
                   eq(statementLine.accountId, target.id),
                   eq(statementLine.state, "counted"),
+                  // A side the app made for a transfer is replaced by the file's line, never held
+                  // against it (the pairing below).
+                  ne(statementLine.source, "counterpart"),
                   gte(statementLine.bookedOn, shiftDay(periodFrom, -NEAR_DAYS)),
                   lte(statementLine.bookedOn, shiftDay(periodTo, NEAR_DAYS)),
                   or(isNull(statementLine.importId), ne(statementLine.importId, importId)),
@@ -433,6 +437,18 @@ export function runImport(
 
       if (balances.length > 0) {
         await transaction.insert(accountBalance).values(balances);
+      }
+
+      // The transfers its lines make with the user's other lines (#26), in the transaction that ends
+      // the import: an attempt that stops before it pairs nothing, and the next one pairs them.
+      if (periodFrom !== null && periodTo !== null) {
+        await pairTransfers(transaction, owner, {
+          kind: "import",
+          importId,
+          accountId: target.id,
+          from: periodFrom,
+          to: periodTo,
+        });
       }
 
       const states = await transaction

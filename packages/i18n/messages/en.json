@@ -253,6 +253,7 @@
   "importContinue": "Continue to the review",
   "importUndoneTitle": "Import undone",
   "importUndoneDescription": "Lines removed: {removed}. Lines of other imports counted again: {givenBack}.",
+  "importUndoneTransfers": "Transfers undone with them: {count}; their other sides wait to be paired again.",
   "importUndoneOverlap": "Later imports of this account overlap it: the lines they skipped as already known are gone too. Import this file again to bring them back.",
   "importSameFile": "{file} was already imported, on {date}: nothing is added twice.",
   "importAccountLabel": "Account of {file}",

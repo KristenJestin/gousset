@@ -5,6 +5,7 @@ import type {
   Imports,
   Ledger,
   LineStore,
+  Transfers,
 } from "@gousset/core";
 
 import { INSTRUCTIONS } from "./instructions";
@@ -18,7 +19,7 @@ import { monthTool } from "./tools/month";
 
 /**
  * The services Gousset's tools need (the made-up month, the user's accounts, the imports and their
- * profiles, the export, every line searched across accounts).
+ * profiles, the export, every line searched across accounts, the transfers between accounts).
  */
 export type GoussetServices =
   | Ledger
@@ -26,7 +27,8 @@ export type GoussetServices =
   | Imports
   | ImportProfiles
   | DataExport
-  | LineStore;
+  | LineStore
+  | Transfers;
 
 /**
  * Gousset's tools, in the order `tools/list` gives them: one family per concept

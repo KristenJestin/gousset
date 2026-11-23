@@ -3,6 +3,7 @@ import {
   FixtureLedger,
   ImportProfiles,
   Imports,
+  Transfers,
   memoryAccountStore,
   memoryId,
   memoryLineStore,
@@ -120,6 +121,10 @@ function onToday(rows: MemoryLineRows): Runner<GoussetServices> {
     Layer.mock(Imports, {}),
     Layer.mock(ImportProfiles, {}),
     Layer.mock(DataExport, {}),
+    // No line of these is a transfer; transfers are tried end to end (#26, lines-transfers.spec).
+    Layer.mock(Transfers, {
+      ofLine: () => Effect.succeed({ paired: null, candidates: [] }),
+    }),
     TestClock.layer(),
   );
 
@@ -189,7 +194,7 @@ describe("lines search", () => {
 
     expect(isError).toBe(false);
     expect(text).toContain(
-      "5 line(s) match: every line counted (add to_review: true for the lines held for review).",
+      "5 line(s) match: every line counted (add to_review: true for the lines to review).",
     );
     expect(text).toContain(
       `- 2026-11-03, Current account (Riverside Bank): -23.80 EUR, "CB CORNER CAFE"; line: ${cafe.id}`,
@@ -216,7 +221,7 @@ describe("lines search", () => {
 
     expect(isError).toBe(false);
     expect(text).toContain(
-      '1 line(s) match: lines counted (add to_review: true for the lines held for review), containing "fuelstop", in Current account (Riverside Bank), booked from 2026-10-01, booked until 2026-10-31.',
+      '1 line(s) match: lines counted (add to_review: true for the lines to review), containing "fuelstop", in Current account (Riverside Bank), booked from 2026-10-01, booked until 2026-10-31.',
     );
     expect(handlesOf(text)).toEqual([fuel.id]);
   });
@@ -239,12 +244,12 @@ describe("lines search", () => {
     expect(handlesOf(text)).toEqual([fuel.id]);
   });
 
-  test("lists the lines held for review when asked, marked so", async () => {
+  test("lists the lines to review when asked, marked so", async () => {
     const { text, isError } = await lines({ action: "search", to_review: true });
 
     expect(isError).toBe(false);
     expect(text).toContain(
-      "1 line(s) match: every line held for review (near duplicates waiting for the user).",
+      "1 line(s) match: every line to review (near duplicates held, and transfers whose other side the user chooses).",
     );
     expect(text).toContain(
       `- 2026-11-04, Current account (Riverside Bank): -23.80 EUR, "CB CORNER CAFE", to review; line: ${heldCafe.id}`,
@@ -460,7 +465,16 @@ describe("lines show", () => {
 });
 
 describe("the lines tool", () => {
-  test("only reads, and says so, last in the fixed order", async () => {
+  test("pairs, classifies and unpairs only with the write scope, and says how to get it", async () => {
+    for (const action of ["pair", "classify", "unpair"]) {
+      const { text, isError } = await lines({ action, line: salary.id, kind: "transfer" });
+
+      expect(isError, action).toBe(true);
+      expect(text, action).toContain("choose Read and write on Gousset's consent page");
+    }
+  });
+
+  test("writes transfers, and says so, last in the fixed order", async () => {
     const client = await connectInProcess(
       goussetServer,
       { run: onToday(ROWS) },
@@ -480,8 +494,8 @@ describe("the lines tool", () => {
     ]);
     expect(tool?.title).toBe("Lines");
     expect(tool?.annotations).toEqual({
-      readOnlyHint: true,
-      destructiveHint: false,
+      readOnlyHint: false,
+      destructiveHint: true,
       idempotentHint: true,
       openWorldHint: false,
     });

@@ -95,6 +95,9 @@ export const lineSource = pgEnum("line_source", ["import", "manual", "balance", 
 
 export const lineState = pgEnum("line_state", ["counted", "held", "discarded"]);
 
+/** Whether the monthly review still lists a line (v0.3): until the user, or a sure rule, says. */
+export const reviewState = pgEnum("review_state", ["to_review", "done"]);
+
 export const importFormat = pgEnum("import_format", [
   "ofx",
   "qfx",
@@ -314,6 +317,8 @@ export const statementLine = pgTable.withRLS(
     expiresOn: day("expires_on"),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
+    // Added by v0.3 (#26), after the others: every line of v0.2 starts to review, which it is.
+    reviewState: reviewState("review_state").default("to_review").notNull(),
   },
   (table) => [
     unique("statement_line_user_id_id_key").on(table.userId, table.id),
