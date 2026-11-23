@@ -15,6 +15,13 @@ const TOO_LONG = "The password can have at most 128 characters.";
 /** A message as part of an accessible description, which also holds the field's rules. */
 const within = (message: string) => new RegExp(message.replaceAll(".", String.raw`\.`));
 
+/**
+ * A message as the page shows it: in `<main>`, since ui-sdk also hands a field's error to a shared
+ * screen-reader announcer beside it, which keeps the last one said.
+ */
+const shown = (page: Page, message: string) =>
+  page.getByRole("main").getByText(message, { exact: true });
+
 /** Marks the page: the mark survives only if the page is never reloaded. */
 async function markPage(page: Page) {
   await page.evaluate(() => {
@@ -37,7 +44,7 @@ type Refused = {
  * (nothing fades or slides in), the passwords emptied, every other field as typed, no reload.
  */
 async function expectRefused(page: Page, { field, message, kept, emptied }: Refused) {
-  const error = page.getByText(message, { exact: true });
+  const error = shown(page, message);
   const input = page.getByLabel(field, { exact: true });
 
   await expect(error).toBeVisible();
@@ -105,11 +112,13 @@ test("a password too short and one too long on setup each show their own message
       emptied: ["Password"],
     });
     // Its own message: the other one is gone.
-    await expect(page.getByText(TOO_SHORT, { exact: true })).toHaveCount(0);
+    await expect(shown(page, TOO_SHORT)).toHaveCount(0);
 
-    // Typing again takes the message away.
+    // Typing again takes the message away: the field holds its rules alone.
     await password.fill("ada-pass");
-    await expect(page.getByText(TOO_LONG, { exact: true })).toHaveCount(0);
+    await expect(shown(page, TOO_LONG)).toHaveCount(0);
+    await expect(password).not.toHaveAttribute("aria-invalid", "true");
+    await expect(password).toHaveAccessibleDescription(RULES);
     expect(await hasUser(fresh.database, "ada@example.com")).toBe(false);
   } finally {
     await fresh.stop();
@@ -187,7 +196,7 @@ test("a new password too long says so when changing the password, a current one 
   await page.getByRole("button", { name: "Change the password" }).click();
   await expect(currentPassword).toHaveAttribute("aria-invalid", "true");
   await expect(newPassword).not.toHaveAttribute("aria-invalid", "true");
-  await expect(page.getByText(TOO_LONG, { exact: true })).toHaveCount(0);
+  await expect(shown(page, TOO_LONG)).toHaveCount(0);
 
   // Still temporary: nothing else opens.
   await page.goto("/");
@@ -205,12 +214,30 @@ test("a form sends nothing before the page is ready, so no password lands in an 
 
   try {
     const page = await context.newPage();
+    const sent: Array<string> = [];
+
+    page.on("request", (request) => {
+      // The query alone: preloaded scripts carry the word in their names.
+      if (new URL(request.url()).searchParams.has("password")) {
+        sent.push(request.url());
+      }
+    });
 
     await page.goto("/sign-in");
-    await page.getByLabel("E-mail").fill(user.email);
-    await page.getByLabel("Password", { exact: true }).fill(user.password);
 
-    await expect(page.getByRole("button", { name: "Sign in" })).toBeDisabled();
+    const password = page.getByLabel("Password", { exact: true });
+
+    await page.getByLabel("E-mail").fill(user.email);
+    await password.fill(user.password);
+    await page.getByRole("button", { name: "Sign in" }).click();
+    await password.press("Enter");
+    await page.waitForLoadState("load");
+
+    // Nothing sent, nothing drawn again: the page and what was typed are still there.
+    expect(sent).toEqual([]);
+    await expect(page).toHaveURL(/\/sign-in$/);
+    await expect(page.getByLabel("E-mail")).toHaveValue(user.email);
+    await expect(password).toHaveValue(user.password);
   } finally {
     await context.close();
   }

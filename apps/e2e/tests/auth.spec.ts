@@ -236,7 +236,8 @@ test("a new password equal to the current one is refused", async ({ page, app, u
   const message = "The new password must differ from the current one.";
   const newPassword = page.getByLabel("New password", { exact: true });
 
-  await expect(page.getByText(message, { exact: true })).toBeVisible();
+  // In the page: ui-sdk's screen-reader announcer beside it says the same words.
+  await expect(page.getByRole("main").getByText(message, { exact: true })).toBeVisible();
   await expect(newPassword).toHaveAccessibleDescription(
     new RegExp(message.replaceAll(".", String.raw`\.`)),
   );
