@@ -129,7 +129,7 @@ test("a temporary password too short says so on the users page, and keeps the na
   userPage,
   app,
 }) => {
-  await visit(userPage, "/users");
+  await visit(userPage, "/settings/users");
   await markPage(userPage);
 
   const password = userPage.getByLabel("Temporary password", { exact: true });

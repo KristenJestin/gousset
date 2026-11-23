@@ -127,6 +127,7 @@
   "importEmptyDescription": "Les relevés que vous importez seront listés ici, avec ce que chacun a ajouté et ce qu'il reste à vérifier.",
   "settingsTitle": "Réglages",
   "settingsNavGeneral": "Général",
+  "settingsNavUsers": "Utilisateurs",
   "settingsNavCategories": "Catégories",
   "settingsNavRules": "Règles",
   "settingsLanguageTitle": "Langue",
