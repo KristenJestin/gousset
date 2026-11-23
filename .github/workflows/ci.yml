@@ -146,6 +146,97 @@ jobs:
             echo "ui-shards=$(shards "$ui_total")"
           } | tee -a "$GITHUB_OUTPUT"
 
+  # First of the jobs after `plan`: the e2e shards are the longest, and when the account's runners
+  # are all taken, the jobs queued first are the first served.
+  #
+  # The end-to-end suite (apps/e2e), one shard: the chromium-desktop project, or every project
+  # (apps/e2e/playwright.config.ts) when `plan` says so. The job's name says its scope
+  # (`e2e full 3/6`): the release reads it.
+  e2e-shard:
+    name: e2e ${{ needs.plan.outputs.e2e-scope }} ${{ matrix.shard }}/${{ needs.plan.outputs.e2e-total }}
+    needs: plan
+    if: needs.plan.outputs.browsers == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ${{ fromJSON(needs.plan.outputs.e2e-shards) }}
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: gousset
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      E2E_BROWSERS: ${{ needs.plan.outputs.e2e-scope == 'full' && 'chromium firefox' || 'chromium' }}
+      E2E_PROJECTS: ${{ needs.plan.outputs.e2e-scope != 'full' && '--project=chromium-desktop' || '' }}
+      SHARD: ${{ matrix.shard }}/${{ needs.plan.outputs.e2e-total }}
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/gousset
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      # The runner's image holds what both browsers need: no system package from apt, whose mirrors
+      # took up to five minutes (issue #115).
+      - name: Playwright's browsers
+        run: pnpm --dir apps/e2e exec playwright install $E2E_BROWSERS
+      # The suite runs the built app.
+      - name: Build
+        run: pnpm run build
+      - name: End-to-end tests, shard ${{ matrix.shard }}
+        # The configuration's two workers: four on a runner's four cores made no shard faster, and
+        # broke the tests that time a motion or a scroll in Firefox and at a phone's width.
+        run: pnpm e2e --shard=$SHARD $E2E_PROJECTS
+      - name: Keep the trace, video and screenshots
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: e2e-shard-${{ matrix.shard }}
+          path: |
+            apps/e2e/test-results
+            apps/e2e/playwright-report
+          if-no-files-found: ignore
+          retention-days: 14
+      # The pictures a scenario takes on purpose (`testInfo.outputPath("screens", …)`), kept
+      # whatever the result: the screens shown in the pull request.
+      - name: Keep the screens' pictures
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: screens-shard-${{ matrix.shard }}
+          path: apps/e2e/test-results/**/screens/*.png
+          if-no-files-found: ignore
+          retention-days: 14
+
+  # The required check: one job named e2e that passes only when every shard passed, whatever the
+  # number of shards.
+  e2e:
+    if: always() && !(github.event_name == 'push' && github.ref == 'refs/heads/main')
+    needs: [plan, e2e-shard]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Every shard passed
+        env:
+          RESULT: ${{ needs.e2e-shard.result }}
+        run: |
+          echo "The shards: $RESULT"
+          [ "$RESULT" = success ]
+
   # Format, lint, types, unit tests, build, and React Doctor on the whole of apps/web and
   # packages/ui (doctor.config.ts), failing on an error.
   verify:
@@ -348,94 +439,6 @@ jobs:
             echo "::error::This run was asked to draw the missing references (Update-Snapshots: missing) and committed none: push a commit without the trailer."
             exit 1
           fi
-
-  # The end-to-end suite (apps/e2e), one shard: the chromium-desktop project, or every project
-  # (apps/e2e/playwright.config.ts) when `plan` says so. The job's name says its scope
-  # (`e2e full 3/6`): the release reads it.
-  e2e-shard:
-    name: e2e ${{ needs.plan.outputs.e2e-scope }} ${{ matrix.shard }}/${{ needs.plan.outputs.e2e-total }}
-    needs: plan
-    if: needs.plan.outputs.browsers == 'true'
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        shard: ${{ fromJSON(needs.plan.outputs.e2e-shards) }}
-    services:
-      postgres:
-        image: postgres:18
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: gousset
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U postgres"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
-    env:
-      E2E_BROWSERS: ${{ needs.plan.outputs.e2e-scope == 'full' && 'chromium firefox' || 'chromium' }}
-      E2E_PROJECTS: ${{ needs.plan.outputs.e2e-scope != 'full' && '--project=chromium-desktop' || '' }}
-      SHARD: ${{ matrix.shard }}/${{ needs.plan.outputs.e2e-total }}
-      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/gousset
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: pnpm
-      - name: Install
-        run: pnpm install --frozen-lockfile
-      # The runner's image holds what both browsers need: no system package from apt, whose mirrors
-      # took up to five minutes (issue #115).
-      - name: Playwright's browsers
-        run: pnpm --dir apps/e2e exec playwright install $E2E_BROWSERS
-      # The suite runs the built app.
-      - name: Build
-        run: pnpm run build
-      - name: End-to-end tests, shard ${{ matrix.shard }}
-        # The configuration's two workers: four on a runner's four cores made no shard faster, and
-        # broke the tests that time a motion or a scroll in Firefox and at a phone's width.
-        run: pnpm e2e --shard=$SHARD $E2E_PROJECTS
-      - name: Keep the trace, video and screenshots
-        if: failure()
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: e2e-shard-${{ matrix.shard }}
-          path: |
-            apps/e2e/test-results
-            apps/e2e/playwright-report
-          if-no-files-found: ignore
-          retention-days: 14
-      # The pictures a scenario takes on purpose (`testInfo.outputPath("screens", …)`), kept
-      # whatever the result: the screens shown in the pull request.
-      - name: Keep the screens' pictures
-        if: always()
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        with:
-          name: screens-shard-${{ matrix.shard }}
-          path: apps/e2e/test-results/**/screens/*.png
-          if-no-files-found: ignore
-          retention-days: 14
-
-  # The required check: one job named e2e that passes only when every shard passed, whatever the
-  # number of shards.
-  e2e:
-    if: always() && !(github.event_name == 'push' && github.ref == 'refs/heads/main')
-    needs: [plan, e2e-shard]
-    runs-on: ubuntu-latest
-    steps:
-      - name: Every shard passed
-        env:
-          RESULT: ${{ needs.e2e-shard.result }}
-        run: |
-          echo "The shards: $RESULT"
-          [ "$RESULT" = success ]
 
   # The image of the commit (docs/releases.md, "The image"), built once and handed to `upgrade`
   # and `beta` as the `image` artifact. The branch's code runs here, with a token that can only
