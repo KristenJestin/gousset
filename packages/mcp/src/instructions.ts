@@ -20,5 +20,6 @@ Gousset's words, used in every result:
 
 Which tool answers what:
 - \`month\`: a month's summary (received, spent, set aside, left) and where the money went, by category and by merchant. Use it for "how much did I spend last month, and where?".
+- \`imports\`: imports a bank statement file into an account without duplicates, and lists, follows and undoes imports. Use it when the user gives a statement or asks what was imported.
 
 Results are text, with names rather than ids. A long result comes in parts: its last line writes the next call to make. An error says what to do and gives a valid call. A write needs the connection to have been allowed to read and write; a refusal says how to get it.`;
