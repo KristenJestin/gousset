@@ -1,7 +1,9 @@
 import type { Page } from "@playwright/test";
+import { authUser } from "@gousset/db/schema/auth";
 import type { Client } from "@modelcontextprotocol/client";
+import { eq } from "drizzle-orm";
 
-import { connectMcp, expect, test } from "../src/test";
+import { addUser, connectMcp, expect, personOfItsOwn, test } from "../src/test";
 import { openUserData } from "../src/user-data";
 
 // Issue #23's MCP scenarios: the `categories` tool and `lines classify`, through the official MCP
@@ -250,6 +252,42 @@ test("a line is classified by its category's name", async ({ userPage, baseURL, 
 
   expect(wrong.isError).toBe(true);
   expect(wrong.text).toContain('A valid call: categories {"action":"list"}');
+});
+
+test("a user whose currency is USD reads and sets a fixed benchmark in dollars", async ({
+  page,
+  app,
+  user,
+  baseURL,
+  mcpClientId,
+}) => {
+  // A user of its own: the worker's user keeps euros for every other test.
+  const ottilie = await addUser(app.baseURL, user, personOfItsOwn("ottilie"));
+  const owner = await data.ownerOf(ottilie.email);
+
+  // What Settings › General keeps, written as the app's role writes it.
+  expect(
+    await data.outside((database) =>
+      database.update(authUser).set({ currency: "USD" }).where(eq(authUser.id, owner)),
+    ),
+  ).toBe("accepted");
+
+  await page.context().addCookies([...ottilie.cookies]);
+
+  const client = await writer({ userPage: page, baseURL, mcpClientId });
+
+  const set = await callTool(client, "categories", {
+    action: "edit",
+    category: "Groceries",
+    benchmark: "130",
+  });
+
+  expect(set.isError, set.text).toBe(false);
+  expect(set.text).toContain("benchmark: 130.00 USD a month.");
+
+  const { text } = await callTool(client, "categories", { action: "list" });
+
+  expect(text).toMatch(/\n- Groceries: \d+ entr(y|ies); benchmark: 130\.00 USD a month;/);
 });
 
 test("a read-only token's write is refused, saying how to get write", async ({

@@ -322,6 +322,15 @@ test("the currency chosen in Settings › General writes a fixed benchmark", asy
   await dialog.getByRole("button", { name: "Save" }).click();
   await expect(dialog).toBeHidden();
   await expect(row(page, "Groceries")).toContainText("set · $130.00");
+
+  // A new account starts in the user's currency too.
+  await visit(page, "/accounts");
+  await page.getByRole("button", { name: "Add an account", exact: true }).click();
+  await expect(
+    page
+      .getByRole("dialog", { name: "Add an account" })
+      .getByRole("combobox", { name: "Currency" }),
+  ).toHaveValue("USD");
 });
 
 test("a category just added slides in, and appears at once under reduced motion", async ({
