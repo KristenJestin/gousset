@@ -24,7 +24,10 @@ export type LineQuery = {
   readonly to: string;
   /** The amount's bounds in each currency; null for none. */
   readonly amount: ((currency: string) => AmountBounds | null) | null;
-  /** `held` lines only (to review), or `counted` only; never `discarded`. */
+  /**
+   * `held` lines (to review), or `counted` only; never `discarded`. With `held`, the counted lines
+   * whose entry is still where the import put it (`classified_by = default`, #23) match too.
+   */
   readonly state: "counted" | "held";
   /** With `held`: these counted lines match too (a transfer's side to choose, #26). */
   readonly alsoLineIds: ReadonlyArray<string>;

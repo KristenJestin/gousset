@@ -1,7 +1,13 @@
-import { account, statementImport, statementLine } from "@gousset/db/schema/ledger";
+import {
+  account,
+  entry,
+  entryPart,
+  statementImport,
+  statementLine,
+} from "@gousset/db/schema/ledger";
 import { UserData } from "@gousset/db/user-data";
 import type { UserTransaction } from "@gousset/db/user-data";
-import { and, desc, eq, gte, inArray, lte, or, sql } from "drizzle-orm";
+import { and, desc, eq, exists, gte, inArray, lte, or, sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { Effect, Layer } from "effect";
@@ -64,13 +70,24 @@ function amountCondition(
   return or(...each) ?? sql`false`;
 }
 
+/** A line whose entry is still where the import put it, in its kind's fallback: to classify. */
+const byDefault = exists(
+  sql`(select 1 from ${entryPart} inner join ${entry} on ${entry.id} = ${entryPart.entryId} where ${entryPart.lineId} = ${statementLine.id} and ${entry.classifiedBy} = 'default')`,
+);
+
 function conditions(accounts: ReadonlyArray<AccountColumns>, query: LineQuery) {
   const ofState = eq(statementLine.state, query.state);
   const ids = query.alsoLineIds.filter(isId);
 
   return and(
-    query.state === "held" && ids.length > 0
-      ? or(ofState, and(eq(statementLine.state, "counted"), inArray(statementLine.id, ids)))
+    query.state === "held"
+      ? or(
+          ofState,
+          and(
+            eq(statementLine.state, "counted"),
+            ids.length > 0 ? or(inArray(statementLine.id, ids), byDefault) : byDefault,
+          ),
+        )
       : ofState,
     lte(statementLine.bookedOn, query.to),
     query.from === null ? undefined : gte(statementLine.bookedOn, query.from),
