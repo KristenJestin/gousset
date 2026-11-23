@@ -2,11 +2,12 @@ import { createHash } from "node:crypto";
 import { readFile } from "node:fs/promises";
 
 import type { Client } from "@modelcontextprotocol/client";
+import { request } from "@playwright/test";
 import type { Page } from "@playwright/test";
 import { EXPORT_FORMAT, EXPORT_TABLES, EXPORT_VERSION } from "@gousset/core";
 import { Schema } from "effect";
 
-import { addUser } from "../src/auth";
+import { addUser, createUser, signIn } from "../src/auth";
 import type { TestUser } from "../src/auth";
 import { readArchive } from "../src/export";
 import { connectMcp, expect, test, visit } from "../src/test";
@@ -151,6 +152,33 @@ test("the export needs a session", async ({ playwright, app }) => {
     expect(answer.headers()["content-type"]).toContain("application/json");
   } finally {
     await anonymous.dispose();
+  }
+});
+
+test("a temporary password exports nothing until it is changed", async ({ app, user }) => {
+  const person = {
+    name: "Lou Example",
+    email: `lou.export.worker${app.slot}@example.com`,
+    password: `e2e-lou-temporary-${app.slot}`,
+  };
+
+  // Created by the administrator, as the users page does: the password is theirs, not Lou's.
+  await createUser(app.baseURL, user, person);
+
+  const held = await signIn(app.baseURL, { ...person, cookies: [] });
+
+  const context = await request.newContext({
+    baseURL: app.baseURL,
+    storageState: { cookies: [...held.cookies], origins: [] },
+  });
+
+  try {
+    const answer = await context.get("/api/export");
+
+    expect(answer.status()).toBe(403);
+    expect(await answer.json()).toEqual({ refused: "PASSWORD_CHANGE_REQUIRED" });
+  } finally {
+    await context.dispose();
   }
 });
 
