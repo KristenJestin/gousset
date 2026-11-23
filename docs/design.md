@@ -66,6 +66,29 @@ Geist, with **tabular numerals** wherever amounts line up.
 - 12 px corners.
 - No block inside a block.
 
+### Floating surfaces
+
+What floats above the page (menus, popovers, a select's or a combobox's list, the calendar, tooltips, toasts, dialogs and sheets) must never be mistaken for it, over the page, a block or the sidebar, in either scheme. It takes **all three**, never one alone, unlike blocks:
+
+- **Its own surface**: `--popover`. White in light, like the blocks: the edge and the shadow set it off. In dark, a step above the blocks (nearer is lighter).
+- **A visible edge**: a 1 px border in `--popover-border`, darker than the blocks' `--border` in light and lighter in dark. It keeps **1.7:1 or more** against the page, the blocks, the sidebar and its own inside, in both schemes (the blocks' `--border` gives 1.2 to 1.4:1). `src/lib/contrast.test.ts` measures it from `globals.css`, and the "Theme/Tokens" story lists the figures: 1.74:1 on the page and 1.87:1 on a block or the sidebar in light; 2.07:1 on the page, 1.90:1 on a block or the sidebar and 1.79:1 on its inside in dark.
+- **An elevation shadow**: `--popover-shadow` (`shadow-popover`), a tight contact shadow and a wide soft one. Deeper in dark, where a soft shadow is lost on the near-black page.
+
+The classes live once in `packages/ui` (`floatingSurfaceClasses`); a floating component uses them and adds only its size and spacing. A sheet keeps its edge on the side that faces the page. The charts' tooltip is Bklit's own panel, vendored: it takes the same edge and shadow (`border-popover-border`, `shadow-popover`) as a recorded local change (`charts/UPSTREAM.md`), its surface being `--chart-tooltip-background`, which is `--popover`.
+
+## Actions and forms
+
+A page shows things; it does not hold an action's form.
+
+- **An action that asks for input** (create, edit, reset, note a balance, set an expiry…) is a button that opens a **dialog** holding the form (`Dialog` with `onSubmit`). The button sits where the action applies: beside the title of the block it changes ("Create a user" beside the list of users), or beside the page's title for the screen's main action.
+- **A long form** (several groups of fields, with effects to read: creating a subject, editing a rule) opens in a side `Sheet` instead, as the wireframes draw it (screens 8 and 9). It is still a button that opens it, never a form inline in the page.
+- **On a phone** (below 768 px, where the tab bar shows) both are a **sheet** along the bottom edge, its whole width: the dialog, and the side sheet.
+- The dialog's actions are Cancel, then the submit button. While the form is sent the dialog stays open, its button busy. A refusal keeps the dialog open and says why under the field at fault; once the form is accepted the dialog closes, focus goes back to the button that opened it, and the page shows the result (the new line in its list, a sentence saying what was done).
+- **Settings that apply at once** (a switch, a choice, a button that turns something on) stay inline in the page: they ask for nothing to fill in.
+- A screen that is itself the task (signing in, the first setup, changing a temporary password, an MCP client's consent, importing a statement) is not a page that shows things: its form is the screen. On the import screen, what an import asks before it goes on (the account a file is for, a CSV file's columns) stays under its row, a step of that import.
+
+Motion: the dialog fades and grows in 200 ms, ease-out, and on a phone slides up from the bottom edge; it leaves the same way. Cut under reduced motion.
+
 ## Motion
 
 Motion where it explains what changes, never as decoration:

@@ -63,12 +63,19 @@ function Overview() {
   const queryClient = useQueryClient();
   const locale = usePageLanguage();
   const [formOpen, setFormOpen] = useState(false);
+  const [formOpened, setFormOpened] = useState(0);
   const [justCreatedId, setJustCreatedId] = useState<string>();
 
   const openCurrentAccounts = data.groups
     .flatMap((group) => group.accounts)
     .filter((account) => account.kind === "current")
     .map((account) => ({ id: account.id, name: account.name }));
+
+  // Each opening starts from an empty form, with no past refusal.
+  function openForm() {
+    setFormOpened((count) => count + 1);
+    setFormOpen(true);
+  }
 
   async function handleCreate(values: AccountFormValues): Promise<AccountFormResult> {
     try {
@@ -88,6 +95,7 @@ function Overview() {
 
   const form = (
     <AccountForm
+      key={formOpened}
       open={formOpen}
       onOpenChange={setFormOpen}
       title={m.accountFormCreateTitle()}
@@ -117,7 +125,7 @@ function Overview() {
           icon="accounts"
           title={m.accountsEmptyTitle()}
           description={m.accountsEmptyDescription()}
-          action={{ label: m.accountsAddAccount(), icon: "add", onClick: () => setFormOpen(true) }}
+          action={{ label: m.accountsAddAccount(), icon: "add", onClick: openForm }}
         />
         {form}
       </>
@@ -127,7 +135,7 @@ function Overview() {
   return (
     <div className="flex flex-col gap-6">
       <div className="flex justify-end">
-        <Button icon="add" onClick={() => setFormOpen(true)}>
+        <Button icon="add" onClick={openForm}>
           {m.accountsAddAccount()}
         </Button>
       </div>

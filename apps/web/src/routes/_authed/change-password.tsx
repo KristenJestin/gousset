@@ -2,26 +2,28 @@ import { m } from "@gousset/i18n/messages";
 import { getLocale, locales } from "@gousset/i18n/runtime";
 import { Button } from "@gousset/ui/components/button";
 import { Card } from "@gousset/ui/components/card";
-import { FormMessage } from "@gousset/ui/components/form-message";
 import { Actions, Form, Screen } from "@gousset/ui/components/screen";
-import { TextField } from "@gousset/ui/components/text-field";
-import { createFileRoute, useNavigate, useRouter } from "@tanstack/react-router";
+import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
 import { Schema } from "effect";
-import { useState } from "react";
-import type { FormEvent } from "react";
 
-import { AppLink } from "@/components/app-link";
-import { errorMessage } from "@/i18n/messages";
-import { authClient } from "@/lib/auth-client";
+import { ChangePasswordFields, useChangePassword } from "@/components/change-password";
 import { AUTHORIZE_PATH } from "@/lib/authorization";
-import { formText } from "@/lib/form";
-import { whileBusy } from "@/lib/while-busy";
 
+/**
+ * The change of a temporary password, alone on its page before the app opens. Anyone else
+ * changes theirs in the settings (#105), where this address leads them.
+ */
 export const Route = createFileRoute("/_authed/change-password")({
   // An MCP client's authorization the sign-in was for, resumed once the password is changed.
   validateSearch: Schema.toStandardSchemaV1(
     Schema.Struct({ resume: Schema.optional(Schema.String) }),
   ),
+  beforeLoad: ({ context }) => {
+    if (!context.user.mustChangePassword) {
+      // oxlint-disable-next-line typescript/only-throw-error -- TanStack Router's redirects are thrown by design.
+      throw redirect({ to: "/settings/account" });
+    }
+  },
   component: ChangePassword,
 });
 
@@ -62,31 +64,10 @@ function whyChange(passwordResetOn: string | null, fromServer: boolean) {
 
 function ChangePassword() {
   const navigate = useNavigate();
-  const router = useRouter();
   const { user } = Route.useRouteContext();
   const { resume } = Route.useSearch();
-  const [error, setError] = useState<string>();
-  const [busy, setBusy] = useState(false);
 
-  async function submit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-
-    const form = new FormData(event.currentTarget);
-
-    const { error: refusal } = await whileBusy(setBusy, () =>
-      authClient.changePassword({
-        currentPassword: formText(form, "currentPassword"),
-        newPassword: formText(form, "newPassword"),
-        revokeOtherSessions: true,
-      }),
-    );
-
-    if (refusal) {
-      setError(errorMessage(refusal.code));
-
-      return;
-    }
-
+  const { refusal, busy, submit, clearRefusal } = useChangePassword(async () => {
     // Back to the authorization server, which goes on to the consent: a page of the server, not a
     // route of the app, so the browser loads it.
     if (resume !== undefined) {
@@ -95,42 +76,24 @@ function ChangePassword() {
       return;
     }
 
-    await router.invalidate();
-    await navigate({ to: "/" });
-  }
+    // The root reads the viewer again on the way: the app opens. No invalidation first, which
+    // would run this page's own guard, now false, and step through the settings. A one-time
+    // step: Back does not return to it.
+    await navigate({ to: "/", replace: true });
+  });
 
   return (
     <Screen>
       <Card
         title={m.changePasswordTitle()}
-        description={
-          user.mustChangePassword
-            ? whyChange(user.passwordResetOn, user.passwordResetFromServer)
-            : m.changePasswordDescription()
-        }
+        description={whyChange(user.passwordResetOn, user.passwordResetFromServer)}
       >
-        <Form onSubmit={(event) => void submit(event)} onInput={() => setError(undefined)}>
-          <TextField
-            label={m.fieldCurrentPassword()}
-            name="currentPassword"
-            type="password"
-            autoComplete="current-password"
-            required
-          />
-          <TextField
-            label={m.fieldNewPassword()}
-            name="newPassword"
-            type="password"
-            autoComplete="new-password"
-            minLength={8}
-            required
-          />
-          <FormMessage message={error} />
+        <Form onSubmit={(event) => void submit(event)} onInput={clearRefusal}>
+          <ChangePasswordFields refusal={refusal} />
           <Actions>
             <Button type="submit" loading={busy}>
               {m.changePasswordSubmit()}
             </Button>
-            {user.mustChangePassword ? null : <AppLink to="/">{m.usersBack()}</AppLink>}
           </Actions>
         </Form>
       </Card>

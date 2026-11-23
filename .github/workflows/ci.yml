@@ -1,9 +1,12 @@
-# Every pull request, and every push to dev and main, is verified here (issue #3). What reads a
-# pull request's title and description is in pull-request.yml, which runs again when they change.
-# Required on dev and main: verify, ui, e2e and react-doctor here, privacy there. ui and e2e also
-# run on each push to dev, so that what a merge breaks there shows at once. A pull request runs them
-# in Chromium on a desktop only; dev runs every browser and width, and a failure seen only there is
-# fixed at once.
+# Every pull request, and every push to dev and to a next/x.y branch, is verified here (issue #3).
+# main runs no CI of its own: the release moves it with the workflow's token, which starts no run,
+# to a commit whose run here passed as a whole on its push to dev (docs/releases.md,
+# "Releasing"); a push to main by anyone else would run verify alone. What reads a pull request's
+# title and description is in pull-request.yml, which runs again when they change. Required on
+# dev: verify, ui, e2e and react-doctor here, privacy there. ui and e2e also run on each push to
+# dev and next/x.y, so that what a merge breaks there shows at once. A pull request runs them in
+# Chromium on a desktop only; dev and next/x.y run every browser and width, and a failure seen only
+# there is fixed at once.
 #
 # Actions are pinned by commit, the version beside it: a moved tag runs no new code here.
 name: ci
@@ -11,10 +14,10 @@ name: ci
 on:
   pull_request:
   push:
-    branches: [dev, main]
+    branches: [dev, "next/**", main]
 
-# A new push makes the runs of the same pull request's older pushes useless. Not on dev and main,
-# whose runs always finish.
+# A new push makes the runs of the same pull request's older pushes useless. Not on dev, next/x.y
+# and main, whose runs always finish.
 concurrency:
   group: ci-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -58,7 +61,9 @@ jobs:
   # request only when its head commit carries the trailer line `E2E-Matrix: full` (AGENTS.md,
   # "Testing"), as a pull request must before it merges when it touches what other browsers draw.
   scope:
-    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/dev'
+    if: >-
+      github.event_name == 'pull_request' || github.ref == 'refs/heads/dev' ||
+      startsWith(github.ref, 'refs/heads/next/')
     runs-on: ubuntu-latest
     outputs:
       full: ${{ steps.read.outputs.full }}
@@ -83,7 +88,9 @@ jobs:
   # one tools/playwright-docker.sh renders the reference screenshots in, so both draw alike. Its
   # version is @playwright/test's in packages/ui/package.json: they move together.
   ui:
-    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/dev'
+    if: >-
+      github.event_name == 'pull_request' || github.ref == 'refs/heads/dev' ||
+      startsWith(github.ref, 'refs/heads/next/')
     needs: scope
     runs-on: ubuntu-latest
     container:
@@ -124,7 +131,9 @@ jobs:
   # (apps/e2e/playwright.config.ts).
   e2e-shard:
     name: e2e shard ${{ matrix.shard }}
-    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/dev'
+    if: >-
+      github.event_name == 'pull_request' || github.ref == 'refs/heads/dev' ||
+      startsWith(github.ref, 'refs/heads/next/')
     needs: scope
     runs-on: ubuntu-latest
     strategy:
@@ -320,7 +329,9 @@ jobs:
   # The required check: one job named e2e that passes only when every shard passed, whatever the
   # number of shards.
   e2e:
-    if: always() && (github.event_name == 'pull_request' || github.ref == 'refs/heads/dev')
+    if: >-
+      always() && (github.event_name == 'pull_request' || github.ref == 'refs/heads/dev' ||
+      startsWith(github.ref, 'refs/heads/next/'))
     needs: e2e-shard
     runs-on: ubuntu-latest
     steps:
