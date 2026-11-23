@@ -61,6 +61,20 @@ export class ProfileNameMissing extends Schema.TaggedError<ProfileNameMissing>()
 ) {}
 
 /**
+ * A profile's name, institution or header, or a profile's file (`field`), is longer than `limit`
+ * characters (`MAX_PROFILE_NAME`, `MAX_PROFILE_HEADER`, `MAX_PROFILE_FILE`).
+ */
+export class ProfileTooLong extends Schema.TaggedError<ProfileTooLong>()("ProfileTooLong", {
+  field: Schema.Literals(["name", "institution", "header", "file"]),
+  limit: Schema.Number,
+}) {}
+
+/** The user keeps `limit` profiles already (`MAX_PROFILES`): one is deleted before another is kept. */
+export class TooManyProfiles extends Schema.TaggedError<TooManyProfiles>()("TooManyProfiles", {
+  limit: Schema.Number,
+}) {}
+
+/**
  * A profile's file cannot be imported: it is no JSON, or no profile Gousset reads. `problem` says
  * what is wrong, in English, quoting the file: for the user, never for a log.
  */

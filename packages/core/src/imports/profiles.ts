@@ -11,7 +11,7 @@ import {
   testReadCsv,
 } from "@gousset/import";
 import type { CsvFile, ShippedProfile } from "@gousset/import";
-import { and, asc, desc, eq } from "drizzle-orm";
+import { and, asc, count, desc, eq } from "drizzle-orm";
 import { Cause, Context, Effect, Exit, Layer, Option, Schema } from "effect";
 
 import {
@@ -19,9 +19,12 @@ import {
   InvalidProfileFile,
   ProfileNameMissing,
   ProfileNotFound,
+  ProfileTooLong,
   ProfileUnreadable,
+  TooManyProfiles,
 } from "./errors";
 import { isId } from "./rows";
+import { MAX_PROFILE_FILE, MAX_PROFILE_HEADER, MAX_PROFILE_NAME, MAX_PROFILES } from "./summary";
 import type {
   ImportProfileEntry,
   ProfileChoice,
@@ -95,17 +98,26 @@ export type ProfileCandidate = {
 };
 
 /**
+ * The user's profiles that read statements, in the order a CSV file is matched against them: the
+ * most recently updated first. At most `MAX_PROFILES`, which saving keeps them under: the limit
+ * here bounds the profiles tried on a file even past two saves made at once.
+ */
+const statementProfiles = (transaction: UserTransaction): Promise<ReadonlyArray<StoredRow>> =>
+  transaction
+    .select(storedColumns)
+    .from(importProfile)
+    .where(eq(importProfile.kind, "statement"))
+    .orderBy(desc(importProfile.updatedAt), desc(importProfile.id))
+    .limit(MAX_PROFILES);
+
+/**
  * The profiles a CSV statement is matched against, in order: the user's that read statements and
- * still decode, the most recently saved first, then the shipped ones.
+ * still decode, the most recently updated first, then the shipped ones.
  */
 export async function profileCandidates(
   transaction: UserTransaction,
 ): Promise<ReadonlyArray<ProfileCandidate>> {
-  const rows = await transaction
-    .select({ ...storedColumns, updatedAt: importProfile.updatedAt })
-    .from(importProfile)
-    .where(eq(importProfile.kind, "statement"))
-    .orderBy(desc(importProfile.updatedAt), desc(importProfile.id));
+  const rows = await statementProfiles(transaction);
 
   const stored = rows.flatMap((row): Array<ProfileCandidate> => {
     const definition = decodeDefinition(row.definition);
@@ -134,17 +146,32 @@ export const matchProfile = (
   candidates: ReadonlyArray<ProfileCandidate>,
 ): Effect.Effect<ProfileCandidate | undefined> => matchCsvHeader(csvFile(bytes), candidates);
 
-/** A name as kept: trimmed; a blank one is refused. */
-function nameOf(name: string): Effect.Effect<string, ProfileNameMissing> {
-  const trimmed = name.trim();
-
-  return trimmed === "" ? Effect.fail(new ProfileNameMissing()) : Effect.succeed(trimmed);
+/** A text no longer than `limit` characters, or `ProfileTooLong` for `field`. */
+function withinLength(
+  field: ProfileTooLong["field"],
+  text: string,
+  limit: number,
+): Effect.Effect<string, ProfileTooLong> {
+  return text.length > limit
+    ? Effect.fail(new ProfileTooLong({ field, limit }))
+    : Effect.succeed(text);
 }
 
-function institutionOf(institution: string | null): string | null {
+/** A name as kept: trimmed; a blank one is refused, and one too long. */
+function nameOf(name: string): Effect.Effect<string, ProfileNameMissing | ProfileTooLong> {
+  const trimmed = name.trim();
+
+  return trimmed === ""
+    ? Effect.fail(new ProfileNameMissing())
+    : withinLength("name", trimmed, MAX_PROFILE_NAME);
+}
+
+function institutionOf(institution: string | null): Effect.Effect<string | null, ProfileTooLong> {
   const trimmed = institution?.trim() ?? "";
 
-  return trimmed === "" ? null : trimmed;
+  return trimmed === ""
+    ? Effect.succeed(null)
+    : withinLength("institution", trimmed, MAX_PROFILE_NAME);
 }
 
 /** A file name from the profile's name: letters and digits, the rest a dash. */
@@ -165,6 +192,9 @@ const PROBLEM_LENGTH = 600;
 
 type Failure = QueryFailed;
 
+/** Why a profile is not kept: no name, a text too long, or as many profiles kept as allowed. */
+type Refused = ProfileNameMissing | ProfileTooLong | TooManyProfiles;
+
 /** The user's import profiles and those shipped with Gousset, for the user `owner` of each call. */
 export class ImportProfiles extends Context.Service<
   ImportProfiles,
@@ -182,12 +212,15 @@ export class ImportProfiles extends Context.Service<
     readonly save: (
       owner: string,
       draft: ProfileDraft,
-    ) => Effect.Effect<ImportProfileEntry, ProfileNameMissing | Failure>;
+    ) => Effect.Effect<ImportProfileEntry, Refused | Failure>;
     readonly rename: (
       owner: string,
       profileId: string,
       name: string,
-    ) => Effect.Effect<ImportProfileEntry, ProfileNotFound | ProfileNameMissing | Failure>;
+    ) => Effect.Effect<
+      ImportProfileEntry,
+      ProfileNotFound | ProfileNameMissing | ProfileTooLong | Failure
+    >;
     /** Deletes one of the user's profiles; the imports it read forget it, and keep their lines. */
     readonly remove: (
       owner: string,
@@ -200,7 +233,8 @@ export class ImportProfiles extends Context.Service<
     ) => Effect.Effect<ProfileFile, ProfileNotFound | ProfileUnreadable | Failure>;
     /**
      * Saves a profile shared as a file (`exportFile`'s) under the name the user gives it. It
-     * recognises no file by its header until saved again from a preview.
+     * recognises no file by its header until saved again from a preview. A file longer than
+     * `MAX_PROFILE_FILE` is refused before it is parsed.
      */
     readonly importFile: (
       owner: string,
@@ -209,7 +243,7 @@ export class ImportProfiles extends Context.Service<
         readonly institution: string | null;
         readonly content: string;
       },
-    ) => Effect.Effect<ImportProfileEntry, InvalidProfileFile | ProfileNameMissing | Failure>;
+    ) => Effect.Effect<ImportProfileEntry, InvalidProfileFile | Refused | Failure>;
     /**
      * The definition of a chosen profile and what an import records of it: refused for a profile
      * the user does not have, or one that no longer reads.
@@ -314,26 +348,44 @@ export const importProfilesLayer = Layer.effect(
     const insert = (owner: string, draft: ProfileDraft) =>
       Effect.gen(function* () {
         const name = yield* nameOf(draft.name);
+        const institution = yield* institutionOf(draft.institution);
 
-        const [row] = yield* inTransaction(owner, (transaction) =>
-          transaction
+        const header =
+          draft.header === null
+            ? null
+            : yield* withinLength("header", draft.header, MAX_PROFILE_HEADER);
+
+        const inserted = yield* inTransaction(owner, async (transaction) => {
+          const [kept] = await transaction.select({ total: count() }).from(importProfile);
+
+          if ((kept?.total ?? 0) >= MAX_PROFILES) {
+            return { full: true, row: undefined };
+          }
+
+          const [row] = await transaction
             .insert(importProfile)
             .values({
               userId: owner,
               name,
-              institution: institutionOf(draft.institution),
+              institution,
               kind: "statement",
               definition: draft.definition,
-              header: draft.header,
+              header,
             })
-            .returning(storedColumns),
-        );
+            .returning(storedColumns);
 
-        if (row === undefined) {
+          return { full: false, row };
+        });
+
+        if (inserted.full) {
+          return yield* new TooManyProfiles({ limit: MAX_PROFILES });
+        }
+
+        if (inserted.row === undefined) {
           return yield* Effect.die(new Error("The insert returned no row."));
         }
 
-        return storedEntry(row);
+        return storedEntry(inserted.row);
       });
 
     return {
@@ -403,7 +455,8 @@ export const importProfilesLayer = Layer.effect(
 
       importFile: (owner, shared) =>
         Effect.gen(function* () {
-          const decoded = decodeFile(shared.content);
+          const content = yield* withinLength("file", shared.content, MAX_PROFILE_FILE);
+          const decoded = decodeFile(content);
 
           if (Exit.isFailure(decoded)) {
             const issue = Cause.squash(decoded.cause);
@@ -453,7 +506,8 @@ export const importProfilesLayer = Layer.effect(
               .select(storedColumns)
               .from(importProfile)
               .where(eq(importProfile.kind, "statement"))
-              .orderBy(asc(importProfile.name), asc(importProfile.id));
+              .orderBy(asc(importProfile.name), asc(importProfile.id))
+              .limit(MAX_PROFILES);
 
             return { row, stored: stored.map(storedEntry) };
           });
@@ -463,11 +517,14 @@ export const importProfilesLayer = Layer.effect(
           }
 
           const { row, stored } = found;
+
+          // At most fifty of the user's and the shipped ones, on a file decoded once, each reading
+          // its top only.
           const entries: ReadonlyArray<ImportProfileEntry> = [...stored, ...SHIPPED_ENTRIES];
           const file = csvFile(row.content);
-          const fitting = yield* Effect.forEach(entries, (entry) =>
-            fits(file, entry, row.currency),
-          );
+
+          const tried = yield* Effect.forEach(entries, (entry) => fits(file, entry, row.currency));
+          const fitting = tried.flatMap((fit) => (fit === undefined ? [] : [fit]));
 
           const used =
             entries.find(
@@ -480,7 +537,7 @@ export const importProfilesLayer = Layer.effect(
             fileName: row.fileName,
             status: row.status,
             used,
-            fitting: fitting.flatMap((fit) => (fit === undefined ? [] : [fit])),
+            fitting,
           };
         }),
     };

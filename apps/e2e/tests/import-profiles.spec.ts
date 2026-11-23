@@ -1,3 +1,4 @@
+import { ProfileTooLong, TooManyProfiles } from "@gousset/core";
 import type { ImportProfileEntry } from "@gousset/core";
 import { importProfile } from "@gousset/db/schema/ledger";
 import { encodeWindows1252 } from "@gousset/fixture";
@@ -34,6 +35,22 @@ test.beforeAll(async ({ app, user }) => {
 test.afterAll(async () => {
   await data.close();
 });
+
+/** A user of the test's own, for one that counts or orders every profile the user keeps. */
+async function ownerOfItsOwn(
+  baseURL: string,
+  admin: Parameters<typeof addUser>[1],
+  slot: number,
+  name: string,
+): Promise<string> {
+  const added = await addUser(baseURL, admin, {
+    name: `${name} Example`,
+    email: `${name.toLowerCase()}.profiles.worker${String(slot)}.${crypto.randomUUID().slice(0, 8)}@example.com`,
+    password: `e2e-${name.toLowerCase()}-password-${String(slot)}`,
+  });
+
+  return data.ownerOf(added.email);
+}
 
 /** How the invented pipe exports below read: ISO days, one signed amount, the label last. */
 const pipeProfile: CsvProfile = {
@@ -333,6 +350,95 @@ test("a profile is listed, renamed, exported, imported back and deleted", async 
   );
 
   expect(gone._tag).toBe("ProfileNotFound");
+});
+
+test("a user keeps fifty profiles at most: one more is refused, saved or imported", async ({
+  app,
+  user,
+}) => {
+  const own = await ownerOfItsOwn(app.baseURL, user, app.slot, "Frankie");
+
+  await data.asUser(own, (transaction) =>
+    transaction.insert(importProfile).values(
+      Array.from({ length: 50 }, (_, n) => ({
+        userId: own,
+        name: `Kept profile ${String(n + 1)}`,
+        definition: pipeProfile,
+      })),
+    ),
+  );
+
+  const draft = { name: "One more", institution: null, definition: pipeProfile, header: null };
+
+  const refusedSave = await imports.withProfiles((profiles) =>
+    Effect.flip(profiles.save(own, draft)),
+  );
+
+  expect(refusedSave).toEqual(new TooManyProfiles({ limit: 50 }));
+
+  const refusedImport = await imports.withProfiles((profiles) =>
+    Effect.flip(
+      profiles.importFile(own, {
+        name: "One more",
+        institution: null,
+        content: JSON.stringify(pipeProfile),
+      }),
+    ),
+  );
+
+  expect(refusedImport).toEqual(new TooManyProfiles({ limit: 50 }));
+
+  const [first] = await imports.withProfiles((profiles) => profiles.list(own));
+
+  if (first?.source !== "stored") {
+    throw new Error("The user's profiles come first.");
+  }
+
+  await imports.withProfiles((profiles) => profiles.remove(own, first.id));
+
+  expect(await imports.withProfiles((profiles) => profiles.save(own, draft))).toMatchObject({
+    name: "One more",
+  });
+});
+
+test("a profile's name, institution, header and shared file are refused past their length", async () => {
+  const draft = { name: "Long", institution: null, definition: pipeProfile, header: null };
+
+  const refused = await imports.withProfiles((profiles) =>
+    Effect.all([
+      Effect.flip(profiles.save(owner, { ...draft, name: "n".repeat(101) })),
+      Effect.flip(profiles.save(owner, { ...draft, institution: "i".repeat(101) })),
+      Effect.flip(profiles.save(owner, { ...draft, header: "h".repeat(10_001) })),
+      Effect.flip(
+        profiles.importFile(owner, {
+          name: "Long file",
+          institution: null,
+          content: `${JSON.stringify(pipeProfile)}${" ".repeat(64 * 1024)}`,
+        }),
+      ),
+    ]),
+  );
+
+  expect(refused).toEqual([
+    new ProfileTooLong({ field: "name", limit: 100 }),
+    new ProfileTooLong({ field: "institution", limit: 100 }),
+    new ProfileTooLong({ field: "header", limit: 10_000 }),
+    new ProfileTooLong({ field: "file", limit: 65_536 }),
+  ]);
+
+  const kept = saved(
+    await imports.withProfiles((profiles) =>
+      profiles.save(owner, { ...draft, name: "n".repeat(100) }),
+    ),
+  );
+
+  const renamed = await imports.withProfiles((profiles) =>
+    Effect.flip(profiles.rename(owner, kept.id, "r".repeat(101))),
+  );
+
+  expect(renamed).toEqual(new ProfileTooLong({ field: "name", limit: 100 }));
+
+  await imports.withProfiles((profiles) => profiles.remove(owner, kept.id));
 });
 
 test("a stored definition that no longer reads is listed as such, and refused to resume with", async () => {

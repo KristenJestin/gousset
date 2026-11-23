@@ -48,6 +48,21 @@ export type ImportSummary = {
   readonly undoneAt: string | null;
 };
 
+/**
+ * The most profiles a user keeps: the import tries each on every CSV file it reads, beside the
+ * shipped ones, so their number bounds what an upload costs.
+ */
+export const MAX_PROFILES = 50;
+
+/** The longest name or institution a profile takes, in characters. */
+export const MAX_PROFILE_NAME = 100;
+
+/** The longest header a profile keeps, normalised, in characters: a thousand columns at most. */
+export const MAX_PROFILE_HEADER = 10_000;
+
+/** The longest profile file taken to share a profile, in characters: one is under a kibibyte. */
+export const MAX_PROFILE_FILE = 64 * 1024;
+
 /** A profile chosen to read a CSV file: one of the user's, by id, or one shipped, by key. */
 export type ProfileChoice =
   | { readonly kind: "stored"; readonly id: string }

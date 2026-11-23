@@ -1,10 +1,11 @@
 import { ImportProfiles } from "@gousset/core";
-import { CsvProfile } from "@gousset/import";
+import type { ProfileTooLong, TooManyProfiles } from "@gousset/core";
 import { createServerFn } from "@tanstack/react-start";
 import { Effect, Schema } from "effect";
 
 import { runCore } from "@/services";
 
+import { ImportProfileInput, RenameProfileInput, SaveProfileInput } from "./import-profile-inputs";
 import { signedIn } from "./month";
 
 // The import screen's calls for CSV profiles (#19), on `@gousset/core`'s `ImportProfiles`, as the
@@ -17,6 +18,14 @@ export const ProfileChoiceInput = Schema.Union([
 ]);
 
 const ProfileIdInput = Schema.Struct({ profileId: Schema.String });
+
+/** A text past its length: which, and the most it takes, for the screen to say. */
+const tooLong = (refusal: ProfileTooLong) =>
+  Effect.succeed({ refused: "PROFILE_TOO_LONG", field: refusal.field, limit: refusal.limit });
+
+/** As many profiles kept as allowed: one is deleted before another is saved. */
+const tooMany = (refusal: TooManyProfiles) =>
+  Effect.succeed({ refused: "TOO_MANY_PROFILES", limit: refusal.limit });
 
 /** The user's profiles, by name, then those shipped with Gousset. */
 export const listImportProfiles = createServerFn({ method: "GET" })
@@ -31,32 +40,23 @@ export const listImportProfiles = createServerFn({ method: "GET" })
  */
 export const saveImportProfile = createServerFn({ method: "POST" })
   .middleware([signedIn])
-  .validator(
-    Schema.toStandardSchemaV1(
-      Schema.Struct({
-        name: Schema.String,
-        institution: Schema.NullOr(Schema.String),
-        definition: CsvProfile,
-        header: Schema.NullOr(Schema.String),
-      }),
-    ),
-  )
+  .validator(Schema.toStandardSchemaV1(SaveProfileInput))
   .handler(({ data, context }) =>
     runCore(
       ImportProfiles.use((profiles) => profiles.save(context.owner, data)).pipe(
         Effect.map((saved) => ({ saved })),
-        Effect.catchTag("ProfileNameMissing", () =>
-          Effect.succeed({ refused: "PROFILE_NAME_MISSING" }),
-        ),
+        Effect.catchTags({
+          ProfileNameMissing: () => Effect.succeed({ refused: "PROFILE_NAME_MISSING" }),
+          ProfileTooLong: tooLong,
+          TooManyProfiles: tooMany,
+        }),
       ),
     ),
   );
 
 export const renameImportProfile = createServerFn({ method: "POST" })
   .middleware([signedIn])
-  .validator(
-    Schema.toStandardSchemaV1(Schema.Struct({ profileId: Schema.String, name: Schema.String })),
-  )
+  .validator(Schema.toStandardSchemaV1(RenameProfileInput))
   .handler(({ data, context }) =>
     runCore(
       ImportProfiles.use((profiles) =>
@@ -66,6 +66,7 @@ export const renameImportProfile = createServerFn({ method: "POST" })
         Effect.catchTags({
           ProfileNotFound: () => Effect.succeed({ refused: "PROFILE_NOT_FOUND" }),
           ProfileNameMissing: () => Effect.succeed({ refused: "PROFILE_NAME_MISSING" }),
+          ProfileTooLong: tooLong,
         }),
       ),
     ),
@@ -100,18 +101,13 @@ export const exportImportProfile = createServerFn({ method: "GET" })
     ),
   );
 
-/** Saves a profile shared as a file, under the name the user gives it. */
+/**
+ * Saves a profile shared as a file, under the name the user gives it; a file of more than 64 KiB is
+ * refused before its JSON is parsed.
+ */
 export const importImportProfile = createServerFn({ method: "POST" })
   .middleware([signedIn])
-  .validator(
-    Schema.toStandardSchemaV1(
-      Schema.Struct({
-        name: Schema.String,
-        institution: Schema.NullOr(Schema.String),
-        content: Schema.String,
-      }),
-    ),
-  )
+  .validator(Schema.toStandardSchemaV1(ImportProfileInput))
   .handler(({ data, context }) =>
     runCore(
       ImportProfiles.use((profiles) => profiles.importFile(context.owner, data)).pipe(
@@ -120,6 +116,8 @@ export const importImportProfile = createServerFn({ method: "POST" })
           InvalidProfileFile: (invalid) =>
             Effect.succeed({ refused: "INVALID_PROFILE_FILE", problem: invalid.problem }),
           ProfileNameMissing: () => Effect.succeed({ refused: "PROFILE_NAME_MISSING" }),
+          ProfileTooLong: tooLong,
+          TooManyProfiles: tooMany,
         }),
       ),
     ),

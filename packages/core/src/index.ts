@@ -54,7 +54,9 @@ export {
   InvalidProfileFile,
   ProfileNameMissing,
   ProfileNotFound,
+  ProfileTooLong,
   ProfileUnreadable,
+  TooManyProfiles,
   UnknownFormat,
 } from "./imports/errors";
 
@@ -74,7 +76,14 @@ export type {
 
 export { ReadFailed, ReadRequest, StatementReader, inlineStatementReader } from "./imports/read";
 
-export { IMPORT_STEPS, MAX_FILE_BYTES } from "./imports/summary";
+export {
+  IMPORT_STEPS,
+  MAX_FILE_BYTES,
+  MAX_PROFILE_FILE,
+  MAX_PROFILE_HEADER,
+  MAX_PROFILE_NAME,
+  MAX_PROFILES,
+} from "./imports/summary";
 
 export type {
   ImportFormat,
