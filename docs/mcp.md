@@ -85,7 +85,7 @@ From Anthropic's [Writing effective tools for agents](https://www.anthropic.com/
    | `month` | v0.1 (made-up data), then v0.4 |
    | `accounts`, `lines`, `imports` | v0.2 |
    | `data` (what an export holds, and where to download it) | v0.2 |
-   | `categories`, `merchants`, `rules` (`list`, `show`, `create`, `edit`, `disable`, `apply_to_past`) | v0.3 |
+   | `categories`, `merchants`, `rules` (`list`, `show`, `create`, `edit`, `disable`, `delete`, `apply_to_past`) | v0.3 |
    | `review` | v0.4 |
    | `subjects` | v0.5 |
    | `investments` | v0.6 |

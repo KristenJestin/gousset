@@ -3,6 +3,7 @@ import {
   RuleJobs,
   accountNamed,
   createRule,
+  deleteRule,
   editRule,
   listRules,
   merchantKey,
@@ -69,9 +70,17 @@ const WrittenCondition = Schema.Struct({
 export type WrittenCondition = typeof WrittenCondition.Type;
 
 const RulesInput = Schema.Struct({
-  action: Schema.Literals(["list", "show", "create", "edit", "disable", "apply_to_past"]).annotate({
+  action: Schema.Literals([
+    "list",
+    "show",
+    "create",
+    "edit",
+    "disable",
+    "delete",
+    "apply_to_past",
+  ]).annotate({
     description:
-      "list, show: read. create, edit, disable (turns one off), apply_to_past (to the lines already there): write.",
+      "list, show: read. create, edit, disable (turns one off), delete, apply_to_past (to the lines already there): write.",
   }),
   rule: Schema.optional(
     Schema.String.annotate({
@@ -79,9 +88,11 @@ const RulesInput = Schema.Struct({
     }),
   ),
   conditions: Schema.optional(
-    Schema.Array(WrittenCondition).annotate({
-      description: `create, edit: 1 to ${MAX_CONDITIONS}, all to be met; edit replaces them all.`,
-    }),
+    Schema.Array(WrittenCondition)
+      .check(Schema.isMaxLength(MAX_CONDITIONS))
+      .annotate({
+        description: `create, edit: 1 to ${MAX_CONDITIONS}, all to be met; edit replaces them all.`,
+      }),
   ),
   merchant: Schema.optional(
     Schema.NullOr(Schema.String).annotate({
@@ -140,11 +151,11 @@ const DESCRIPTION = `Rules classify lines by themselves: conditions a line must 
 
 Use it when the user wants lines like one classified the same way from now on: \`lines\` \`classify\` ends by proposing the exact create call. \`merchants\` and \`categories\` change those themselves.
 
-Writes, with the write scope: \`create\` (\`conditions\`; \`merchant\`, \`category\` or both, by name; \`from_correction: true\` when it comes from a correction); \`edit\` one by \`rule\` id: \`conditions\` (replaced whole), \`merchant\` or \`category\` (null clears), \`enabled\`, \`place\`; \`disable\` turns one off; \`apply_to_past\` waits up to 15 seconds and says how many lines changed.
+Writes, with the write scope: \`create\` (\`conditions\`; \`merchant\`, \`category\` or both, by name; \`from_correction: true\` when it comes from a correction); \`edit\` one by \`rule\` id: \`conditions\` (replaced whole), \`merchant\` or \`category\` (null clears), \`enabled\`, \`place\`; \`disable\` turns one off; \`delete\`; \`apply_to_past\` waits up to 15 s and says how many lines changed.
 
 A condition is {"field","operator","value"}: label (contains, startsWith, endsWith, eq, notContains; any case); account (eq, neq; its name as \`accounts\` lists it, any case, with "institution" when two share it); amount (eq, neq, gte, lte, gt, lt, between; no sign, in the account's currency: 12.5 for 12.50); direction (eq "out" or "in"); day of the month (eq, gte, lte, between; 1 to 31); date (eq, gte, lte, between; YYYY-MM-DD). between takes [low, high], both included. At most ${MAX_CONDITIONS}.
 
-Refused, with what to do: no condition or too many, a value of the wrong form, an unknown or ambiguous account, merchant or category name (with names to choose), nothing set, an archived category, an unknown id, ${MAX_RULES} rules already.
+Refused, with what to do: no condition or too many, a value of the wrong form, an unknown or ambiguous name (with names to choose), nothing set, an archived category, an unknown id, ${MAX_RULES} rules already.
 
 Example: ${JSON.stringify(CREATE_EXAMPLE)}`;
 
@@ -265,7 +276,7 @@ function listText(rules: ReadonlyArray<RuleSummary>, accounts: ReadonlyArray<Rul
   }
 
   return [
-    `${rules.length} rule(s), in the order they are tried: the first whose conditions a line meets, and which applies to it, classifies it. Each ends with its id, which show, edit, disable and apply_to_past take.`,
+    `${rules.length} rule(s), in the order they are tried: the first whose conditions a line meets, and which applies to it, classifies it. Each ends with its id, which show, edit, disable, delete and apply_to_past take.`,
     rules.map((rule) => ruleText(rule, accounts)).join("\n"),
   ].join("\n\n");
 }
@@ -622,6 +633,23 @@ function disable(owner: string, input: RulesInput) {
   );
 }
 
+/** Deletes a rule; the lines it classified keep their category and merchant. */
+function remove(owner: string, input: RulesInput) {
+  const rule = input.rule?.trim() ?? "";
+
+  if (rule === "") {
+    return refuse("delete needs rule: the rule's id, as list writes it after Id:.", LIST_CALL);
+  }
+
+  return Effect.gen(function* () {
+    const detail = yield* showRule(owner, rule);
+
+    yield* deleteRule(owner, detail.id);
+
+    return `Deleted: ${ruleText(detail, detail.accounts)}\nThe lines it classified keep their category and merchant. To only stop it, turn a rule off instead: ${call({ action: "disable", rule: "…" })}`;
+  }).pipe(Effect.catchTags({ RuleNotFound: () => NOT_FOUND(rule), QueryFailed: Effect.die }));
+}
+
 /** How often, and how many times, apply_to_past reads its job again: 15 seconds at most. */
 const POLL = Duration.millis(500);
 const SETTLE_POLLS = 30;
@@ -751,6 +779,7 @@ export const rulesTool = defineTool<
     create: "write",
     edit: "write",
     disable: "write",
+    delete: "write",
     apply_to_past: "write",
   },
   run: (input, caller) => {
@@ -787,6 +816,10 @@ export const rulesTool = defineTool<
 
       case "disable": {
         return disable(owner, input);
+      }
+
+      case "delete": {
+        return remove(owner, input);
       }
 
       case "apply_to_past": {

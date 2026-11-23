@@ -460,4 +460,11 @@ test("an MCP client lists, shows, edits, moves and turns off rules, and is told 
   expect(unknownRule.isError).toBe(true);
   expect(unknownRule.text).toContain('No rule of the user\'s has the id "not-a-rule".');
   expect(unknownRule.text).toContain('A valid call: rules {"action":"list"}');
+
+  // Deleted: gone from the list, the other one stays.
+  const deleted = await call("rules", { action: "delete", rule: cinema });
+
+  expect(deleted.isError, deleted.text).toBe(false);
+  expect(deleted.text).toContain('Deleted: 2. If label contains "SILVERLINE"');
+  expect(idsOf((await call("rules", { action: "list" })).text)).toEqual([books]);
 });
