@@ -80,14 +80,19 @@ function RootDocument() {
   const { viewer } = Route.useRouteContext();
 
   return (
-    // The saved colour scheme lands on <html> before hydration (ThemeProvider). The language is
+    // The saved colour scheme, the account's once signed in, lands on <html> before hydration
+    // (ThemeProvider). The language is
     // the request's on the server (src/server.ts), the same cookie or browser's in the page.
     <html lang={getLocale()} suppressHydrationWarning>
       <head>
         <HeadContent />
       </head>
       <body>
-        <ThemeProvider nonce={nonce}>
+        <ThemeProvider
+          nonce={nonce}
+          accountScheme={viewer.user?.colorScheme}
+          accountOwner={viewer.user?.email}
+        >
           <Shortcuts singleKeyShortcuts={viewer.user?.singleKeyShortcuts ?? true}>
             <Outlet />
           </Shortcuts>

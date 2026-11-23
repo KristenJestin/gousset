@@ -172,7 +172,15 @@ export { expect } from "@playwright/test";
 
 export { expectAccessible, visit } from "./accessibility";
 
-export { SIGN_IN_PATH, SIGN_UP_PATH, createUser, signIn, signInStatus } from "./auth";
+export {
+  SIGN_IN_PATH,
+  SIGN_UP_PATH,
+  addUser,
+  createUser,
+  personOfItsOwn,
+  signIn,
+  signInStatus,
+} from "./auth";
 
 export { fixDay } from "./clock";
 

@@ -206,6 +206,24 @@ export async function sessionsOf(
   }
 }
 
+/** The colour scheme kept on the account of the user with this e-mail, read straight from its table. */
+export async function colorSchemeOf(database: string, email: string): Promise<string | undefined> {
+  const client = new pg.Client({ connectionString: databaseUrl(database) });
+
+  await client.connect();
+
+  try {
+    const result = await client.query<{ color_scheme: string }>(
+      'SELECT color_scheme FROM "auth_user" WHERE email = $1',
+      [email],
+    );
+
+    return result.rows[0]?.color_scheme;
+  } finally {
+    await client.end();
+  }
+}
+
 /** Whether a unique index of that name exists in a database. */
 export async function hasUniqueIndex(database: string, name: string): Promise<boolean> {
   const client = new pg.Client({ connectionString: databaseUrl(database) });

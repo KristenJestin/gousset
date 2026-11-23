@@ -22,6 +22,7 @@ import {
 } from "@/functions/mcp";
 import { setSingleKeyShortcuts } from "@/functions/shortcuts";
 import { errorMessage } from "@/i18n/messages";
+import { colorSchemeKept, keepColorScheme } from "@/lib/account-color-scheme";
 import { refusalOf } from "@/lib/refusal";
 import { whileBusy } from "@/lib/while-busy";
 
@@ -33,8 +34,8 @@ const LANGUAGE_NAMES = {
 
 /**
  * The general settings: how the interface looks and speaks, the MCP clients the user allowed and,
- * for the administrator, the MCP door itself. The blocks to come land here, one under the other:
- * the colour scheme kept on the account (#50).
+ * for the administrator, the MCP door itself. The colour scheme is kept on the account, like the
+ * single-key shortcuts.
  */
 export const Route = createFileRoute("/_authed/settings/")({
   loader: async () => {
@@ -53,7 +54,8 @@ function GeneralSettings() {
           label={m.settingsLanguageTitle()}
           value={getLocale()}
           choices={locales.map((locale) => ({ value: locale, label: LANGUAGE_NAMES[locale]() }))}
-          onChange={(locale) => void setLocale(locale)}
+          // The reload waits for a scheme just picked to reach the account (frame.tsx says why).
+          onChange={(locale) => void colorSchemeKept().then(() => setLocale(locale))}
         />
       </Block>
       <Block title={m.settingsColorSchemeTitle()} description={m.settingsColorSchemeDescription()}>
@@ -64,6 +66,7 @@ function GeneralSettings() {
             light: m.colorSchemeLight(),
             dark: m.colorSchemeDark(),
           }}
+          onChange={(scheme) => void keepColorScheme(scheme)}
         />
       </Block>
       <ShortcutSettings />

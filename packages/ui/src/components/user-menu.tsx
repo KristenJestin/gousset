@@ -20,13 +20,16 @@ export type UserMenuProps<Language extends string> = {
   /** The colour scheme heading, and each choice's words. */
   colorSchemeLabel: string;
   colorSchemes: { readonly [Scheme in ColorSchemeValue]: string };
+  /** Called once the choice changed, already applied: to keep it beyond this browser. */
+  onColorSchemeChange?: (scheme: ColorSchemeValue) => void;
   /** The account's actions after them: change the password, the users, sign out. */
   children: ReactNode;
 };
 
 /**
  * The user's menu at the sidebar's foot: the language, the colour scheme (applied at once, kept
- * in this browser) and the account's actions. Motion: as `Menu`.
+ * in this browser, and wherever `onColorSchemeChange` keeps it) and the account's actions.
+ * Motion: as `Menu`.
  */
 export function UserMenu<Language extends string>({
   name,
@@ -36,6 +39,7 @@ export function UserMenu<Language extends string>({
   onLanguageChange,
   colorSchemeLabel,
   colorSchemes,
+  onColorSchemeChange,
   children,
 }: UserMenuProps<Language>) {
   const { value } = usePreference(colorScheme);
@@ -53,7 +57,11 @@ export function UserMenu<Language extends string>({
         label={colorSchemeLabel}
         value={value}
         choices={SCHEMES.map((scheme) => ({ value: scheme, label: colorSchemes[scheme] }))}
-        onChange={(scheme) => colorScheme.set(scheme)}
+        onChange={(scheme) => {
+          if (colorScheme.set(scheme)) {
+            onColorSchemeChange?.(scheme);
+          }
+        }}
       />
       <MenuSeparator />
       {children}
