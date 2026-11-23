@@ -193,9 +193,11 @@ review; it is never merged with the button, and GitHub shows it merged once `mai
 
 - **What it checks first**, reading only: it runs from `dev`; the commit is a full SHA or `dev`,
   and a commit of `dev`; `main`, when it exists, is its ancestor; something was committed since the
-  last release. Then, before writing anything, that **the beta of that commit was published** (`sha-<commit>`): a beta exists only once `verify` passed on its
-  push, so a release is never a commit no `verify` passed on, and is never built again. Any of these refused, nothing moves and the run fails,
-  saying why.
+  last release; **the `ci` run of its push to `dev` passed as a whole** (its last attempt: every
+  job, the full matrix of `ui` and `e2e` included, where the beta needs only `verify`), so a
+  release is never a commit whose checks failed or have not finished on `dev`. Then, before
+  writing anything, that **the beta of that commit was published** (`sha-<commit>`): a release is
+  never built again. Any of these refused, nothing moves and the run fails, saying why.
 - **Then**, in this order: `main` moves forward to the commit through GitHub's API, not forced
   (GitHub refuses anything but a fast-forward; before the first release, `main` is made there);
   the beta image is published again, unchanged, as `X.Y.Z` and `latest`; last, the GitHub release
@@ -212,9 +214,9 @@ review; it is never merged with the button, and GitHub shows it merged once `mai
   what the reading job decided.
 - **`main` runs no CI of its own after a release**, and the release starts none: a ref moved with
   the workflow's token starts no workflow, and nothing is left to check. `main` is then a commit of
-  `dev`, the very one whose `verify` passed on its push (its beta exists only then), and GitHub
-  keeps a check by commit, not by branch; on `main`, `ci.yml` would run that same `verify` again
-  and nothing else, and `beta.yml` follows `dev` only.
+  `dev` whose every check passed on its push, and GitHub keeps a check by commit, not by branch; on
+  `main`, `ci.yml` would run that same `verify` again and nothing else, and `beta.yml` follows
+  `dev` only.
 
 ## The notes
 
@@ -235,10 +237,13 @@ In the repository's settings, never in the repository:
 
 1. **The package is public.** The first beta creates `ghcr.io/kristenjestin/gousset` as a private
    package: in its settings, make it public, so that an installation pulls it without signing in.
-2. **`main`'s ruleset blocks deletion and non-fast-forward, nothing more.** `main` moves only by
-   the release, with the workflow's own token, through the API, never by a pull request, to a
-   commit whose checks passed on `dev` and whose beta exists (which needs `verify`): the checks are
-   enforced on `dev`. A rule asking for a pull request or for status checks on `main` would refuse
-   the release. The release needs no secret and no environment.
-3. The beta follows the workflow named `ci` and its job named `verify`: renaming either means
-   changing `beta.yml` with it.
+2. **`main`'s ruleset blocks deletion and non-fast-forward, nothing more.** The release moves
+   `main` with the workflow's own token, through the API, never by a pull request, to a commit
+   whose checks passed on `dev` and whose beta exists: the checks are enforced on `dev`, and a rule
+   asking for a pull request or for status checks on `main` would refuse the release. That `main`
+   moves only by the release is a convention, not a guarantee: the ruleset protects it against
+   deletion and a force, nothing else, so whoever may write to the repository, and any branch's
+   workflow given `contents: write`, can fast-forward it too. The release then fails while `main`
+   is not an ancestor of `dev`. The release needs no secret and no environment.
+3. The beta follows the workflow named `ci` and its job named `verify`, and the release reads the
+   runs of `ci.yml`: renaming either means changing `beta.yml` and `release.yml` with it.

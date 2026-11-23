@@ -33,6 +33,8 @@ jobs:
       contents: read
       # The notes read the pull requests' descriptions.
       pull-requests: read
+      # To read the commit's ci run.
+      actions: read
     outputs:
       sha: ${{ steps.commit.outputs.sha }}
       version: ${{ steps.version.outputs.version }}
@@ -78,6 +80,31 @@ jobs:
             exit 1
           fi
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
+
+      # The beta needs only verify; a release needs every check of the push to dev, the full
+      # matrix of ui and e2e included: the run of ci as a whole. Its last attempt counts.
+      - name: The ci run of the commit's push to dev passed
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          SHA: ${{ steps.commit.outputs.sha }}
+        run: |
+          run=$(gh api "repos/$GH_REPO/actions/workflows/ci.yml/runs?head_sha=$SHA&branch=dev&event=push" \
+            --jq '.workflow_runs | if length == 0 then "none" else (max_by(.run_number) | "\(.status) \(.conclusion // "none") \(.html_url)") end')
+          read -r status conclusion url <<< "$run"
+          if [ "$status" = none ]; then
+            echo "::error::No ci run of the push of $SHA to dev was found: nothing was released."
+            exit 1
+          fi
+          if [ "$status" != completed ]; then
+            echo "::error::The ci run of the push of $SHA to dev is $status, not finished ($url): nothing was released."
+            exit 1
+          fi
+          if [ "$conclusion" != success ]; then
+            echo "::error::The ci run of the push of $SHA to dev ended $conclusion, not a success ($url): nothing was released."
+            exit 1
+          fi
+          echo "::notice::Every check of the push of $SHA to dev passed ($url)."
 
       # Computed now, from the releases the commit holds: the version its beta had without the
       # pre-release, unless another release was made since its push.
