@@ -30,7 +30,8 @@ $$;--> statement-breakpoint
 -- src/default-categories.ts, which a unit test keeps equal to the list below), and every counted
 -- line with an amount one entry: an expense when money leaves, an income when it comes in, the
 -- day it was booked, in its kind's fallback category, with one payment part of the whole line,
--- `classified_by = default`. A line of no amount has none. Statement lines already force
+-- `classified_by = default`. A line of no amount has none, nor a side of a transfer (#26): it is
+-- the transfer, never an expense nor an income. Statement lines already force
 -- row-level security: the tables' owner, when it is no superuser, sees a user's rows only with
 -- that user set, so each user is set in turn. A user who has categories already, or a line that
 -- has a part, is left as it is.
@@ -125,6 +126,7 @@ BEGIN
         AND c.kind = (CASE WHEN l.amount_minor < 0 THEN 'expense' ELSE 'income' END)::entry_kind
       WHERE l.user_id = each_user AND l.state = 'counted' AND l.amount_minor <> 0
         AND NOT EXISTS (SELECT 1 FROM entry_part p WHERE p.line_id = l.id)
+        AND NOT EXISTS (SELECT 1 FROM transfer t WHERE l.id IN (t.out_line_id, t.in_line_id))
       ORDER BY l.booked_on, l.id
     ), made AS (
       INSERT INTO entry (id, user_id, kind, happened_on, category_id, classified_by)

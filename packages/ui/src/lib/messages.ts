@@ -218,6 +218,23 @@ function uiMessages(locale: Locale) {
       importedOn: m.uiOperationsImportedOn({}, options),
       period: m.uiOperationsPeriod({}, options),
       enteredByHand: m.uiOperationsEnteredByHand({}, options),
+      /** `LineTransfer`: the transfer a line is a side of, or the lines that may be its other side. */
+      transferTo: (account: string) => m.uiOperationsTransferTo({ account }, options),
+      transferFrom: (account: string) => m.uiOperationsTransferFrom({ account }, options),
+      setAside: m.uiOperationsSetAside({}, options),
+      madeByApp: (account: string) => m.uiOperationsMadeByApp({ account }, options),
+      notATransfer: m.uiOperationsNotATransfer({}, options),
+      unpairTitle: m.uiOperationsUnpairTitle({}, options),
+      unpairDescription: m.uiOperationsUnpairDescription({}, options),
+      /** The other side was made by the app: unpairing deletes it. */
+      unpairDescriptionMade: (account: string) =>
+        m.uiOperationsUnpairDescriptionMade({ account }, options),
+      unpair: m.uiOperationsUnpair({}, options),
+      maybeTransfer: m.uiOperationsMaybeTransfer({}, options),
+      pairAsTransfer: m.uiOperationsPairAsTransfer({}, options),
+      pairDescription: m.uiOperationsPairDescription({}, options),
+      otherSide: m.uiOperationsOtherSide({}, options),
+      pair: m.uiOperationsPair({}, options),
     },
     categories: {
       columns: {

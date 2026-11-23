@@ -23,15 +23,17 @@ import {
   statementLine,
 } from "./schema/ledger";
 import type { accountEnvelope } from "./schema/ledger";
+import { transfer } from "./schema/transfers";
 import { UserData } from "./user-data";
 import type { QueryFailed, UserTransaction } from "./user-data";
 
 // The shared made-up data of `packages/fixture` written into a user's tables: the development
 // database (`pnpm db:seed`) and the end-to-end tests that need rows. Each made-up account gets one
-// OFX import a month, its file, its lines and the statement's closing balance. It goes through
-// `UserData`, as the app's own writes do. Each counted line gets its entry, in its kind's fallback
-// category, as an import gives it: the user's categories are theirs from sign-up (packages/auth) or
-// from the migration that brought them. The fixture's sample statements of other formats (#17)
+// OFX import a month, its file, its lines and the statement's closing balance, and its transfers
+// paired as the import pairs them (#26). It goes through `UserData`, as the app's own writes do.
+// Each counted line that is no side of a transfer gets its entry, in its kind's fallback category,
+// as an import gives it: the user's categories are theirs from sign-up (packages/auth) or from the
+// migration that brought them. The fixture's sample statements of other formats (#17)
 // are not written yet.
 
 type Envelope = (typeof accountEnvelope.enumValues)[number];
@@ -101,6 +103,9 @@ async function writeMadeUpData(
   const summary = { accounts: 0, imports: 0, lines: 0 };
   const accountIds = new Map<string, string>();
   const balances = new Map<string, number>();
+  // The made-up lines' rows, by the made-up id, and the other side of each made-up transfer.
+  const lineIds = new Map<string, string>();
+  const otherSides = new Map<string, string>();
 
   for (const made of madeUpAccounts) {
     const openingBalanceMinor = OPENING_BALANCES.get(made.id) ?? 0;
@@ -128,6 +133,13 @@ async function writeMadeUpData(
   for (const month of months) {
     // Nothing booked after today, as on a statement downloaded today.
     const lines = madeUpMonth(month).lines.filter((line) => line.bookedOn <= today);
+
+    for (const line of lines) {
+      if (line.amountMinor < 0 && line.counterpartLineId !== null) {
+        otherSides.set(line.id, line.counterpartLineId);
+      }
+    }
+
     const end = lastDayOf(month);
     const to = end < today ? end : today;
 
@@ -177,7 +189,7 @@ async function writeMadeUpData(
       await transaction.insert(importFile).values({ importId: created.id, userId: owner, content });
 
       // Oldest first, as the import saves a file's lines.
-      const added = await transaction
+      const saved = await transaction
         .insert(statementLine)
         .values(
           statement.lines.map((line) => ({
@@ -192,13 +204,13 @@ async function writeMadeUpData(
             dedupKey: `bank:${line.reference}`,
           })),
         )
-        .returning({ id: statementLine.id });
+        .returning({ id: statementLine.id, bankId: statementLine.bankId });
 
-      await insertDefaultEntries(
-        transaction,
-        owner,
-        added.map((line) => line.id),
-      );
+      for (const line of saved) {
+        if (line.bankId !== null) {
+          lineIds.set(line.bankId, line.id);
+        }
+      }
 
       const closing = closingBalanceMinor(statement);
 
@@ -216,6 +228,22 @@ async function writeMadeUpData(
       summary.lines += ofAccount.length;
     }
   }
+
+  const pairs = [...otherSides].flatMap(([out, into]) => {
+    const outLineId = lineIds.get(out);
+    const inLineId = lineIds.get(into);
+
+    return outLineId === undefined || inLineId === undefined
+      ? []
+      : [{ userId: owner, outLineId, inLineId, pairedBy: "import" as const }];
+  });
+
+  if (pairs.length > 0) {
+    await transaction.insert(transfer).values(pairs);
+  }
+
+  // After the transfers: their sides get no entry.
+  await insertDefaultEntries(transaction, owner, [...lineIds.values()]);
 
   return summary;
 }

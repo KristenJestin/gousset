@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { InFrench } from "../stories/in-french";
 import { CategoryPicker } from "./category-picker";
 import { LineDetail, LineDetailSkeleton } from "./line-detail";
+import { LineTransfer } from "./line-transfer";
 
 const eur = (minor: number) => ({ minor, currency: "EUR" });
 
@@ -113,6 +114,32 @@ export const Expiring: Story = {
     expiresOn: "31 December 2027",
     memo: undefined,
     counterparty: undefined,
+  },
+};
+
+/** A side of a transfer: its other side, one click away (`LineTransfer`). */
+export const Transfer: Story = {
+  args: {
+    label: "SEPA TRF TO LIVRET A",
+    rawLabel: "SEPA TRF TO LIVRET A REF 2026-10",
+    amount: eur(-25_000),
+    memo: undefined,
+    counterparty: undefined,
+    transfer: (
+      <LineTransfer
+        direction="out"
+        other={{
+          id: "line-1",
+          day: "Oct 10",
+          label: "SEPA TRF TO LIVRET A",
+          account: "Livret A",
+          amount: eur(25_000),
+        }}
+        setAside
+        onOpenOther={() => undefined}
+        onUnpair={() => Promise.resolve()}
+      />
+    ),
   },
 };
 

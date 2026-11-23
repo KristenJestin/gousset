@@ -31,6 +31,7 @@ import {
   ImportNotFound,
   UnknownFormat,
 } from "./errors";
+import { unpairForUndo } from "../transfers/pair-lines";
 import { resolveProfile } from "./profiles";
 import { findSummary, isId, selectSummaries, summaryOf } from "./rows";
 import type { ImportJobInput } from "./run";
@@ -98,6 +99,8 @@ export type Undone = {
   readonly undone: ImportSummary;
   readonly linesRemoved: number;
   readonly linesGivenBack: number;
+  /** The transfers its lines were a side of, undone with them. */
+  readonly transfersRemoved: number;
   readonly laterOverlapping: number;
   readonly months: ReadonlyArray<string>;
 };
@@ -482,6 +485,9 @@ export const importsLayer = Layer.effect(
               )
               .returning({ id: statementLine.id, bookedOn: statementLine.bookedOn });
 
+            // Its lines' transfers go with them (#26), and the sides the app made for them.
+            const transfersRemoved = await unpairForUndo(transaction, own);
+
             // The lines' parts go with them (`on delete cascade`); an entry left with no part goes
             // too, and a line counted again gets its entry, in this same transaction.
             const removed = await transaction
@@ -523,6 +529,7 @@ export const importsLayer = Layer.effect(
             return {
               linesRemoved: removed.length,
               linesGivenBack: givenBack.length,
+              transfersRemoved,
               laterOverlapping: overlapping.length,
               months: [...months].toSorted(),
             };

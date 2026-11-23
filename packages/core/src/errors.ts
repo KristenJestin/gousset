@@ -15,6 +15,34 @@ export class LineSearchRefused extends Schema.TaggedError<LineSearchRefused>()(
   { reason: Schema.Literals(["amount", "period", "cursor"]) },
 ) {}
 
+/**
+ * Two lines cannot be paired as a transfer (#26): the same line twice (`same_line`), two lines of one
+ * account (`same_account`), two lines both out or both in (`same_sign`), a line of nothing
+ * (`zero_amount`), a line held for review or thrown away (`not_counted`), a line made from a noted
+ * balance, which stands for a month's movement (`made_from_balance`), a line that is a side of a
+ * transfer already (`already_paired`, `lineId` naming it); with no other side named, a line with no
+ * candidate (`no_candidate`) or with several (`several_candidates`), for the user to choose.
+ */
+export class TransferRefused extends Schema.TaggedError<TransferRefused>()("TransferRefused", {
+  reason: Schema.Literals([
+    "same_line",
+    "same_account",
+    "same_sign",
+    "zero_amount",
+    "not_counted",
+    "made_from_balance",
+    "already_paired",
+    "no_candidate",
+    "several_candidates",
+  ]),
+  lineId: Schema.String,
+}) {}
+
+/** The line is no side of a transfer: there is nothing to unpair. */
+export class NotATransfer extends Schema.TaggedError<NotATransfer>()("NotATransfer", {
+  lineId: Schema.String,
+}) {}
+
 /** A month too far from today to be read: more than ten years before or after it. */
 export class MonthOutOfRange extends Schema.TaggedError<MonthOutOfRange>()("MonthOutOfRange", {
   month: Schema.String,

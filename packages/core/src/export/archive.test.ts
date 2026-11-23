@@ -24,6 +24,7 @@ import {
   IMPORTS,
   IMPORT_PROFILES,
   STATEMENT_LINES,
+  TRANSFERS,
 } from "./tables";
 import type { ExportTable } from "./tables";
 
@@ -53,8 +54,10 @@ function madeUpExport(): ExportData {
   const imports: Array<ExportRow> = [];
   const lines: Array<ExportRow> = [];
   const balances: Array<ExportRow> = [];
+  const transfers: Array<ExportRow> = [];
   const files: Array<ExportData["files"][number]> = [];
   const accountIds = new Map<string, string>();
+  const lineIds = new Map<string, string>();
   const entries: Array<ExportRow> = [];
   const parts: Array<ExportRow> = [];
 
@@ -129,31 +132,38 @@ function madeUpExport(): ExportData {
 
       for (const line of ofAccount) {
         const lineId = nextId();
-        const entryId = nextId();
         const fallback = line.amountMinor < 0 ? expenseFallback : incomeFallback;
 
-        entries.push(
-          row(ENTRIES, {
-            id: entryId,
-            user_id: OWNER,
-            kind: line.amountMinor < 0 ? "expense" : "income",
-            happened_on: line.bookedOn,
-            category_id: fallback?.["id"] ?? null,
-            classified_by: "default",
-            created_at: `${month}-28T10:00:00+00:00`,
-            updated_at: `${month}-28T10:00:00+00:00`,
-          }),
-        );
-        parts.push(
-          row(ENTRY_PARTS, {
-            id: nextId(),
-            user_id: OWNER,
-            entry_id: entryId,
-            line_id: lineId,
-            role: "payment",
-            amount_minor: Math.abs(line.amountMinor),
-          }),
-        );
+        lineIds.set(line.id, lineId);
+
+        // A side of a transfer has no entry: it is the transfer.
+        if (line.counterpartLineId === null) {
+          const entryId = nextId();
+
+          entries.push(
+            row(ENTRIES, {
+              id: entryId,
+              user_id: OWNER,
+              kind: line.amountMinor < 0 ? "expense" : "income",
+              happened_on: line.bookedOn,
+              category_id: fallback?.["id"] ?? null,
+              classified_by: "default",
+              created_at: `${month}-28T10:00:00+00:00`,
+              updated_at: `${month}-28T10:00:00+00:00`,
+            }),
+          );
+          parts.push(
+            row(ENTRY_PARTS, {
+              id: nextId(),
+              user_id: OWNER,
+              entry_id: entryId,
+              line_id: lineId,
+              role: "payment",
+              amount_minor: Math.abs(line.amountMinor),
+            }),
+          );
+        }
+
         lines.push(
           row(STATEMENT_LINES, {
             id: lineId,
@@ -185,6 +195,25 @@ function madeUpExport(): ExportData {
     }
   }
 
+  // The made-up transfers, paired as the import pairs them.
+  for (const month of MONTHS) {
+    for (const line of madeUpMonth(month).lines) {
+      const other = line.counterpartLineId;
+
+      if (line.amountMinor < 0 && other !== null) {
+        transfers.push(
+          row(TRANSFERS, {
+            id: nextId(),
+            user_id: OWNER,
+            out_line_id: lineIds.get(line.id) ?? null,
+            in_line_id: lineIds.get(other) ?? null,
+            paired_by: "import",
+          }),
+        );
+      }
+    }
+  }
+
   const profiles = [
     row(IMPORT_PROFILES, {
       id: nextId(),
@@ -206,6 +235,7 @@ function madeUpExport(): ExportData {
     [CATEGORIES, categories],
     [ENTRIES, entries],
     [ENTRY_PARTS, parts],
+    [TRANSFERS, transfers],
   ]);
 
   return {

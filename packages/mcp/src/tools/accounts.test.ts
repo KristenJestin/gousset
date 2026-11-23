@@ -3,6 +3,7 @@ import {
   FixtureLedger,
   ImportProfiles,
   Imports,
+  Transfers,
   memoryAccountStore,
   memoryCategoryStore,
   memoryId,
@@ -125,6 +126,7 @@ function onToday(rows: MemoryRows): Runner<GoussetServices> {
     Layer.mock(Imports, {}),
     Layer.mock(ImportProfiles, {}),
     Layer.mock(DataExport, {}),
+    Layer.mock(Transfers, {}),
     TestClock.layer(),
   );
 

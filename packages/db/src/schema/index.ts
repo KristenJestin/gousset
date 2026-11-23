@@ -25,6 +25,7 @@ import {
   statementLine,
 } from "./ledger";
 import { installationSettings } from "./settings";
+import { transfer } from "./transfers";
 
 /** Every table, named once for Drizzle's relations and better-auth's adapter. */
 export const tables = {
@@ -50,6 +51,7 @@ export const tables = {
   category,
   entry,
   entryPart,
+  transfer,
 };
 
 export { authRelations };

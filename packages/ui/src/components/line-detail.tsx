@@ -48,6 +48,8 @@ export type LineDetailProps = {
   importedFrom?: LineImport;
   /** Its category, to see and change: a `CategoryPicker`; left out for a line with none. */
   category?: ReactNode;
+  /** The line's transfer or its candidates (`LineTransfer`), after its account and days. */
+  transfer?: ReactNode;
   onClose: () => void;
   /** The page's language (`<html lang>`) unless given. */
   locale?: string;
@@ -70,8 +72,9 @@ function DetailGroup({ children }: { children: ReactNode }) {
  * One line's detail (docs/wireframes, screen 2, block 3): its label and amount, its account, the
  * day it was booked and its value date, the bank's raw label (fixed-width) with its memo and
  * counterparty, the original amount when it was in another currency, its expiry, "To review:
- * looks like …" on a held line, and the import it came from or "Entered by hand"; first, its
- * category, through the control the page gives (`category`). Every text comes
+ * looks like …" on a held line, its transfer (`transfer`, a `LineTransfer`), and the import it
+ * came from or "Entered by hand"; first, its category, through the control the page gives
+ * (`category`). Every text comes
  * worded from the page. The close button or Escape closes it; the focus goes into it when it opens.
  * `OperationsLayout` sets it beside the list on a wide screen and over it on a phone.
  *
@@ -96,6 +99,7 @@ export function LineDetail({
   looksLike,
   importedFrom,
   category,
+  transfer,
   onClose,
   locale,
 }: LineDetailProps) {
@@ -144,6 +148,7 @@ export function LineDetail({
           <DetailRow label={words.expiresOn}>{expiresOn}</DetailRow>
         )}
       </DetailGroup>
+      {transfer}
       <DetailGroup>
         <div className="flex flex-col gap-1 text-sm">
           <dt className="text-muted-foreground">{words.rawLabel}</dt>

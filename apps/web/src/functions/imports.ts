@@ -123,6 +123,7 @@ export const undoImport = createServerFn({ method: "POST" })
           undone: undone.undone,
           linesRemoved: undone.linesRemoved,
           linesGivenBack: undone.linesGivenBack,
+          transfersRemoved: undone.transfersRemoved,
           laterOverlapping: undone.laterOverlapping,
           months: [...undone.months],
         })),

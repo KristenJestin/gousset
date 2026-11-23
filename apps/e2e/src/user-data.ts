@@ -32,6 +32,7 @@ export const USER_TABLES: ReadonlyArray<UserTable> = [
   { name: "category", key: "id", rows: "categories" },
   { name: "entry", key: "id", rows: "entries" },
   { name: "entry_part", key: "id", rows: "entry parts" },
+  { name: "transfer", key: "id", rows: "transfers" },
 ];
 
 /**

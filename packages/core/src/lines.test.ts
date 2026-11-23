@@ -461,3 +461,39 @@ describe("showLine", () => {
     expect(await tagOf(ADA, "not-an-id")).toBe("LineNotFound");
   });
 });
+
+describe("searchLines: to review", () => {
+  const current = accountOf("Current account");
+  const savings = accountOf("Savings");
+  const other = accountOf("Other savings");
+  const out = line(current.id, "2026-11-10", -5000, "SEPA TRF TO SAVINGS");
+  const held = line(current.id, "2026-11-12", -4200, "CB GREENMARKET", { state: "held" });
+  const cafe = line(current.id, "2026-11-13", -250);
+
+  const rows: MemoryLineRows = {
+    accounts: [current, savings, other],
+    lines: [
+      out,
+      line(savings.id, "2026-11-11", 5000, "SEPA TRF RECEIVED"),
+      line(other.id, "2026-11-09", 5000, "SEPA TRF RECEIVED"),
+      held,
+      cafe,
+    ],
+  };
+
+  test("lists the held lines and those whose transfer's other side waits for the user's choice", async () => {
+    const page = await search(rows, { toReview: true });
+
+    // The two lines in may each be out's other side: out has two candidates, each of them one.
+    expect(page.lines.map((each) => each.id)).toEqual([held.id, out.id]);
+    expect(page.lines.every((each) => each.toReview)).toBe(true);
+    expect(page.total).toBe(2);
+  });
+
+  test("leaves them among the counted lines too", async () => {
+    const page = await search(rows, {});
+
+    expect(page.lines.map((each) => each.id)).toContain(out.id);
+    expect(page.lines.find((each) => each.id === out.id)?.toReview).toBe(false);
+  });
+});

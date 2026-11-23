@@ -26,6 +26,8 @@ export type LineQuery = {
   readonly amount: ((currency: string) => AmountBounds | null) | null;
   /** `held` lines only (to review), or `counted` only; never `discarded`. */
   readonly state: "counted" | "held";
+  /** With `held`: these counted lines match too (a transfer's side to choose, #26). */
+  readonly alsoLineIds: ReadonlyArray<string>;
   /** Lines strictly older than this one in the order (booked on, then id). */
   readonly after: { readonly bookedOn: string; readonly id: string } | null;
   /** How many lines to give at most. */
@@ -106,5 +108,13 @@ export class LineStore extends Context.Service<
       lineId: string,
       day: string,
     ) => Effect.Effect<FoundLineDetail | undefined, QueryFailed>;
+    /**
+     * The counted lines booked on or before `day`, still to review and no side of a transfer, that
+     * have several lines that may be their transfer's other side (#26): they wait for the user.
+     */
+    readonly severalCandidates: (
+      owner: string,
+      day: string,
+    ) => Effect.Effect<ReadonlyArray<string>, QueryFailed>;
   }
 >()("@gousset/core/LineStore") {}
