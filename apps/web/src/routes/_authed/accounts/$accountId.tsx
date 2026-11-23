@@ -244,7 +244,7 @@ function AccountPage() {
           openingBalanceMinor: account.openingBalance.minor,
           openedOn: account.openedOn,
           settlesIntoAccountId: account.settlesInto?.id ?? null,
-          creditOrder: detail.credits?.order ?? null,
+          creditOrder: account.creditOrder,
         }}
         settlesIntoChoices={settlesIntoChoices}
         onSubmit={handleEdit}
@@ -525,7 +525,7 @@ function ExpiryDialog({
 }
 
 function Settings({ accountId, onEdit }: { accountId: string; onEdit: () => void }) {
-  const { account, credits } = useAccountDetail(accountId);
+  const { account } = useAccountDetail(accountId);
   const locale = usePageLanguage();
 
   return (
@@ -536,7 +536,7 @@ function Settings({ accountId, onEdit }: { accountId: string; onEdit: () => void
       openedOn={account.openedOn === null ? null : longDay(account.openedOn, locale)}
       institution={account.institution ?? undefined}
       settlesInto={account.settlesInto?.name}
-      creditOrder={credits === null ? undefined : creditOrderLabel(credits.order)}
+      creditOrder={account.kind === "benefit" ? creditOrderLabel(account.creditOrder) : undefined}
       action={
         <Button variant="secondary" size="sm" icon="edit" onClick={onEdit}>
           {m.accountEdit()}

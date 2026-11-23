@@ -557,6 +557,17 @@ describe("benefit accounts", () => {
     expect((await inOrder(rows, showAccount(ADA, current.id))).credits).toBeNull();
   });
 
+  test("an account's page gives its order of use, even kept by its balance", async () => {
+    const kept = accountOf("Gift card", "benefit", {
+      mode: "balance",
+      creditOrder: "expiring_first",
+    });
+
+    const detail = await inOrder({ accounts: [kept] }, showAccount(ADA, kept.id));
+
+    expect(detail.account.creditOrder).toBe("expiring_first");
+  });
+
   test("an account's credit order is oldest first unless given, and kept by an edit that leaves it out", async () => {
     const outcome = await inOrder(
       {},

@@ -148,6 +148,8 @@ export type AccountDetail = {
     readonly envelope: AccountEnvelope | null;
     readonly openingBalance: Money;
     readonly openedOn: string | null;
+    /** In which order a benefit account's credits are used; read for a benefit account only. */
+    readonly creditOrder: CreditOrder;
     /** A card's current account. */
     readonly settlesInto: { readonly id: string; readonly name: string } | null;
   };
@@ -346,6 +348,7 @@ export const showAccount = (owner: string, accountId: string, view: AccountView 
         ...summaryOf(found, day),
         envelope: account.envelope,
         openingBalance: money(account.openingBalanceMinor, account.currency),
+        creditOrder: account.creditOrder,
         openedOn: account.openedOn,
         settlesInto:
           settlesInto === undefined
