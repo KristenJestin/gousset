@@ -7,7 +7,7 @@ import { exampleStatement } from "@gousset/fixture";
 
 import { addUser } from "../src/auth";
 import type { TestUser } from "../src/auth";
-import { expect, test, visit } from "../src/test";
+import { animationsDone, expect, test, visit } from "../src/test";
 import { openUserData } from "../src/user-data";
 
 // Issue #20, the import screen (docs/wireframes, `import`): files dropped are imported in the
@@ -98,6 +98,8 @@ test("the same file twice adds nothing, and an import can be undone", async ({
   await expect(page.getByText("Lines removed: 6.", { exact: false })).toBeVisible();
   await expect(page.getByText("Later imports of this account overlap it")).toBeVisible();
   await expect(page.getByRole("cell", { name: "Undone" })).toBeVisible();
+  // The toast still fading in would fail axe's contrast check at the end.
+  await animationsDone(page);
 });
 
 test("a file that names no account asks for one, then imports into it", async ({
@@ -129,6 +131,7 @@ test("a file that names no account asks for one, then imports into it", async ({
   await expect(summaryOf(page, file)).toBeVisible({ timeout: 30_000 });
   await expect(figure(page, file, "added")).toHaveText("6");
   await expect(summaryOf(page, file)).toHaveCSS("opacity", "1");
+  await animationsDone(page);
 });
 
 test("a file of no known format is refused, saying why", async ({ userPage }, testInfo) => {
@@ -141,4 +144,5 @@ test("a file of no known format is refused, saying why", async ({ userPage }, te
   await expect(
     userPage.getByText("photo.png: Gousset cannot tell this file's format"),
   ).toBeVisible();
+  await animationsDone(userPage);
 });

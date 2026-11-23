@@ -3,6 +3,7 @@ import type { Statement, StatementLine } from "@gousset/fixture";
 import { accountBalance, statementImport } from "@gousset/db/schema/ledger";
 import { eq } from "drizzle-orm";
 
+import { addUser } from "../src/auth";
 import { importsOn, statementFile } from "../src/imports";
 import { expect, test } from "../src/test";
 import { openUserData } from "../src/user-data";
@@ -11,16 +12,23 @@ import { openUserData } from "../src/user-data";
 // near duplicate is held for review, undoing removes exactly the import's lines, and a job run
 // again doubles nothing. Each test imports into an account of its own, on the worker's database,
 // through `@gousset/core` as the import job runs it (docs/data-model.md, "Imports and
-// deduplication").
+// deduplication"). The accounts belong to a user of this file's own: the worker's users stay
+// without accounts, which other specs seed as they need.
 
 let data: ReturnType<typeof openUserData>;
 let imports: ReturnType<typeof importsOn>;
 let owner = "";
 
 test.beforeAll(async ({ app, user }) => {
+  const importer = await addUser(app.baseURL, user, {
+    name: "Sam Example",
+    email: `sam.dedup.worker${app.slot}.${crypto.randomUUID().slice(0, 8)}@example.com`,
+    password: `e2e-sam-password-${app.slot}`,
+  });
+
   data = openUserData(app.database);
   imports = importsOn(data);
-  owner = await data.ownerOf(user.email);
+  owner = await data.ownerOf(importer.email);
 });
 
 test.afterAll(async () => {
