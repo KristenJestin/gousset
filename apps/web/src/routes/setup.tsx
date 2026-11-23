@@ -8,9 +8,10 @@ import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 import type { FormEvent } from "react";
 
-import { errorMessage } from "@/i18n/messages";
+import { passwordRules, refusalMessage, refusalOf } from "@/i18n/messages";
+import type { Refusal } from "@/i18n/messages";
 import { authClient } from "@/lib/auth-client";
-import { formText } from "@/lib/form";
+import { emptyPasswords, formText } from "@/lib/form";
 import { whileBusy } from "@/lib/while-busy";
 
 /** A fresh install: the first visit creates the administrator. */
@@ -26,15 +27,16 @@ export const Route = createFileRoute("/setup")({
 
 function Setup() {
   const navigate = useNavigate();
-  const [error, setError] = useState<string>();
+  const [refusal, setRefusal] = useState<Refusal>();
   const [busy, setBusy] = useState(false);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    const form = new FormData(event.currentTarget);
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
 
-    const { error: refusal } = await whileBusy(setBusy, () =>
+    const { error: refused } = await whileBusy(setBusy, () =>
       authClient.signUp.email({
         name: formText(form, "name"),
         email: formText(form, "email"),
@@ -42,8 +44,9 @@ function Setup() {
       }),
     );
 
-    if (refusal) {
-      setError(errorMessage(refusal.code));
+    if (refused) {
+      setRefusal(refusalOf(refused.code));
+      emptyPasswords(formElement, ["password"]);
 
       return;
     }
@@ -55,7 +58,7 @@ function Setup() {
   return (
     <Screen>
       <Card title={m.setupTitle()} description={m.setupDescription()}>
-        <Form onSubmit={(event) => void submit(event)} onInput={() => setError(undefined)}>
+        <Form onSubmit={(event) => void submit(event)} onInput={() => setRefusal(undefined)}>
           <TextField label={m.fieldName()} name="name" autoComplete="name" required />
           <TextField
             label={m.fieldEmail()}
@@ -63,16 +66,18 @@ function Setup() {
             type="email"
             autoComplete="email"
             required
+            error={refusalMessage(refusal, "email")}
           />
           <TextField
             label={m.fieldPassword()}
             name="password"
             type="password"
             autoComplete="new-password"
-            minLength={8}
             required
+            description={passwordRules()}
+            error={refusalMessage(refusal, "password")}
           />
-          <FormMessage message={error} />
+          <FormMessage message={refusalMessage(refusal, undefined)} />
           <Button type="submit" loading={busy}>
             {m.setupSubmit()}
           </Button>

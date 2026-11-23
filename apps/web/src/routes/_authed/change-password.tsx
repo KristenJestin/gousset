@@ -11,10 +11,11 @@ import { useState } from "react";
 import type { FormEvent } from "react";
 
 import { AppLink } from "@/components/app-link";
-import { errorMessage } from "@/i18n/messages";
+import { passwordRules, refusalMessage, refusalOf } from "@/i18n/messages";
+import type { Refusal } from "@/i18n/messages";
 import { authClient } from "@/lib/auth-client";
 import { AUTHORIZE_PATH } from "@/lib/authorization";
-import { formText } from "@/lib/form";
+import { emptyPasswords, formText } from "@/lib/form";
 import { whileBusy } from "@/lib/while-busy";
 
 export const Route = createFileRoute("/_authed/change-password")({
@@ -65,15 +66,16 @@ function ChangePassword() {
   const router = useRouter();
   const { user } = Route.useRouteContext();
   const { resume } = Route.useSearch();
-  const [error, setError] = useState<string>();
+  const [refusal, setRefusal] = useState<Refusal>();
   const [busy, setBusy] = useState(false);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
 
-    const form = new FormData(event.currentTarget);
+    const formElement = event.currentTarget;
+    const form = new FormData(formElement);
 
-    const { error: refusal } = await whileBusy(setBusy, () =>
+    const { error: refused } = await whileBusy(setBusy, () =>
       authClient.changePassword({
         currentPassword: formText(form, "currentPassword"),
         newPassword: formText(form, "newPassword"),
@@ -81,8 +83,9 @@ function ChangePassword() {
       }),
     );
 
-    if (refusal) {
-      setError(errorMessage(refusal.code));
+    if (refused) {
+      setRefusal(refusalOf(refused.code));
+      emptyPasswords(formElement, ["currentPassword", "newPassword"]);
 
       return;
     }
@@ -109,23 +112,25 @@ function ChangePassword() {
             : m.changePasswordDescription()
         }
       >
-        <Form onSubmit={(event) => void submit(event)} onInput={() => setError(undefined)}>
+        <Form onSubmit={(event) => void submit(event)} onInput={() => setRefusal(undefined)}>
           <TextField
             label={m.fieldCurrentPassword()}
             name="currentPassword"
             type="password"
             autoComplete="current-password"
             required
+            error={refusalMessage(refusal, "currentPassword")}
           />
           <TextField
             label={m.fieldNewPassword()}
             name="newPassword"
             type="password"
             autoComplete="new-password"
-            minLength={8}
             required
+            description={passwordRules()}
+            error={refusalMessage(refusal, "password")}
           />
-          <FormMessage message={error} />
+          <FormMessage message={refusalMessage(refusal, undefined)} />
           <Actions>
             <Button type="submit" loading={busy}>
               {m.changePasswordSubmit()}

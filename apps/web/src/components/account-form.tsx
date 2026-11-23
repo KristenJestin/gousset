@@ -4,15 +4,15 @@ import { m } from "@gousset/i18n/messages";
 import { Button } from "@gousset/ui/components/button";
 import { Combobox } from "@gousset/ui/components/combobox";
 import { DatePicker } from "@gousset/ui/components/date-picker";
-import { Dialog, DialogClose } from "@gousset/ui/components/dialog";
 import { FormMessage } from "@gousset/ui/components/form-message";
 import { MoneyField } from "@gousset/ui/components/money-field";
 import { Select } from "@gousset/ui/components/select";
 import type { ChoiceItem } from "@gousset/ui/components/select";
+import { Sheet } from "@gousset/ui/components/sheet";
 import { TextField } from "@gousset/ui/components/text-field";
 import { useUiMessages } from "@gousset/ui/hooks/use-ui-messages";
 import { CURRENCY_CODES } from "@gousset/ui/lib/money";
-import { useId, useState } from "react";
+import { useState } from "react";
 
 import { accountRefusalMessage } from "@/i18n/messages";
 import { accountChoiceLabel } from "@/lib/account-labels";
@@ -95,15 +95,17 @@ export type AccountFormProps = {
   /** The user's open current accounts, for a card's "settles into"; by id and name. */
   settlesIntoChoices: ReadonlyArray<{ id: string; name: string }>;
   onSubmit: (values: AccountFormValues) => Promise<AccountFormResult>;
-  /** Called once a write succeeds, before the dialog closes, with the account's id when given. */
+  /** Called once a write succeeds, before the sheet closes, with the account's id when given. */
   onSaved?: (accountId: string | undefined) => void;
 };
 
 /**
- * The account create and edit form, a `Dialog` composed of `packages/ui` fields: name, kind,
+ * The account create and edit form, a long form in a side `Sheet` (docs/design.md, "Actions and
+ * forms"; a sheet along the bottom edge on a phone) composed of `packages/ui` fields: name, kind,
  * institution, currency, tracking, opening balance, opened on and, for a card, the current account
- * it settles into; for a benefit account, the order its credits are used in. `key`d by the account's id (or "new") at the call site so that editing another
- * account starts from its own values.
+ * it settles into; for a benefit account, the order its credits are used in. `key`d by the
+ * account's id (or "new") at the call site so that editing another account starts from its own
+ * values. Motion: the shared `Sheet`'s, sliding in from its edge, a fade under reduced motion.
  */
 export function AccountForm({
   open,
@@ -116,7 +118,6 @@ export function AccountForm({
   onSaved,
 }: AccountFormProps) {
   const messages = useUiMessages();
-  const formId = useId();
   const [name, setName] = useState(initial.name);
   const [choice, setChoice] = useState<AccountChoice>(initial.choice);
   const [institution, setInstitution] = useState(initial.institution);
@@ -203,99 +204,94 @@ export function AccountForm({
   }
 
   return (
-    <Dialog
+    <Sheet
       title={title}
       open={open}
-      onOpenChange={onOpenChange}
+      onOpenChange={(next) => {
+        // While the form is sent it stays open: its answer lands on the form that sent it.
+        if (!next && busy) {
+          return;
+        }
+
+        onOpenChange(next);
+      }}
+      onSubmit={(event) => {
+        event.preventDefault();
+        void submit();
+      }}
       actions={
-        <>
-          <DialogClose>
-            <Button type="button" variant="secondary">
-              {m.uiCancel()}
-            </Button>
-          </DialogClose>
-          <Button type="submit" form={formId} loading={busy}>
-            {submitLabel}
-          </Button>
-        </>
+        <Button type="submit" loading={busy}>
+          {submitLabel}
+        </Button>
       }
     >
-      <form
-        id={formId}
-        onSubmit={(event) => {
-          event.preventDefault();
-          void submit();
-        }}
-        className="flex flex-col gap-4"
-      >
-        <TextField
-          label={m.fieldName()}
-          value={name}
-          onChange={(event) => setName(event.target.value)}
-          autoComplete="off"
-          required
-        />
-        <Select
-          label={m.fieldKind()}
-          items={choiceItems}
-          value={choice}
-          onValueChange={onChoiceChange}
-          required
-        />
-        <TextField
-          label={m.fieldInstitution()}
-          value={institution}
-          onChange={(event) => setInstitution(event.target.value)}
-          autoComplete="off"
-        />
-        <Combobox
-          label={m.fieldCurrency()}
-          placeholder={m.fieldCurrencyPlaceholder()}
-          items={CURRENCY_ITEMS}
-          value={currency}
-          onValueChange={(value) => setCurrency(value ?? currency)}
-          required
-        />
-        <Select
-          label={m.fieldMode()}
-          items={modeItems}
-          value={mode}
-          onValueChange={onModeChange}
-          required
-        />
-        <MoneyField
-          label={m.fieldOpeningBalance()}
-          currency={currency}
-          value={openingBalanceMinor}
-          error={openingBalanceInvalid ? m.fieldOpeningBalanceInvalid() : undefined}
-          onValueChange={(minor) => {
-            setOpeningBalanceInvalid(minor === null);
+      <TextField
+        label={m.fieldName()}
+        value={name}
+        onChange={(event) => setName(event.target.value)}
+        autoComplete="off"
+        required
+      />
+      <Select
+        label={m.fieldKind()}
+        items={choiceItems}
+        value={choice}
+        onValueChange={onChoiceChange}
+        required
+      />
+      <TextField
+        label={m.fieldInstitution()}
+        value={institution}
+        onChange={(event) => setInstitution(event.target.value)}
+        autoComplete="off"
+      />
+      <Combobox
+        label={m.fieldCurrency()}
+        placeholder={m.fieldCurrencyPlaceholder()}
+        items={CURRENCY_ITEMS}
+        value={currency}
+        onValueChange={(value) => setCurrency(value ?? currency)}
+        required
+      />
+      <Select
+        label={m.fieldMode()}
+        items={modeItems}
+        value={mode}
+        onValueChange={onModeChange}
+        required
+      />
+      <MoneyField
+        label={m.fieldOpeningBalance()}
+        currency={currency}
+        value={openingBalanceMinor}
+        error={openingBalanceInvalid ? m.fieldOpeningBalanceInvalid() : undefined}
+        onValueChange={(minor) => {
+          setOpeningBalanceInvalid(minor === null);
 
-            if (minor !== null) {
-              setOpeningBalanceMinor(minor);
-            }
-          }}
+          if (minor !== null) {
+            setOpeningBalanceMinor(minor);
+          }
+        }}
+      />
+      <DatePicker label={m.fieldOpenedOn()} value={openedOn} onValueChange={setOpenedOn} />
+      {choice === "card" ? (
+        <Select
+          label={m.fieldSettlesInto()}
+          items={settlesItems}
+          value={settlesIntoAccountId}
+          onValueChange={setSettlesIntoAccountId}
+          required
         />
-        <DatePicker label={m.fieldOpenedOn()} value={openedOn} onValueChange={setOpenedOn} />
-        {choice === "card" ? (
-          <Select
-            label={m.fieldSettlesInto()}
-            items={settlesItems}
-            value={settlesIntoAccountId}
-            onValueChange={setSettlesIntoAccountId}
-            required
-          />
-        ) : null}
-        {choice === "benefit" ? (
-          <Select
-            label={m.fieldCreditOrder()}
-            items={creditOrderItems}
-            value={creditOrder}
-            onValueChange={onCreditOrderChange}
-          />
-        ) : null}
-        <FormMessage message={error} />
-      </form>
-    </Dialog>
+      ) : null}
+      {choice === "benefit" ? (
+        <Select
+          label={m.fieldCreditOrder()}
+          items={creditOrderItems}
+          value={creditOrder}
+          onValueChange={onCreditOrderChange}
+        />
+      ) : null}
+      <FormMessage message={error} />
+    </Sheet>
   );
 }
