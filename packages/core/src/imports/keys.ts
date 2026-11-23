@@ -5,8 +5,9 @@ import { createHash } from "node:crypto";
 // decides what is added. A line with no exact match may still be the same payment read another way:
 // a near duplicate, set aside for review.
 
-/** The formats an import reads: the values of the database's `import_format`. */
-export type ImportFormat = "ofx" | "qfx" | "qif" | "camt053" | "mt940" | "csv";
+import type { ImportFormat } from "./summary";
+
+export type { ImportFormat } from "./summary";
 
 /** What a key is made of: a line as a reader gives it. */
 export type KeyedLine = {

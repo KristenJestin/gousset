@@ -6,6 +6,7 @@
   "exports": {
     ".": "./src/index.ts",
     "./values": "./src/values.ts",
+    "./imports": "./src/imports/summary.ts",
     "./read": "./src/imports/read.ts"
   },
   "scripts": {

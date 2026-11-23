@@ -1,43 +1,10 @@
-import type { importStatus } from "@gousset/db/schema/ledger";
 import { account, statementImport } from "@gousset/db/schema/ledger";
 import type { UserTransaction } from "@gousset/db/user-data";
 import { eq } from "drizzle-orm";
 
-import type { ImportFormat } from "./keys";
+import type { ImportSummary } from "./summary";
 
-// An import's row as the screen and the MCP door read it.
-
-/** Where an import stands: the values of the database's `import_status`. */
-export type ImportStatus = (typeof importStatus.enumValues)[number];
-
-/** The import's steps, in order: the job reports each, and the screen moves through them. */
-export const IMPORT_STEPS = ["read", "deduplicate", "save"] as const;
-
-export type ImportStep = (typeof IMPORT_STEPS)[number];
-
-/** One file dropped, from upload to summary. Days are `YYYY-MM-DD`, instants ISO 8601. */
-export type ImportSummary = {
-  readonly id: string;
-  readonly fileName: string;
-  readonly format: ImportFormat;
-  readonly status: ImportStatus;
-  /** What a waiting import waits for: the user to choose its account, or how to read its CSV. */
-  readonly waitingFor: "account" | "profile" | null;
-  readonly account: { readonly id: string; readonly name: string } | null;
-  readonly periodFrom: string | null;
-  readonly periodTo: string | null;
-  readonly linesRead: number;
-  readonly linesAdded: number;
-  readonly linesDuplicate: number;
-  readonly linesHeld: number;
-  /** Why it failed, as a code: a reader's error (`MalformedFile`), `CURRENCY_MISMATCH`… */
-  readonly errorCode: string | null;
-  /** The job that runs it, for the screen to follow. */
-  readonly jobId: string | null;
-  readonly createdAt: string;
-  readonly finishedAt: string | null;
-  readonly undoneAt: string | null;
-};
+// An import's row as the screen and the MCP door read it (`./summary`).
 
 /** Gousset's ids are uuids: anything else names no row, rather than a query Postgres refuses. */
 export const isId = (id: string) =>

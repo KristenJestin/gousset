@@ -1,22 +1,24 @@
-import { readCamt053, readCsv, readMt940, readOfx, readQif } from "@gousset/import";
-import type { CsvProfile, ReadError, Statement } from "@gousset/import";
+import { CsvProfile, readCamt053, readCsv, readMt940, readOfx, readQif } from "@gousset/import";
+import type { ReadError, Statement } from "@gousset/import";
 import { Context, Effect, Layer, Schema } from "effect";
-
-import type { ImportFormat } from "./keys";
 
 // Reading a file with its format's reader. The readers are synchronous: a crafted file can hold
 // the thread for seconds, so the app runs them in a worker thread (`StatementReader`), and this
 // module is that worker's whole program: it needs nothing but the readers.
 
-/** What the import asks a reader: the file, its format, and what the format does not say itself. */
-export type ReadRequest = {
-  readonly format: ImportFormat;
-  readonly bytes: Uint8Array;
-  /** The account's currency: QIF and CSV name none. */
-  readonly currency: string | null;
-  /** How to read a CSV file. */
-  readonly csvProfile: CsvProfile | null;
-};
+/**
+ * What the import asks a reader: the file, its format, and what the format does not say itself:
+ * the account's currency (QIF and CSV name none) and how to read a CSV file. What crosses to the
+ * worker thread.
+ */
+export const ReadRequest = Schema.Struct({
+  format: Schema.Literals(["ofx", "qfx", "qif", "camt053", "mt940", "csv"]),
+  bytes: Schema.Uint8Array,
+  currency: Schema.NullOr(Schema.String),
+  csvProfile: Schema.NullOr(CsvProfile),
+});
+
+export type ReadRequest = typeof ReadRequest.Type;
 
 /**
  * Why a file could not be read, as a code the import screen translates (the reader's error, by its

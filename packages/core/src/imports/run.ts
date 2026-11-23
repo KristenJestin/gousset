@@ -17,7 +17,7 @@ import type { ExistingLine, ImportFormat, ReadLine } from "./keys";
 import { StatementReader } from "./read";
 import type { ReadStatement } from "./read";
 import { isId } from "./rows";
-import type { ImportStep } from "./rows";
+import type { ImportStep } from "./summary";
 
 // The import's job (docs/architecture.md, "Background jobs"): read the file, deduplicate its
 // lines against the account's, save what is new. Each attempt runs it again from the start, so

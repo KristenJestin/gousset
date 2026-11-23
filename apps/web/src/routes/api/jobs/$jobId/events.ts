@@ -39,6 +39,13 @@ export const Route = createFileRoute("/api/jobs/$jobId/events")({
           return new Response("No job of yours has this id.", { status: 404, headers: NO_STORE });
         }
 
+        if (body === "busy") {
+          return new Response("You follow too many jobs at once: close a page that follows one.", {
+            status: 429,
+            headers: { ...NO_STORE, "Retry-After": "5" },
+          });
+        }
+
         return new Response(body, {
           headers: {
             ...NO_STORE,

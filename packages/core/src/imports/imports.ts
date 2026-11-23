@@ -23,17 +23,14 @@ import {
   ImportNotFound,
   UnknownFormat,
 } from "./errors";
-import type { ImportFormat } from "./keys";
 import { findSummary, isId, selectSummaries, summaryOf } from "./rows";
-import type { ImportSummary } from "./rows";
 import type { ImportJobInput } from "./run";
+import { MAX_FILE_BYTES } from "./summary";
+import type { ImportFormat, ImportSummary } from "./summary";
 
 // Importing statements (#20), as the import screen and the MCP door both do it: a file dropped
 // becomes an import and its job; the screen follows the job, answers what the file left open,
 // lists the imports and undoes one.
-
-/** The largest file an import takes: a statement is a few hundred kilobytes. */
-export const MAX_FILE_BYTES = 10 * 1024 * 1024;
 
 /** How many imports a page of the list holds at most. */
 export const IMPORTS_LISTED = 50;

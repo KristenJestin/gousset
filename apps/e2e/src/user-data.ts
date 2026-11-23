@@ -116,6 +116,9 @@ export function openUserData(database: string) {
     }).pipe(Effect.provide(layer));
 
   return {
+    /** `UserData` on this database, for the packages' own logic (`@gousset/core`) to run on. */
+    layer,
+
     /** Runs `work` in a transaction of `owner`'s, as every server function does. */
     asUser: <A>(owner: string, work: (transaction: UserTransaction) => Promise<A>): Promise<A> =>
       Effect.runPromise(transaction(owner, work)),
