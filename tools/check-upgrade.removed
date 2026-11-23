@@ -1,6 +1,0 @@
-# The rows of tools/check-upgrade.sql that a migration removes on purpose, one a line:
-# <migration folder> TAB <table> TAB <the row's id>. When that migration is among those the update
-# brings, tools/check-upgrade.sh expects the row before the update and gone after it; otherwise the
-# row must come through unchanged, as every other row does (docs/releases.md, "Every release is an
-# upgrade"). A migration generated again under a new timestamp is renamed here too.
-20261123222416_ignore_empty_statement_balances	account_balance	019a0000-0000-7000-8000-000000000504
