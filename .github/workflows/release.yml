@@ -113,9 +113,10 @@ jobs:
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
 
       # main's ruleset asks for no check: they are enforced here. The beta needs only verify; a
-      # release needs the whole ci run of the commit's push to dev (the full matrix of ui and e2e
-      # included), and the release pull request's own runs of ci and pull-request (react-doctor,
-      # privacy, the commit messages). Each workflow's last run counts, at its last attempt.
+      # release needs the whole ci run of the commit's push to dev (upgrade included), and the
+      # release pull request's own runs of ci, with every browser and width (ci.yml runs them on a
+      # pull request into main), and pull-request (react-doctor, privacy, the commit messages). Each
+      # workflow's last run counts, at its last attempt.
       - name: The checks of the commit passed, on dev and on the pull request
         env:
           GH_TOKEN: ${{ github.token }}
@@ -123,11 +124,15 @@ jobs:
           SHA: ${{ steps.commit.outputs.sha }}
           PULL_REQUEST: ${{ inputs.pull_request }}
         run: |
+          # The run checked last, by id, for full_matrix and job.
+          run_id=
+          # Only this repository's dev counts: a fork's branch named dev, at the same commit, has
+          # runs of its own.
           passed() { # <workflow file> <event> <what>
             local run status conclusion url
             run=$(gh api "repos/$GH_REPO/actions/workflows/$1/runs?head_sha=$SHA&branch=dev&event=$2" \
-              --jq '.workflow_runs | if length == 0 then "none" else (max_by(.run_number) | "\(.status) \(.conclusion // "none") \(.html_url)") end')
-            read -r status conclusion url <<< "$run"
+              --jq "[.workflow_runs[] | select(.head_repository.full_name == \"$GH_REPO\")]"' | if length == 0 then "none" else (max_by(.run_number) | "\(.status) \(.conclusion // "none") \(.html_url) \(.id)") end')
+            read -r status conclusion url run_id <<< "$run"
             if [ "$status" = none ]; then
               echo "::error::No $1 run of $3 was found: nothing was released."
               return 1
@@ -142,30 +147,48 @@ jobs:
             fi
             echo "::notice::The $1 run of $3 passed ($url)."
           }
+          # The jobs of the run's last attempt, a line each: name, then conclusion.
+          jobs() {
+            gh api --paginate "repos/$GH_REPO/actions/runs/$run_id/jobs?per_page=100" \
+              --jq '.jobs[] | "\(.name)\t\(.conclusion // "none")"'
+          }
+          # A job of the run, by its name, passed.
+          job() { # <name> <what>
+            local conclusion
+            conclusion=$(jobs | awk -F '\t' -v name="$1" '$1 == name { print $2 }')
+            if [ "$conclusion" != success ]; then
+              echo "::error::The $1 job of $2 did not pass (${conclusion:-not found}, run $run_id): nothing was released."
+              return 1
+            fi
+            echo "::notice::The $1 job of $2 passed."
+          }
+          # The run checked every browser and width: its shards are named `ui full i/n` and
+          # `e2e full i/n` (ci.yml), and each passed.
+          full_matrix() { # <what>
+            local list check
+            list=$(jobs)
+            for check in ui e2e; do
+              if ! awk -F '\t' -v check="$check" '
+                $1 ~ ("^" check " full [0-9]+/[0-9]+$") { shards++; if ($2 != "success") failed++ }
+                END { exit !(shards > 0 && failed == 0) }' <<< "$list"; then
+                echo "::error::The ci run of $1 did not pass $check with every browser and width (run $run_id): nothing was released."
+                return 1
+              fi
+            done
+            echo "::notice::The ci run of $1 passed ui and e2e with every browser and width."
+          }
           passed ci.yml push "the push of $SHA to dev"
+          # Every commit is tested as an update of the last release (ci.yml, `upgrade`): a release
+          # never reaches an installation it was not tested to update.
+          job upgrade "the push of $SHA to dev"
           if [ -n "$PULL_REQUEST" ]; then
             passed ci.yml pull_request "#$PULL_REQUEST at $SHA"
+            full_matrix "#$PULL_REQUEST at $SHA"
             passed pull-request.yml pull_request "#$PULL_REQUEST at $SHA"
-          fi
-
-      # As verify through its beta, the commit passed the upgrade job (upgrade.yml) on its push to
-      # dev: a release never reaches an installation it was not tested to update.
-      - name: The upgrade job passed on the commit's push
-        env:
-          GH_TOKEN: ${{ github.token }}
-          GH_REPO: ${{ github.repository }}
-          SHA: ${{ steps.commit.outputs.sha }}
-        run: |
-          run=$(gh api "repos/$GH_REPO/actions/workflows/upgrade.yml/runs?head_sha=$SHA&event=push&branch=dev" --jq '.workflow_runs[0].id // empty')
-          if [ -z "$run" ]; then
-            echo "::error::The upgrade workflow never ran on the push of $SHA to dev: nothing was released."
-            exit 1
-          fi
-          # The run's last attempt: a job run again counts as it ended.
-          conclusion=$(gh api "repos/$GH_REPO/actions/runs/$run/jobs" --paginate --jq '.jobs[] | select(.name == "upgrade") | .conclusion')
-          if [ "$conclusion" != success ]; then
-            echo "::error::The upgrade job of the push of $SHA to dev did not pass (${conclusion:-not found}, run $run): nothing was released."
-            exit 1
+          else
+            # The first release, with no pull request: its push (run_id still) asked for every
+            # browser and width (`E2E-Matrix: full`).
+            full_matrix "the push of $SHA to dev"
           fi
 
       # Computed now, from the releases the commit holds: the version its beta had without the
@@ -230,7 +253,7 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ github.token }}
 
-      # Published by beta.yml once verify passed on that commit, under its commit: a release is
+      # Published by ci.yml's beta job once verify passed on that commit, under its commit: a release is
       # never built anew, nor taken by a name computed again.
       - name: The image of the commit is published, and the version is not another's
         run: |
