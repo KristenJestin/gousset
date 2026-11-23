@@ -48,6 +48,46 @@ export function accountRefusalMessage(code: string): string {
   }
 }
 
+/**
+ * A refusal of a change of the categories (`CategoryRefusalCode`) or of a line's category
+ * (`LineRefusalCode`), by its code. An icon or a position the page never sends falls to the
+ * general message.
+ */
+export function categoryRefusalMessage(code: string): string {
+  switch (code) {
+    case "CATEGORY_NOT_FOUND":
+      return m.categoryRefusalNotFound();
+    case "CATEGORY_NAME_TAKEN":
+      return m.categoryRefusalNameTaken();
+    case "CATEGORY_THIRD_LEVEL":
+      return m.categoryRefusalThirdLevel();
+    case "CATEGORY_PARENT_KIND":
+      return m.categoryRefusalParentKind();
+    case "CATEGORY_ITSELF":
+      return m.categoryRefusalItself();
+    case "CATEGORY_ARCHIVED":
+      return m.categoryRefusalArchived();
+    case "CATEGORY_PARENT_ARCHIVED":
+      return m.categoryRefusalParentArchived();
+    case "CATEGORY_FALLBACK":
+      return m.categoryRefusalFallback();
+    case "CATEGORY_NAME":
+      return m.categoryRefusalName();
+    case "CATEGORY_TOO_MANY":
+      return m.categoryRefusalTooMany();
+    case "CATEGORY_BENCHMARK":
+      return m.categoryRefusalBenchmark();
+    case "CATEGORY_KIND_MISMATCH":
+      return m.categoryRefusalKindMismatch();
+    case "LINE_NOT_CLASSIFIABLE":
+      return m.categoryRefusalNotClassifiable();
+    case "LINE_NOT_FOUND":
+      return m.categoryRefusalLineNotFound();
+    default:
+      return m.errorUnknown();
+  }
+}
+
 /** The message for a refusal of better-auth or of Gousset, by its code. */
 export function errorMessage(code: string | undefined): string {
   switch (code) {
