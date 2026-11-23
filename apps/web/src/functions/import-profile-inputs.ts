@@ -2,10 +2,12 @@ import { MAX_PROFILE_FILE, MAX_PROFILE_HEADER, MAX_PROFILE_NAME } from "@gousset
 import { CsvProfile } from "@gousset/import";
 import { Schema } from "effect";
 
-// What the import screen sends to keep a CSV profile, each text bounded as core bounds it, so that
-// an oversized one is refused before it reaches core, and a shared file before it is parsed.
+// What the import screen sends to keep a CSV profile. A name or an institution is bounded loosely
+// here, ten times what core keeps: core trims it, then refuses one too long with `ProfileTooLong`,
+// a code the screen translates, which a refusal here would not be. The header and a shared file,
+// which core does not trim, are bounded as core bounds them, a file before its JSON is parsed.
 
-const ProfileName = Schema.String.check(Schema.isMaxLength(MAX_PROFILE_NAME));
+const ProfileName = Schema.String.check(Schema.isMaxLength(MAX_PROFILE_NAME * 10));
 
 /** A profile made from a preview, as `saveImportProfile` takes it. */
 export const SaveProfileInput = Schema.Struct({

@@ -16,6 +16,7 @@ export {
   csvFile,
   matchCsvHeader,
   normalizeHeader,
+  previewCsvRows,
   readCsv,
   readCsvHeader,
   testReadCsv,

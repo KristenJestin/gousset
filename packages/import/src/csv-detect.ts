@@ -2,7 +2,7 @@ import { Effect, Exit } from "effect";
 
 import { readAmount } from "./amount";
 import type { AmountSyntax } from "./amount";
-import { normalizeHeader } from "./csv";
+import { normalizeHeader, readCsvHeader } from "./csv";
 import { dayReader, MAX_SKIP_ROWS } from "./csv-profile";
 import type { CsvProfile } from "./csv-profile";
 import { decodeDetected, parseRows } from "./csv-parse";
@@ -423,26 +423,35 @@ export const detectCsvProfile = (bytes: Uint8Array): Effect.Effect<CsvProposal, 
       unsure.push("amount");
     }
 
-    return {
-      profile: {
-        version: 1,
-        separator: table.separator,
-        encoding,
-        skipRows: table.skipped,
-        headerRow,
-        dateFormat,
-        decimalMark,
-        columns: {
-          bookedOn: booked.column,
-          valueOn: valueOn?.column ?? null,
-          amount: layout.amount,
-          label: label.column,
-          memo: memo?.column ?? null,
-          bankId: bankId?.column ?? null,
-          currency: currency?.column ?? null,
-        },
+    const profile: CsvProfile = {
+      version: 1,
+      separator: table.separator,
+      encoding,
+      skipRows: table.skipped,
+      headerRow,
+      dateFormat,
+      decimalMark,
+      columns: {
+        bookedOn: booked.column,
+        valueOn: valueOn?.column ?? null,
+        amount: layout.amount,
+        label: label.column,
+        memo: memo?.column ?? null,
+        bankId: bankId?.column ?? null,
+        currency: currency?.column ?? null,
       },
-      header: headerRow ? normalizeHeader(firstRow.cells.map((cell) => cell.text)) : null,
-      unsure,
     };
+
+    const header = headerRow ? normalizeHeader(firstRow.cells.map((cell) => cell.text)) : null;
+
+    // A profile recognises its files by the header `readCsvHeader` reads, which looks for it within
+    // the file's top only (`HEADER_SEARCH`): a header past it (under many blank lines, or much text)
+    // would be proposed, then never found again. Read on the text already decoded.
+    const found = yield* readCsvHeader({ text: () => Effect.succeed(text) }, profile);
+
+    if (found !== header) {
+      return yield* notCsv;
+    }
+
+    return { profile, header, unsure };
   });

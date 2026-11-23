@@ -1,10 +1,19 @@
-import { queryOptions } from "@tanstack/react-query";
+import type { CsvProfile } from "@gousset/import";
+import { keepPreviousData, queryOptions } from "@tanstack/react-query";
 
-import { getCsvQuestions, getImport, getImportAccounts, listImports } from "@/functions/imports";
+import { getImportProfilesFor, listImportProfiles } from "@/functions/import-profiles";
+import {
+  getCsvPreview,
+  getCsvQuestions,
+  getImport,
+  getImportAccounts,
+  listImports,
+} from "@/functions/imports";
 
 /**
  * The imports domain's query keys (docs/architecture.md, "Data loading and skeletons"): the list,
- * each import, the accounts a file may go to, and a waiting CSV's questions.
+ * each import, the accounts a file may go to, a waiting CSV's questions and its preview with a
+ * profile, and the import profiles.
  */
 export const importKeys = {
   all: ["import"] as const,
@@ -12,6 +21,10 @@ export const importKeys = {
   one: (id: string) => [...importKeys.all, "one", id] as const,
   accounts: () => [...importKeys.all, "accounts"] as const,
   csv: (id: string) => [...importKeys.all, "csv", id] as const,
+  preview: (id: string, profile: CsvProfile) =>
+    [...importKeys.all, "preview", id, profile] as const,
+  profiles: () => [...importKeys.all, "profiles"] as const,
+  profilesFor: (id: string) => [...importKeys.profiles(), id] as const,
 };
 
 export const importQueries = {
@@ -36,5 +49,28 @@ export const importQueries = {
       queryKey: importKeys.csv(id),
       queryFn: () => getCsvQuestions({ data: { importId: id } }),
       staleTime: Infinity,
+    }),
+  /**
+   * The file read with the profile being made: the last result stays shown while the next one is
+   * read, so that the preview does not blink at each change.
+   */
+  preview: (id: string, profile: CsvProfile) =>
+    queryOptions({
+      queryKey: importKeys.preview(id, profile),
+      queryFn: () => getCsvPreview({ data: { importId: id, profile } }),
+      staleTime: Infinity,
+      placeholderData: keepPreviousData,
+    }),
+  /** The user's profiles, then the shipped ones. */
+  profiles: () =>
+    queryOptions({
+      queryKey: importKeys.profiles(),
+      queryFn: () => listImportProfiles(),
+    }),
+  /** The profiles that read the import's file. */
+  profilesFor: (id: string) =>
+    queryOptions({
+      queryKey: importKeys.profilesFor(id),
+      queryFn: () => getImportProfilesFor({ data: { importId: id } }),
     }),
 };

@@ -55,6 +55,23 @@ export const getCsvQuestions = createServerFn({ method: "GET" })
   );
 
 /**
+ * A waiting CSV import's file read with a profile made or chosen on the screen: its first rows, its
+ * header, and a test read; `null` for no such import.
+ */
+export const getCsvPreview = createServerFn({ method: "GET" })
+  .middleware([signedIn])
+  .validator(
+    Schema.toStandardSchemaV1(Schema.Struct({ importId: Schema.String, profile: CsvProfile })),
+  )
+  .handler(({ data, context }) =>
+    runCore(
+      Imports.use((imports) => imports.csvPreview(context.owner, data.importId, data.profile)).pipe(
+        Effect.catchTag("ImportNotFound", () => Effect.succeed(null)),
+      ),
+    ),
+  );
+
+/**
  * Runs a waiting or failed import again with the user's answers: its account, how to read it (a
  * definition made on the screen, or a profile chosen by id or key).
  */
