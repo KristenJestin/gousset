@@ -1,0 +1,37 @@
+{
+  "type": "diff",
+  "version": "10",
+  "dialect": "postgres",
+  "id": "95c3a4d9-b0d4-4859-b95b-acf81329c0c8",
+  "prevIds": ["eb197cf6-6e97-4193-9b58-8824f81d6222"],
+  "footprints": [
+    {
+      "statementType": "add_column",
+      "statementTarget": ["column", "public", "auth_user", "color_scheme"],
+      "writes": [
+        "s|col|public.auth_user.color_scheme",
+        "n|col|public.auth_user.color_scheme",
+        "e|col|public.auth_user.color_scheme"
+      ],
+      "reads": ["n|tbl|public.auth_user", "n|sch|public"]
+    }
+  ],
+  "deltas": [
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "auth_user",
+        "name": "color_scheme",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "'system'",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    }
+  ]
+}

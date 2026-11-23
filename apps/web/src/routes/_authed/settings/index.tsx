@@ -19,6 +19,7 @@ import {
   setMcpDoor,
 } from "@/functions/mcp";
 import { errorMessage } from "@/i18n/messages";
+import { keepColorScheme } from "@/lib/account-color-scheme";
 import { refusalOf } from "@/lib/refusal";
 import { whileBusy } from "@/lib/while-busy";
 
@@ -61,6 +62,7 @@ function GeneralSettings() {
             light: m.colorSchemeLight(),
             dark: m.colorSchemeDark(),
           }}
+          onChange={(scheme) => void keepColorScheme(scheme)}
         />
       </Block>
       <McpSettings />

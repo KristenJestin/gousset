@@ -7,6 +7,7 @@ import { UserMenu } from "@gousset/ui/components/user-menu";
 import { useLocation, useNavigate } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 
+import { keepColorScheme } from "@/lib/account-color-scheme";
 import { authClient } from "@/lib/auth-client";
 
 import { AppNavLink, AppTabLink } from "./app-link";
@@ -87,6 +88,7 @@ export function Frame({ user, children }: FrameProps) {
               light: m.colorSchemeLight(),
               dark: m.colorSchemeDark(),
             }}
+            onColorSchemeChange={(scheme) => void keepColorScheme(scheme)}
           >
             {account}
           </UserMenu>

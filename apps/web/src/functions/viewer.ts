@@ -1,10 +1,12 @@
 import { createServerFn } from "@tanstack/react-start";
 import { getCookie, getRequestHeaders } from "@tanstack/react-start/server";
-import { Effect } from "effect";
+import { Effect, Schema } from "effect";
 
 import { monthOfDay } from "@/lib/month";
 import { E2E_DAY_COOKIE, today } from "@/lib/today";
 import { auth } from "@/services";
+
+import { ColorSchemeChoice } from "./color-scheme";
 
 /**
  * Who is looking, whether the installation has its administrator yet, and, signed in, the current
@@ -27,6 +29,10 @@ export const getViewer = createServerFn({ method: "GET" }).handler(() =>
           user: {
             name: user.name,
             email: user.email,
+            // One of the three, whatever the column holds: it goes into the page's inline script.
+            colorScheme: Schema.is(ColorSchemeChoice)(user.colorScheme)
+              ? user.colorScheme
+              : "system",
             isAdmin: user.role === "admin",
             mustChangePassword: user.mustChangePassword === true,
           },
