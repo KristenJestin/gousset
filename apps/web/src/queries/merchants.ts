@@ -11,6 +11,12 @@ const PAGE_MERCHANTS = 50;
 /** How many names a name field offers while the user types. */
 const SUGGESTED = 8;
 
+/**
+ * The merchants a rule's picker offers, found by typing among them: the most the server lists at
+ * once (`MAX_MERCHANTS_LISTED`), more than one person's merchants.
+ */
+const CHOICES = 500;
+
 /** The queries of the merchants pages, for their loaders and components alike. */
 export const merchantQueries = {
   /**
@@ -38,6 +44,16 @@ export const merchantQueries = {
       },
       enabled: text.trim() !== "",
       placeholderData: keepPreviousData,
+    }),
+  /** The merchants a rule may set, by name: the first `CHOICES`. */
+  choices: () =>
+    queryOptions({
+      queryKey: merchantKeys.choices(),
+      queryFn: async () => {
+        const page = await getMerchants({ data: { limit: CHOICES } });
+
+        return page.merchants.map((merchant) => ({ id: merchant.id, name: merchant.name }));
+      },
     }),
   /** One merchant's page; one the user does not have comes back as `{ ok: false, code }`. */
   detail: (merchantId: string) =>

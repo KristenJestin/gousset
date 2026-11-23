@@ -118,6 +118,48 @@ export function merchantRefusalMessage(code: string, name?: string): string {
   }
 }
 
+/**
+ * A refusal of a rule's read or change (`RuleRefusalCode`), by its code; `index` is the condition
+ * it is about (from 0), when one is the cause; `limit` the server's limit a refusal names (the most
+ * conditions, the most rules).
+ */
+export function ruleRefusalMessage(
+  code: string,
+  index: number | null = null,
+  limit: number | null = null,
+): string {
+  const condition = (index ?? 0) + 1;
+
+  switch (code) {
+    case "RULE_NOT_FOUND":
+      return m.ruleRefusalNotFound();
+    case "CONDITIONS_EMPTY":
+      return m.ruleRefusalConditionsEmpty();
+    case "CONDITIONS_TOO_MANY":
+      return m.ruleRefusalConditionsTooMany({ max: limit ?? 0 });
+    case "CONDITION_INVALID":
+      return m.ruleRefusalConditionInvalid({ index: condition });
+    case "CONDITION_UNKNOWN_ACCOUNT":
+      return m.ruleRefusalUnknownAccount({ index: condition });
+    case "NOTHING_SET":
+      return m.ruleRefusalNothingSet();
+    case "CATEGORY_ARCHIVED":
+      return m.ruleRefusalCategoryArchived();
+    case "CATEGORY_NOT_FOUND":
+      return m.ruleRefusalCategoryNotFound();
+    case "MERCHANT_NOT_FOUND":
+      return m.ruleRefusalMerchantNotFound();
+    case "TOO_MANY_RULES":
+      return m.ruleRefusalTooMany({ max: limit ?? 0 });
+    case "JOB_UNAVAILABLE":
+      return m.ruleRefusalJobUnavailable();
+    case "LINE_NOT_FOUND":
+      return m.ruleRefusalLineNotFound();
+    default:
+      return m.errorUnknown();
+  }
+}
+
 /** The message for a refusal of better-auth or of Gousset, by its code. */
 export function errorMessage(code: string | undefined): string {
   switch (code) {

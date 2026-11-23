@@ -11,6 +11,8 @@ export const merchantKeys = {
   list: (text: string) => [...merchantKeys.lists(), text] as const,
   /** The names a name field offers for `text`. */
   names: (text: string) => [...merchantKeys.all, "names", text] as const,
+  /** The merchants a rule may set, by name. */
+  choices: () => [...merchantKeys.all, "choices"] as const,
   details: () => [...merchantKeys.all, "detail"] as const,
   detail: (merchantId: string) => [...merchantKeys.details(), merchantId] as const,
 };

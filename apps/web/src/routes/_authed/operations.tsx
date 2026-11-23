@@ -30,6 +30,8 @@ import { createFileRoute } from "@tanstack/react-router";
 import { Schema } from "effect";
 import { useState } from "react";
 
+import { ProposedRule } from "@/components/proposed-rule";
+import { RuleJobNotice } from "@/components/rule-job";
 import { classifyLine, pairLine, unpairLine } from "@/functions/lines";
 import type { TransferRefusalCode } from "@/functions/lines";
 import { categoryRefusalMessage } from "@/i18n/messages";
@@ -208,6 +210,9 @@ function Operations() {
   );
 
   const openId = search.line;
+  // Rules a correction proposed and applied to the past: a toast follows each one's job, the line
+  // closed or not.
+  const [ruleJobs, setRuleJobs] = useState<ReadonlyArray<string>>([]);
 
   const { data: opened } = useQuery({
     ...lineQueries.detail(openId ?? ""),
@@ -300,11 +305,15 @@ function Operations() {
               locale={locale}
               onOpen={openLine}
               onClose={close}
+              onRuleJob={(jobId) => setRuleJobs([...ruleJobs, jobId])}
             />
           )
         }
         locale={locale}
       />
+      {ruleJobs.map((jobId) => (
+        <RuleJobNotice key={jobId} jobId={jobId} />
+      ))}
     </Page>
   );
 }
@@ -335,13 +344,27 @@ function accountChoices(list: AccountList | undefined, nameOf: (account: LineAcc
 /**
  * The open line's category, chosen among the categories of its kind in use (its own too, when it
  * is archived: the line keeps it). The choice shows at once; refused, it goes back to the line's
- * and a toast says why. Done, the lines and the categories are read again.
+ * and a toast says why. Done, the lines and the categories are read again, and a rule is proposed
+ * for the lines like it (#25), applied to the past through `onRuleJob`'s job if the user wants.
  */
-function LineCategoryPicker({ line }: { line: Line }) {
+function LineCategoryPicker({
+  line,
+  onRuleJob,
+}: {
+  line: Line;
+  onRuleJob: (jobId: string) => void;
+}) {
   const queryClient = useQueryClient();
   const { data: tree } = useQuery(categoryQueries.list());
   const current = line.category;
   const [chosen, setChosen] = useState(current?.id ?? null);
+
+  // The rule the last correction proposes, each correction a new proposal.
+  const [proposal, setProposal] = useState<{
+    categoryId: string;
+    category: string;
+    turn: number;
+  }>();
 
   if (current === null) {
     return null;
@@ -379,17 +402,33 @@ function LineCategoryPicker({ line }: { line: Line }) {
     }
 
     await invalidateCategories(queryClient);
+    setProposal({
+      categoryId,
+      category: categoryPath(answer.category),
+      turn: (proposal?.turn ?? 0) + 1,
+    });
   }
 
   return (
-    <CategoryPicker
-      label={m.operationsCategory()}
-      placeholder={m.categoriesSearch()}
-      size="sm"
-      categories={categories}
-      value={chosen}
-      onValueChange={(categoryId) => void choose(categoryId)}
-    />
+    <>
+      <CategoryPicker
+        label={m.operationsCategory()}
+        placeholder={m.categoriesSearch()}
+        size="sm"
+        categories={categories}
+        value={chosen}
+        onValueChange={(categoryId) => void choose(categoryId)}
+      />
+      {proposal === undefined ? null : (
+        <ProposedRule
+          key={proposal.turn}
+          lineId={line.id}
+          categoryId={proposal.categoryId}
+          category={proposal.category}
+          onApplied={onRuleJob}
+        />
+      )}
+    </>
   );
 }
 
@@ -561,6 +600,7 @@ function OpenLine({
   locale,
   onOpen,
   onClose,
+  onRuleJob,
 }: {
   line: Line;
   transfer: Transfer;
@@ -568,13 +608,19 @@ function OpenLine({
   locale: string;
   onOpen: (id: string) => void;
   onClose: () => void;
+  /** A rule its correction proposed was applied to the past: its job. */
+  onRuleJob: (jobId: string) => void;
 }) {
   const twin = line.duplicateOf;
   const source = line.import;
 
   return (
     <LineDetail
-      category={line.category === null ? undefined : <LineCategoryPicker line={line} />}
+      category={
+        line.category === null ? undefined : (
+          <LineCategoryPicker line={line} onRuleJob={onRuleJob} />
+        )
+      }
       id={line.id}
       label={line.label}
       amount={line.amount}
