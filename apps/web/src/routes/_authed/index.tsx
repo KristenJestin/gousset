@@ -2,6 +2,7 @@ import type { Flag, Money } from "@gousset/core";
 import { SpendingGroup, addMonths } from "@gousset/core/values";
 import { m } from "@gousset/i18n/messages";
 import { getLocale } from "@gousset/i18n/runtime";
+import type { Locale } from "@gousset/i18n/runtime";
 import { Count } from "@gousset/ui/components/amount";
 import { Page } from "@gousset/ui/components/app-shell";
 import { Breakdown, BreakdownSkeleton } from "@gousset/ui/components/breakdown";
@@ -61,39 +62,32 @@ const FLAG_ICONS = {
 
 const dateOf = (day: string) => new Date(`${day}T00:00:00Z`);
 
-/** One formatter per language, built once: building one is slow, and a render may need many. */
-function perLocale<Made>(make: (locale: string) => Made) {
-  const made = new Map<string, Made>();
+// The formatters, one per language, built once when the module loads: building one is slow, and
+// a render may need many.
+const shortDays = {
+  en: new Intl.DateTimeFormat("en-GB", { day: "numeric", month: "short", timeZone: "UTC" }),
+  fr: new Intl.DateTimeFormat("fr", { day: "numeric", month: "short", timeZone: "UTC" }),
+} satisfies { [Language in Locale]: Intl.DateTimeFormat };
 
-  return (locale: string) => {
-    const known = made.get(locale) ?? make(locale);
+const plurals = {
+  en: new Intl.PluralRules("en"),
+  fr: new Intl.PluralRules("fr"),
+} satisfies { [Language in Locale]: Intl.PluralRules };
 
-    made.set(locale, known);
+const lists = {
+  en: new Intl.ListFormat("en", { type: "conjunction" }),
+  fr: new Intl.ListFormat("fr", { type: "conjunction" }),
+} satisfies { [Language in Locale]: Intl.ListFormat };
 
-    return known;
-  };
-}
-
-const shortDays = perLocale(
-  (locale) =>
-    new Intl.DateTimeFormat(locale === "en" ? "en-GB" : locale, {
-      day: "numeric",
-      month: "short",
-      timeZone: "UTC",
-    }),
-);
-
-const plurals = perLocale((locale) => new Intl.PluralRules(locale));
-const lists = perLocale((locale) => new Intl.ListFormat(locale, { type: "conjunction" }));
-
-const monthNames = perLocale(
-  (locale) => new Intl.DateTimeFormat(locale, { month: "long", timeZone: "UTC" }),
-);
+const monthNames = {
+  en: new Intl.DateTimeFormat("en", { month: "long", timeZone: "UTC" }),
+  fr: new Intl.DateTimeFormat("fr", { month: "long", timeZone: "UTC" }),
+} satisfies { [Language in Locale]: Intl.DateTimeFormat };
 
 /** "24 Oct", "24 oct.": a day in the page's language. */
-const shortDay = (day: string, locale: string) => shortDays(locale).format(dateOf(day));
+const shortDay = (day: string, locale: Locale) => shortDays[locale].format(dateOf(day));
 
-const isOne = (count: number, locale: string) => plurals(locale).select(count) === "one";
+const isOne = (count: number, locale: Locale) => plurals[locale].select(count) === "one";
 
 export const Route = createFileRoute("/_authed/")({
   validateSearch: monthSearch,
@@ -273,7 +267,7 @@ function Summary({ month }: { month: string }) {
       saved={data.setAside}
       left={data.left}
       restricted={data.restricted}
-      note={lists(locale).format(data.receivedFrom)}
+      note={lists[locale].format(data.receivedFrom)}
       comparison={
         data.averageSpent === null ? undefined : (
           <>
@@ -369,7 +363,7 @@ function RowChart({ month, by, name }: { month: string; by: SpendingGroup; name:
   const { data } = useSuspenseQuery(monthQueries.spendingDays(month, by, name));
 
   const monthName = (offset: number) =>
-    monthNames(locale).format(dateOf(`${addMonths(month, offset)}-01`));
+    monthNames[locale].format(dateOf(`${addMonths(month, offset)}-01`));
 
   return (
     <SpendingChart
@@ -458,7 +452,7 @@ function ToReview({ month }: { month: string }) {
 }
 
 /** A flag as the page says it: its key, its icon and its sentence. */
-function flagRow(flag: Flag, locale: string) {
+function flagRow(flag: Flag, locale: Locale) {
   const amount = (value: Money) => formatMoney(value, { locale });
 
   switch (flag.kind) {
