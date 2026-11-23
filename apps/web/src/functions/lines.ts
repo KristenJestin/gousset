@@ -1,12 +1,18 @@
 import {
   MAX_SEARCH_LINES,
+  MAX_SHARES,
   classifyLine as classifyCoreLine,
+  lineExpensesOf,
   lineTransferOf,
+  linkLine as linkCoreLine,
   pairLines,
   searchLines,
   showLine,
+  splitLine as splitCoreLine,
+  unlinkLine as unlinkCoreLine,
   unpairLine as unpairCoreLine,
 } from "@gousset/core";
+import type { LinkRefused } from "@gousset/core";
 import { AccountId } from "@gousset/core/account-values";
 import { MAX_FILTER_TEXT } from "@gousset/ui/lib/operations";
 import { createServerFn } from "@tanstack/react-start";
@@ -86,8 +92,9 @@ export const getLines = createServerFn({ method: "GET" })
   );
 
 /**
- * One line with all that is known of it, and its transfer: the other side it is paired with, or the
- * lines that may be its other side. A line the user does not have comes back as a code.
+ * One line with all that is known of it, its transfer (the other side it is paired with, or the
+ * lines that may be its other side) and its expense (the expense of several lines it is part of,
+ * its split, or the expenses it may refund). A line the user does not have comes back as a code.
  */
 export const getLine = createServerFn({ method: "GET" })
   .middleware([signedIn, slowedInDevelopment])
@@ -97,8 +104,14 @@ export const getLine = createServerFn({ method: "GET" })
       Effect.all([
         showLine(context.owner, data.lineId),
         lineTransferOf(context.owner, data.lineId),
+        lineExpensesOf(context.owner, data.lineId),
       ]).pipe(
-        Effect.map(([line, transfer]) => ({ ok: true as const, line, transfer })),
+        Effect.map(([line, transfer, expenses]) => ({
+          ok: true as const,
+          line,
+          transfer,
+          expenses,
+        })),
         Effect.catchTags({
           LineNotFound: () => refused("LINE_NOT_FOUND"),
         }),
@@ -183,6 +196,107 @@ export const unpairLine = createServerFn({ method: "POST" })
         Effect.catchTags({
           LineNotFound: () => transferRefused("LINE_NOT_FOUND"),
           NotATransfer: () => transferRefused("NOT_A_TRANSFER"),
+        }),
+      ),
+    ),
+  );
+
+/**
+ * Why linking, unlinking or splitting a line was refused, as a code for the interface to translate:
+ * the line is gone; a side of a transfer, a split line, a line of another expense, a line in it
+ * already, a refund above the net cost or another currency (`LINK_*`); shares that do not make the
+ * line, in categories of its kind in use (`SPLIT_REFUSED`); a line that is its expense alone
+ * (`NOT_LINKED`).
+ */
+export type ExpenseRefusalCode =
+  | "LINE_NOT_FOUND"
+  | "LINK_TRANSFER"
+  | "LINK_SPLIT"
+  | "LINK_LINKED"
+  | "LINK_ALREADY_LINKED"
+  | "LINK_EXCEEDS"
+  | "LINK_CURRENCY"
+  | "LINK_OTHER"
+  | "SPLIT_REFUSED"
+  | "NOT_LINKED";
+
+const expenseRefused = (code: ExpenseRefusalCode) => Effect.succeed({ ok: false as const, code });
+
+const LINK_CODES = {
+  same_line: "LINK_OTHER",
+  not_counted: "LINK_OTHER",
+  zero_amount: "LINK_OTHER",
+  made_from_balance: "LINK_OTHER",
+  transfer: "LINK_TRANSFER",
+  split: "LINK_SPLIT",
+  linked: "LINK_LINKED",
+  already_linked: "LINK_ALREADY_LINKED",
+  currency: "LINK_CURRENCY",
+  exceeds: "LINK_EXCEEDS",
+} as const satisfies { readonly [Reason in LinkRefused["reason"]]: ExpenseRefusalCode };
+
+/**
+ * Makes the line a part of the expense of `intoId`, another line: a payment when its money goes
+ * the expense's way, a refund otherwise. Answers the expense as it is now; refused with a code.
+ */
+export const linkLine = createServerFn({ method: "POST" })
+  .middleware([signedIn, slowedInDevelopment])
+  .validator(Schema.toStandardSchemaV1(Schema.Struct({ lineId: LineId, intoId: LineId })))
+  .handler(({ data, context }) =>
+    runCore(
+      linkCoreLine(context.owner, data.lineId, data.intoId).pipe(
+        Effect.map((linked) => ({ ok: true as const, linked })),
+        Effect.catchTags({
+          LineNotFound: () => expenseRefused("LINE_NOT_FOUND"),
+          LinkRefused: (refusal) => expenseRefused(LINK_CODES[refusal.reason]),
+        }),
+      ),
+    ),
+  );
+
+/** Takes the line out of its expense of several lines: it counts on its own again. */
+export const unlinkLine = createServerFn({ method: "POST" })
+  .middleware([signedIn, slowedInDevelopment])
+  .validator(Schema.toStandardSchemaV1(Schema.Struct({ lineId: LineId })))
+  .handler(({ data, context }) =>
+    runCore(
+      unlinkCoreLine(context.owner, data.lineId).pipe(
+        Effect.map((expenses) => ({ ok: true as const, expenses })),
+        Effect.catchTags({
+          LineNotFound: () => expenseRefused("LINE_NOT_FOUND"),
+          NotLinked: () => expenseRefused("NOT_LINKED"),
+        }),
+      ),
+    ),
+  );
+
+/** A share's amount, typed in major units of the line's currency ("30", "12.50"). */
+const ShareAmount = Schema.String.check(Schema.isMaxLength(32));
+
+/**
+ * Splits the line across categories, one share each, as the user's choice; the shares add up to the
+ * line. One share puts it back in one category. Refused with a code.
+ */
+export const splitLine = createServerFn({ method: "POST" })
+  .middleware([signedIn, slowedInDevelopment])
+  .validator(
+    Schema.toStandardSchemaV1(
+      Schema.Struct({
+        lineId: LineId,
+        shares: Schema.Array(Schema.Struct({ categoryId: CategoryId, amount: ShareAmount })).check(
+          Schema.isMaxLength(MAX_SHARES),
+        ),
+      }),
+    ),
+  )
+  .handler(({ data, context }) =>
+    runCore(
+      splitCoreLine(context.owner, data.lineId, data.shares).pipe(
+        Effect.map((expenses) => ({ ok: true as const, expenses })),
+        Effect.catchTags({
+          LineNotFound: () => expenseRefused("LINE_NOT_FOUND"),
+          SplitRefused: () => expenseRefused("SPLIT_REFUSED"),
+          CategoryNotFound: () => expenseRefused("SPLIT_REFUSED"),
         }),
       ),
     ),

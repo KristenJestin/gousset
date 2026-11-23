@@ -15,4 +15,7 @@ export const lineKeys = {
   search: (filters: LineFilters) => [...lineKeys.searches(), filters] as const,
   details: () => [...lineKeys.all, "detail"] as const,
   detail: (lineId: string) => [...lineKeys.details(), lineId] as const,
+  /** The lines a line may be linked to, as its dialog searches them (#27). */
+  linkCandidates: (lineId: string, text: string) =>
+    [...lineKeys.all, "link-candidates", lineId, text] as const,
 };

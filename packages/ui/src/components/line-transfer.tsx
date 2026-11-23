@@ -56,8 +56,8 @@ export type LineTransferCandidatesProps = {
   locale?: string;
 };
 
-/** A side's label, day, account and amount, on one row. */
-function Side({ side, locale }: { side: TransferSideView; locale: string }) {
+/** A line's label, day, account and amount, on one row: a transfer's side, an expense's part. */
+export function Side({ side, locale }: { side: TransferSideView; locale: string }) {
   return (
     <span className="flex min-w-0 flex-1 items-center justify-between gap-3 text-sm">
       <span className="flex min-w-0 flex-col">

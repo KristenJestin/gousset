@@ -1,6 +1,9 @@
 import { Result } from "effect";
 
 import { shiftDay } from "../transfers/pairing";
+import { MAX_SHARES } from "../values";
+
+export { MAX_SHARES } from "../values";
 
 // An expense made of parts of lines (#27; docs/vision.md, "An expense is not a bank line"): the
 // rules alone, on values already read, so that the line's detail, linking, splitting and the
@@ -11,9 +14,6 @@ import { shiftDay } from "../transfers/pairing";
 export type PartRole = "payment" | "refund";
 
 export type EntryKind = "expense" | "income";
-
-/** How many categories one line may be split across. */
-export const MAX_SHARES = 20;
 
 /** How many days after a purchase a line coming back may be its cancellation, proposed as a refund. */
 export const REFUND_DAYS = 60;
