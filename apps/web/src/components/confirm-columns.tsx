@@ -230,7 +230,7 @@ function ColumnsPreview({
 
     const answer = await saveImportProfile({
       data: {
-        name: name.slice(0, MAX_PROFILE_NAME),
+        name,
         institution: null,
         definition: draft.profile,
         header: preview?.header ?? null,
