@@ -123,7 +123,8 @@ function NewSearch() {
 
 /**
  * Every statement line, newest first (screen 2, block 2): its day, its raw label with a "To
- * review" chip on a held line, its account (from a tablet's width) and its amount, in tabular
+ * review" chip on a held line, its category with `withCategory` (from a laptop's width), its
+ * account (from a tablet's width) and its amount, in tabular
  * figures. A row opens the line, by press, Enter or Space. Virtualised with ui-sdk: only the rows
  * in view are in the page, 48 px each, in a scroller of its own that fills the block the page
  * gives it; `onEnd` asks for the next page and `loadingMore` says it is coming.
@@ -160,6 +161,17 @@ export const Default: Story = { render: () => <Opening rows={ROWS} /> };
 
 /** Ten thousand generated lines: a few dozen rows in the page at any time. */
 export const TenThousandRows: Story = { render: () => <Opening rows={TEN_THOUSAND} /> };
+
+/** Each line's category, in a column of its own from a laptop's width. */
+export const WithCategory: Story = {
+  args: {
+    withCategory: true,
+    rows: ROWS.map((row, index) => ({
+      ...row,
+      category: ["Groceries › Supermarket", "Housing › Rent", "Other"][index % 3],
+    })),
+  },
+};
 
 /** A line open: its row is marked and kept in the page wherever the list is scrolled. */
 export const LineOpen: Story = { args: { openId: "line-3" } };

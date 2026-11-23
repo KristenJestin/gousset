@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import type { ReactNode } from "react";
 
 import { InFrench } from "../stories/in-french";
+import { CategoryPicker } from "./category-picker";
 import { LineDetail, LineDetailSkeleton } from "./line-detail";
 
 const eur = (minor: number) => ({ minor, currency: "EUR" });
@@ -15,8 +16,9 @@ function Column({ children }: { children: ReactNode }) {
  * One line's detail (screen 2, block 3): its label and amount, its account, the day it was booked
  * and its value date, the bank's raw label (fixed-width) with its memo and counterparty, the
  * original amount of a line in another currency, its expiry, "To review: looks like …" on a held
- * line, and the import it came from or "Entered by hand". Every value comes worded from the page;
- * the close button or Escape closes it.
+ * line, and the import it came from or "Entered by hand"; first, a counted line's category, through
+ * the control the page gives (`category`, a `CategoryPicker`). Every value comes worded from the
+ * page; the close button or Escape closes it.
  *
  * Loading: `LineDetailSkeleton`, its title, amount and rows at the same heights.
  *
@@ -24,8 +26,8 @@ function Column({ children }: { children: ReactNode }) {
  * ease-out), its content fading in after 100 ms, and folds back into the row on close (see
  * `OperationsLayout`). Drawn by the server, it stays still. Cut under reduced motion.
  *
- * Don't: show it without its row's id (the shared layout pairs them), or edit the line in it:
- * v0.2's lines are read only.
+ * Don't: show it without its row's id (the shared layout pairs them), or edit the line's own
+ * figures in it: the bank's are read only; only its category is chosen.
  */
 const meta = {
   title: "Operations/LineDetail",
@@ -60,6 +62,29 @@ type Story = StoryObj<typeof meta>;
 
 /** A line from an imported statement. */
 export const Imported: Story = {};
+
+/** A counted line: its category first, chosen with a `CategoryPicker`. */
+export const WithCategory: Story = {
+  args: {
+    category: (
+      <CategoryPicker
+        label="Category"
+        placeholder="Search a category"
+        size="sm"
+        categories={[
+          {
+            id: "groceries",
+            name: "Groceries",
+            children: [{ id: "supermarket", name: "Supermarket" }],
+          },
+          { id: "other", name: "Other" },
+        ]}
+        value="supermarket"
+        onValueChange={() => undefined}
+      />
+    ),
+  },
+};
 
 /** A line held for review: the line it looks like comes first. */
 export const ToReview: Story = {

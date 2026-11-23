@@ -46,6 +46,8 @@ export type LineDetailProps = {
   looksLike?: string;
   /** The import it came from; left out, the line was entered by hand. */
   importedFrom?: LineImport;
+  /** Its category, to see and change: a `CategoryPicker`; left out for a line with none. */
+  category?: ReactNode;
   onClose: () => void;
   /** The page's language (`<html lang>`) unless given. */
   locale?: string;
@@ -68,7 +70,8 @@ function DetailGroup({ children }: { children: ReactNode }) {
  * One line's detail (docs/wireframes, screen 2, block 3): its label and amount, its account, the
  * day it was booked and its value date, the bank's raw label (fixed-width) with its memo and
  * counterparty, the original amount when it was in another currency, its expiry, "To review:
- * looks like …" on a held line, and the import it came from or "Entered by hand". Every text comes
+ * looks like …" on a held line, and the import it came from or "Entered by hand"; first, its
+ * category, through the control the page gives (`category`). Every text comes
  * worded from the page. The close button or Escape closes it; the focus goes into it when it opens.
  * `OperationsLayout` sets it beside the list on a wide screen and over it on a phone.
  *
@@ -92,6 +95,7 @@ export function LineDetail({
   expiresOn,
   looksLike,
   importedFrom,
+  category,
   onClose,
   locale,
 }: LineDetailProps) {
@@ -121,6 +125,7 @@ export function LineDetail({
 
   const content = (
     <>
+      {category === undefined ? null : <div data-slot="line-category">{category}</div>}
       {looksLike === undefined ? null : (
         <p className="rounded-md bg-muted px-3 py-2 text-sm text-foreground">
           {words.looksLike(looksLike)}
