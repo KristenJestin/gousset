@@ -9,7 +9,7 @@ import { Effect, Schema } from "effect";
 import fc from "fast-check";
 import { describe, expect, test } from "vite-plus/test";
 
-import { readCsv, readCsvHeader } from "./csv";
+import { csvFile, previewCsvRows, readCsv, readCsvHeader, testReadCsv } from "./csv";
 import { detectCsvProfile } from "./csv-detect";
 import { CsvProfile, dayReader } from "./csv-profile";
 import {
@@ -129,6 +129,13 @@ const refusal = (text: string, profile: CsvProfile = semicolon) =>
 const detect = (bytes: Uint8Array) => Effect.runSync(detectCsvProfile(bytes));
 
 const detectText = (text: string) => detect(utf8.encode(text));
+
+const headerOf = (bytes: Uint8Array, profile: CsvProfile) =>
+  Effect.runSync(readCsvHeader(csvFile(bytes), profile));
+
+/** Rows of other widths than a three-column table's: the table is still the one most rows agree on. */
+const linesAbove = (count: number) =>
+  Array.from({ length: count }, (_, n) => ["a", "a;b", "a;b;c;d", "a;b;c;d;e"][n % 4]);
 
 function line(bookedOn: string, amountMinor: number, label: string) {
   return {
@@ -310,11 +317,11 @@ describe("reading CSV files with a profile", () => {
   });
 
   test("gives the normalised header a profile keeps to recognise its files", () => {
-    expect(Effect.runSync(readCsvHeader(csvSamples.csvDebitCredit.bytes, debitCredit))).toBe(
+    expect(headerOf(csvSamples.csvDebitCredit.bytes, debitCredit)).toBe(
       "date;date de valeur;libellé;débit;crédit",
     );
 
-    expect(Effect.runSync(readCsvHeader(csvSamples.csvTabNoHeader.bytes, tabNoHeader))).toBeNull();
+    expect(headerOf(csvSamples.csvTabNoHeader.bytes, tabNoHeader)).toBeNull();
   });
 });
 
@@ -336,9 +343,14 @@ describe("an import profile as a file", () => {
       { ...semicolon, dateFormat: "DD/MM-YYYY" },
       { ...semicolon, separator: "#" },
       { ...semicolon, version: 2 },
+      { ...semicolon, skipRows: 101 },
     ]) {
       expect(() => decode(JSON.stringify(wrong))).toThrow();
     }
+  });
+
+  test("skips 100 lines at most above the table", () => {
+    expect(decode(JSON.stringify({ ...debitCredit, skipRows: 100 })).skipRows).toBe(100);
   });
 });
 
@@ -419,8 +431,9 @@ describe("refusing a CSV file", () => {
 
     expect(refusal("")).toEqual(none);
 
-    // A file of line breaks alone builds no row (README, "Errors"), however large it is.
-    const blank = new Uint8Array(8 * 1024 * 1024).fill(0x0a);
+    // A file of line breaks alone builds no row (README, "Errors"), however large it is: this one
+    // is past every bound of the header search (100 lines, 64 KiB), which is all the test needs.
+    const blank = new Uint8Array(256 * 1024).fill(0x0a);
 
     expect(Effect.runSync(Effect.flip(readCsv(blank, semicolon, { currency: "EUR" })))).toEqual(
       none,
@@ -740,10 +753,101 @@ describe("proposing a profile from a CSV file", () => {
   test("reads the first 2,000 lines at most", () => {
     const table = "Date;Libellé;Montant\n13/11/2026;A;-12,00\n";
 
-    expect(detectText(`${"\n".repeat(1990)}${table}`).profile.skipRows).toBe(1990);
+    // Blank lines are read past without being skipped: the reader leaves them out.
+    expect(detectText(`${"\n".repeat(90)}${table}`).profile.skipRows).toBe(0);
 
     expect(
       Effect.runSync(Effect.flip(detectCsvProfile(utf8.encode(`${";\n".repeat(2000)}${table}`)))),
     ).toEqual(new NotAStatement({ format: "csv" }));
+  });
+
+  test("proposes no table under more than 100 lines it would skip", () => {
+    const lines = Array.from({ length: 60 }, () => "13/11/2026;A;-12,00");
+    const table = ["Date;Libellé;Montant", ...lines].join("\n");
+
+    expect(detectText(`${linesAbove(100).join("\n")}\n\n\n${table}\n`).profile.skipRows).toBe(100);
+
+    expect(
+      Effect.runSync(
+        Effect.flip(detectCsvProfile(utf8.encode(`${linesAbove(101).join("\n")}\n${table}`))),
+      ),
+    ).toEqual(new NotAStatement({ format: "csv" }));
+  });
+});
+
+// A profile saved from detection's proposal recognises its files by their header: whatever header
+// detection proposes, `readCsvHeader` finds again with the profile proposed (#19).
+describe("a proposed header is one the profile finds again", () => {
+  const table = "Date;Libellé;Montant\n13/11/2026;EXAMPLE GROCER;-12,00\n";
+
+  test("under a few blank lines, as the profile reads it", () => {
+    const bytes = utf8.encode(`${"\n".repeat(50)}${table}`);
+    const { profile, header } = detect(bytes);
+
+    expect(header).toBe("date;libellé;montant");
+    expect(headerOf(bytes, profile)).toBe(header);
+  });
+
+  test("no table under more blank lines than the header search reads", () => {
+    expect(
+      Effect.runSync(Effect.flip(detectCsvProfile(utf8.encode(`${"\n".repeat(150)}${table}`)))),
+    ).toEqual(new NotAStatement({ format: "csv" }));
+  });
+
+  test("no table under more text than the header search reads", () => {
+    const above = Array.from({ length: 20 }, () => "x".repeat(4000)).join("\n");
+    const lines = Array.from({ length: 30 }, () => "13/11/2026;EXAMPLE GROCER;-12,00");
+    const long = `${above}\nDate;Libellé;Montant\n${lines.join("\n")}\n`;
+
+    // Its table alone is read, the same rows a few lines down.
+    expect(detectText(`x\n${long.slice(long.indexOf("Date"))}`).profile.skipRows).toBe(1);
+
+    expect(Effect.runSync(Effect.flip(detectCsvProfile(utf8.encode(long))))).toEqual(
+      new NotAStatement({ format: "csv" }),
+    );
+  });
+});
+
+// The import screen's preview (#19): the top of the file as a profile splits it, and a test read.
+const preview = (bytes: Uint8Array, profile: CsvProfile) =>
+  Effect.runSync(previewCsvRows(csvFile(bytes), profile));
+
+describe("previewing a CSV file with a profile", () => {
+  test("gives the header and the first five rows as written, past the lines skipped", () => {
+    const rows = preview(csvSamples.csvDebitCredit.bytes, debitCredit);
+
+    expect(rows).toHaveLength(6);
+
+    expect(rows.slice(0, 3)).toEqual([
+      ["Date", "Date de valeur", "Libellé", "Débit", "Crédit"],
+      ["02/11/2026", "31/10/2026", "CB PÂTISSERIE DU MARCHÉ 31/10", "23,90", ""],
+      ["02/11/2026", "02/11/2026", "VIR SEPA CAMILLE EXEMPLE", "", "150,00"],
+    ]);
+  });
+
+  test("splits the rows with the separator it is given, even a wrong one", () => {
+    const text = utf8.encode(`${HEADER}\n13/11/2026;EXAMPLE GROCER;-12,40;EUR;R1\n`);
+
+    expect(preview(text, { ...semicolon, separator: "," })).toEqual([
+      [HEADER],
+      ["13/11/2026;EXAMPLE GROCER;-12", "40;EUR;R1"],
+    ]);
+  });
+
+  test("a test read reads the file's top alone, 64 KiB past the lines skipped", () => {
+    const long = Array.from({ length: 5 }, () => `13/11/2026;${"A".repeat(20_000)};-1,00;EUR;R`);
+    const text = [HEADER, ...long, "31/02/2026;LATE;-1,00;EUR;R", ""].join("\n");
+    const read = Effect.runSync(testReadCsv(csvFile(utf8.encode(text)), semicolon, "EUR"));
+
+    // Three long lines fit; the fourth, and the bad date after them, are past the top.
+    expect(read.lines).toHaveLength(3);
+  });
+
+  test("a test read gives the lines of the file's top as the import reads them", () => {
+    const text = utf8.encode(`${HEADER}\n13/11/2026;EXAMPLE GROCER;-12,40;EUR;R1\n`);
+
+    expect(Effect.runSync(testReadCsv(csvFile(text), semicolon, "EUR")).lines).toEqual([
+      { ...line("2026-11-13", -1240, "EXAMPLE GROCER"), bankId: "R1" },
+    ]);
   });
 });

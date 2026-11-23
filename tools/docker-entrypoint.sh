@@ -1,6 +1,8 @@
 #!/bin/sh
 # The image's entry point (Dockerfile): `serve` (the default) starts the app, `migrate` applies the
-# database migrations and exits, anything else runs as given.
+# database migrations and exits, `recover-admin <e-mail>` gives the administrator a temporary
+# password, anything else runs as given. Installed as `gousset`, so that a command run in the
+# running container reads its secrets too: `docker compose exec web gousset recover-admin <e-mail>`.
 #
 # Each `<NAME>_FILE` variable names a file whose content becomes `<NAME>` (Compose secrets,
 # docker-compose.yml), so that a secret is never written in the container's declared environment.
@@ -52,5 +54,6 @@ fi
 case "${1:-serve}" in
   serve) exec node /app/server/index.mjs ;;
   migrate) exec node /app/db/migrate.mjs ;;
+  recover-admin) shift && exec node /app/auth/recover-admin.mjs "$@" ;;
   *) exec "$@" ;;
 esac

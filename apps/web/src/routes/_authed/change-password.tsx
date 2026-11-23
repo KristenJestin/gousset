@@ -42,11 +42,22 @@ function dayInWords(day: string) {
   return (dayFormats.get(getLocale()) ?? englishDays).format(new Date(`${day}T00:00:00Z`));
 }
 
-/** Why the password must change: temporary, and reset by the administrator on that day if so. */
-function whyChange(passwordResetOn: string | null) {
-  return passwordResetOn === null
-    ? m.changePasswordRequired()
-    : `${m.changePasswordResetOn({ date: dayInWords(passwordResetOn) })} ${m.changePasswordRequired()}`;
+/**
+ * Why the password must change: temporary, and reset on that day if so, by the administrator or
+ * from the server (the administrator's own, recovered).
+ */
+function whyChange(passwordResetOn: string | null, fromServer: boolean) {
+  if (passwordResetOn === null) {
+    return m.changePasswordRequired();
+  }
+
+  const date = dayInWords(passwordResetOn);
+
+  const reset = fromServer
+    ? m.changePasswordRecoveredOn({ date })
+    : m.changePasswordResetOn({ date });
+
+  return `${reset} ${m.changePasswordRequired()}`;
 }
 
 function ChangePassword() {
@@ -93,7 +104,9 @@ function ChangePassword() {
       <Card
         title={m.changePasswordTitle()}
         description={
-          user.mustChangePassword ? whyChange(user.passwordResetOn) : m.changePasswordDescription()
+          user.mustChangePassword
+            ? whyChange(user.passwordResetOn, user.passwordResetFromServer)
+            : m.changePasswordDescription()
         }
       >
         <Form onSubmit={(event) => void submit(event)} onInput={() => setError(undefined)}>

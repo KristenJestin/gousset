@@ -30,6 +30,12 @@ const AmountColumns = Schema.Union([
   Schema.Struct({ kind: Schema.Literal("debit-credit"), debit: Column, credit: Column }),
 ]);
 
+/**
+ * The most lines a profile skips above its table: a bank writes a few (an account's name, a
+ * period), and blank lines need no skipping. It bounds what a header search scans.
+ */
+export const MAX_SKIP_ROWS = 100;
+
 /** An import profile's definition, version 1. */
 export const CsvProfile = Schema.Struct({
   version: Schema.Literal(1),
@@ -41,7 +47,10 @@ export const CsvProfile = Schema.Struct({
    */
   encoding: Schema.Literals(["utf8", "windows-1252"]),
   /** The file's first lines, read past before the header: the account's name, the period. */
-  skipRows: Schema.Int.check(Schema.isGreaterThanOrEqualTo(0)),
+  skipRows: Schema.Int.check(
+    Schema.isGreaterThanOrEqualTo(0),
+    Schema.isLessThanOrEqualTo(MAX_SKIP_ROWS),
+  ),
   /** Whether the first row after them names the columns, rather than holding a line. */
   headerRow: Schema.Boolean,
   dateFormat: DateFormat,

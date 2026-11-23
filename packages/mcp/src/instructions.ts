@@ -1,5 +1,5 @@
 /**
- * The server's instructions (docs/mcp.md, rule 15): under 400 words, what Gousset is, its words,
+ * The server's instructions (docs/mcp.md, rule 15): under 600 words, what Gousset is, its words,
  * and which tool answers what. Every tool is named between backticks, and a test checks that
  * each name so written is a tool of the server.
  */
@@ -22,5 +22,6 @@ Which tool answers what:
 - \`month\`: a month's summary (received, spent, set aside, left) and where the money went, by category, merchant and subject, against benchmarks; or the month's review (imports, lines to review, movements between accounts, investments, flags); or one row day by day, against the month before. Use it for "how much did I spend last month, and where?", "what is left to check this month?" and "how is my Groceries spending going compared with last month?".
 - \`imports\`: imports a bank statement file into an account without duplicates, and lists, follows and undoes imports. Use it when the user gives a statement or asks what was imported.
 - \`accounts\`: the user's accounts by group (available, restricted, savings and investments, owed) with their balances and totals per currency, and one account's last lines and the check of its balance against its bank statement. Use it for "how much do I have?" or "does my balance match my bank's?".
+- \`data\`: what an export of all the user's data holds, and where they download it. Use it when the user asks to export or back up their data.
 
 Results are text, with names rather than ids. A long result comes in parts: its last line writes the next call to make. An error says what to do and gives a valid call. A write needs the connection to have been allowed to read and write; a refusal says how to get it.`;

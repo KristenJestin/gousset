@@ -9,12 +9,19 @@ import {
 } from "@gousset/db/schema/ledger";
 import { UserData } from "@gousset/db/user-data";
 import type { QueryFailed, UserTransaction } from "@gousset/db/user-data";
-import { detectCsvProfile, detectFormat } from "@gousset/import";
-import type { CsvProfile, CsvUnsure } from "@gousset/import";
+import {
+  csvFile,
+  detectCsvProfile,
+  detectFormat,
+  previewCsvRows,
+  readCsvHeader,
+  testReadCsv,
+} from "@gousset/import";
+import type { CsvFile, CsvProfile, CsvUnsure } from "@gousset/import";
 import { and, asc, desc, eq, gt, inArray, isNull, lt, ne, or, sql } from "drizzle-orm";
 import { Context, Effect, Layer } from "effect";
 
-import type { ImportUnavailable } from "./errors";
+import type { ImportUnavailable, ProfileNotFound, ProfileUnreadable } from "./errors";
 import {
   AccountNotFound,
   EmptyFile,
@@ -23,10 +30,18 @@ import {
   ImportNotFound,
   UnknownFormat,
 } from "./errors";
+import { resolveProfile } from "./profiles";
 import { findSummary, isId, selectSummaries, summaryOf } from "./rows";
 import type { ImportJobInput } from "./run";
-import { MAX_FILE_BYTES } from "./summary";
-import type { ImportFormat, ImportStatus, ImportSummary } from "./summary";
+import { MAX_FILE_BYTES, TEST_READ_SHOWN } from "./summary";
+import type {
+  CsvPreview,
+  CsvReadRefusal,
+  ImportFormat,
+  ImportStatus,
+  ImportSummary,
+  ProfileChoice,
+} from "./summary";
 
 // Importing statements (#20), as the import screen and the MCP door both do it: a file dropped
 // becomes an import and its job; the screen follows the job, answers what the file left open,
@@ -102,10 +117,15 @@ export type CsvQuestions = {
   readonly unsure: ReadonlyArray<CsvUnsure>;
 };
 
-/** What the user answers a waiting import: its account, and how to read its CSV. */
+/**
+ * What the user answers a waiting import: its account, and how to read its CSV: a definition made
+ * on the screen (`csvProfile`), or a profile chosen by id or key (`profile`), which wins when both
+ * are given. With neither, the import chooses again as it did the first time.
+ */
 export type Answers = {
   readonly accountId: string | null;
   readonly csvProfile: CsvProfile | null;
+  readonly profile: ProfileChoice | null;
 };
 
 type Failure = QueryFailed;
@@ -141,7 +161,8 @@ export class Imports extends Context.Service<
     ) => Effect.Effect<Undone, ImportNotFound | ImportBusy | Failure>;
     /**
      * Runs a waiting or failed import again, with the user's answers: its account, how to read its
-     * CSV. Refused for an import that runs, is done or undone.
+     * CSV, the import recording the profile chosen. Refused for an import that runs, is done or
+     * undone, and for a profile the user does not have or that no longer reads.
      */
     readonly resume: (
       owner: string,
@@ -149,7 +170,13 @@ export class Imports extends Context.Service<
       answers: Answers,
     ) => Effect.Effect<
       ImportSummary,
-      ImportNotFound | ImportBusy | AccountNotFound | ImportUnavailable | Failure
+      | ImportNotFound
+      | ImportBusy
+      | AccountNotFound
+      | ProfileNotFound
+      | ProfileUnreadable
+      | ImportUnavailable
+      | Failure
     >;
     /** The accounts an import may go to: the open ones, by name. */
     readonly accounts: (owner: string) => Effect.Effect<ReadonlyArray<ImportAccount>, Failure>;
@@ -158,8 +185,81 @@ export class Imports extends Context.Service<
       owner: string,
       importId: string,
     ) => Effect.Effect<CsvQuestions, ImportNotFound | Failure>;
+    /**
+     * A CSV import's file read with `profile`, as the import screen previews it before importing:
+     * its first rows, the header it would be recognised by, and a test read of its top in the
+     * account's currency. A file the profile cannot read is said so, never failed.
+     */
+    readonly csvPreview: (
+      owner: string,
+      importId: string,
+      profile: CsvProfile,
+    ) => Effect.Effect<CsvPreview, ImportNotFound | Failure>;
   }
 >()("@gousset/core/Imports") {}
+
+const refused = (refusal: CsvReadRefusal) => Effect.succeed({ refused: refusal });
+
+/** A test read of a file's top with a profile: its first lines, or why the reader refuses it. */
+const testRead = (
+  file: CsvFile,
+  profile: CsvProfile,
+  currency: string | null,
+): Effect.Effect<CsvPreview["read"]> =>
+  testReadCsv(file, profile, currency).pipe(
+    Effect.map((statement): CsvPreview["read"] => ({
+      lines: statement.lines.slice(0, TEST_READ_SHOWN).map((line, index) => ({
+        position: index + 1,
+        bookedOn: line.bookedOn,
+        label: line.label,
+        amountMinor: line.amountMinor,
+      })),
+    })),
+    Effect.catchTags({
+      NotAStatement: () =>
+        refused({ error: "NotAStatement", line: null, column: null, field: null, text: null }),
+      MalformedFile: (error) =>
+        refused({
+          error: "MalformedFile",
+          line: error.line,
+          column: error.column ?? null,
+          field: null,
+          text: null,
+        }),
+      MissingField: (error) =>
+        refused({
+          error: "MissingField",
+          line: error.line,
+          column: error.column ?? null,
+          field: error.field,
+          text: null,
+        }),
+      InvalidField: (error) =>
+        refused({
+          error: "InvalidField",
+          line: error.line,
+          column: error.column ?? null,
+          field: error.field,
+          text: error.text,
+        }),
+      UnsupportedContent: (error) =>
+        refused({
+          error: "UnsupportedContent",
+          line: error.line,
+          column: error.column ?? null,
+          field: null,
+          text: null,
+        }),
+      InvalidOption: (error) =>
+        refused({
+          error: "InvalidOption",
+          line: null,
+          column: null,
+          field: error.option,
+          text: error.text,
+        }),
+    }),
+  );
 
 const sha256 = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
 
@@ -432,6 +532,13 @@ export const importsLayer = Layer.effect(
           const statuses = yield* statusesFor(owner, found, RESUMABLE);
           const { accountId } = answers;
 
+          const chosen =
+            answers.profile === null
+              ? undefined
+              : yield* resolveProfile(owner, answers.profile).pipe(
+                  Effect.provideService(UserData, userData),
+                );
+
           const outcome = yield* inTransaction(owner, async (transaction) => {
             if (accountId !== null && !(await accountExists(transaction, accountId))) {
               return "no-account" as const;
@@ -443,6 +550,9 @@ export const importsLayer = Layer.effect(
                 status: "queued",
                 errorCode: null,
                 accountId: accountId ?? found.account?.id ?? null,
+                // The profile chosen; none for a definition given, or for the job to choose again.
+                profileId: chosen?.profileId ?? null,
+                shippedProfile: chosen?.shippedProfile ?? null,
                 // The job it replaces is forgotten at once: the new one's id comes with its send.
                 jobId: null,
               })
@@ -462,7 +572,7 @@ export const importsLayer = Layer.effect(
             return yield* new ImportBusy({ importId, status: now.status });
           }
 
-          yield* sendJob(owner, importId, answers.csvProfile);
+          yield* sendJob(owner, importId, chosen?.profile ?? answers.csvProfile);
 
           return yield* show(owner, importId);
         }),
@@ -517,6 +627,46 @@ export const importsLayer = Layer.effect(
               InvalidOption: () => Effect.fail(new ImportNotFound({ importId })),
             }),
           );
+        }),
+
+      csvPreview: (owner, importId, profile) =>
+        Effect.gen(function* () {
+          const found = yield* inTransaction(owner, async (transaction) => {
+            if (!isId(importId)) {
+              return undefined;
+            }
+
+            const [row] = await transaction
+              .select({ content: importFile.content, currency: account.currency })
+              .from(importFile)
+              .innerJoin(statementImport, eq(statementImport.id, importFile.importId))
+              .leftJoin(account, eq(account.id, statementImport.accountId))
+              .where(and(eq(importFile.importId, importId), eq(statementImport.format, "csv")));
+
+            return row;
+          });
+
+          if (found === undefined) {
+            return yield* new ImportNotFound({ importId });
+          }
+
+          // Decoded once for the three reads, each bounded to the file's top, as `forImport` reads.
+          const file = csvFile(found.content);
+
+          const rows = yield* previewCsvRows(file, profile).pipe(
+            Effect.match({ onFailure: () => [], onSuccess: (read) => read }),
+          );
+
+          const header = yield* readCsvHeader(file, profile).pipe(
+            Effect.match({ onFailure: () => null, onSuccess: (read) => read }),
+          );
+
+          return {
+            rows,
+            header,
+            currency: found.currency,
+            read: yield* testRead(file, profile, found.currency),
+          };
         }),
     };
   }),

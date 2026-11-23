@@ -108,8 +108,16 @@ export {
   ImportFailed,
   ImportNotFound,
   ImportUnavailable,
+  InvalidProfileFile,
+  ProfileNameMissing,
+  ProfileNotFound,
+  ProfileTooLong,
+  ProfileUnreadable,
+  TooManyProfiles,
   UnknownFormat,
 } from "./imports/errors";
+
+export { ImportProfiles, importProfilesLayer } from "./imports/profiles";
 
 export { IMPORTS_LISTED, ImportJobs, Imports, importsLayer } from "./imports/imports";
 
@@ -125,10 +133,44 @@ export type {
 
 export { ReadFailed, ReadRequest, StatementReader, inlineStatementReader } from "./imports/read";
 
-export { IMPORT_STEPS, MAX_FILE_BYTES } from "./imports/summary";
+export {
+  IMPORT_STEPS,
+  MAX_FILE_BYTES,
+  TEST_READ_SHOWN,
+  MAX_PROFILE_FILE,
+  MAX_PROFILE_HEADER,
+  MAX_PROFILE_NAME,
+  MAX_PROFILES,
+} from "./imports/summary";
 
-export type { ImportFormat, ImportStatus, ImportStep, ImportSummary } from "./imports/summary";
+export type {
+  CsvPreview,
+  CsvReadRefusal,
+  CsvTestLine,
+  ImportFormat,
+  ImportProfileEntry,
+  ImportStatus,
+  ImportStep,
+  ImportSummary,
+  ProfileChoice,
+  ProfileDraft,
+  ProfileFile,
+  ProfileFit,
+  ProfilesForImport,
+} from "./imports/summary";
 
 export { ImportJobInput, markFailed, runImport } from "./imports/run";
 
 export type { ImportProgress, ImportRun } from "./imports/run";
+
+export { DataExport, dataExportLayer } from "./export/export";
+
+export type { ExportContents } from "./export/export";
+
+export { EXPORT_FORMAT, EXPORT_VERSION, MANIFEST } from "./export/archive";
+
+export type { ExportArchive } from "./export/archive";
+
+export { EXPORT_TABLES, IMPORT_FILES_FOLDER } from "./export/tables";
+
+export type { ExportTable } from "./export/tables";

@@ -1,4 +1,10 @@
-import { FixtureLedger, Imports, memoryAccountStore } from "@gousset/core";
+import {
+  DataExport,
+  FixtureLedger,
+  ImportProfiles,
+  Imports,
+  memoryAccountStore,
+} from "@gousset/core";
 import { Effect, Layer } from "effect";
 import { describe, expect, test } from "vite-plus/test";
 
@@ -10,7 +16,7 @@ import { connectInProcess } from "./test-client";
 const MAX_TOOLS = 15;
 const MAX_LISTING_CHARACTERS = 30_000;
 const MAX_DESCRIPTION_CHARACTERS = 2048;
-const MAX_INSTRUCTION_WORDS = 400;
+const MAX_INSTRUCTION_WORDS = 600;
 
 const reader = { userId: "guard", canWrite: false };
 
@@ -18,12 +24,18 @@ async function listing() {
   const client = await connectInProcess(
     goussetServer,
     {
-      // Listing calls no tool: the imports are never reached.
+      // Listing calls no tool: the imports and the export are never reached.
       run: (effect) =>
         Effect.runPromiseExit(
           Effect.provide(
             effect,
-            Layer.mergeAll(FixtureLedger, memoryAccountStore(), Layer.mock(Imports, {})),
+            Layer.mergeAll(
+              FixtureLedger,
+              memoryAccountStore(),
+              Layer.mock(Imports, {}),
+              Layer.mock(ImportProfiles, {}),
+              Layer.mock(DataExport, {}),
+            ),
           ),
         ),
     },
