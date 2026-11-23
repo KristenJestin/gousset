@@ -15,7 +15,7 @@
   "devDependencies": {
     "@gousset/config": "workspace:*",
     "@gousset/fixture": "workspace:*",
-    "fast-check": "4.10.3",
+    "fast-check": "catalog:",
     "typescript": "catalog:"
   }
 }
