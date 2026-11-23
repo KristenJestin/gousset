@@ -23,6 +23,7 @@ function Settings() {
             />
             <AppSectionLink to="/settings/categories" label={m.settingsNavCategories()} />
             <AppSectionLink to="/settings/rules" label={m.settingsNavRules()} />
+            <AppSectionLink to="/settings/data" label={m.settingsNavData()} />
           </>
         }
       >

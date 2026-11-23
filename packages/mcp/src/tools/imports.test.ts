@@ -1,4 +1,5 @@
 import {
+  DataExport,
   EmptyFile,
   FileTooLarge,
   FixtureLedger,
@@ -170,7 +171,13 @@ function runnerOf(state: Fake): Runner<GoussetServices> {
     Effect.runPromiseExit(
       Effect.provide(
         effect,
-        Layer.mergeAll(FixtureLedger, memoryAccountStore(), importsOf(state), profilesOf(state)),
+        Layer.mergeAll(
+          FixtureLedger,
+          memoryAccountStore(),
+          importsOf(state),
+          profilesOf(state),
+          Layer.mock(DataExport, {}),
+        ),
       ),
     );
 }
@@ -194,6 +201,7 @@ function runnerWithTime(state: Fake): Runner<GoussetServices> {
             memoryAccountStore(),
             importsOf(state),
             profilesOf(state),
+            Layer.mock(DataExport, {}),
             TestClock.layer(),
           ),
         ),

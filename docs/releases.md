@@ -148,6 +148,66 @@ development is another file, `docker-compose.dev.yml` (`pnpm db:start`): another
 (`gousset-dev`) with its own volume, on `127.0.0.1:5432`, so that it never shares a database, and
 so a password, with an installation.
 
+## Backing up and restoring
+
+An installation is its database and its two secrets. Each user takes their own data away from
+Settings, Data: an archive of JSON and CSV files, readable without Gousset, which a backup does
+not replace and which Gousset does not import back. The administrator backs up the whole
+installation, every user's data, password and connected MCP clients, from the folder of
+`docker-compose.yml`.
+
+**The secrets**: keep `secrets/` with every backup, away from the machine. `better_auth_secret`
+signs the sessions, and better-auth encrypts with it the keys the MCP door signs its tokens with:
+a database restored beside another secret keeps its users and passwords, but nobody's session or
+MCP client works until they sign in and connect again. `postgres_password` is the password of the
+tables' owner (`gousset`), from which `migrate` derives `gousset_app`'s.
+
+**A dump** (`pg_dump`), made while the app serves (it reads one consistent snapshot):
+
+```sh
+docker compose exec -T postgres pg_dump -U gousset -d gousset --format=custom > gousset-$(date +%F).dump
+```
+
+`-T` gives no terminal, so that the binary dump comes out whole. A dump holds the tables, their
+rows, pg-boss's jobs and the grants, never the roles: `gousset_app` and `gousset_user` belong to
+the Postgres server, not to one database, and the restore makes them first.
+
+**Restoring a dump** into an empty installation (a new machine, or a lost volume): the same
+`docker-compose.yml`, the same `secrets/`, and the `GOUSSET_VERSION` the dump was made with
+(update afterwards, as always).
+
+```sh
+docker compose up -d postgres
+docker compose run --rm migrate                  # makes the roles gousset_app and gousset_user
+docker compose exec -T postgres dropdb -U gousset gousset
+docker compose exec -T postgres createdb -U gousset gousset
+docker compose exec -T postgres pg_restore -U gousset -d gousset --exit-on-error --single-transaction < gousset-2026-11-23.dump
+docker compose up -d                             # migrate again (it lets gousset_app log in), then the app
+```
+
+`migrate` makes the roles on the new server, then the database it filled gives way to an empty one,
+so that the dump comes in whole, in one transaction: a restore that fails leaves the database
+empty, never half restored. Over an installation that still has its volume, `docker compose down`
+first: the same steps then replace its database, and every row in it, with the dump's.
+
+The end-to-end test `apps/e2e/tests/backup.spec.ts` runs these `pg_dump` and `pg_restore` options
+against a database the migrations' roles already exist for, starts an app on it, signs a user in
+with their password and finds their export unchanged.
+
+**A copy of the volume**, the other way: stop the installation, so that Postgres writes nothing
+during the copy, then copy the volume `gousset_postgres` with Postgres's image, which is already
+there:
+
+```sh
+docker compose stop
+docker run --rm -v gousset_postgres:/data:ro -v "$PWD":/backup postgres:18.7 tar -czf /backup/gousset-volume.tgz -C /data .
+docker compose start
+```
+
+It restores into an empty volume of the same name (`tar -xzf … -C /data`, the installation
+stopped), on the same major version of Postgres only (18): a dump is the one that moves to a later
+Postgres. This copy is not tested.
+
 ## The version
 
 Computed, never typed: `tools/version.sh stable|beta|base [--at <commit>]`, for HEAD by default.

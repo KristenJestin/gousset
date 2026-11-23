@@ -24,6 +24,7 @@ import { Route as AuthedOperationsRouteImport } from './routes/_authed/operation
 import { Route as AuthedSettingsRouteRouteImport } from './routes/_authed/settings/route'
 import { Route as AuthedSubjectsRouteImport } from './routes/_authed/subjects'
 import { Route as AuthedUsersRouteImport } from './routes/_authed/users'
+import { Route as ApiExportRouteImport } from './routes/api/export'
 import { Route as ApiImportsRouteImport } from './routes/api/imports'
 import { Route as E2eTodayRouteImport } from './routes/e2e/today'
 import { Route as AuthedAccountsIndexRouteImport } from './routes/_authed/accounts/index'
@@ -31,6 +32,7 @@ import { Route as AuthedAccountsAccountIdRouteImport } from './routes/_authed/ac
 import { Route as AuthedE2eJobsRouteImport } from './routes/_authed/e2e/jobs'
 import { Route as AuthedSettingsIndexRouteImport } from './routes/_authed/settings/index'
 import { Route as AuthedSettingsCategoriesRouteImport } from './routes/_authed/settings/categories'
+import { Route as AuthedSettingsDataRouteImport } from './routes/_authed/settings/data'
 import { Route as AuthedSettingsRulesRouteImport } from './routes/_authed/settings/rules'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as ApiJobsJobIdEventsRouteImport } from './routes/api/jobs/$jobId/events'
@@ -109,6 +111,11 @@ const AuthedUsersRoute = AuthedUsersRouteImport.update({
   path: '/users',
   getParentRoute: () => AuthedRoute,
 } as any)
+const ApiExportRoute = ApiExportRouteImport.update({
+  id: '/api/export',
+  path: '/api/export',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiImportsRoute = ApiImportsRouteImport.update({
   id: '/api/imports',
   path: '/api/imports',
@@ -145,6 +152,11 @@ const AuthedSettingsCategoriesRoute =
     path: '/categories',
     getParentRoute: () => AuthedSettingsRouteRoute,
   } as any)
+const AuthedSettingsDataRoute = AuthedSettingsDataRouteImport.update({
+  id: '/data',
+  path: '/data',
+  getParentRoute: () => AuthedSettingsRouteRoute,
+} as any)
 const AuthedSettingsRulesRoute = AuthedSettingsRulesRouteImport.update({
   id: '/rules',
   path: '/rules',
@@ -176,11 +188,13 @@ export interface FileRoutesByFullPath {
   '/operations': typeof AuthedOperationsRoute
   '/subjects': typeof AuthedSubjectsRoute
   '/users': typeof AuthedUsersRoute
+  '/api/export': typeof ApiExportRoute
   '/api/imports': typeof ApiImportsRoute
   '/e2e/today': typeof E2eTodayRoute
   '/accounts/$accountId': typeof AuthedAccountsAccountIdRoute
   '/e2e/jobs': typeof AuthedE2eJobsRoute
   '/settings/categories': typeof AuthedSettingsCategoriesRoute
+  '/settings/data': typeof AuthedSettingsDataRoute
   '/settings/rules': typeof AuthedSettingsRulesRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/accounts/': typeof AuthedAccountsIndexRoute
@@ -200,12 +214,14 @@ export interface FileRoutesByTo {
   '/operations': typeof AuthedOperationsRoute
   '/subjects': typeof AuthedSubjectsRoute
   '/users': typeof AuthedUsersRoute
+  '/api/export': typeof ApiExportRoute
   '/api/imports': typeof ApiImportsRoute
   '/e2e/today': typeof E2eTodayRoute
   '/': typeof AuthedIndexRoute
   '/accounts/$accountId': typeof AuthedAccountsAccountIdRoute
   '/e2e/jobs': typeof AuthedE2eJobsRoute
   '/settings/categories': typeof AuthedSettingsCategoriesRoute
+  '/settings/data': typeof AuthedSettingsDataRoute
   '/settings/rules': typeof AuthedSettingsRulesRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/accounts': typeof AuthedAccountsIndexRoute
@@ -228,12 +244,14 @@ export interface FileRoutesById {
   '/_authed/operations': typeof AuthedOperationsRoute
   '/_authed/subjects': typeof AuthedSubjectsRoute
   '/_authed/users': typeof AuthedUsersRoute
+  '/api/export': typeof ApiExportRoute
   '/api/imports': typeof ApiImportsRoute
   '/e2e/today': typeof E2eTodayRoute
   '/_authed/': typeof AuthedIndexRoute
   '/_authed/accounts/$accountId': typeof AuthedAccountsAccountIdRoute
   '/_authed/e2e/jobs': typeof AuthedE2eJobsRoute
   '/_authed/settings/categories': typeof AuthedSettingsCategoriesRoute
+  '/_authed/settings/data': typeof AuthedSettingsDataRoute
   '/_authed/settings/rules': typeof AuthedSettingsRulesRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/_authed/accounts/': typeof AuthedAccountsIndexRoute
@@ -257,11 +275,13 @@ export interface FileRouteTypes {
     | '/operations'
     | '/subjects'
     | '/users'
+    | '/api/export'
     | '/api/imports'
     | '/e2e/today'
     | '/accounts/$accountId'
     | '/e2e/jobs'
     | '/settings/categories'
+    | '/settings/data'
     | '/settings/rules'
     | '/api/auth/$'
     | '/accounts/'
@@ -281,12 +301,14 @@ export interface FileRouteTypes {
     | '/operations'
     | '/subjects'
     | '/users'
+    | '/api/export'
     | '/api/imports'
     | '/e2e/today'
     | '/'
     | '/accounts/$accountId'
     | '/e2e/jobs'
     | '/settings/categories'
+    | '/settings/data'
     | '/settings/rules'
     | '/api/auth/$'
     | '/accounts'
@@ -308,12 +330,14 @@ export interface FileRouteTypes {
     | '/_authed/operations'
     | '/_authed/subjects'
     | '/_authed/users'
+    | '/api/export'
     | '/api/imports'
     | '/e2e/today'
     | '/_authed/'
     | '/_authed/accounts/$accountId'
     | '/_authed/e2e/jobs'
     | '/_authed/settings/categories'
+    | '/_authed/settings/data'
     | '/_authed/settings/rules'
     | '/api/auth/$'
     | '/_authed/accounts/'
@@ -328,6 +352,7 @@ export interface RootRouteChildren {
   SetupRoute: typeof SetupRoute
   SignInRoute: typeof SignInRoute
   DotwellKnownSplatRoute: typeof DotwellKnownSplatRoute
+  ApiExportRoute: typeof ApiExportRoute
   ApiImportsRoute: typeof ApiImportsRoute
   E2eTodayRoute: typeof E2eTodayRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
@@ -441,6 +466,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedUsersRouteImport
       parentRoute: typeof AuthedRoute
     }
+    '/api/export': {
+      id: '/api/export'
+      path: '/api/export'
+      fullPath: '/api/export'
+      preLoaderRoute: typeof ApiExportRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/imports': {
       id: '/api/imports'
       path: '/api/imports'
@@ -490,6 +522,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedSettingsCategoriesRouteImport
       parentRoute: typeof AuthedSettingsRouteRoute
     }
+    '/_authed/settings/data': {
+      id: '/_authed/settings/data'
+      path: '/data'
+      fullPath: '/settings/data'
+      preLoaderRoute: typeof AuthedSettingsDataRouteImport
+      parentRoute: typeof AuthedSettingsRouteRoute
+    }
     '/_authed/settings/rules': {
       id: '/_authed/settings/rules'
       path: '/rules'
@@ -516,12 +555,14 @@ declare module '@tanstack/react-router' {
 
 interface AuthedSettingsRouteRouteChildren {
   AuthedSettingsCategoriesRoute: typeof AuthedSettingsCategoriesRoute
+  AuthedSettingsDataRoute: typeof AuthedSettingsDataRoute
   AuthedSettingsRulesRoute: typeof AuthedSettingsRulesRoute
   AuthedSettingsIndexRoute: typeof AuthedSettingsIndexRoute
 }
 
 const AuthedSettingsRouteRouteChildren: AuthedSettingsRouteRouteChildren = {
   AuthedSettingsCategoriesRoute: AuthedSettingsCategoriesRoute,
+  AuthedSettingsDataRoute: AuthedSettingsDataRoute,
   AuthedSettingsRulesRoute: AuthedSettingsRulesRoute,
   AuthedSettingsIndexRoute: AuthedSettingsIndexRoute,
 }
@@ -569,6 +610,7 @@ const rootRouteChildren: RootRouteChildren = {
   SetupRoute: SetupRoute,
   SignInRoute: SignInRoute,
   DotwellKnownSplatRoute: DotwellKnownSplatRoute,
+  ApiExportRoute: ApiExportRoute,
   ApiImportsRoute: ApiImportsRoute,
   E2eTodayRoute: E2eTodayRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,

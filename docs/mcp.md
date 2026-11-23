@@ -84,6 +84,7 @@ From Anthropic's [Writing effective tools for agents](https://www.anthropic.com/
    |---|---|
    | `month` | v0.1 (made-up data), then v0.4 |
    | `accounts`, `lines`, `imports` | v0.2 |
+   | `data` (what an export holds, and where to download it) | v0.2 |
    | `categories`, `merchants`, `rules` | v0.3 |
    | `review` | v0.4 |
    | `subjects` | v0.5 |
@@ -118,7 +119,7 @@ They are not a number to trim to. **A tool keeps the description and the example
 
 ### Server instructions
 
-15. **Under 400 words**: what Gousset is, its words (expense, payment, refund, transfer, benefit account, subject, benchmark: see [`vision.md`](vision.md#words)), which tool answers what. A test checks that every tool they name exists.
+15. **Under 600 words**: what Gousset is, its words (expense, payment, refund, transfer, benefit account, subject, benchmark: see [`vision.md`](vision.md#words)), which tool answers what. A test checks that every tool they name exists.
 
 ### Telemetry
 

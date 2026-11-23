@@ -45,28 +45,47 @@ export class UserData extends Context.Service<
       owner: string,
       work: (transaction: UserTransaction) => Promise<A>,
     ) => Effect.Effect<A, QueryFailed>;
+    /**
+     * The same, read only, and seeing one snapshot of the data throughout (`repeatable read`):
+     * what several queries read together (an export) stays consistent while an import writes.
+     */
+    readonly snapshot: <A>(
+      owner: string,
+      work: (transaction: UserTransaction) => Promise<A>,
+    ) => Effect.Effect<A, QueryFailed>;
   }
 >()("@gousset/db/UserData") {}
 
+type TransactionConfig = Parameters<Database["transaction"]>[1];
+
+const SNAPSHOT: TransactionConfig = { isolationLevel: "repeatable read", accessMode: "read only" };
+
 /** `UserData` on the app's database. */
 export function userDataLayer(db: Database): Layer.Layer<UserData> {
-  return Layer.succeed(UserData, {
-    transaction: (owner, work) =>
-      Effect.tryPromise({
-        try: () =>
-          db.transaction(async (transaction) => {
-            await transaction.execute(sql`set local role ${sql.identifier(USER_ROLE)}`);
-            await transaction.execute(sql`select set_config(${USER_SETTING}, ${owner}, true)`);
+  const run = <A>(
+    owner: string,
+    work: (transaction: UserTransaction) => Promise<A>,
+    config?: TransactionConfig,
+  ) =>
+    Effect.tryPromise({
+      try: () =>
+        db.transaction(async (transaction) => {
+          await transaction.execute(sql`set local role ${sql.identifier(USER_ROLE)}`);
+          await transaction.execute(sql`select set_config(${USER_SETTING}, ${owner}, true)`);
 
-            return work(transaction);
-          }),
-        catch: (error) =>
-          new QueryFailed({
-            code: sqlState(error).pipe(
-              Option.orElse(() => Option.map(wrappedSqlState(error), (wrapped) => wrapped.cause)),
-              Option.match({ onNone: () => "UNKNOWN", onSome: (state) => state.code }),
-            ),
-          }),
-      }),
+          return work(transaction);
+        }, config),
+      catch: (error) =>
+        new QueryFailed({
+          code: sqlState(error).pipe(
+            Option.orElse(() => Option.map(wrappedSqlState(error), (wrapped) => wrapped.cause)),
+            Option.match({ onNone: () => "UNKNOWN", onSome: (state) => state.code }),
+          ),
+        }),
+    });
+
+  return Layer.succeed(UserData, {
+    transaction: (owner, work) => run(owner, work),
+    snapshot: (owner, work) => run(owner, work, SNAPSHOT),
   });
 }

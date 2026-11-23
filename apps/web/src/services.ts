@@ -3,10 +3,11 @@ import {
   DatabaseAccountStore,
   FixtureLedger,
   Today,
+  dataExportLayer,
   importProfilesLayer,
   importsLayer,
 } from "@gousset/core";
-import type { AccountStore, ImportProfiles, Imports, Ledger } from "@gousset/core";
+import type { AccountStore, DataExport, ImportProfiles, Imports, Ledger } from "@gousset/core";
 import { getCookie } from "@tanstack/react-start/server";
 import { Effect, Layer, ManagedRuntime } from "effect";
 
@@ -21,9 +22,9 @@ export const auth = createAuth(ENV, db);
 
 /**
  * What Gousset's logic needs: the made-up month (v0.1), the user's accounts in the database, the
- * imports (#20) and their profiles (#19).
+ * imports (#20) and their profiles (#19), and the export (#22).
  */
-export type CoreServices = Ledger | AccountStore | Imports | ImportProfiles;
+export type CoreServices = Ledger | AccountStore | Imports | ImportProfiles | DataExport;
 
 /**
  * Gousset's logic (`@gousset/core`) runs on one runtime for the whole process, so that the server
@@ -36,6 +37,7 @@ const core = ManagedRuntime.make(
     Layer.provide(DatabaseAccountStore, userData),
     importsLayer.pipe(Layer.provide(Layer.mergeAll(userData, importJobs))),
     importProfilesLayer.pipe(Layer.provide(userData)),
+    dataExportLayer.pipe(Layer.provide(userData)),
   ),
 );
 

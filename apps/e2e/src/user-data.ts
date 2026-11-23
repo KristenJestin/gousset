@@ -340,6 +340,16 @@ export function openUserData(database: string) {
       return decodeKeys(result).rows.map((row) => row.key);
     },
 
+    /** The columns of a table of the public schema, in their order. */
+    async columnsOf(table: string): Promise<ReadonlyArray<string>> {
+      const result = await catalog.execute(sql`
+        select column_name::text as key from information_schema.columns
+        where table_schema = 'public' and table_name = ${table}
+        order by ordinal_position`);
+
+      return decodeKeys(result).rows.map((row) => row.key);
+    },
+
     /** What `gousset_user` may do beyond its grants: nothing, or row-level security means nothing. */
     async userRole() {
       const result = await catalog.execute(sql`

@@ -1,4 +1,5 @@
 import {
+  DataExport,
   FixtureLedger,
   ImportProfiles,
   Imports,
@@ -108,9 +109,10 @@ function onToday(rows: MemoryRows): Runner<GoussetServices> {
   const layer = Layer.mergeAll(
     FixtureLedger,
     memoryAccountStore(new Map([[reader.userId, rows]])),
-    // accounts never reaches the imports.
+    // accounts never reaches the imports nor the export.
     Layer.mock(Imports, {}),
     Layer.mock(ImportProfiles, {}),
+    Layer.mock(DataExport, {}),
     TestClock.layer(),
   );
 
@@ -392,7 +394,7 @@ describe("the accounts tool", () => {
     const { tools } = await (await client()).listTools();
     const tool = tools.find((each) => each.name === "accounts");
 
-    expect(tools.map((each) => each.name)).toEqual(["month", "imports", "accounts"]);
+    expect(tools.map((each) => each.name)).toEqual(["month", "imports", "accounts", "data"]);
     expect(tool?.title).toBe("Accounts");
     expect(tool?.annotations).toEqual({
       readOnlyHint: true,
