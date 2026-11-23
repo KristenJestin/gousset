@@ -162,8 +162,8 @@ test("a created user must change their password", async ({ userPage, browser, ap
 
   // The confirmation's live region is there, empty, before the confirmation comes, so that a
   // screen reader announces it.
-  // In the page itself: the toaster keeps live regions of its own beside it.
-  const status = userPage.getByRole("main").locator('[role="status"]');
+  // In the creation form itself: the toaster and the users list keep live regions of their own.
+  const status = userPage.getByRole("main").locator("form").locator('[role="status"]');
 
   await expect(status).toHaveCount(1);
   await expect(status).toBeEmpty();
@@ -189,6 +189,8 @@ test("a created user must change their password", async ({ userPage, browser, ap
 
     await expect(page).toHaveURL(/\/change-password$/);
     await expect(page.getByText("Your password is temporary")).toBeVisible();
+    // Created, not reset: nothing to say about a reset.
+    await expect(page.getByText(/reset your password/)).toHaveCount(0);
     await expectAccessible(page);
 
     // Nothing else opens before the password is changed.

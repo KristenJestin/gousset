@@ -17,7 +17,8 @@ const Day = Schema.String.check(
 /** Present only when the harness started the app; any value but `on` fails loudly. */
 export const e2eClock = Config.option(Config.Literal("on", E2E_CLOCK_VARIABLE));
 
-function localDay(date: Date): string {
+/** A moment's calendar day on the server, `YYYY-MM-DD`, in its own time zone. */
+export function localDay(date: Date): string {
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
 

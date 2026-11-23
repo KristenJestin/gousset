@@ -1,3 +1,4 @@
+import { isHeldForPasswordChange } from "@gousset/auth";
 import { createFileRoute } from "@tanstack/react-router";
 import { Effect } from "effect";
 
@@ -20,6 +21,14 @@ export const Route = createFileRoute("/api/jobs/$jobId/events")({
 
         if (!session) {
           return new Response("Sign in to follow a job.", { status: 401, headers: NO_STORE });
+        }
+
+        // A temporary password follows no job: the administrator chose it (#70).
+        if (isHeldForPasswordChange(session)) {
+          return new Response("Change your temporary password first.", {
+            status: 403,
+            headers: NO_STORE,
+          });
         }
 
         const body = await jobs.runPromise(

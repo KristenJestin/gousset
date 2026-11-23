@@ -74,7 +74,7 @@ From Anthropic's [Writing effective tools for agents](https://www.anthropic.com/
 
 4. **Every user comes in through OAuth**, from any MCP client, and sees only their own data. better-auth serves the authorization: `@better-auth/mcp` (OAuth 2.1, protected resource metadata, resource-bound tokens) with `@better-auth/cimd` (Client ID Metadata Documents). Dynamic client registration stays off.
 5. **Two scopes, chosen on the consent page**: **read**, or **read and write**. A write is refused to a token without the write scope, and the refusal says how to get it.
-6. A user sees and revokes their connected clients in their settings. A client's access does not depend on the browser session: a revoke, a password change or a ban cuts it at once, signing out does not.
+6. A user sees and revokes their connected clients in their settings. A client's access does not depend on the browser session: a revoke, a password change (the user's own, or the administrator's reset), or a ban cuts it at once, signing out does not.
 
 ### Tools
 
@@ -89,6 +89,8 @@ From Anthropic's [Writing effective tools for agents](https://www.anthropic.com/
    | `review` | v0.4 |
    | `subjects` | v0.5 |
    | `investments` | v0.6 |
+
+   The administration of users (creating one, a ban, a password reset) has no tool: it stays on the users page, an act of the administrator in person. A tool would let an agent holding the administrator's token reset a user's password and sign in with the temporary one before the user does, unattended.
 
 8. **Every tool has a `title`, a description following §3, and annotations**:
    - `readOnlyHint` on reads;
@@ -127,7 +129,7 @@ They are not a number to trim to. **A tool keeps the description and the example
 
 ### Every feature ticket adds its tools
 
-A feature is reachable from the MCP server in the same pull request that builds it: its family tool and actions, following this file, with end-to-end tests through a real MCP client.
+A feature is reachable from the MCP server in the same pull request that builds it: its family tool and actions, following this file, with end-to-end tests through a real MCP client. The one exception is the administration of users, which has no tool (rule 7, under the planned families).
 
 ### Review of every tool change
 
