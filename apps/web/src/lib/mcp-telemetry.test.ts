@@ -1,4 +1,10 @@
-import { FixtureLedger, Imports, memoryAccountStore, memoryLineStore } from "@gousset/core";
+import {
+  FixtureLedger,
+  ImportProfiles,
+  Imports,
+  memoryAccountStore,
+  memoryLineStore,
+} from "@gousset/core";
 import { goussetServer } from "@gousset/mcp/gousset";
 import { callText, connectInProcess } from "@gousset/mcp/test-client";
 import { Effect, Layer, Tracer } from "effect";
@@ -46,6 +52,7 @@ describe("a call to the MCP door", () => {
                   memoryAccountStore(),
                   memoryLineStore(),
                   Layer.mock(Imports, {}),
+                  Layer.mock(ImportProfiles, {}),
                 ),
               ),
             ),

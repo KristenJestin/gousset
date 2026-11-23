@@ -14,7 +14,7 @@ import type { CsvProfile, CsvUnsure } from "@gousset/import";
 import { and, asc, desc, eq, gt, inArray, isNull, lt, ne, or, sql } from "drizzle-orm";
 import { Context, Effect, Layer } from "effect";
 
-import type { ImportUnavailable } from "./errors";
+import type { ImportUnavailable, ProfileNotFound, ProfileUnreadable } from "./errors";
 import {
   AccountNotFound,
   EmptyFile,
@@ -23,10 +23,11 @@ import {
   ImportNotFound,
   UnknownFormat,
 } from "./errors";
+import { resolveProfile } from "./profiles";
 import { findSummary, isId, selectSummaries, summaryOf } from "./rows";
 import type { ImportJobInput } from "./run";
 import { MAX_FILE_BYTES } from "./summary";
-import type { ImportFormat, ImportStatus, ImportSummary } from "./summary";
+import type { ImportFormat, ImportStatus, ImportSummary, ProfileChoice } from "./summary";
 
 // Importing statements (#20), as the import screen and the MCP door both do it: a file dropped
 // becomes an import and its job; the screen follows the job, answers what the file left open,
@@ -102,10 +103,15 @@ export type CsvQuestions = {
   readonly unsure: ReadonlyArray<CsvUnsure>;
 };
 
-/** What the user answers a waiting import: its account, and how to read its CSV. */
+/**
+ * What the user answers a waiting import: its account, and how to read its CSV: a definition made
+ * on the screen (`csvProfile`), or a profile chosen by id or key (`profile`), which wins when both
+ * are given. With neither, the import chooses again as it did the first time.
+ */
 export type Answers = {
   readonly accountId: string | null;
   readonly csvProfile: CsvProfile | null;
+  readonly profile: ProfileChoice | null;
 };
 
 type Failure = QueryFailed;
@@ -141,7 +147,8 @@ export class Imports extends Context.Service<
     ) => Effect.Effect<Undone, ImportNotFound | ImportBusy | Failure>;
     /**
      * Runs a waiting or failed import again, with the user's answers: its account, how to read its
-     * CSV. Refused for an import that runs, is done or undone.
+     * CSV, the import recording the profile chosen. Refused for an import that runs, is done or
+     * undone, and for a profile the user does not have or that no longer reads.
      */
     readonly resume: (
       owner: string,
@@ -149,7 +156,13 @@ export class Imports extends Context.Service<
       answers: Answers,
     ) => Effect.Effect<
       ImportSummary,
-      ImportNotFound | ImportBusy | AccountNotFound | ImportUnavailable | Failure
+      | ImportNotFound
+      | ImportBusy
+      | AccountNotFound
+      | ProfileNotFound
+      | ProfileUnreadable
+      | ImportUnavailable
+      | Failure
     >;
     /** The accounts an import may go to: the open ones, by name. */
     readonly accounts: (owner: string) => Effect.Effect<ReadonlyArray<ImportAccount>, Failure>;
@@ -432,6 +445,13 @@ export const importsLayer = Layer.effect(
           const statuses = yield* statusesFor(owner, found, RESUMABLE);
           const { accountId } = answers;
 
+          const chosen =
+            answers.profile === null
+              ? undefined
+              : yield* resolveProfile(owner, answers.profile).pipe(
+                  Effect.provideService(UserData, userData),
+                );
+
           const outcome = yield* inTransaction(owner, async (transaction) => {
             if (accountId !== null && !(await accountExists(transaction, accountId))) {
               return "no-account" as const;
@@ -443,6 +463,9 @@ export const importsLayer = Layer.effect(
                 status: "queued",
                 errorCode: null,
                 accountId: accountId ?? found.account?.id ?? null,
+                // The profile chosen; none for a definition given, or for the job to choose again.
+                profileId: chosen?.profileId ?? null,
+                shippedProfile: chosen?.shippedProfile ?? null,
                 // The job it replaces is forgotten at once: the new one's id comes with its send.
                 jobId: null,
               })
@@ -462,7 +485,7 @@ export const importsLayer = Layer.effect(
             return yield* new ImportBusy({ importId, status: now.status });
           }
 
-          yield* sendJob(owner, importId, answers.csvProfile);
+          yield* sendJob(owner, importId, chosen?.profile ?? answers.csvProfile);
 
           return yield* show(owner, importId);
         }),

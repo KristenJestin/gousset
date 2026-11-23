@@ -1,5 +1,6 @@
 import {
   FixtureLedger,
+  ImportProfiles,
   Imports,
   memoryAccountStore,
   memoryId,
@@ -115,6 +116,7 @@ function onToday(rows: MemoryLineRows): Runner<GoussetServices> {
     memoryLineStore(byOwner),
     // lines never reaches the imports.
     Layer.mock(Imports, {}),
+    Layer.mock(ImportProfiles, {}),
     TestClock.layer(),
   );
 

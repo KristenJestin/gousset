@@ -112,8 +112,16 @@ export {
   ImportFailed,
   ImportNotFound,
   ImportUnavailable,
+  InvalidProfileFile,
+  ProfileNameMissing,
+  ProfileNotFound,
+  ProfileTooLong,
+  ProfileUnreadable,
+  TooManyProfiles,
   UnknownFormat,
 } from "./imports/errors";
+
+export { ImportProfiles, importProfilesLayer } from "./imports/profiles";
 
 export { IMPORTS_LISTED, ImportJobs, Imports, importsLayer } from "./imports/imports";
 
@@ -129,9 +137,27 @@ export type {
 
 export { ReadFailed, ReadRequest, StatementReader, inlineStatementReader } from "./imports/read";
 
-export { IMPORT_STEPS, MAX_FILE_BYTES } from "./imports/summary";
+export {
+  IMPORT_STEPS,
+  MAX_FILE_BYTES,
+  MAX_PROFILE_FILE,
+  MAX_PROFILE_HEADER,
+  MAX_PROFILE_NAME,
+  MAX_PROFILES,
+} from "./imports/summary";
 
-export type { ImportFormat, ImportStatus, ImportStep, ImportSummary } from "./imports/summary";
+export type {
+  ImportFormat,
+  ImportProfileEntry,
+  ImportStatus,
+  ImportStep,
+  ImportSummary,
+  ProfileChoice,
+  ProfileDraft,
+  ProfileFile,
+  ProfileFit,
+  ProfilesForImport,
+} from "./imports/summary";
 
 export { ImportJobInput, markFailed, runImport } from "./imports/run";
 
