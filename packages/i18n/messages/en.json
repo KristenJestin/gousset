@@ -18,6 +18,7 @@
   "changePasswordDescription": "Other devices signed in to your account will be signed out.",
   "changePasswordSubmit": "Change the password",
   "changePasswordResetOn": "The administrator reset your password on {date}.",
+  "changePasswordRecoveredOn": "Your password was reset from the server on {date}.",
   "usersTitle": "Users",
   "usersDescription": "Everyone with an account on this installation.",
   "usersAdministrator": "Administrator",

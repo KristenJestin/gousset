@@ -2,7 +2,8 @@
 # Installs an image as docker-compose.yml does, on an empty machine (docs/releases.md, "The
 # image"): a fresh project and volume, secrets made for the run, `migrate`, then the app. Checks
 # that `migrate` succeeded, that /health answers 200, that the app serves its page and logs in to
-# the database as its own role, never as the tables' owner; then that the app is not healthy
+# the database as its own role, never as the tables' owner, and that `recover-admin` runs in the
+# app's container and reaches the database; then that the app is not healthy
 # without BETTER_AUTH_SECRET, nor with a wrong database password. The database password holds every
 # character a URL reserves. Removes everything it started, whatever happened.
 #   tools/check-image.sh <tag>   a tag of ghcr.io/kristenjestin/gousset, local or pulled
@@ -58,6 +59,16 @@ roles=$("${compose[@]}" exec -T postgres psql -U gousset -d gousset -tAc \
   fail "the database's sessions could not be read."
 [ "$roles" = gousset_app ] || fail "the app logs in to the database as '$roles', not gousset_app."
 
+# The administrator's recovery runs in the running container, its secret read by the entry point,
+# and reaches the database as its owner (after the check above, which it would fail): with no
+# administrator yet, it refuses, saying so, and changes nothing.
+recovery=$("${compose[@]}" exec -T web gousset recover-admin nobody@example.com 2>&1) &&
+  fail "recover-admin accepted an installation without an administrator."
+case $recovery in
+  *"has no administrator yet"*) ;;
+  *) fail "recover-admin did not reach the database: $recovery" ;;
+esac
+
 # The image beside the installation, on its network and database, one thing wrong: what its
 # /health answers once it answers (000: it never started, which is not healthy either).
 probe() { # <name> <host port> <docker run arguments>…
@@ -87,5 +98,5 @@ wrong=$(probe wrong-password $((port + 2)) --env "BETTER_AUTH_SECRET=$secret" --
 [ "$wrong" != 200 ] || fail "/health answered 200 with a wrong database password."
 
 echo "check-image.sh: $tag installs: migrate ran, /health answers 200, the app serves its page"
-echo "check-image.sh: and logs in as gousset_app;"
+echo "check-image.sh: and logs in as gousset_app; recover-admin reaches the database;"
 echo "check-image.sh: /health answers $unsigned without BETTER_AUTH_SECRET, $wrong with a wrong database password."

@@ -12,7 +12,8 @@ export const PasswordResetCode = Schema.Literals([
   "USER_NOT_FOUND",
   // The administrator changes their own password themselves, knowing the current one. There is
   // one administrator per installation (no second one can be named, admin-access.ts), so this is
-  // always their own account; recovering it when they forget is #79.
+  // always their own account; when they forget it, whoever runs the installation recovers it from
+  // the server (admin-recovery.ts).
   "CANNOT_RESET_ADMINISTRATOR",
   "PASSWORD_TOO_SHORT",
   "PASSWORD_TOO_LONG",
@@ -25,7 +26,7 @@ export class PasswordResetRefused extends Schema.TaggedError<PasswordResetRefuse
 
 /**
  * The user chose their own password: the temporary one is no longer held, and the reset's date
- * goes. Only as the change found it (`resetAt`, read with the session before the change): a reset
+ * and source go. Only as the change found it (`resetAt`, read with the session before the change): a reset
  * the administrator committed meanwhile keeps its flag, or the user could end up on a password
  * the administrator chose, with nothing asking them to change it.
  */
@@ -36,7 +37,7 @@ export async function clearTemporaryPassword(
 ): Promise<void> {
   await database
     .update(authUser)
-    .set({ mustChangePassword: false, passwordResetAt: null })
+    .set({ mustChangePassword: false, passwordResetAt: null, passwordResetBy: null })
     .where(
       and(
         eq(authUser.id, userId),
@@ -53,6 +54,39 @@ export class PasswordResetFailed extends Schema.TaggedError<PasswordResetFailed>
 
 const attempt = <A>(run: () => Promise<A>) =>
   Effect.tryPromise({ try: run, catch: () => new PasswordResetFailed() });
+
+/**
+ * Who gives a temporary password: the administrator, from the users page, or whoever runs the
+ * installation, recovering the administrator's from the server (admin-recovery.ts).
+ */
+export type PasswordResetBy = NonNullable<(typeof authUser.$inferSelect)["passwordResetBy"]>;
+
+/**
+ * The reset itself, in one transaction: the password becomes the temporary one (`hash`), the user
+ * must change it at the next sign-in, the reset's time and source (`by`) are kept to show them,
+ * every session of the user ends and every MCP client they allowed loses its access.
+ */
+export async function replaceWithTemporaryPassword(
+  database: Database,
+  userId: string,
+  hash: string,
+  by: PasswordResetBy,
+): Promise<void> {
+  await database.transaction(async (transaction) => {
+    await transaction
+      .update(authAccount)
+      .set({ password: hash })
+      .where(and(eq(authAccount.userId, userId), eq(authAccount.providerId, "credential")));
+
+    await transaction
+      .update(authUser)
+      .set({ mustChangePassword: true, passwordResetAt: new Date(), passwordResetBy: by })
+      .where(eq(authUser.id, userId));
+
+    await transaction.delete(authSession).where(eq(authSession.userId, userId));
+    await revokeAllClientsWithin(transaction, userId);
+  });
+}
 
 /**
  * The administrator gives a user a new temporary password, for a user who forgot theirs. In one
@@ -104,21 +138,6 @@ export function resetPassword(
 
     const hash = yield* attempt(() => context.password.hash(temporaryPassword));
 
-    yield* attempt(() =>
-      database.transaction(async (transaction) => {
-        await transaction
-          .update(authAccount)
-          .set({ password: hash })
-          .where(and(eq(authAccount.userId, userId), eq(authAccount.providerId, "credential")));
-
-        await transaction
-          .update(authUser)
-          .set({ mustChangePassword: true, passwordResetAt: new Date() })
-          .where(eq(authUser.id, userId));
-
-        await transaction.delete(authSession).where(eq(authSession.userId, userId));
-        await revokeAllClientsWithin(transaction, userId);
-      }),
-    );
+    yield* attempt(() => replaceWithTemporaryPassword(database, userId, hash, "administrator"));
   });
 }

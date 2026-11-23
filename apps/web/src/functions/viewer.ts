@@ -35,9 +35,11 @@ export const getViewer = createServerFn({ method: "GET" }).handler(() =>
               : "system",
             isAdmin: user.role === "admin",
             mustChangePassword: user.mustChangePassword === true,
-            // The day the administrator reset the password, on the server's calendar: the same
-            // text on the server and in the browser, whatever their time zones.
+            // The day the password was reset, on the server's calendar: the same text on the
+            // server and in the browser, whatever their time zones.
             passwordResetOn: user.passwordResetAt ? localDay(user.passwordResetAt) : null,
+            // By the administrator, or from the server when the administrator's was recovered.
+            passwordResetFromServer: user.passwordResetBy === "server",
             singleKeyShortcuts: user.singleKeyShortcuts !== false,
           },
         };
