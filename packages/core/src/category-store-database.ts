@@ -4,6 +4,7 @@ import {
   entry,
   entryPart,
   merchant,
+  rule,
   statementLine,
 } from "@gousset/db/schema/ledger";
 import { transfer } from "@gousset/db/schema/transfers";
@@ -139,6 +140,12 @@ async function apply(
           .update(merchant)
           .set({ defaultCategoryId: step.into })
           .where(eq(merchant.defaultCategoryId, step.from));
+
+        // The rules that set it go with the merchants' defaults (#25): its deletion would clear them.
+        await transaction
+          .update(rule)
+          .set({ setCategoryId: step.into })
+          .where(eq(rule.setCategoryId, step.from));
         break;
       }
 

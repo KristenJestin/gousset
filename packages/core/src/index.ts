@@ -293,4 +293,42 @@ export type { ExportArchive } from "./export/archive";
 
 export { EXPORT_TABLES, IMPORT_FILES_FOLDER } from "./export/tables";
 
+export {
+  RuleConditionsRefused,
+  RuleEffectRefused,
+  RuleJobUnavailable,
+  RuleNotFound,
+  TooManyRules,
+} from "./rules/errors";
+
+export {
+  MAX_RULES,
+  RuleJobInput,
+  RuleJobs,
+  applyRuleToPast,
+  createRule,
+  deleteRule,
+  editRule,
+  listRules,
+  moveRule,
+  previewRule,
+  showRule,
+  startApplyToPast,
+} from "./rules/rules";
+
+export type {
+  RuleAccount,
+  RuleApplied,
+  RuleCategory,
+  RuleDetail,
+  RuleEdit,
+  RuleEffect,
+  RuleInput,
+  RuleJobOutcome,
+  RuleList,
+  RuleOrigin,
+  RuleReach,
+  RuleSummary,
+} from "./rules/rules";
+
 export type { ExportTable } from "./export/tables";

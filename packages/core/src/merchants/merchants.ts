@@ -1,8 +1,10 @@
 import {
   account,
   category,
+  entry,
   merchant,
   merchantAlias,
+  rule,
   statementLine,
 } from "@gousset/db/schema/ledger";
 import { UserData } from "@gousset/db/user-data";
@@ -704,6 +706,18 @@ export const merchantsLayer = Layer.effect(
                   defaultCategoryId: sql`coalesce(${merchant.defaultCategoryId}, (select m.default_category_id from ${merchant} m where m.id = ${from.id}))`,
                 })
                 .where(eq(merchant.id, into.id));
+
+              // The rules that set the merged one, and the entries they gave it, go to the one kept
+              // (#25): its deletion would clear them.
+              await transaction
+                .update(rule)
+                .set({ setMerchantId: into.id })
+                .where(eq(rule.setMerchantId, from.id));
+
+              await transaction
+                .update(entry)
+                .set({ merchantId: into.id })
+                .where(eq(entry.merchantId, from.id));
 
               await transaction.delete(merchant).where(eq(merchant.id, from.id));
 

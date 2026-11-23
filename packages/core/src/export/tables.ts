@@ -215,6 +215,9 @@ export const ENTRIES: ExportTable = {
     },
     CREATED_AT,
     UPDATED_AT,
+    // Added after the others (#25): the database keeps them last.
+    { name: "merchant_id", holds: "the merchant a rule set (merchants.id); empty for none" },
+    { name: "rule_id", holds: "the rule that classified it (rules.id); empty for none" },
   ],
 };
 
@@ -282,6 +285,34 @@ export const TRANSFERS: ExportTable = {
   ],
 };
 
+export const RULES: ExportTable = {
+  table: "rule",
+  file: "rules",
+  holds: "your rules: what a line must match, and the merchant and category its entry then gets",
+  columns: [
+    ID,
+    OWNER,
+    {
+      name: "position",
+      holds: "its place: rules are tried in this order, the first that matches wins",
+    },
+    { name: "enabled", holds: "false when it is turned off" },
+    {
+      name: "conditions",
+      holds: "what a line must match, as JSON: label, account, amount, direction, day or date",
+    },
+    { name: "set_merchant_id", holds: "the merchant it sets (merchants.id); empty for none" },
+    { name: "set_category_id", holds: "the category it sets (categories.id); empty for none" },
+    { name: "applied_count", holds: "how many lines it classified" },
+    {
+      name: "created_from",
+      holds: "correction (proposed when you corrected a line) or user (written on its screen)",
+    },
+    CREATED_AT,
+    UPDATED_AT,
+  ],
+};
+
 /** Every table an export writes, in the manifest's order. */
 export const EXPORT_TABLES: ReadonlyArray<ExportTable> = [
   ACCOUNTS,
@@ -295,6 +326,7 @@ export const EXPORT_TABLES: ReadonlyArray<ExportTable> = [
   TRANSFERS,
   MERCHANTS,
   MERCHANT_ALIASES,
+  RULES,
 ];
 
 /** Where the files imported go: one folder per import, named by its id. */

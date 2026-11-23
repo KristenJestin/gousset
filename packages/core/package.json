@@ -9,12 +9,14 @@
     "./account-values": "./src/account-values.ts",
     "./default-categories": "./src/default-categories.ts",
     "./imports": "./src/imports/summary.ts",
-    "./read": "./src/imports/read.ts"
+    "./read": "./src/imports/read.ts",
+    "./rule-values": "./src/rules/conditions.ts"
   },
   "scripts": {
     "check-types": "tsc --noEmit"
   },
   "dependencies": {
+    "@gousset/currency": "workspace:*",
     "@gousset/db": "workspace:*",
     "@gousset/fixture": "workspace:*",
     "@gousset/import": "workspace:*",

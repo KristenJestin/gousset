@@ -14,6 +14,7 @@ import { Effect, Schema } from "effect";
 import { takeCategoryTurn } from "../category-turn";
 import { entriesForLines } from "../entries";
 import { recogniseIn } from "../merchants/merchants";
+import { applyRulesToImport } from "../rules/rules";
 import { ImportFailed } from "./errors";
 import { dedupKeys, NEAR_DAYS, nearDuplicates } from "./keys";
 import type { ExistingLine, ImportFormat, ReadLine } from "./keys";
@@ -476,6 +477,9 @@ export function runImport(
       // The merchants of the lines just added, and of any line whose label names none yet (the
       // lines of v0.2, kept before merchants existed, at the first import after the update).
       await recogniseIn(transaction, owner);
+
+      // The user's rules classify the lines it added (#25), after their merchants' defaults.
+      await applyRulesToImport(transaction, importId);
 
       const of = (state: string) => states.find((row) => row.state === state)?.lines ?? 0;
       const added = of("counted");
