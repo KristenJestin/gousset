@@ -9,7 +9,8 @@ import { expect, test } from "@playwright/test";
  * story in every browser would put over a thousand images in Git. Reduced motion: each story is
  * caught in its final state, never on its way.
  *
- * The references come from CI (`.github/workflows/ui-snapshots.yml`), never from a local browser.
+ * The references come from CI (the `references` job of `.github/workflows/ci.yml`), never from a
+ * local browser.
  */
 type Shot = {
   id: string;

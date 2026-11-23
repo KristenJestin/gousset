@@ -105,6 +105,13 @@ function counts(summary: ImportSummary): string {
   return `${summary.linesRead} lines read: ${summary.linesAdded} added, ${summary.linesDuplicate} already known (duplicates), ${summary.linesHeld} held for review as near duplicates`;
 }
 
+/** Some banks write a balance of 0.00 for an account that is not empty: the import ignored it. */
+function balanceText(summary: ImportSummary): string {
+  return summary.balanceIgnored
+    ? "The file's balance looks empty and was ignored: it says 0, while the account's lines make it something else that day. The account is not checked against it."
+    : "";
+}
+
 /** Where the job stands, in its steps (read, deduplicate, save). */
 function stepOf(summary: ImportSummary): string {
   const all = IMPORT_STEPS.join(", ");
@@ -179,6 +186,7 @@ function statusText(summary: ImportSummary): string {
     `${summary.fileName} (${summary.format}): ${stepOf(summary)}.`,
     `Account: ${accountName(summary)}. Period: ${period(summary)}.`,
     `${counts(summary)}.`,
+    balanceText(summary),
     summary.status === "failed" ? failureText(summary.errorCode) : "",
     `Import id: ${summary.id}`,
   ]
@@ -211,6 +219,7 @@ function doneText(summary: ImportSummary): string {
     summary.linesHeld > 0
       ? "The lines held wait for the user's review: they count only once confirmed."
       : "",
+    balanceText(summary),
     `Import id: ${summary.id} (to undo it: ${call({ action: "undo", import: summary.id })})`,
   ]
     .filter((line) => line !== "")

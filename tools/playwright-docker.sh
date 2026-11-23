@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Runs packages/ui's browser checks in the official Playwright image, the one CI's `ui` job runs
-# in, so that screenshots render alike here and there. The image's version is the installed
+# Runs packages/ui's browser checks in the official Playwright image, the one CI's `ui-shard` jobs
+# run in, so that screenshots render alike here and there. The image's version is the installed
 # @playwright/test's. Arguments go to `playwright test`; to refresh the reference screenshots:
 #
 #   tools/playwright-docker.sh --update-snapshots=all

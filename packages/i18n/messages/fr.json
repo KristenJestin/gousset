@@ -245,6 +245,7 @@
   "importLinesAdded": "Ajoutées",
   "importLinesKnown": "Déjà connues",
   "importLinesReview": "À vérifier",
+  "importBalanceIgnored": "Le solde de ce fichier semble vide et a été ignoré : il indique 0, alors que les lignes du compte donnent un autre montant ce jour-là.",
   "importUndo": "Annuler cet import",
   "importContinue": "Passer à la revue",
   "importUndoneTitle": "Import annulé",

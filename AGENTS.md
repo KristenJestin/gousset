@@ -218,17 +218,20 @@ The lead reviews every change to the tools against `docs/mcp.md` before merging.
   phone; screenshots compared). CI runs them in the official Playwright image; refresh the
   reference screenshots in that same image with `tools/playwright-docker.sh
   --update-snapshots=all`, never with a local browser, which renders fonts differently. Missing
-  references are made by CI, never on the machine: push a commit whose body has the trailer line
-  `Update-Snapshots: missing` alone, as the last commit of the push, and the `ui-snapshots`
-  workflow draws the missing ones in that image and commits them to the branch (`test(ui): …`);
-  then fetch, check them, and push a commit of your own so that CI runs again. To redraw a
-  reference, delete it first. The branch's code draws them with a read-only token; another job,
-  which runs none of it, checks they are only new PNGs and pushes them.
-- **CI on a pull request runs Chromium on a desktop only**, in `e2e` and `ui`; each push to `dev`
-  runs every browser and width. A failure seen only on `dev` is fixed at once. A pull request
-  whose head commit ends with the trailer line `E2E-Matrix: full` runs every browser and width as
-  `dev` does: use it to reproduce a failure of another browser, and make the last run before
-  merging a full one when the change touches what other browsers draw.
+  references are made by CI, never on the machine: on a pull request, push a commit whose body
+  has the trailer line `Update-Snapshots: missing` alone, as the last commit of the push; that
+  push's `ci` run draws the missing ones in every browser, in that image, and its `references`
+  job commits them to the branch (`test(ui): …`), and `ui` fails, saying so. Then fetch, check
+  them, and push a commit of your own so that CI runs again. To redraw a reference, delete it
+  first. The branch's code draws them with a read-only token; the `references` job, which runs
+  none of it, checks they are only new PNGs and pushes them.
+- **CI runs Chromium on a desktop only**, in `e2e` and `ui`, on a pull request and on each push
+  to `dev` and `next/x.y`; both are sharded, each shard on a runner of its own. **Every browser
+  and width** runs on the release pull request (`dev → main`, which the release requires), each
+  night on `dev`, by hand ("Run workflow" on `ci`), and on a pull request or push whose head
+  commit ends with the trailer line `E2E-Matrix: full`: use it to reproduce a failure of another
+  browser, and make the last run before merging a full one when the change touches what other
+  browsers draw. A failure seen only in a full run is fixed at once.
 - **Required checks** on `dev`: `verify`, `ui`, `e2e`, `react-doctor` and `privacy`. `main` is
   moved by the release alone, to a commit of `dev` whose checks passed (`docs/releases.md`,
   "Releasing"); this is a convention: its ruleset only blocks deletion and non-fast-forward, and
@@ -248,11 +251,11 @@ From v0.2 on, installations hold real data: an update must never lose, duplicate
 - **Its timestamp follows every migration of its target branch** when it lands: after merging
   `origin/dev` (or `origin/next/x.y`), a migration of yours that is no longer the last is
   generated again.
-- **The `upgrade` workflow** (`tools/check-upgrade.sh`) updates the last release, filled with
-  invented data, to the commit, on every push to `dev` and `next/**` and on a pull request that
-  touches what an update runs through (`packages/db`, `packages/auth`, the image, its compose
-  files and entry point, or the job; `docs/releases.md` lists them), and compares every row before and after; the release refuses a commit whose push to `dev` did not
-  pass it. A column or a table the new migrations add is expected by name (`ALTER TABLE "t" ADD
+- **The `upgrade` job** of `ci` (`tools/check-upgrade.sh`) updates the last release, filled with
+  invented data, to the commit's image, on every push to `dev` and `next/**` and on a pull request
+  that touches what an update runs through (`packages/db`, `packages/auth`, the image, its compose
+  files and entry point, or the job; `docs/releases.md` lists them), and compares every row before
+  and after; the release refuses a commit whose push to `dev` did not pass it. A column or a table the new migrations add is expected by name (`ALTER TABLE "t" ADD
   COLUMN "c"`, `CREATE TABLE "t"`); any other difference fails it.
 
 ## How the work is organised

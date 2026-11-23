@@ -294,6 +294,46 @@ describe("showAccount", () => {
     ]);
   });
 
+  test("leaves out a statement balance of zero the account contradicts, as an older import kept it", async () => {
+    const withEmptyBalances: MemoryRows = {
+      accounts: [current],
+      lines,
+      balances: [
+        // The app counts 9000 at the end of 2026-10-05: a 0.00 that day looks empty. The latest,
+        // 0.00 on 2026-10-31 while the app counts 14,000, too: the one before it is the check's.
+        { accountId: current.id, day: "2026-10-05", minor: 0, source: "statement" },
+        { accountId: current.id, day: "2026-10-20", minor: 14_000, source: "statement" },
+        { accountId: current.id, day: "2026-10-31", minor: 0, source: "statement" },
+      ],
+    };
+
+    const { check } = await inOrder(withEmptyBalances, showAccount(ADA, current.id));
+
+    expect(check).toEqual({
+      day: "2026-10-20",
+      statement: { minor: 14_000, currency: "EUR" },
+      app: { minor: 14_000, currency: "EUR" },
+      difference: { minor: 0, currency: "EUR" },
+      agrees: true,
+      earlierMismatches: [],
+    });
+  });
+
+  test("keeps a statement balance of zero the account agrees with", async () => {
+    const empty = accountOf("Emptied", "current", { openingBalanceMinor: 0 });
+
+    const { check } = await inOrder(
+      {
+        accounts: [empty],
+        lines: [line(empty.id, "2026-10-02", 5000), line(empty.id, "2026-10-20", -5000)],
+        balances: [{ accountId: empty.id, day: "2026-10-31", minor: 0, source: "statement" }],
+      },
+      showAccount(ADA, empty.id),
+    );
+
+    expect(check).toMatchObject({ day: "2026-10-31", agrees: true });
+  });
+
   test("gives the current month's counted money in and out, from the 1st to today", async () => {
     const spending = accountOf("Spending", "current");
 
