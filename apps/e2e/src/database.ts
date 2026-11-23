@@ -52,6 +52,11 @@ export function workerDatabaseName(parallelIndex: number, run = currentRunId()):
   return `gousset_e2e_${run}_worker_${parallelIndex}`;
 }
 
+/** Where a worker's test restores a backup: an empty database, as a new installation's is. */
+export function restoredDatabaseName(parallelIndex: number, run = currentRunId()): string {
+  return `gousset_e2e_${run}_restored_${parallelIndex}`;
+}
+
 /** The harness's server URL, pointed at one of its databases. */
 export function databaseUrl(database: string): string {
   const url = new URL(harness.databaseUrl);

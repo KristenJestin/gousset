@@ -1,4 +1,5 @@
 import {
+  DataExport,
   FixtureLedger,
   ImportProfiles,
   Imports,
@@ -36,7 +37,7 @@ function onDay(day: string, ledger: Layer.Layer<Ledger> = FixtureLedger): Runner
 
         return yield* effect;
       }).pipe(
-        // month never reaches the imports.
+        // month never reaches the imports nor the export.
         Effect.provide(
           Layer.mergeAll(
             ledger,
@@ -44,6 +45,7 @@ function onDay(day: string, ledger: Layer.Layer<Ledger> = FixtureLedger): Runner
             memoryLineStore(),
             Layer.mock(Imports, {}),
             Layer.mock(ImportProfiles, {}),
+            Layer.mock(DataExport, {}),
             TestClock.layer(),
           ),
         ),

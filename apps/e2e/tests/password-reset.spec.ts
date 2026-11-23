@@ -442,6 +442,21 @@ test("a temporary password opens nothing but its change, on the server too", asy
   expect((await answerTo(app.baseURL, held.cookies, job)).status).toBe(403);
   expect((await answerTo(app.baseURL, secondUser.cookies, job)).status).toBe(404);
 
+  // No import: a statement file sent to the upload is refused before it is read.
+  const upload = {
+    url: "/api/imports?name=statement.bin",
+    method: "POST",
+    headers: { "content-type": "application/octet-stream" },
+    body: "not a statement",
+  };
+
+  const uploaded = await answerTo(app.baseURL, held.cookies, upload);
+
+  expect(uploaded.status).toBe(403);
+  expect(uploaded.text).toContain(HELD);
+  // Another user's session gets past the guard, to the file's own refusal, which writes nothing.
+  expect((await answerTo(app.baseURL, secondUser.cookies, upload)).status).toBe(422);
+
   // None of better-auth's own routes on the account.
   const renamed = await answerTo(app.baseURL, held.cookies, {
     url: "/api/auth/update-user",

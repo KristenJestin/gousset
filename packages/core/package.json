@@ -18,7 +18,8 @@
     "@gousset/fixture": "workspace:*",
     "@gousset/import": "workspace:*",
     "drizzle-orm": "catalog:",
-    "effect": "catalog:"
+    "effect": "catalog:",
+    "fflate": "0.8.3"
   },
   "devDependencies": {
     "@gousset/config": "workspace:*",

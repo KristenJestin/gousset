@@ -208,6 +208,19 @@ export async function startWorkerEnvironment(
 
   await recreateDatabase(database, templateDatabase());
 
+  return startApp(slot, database, logFile, extra);
+}
+
+/**
+ * Starts an app on a database that is ready (a backup restored into it, say), on a port of its
+ * own. Stopping it drops the database.
+ */
+export async function startApp(
+  slot: number,
+  database: string,
+  logFile: string,
+  extra: AppEnvironment = {},
+): Promise<WorkerEnvironment> {
   const port = await freePort();
   const baseURL = `http://${APP_HOST}:${port}`;
 

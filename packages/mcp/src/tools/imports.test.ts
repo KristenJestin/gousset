@@ -1,4 +1,5 @@
 import {
+  DataExport,
   EmptyFile,
   FileTooLarge,
   FixtureLedger,
@@ -177,6 +178,7 @@ function runnerOf(state: Fake): Runner<GoussetServices> {
           memoryLineStore(),
           importsOf(state),
           profilesOf(state),
+          Layer.mock(DataExport, {}),
         ),
       ),
     );
@@ -202,6 +204,7 @@ function runnerWithTime(state: Fake): Runner<GoussetServices> {
             memoryLineStore(),
             importsOf(state),
             profilesOf(state),
+            Layer.mock(DataExport, {}),
             TestClock.layer(),
           ),
         ),

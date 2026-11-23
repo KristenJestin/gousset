@@ -31,6 +31,7 @@ const SCREENS = [
   { path: "/settings", name: "settings", en: "Settings", fr: "Réglages" },
   { path: "/settings/categories", name: "categories", en: "Settings", fr: "Réglages" },
   { path: "/settings/rules", name: "rules", en: "Settings", fr: "Réglages" },
+  { path: "/settings/data", name: "data", en: "Settings", fr: "Réglages" },
   { path: "/users", name: "users", en: "Users", fr: "Utilisateurs" },
   {
     path: "/change-password",

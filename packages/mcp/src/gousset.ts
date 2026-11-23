@@ -1,18 +1,32 @@
-import type { AccountStore, ImportProfiles, Imports, Ledger, LineStore } from "@gousset/core";
+import type {
+  AccountStore,
+  DataExport,
+  ImportProfiles,
+  Imports,
+  Ledger,
+  LineStore,
+} from "@gousset/core";
 
 import { INSTRUCTIONS } from "./instructions";
 import type { ServerDefinition } from "./server";
 import type { Tool } from "./tool";
 import { accountsTool } from "./tools/accounts";
+import { dataTool } from "./tools/data";
 import { importsTool } from "./tools/imports";
 import { linesTool } from "./tools/lines";
 import { monthTool } from "./tools/month";
 
 /**
  * The services Gousset's tools need (the made-up month, the user's accounts, the imports and their
- * profiles, every line searched across accounts).
+ * profiles, the export, every line searched across accounts).
  */
-export type GoussetServices = Ledger | AccountStore | Imports | ImportProfiles | LineStore;
+export type GoussetServices =
+  | Ledger
+  | AccountStore
+  | Imports
+  | ImportProfiles
+  | DataExport
+  | LineStore;
 
 /**
  * Gousset's tools, in the order `tools/list` gives them: one family per concept
@@ -22,6 +36,7 @@ export const goussetTools: ReadonlyArray<Tool<GoussetServices>> = [
   monthTool,
   importsTool,
   accountsTool,
+  dataTool,
   linesTool,
 ];
 

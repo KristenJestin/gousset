@@ -133,6 +133,22 @@ export default defineConfig({
         files: ["**/*.stories.tsx", "**/*.test.tsx", "**/*.test.ts", "apps/web/src/routes/e2e/**"],
         rules: { "gousset/no-text-outside-messages": "off" },
       },
+      // The app reads the session through `usableSession`, which refuses a session held for a
+      // temporary password's change (#70, #79). Three places read it whole: that function, the
+      // viewer (which sends a held session to the change), and better-auth's own routes, which its
+      // hook guards (packages/auth).
+      {
+        files: ["apps/web/src/**/*.ts", "apps/web/src/**/*.tsx"],
+        rules: { "gousset/no-direct-session-read": "error" },
+      },
+      {
+        files: [
+          "apps/web/src/lib/session.server.ts",
+          "apps/web/src/functions/viewer.ts",
+          "apps/web/src/routes/api/auth/$.ts",
+        ],
+        rules: { "gousset/no-direct-session-read": "off" },
+      },
     ],
     ignorePatterns: [
       ...(cloudflare.ignorePatterns ?? []),

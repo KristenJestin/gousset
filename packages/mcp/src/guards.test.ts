@@ -1,4 +1,5 @@
 import {
+  DataExport,
   FixtureLedger,
   ImportProfiles,
   Imports,
@@ -24,7 +25,7 @@ async function listing() {
   const client = await connectInProcess(
     goussetServer,
     {
-      // Listing calls no tool: the imports are never reached.
+      // Listing calls no tool: the imports and the export are never reached.
       run: (effect) =>
         Effect.runPromiseExit(
           Effect.provide(
@@ -35,6 +36,7 @@ async function listing() {
               memoryLineStore(),
               Layer.mock(Imports, {}),
               Layer.mock(ImportProfiles, {}),
+              Layer.mock(DataExport, {}),
             ),
           ),
         ),

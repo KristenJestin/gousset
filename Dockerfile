@@ -1,9 +1,10 @@
 # syntax=docker/dockerfile:1
 # The one image of Gousset (docs/releases.md, "The image"): the app (pages, server functions,
-# background jobs) and its `migrate` one-shot.
+# background jobs), its `migrate` one-shot and the `recover-admin` command.
 #   docker build -t gousset .
 #   docker run gousset           the app, on port 3001
 #   docker run gousset migrate   applies the database migrations, then exits
+#   docker compose exec web gousset recover-admin <e-mail>   a temporary password for the administrator
 FROM node:26.13.1-slim AS build
 ENV VARLOCK_TELEMETRY_DISABLED=1
 RUN npm install --global pnpm@12.21.0
@@ -12,10 +13,11 @@ COPY . .
 RUN --mount=type=cache,id=pnpm-store,target=/pnpm-store \
   pnpm install --frozen-lockfile --store-dir /pnpm-store
 ENV NODE_ENV=production
-RUN pnpm --filter web build
+RUN pnpm --filter web build && pnpm --filter @gousset/auth build
 # The migrations need drizzle-orm and pg only: one bundled file, its migrations beside it.
 RUN pnpm exec rolldown packages/db/src/migrate.ts --platform node -f esm -o /out/db/migrate.mjs \
   && cp -r packages/db/src/migrations /out/db/migrations \
+  && mkdir -p /out/auth && cp packages/auth/dist/recover-admin.mjs /out/auth/recover-admin.mjs \
   && cp -r apps/web/.output/. /out/
 # The server loads and checks its environment at start with Varlock's CLI and the app's schema
 # (`ssrInjectMode: "auto-load"`): both ship, the CLI having no dependency of its own.

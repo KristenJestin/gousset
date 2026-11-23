@@ -1,4 +1,5 @@
 import {
+  DataExport,
   FixtureLedger,
   ImportProfiles,
   Imports,
@@ -42,7 +43,7 @@ describe("a call to the MCP door", () => {
       const client = await connectInProcess(
         goussetServer,
         {
-          // The call reads the month only: no import is reached.
+          // The call reads the month only: no import nor export is reached.
           run: (effect) =>
             Effect.runPromiseExit(
               Effect.provide(
@@ -53,6 +54,7 @@ describe("a call to the MCP door", () => {
                   memoryLineStore(),
                   Layer.mock(Imports, {}),
                   Layer.mock(ImportProfiles, {}),
+                  Layer.mock(DataExport, {}),
                 ),
               ),
             ),

@@ -1,4 +1,5 @@
 import {
+  DataExport,
   FixtureLedger,
   ImportProfiles,
   Imports,
@@ -117,6 +118,7 @@ function onToday(rows: MemoryLineRows): Runner<GoussetServices> {
     // lines never reaches the imports.
     Layer.mock(Imports, {}),
     Layer.mock(ImportProfiles, {}),
+    Layer.mock(DataExport, {}),
     TestClock.layer(),
   );
 
@@ -468,7 +470,13 @@ describe("the lines tool", () => {
     const { tools } = await client.listTools();
     const tool = tools.find((each) => each.name === "lines");
 
-    expect(tools.map((each) => each.name)).toEqual(["month", "imports", "accounts", "lines"]);
+    expect(tools.map((each) => each.name)).toEqual([
+      "month",
+      "imports",
+      "accounts",
+      "data",
+      "lines",
+    ]);
     expect(tool?.title).toBe("Lines");
     expect(tool?.annotations).toEqual({
       readOnlyHint: true,

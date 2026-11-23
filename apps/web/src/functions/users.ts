@@ -1,4 +1,3 @@
-import { isHeldForPasswordChange } from "@gousset/auth";
 import { resetPassword as resetUserPassword } from "@gousset/auth/password-reset";
 import { listUsers as listAllUsers } from "@gousset/auth/users";
 import { createMiddleware, createServerFn } from "@tanstack/react-start";
@@ -6,13 +5,14 @@ import { getRequestHeaders } from "@tanstack/react-start/server";
 import { isAPIError } from "better-auth/api";
 import { Effect, Schema } from "effect";
 
+import { usableSession } from "@/lib/session.server";
 import { auth, db } from "@/services";
 
 /** Only an administrator gets through; a route guard hides the page, this protects the data. */
 const adminOnly = createMiddleware({ type: "function" }).server(async ({ next }) => {
-  const session = await auth.api.getSession({ headers: getRequestHeaders() });
+  const { session } = await usableSession(getRequestHeaders());
 
-  if (session?.user.role !== "admin" || isHeldForPasswordChange(session)) {
+  if (session?.user.role !== "admin") {
     throw new Error("Only the administrator manages users.");
   }
 
