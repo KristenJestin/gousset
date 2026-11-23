@@ -18,12 +18,13 @@ export type ReviewStatusProps = {
 /**
  * The review's state line (screen 1, the header): the state of the imports and the link down to
  * the lines to review, `StatusPiece`s separated by dots; under it, a notice when the data is not
- * the user's own.
+ * the user's own. It holds the height of one line on a wide screen and of two on a phone, where
+ * its pieces wrap, so that the blocks under it stay where they are while its data loads.
  */
 export function ReviewStatus({ status, notice }: ReviewStatusProps) {
   return (
     <div className="-mt-3 flex flex-col gap-1.5">
-      <div className="flex min-h-5 min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
+      <div className="flex min-h-11 min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground md:min-h-5">
         {status}
       </div>
       {notice === undefined ? null : (
