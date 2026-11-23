@@ -4,7 +4,7 @@
 # here (`--update-snapshots=missing`): to redraw one, delete it in the branch first.
 #
 # Started three ways:
-# - a push to a branch other than dev and main whose last commit has, in its body, the line
+# - a push to a branch other than dev, next/x.y and main whose last commit has, in its body, the line
 #   `Update-Snapshots: missing` alone (a trailer; the subject stays a normal one);
 # - by hand (Actions, "ui-snapshots", with the branch's plain name), once this file is on the
 #   default branch;
@@ -30,7 +30,7 @@ on:
   pull_request:
     types: [labeled]
   push:
-    branches-ignore: [dev, main]
+    branches-ignore: [dev, "next/**", main]
 
 concurrency:
   group: ui-snapshots-${{ github.event.pull_request.head.ref || inputs.branch || github.ref_name }}

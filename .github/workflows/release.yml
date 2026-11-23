@@ -1,9 +1,11 @@
-# A release (docs/releases.md, "Releasing"), started by hand from dev:
-#   gh workflow run release.yml --ref dev [-f commit=<full SHA of dev>]
-# main moves forward to a commit of dev (a fast-forward, never a squash nor a merge of its own),
-# that commit's beta image (recorded as sha-<commit>) is published again as X.Y.Z and latest, and
-# the GitHub release vX.Y.Z, which makes the tag, carries the notes built from the pull requests'
-# `Note:` lines.
+# A release (docs/releases.md, "Releasing"): the release pull request dev -> main is its review,
+# and once the maintainer said yes on it, this workflow is started by hand from dev:
+#   gh workflow run release.yml --ref dev -f pull_request=<number>
+# (with no pull request only for the first release, while main does not exist). main moves forward
+# to the pull request's head, a commit of dev (a fast-forward, never a squash nor a merge of its
+# own), and GitHub then shows the pull request merged; that commit's beta image (recorded as
+# sha-<commit>) is published again as X.Y.Z and latest, and the GitHub release vX.Y.Z, which makes
+# the tag, carries the notes built from the pull requests' `Note:` lines.
 #
 # Actions are pinned by commit, the version beside it (as in ci.yml).
 name: Release
@@ -11,10 +13,10 @@ name: Release
 on:
   workflow_dispatch:
     inputs:
-      commit:
-        description: The commit of dev to release, its full SHA, or dev for its head
-        required: true
-        default: dev
+      pull_request:
+        description: The release pull request dev -> main, its number (empty only before the first release, while main does not exist)
+        required: false
+        default: ""
 
 permissions: {}
 
@@ -39,17 +41,17 @@ jobs:
       sha: ${{ steps.commit.outputs.sha }}
       version: ${{ steps.version.outputs.version }}
     steps:
-      - name: Started from dev, for a commit of dev
+      - name: Started from dev, for a pull request
         env:
-          COMMIT: ${{ inputs.commit }}
+          PULL_REQUEST: ${{ inputs.pull_request }}
         run: |
           # dev's copy of this workflow is the one that releases: another branch's may say anything.
           if [ "$GITHUB_REF" != refs/heads/dev ]; then
             echo "::error::The release is started from dev, not $GITHUB_REF: nothing was released."
             exit 1
           fi
-          if [ "$COMMIT" != dev ] && ! [[ $COMMIT =~ ^[0-9a-f]{40}$ ]]; then
-            echo "::error::The commit to release is a full SHA of dev, or dev for its head: nothing was released."
+          if [ -n "$PULL_REQUEST" ] && ! [[ $PULL_REQUEST =~ ^[1-9][0-9]*$ ]]; then
+            echo "::error::pull_request is the number of the release pull request dev -> main, as 42: nothing was released."
             exit 1
           fi
 
@@ -60,51 +62,91 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: The commit
+      # The commit released is the release pull request's head; before the first release there is
+      # no main, so no pull request, and it is dev's head.
+      - name: The pull request and its commit
         id: commit
         env:
-          COMMIT: ${{ inputs.commit }}
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          PULL_REQUEST: ${{ inputs.pull_request }}
         run: |
-          sha=$(git rev-parse HEAD)
-          if [ "$COMMIT" != dev ]; then
-            if ! git merge-base --is-ancestor "$COMMIT" HEAD 2> /dev/null; then
-              echo "::error::$COMMIT is not a commit of dev: nothing was released."
+          main=
+          if git rev-parse -q --verify refs/remotes/origin/main > /dev/null; then
+            main=$(git rev-parse refs/remotes/origin/main)
+          fi
+          if [ -z "$PULL_REQUEST" ]; then
+            if [ -n "$main" ]; then
+              echo "::error::main exists: a release is a pull request dev -> main, started with -f pull_request=<number>. Nothing was released."
               exit 1
             fi
-            sha=$COMMIT
-          fi
-          # main is always an ancestor of dev; before the first release it does not exist yet.
-          if git rev-parse -q --verify refs/remotes/origin/main > /dev/null &&
-            ! git merge-base --is-ancestor origin/main "$sha"; then
-            echo "::error::main is not an ancestor of $sha: main cannot move forward to it, nothing was released."
-            exit 1
+            sha=$(git rev-parse HEAD)
+            echo "::notice::The first release: main is made on dev's head, $sha."
+          else
+            if [ -z "$main" ]; then
+              echo "::error::main does not exist yet: the first release is started with no pull request. Nothing was released."
+              exit 1
+            fi
+            pull=$(gh api "repos/$GH_REPO/pulls/$PULL_REQUEST" \
+              --jq '[.state, (.merged | tostring), .base.ref, .head.ref, (.head.repo.full_name // "none"), .head.sha] | join(" ")')
+            read -r state merged base head repository sha <<< "$pull"
+            if [ "$base" != main ] || [ "$head" != dev ] || [ "$repository" != "$GH_REPO" ]; then
+              echo "::error::#$PULL_REQUEST is not a pull request of dev into main: nothing was released."
+              exit 1
+            fi
+            # Merged already: a run again after main moved forward to its head.
+            if [ "$state" != open ] && ! { [ "$merged" = true ] && [ "$main" = "$sha" ]; }; then
+              echo "::error::#$PULL_REQUEST is closed: nothing was released."
+              exit 1
+            fi
+            if ! git merge-base --is-ancestor "$sha" HEAD 2> /dev/null; then
+              echo "::error::The head of #$PULL_REQUEST, $sha, is not a commit of dev: nothing was released."
+              exit 1
+            fi
+            # main is always an ancestor of dev, and only ever moves forward.
+            if ! git merge-base --is-ancestor "$main" "$sha"; then
+              echo "::error::main is not an ancestor of $sha: main cannot move forward to it, nothing was released."
+              exit 1
+            fi
+            echo "::notice::#$PULL_REQUEST releases $sha."
           fi
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
 
-      # The beta needs only verify; a release needs every check of the push to dev, the full
-      # matrix of ui and e2e included: the run of ci as a whole. Its last attempt counts.
-      - name: The ci run of the commit's push to dev passed
+      # main's ruleset asks for no check: they are enforced here. The beta needs only verify; a
+      # release needs the whole ci run of the commit's push to dev (the full matrix of ui and e2e
+      # included), and the release pull request's own runs of ci and pull-request (react-doctor,
+      # privacy, the commit messages). Each workflow's last run counts, at its last attempt.
+      - name: The checks of the commit passed, on dev and on the pull request
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           SHA: ${{ steps.commit.outputs.sha }}
+          PULL_REQUEST: ${{ inputs.pull_request }}
         run: |
-          run=$(gh api "repos/$GH_REPO/actions/workflows/ci.yml/runs?head_sha=$SHA&branch=dev&event=push" \
-            --jq '.workflow_runs | if length == 0 then "none" else (max_by(.run_number) | "\(.status) \(.conclusion // "none") \(.html_url)") end')
-          read -r status conclusion url <<< "$run"
-          if [ "$status" = none ]; then
-            echo "::error::No ci run of the push of $SHA to dev was found: nothing was released."
-            exit 1
+          passed() { # <workflow file> <event> <what>
+            local run status conclusion url
+            run=$(gh api "repos/$GH_REPO/actions/workflows/$1/runs?head_sha=$SHA&branch=dev&event=$2" \
+              --jq '.workflow_runs | if length == 0 then "none" else (max_by(.run_number) | "\(.status) \(.conclusion // "none") \(.html_url)") end')
+            read -r status conclusion url <<< "$run"
+            if [ "$status" = none ]; then
+              echo "::error::No $1 run of $3 was found: nothing was released."
+              return 1
+            fi
+            if [ "$status" != completed ]; then
+              echo "::error::The $1 run of $3 is $status, not finished ($url): nothing was released."
+              return 1
+            fi
+            if [ "$conclusion" != success ]; then
+              echo "::error::The $1 run of $3 ended $conclusion, not a success ($url): nothing was released."
+              return 1
+            fi
+            echo "::notice::The $1 run of $3 passed ($url)."
+          }
+          passed ci.yml push "the push of $SHA to dev"
+          if [ -n "$PULL_REQUEST" ]; then
+            passed ci.yml pull_request "#$PULL_REQUEST at $SHA"
+            passed pull-request.yml pull_request "#$PULL_REQUEST at $SHA"
           fi
-          if [ "$status" != completed ]; then
-            echo "::error::The ci run of the push of $SHA to dev is $status, not finished ($url): nothing was released."
-            exit 1
-          fi
-          if [ "$conclusion" != success ]; then
-            echo "::error::The ci run of the push of $SHA to dev ended $conclusion, not a success ($url): nothing was released."
-            exit 1
-          fi
-          echo "::notice::Every check of the push of $SHA to dev passed ($url)."
 
       # Computed now, from the releases the commit holds: the version its beta had without the
       # pre-release, unless another release was made since its push.
@@ -203,6 +245,7 @@ jobs:
       # With the workflow's own token: GitHub refuses it a `git push` that changes
       # .github/workflows, not a ref moved through the API to a commit already in the repository.
       # A ref it moves starts no workflow: main runs no CI of its own (docs/releases.md, "Releasing").
+      # GitHub shows the release pull request merged once main is its head.
       - name: Move main forward to the commit
         run: |
           if main=$(gh api "repos/$GH_REPO/git/ref/heads/main" --jq .object.sha 2> /dev/null); then
