@@ -86,6 +86,22 @@ export function filtersOf(search: OperationsSearch): OperationsFilterValues {
 
 const blankAsNone = (text: string) => (text.trim() === "" ? undefined : text);
 
+/**
+ * An amount for the address: the router quotes a string that looks like a number
+ * (`?min=%22100%22`), so one that reads back the same as a number goes in as that number.
+ */
+function amountOf(text: string): string | number | undefined {
+  const typed = blankAsNone(text);
+
+  if (typed === undefined) {
+    return undefined;
+  }
+
+  const number = Number(typed);
+
+  return Number.isFinite(number) && String(number) === typed ? number : typed;
+}
+
 /** The address of the filters, with the line `line` open; what is not set is left out. */
 export function searchOf(
   values: OperationsFilterValues,
@@ -96,8 +112,8 @@ export function searchOf(
     account: values.accountId ?? undefined,
     from: values.from ?? undefined,
     to: values.to ?? undefined,
-    min: blankAsNone(values.min),
-    max: blankAsNone(values.max),
+    min: amountOf(values.min),
+    max: amountOf(values.max),
     review: values.toReview ? true : undefined,
     line,
   };

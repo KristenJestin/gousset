@@ -69,7 +69,7 @@ describe("operations-search", () => {
     expect(Object.entries(search).filter(([, value]) => value !== undefined)).toEqual([
       ["q", "greenmarket"],
       ["from", "2026-10-01"],
-      ["max", "50"],
+      ["max", 50],
       ["review", true],
     ]);
     expect(filtersKey(filtersOf(search))).toBe(filtersKey(values));
@@ -79,5 +79,15 @@ describe("operations-search", () => {
       amountMax: "50",
       toReview: true,
     });
+  });
+
+  test("writes an amount that is a plain number as a number, so the address reads ?min=100", () => {
+    const search = searchOf({ ...NO_OPERATIONS_FILTERS, min: "100", max: "12.50" }, undefined);
+
+    // The router quotes a string that looks like a number (`?min=%22100%22`); a number it does not.
+    expect(search.min).toBe(100);
+    // Written otherwise than the number reads back: kept as typed.
+    expect(search.max).toBe("12.50");
+    expect(filtersOf(search)).toMatchObject({ min: "100", max: "12.50" });
   });
 });
