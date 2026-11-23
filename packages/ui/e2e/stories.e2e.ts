@@ -78,6 +78,10 @@ const SHOTS: ReadonlyArray<Shot> = [
   { id: "accounts-balancechart--default" },
   { id: "accounts-accountsettings--card" },
   { id: "accounts-accountlines--with-show-older" },
+  { id: "operations-operationslist--default" },
+  { id: "operations-linedetail--to-review" },
+  { id: "operations-operationsfilters--set" },
+  { id: "operations-operationslayout--line-open" },
 ];
 
 async function openPopup(page: Page, open: Shot["open"]) {
