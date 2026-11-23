@@ -16,8 +16,8 @@ import { formText } from "@/lib/form";
 import { whileBusy } from "@/lib/while-busy";
 
 /**
- * The administrator's section of the settings (docs/wireframes, `rules`: users come first in the
- * settings' menu): who has an account, and creating the others, each in a block.
+ * The administrator's section of the settings (docs/wireframes, `rules`: the settings' menu lists
+ * the users): who has an account, and creating the others, each in a block.
  */
 export const Route = createFileRoute("/_authed/settings/users")({
   beforeLoad: ({ context }) => {
