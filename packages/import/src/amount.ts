@@ -3,8 +3,11 @@ import { Effect } from "effect";
 import { InvalidField } from "./errors";
 import { excerpt, quote } from "./text";
 
-/** A field's text and where it stands in the file, for the error that names it. */
-export type FieldText = { field: string; text: string; line: number };
+/**
+ * A field's text and where it stands in the file, for the error that names it: its line, and its
+ * column in a CSV file.
+ */
+export type FieldText = { field: string; text: string; line: number; column?: number };
 
 /** The error for a field that cannot be read: its text cut to 40 characters, as written. */
 export function invalidField(written: FieldText, expected: string): InvalidField {
@@ -14,25 +17,31 @@ export function invalidField(written: FieldText, expected: string): InvalidField
 /**
  * How a format writes amounts. `ofx`: an optional sign, digits and at most one decimal mark, `.` or
  * `,` (French banks write a comma), never a thousands separator. `qif`: the same, and thousands
- * may be grouped (`1,234.56`, `1.234,56`, `1 234,56`, `1'234.56`). `camt053`: digits and a decimal
- * point, never a sign (the credit or debit indicator gives the direction). `mt940`: the same with a
- * decimal comma.
+ * may be grouped (`1,234.56`, `1.234,56`, `1 234,56`, `1'234.56`). `decimal-point` and
+ * `decimal-comma`: a CSV profile names the decimal mark, so thousands may be grouped by any other
+ * mark (`1,234.56`, `1 234,56`, `1.234,56`, `1'234.56`), each group of three digits. `camt053`:
+ * digits and a decimal point, never a sign (the credit or debit indicator gives the direction).
+ * `mt940`: the same with a decimal comma.
  */
-export type AmountSyntax = "ofx" | "qif" | "camt053" | "mt940";
+export type AmountSyntax = "ofx" | "qif" | "decimal-point" | "decimal-comma" | "camt053" | "mt940";
 
 const EXAMPLES = {
   ofx: "an amount such as -1234.56 or -1234,56",
   qif: "an amount such as -1,234.56, -1.234,56 or -1234,56",
+  "decimal-point": "an amount such as -1234.56 or -1,234.56",
+  "decimal-comma": "an amount such as -1234,56 or -1 234,56",
   camt053: "an amount such as 1234.56",
   mt940: "an amount such as 1234,56",
 } satisfies { [syntax in AmountSyntax]: string };
 
 /** The syntaxes of digits and one decimal mark, with no thousands separator. */
+type DecimalSyntax = "ofx" | "camt053" | "mt940";
+
 const DECIMAL = {
   ofx: /^(\d*)(?:[.,](\d*))?$/,
   camt053: /^(\d*)(?:\.(\d*))?$/,
   mt940: /^(\d*)(?:,(\d*))?$/,
-} satisfies { [syntax in Exclude<AmountSyntax, "qif">]: RegExp };
+} satisfies { [syntax in DecimalSyntax]: RegExp };
 
 const SEPARATORS = /[.,'   ]/;
 
@@ -77,7 +86,7 @@ export function minorDigits(currency: string): number {
 
 type Split = { whole: string; fraction: string } | { expected: string };
 
-function splitDecimal(unsigned: string, syntax: Exclude<AmountSyntax, "qif">): Split {
+function splitDecimal(unsigned: string, syntax: DecimalSyntax): Split {
   const parts = DECIMAL[syntax].exec(unsigned);
 
   if (parts === null) {
@@ -126,10 +135,48 @@ function splitQif(unsigned: string, digits: number): Split {
   return { whole: groups.join(""), fraction };
 }
 
+/** What groups thousands beside each decimal mark: the other mark, spaces, an apostrophe. */
+const GROUPING = { ".": /[,'   ]/, ",": /[.'   ]/ };
+
+/** An amount whose decimal mark is known: every other mark groups thousands, by three digits. */
+function splitMarked(unsigned: string, mark: "." | ","): Split {
+  const expected = EXAMPLES[mark === "." ? "decimal-point" : "decimal-comma"];
+  const [whole = "", fraction = "", ...more] = unsigned.split(mark);
+  const groups = whole.split(GROUPING[mark]);
+
+  const grouped = groups.every((group, index) =>
+    index === 0 ? /^\d{1,3}$/.test(group) : /^\d{3}$/.test(group),
+  );
+
+  if (
+    more.length > 0 ||
+    !/^\d*$/.test(fraction) ||
+    (groups.length > 1 ? !grouped : !/^\d*$/.test(whole))
+  ) {
+    return { expected };
+  }
+
+  return { whole: groups.join(""), fraction };
+}
+
+function splitAmount(unsigned: string, syntax: AmountSyntax, digits: number): Split {
+  switch (syntax) {
+    case "ofx":
+    case "camt053":
+    case "mt940":
+      return splitDecimal(unsigned, syntax);
+    case "qif":
+      return splitQif(unsigned, digits);
+    case "decimal-point":
+      return splitMarked(unsigned, ".");
+    case "decimal-comma":
+      return splitMarked(unsigned, ",");
+  }
+}
+
 /**
  * The amount a field writes, in minor units of `currency`, read from its digits: exact, never
- * through a float. A sign may lead in OFX and QIF (`-12.34`, `+12.34`), never in CAMT.053 and
- * MT940; more decimals than the currency has are refused unless they are zeros (`12.340` is
+ * through a float. A sign may lead (`-12.34`, `+12.34`), but never in CAMT.053 and MT940; more decimals than the currency has are refused unless they are zeros (`12.340` is
  * `12.34` in EUR).
  */
 export const readAmount = (field: FieldText, currency: string, syntax: AmountSyntax) =>
@@ -144,7 +191,7 @@ export const readAmount = (field: FieldText, currency: string, syntax: AmountSyn
 
     const negative = written.startsWith("-");
     const unsigned = signed ? written.slice(1).trimStart() : written;
-    const split = syntax === "qif" ? splitQif(unsigned, digits) : splitDecimal(unsigned, syntax);
+    const split = splitAmount(unsigned, syntax, digits);
 
     if ("expected" in split) {
       return yield* invalidField(field, split.expected);

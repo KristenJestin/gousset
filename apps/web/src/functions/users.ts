@@ -48,7 +48,8 @@ export const createUser = createServerFn({ method: "POST" })
               name: data.name,
               email: data.email,
               password: data.password,
-              role: "user",
+              // No role: naming one needs `user:set-role`, which the administrator does not hold
+              // (packages/auth, admin-access.ts); the plugin's default role is `user`.
               data: { mustChangePassword: true },
             },
             headers: getRequestHeaders(),
