@@ -426,22 +426,26 @@ function Lines({ accountId }: { accountId: string }) {
       return;
     }
 
-    setLoadingOlder(true);
+    // A failed call answers `undefined`: the React Compiler has no `try` to handle in a component.
+    const result = await whileBusy(setLoadingOlder, () =>
+      getAccount({ data: { accountId, before: olderBefore } }).then(
+        (answer) => answer,
+        () => undefined,
+      ),
+    );
 
-    try {
-      const result = await getAccount({ data: { accountId, before: olderBefore } });
-
-      if (result.ok) {
-        setOlder((current) => [...current, ...result.account.lines]);
-        setOlderBefore(result.account.olderBefore);
-        setOlderError(undefined);
-      } else {
-        setOlderBefore(null);
-      }
-    } catch {
+    if (result === undefined) {
       setOlderError(m.accountLinesOlderFailed());
-    } finally {
-      setLoadingOlder(false);
+
+      return;
+    }
+
+    if (result.ok) {
+      setOlder((current) => [...current, ...result.account.lines]);
+      setOlderBefore(result.account.olderBefore);
+      setOlderError(undefined);
+    } else {
+      setOlderBefore(null);
     }
   }
 
