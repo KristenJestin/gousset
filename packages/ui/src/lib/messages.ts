@@ -109,6 +109,40 @@ function uiMessages(locale: Locale) {
       /** What an investment's gain is measured against: its net contributions. */
       putIn: m.uiMoneyPutIn({}, options),
     },
+    accounts: {
+      /** The "Tracking" column and the settings' value: how the account is followed. */
+      trackingLines: m.uiAccountsTrackingLines({}, options),
+      trackingBalance: m.uiAccountsTrackingBalance({}, options),
+      /** How far statements go, when there is none yet. */
+      noStatement: m.uiAccountsNoStatement({}, options),
+      /** Beside the date, when the import lags behind the month (⚠). */
+      importBehind: m.uiAccountsImportBehind({}, options),
+      closed: (count: number) =>
+        pluralRules[locale].select(count) === "one"
+          ? m.uiAccountsClosedOne({ count }, options)
+          : m.uiAccountsClosedOther({ count }, options),
+      showOlderLines: m.uiAccountsShowOlderLines({}, options),
+      noLines: m.uiAccountsNoLines({}, options),
+      balanceChecked: m.uiAccountsBalanceChecked({}, options),
+      balanceMismatch: m.uiAccountsBalanceMismatch({}, options),
+      balanceAgrees: (app: string, statement: string, day: string) =>
+        m.uiAccountsBalanceAgrees({ app, statement, day }, options),
+      balanceDisagrees: (app: string, statement: string, day: string, difference: string) =>
+        m.uiAccountsBalanceDisagrees({ app, statement, day, difference }, options),
+      balanceNoStatement: m.uiAccountsBalanceNoStatement({}, options),
+      /** Before the earlier statement balances that disagree, once the latest check is shown. */
+      balanceAlsoDiffers: m.uiAccountsBalanceAlsoDiffers({}, options),
+      balanceOnDay: (day: string) => m.uiAccountsBalanceOnDay({ day }, options),
+      inPeriod: (period: string) => m.uiAccountsInPeriod({ period }, options),
+      outPeriod: (period: string) => m.uiAccountsOutPeriod({ period }, options),
+      settingsKind: m.uiAccountsSettingsKind({}, options),
+      settingsTracking: m.uiAccountsSettingsTracking({}, options),
+      settingsCurrency: m.uiAccountsSettingsCurrency({}, options),
+      settingsOpenedOn: m.uiAccountsSettingsOpenedOn({}, options),
+      settingsInstitution: m.uiAccountsSettingsInstitution({}, options),
+      settingsSettlesInto: m.uiAccountsSettingsSettlesInto({}, options),
+      settingsNotSet: m.uiAccountsSettingsNotSet({}, options),
+    },
     jobs: {
       /** A background job's state, beside its title. */
       waiting: m.uiJobWaiting({}, options),
