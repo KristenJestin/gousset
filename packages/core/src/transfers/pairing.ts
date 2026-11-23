@@ -76,9 +76,18 @@ function closeDays(a: string, b: string, byFortnight: boolean): boolean {
   );
 }
 
-/** Whether two lines are close enough, by booking date, or by value date when both have one. */
-function closeEnough(a: PairableLine, b: PairableLine): boolean {
-  const byFortnight = BY_FORTNIGHT.has(a.accountKind) || BY_FORTNIGHT.has(b.accountKind);
+/**
+ * Whether two lines are close enough, by booking date, or by value date when both have one: by the
+ * fortnight when one side's account dates by it, unless `fortnights` is `never`.
+ */
+function closeEnough(
+  a: PairableLine,
+  b: PairableLine,
+  fortnights: "when either dates by it" | "never" = "when either dates by it",
+): boolean {
+  const byFortnight =
+    fortnights === "when either dates by it" &&
+    (BY_FORTNIGHT.has(a.accountKind) || BY_FORTNIGHT.has(b.accountKind));
 
   return (
     closeDays(a.bookedOn, b.bookedOn, byFortnight) ||
@@ -120,8 +129,23 @@ export function candidatesOf<Line extends PairableLine>(
 const amountKey = (line: PairableLine) => `${line.currency} ${Math.abs(line.amountMinor)}`;
 
 /**
- * `candidatesOf` over one pool, read many times: the pool is grouped once by currency and amount, so
- * that pairing every line of a user's stays linear.
+ * The candidates the automatic pairing weighs (#131): those within `TRANSFER_DAYS` when there are
+ * any, as before the fortnight; the fortnight's farther ones only for a line with none that near,
+ * so that a weekly transfer to a savings account still pairs each line with its own day's.
+ */
+function nearestTier<Line extends PairableLine>(
+  line: PairableLine,
+  candidates: ReadonlyArray<Line>,
+): ReadonlyArray<Line> {
+  const near = candidates.filter((other) => closeEnough(line, other, "never"));
+
+  return near.length > 0 ? near : candidates;
+}
+
+/**
+ * The candidates the automatic pairing weighs for each line of one pool, read many times (the
+ * line's detail offers them all, `candidatesOf`): the pool is grouped once by currency and amount,
+ * so that pairing every line of a user's stays linear.
  */
 export function candidateFinder<Line extends PairableLine>(
   pool: ReadonlyArray<Line>,
@@ -135,7 +159,7 @@ export function candidateFinder<Line extends PairableLine>(
     groups.set(amountKey(line), group);
   }
 
-  return (line) => candidatesOf(line, groups.get(amountKey(line)) ?? []);
+  return (line) => nearestTier(line, candidatesOf(line, groups.get(amountKey(line)) ?? []));
 }
 
 const pairOf = (a: PairableLine, b: PairableLine): Pair =>
@@ -165,7 +189,10 @@ export function clearPairs(
       continue;
     }
 
-    if (candidates(only).length === 1) {
+    // The line must be its candidate's only one too: a far candidate may have a near one of its own.
+    const [back, ...more] = candidates(only);
+
+    if (back?.id === line.id && more.length === 0) {
       pairs.push(pairOf(line, only));
       paired.add(line.id);
       paired.add(only.id);

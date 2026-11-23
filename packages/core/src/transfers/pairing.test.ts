@@ -101,7 +101,13 @@ describe("clear pairs", () => {
     const lines = fc.array(
       fc.record({
         accountId: fc.constantFrom("a", "b", "c"),
-        bookedOn: fc.constantFrom("2026-10-01", "2026-10-03", "2026-10-09"),
+        bookedOn: fc.constantFrom(
+          "2026-10-01",
+          "2026-10-03",
+          "2026-10-09",
+          "2026-10-16",
+          "2026-10-20",
+        ),
         amountMinor: fc.constantFrom(-100, 100, -200, 200),
       }),
       { maxLength: 12 },
@@ -109,8 +115,11 @@ describe("clear pairs", () => {
 
     fc.assert(
       fc.property(lines, (drafts) => {
+        // The account c is a savings account: its lines pair by the fortnight.
         const pool = drafts.map((draft, index) =>
-          line(`l${index}`, draft.accountId, draft.bookedOn, draft.amountMinor),
+          line(`l${index}`, draft.accountId, draft.bookedOn, draft.amountMinor, {
+            accountKind: draft.accountId === "c" ? "savings" : "current",
+          }),
         );
 
         const pairs = clearPairs(pool, pool);
@@ -152,6 +161,46 @@ describe("a savings account dates by the fortnight", () => {
 
     expect(isCandidate(out, into)).toBe(false);
     expect(clearPairs([out, into], [out, into])).toEqual([]);
+  });
+
+  test("a weekly transfer to savings still pairs each line with the one of its own day", () => {
+    const pool = ["2026-10-02", "2026-10-09", "2026-10-16"].flatMap((day) => [
+      line(`out-${day}`, "current", day, -5000),
+      line(`in-${day}`, "savings", day, 5000, { accountKind: "savings" }),
+    ]);
+
+    expect(clearPairs(pool, pool)).toEqual([
+      { outLineId: "out-2026-10-02", inLineId: "in-2026-10-02" },
+      { outLineId: "out-2026-10-09", inLineId: "in-2026-10-09" },
+      { outLineId: "out-2026-10-16", inLineId: "in-2026-10-16" },
+    ]);
+  });
+
+  test("a standing order on the 1st and the 16th pairs each with its own", () => {
+    const pool = ["2026-10-01", "2026-10-16"].flatMap((day) => [
+      line(`out-${day}`, "current", day, -5000),
+      line(`in-${day}`, "savings", day, 5000, { accountKind: "savings" }),
+    ]);
+
+    expect(clearPairs(pool, pool)).toHaveLength(2);
+  });
+
+  test("a candidate within 4 days is the line's own, before the fortnight's farther ones", () => {
+    const out = line("out", "current", "2026-10-01", -30_000);
+    const pool = [out, savings("near", "2026-10-02", 30_000), savings("far", "2026-10-16", 30_000)];
+
+    expect(clearPairs(pool, pool)).toEqual([{ outLineId: "out", inLineId: "near" }]);
+  });
+
+  test("a line is not paired with a far candidate that has a near one of its own", () => {
+    // The savings line's own is the second current account's line, the day after it.
+    const far = line("far", "current", "2026-10-01", -30_000);
+    const into = savings("in", "2026-10-16", 30_000);
+    const near = line("near", "other-current", "2026-10-17", -30_000);
+    const pool = [far, into, near];
+
+    expect(clearPairs([far], pool)).toEqual([]);
+    expect(clearPairs(pool, pool)).toEqual([{ outLineId: "near", inLineId: "in" }]);
   });
 
   test("two candidates in a fortnight go to review", () => {
