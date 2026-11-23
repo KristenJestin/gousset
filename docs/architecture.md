@@ -12,7 +12,7 @@ The stack and why, how a page loads its data, the shared components, quality, te
   - **Pacer** (0.24, beta): pacing on the interface side. Search waits for typing to stop, several statements dropped at once queue with limited concurrency, and corrections made in a burst during the review are sent together. On the server, retries and scheduling stay with pg-boss.
   - **Devtools** (0.10, alpha): one panel in development for Query, Router, Pacer and Hotkeys, plus a panel of Gousset's own for pg-boss jobs and import progress. Nothing of it ships in production.
   - **Intent** (0.5, alpha): agent skills shipped inside installed packages. `@tanstack/intent` is a devDependency, and `intent install` writes into `AGENTS.md` how to load them, with an allowlist of packages. It replaces Better-T-Stack's `skills` add-on.
-  - **Redact** (0.3): a lighter React runtime (about 43 % less JavaScript with Start), added by a Vite plugin. It renders synchronously, without render splitting, and its own documentation says animations are not yet verified everywhere. Whether Motion, Bklit and ui-sdk run on it is unknown. **The first ticket builds the monthly review with and without Redact**, and Redact stays only if animations and charts render the same. Removing it touches one line of `vite.config.ts`.
+  - **Redact** (0.3): a lighter React runtime (about 43 % less JavaScript with Start), added by a Vite plugin. It renders synchronously, without render splitting, and its own documentation says animations are not yet verified everywhere. Whether Motion, Bklit and ui-sdk run on it is unknown. **The first ticket builds the monthly review with and without Redact**, and Redact stays only if animations and charts render the same. Removing it touches one line of `vite.config.ts`. **Verdict (#10): not kept for now**, see [Redact](#redact).
 - **Postgres 18** with **Drizzle 1.0.0-rc.6** (`drizzle-orm` and `drizzle-kit`).
 - **Effect 4.1.5** for services, typed errors and telemetry.
 - **better-auth 1.7** for user accounts. An installation has several users.
@@ -80,6 +80,17 @@ The logic (import, rules, the month's figures) lives in packages, not in server 
 ## MCP server
 
 From v0.1, the app serves MCP at `/mcp`, so that each user reaches their own data from an AI agent. The tools call the same packages as the server functions: no logic of their own. The protocol, the authorization and the rules every tool follows are in [`mcp.md`](mcp.md).
+
+## Redact
+
+The comparison #10 asked for, run on 2026-11-22 with `@tanstack/redact` 0.3.1 (its Vite plugin, default `full` preset) on the monthly review. `GOUSSET_REDACT=1` builds the app on Redact; the `redact` job of `ci.yml` runs the same scenarios on both builds.
+
+- **Client bundle** (every JavaScript file the build emits for the browser): 1,363,612 bytes on React, 1,184,268 on Redact (−13 %); 471,104 against 424,845 gzipped (−9.8 %), 414,757 against 377,326 with Brotli. Far from the 43 % announced: React DOM is a small part of a page that carries Start, Router, Query, Motion, Bklit and ui-sdk.
+- **Chromium**: the review's scenarios (its blocks, the four motions asserted, the chart's crosshair and tooltip, the optimistic approval, the month kept on screen while the next loads, which leans on `useDeferredValue`) gave the same results on both builds, failures included: the same two, which were the review's own and are fixed since.
+- **Firefox**: not compared. Both builds lose most scenarios to Firefox's "Page crashed", which comes from a component of `packages/ui` and is being bisected; Redact's own documentation also lists Firefox as unverified.
+- **The films** of the four motions were made on React only; nobody has compared them frame by frame with Redact's.
+
+**Verdict: not kept for now.** The rule was that Redact stays only if both render the same; that is shown in Chromium only, and the gain (about 46 KB gzipped) does not justify a runtime that renders without React's scheduling until Firefox is shown too. The screen ships on React. The flag stays off and costs nothing; the `redact` job runs again on a pull request that asks for every browser (`E2E-Matrix: full`), to decide once Firefox runs the review.
 
 ## Quality
 

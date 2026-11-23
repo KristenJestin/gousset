@@ -227,6 +227,76 @@ test("an MCP client answers how much was spent last month, and where, from month
   });
 });
 
+test("an MCP client reads the month's review and its benchmarks, as the screen shows them, from month", async ({
+  userPage,
+  baseURL,
+  mcpClientId,
+}) => {
+  const session = await connectMcp({
+    baseURL: baseURL ?? "",
+    page: userPage,
+    consent: allowReadOnly,
+    scope: "read write",
+    clientId: mcpClientId,
+  });
+
+  const summary = await askMonth(session.client);
+
+  expect(summary.isError).toBe(false);
+  expect(summary.text).toContain("Received: ");
+  expect(summary.text).toContain("from Salary and Meal vouchers");
+  expect(summary.text).toMatch(/Spent: [\d,]+\.\d\d EUR \(6-month average: [\d,]+\.\d\d EUR\)/);
+  expect(summary.text).toMatch(/- Housing: [\d,]+\.\d\d EUR \(benchmark [\d,]+\.\d\d EUR\)/);
+  expect(summary.text).toContain("By subject");
+
+  const review = await callText(session.client, "month", { action: "review", month: "2026-10" });
+
+  expect(review.isError).toBe(false);
+  expect(review.text).toContain("October 2026, made-up data");
+  expect(review.text).toMatch(/Imports: \d of 4 accounts imported/);
+  expect(review.text).toMatch(/Lines to review \(\d+\):/);
+  expect(review.text).toContain("Acme Consulting → ");
+  expect(review.text).toContain("Northbank PEA: worth ");
+  expect(review.text).toContain("Streamly: its price went from 8.99 EUR to 9.49 EUR.");
+});
+
+test("an MCP client reads a row day by day against the month before, as its chart draws it, from month", async ({
+  userPage,
+  baseURL,
+  mcpClientId,
+}) => {
+  const session = await connectMcp({
+    baseURL: baseURL ?? "",
+    page: userPage,
+    consent: allowReadOnly,
+    scope: "read write",
+    clientId: mcpClientId,
+  });
+
+  const days = await callText(session.client, "month", {
+    action: "days",
+    month: "2026-10",
+    by: "category",
+    row: "Housing",
+  });
+
+  expect(days.isError).toBe(false);
+  expect(days.text).toContain("October 2026, made-up data");
+  expect(days.text).toContain("Housing, by category, day by day in October 2026");
+  // The made-up rent is paid on the 5th, every month.
+  expect(days.text).toContain("- 2026-10-05: 690.00 EUR, against 690.00 EUR");
+  expect(days.text).toContain(
+    "- 2026-10-31: 690.00 EUR, against nothing (September 2026 has no 31st)",
+  );
+
+  const refused = await callText(session.client, "month", { action: "days", month: "2026-10" });
+
+  expect(refused.isError).toBe(true);
+  expect(refused.text).toContain(
+    'A valid call: month {"action":"days","month":"2026-10","by":"category","row":"Groceries"}',
+  );
+});
+
 test("the consent page says where the client will be sent back", async ({
   userPage,
   baseURL,

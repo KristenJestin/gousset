@@ -5,8 +5,8 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 import { approveLine } from "@/functions/month";
 
-import { invalidateTouched } from "./invalidate";
-import { monthKeys } from "./month";
+import { invalidateApproval } from "./invalidate";
+import { monthKeys } from "./month-keys";
 import { withLineBack, withoutLine } from "./review-lines";
 
 /** What an approval took out of the list, to put it back if it is refused. */
@@ -83,7 +83,7 @@ export function useApproveLine(month: string) {
     // under way has settled: an earlier answer would bring back a line still on its way.
     onSettled: async () => {
       if (queryClient.isMutating({ mutationKey }) === 1) {
-        await invalidateTouched(queryClient, { months: [month] });
+        await invalidateApproval(queryClient, month);
       }
     },
   });

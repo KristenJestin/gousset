@@ -217,6 +217,8 @@ export type MoneyRole = "spent" | "saved" | "left";
 export type MonthBarLayout = {
   /** Each part's start and width, in percent of the bar, in order. */
   parts: Array<{ role: MoneyRole; x: number; width: number }>;
+  /** The restricted end of the part left (benefit accounts), hatched; null when there is none. */
+  restricted: { x: number; width: number } | null;
   /** Where the money received ends, when more went out than came in; null otherwise. */
   receivedMark: number | null;
   overspent: boolean;
@@ -232,6 +234,8 @@ export function monthBarLayout(figures: {
   spent: Money;
   saved: Money;
   left: Money;
+  /** The part of `left` on benefit accounts: it ends the part left, never wider than it. */
+  restricted?: Money;
 }): MonthBarLayout {
   const spent = Math.max(0, figures.spent.minor);
   const saved = Math.max(0, figures.saved.minor);
@@ -242,13 +246,19 @@ export function monthBarLayout(figures: {
   const whole = Math.max(received, out + left);
   const spentWidth = share(spent, whole);
   const savedWidth = share(saved, whole);
+  const leftWidth = share(left, whole);
+  const restrictedWidth = share(Math.min(left, Math.max(0, figures.restricted?.minor ?? 0)), whole);
 
   return {
     parts: [
       { role: "spent", x: 0, width: spentWidth },
       { role: "saved", x: spentWidth, width: savedWidth },
-      { role: "left", x: spentWidth + savedWidth, width: share(left, whole) },
+      { role: "left", x: spentWidth + savedWidth, width: leftWidth },
     ],
+    restricted:
+      restrictedWidth > 0
+        ? { x: spentWidth + savedWidth + leftWidth - restrictedWidth, width: restrictedWidth }
+        : null,
     receivedMark: overspent ? share(received, whole) : null,
     overspent,
   };

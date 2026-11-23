@@ -45,6 +45,7 @@
     "@tanstack/react-pacer-devtools": "^0.9.1",
     "@tanstack/react-query-devtools": "^5.108.2",
     "@tanstack/react-router-devtools": "^1.167.4",
+    "@tanstack/redact": "^0.3.1",
     "@types/react": "catalog:",
     "@types/react-dom": "catalog:",
     "@vitejs/plugin-react": "^6.3.0",
