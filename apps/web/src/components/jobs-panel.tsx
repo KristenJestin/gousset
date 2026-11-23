@@ -1,10 +1,10 @@
+import { m } from "@gousset/i18n/messages";
 import { Card } from "@gousset/ui/components/card";
 import { EmptyState } from "@gousset/ui/components/empty-state";
 import { List, ListItem } from "@gousset/ui/components/list";
 import { useQuery } from "@tanstack/react-query";
 
 import { listJobs } from "@/functions/jobs";
-import { useMessages } from "@/i18n/use-messages";
 import type { JobView } from "@/jobs/view";
 import { jobKeys } from "@/queries/jobs";
 
@@ -24,8 +24,6 @@ function whereItIs(view: JobView): string {
  * again every second.
  */
 export function JobsPanel() {
-  const messages = useMessages().jobs.panel;
-
   const { data = [] } = useQuery({
     queryKey: [...jobKeys.all, "list"],
     queryFn: () => listJobs(),
@@ -33,17 +31,20 @@ export function JobsPanel() {
   });
 
   return (
-    <Card title={messages.title} description={messages.description}>
+    <Card title={m.jobsPanelTitle()} description={m.jobsPanelDescription()}>
       {data.length === 0 ? (
-        <EmptyState title={messages.empty} size="compact" />
+        <EmptyState title={m.jobsPanelEmpty()} size="compact" />
       ) : (
-        <List label={messages.title}>
+        <List label={m.jobsPanelTitle()}>
           {data.map((view) => (
             <ListItem
               key={view.id}
               title={`${view.job} ${view.id}`}
               description={whereItIs(view)}
-              tags={[view.phase, messages.attempt(view.attempt, view.attempts)]}
+              tags={[
+                view.phase,
+                m.jobsPanelAttempt({ attempt: view.attempt, attempts: view.attempts }),
+              ]}
             />
           ))}
         </List>

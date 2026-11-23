@@ -56,6 +56,10 @@ const SHOTS: ReadonlyArray<Shot> = [
   { id: "money-breakdown--loading" },
   { id: "charts-spending-chart--default" },
   { id: "charts-bar-chart--default" },
+  { id: "brand-brand--with-wordmark" },
+  { id: "layout-app-shell--desktop" },
+  { id: "layout-user-menu--default", open: "click" },
+  { id: "inputs-segmented-choice--default" },
 ];
 
 async function openPopup(page: Page, open: Shot["open"]) {

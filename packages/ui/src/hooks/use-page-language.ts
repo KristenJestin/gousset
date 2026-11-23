@@ -1,3 +1,4 @@
+import { getLocale } from "@gousset/i18n/runtime";
 import { useSyncExternalStore } from "react";
 
 function subscribe(onChange: () => void) {
@@ -10,12 +11,12 @@ function subscribe(onChange: () => void) {
 
 /**
  * The page's language (`<html lang>`, which the app sets), for `Intl` formats, following a change
- * of it; "en" on the server and when the page sets none.
+ * of it; on the server, the request's language (Paraglide's); "en" when the page sets none.
  */
 export function usePageLanguage(): string {
   return useSyncExternalStore(
     subscribe,
     () => (document.documentElement.lang === "" ? "en" : document.documentElement.lang),
-    () => "en",
+    () => getLocale(),
   );
 }

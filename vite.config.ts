@@ -15,6 +15,8 @@ const GENERATED = [
   "apps/web/src/routeTree.gen.ts",
   "apps/web/src/env.ts",
   "packages/db/src/env.ts",
+  // Paraglide's messages and runtime, compiled from packages/i18n/messages at install.
+  "packages/i18n/src/paraglide/**",
 ];
 
 /**
@@ -52,6 +54,7 @@ export default defineConfig({
       "@shadcn/lint",
       { name: "anti-slop", specifier: "./tools/oxlint/anti-slop/index.ts" },
       { name: "anti-slop-effect", specifier: "./tools/oxlint/anti-slop-effect/index.ts" },
+      { name: "gousset", specifier: "./tools/lint/gousset/index.ts" },
     ],
     settings: {
       ...cloudflare.settings,
@@ -114,6 +117,21 @@ export default defineConfig({
       {
         files: ["packages/ui/src/components/icons.ts"],
         rules: { "no-restricted-imports": ["error", NO_ZOD] },
+      },
+      // Every text a person reads comes from the messages (packages/i18n), in the app and in the
+      // shared components; stories, tests and the harness's probe pages hold made-up text.
+      {
+        files: [
+          "apps/web/src/**/*.tsx",
+          "apps/web/src/**/*.ts",
+          "packages/ui/src/components/**/*.tsx",
+          "packages/ui/src/components/**/*.ts",
+        ],
+        rules: { "gousset/no-text-outside-messages": "error" },
+      },
+      {
+        files: ["**/*.stories.tsx", "**/*.test.tsx", "**/*.test.ts", "apps/web/src/routes/e2e/**"],
+        rules: { "gousset/no-text-outside-messages": "off" },
       },
     ],
     ignorePatterns: [

@@ -1,3 +1,4 @@
+import { m } from "@gousset/i18n/messages";
 import { Amount } from "@gousset/ui/components/amount";
 import { Button } from "@gousset/ui/components/button";
 import { Card } from "@gousset/ui/components/card";
@@ -12,7 +13,6 @@ import type { FormEvent } from "react";
 
 import { e2eJobsEnabled, startTestJob } from "@/functions/jobs";
 import { jobFailureMessage } from "@/i18n/messages";
-import { useMessages } from "@/i18n/use-messages";
 import { TEST_JOB_STEPS } from "@/jobs/test-job";
 import { formText } from "@/lib/form";
 import { whileBusy } from "@/lib/while-busy";
@@ -24,6 +24,13 @@ const MONTH = "2026-10";
 
 /** What the test job is sent: the form's numbers, and a key of its own. */
 type TestRun = { count: number; itemMs: number; failures: number };
+
+/** The test job's steps, in the page's words. */
+const STEP_LABELS = {
+  prepare: () => m.jobTestStepPrepare(),
+  count: () => m.jobTestStepCount(),
+  finish: () => m.jobTestStepFinish(),
+};
 
 // The end-to-end harness's page for background jobs (apps/e2e/tests/jobs.spec.ts): it sends the
 // test job and follows it. Not found unless the harness started the app.
@@ -40,14 +47,13 @@ export const Route = createFileRoute("/_authed/e2e/jobs")({
 
 /** The month the job touches: read again once the job ends. */
 function TouchedMonth() {
-  const messages = useMessages();
   const { data } = useQuery(monthQueries.summary(MONTH));
 
   return (
-    <Card title={messages.jobs.test.month}>
+    <Card title={m.jobTestMonth()}>
       {data === undefined ? null : (
         <p className="flex items-center gap-2 text-sm">
-          {messages.jobs.test.received} <Amount value={data.received} />
+          {m.jobTestReceived()} <Amount value={data.received} />
         </p>
       )}
     </Card>
@@ -55,7 +61,6 @@ function TouchedMonth() {
 }
 
 function TestJobs() {
-  const messages = useMessages();
   const { job } = Route.useSearch();
   const navigate = Route.useNavigate();
   const view = useJob(job);
@@ -84,14 +89,14 @@ function TestJobs() {
     });
   }
 
-  const steps = TEST_JOB_STEPS.map((id) => ({ id, label: messages.jobs.test.steps[id] }));
+  const steps = TEST_JOB_STEPS.map((id) => ({ id, label: STEP_LABELS[id]() }));
 
   return (
     <Screen>
-      <Card title={messages.jobs.test.title} description={messages.jobs.test.description}>
+      <Card title={m.jobTestTitle()} description={m.jobTestDescription()}>
         <Form onSubmit={submit}>
           <TextField
-            label={messages.jobs.test.count}
+            label={m.jobTestCount()}
             name="count"
             type="number"
             min={0}
@@ -99,7 +104,7 @@ function TestJobs() {
             required
           />
           <TextField
-            label={messages.jobs.test.itemMs}
+            label={m.jobTestItemMs()}
             name="itemMs"
             type="number"
             min={0}
@@ -107,7 +112,7 @@ function TestJobs() {
             required
           />
           <TextField
-            label={messages.jobs.test.failures}
+            label={m.jobTestFailures()}
             name="failures"
             type="number"
             min={0}
@@ -116,15 +121,15 @@ function TestJobs() {
           />
           <Actions>
             <Button type="submit" loading={busy}>
-              {messages.jobs.test.start}
+              {m.jobTestStart()}
             </Button>
           </Actions>
         </Form>
       </Card>
       {view === undefined ? null : (
-        <Card title={messages.jobs.test.job}>
+        <Card title={m.jobTestJob()}>
           <JobProgress
-            title={messages.jobs.test.job}
+            title={m.jobTestJob()}
             steps={steps}
             phase={view.phase}
             step={view.step}
@@ -132,8 +137,8 @@ function TestJobs() {
             total={view.total}
             attempt={view.attempt}
             attempts={view.attempts}
-            failure={jobFailureMessage(messages, view.failure)}
-            result={messages.jobs.test.done}
+            failure={jobFailureMessage(view.failure)}
+            result={m.jobTestDone()}
             onRetry={last === undefined ? undefined : async () => send(last)}
           />
         </Card>

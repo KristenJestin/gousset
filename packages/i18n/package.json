@@ -1,0 +1,23 @@
+{
+  "name": "@gousset/i18n",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./messages": "./src/paraglide/messages.js",
+    "./runtime": "./src/paraglide/runtime.js",
+    "./server": "./src/paraglide/server.js"
+  },
+  "scripts": {
+    "compile": "paraglide-js compile --project ./project.inlang --outdir ./src/paraglide --strategy cookie preferredLanguage baseLocale --emit-ts-declarations",
+    "dev": "pnpm run compile --watch",
+    "check-types": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@gousset/config": "workspace:*",
+    "@inlang/paraglide-js": "3.2.2",
+    "@inlang/plugin-message-format": "^4.6.0",
+    "effect": "catalog:",
+    "typescript": "catalog:"
+  }
+}

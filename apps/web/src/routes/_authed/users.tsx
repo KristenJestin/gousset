@@ -1,3 +1,4 @@
+import { m } from "@gousset/i18n/messages";
 import { Button } from "@gousset/ui/components/button";
 import { Card } from "@gousset/ui/components/card";
 import { FormMessage } from "@gousset/ui/components/form-message";
@@ -12,7 +13,6 @@ import type { FormEvent } from "react";
 import { AppLink } from "@/components/app-link";
 import { createUser, listUsers } from "@/functions/users";
 import { errorMessage } from "@/i18n/messages";
-import { useMessages } from "@/i18n/use-messages";
 import { formText } from "@/lib/form";
 import { whileBusy } from "@/lib/while-busy";
 
@@ -29,7 +29,6 @@ export const Route = createFileRoute("/_authed/users")({
 });
 
 function Users() {
-  const messages = useMessages();
   const router = useRouter();
   const users = Route.useLoaderData();
   const [error, setError] = useState<string>();
@@ -54,46 +53,40 @@ function Users() {
 
     if (!result.created) {
       setCreated(undefined);
-      setError(errorMessage(messages, result.code));
+      setError(errorMessage(result.code));
 
       return;
     }
 
     setError(undefined);
-    setCreated(messages.users.created(result.name));
+    setCreated(m.usersCreated({ name: result.name }));
     formElement.reset();
     await router.invalidate();
   }
 
   return (
     <Screen>
-      <Card title={messages.users.title} description={messages.users.description}>
-        <List label={messages.users.title}>
+      <Card title={m.usersTitle()} description={m.usersDescription()}>
+        <List label={m.usersTitle()}>
           {users.map((user) => (
             <ListItem
               key={user.id}
               title={user.name}
               description={user.email}
               tags={[
-                ...(user.isAdmin ? [messages.users.administrator] : []),
-                ...(user.mustChangePassword ? [messages.users.mustChangePassword] : []),
+                ...(user.isAdmin ? [m.usersAdministrator()] : []),
+                ...(user.mustChangePassword ? [m.usersMustChangePassword()] : []),
               ]}
             />
           ))}
         </List>
       </Card>
-      <Card title={messages.users.createTitle} description={messages.users.createDescription}>
+      <Card title={m.usersCreateTitle()} description={m.usersCreateDescription()}>
         <Form onSubmit={(event) => void submit(event)} onInput={() => setError(undefined)}>
-          <TextField label={messages.fields.name} name="name" autoComplete="off" required />
+          <TextField label={m.fieldName()} name="name" autoComplete="off" required />
+          <TextField label={m.fieldEmail()} name="email" type="email" autoComplete="off" required />
           <TextField
-            label={messages.fields.email}
-            name="email"
-            type="email"
-            autoComplete="off"
-            required
-          />
-          <TextField
-            label={messages.fields.temporaryPassword}
+            label={m.fieldTemporaryPassword()}
             name="password"
             type="text"
             autoComplete="off"
@@ -104,9 +97,9 @@ function Users() {
           <StatusMessage message={created} />
           <Actions>
             <Button type="submit" loading={busy}>
-              {messages.users.create}
+              {m.usersCreate()}
             </Button>
-            <AppLink to="/">{messages.users.back}</AppLink>
+            <AppLink to="/">{m.usersBack()}</AppLink>
           </Actions>
         </Form>
       </Card>

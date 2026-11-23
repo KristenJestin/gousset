@@ -1,191 +1,144 @@
-// The texts `packages/ui` writes on its own (a retry button, a toast's wording), in English and
-// French, held as the app holds its own (`apps/web/src/i18n/messages.ts`) until Paraglide comes
-// (#8). A text that names the user's data is given by the page as a prop, never written here.
-//
-// Each component family adds its own section below; the French object must match the English.
+// The texts `packages/ui` writes on its own (a retry button, a toast's wording). They live in
+// the app's messages (`packages/i18n/messages`, keys `ui*`), written in English and translated
+// into French; this file only gathers them by component family, in one language. A text that
+// names the user's data is given by the page as a prop, never written here.
+import { m } from "@gousset/i18n/messages";
+import { getLocale } from "@gousset/i18n/runtime";
+import type { Locale } from "@gousset/i18n/runtime";
 
-const en = {
-  loading: "Loading",
-  states: {
-    errorTitle: "This block could not be loaded",
-    errorMessage: "Something went wrong on the way. The rest of the page still works.",
-    retry: "Try again",
-  },
-  pieces: {
-    uncategorised: "Uncategorised",
-    month: "Month",
-    previousMonth: "Previous month",
-    nextMonth: "Next month",
-    remove: (name: string) => `Remove ${name}`,
-  },
-  forms: {
-    noMatch: "Nothing matches this search.",
-    results: (count: number) => (count === 1 ? "1 result" : `${count} results`),
-    showOptions: "Show the options",
-    chooseDate: "Choose a date",
-    previousMonth: "Previous month",
-    nextMonth: "Next month",
-    dateFormat: (example: string) => `As in ${example}`,
-    /** The calendar's language (month and day names, the typed date's order). */
-    dateLocale: "en",
-    /** The calendar's first day of the week, 0 for Sunday. */
-    weekStartsOn: 0,
-  },
-  overlays: {
-    close: "Close",
-    cancel: "Cancel",
-  },
-  charts: {
-    /** The language of the amounts, days and months a chart writes. */
-    locale: "en",
-    empty: "Nothing spent yet in this period.",
-    /** The button under a chart that opens its figures as a table. */
-    showFigures: "Show the figures",
-    hideFigures: "Hide the figures",
-    /** The table's first column. */
-    day: "Day",
-    month: "Month",
-  },
-  notify: {
-    /** The toasts' landmark, reached with F6. */
-    region: "Notifications",
-    saved: "Saved",
-    failed: "Something went wrong",
-    retry: "Retry",
-    /** A progress toast's title when the caller gives none. */
-    working: "Working…",
-    /** A progress toast resolved without a title of the caller's. */
-    done: "Done",
-    undo: "Undo",
-    undone: "Undone",
-    undoFailed: "Couldn't undo",
-    dismiss: "Dismiss",
-    /** Said once a toast's button has been working for a second. */
-    pending: "Still working",
-  },
-  money: {
-    /** After the amount: "€3,120 received". */
-    received: "received",
-    /** Each part of the month bar, after its amount. */
-    roles: { spent: "spent", saved: "set aside", left: "left" },
-    /** In place of "left" when more went out than came in. */
-    overspent: "overspent",
-    /** The month bar's parts, as a group. */
-    parts: "The month's money, by part",
-    /** A change and what it is against ("5%", "your 6-month average"). */
-    deltaMore: (change: string, reference: string) => `${change} more than ${reference}`,
-    deltaLess: (change: string, reference: string) => `${change} less than ${reference}`,
-    deltaSteady: (reference: string) => `About the same as ${reference}`,
-    overBenchmark: "Above the benchmark",
-    benchmark: (amount: string) => `benchmark ${amount}`,
-    moreRows: (count: number) => `+ ${count} more`,
-    empty: "Nothing to show this month.",
-  },
-  jobs: {
-    /** A background job's state, beside its title. */
-    waiting: "Waiting to start",
-    step: (at: number, of: number) => `Step ${at} of ${of}`,
-    retrying: (attempt: number, attempts: number) => `Retrying: attempt ${attempt} of ${attempts}`,
-    completed: "Done",
-    failed: (attempts: number) => (attempts === 1 ? "Failed" : `Failed after ${attempts} attempts`),
-    /** How much of a step is done: "312 of 1,204". */
-    counts: (done: string, total: string) => `${done} of ${total}`,
-    retry: "Try again",
-  },
-};
+/** Which plural form a count takes, in each language: built once. */
+const pluralRules = {
+  en: new Intl.PluralRules("en"),
+  fr: new Intl.PluralRules("fr"),
+} satisfies { [Language in Locale]: Intl.PluralRules };
 
-export type UiMessages = typeof en;
+function uiMessages(locale: Locale) {
+  const options = { locale };
 
-const fr: UiMessages = {
-  loading: "Chargement",
-  states: {
-    errorTitle: "Impossible de charger ce bloc",
-    errorMessage: "Un problème est survenu en route. Le reste de la page fonctionne toujours.",
-    retry: "Réessayer",
-  },
-  pieces: {
-    uncategorised: "Sans catégorie",
-    month: "Mois",
-    previousMonth: "Mois précédent",
-    nextMonth: "Mois suivant",
-    remove: (name: string) => `Retirer ${name}`,
-  },
-  forms: {
-    noMatch: "Rien ne correspond à cette recherche.",
-    results: (count: number) => (count <= 1 ? `${count} résultat` : `${count} résultats`),
-    showOptions: "Afficher les choix",
-    chooseDate: "Choisir une date",
-    previousMonth: "Mois précédent",
-    nextMonth: "Mois suivant",
-    dateFormat: (example: string) => `Par exemple ${example}`,
-    dateLocale: "fr",
-    weekStartsOn: 1,
-  },
-  overlays: {
-    close: "Fermer",
-    cancel: "Annuler",
-  },
-  charts: {
-    locale: "fr",
-    empty: "Aucune dépense sur cette période pour l’instant.",
-    showFigures: "Afficher les chiffres",
-    hideFigures: "Masquer les chiffres",
-    day: "Jour",
-    month: "Mois",
-  },
-  notify: {
-    region: "Notifications",
-    saved: "Enregistré",
-    failed: "Un problème est survenu",
-    retry: "Réessayer",
-    working: "En cours…",
-    done: "Terminé",
-    undo: "Annuler",
-    undone: "Annulé",
-    undoFailed: "Impossible d’annuler",
-    dismiss: "Fermer",
-    pending: "Toujours en cours",
-  },
-  money: {
-    received: "reçus",
-    roles: { spent: "dépensés", saved: "mis de côté", left: "restants" },
-    overspent: "de dépassement",
-    parts: "L’argent du mois, par part",
-    deltaMore: (change: string, reference: string) => `${change} de plus que ${reference}`,
-    deltaLess: (change: string, reference: string) => `${change} de moins que ${reference}`,
-    deltaSteady: (reference: string) => `À peu près comme ${reference}`,
-    overBenchmark: "Au-dessus du repère",
-    benchmark: (amount: string) => `repère ${amount}`,
-    moreRows: (count: number) => `+ ${count} de plus`,
-    empty: "Rien à afficher ce mois-ci.",
-  },
-  jobs: {
-    waiting: "En attente",
-    step: (at: number, of: number) => `Étape ${at} sur ${of}`,
-    retrying: (attempt: number, attempts: number) =>
-      `Nouvel essai : tentative ${attempt} sur ${attempts}`,
-    completed: "Terminé",
-    failed: (attempts: number) => (attempts === 1 ? "Échec" : `Échec après ${attempts} tentatives`),
-    counts: (done: string, total: string) => `${done} sur ${total}`,
-    retry: "Réessayer",
-  },
-};
+  return {
+    loading: m.uiLoading({}, options),
+    states: {
+      errorTitle: m.uiErrorTitle({}, options),
+      errorMessage: m.uiErrorMessage({}, options),
+      retry: m.uiRetry({}, options),
+    },
+    pieces: {
+      uncategorised: m.uiUncategorised({}, options),
+      month: m.uiMonth({}, options),
+      previousMonth: m.uiPreviousMonth({}, options),
+      nextMonth: m.uiNextMonth({}, options),
+      remove: (name: string) => m.uiRemove({ name }, options),
+    },
+    forms: {
+      noMatch: m.uiNoMatch({}, options),
+      results: (count: number) =>
+        pluralRules[locale].select(count) === "one"
+          ? m.uiResultsOne({ count }, options)
+          : m.uiResultsOther({ count }, options),
+      showOptions: m.uiShowOptions({}, options),
+      chooseDate: m.uiChooseDate({}, options),
+      previousMonth: m.uiPreviousMonth({}, options),
+      nextMonth: m.uiNextMonth({}, options),
+      dateFormat: (example: string) => m.uiDateFormat({ example }, options),
+      /** The calendar's language (month and day names, the typed date's order). */
+      dateLocale: locale,
+      /** The calendar's first day of the week, 0 for Sunday. */
+      weekStartsOn: locale === "fr" ? 1 : 0,
+    },
+    overlays: {
+      close: m.uiClose({}, options),
+      cancel: m.uiCancel({}, options),
+    },
+    charts: {
+      /** The language of the amounts, days and months a chart writes. */
+      locale,
+      empty: m.uiChartEmpty({}, options),
+      /** The button under a chart that opens its figures as a table. */
+      showFigures: m.uiChartShowFigures({}, options),
+      hideFigures: m.uiChartHideFigures({}, options),
+      /** The table's first column. */
+      day: m.uiChartDay({}, options),
+      month: m.uiMonth({}, options),
+    },
+    notify: {
+      /** The toasts' landmark, reached with F6. */
+      region: m.uiNotifyRegion({}, options),
+      saved: m.uiNotifySaved({}, options),
+      failed: m.uiNotifyFailed({}, options),
+      retry: m.uiNotifyRetry({}, options),
+      /** A progress toast's title when the caller gives none. */
+      working: m.uiNotifyWorking({}, options),
+      /** A progress toast resolved without a title of the caller's. */
+      done: m.uiNotifyDone({}, options),
+      undo: m.uiNotifyUndo({}, options),
+      undone: m.uiNotifyUndone({}, options),
+      undoFailed: m.uiNotifyUndoFailed({}, options),
+      dismiss: m.uiNotifyDismiss({}, options),
+      /** Said once a toast's button has been working for a second. */
+      pending: m.uiNotifyPending({}, options),
+    },
+    money: {
+      /** After the amount: "€3,120 received". */
+      received: m.uiMoneyReceived({}, options),
+      /** Each part of the month bar, after its amount. */
+      roles: {
+        spent: m.uiMoneySpent({}, options),
+        saved: m.uiMoneySaved({}, options),
+        left: m.uiMoneyLeft({}, options),
+      },
+      /** In place of "left" when more went out than came in. */
+      overspent: m.uiMoneyOverspent({}, options),
+      /** The month bar's parts, as a group. */
+      parts: m.uiMoneyParts({}, options),
+      /** A change and what it is against ("5%", "your 6-month average"). */
+      deltaMore: (change: string, reference: string) =>
+        m.uiDeltaMore({ change, reference }, options),
+      deltaLess: (change: string, reference: string) =>
+        m.uiDeltaLess({ change, reference }, options),
+      deltaSteady: (reference: string) => m.uiDeltaSteady({ reference }, options),
+      overBenchmark: m.uiOverBenchmark({}, options),
+      benchmark: (amount: string) => m.uiBenchmark({ amount }, options),
+      moreRows: (count: number) => m.uiMoreRows({ count }, options),
+      empty: m.uiMoneyEmpty({}, options),
+    },
+    jobs: {
+      /** A background job's state, beside its title. */
+      waiting: m.uiJobWaiting({}, options),
+      step: (at: number, of: number) => m.uiJobStep({ at, of }, options),
+      retrying: (attempt: number, attempts: number) =>
+        m.uiJobRetrying({ attempt, attempts }, options),
+      completed: m.uiJobCompleted({}, options),
+      failed: (attempts: number) =>
+        attempts === 1 ? m.uiJobFailedOnce({}, options) : m.uiJobFailedAfter({ attempts }, options),
+      /** How much of a step is done: "312 of 1,204". */
+      counts: (done: string, total: string) => m.uiJobCounts({ done, total }, options),
+      retry: m.uiJobRetry({}, options),
+    },
+  };
+}
+
+export type UiMessages = ReturnType<typeof uiMessages>;
 
 export const UI_LOCALES = ["en", "fr"] as const;
 
 export type UiLocale = (typeof UI_LOCALES)[number];
 
-const byLocale = { en, fr } satisfies { [Locale in UiLocale]: UiMessages };
+/** The supported language of a tag ("fr", "fr-FR"); English for any other. */
+export function uiLocaleOf(languageTag: string | undefined): UiLocale {
+  return (languageTag ?? "").toLowerCase().startsWith("fr") ? "fr" : "en";
+}
 
 /** The ui's texts for a language tag ("fr", "fr-FR"); English for any other. */
 export function uiMessagesFor(languageTag: string | undefined): UiMessages {
-  return (languageTag ?? "").toLowerCase().startsWith("fr") ? byLocale.fr : byLocale.en;
+  return uiMessages(uiLocaleOf(languageTag));
 }
 
 /**
- * The ui's texts in the page's language: `<html lang>`, which the app sets (English on the
- * server and without it). Read where no React tree is at hand, like `notify`.
+ * The ui's texts in the page's language: `<html lang>`, which the app sets; on the server, the
+ * request's language (Paraglide's). Read where no React tree is at hand, like `notify`.
  */
 export function pageMessages(): UiMessages {
-  return uiMessagesFor(typeof document === "undefined" ? undefined : document.documentElement.lang);
+  return uiMessagesFor(
+    typeof document === "undefined" ? getLocale() : document.documentElement.lang,
+  );
 }

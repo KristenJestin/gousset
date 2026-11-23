@@ -1,3 +1,5 @@
+import { m } from "@gousset/i18n/messages";
+import { baseLocale, overwriteGetLocale, toLocale } from "@gousset/i18n/runtime";
 import { QueryClient } from "@tanstack/react-query";
 import { createRouter as createTanStackRouter } from "@tanstack/react-router";
 import { setupRouterSsrQueryIntegration } from "@tanstack/react-router-ssr-query";
@@ -15,7 +17,21 @@ const getNonce = createIsomorphicFn()
   .server(() => getGlobalStartContext()?.nonce)
   .client(() => undefined);
 
+/**
+ * In the browser, the language is the one the server drew the page in (`<html lang>`: the user's
+ * choice, else the browser's, else English; src/server.ts). Paraglide's own `getLocale()` saves
+ * the language it finds on first use in its cookie, which would then outrank the browser's for
+ * 400 days though the user chose nothing: only their choice (`setLocale`) writes it.
+ */
+const readLocaleFromThePage = createIsomorphicFn()
+  .server(() => undefined)
+  .client(() => {
+    overwriteGetLocale(() => toLocale(document.documentElement.lang) ?? baseLocale);
+  });
+
 export const getRouter = () => {
+  readLocaleFromThePage();
+
   // One client per router, so per request on the server: a user's data never reaches another's
   // page.
   const queryClient = new QueryClient({
@@ -39,7 +55,7 @@ export const getRouter = () => {
     defaultPreload: "intent",
     // TanStack Query decides when data is fresh, not the router's own cache.
     defaultPreloadStaleTime: 0,
-    defaultNotFoundComponent: () => <div>Not Found</div>,
+    defaultNotFoundComponent: () => <p>{m.notFoundTitle()}</p>,
   });
 
   // The server's queries travel with the page and fill the browser's client before it renders.

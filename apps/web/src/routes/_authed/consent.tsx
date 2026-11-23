@@ -1,4 +1,5 @@
 import { MCP_SCOPES, McpScope } from "@gousset/auth/mcp";
+import { m } from "@gousset/i18n/messages";
 import { Button } from "@gousset/ui/components/button";
 import { Card } from "@gousset/ui/components/card";
 import { FormMessage } from "@gousset/ui/components/form-message";
@@ -9,7 +10,6 @@ import { useState } from "react";
 
 import { getConsentClient } from "@/functions/mcp";
 import { errorMessage } from "@/i18n/messages";
-import { useMessages } from "@/i18n/use-messages";
 import { authClient } from "@/lib/auth-client";
 import { whileBusy } from "@/lib/while-busy";
 
@@ -44,7 +44,6 @@ export const Route = createFileRoute("/_authed/consent")({
 });
 
 function Consent() {
-  const messages = useMessages();
   const client = Route.useLoaderData();
   const { scope = "", redirect_uri: redirectUri } = Route.useSearch();
   const back = hostOf(redirectUri);
@@ -64,7 +63,7 @@ function Consent() {
     const next = answerOf(data);
 
     if (refusal || Option.isNone(next)) {
-      setError(errorMessage(messages, undefined));
+      setError(errorMessage(undefined));
     }
   }
 
@@ -78,13 +77,13 @@ function Consent() {
     back === undefined
       ? undefined
       : client?.host === null || client?.host === undefined
-        ? messages.consent.unknownOrigin(back)
-        : messages.consent.origin(client.host, back);
+        ? m.consentUnknownOrigin({ back })
+        : m.consentOrigin({ client: client.host, back });
 
   const description = [
     origin,
-    messages.consent.description,
-    asksWrite ? messages.consent.writeDescription : undefined,
+    m.consentDescription(),
+    asksWrite ? m.consentWriteDescription() : undefined,
   ]
     .filter((part) => part !== undefined)
     .join(" ");
@@ -92,7 +91,7 @@ function Consent() {
   return (
     <Screen>
       <Card
-        title={messages.consent.title(client?.name ?? messages.consent.unknownClient)}
+        title={m.consentTitle({ client: client?.name ?? m.consentUnknownClient() })}
         description={description}
       >
         <FormMessage message={error} />
@@ -100,23 +99,23 @@ function Consent() {
           {asksWrite ? (
             <>
               <Button loading={busy} onClick={() => void answer(true, readOnly)}>
-                {messages.consent.allowRead}
+                {m.consentAllowRead()}
               </Button>
               <Button
                 variant="secondary"
                 loading={busy}
                 onClick={() => void answer(true, everything)}
               >
-                {messages.consent.allowReadWrite}
+                {m.consentAllowReadWrite()}
               </Button>
             </>
           ) : (
             <Button loading={busy} onClick={() => void answer(true, everything)}>
-              {messages.consent.allow}
+              {m.consentAllow()}
             </Button>
           )}
           <Button variant="secondary" loading={busy} onClick={() => void answer(false, [])}>
-            {messages.consent.deny}
+            {m.consentDeny()}
           </Button>
         </Actions>
       </Card>
