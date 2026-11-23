@@ -122,7 +122,7 @@ better-auth's `auth_user` is the user; its tables keep their `auth_` prefix (its
 - Indexes: `(account_id, day)`, the account page's check; `(import_id)`, for undo.
 - Unique `(account_id, day) where source = 'noted'`: one noted balance a day. Balance mode makes one line per noted balance from the one before it ([Balance mode](#balance-mode)); two on a day would make that order ambiguous. Statement balances may repeat a day (two overlapping files each give theirs), and each goes with its import.
 
-The account page's check (#15) compares the balance the app computes at the end of a day (`opening_balance_minor` plus every counted line booked up to that day) with each statement balance, and shows the difference. In balance mode, the noted balances are what the account is kept by.
+The account page's check (#15) compares the balance the app computes at the end of a day (`opening_balance_minor` plus every counted line booked up to that day) with the latest statement balance on or before today, and shows the difference; any earlier statement balance that disagrees with the app's balance at the end of its own day is shown too, so a past mismatch is never hidden. In balance mode, the noted balances are what the account is kept by.
 
 ## Statement lines
 
