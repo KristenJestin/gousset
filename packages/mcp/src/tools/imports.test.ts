@@ -666,6 +666,21 @@ describe("imports profiles", () => {
     expect(text).toContain("No profile has read it yet (it is waiting).");
   });
 
+  test("with a done import that names no profile, says it may have used one deleted since", async () => {
+    const state = fake({
+      profilesFor: {
+        [idOf(5)]: { fileName: "gone.csv", status: "done", used: null, fitting: [] },
+      },
+    });
+
+    const { text, isError } = await imports(state, { action: "profiles", import: idOf(5) });
+
+    expect(isError).toBe(false);
+    expect(text).toContain(
+      "This import names no profile Gousset still has: its columns were detected or confirmed on Gousset's import screen, or the profile it used was deleted since or is no longer shipped.",
+    );
+  });
+
   test("a long list stays under the limit, in parts that write the next call", async () => {
     const many = Array.from({ length: 400 }, (_, n) => ({
       ...RIVERSIDE,

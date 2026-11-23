@@ -523,7 +523,7 @@ function usedText(found: ProfilesForImport): string {
   }
 
   return found.status === "done"
-    ? "This import read its file with no saved or shipped profile: its columns were detected, or confirmed on Gousset's import screen."
+    ? "This import names no profile Gousset still has: its columns were detected or confirmed on Gousset's import screen, or the profile it used was deleted since or is no longer shipped."
     : `No profile has read it yet (it is ${found.status}).`;
 }
 

@@ -118,7 +118,8 @@ export type ProfilesForImport = {
   readonly status: ImportStatus;
   /**
    * The profile the import read its file with, as its row records it: `null` when none did yet,
-   * detection read it, a definition was given by hand, or the profile was deleted since.
+   * detection read it, a definition was given by hand, or the profile was deleted since (or its
+   * key is no longer shipped): a done import with none may have used any of these.
    */
   readonly used: ImportProfileEntry | null;
   /**
