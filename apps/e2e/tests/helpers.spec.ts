@@ -66,8 +66,8 @@ test("a person of its own made twice on one worker's database is two users", asy
   app,
   user,
 }) => {
-  const first = await addUser(app.baseURL, user, personOfItsOwn("wren"));
-  const again = await addUser(app.baseURL, user, personOfItsOwn("wren"));
+  const first = await addUser(app.baseURL, user, personOfItsOwn("linden"));
+  const again = await addUser(app.baseURL, user, personOfItsOwn("linden"));
 
   expect(again.name).toBe(first.name);
   expect(again.email).not.toBe(first.email);
