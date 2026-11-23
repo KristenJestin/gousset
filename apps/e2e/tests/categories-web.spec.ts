@@ -153,6 +153,26 @@ test("a third level is refused with its message", async ({ page }) => {
   await expect(dialog).toBeVisible();
 });
 
+test("a name already taken is said under the name field, the dialog left open", async ({
+  page,
+}) => {
+  await asCamille(page, "/settings/categories");
+  await addCategory(page, "E2E Hobbies");
+  await page.getByRole("button", { name: "Add a category", exact: true }).click();
+
+  const dialog = page.getByRole("dialog", { name: "Add a category" });
+  const name = dialog.getByRole("textbox", { name: "Name" });
+
+  await name.fill("E2E Hobbies");
+  await dialog.getByRole("button", { name: "Add the category" }).click();
+
+  await expect(name).toHaveAttribute("aria-invalid", "true");
+  await expect(name).toHaveAccessibleDescription(
+    /A category of this name is already at this level\./,
+  );
+  await expect(dialog).toBeVisible();
+});
+
 test("renaming and moving a category change its row", async ({ page }) => {
   await asCamille(page, "/settings/categories");
   await addCategory(page, "E2E Books");

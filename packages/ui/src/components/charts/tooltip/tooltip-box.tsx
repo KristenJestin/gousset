@@ -93,7 +93,7 @@ export interface TooltipBoxProps {
  * tokens (`border`, `--radius`) and Tailwind utilities.
  */
 export const TOOLTIP_PANEL_CLASS_NAME =
-  "relative min-w-[160px] rounded-xl border not-dark:bg-clip-padding text-chart-tooltip-foreground shadow-lg/5 before:pointer-events-none before:absolute before:inset-0 before:rounded-[calc(var(--radius-xl)-1px)] before:shadow-[0_1px_rgb(0_0_0/0.04)] dark:before:shadow-[0_-1px_rgb(255_255_255/0.06)]";
+  "relative min-w-[160px] rounded-xl border border-popover-border not-dark:bg-clip-padding text-chart-tooltip-foreground shadow-popover before:pointer-events-none before:absolute before:inset-0 before:rounded-[calc(var(--radius-xl)-1px)] before:shadow-[0_1px_rgb(0_0_0/0.04)] dark:before:shadow-[0_-1px_rgb(255_255_255/0.06)]";
 
 /** Clips content to the panel's inner radius without clipping the edge highlight. */
 export const TOOLTIP_PANEL_INNER_CLASS_NAME =

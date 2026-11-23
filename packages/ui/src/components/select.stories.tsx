@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 
 import { CATEGORIES } from "../stories/made-up";
+import { Card } from "./card";
 import { Select } from "./select";
 
 const categories = CATEGORIES.map((category) => ({
@@ -73,6 +74,21 @@ export const Error: Story = { args: { error: "Choose a category for this expense
 export const Disabled: Story = { args: { disabled: true, defaultValue: "housing" } };
 
 export const Small: Story = { args: { size: "sm", defaultValue: "transport" } };
+
+/**
+ * In a block, as on a screen: the list opens over the card and stands out from it by its own edge
+ * and shadow (docs/design.md, "Floating surfaces").
+ */
+export const InACard: Story = {
+  args: { defaultValue: "groceries" },
+  render: (args) => (
+    <div className="max-w-sm">
+      <Card title="Greenmarket" description="A made-up expense of the month.">
+        <Select {...args} />
+      </Card>
+    </div>
+  ),
+};
 
 export const Phone: Story = {
   globals: { viewport: { value: "mobile1", isRotated: false } },

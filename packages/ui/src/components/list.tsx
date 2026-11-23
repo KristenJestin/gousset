@@ -12,7 +12,10 @@ export function List({ label, children }: { label: string; children: ReactNode }
   );
 }
 
-/** One row of a `List`: its name, a second line, short tags, and at most one action at its end. */
+/**
+ * One row of a `List`: its name, a second line, short tags, and at most one action at its end.
+ * Where the tags and the action leave the name no room (a phone), they go under it.
+ */
 export function ListItem({
   title,
   description,
@@ -26,7 +29,7 @@ export function ListItem({
   action?: ReactNode;
 }) {
   return (
-    <li className="flex items-center justify-between gap-3 py-3">
+    <li className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 py-3">
       <div className="flex min-w-0 flex-col">
         <span className="text-foreground truncate text-sm font-medium">{title}</span>
         {description === undefined ? null : (
