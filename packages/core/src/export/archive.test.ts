@@ -393,6 +393,20 @@ describe("a file imported", () => {
     expect(safeFileName(String.raw`C:\exports\october.csv`)).toBe("C__exports_october.csv");
     expect(safeFileName(".hidden")).toBe("_hidden");
     expect(safeFileName("")).toBe("file");
+
+    // Spaces first never shield a dot: no `.`, `..` nor hidden file once unzipped.
+    for (const name of [".", "..", " ..", " . ", "   "]) {
+      expect(safeFileName(name), JSON.stringify(name)).not.toMatch(/^\.|^\s|^$/);
+    }
+
+    expect(safeFileName(" .hidden")).toBe("_hidden");
+  });
+
+  test("is a name Windows extracts as it is", () => {
+    expect(safeFileName("october.ofx. ")).toBe("october.ofx");
+    expect(safeFileName("NUL.txt")).toBe("_NUL.txt");
+    expect(safeFileName("com1")).toBe("_com1");
+    expect(safeFileName("console.csv")).toBe("console.csv");
   });
 
   test("two files of the same name stay apart, each in its import's folder", () => {

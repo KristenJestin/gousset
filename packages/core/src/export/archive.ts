@@ -96,18 +96,27 @@ export function csvOf(table: ExportTable, rows: ReadonlyArray<ExportRow>): strin
   return `${lines.join("\r\n")}\r\n`;
 }
 
+/** Names Windows keeps for its devices, whatever their extension (`NUL.txt`). */
+const WINDOWS_DEVICE = /^(?:con|prn|aux|nul|com\d|lpt\d)(?:\.|$)/i;
+
 /**
  * A name a file can have in any archive and on any system: no folder, no character a system
- * refuses, no leading dot. The import's folder keeps two files of the same name apart.
+ * refuses, no leading dot (so never `.` nor `..`), no trailing dot or space, which Windows drops,
+ * and no device name of Windows. The import's folder keeps two files of the same name apart.
  */
 export function safeFileName(name: string): string {
   const safe = name
     .replaceAll(/[\p{Cc}/\\:*?"<>|]/gu, "_")
-    .replace(/^\.+/, "_")
+    .slice(0, 120)
     .trim()
-    .slice(0, 120);
+    .replace(/^\.+/, "_")
+    .replace(/[. ]+$/, "");
 
-  return safe === "" ? "file" : safe;
+  if (safe === "") {
+    return "file";
+  }
+
+  return WINDOWS_DEVICE.test(safe) ? `_${safe}` : safe;
 }
 
 const json = (value: Schema.Json) => strToU8(`${JSON.stringify(value, null, 2)}\n`);
