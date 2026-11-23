@@ -563,6 +563,37 @@ describe("lines classify", () => {
     expect(entryOf(categories, salary)?.categoryId).toBe(otherIncome.id);
   });
 
+  test("a name alone is the top-level category of that name, the child's is its path", async () => {
+    const rows = categoryRows();
+    const travel = memoryCategory("expense", "Travel", { position: 3 });
+    const leisure = memoryCategory("expense", "Leisure", { position: 4 });
+    const leisureTravel = memoryCategory("expense", "Travel", { parentId: leisure.id });
+
+    rows.categories.push(travel, leisure, leisureTravel);
+
+    const categories = new Map([[writer.userId, rows]]);
+
+    const top = await lines(
+      { action: "classify", line: fuel.id, category: "Travel" },
+      ROWS,
+      writer,
+      categories,
+    );
+
+    expect(top.isError, top.text).toBe(false);
+    expect(top.text).toContain("is now in Travel (expense).");
+    expect(entryOf(categories.get(writer.userId), fuel)?.categoryId).toBe(travel.id);
+
+    const child = await lines(
+      { action: "classify", line: fuel.id, category: "Leisure > Travel" },
+      ROWS,
+      writer,
+      categories,
+    );
+
+    expect(child.text).toContain("is now in Leisure > Travel (expense).");
+  });
+
   test("refuses an unknown or archived category, and a held line, saying what to do", async () => {
     const unknown = await classify(fuel.id, "Salary");
 

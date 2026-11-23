@@ -649,8 +649,10 @@ export const restoreCategory = (owner: string, categoryId: string) =>
 
 /**
  * The category a person names, archived or not: by its name, ignoring case, or by its path,
- * "Parent > Child", and of `kind` when given. Fails with `CategoryNameUnknown` (with every
- * category's path) or `CategoryNameAmbiguous` (with the paths of those of that name).
+ * "Parent > Child", and of `kind` when given. A name alone names the top-level category of that
+ * name, else the one child of that name, in each kind: so every category can be named, a child
+ * sharing a top-level category's name by its path. Fails with `CategoryNameUnknown` (with every
+ * category's path) or `CategoryNameAmbiguous` (with the path and kind of each of that name).
  */
 export const categoryNamed = (owner: string, name: string, kind?: EntryKind) =>
   Effect.gen(function* () {
@@ -660,9 +662,15 @@ export const categoryNamed = (owner: string, name: string, kind?: EntryKind) =>
     const [first = "", ...rest] = name.split(PATH_SEPARATOR);
     const childName = rest.join(PATH_SEPARATOR);
 
+    const alone = ofKind.filter((each) => sameText(each.name, first));
+
     const matches =
       rest.length === 0
-        ? ofKind.filter((each) => sameText(each.name, first))
+        ? alone.filter(
+            (each) =>
+              each.parentId === null ||
+              !alone.some((top) => top.parentId === null && top.kind === each.kind),
+          )
         : ofKind.filter((each) => {
             const parent = categories.find((candidate) => candidate.id === each.parentId);
 
@@ -686,7 +694,9 @@ export const categoryNamed = (owner: string, name: string, kind?: EntryKind) =>
     if (others.length > 0) {
       return yield* new CategoryNameAmbiguous({
         name,
-        matches: matches.map((each) => pathOf(categories, each)).toSorted(),
+        matches: matches
+          .map((each) => ({ path: pathOf(categories, each), kind: each.kind }))
+          .toSorted((a, b) => a.path.localeCompare(b.path) || a.kind.localeCompare(b.kind)),
       });
     }
 

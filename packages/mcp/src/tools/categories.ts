@@ -92,7 +92,7 @@ type CategoriesCall = typeof CategoriesInput.Encoded;
 
 const DESCRIPTION = `The user's categories, on two levels (a top-level category and its children), one tree for expenses and one for income; every expense has exactly one. \`list\` gives both trees with each category's entries, benchmark and monthly average over the six full months before this one, marks the fallback ("Other", where unclassified lines go) and, with \`archived: true\`, adds the archived ones. \`create\` makes one; \`edit\` renames it, moves it under another top-level category (\`parent\`) or to the top (\`top_level: true\`), or sets its benchmark; \`merge\` moves every entry of \`category\` into \`into\` (its children go under \`into\`, or into \`into\`'s child of the same name) and deletes it; \`archive\` hides it from choices while its entries keep it, \`restore: true\` brings it back. To put a line in a category, use \`lines\` with \`classify\`; for where the money went in a month, \`month\`.
 
-Name a category as \`list\` writes it: its name, or "Parent > Child" when the name alone is shared (any case); add \`kind\` when an expense and an income category share it. A benchmark is "automatic", "none", or a decimal amount a month in the user's currency.
+Name a category as \`list\` writes it (any case): a name alone is the top-level category of that name, else the one child of that name; "Parent > Child" names a child. Add \`kind\` when an expense and an income category share it. A benchmark is "automatic", "none", or a decimal amount a month in the user's currency.
 
 Refused, with what to do: a third level (a category under a child, or one with children under a parent), a parent or merge target of the other kind, a name its siblings already have or holding ">", archiving or merging away the fallback, an archived parent or target, a benchmark that is no decimal from 0. Every action but list needs the write scope.
 
@@ -190,14 +190,15 @@ export function namedCategory(
           LIST,
         ),
       CategoryNameAmbiguous: (ambiguous) => {
-        const [first = ambiguous.name] = ambiguous.matches;
-        const sameKind = new Set(ambiguous.matches).size === ambiguous.matches.length;
+        // Each path names one category of its kind: the first, with its kind, is a valid retry.
+        const [first] = ambiguous.matches;
+        const kinds = new Set(ambiguous.matches.map((match) => match.kind));
 
         return refusal(
-          sameKind
-            ? `Several categories of the user's are named "${ambiguous.name}": ${ambiguous.matches.join(", ")}. Name one by its path, "Parent > Child".`
-            : `An expense and an income category of the user's are both named "${ambiguous.name}". Add kind, expense or income, to say which.`,
-          sameKind ? retry(first, kind) : retry(ambiguous.name, "expense"),
+          kinds.size === 1
+            ? `Several categories of the user's are named "${ambiguous.name}": ${ambiguous.matches.map((match) => match.path).join(", ")}. Name one by its path, "Parent > Child".`
+            : `An expense and an income category of the user's are both named "${ambiguous.name}": ${ambiguous.matches.map((match) => `${match.path} (${match.kind})`).join(", ")}. Add kind, expense or income, to say which, and name it as written here.`,
+          retry(first?.path ?? ambiguous.name, first?.kind ?? kind),
         );
       },
       QueryFailed: Effect.die,

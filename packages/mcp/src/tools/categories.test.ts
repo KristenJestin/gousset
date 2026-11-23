@@ -352,6 +352,59 @@ describe("categories create and edit", () => {
     await expectValidExample(text);
   });
 
+  test("a name alone is the top-level category of that name, the child's is its path", async () => {
+    const fresh = freshRows();
+    const travel = memoryCategory("expense", "Travel", { position: 4 });
+    const leisure = memoryCategory("expense", "Leisure", { position: 5 });
+    const leisureTravel = memoryCategory("expense", "Travel", { parentId: leisure.id });
+
+    fresh.categories.push(travel, leisure, leisureTravel);
+
+    const rows = new Map([[writer.userId, fresh]]);
+    const top = await categories({ action: "archive", category: "Travel" }, rows);
+
+    expect(top.isError, top.text).toBe(false);
+    expect(top.text).toContain('Archived "Travel"');
+
+    const archived = (id: string) =>
+      rowsOf(rows).categories.find((each) => each.id === id)?.archivedAt;
+
+    expect(archived(travel.id)).not.toBeNull();
+    expect(archived(leisureTravel.id)).toBeNull();
+
+    const child = await categories({ action: "archive", category: "Leisure > Travel" }, rows);
+
+    expect(child.text).toContain('Archived "Leisure > Travel"');
+    expect(archived(leisureTravel.id)).not.toBeNull();
+  });
+
+  test("children of one name under two parents: the refusal names each by its path", async () => {
+    const fresh = freshRows();
+
+    fresh.categories.push(
+      memoryCategory("expense", "Fees", { parentId: housing.id, position: 2 }),
+      memoryCategory("expense", "Fees", { parentId: groceries.id, position: 2 }),
+    );
+
+    const rows = new Map([[writer.userId, fresh]]);
+    const { text, isError } = await categories({ action: "archive", category: "fees" }, rows);
+
+    expect(isError).toBe(true);
+    expect(text).toContain('named "fees": Groceries > Fees, Housing > Fees.');
+
+    const written = example(text);
+
+    expect(written?.args).toEqual({
+      action: "archive",
+      category: "Groceries > Fees",
+      kind: "expense",
+    });
+
+    const again = await categories(written?.args ?? {}, rows);
+
+    expect(again.isError, again.text).toBe(false);
+  });
+
   test("refuses an unknown name with the user's categories", async () => {
     const { text, isError } = await categories({ action: "edit", category: "Rnet", name: "Rent" });
 

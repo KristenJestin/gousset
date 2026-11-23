@@ -448,12 +448,61 @@ describe("naming", () => {
 
     const { result: ambiguous } = await run(rows, categoryNamed(ADA, "other"));
 
-    expect(ambiguous).toMatchObject({ failure: { matches: ["Other", "Other"] } });
+    expect(ambiguous).toMatchObject({
+      failure: {
+        matches: [
+          { path: "Other", kind: "expense" },
+          { path: "Other", kind: "income" },
+        ],
+      },
+    });
 
     const { result: unknown } = await run(rows, categoryNamed(ADA, "Rnet", "expense"));
 
     expect(unknown).toMatchObject({
       failure: { categories: expect.arrayContaining(["Housing > Rent", other.name]) },
+    });
+  });
+
+  test("a name alone names the top-level category of that name, else its one child", async () => {
+    const { rows } = startingRows();
+    const travel = memoryCategory("expense", "Travel", { position: 3 });
+    const leisure = memoryCategory("expense", "Leisure", { position: 4 });
+    const leisureTravel = memoryCategory("expense", "Travel", { parentId: leisure.id });
+
+    rows.categories.push(travel, leisure, leisureTravel);
+
+    expect(await run(rows, categoryNamed(ADA, "travel", "expense"))).toMatchObject({
+      result: { success: { id: travel.id } },
+    });
+    expect(await run(rows, categoryNamed(ADA, "Travel"))).toMatchObject({
+      result: { success: { id: travel.id } },
+    });
+    expect(await run(rows, categoryNamed(ADA, "Leisure > Travel"))).toMatchObject({
+      result: { success: { id: leisureTravel.id } },
+    });
+  });
+
+  test("children of the same name under different parents are each named by their path", async () => {
+    const { rows, housing, groceries } = startingRows();
+    const housingFees = memoryCategory("expense", "Fees", { parentId: housing.id, position: 2 });
+    const groceriesFees = memoryCategory("expense", "Fees", { parentId: groceries.id });
+
+    rows.categories.push(housingFees, groceriesFees);
+
+    const { result } = await run(rows, categoryNamed(ADA, "fees"));
+
+    expect(result).toMatchObject({
+      failure: {
+        _tag: "CategoryNameAmbiguous",
+        matches: [
+          { path: "Groceries > Fees", kind: "expense" },
+          { path: "Housing > Fees", kind: "expense" },
+        ],
+      },
+    });
+    expect(await run(rows, categoryNamed(ADA, "Groceries > Fees"))).toMatchObject({
+      result: { success: { id: groceriesFees.id } },
     });
   });
 });

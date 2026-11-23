@@ -180,10 +180,18 @@ export class CategoryNameUnknown extends Schema.TaggedError<CategoryNameUnknown>
   { name: Schema.String, categories: Schema.Array(Schema.String) },
 ) {}
 
-/** Several categories of the user's have this name: their paths ("Parent > Child") tell them apart. */
+/**
+ * Several categories of the user's have this name: each path ("Parent > Child") with its kind names
+ * one alone.
+ */
 export class CategoryNameAmbiguous extends Schema.TaggedError<CategoryNameAmbiguous>()(
   "CategoryNameAmbiguous",
-  { name: Schema.String, matches: Schema.Array(Schema.String) },
+  {
+    name: Schema.String,
+    matches: Schema.Array(
+      Schema.Struct({ path: Schema.String, kind: Schema.Literals(["expense", "income"]) }),
+    ),
+  },
 ) {}
 
 /**
