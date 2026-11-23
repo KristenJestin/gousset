@@ -20,7 +20,9 @@ Node.js 24 and pnpm 12.
 ```sh
 pnpm install
 pnpm db:start   # Postgres 18 in Docker
-pnpm dev        # http://localhost:3001
+pnpm db:migrate # its schema, as an installation gets it
+pnpm dev        # http://localhost:3001; sign up
+pnpm db:seed    # the made-up accounts and lines for every user who has none
 ```
 
 The database of development (`docker-compose.dev.yml`) listens on this machine only. To run the
@@ -29,7 +31,7 @@ whole stack from the clone with `pnpm docker:up`, make its two secret files firs
 
 The database of development moved to `docker-compose.dev.yml` (project `gousset-dev`). If you ran
 `pnpm db:start` before, its old container still holds port 5432: remove it with
-`docker rm --force gousset-postgres` (its volume `gousset_gousset_postgres_data` stays). The new one starts empty: `pnpm db:push` fills its schema; to keep old data, dump it from
+`docker rm --force gousset-postgres` (its volume `gousset_gousset_postgres_data` stays). The new one starts empty: `pnpm db:migrate` fills its schema; to keep old data, dump it from
 the old container before removing it (`docker exec gousset-postgres pg_dump -U postgres gousset`)
 and load it into the new one.
 

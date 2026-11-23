@@ -1,5 +1,4 @@
 import type { QueryClient } from "@tanstack/react-query";
-import { HotkeysProvider } from "@tanstack/react-hotkeys";
 import {
   ClientOnly,
   HeadContent,
@@ -18,7 +17,7 @@ import { ThemeProvider } from "@gousset/ui/components/theme-provider";
 import { getViewer } from "@/functions/viewer";
 
 import appCss from "../index.css?url";
-import { Shortcuts, appHotkeys } from "../shortcuts";
+import { Shortcuts } from "../shortcuts";
 
 // Development only: a production build reads `false` here and drops the import, devtools and all.
 const Devtools = import.meta.env.DEV ? lazy(async () => import("../devtools")) : null;
@@ -90,10 +89,9 @@ function RootDocument() {
       </head>
       <body>
         <ThemeProvider nonce={nonce} accountScheme={viewer.user?.colorScheme}>
-          <HotkeysProvider appHotkeys={appHotkeys}>
+          <Shortcuts singleKeyShortcuts={viewer.user?.singleKeyShortcuts ?? true}>
             <Outlet />
-            <Shortcuts />
-          </HotkeysProvider>
+          </Shortcuts>
           <Toaster />
         </ThemeProvider>
         {Devtools === null ? null : (

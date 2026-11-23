@@ -144,8 +144,9 @@ export async function prepareTemplate(): Promise<void> {
   await recreateDatabase(template);
   await migrate(template);
 
-  // The fixture's seed goes here once Gousset has tables of its own beyond the accounts of
-  // better-auth: the template is the one place it is written, every worker gets a copy.
+  // No made-up data here: a user's rows need their user, and the template has no user yet (each
+  // worker signs its own up). A spec that needs rows seeds its users from `packages/fixture`
+  // (`openUserData(...).seed`, src/user-data.ts).
 }
 
 export async function databaseExists(database: string): Promise<boolean> {
@@ -172,6 +173,30 @@ export async function hasUser(database: string, email: string): Promise<boolean>
     const result = await client.query('SELECT 1 FROM "auth_user" WHERE email = $1', [email]);
 
     return result.rowCount === 1;
+  } finally {
+    await client.end();
+  }
+}
+
+/**
+ * The sessions of the user with this e-mail, read straight from its tables: how many there are, and
+ * how many someone else opened as them (better-auth's impersonation).
+ */
+export async function sessionsOf(
+  database: string,
+  email: string,
+): Promise<{ all: number; impersonated: number }> {
+  const client = new pg.Client({ connectionString: databaseUrl(database) });
+
+  await client.connect();
+
+  try {
+    const result = await client.query<{ all: number; impersonated: number }>(
+      'SELECT count(*)::int AS "all", count(s.impersonated_by)::int AS impersonated FROM "auth_session" s JOIN "auth_user" u ON u.id = s.user_id WHERE u.email = $1',
+      [email],
+    );
+
+    return result.rows[0] ?? { all: 0, impersonated: 0 };
   } finally {
     await client.end();
   }

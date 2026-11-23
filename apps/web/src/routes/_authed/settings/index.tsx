@@ -9,6 +9,8 @@ import { List, ListItem } from "@gousset/ui/components/list";
 import { Actions } from "@gousset/ui/components/screen";
 import { SegmentedChoice } from "@gousset/ui/components/segmented-choice";
 import { StatusMessage } from "@gousset/ui/components/status-message";
+import { Switch } from "@gousset/ui/components/switch";
+import { useFormatForDisplay } from "@tanstack/react-hotkeys";
 import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { useState } from "react";
 
@@ -18,6 +20,7 @@ import {
   revokeConnectedClient,
   setMcpDoor,
 } from "@/functions/mcp";
+import { setSingleKeyShortcuts } from "@/functions/shortcuts";
 import { errorMessage } from "@/i18n/messages";
 import { keepColorScheme } from "@/lib/account-color-scheme";
 import { refusalOf } from "@/lib/refusal";
@@ -31,8 +34,8 @@ const LANGUAGE_NAMES = {
 
 /**
  * The general settings: how the interface looks and speaks, the MCP clients the user allowed and,
- * for the administrator, the MCP door itself. The blocks to come land here, one under the other:
- * the colour scheme kept on the account (#50), turning off the single-key shortcuts (#54).
+ * for the administrator, the MCP door itself. The colour scheme is kept on the account, like the
+ * single-key shortcuts.
  */
 export const Route = createFileRoute("/_authed/settings/")({
   loader: async () => {
@@ -65,8 +68,54 @@ function GeneralSettings() {
           onChange={(scheme) => void keepColorScheme(scheme)}
         />
       </Block>
+      <ShortcutSettings />
       <McpSettings />
     </>
+  );
+}
+
+/**
+ * Turns the single-key shortcuts off or on again (WCAG 2.2, 2.1.4 Character Key Shortcuts), kept
+ * on the account. The switch moves at once and shows the value being saved; one save at a time,
+ * so that two quick toggles cannot land out of order. Otherwise it shows what the account holds:
+ * a refusal puts it back to that, and says so.
+ */
+function ShortcutSettings() {
+  const router = useRouter();
+  const { user } = Route.useRouteContext();
+  const formatForDisplay = useFormatForDisplay();
+  const [saving, setSaving] = useState<boolean>();
+  const [error, setError] = useState<string>();
+
+  async function turn(next: boolean) {
+    if (saving !== undefined) {
+      return;
+    }
+
+    setSaving(next);
+
+    const refusal = await refusalOf(() => setSingleKeyShortcuts({ data: { on: next } }));
+
+    setError(refusal === undefined ? undefined : errorMessage(refusal));
+
+    if (refusal === undefined) {
+      // The root reads the setting again: the shortcuts, and this switch, follow it.
+      await router.invalidate();
+    }
+
+    setSaving(undefined);
+  }
+
+  return (
+    <Block title={m.settingsShortcutsTitle()}>
+      <Switch
+        label={m.settingsSingleKeyShortcuts()}
+        description={m.settingsSingleKeyShortcutsDescription({ keys: formatForDisplay("Mod+/") })}
+        checked={saving ?? user.singleKeyShortcuts}
+        onCheckedChange={(next) => void turn(next)}
+      />
+      <FormMessage message={error} />
+    </Block>
   );
 }
 

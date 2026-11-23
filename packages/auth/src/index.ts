@@ -9,6 +9,7 @@ import { admin, jwt } from "better-auth/plugins";
 import { tanstackStartCookies } from "better-auth/tanstack-start";
 import { Option, Schema } from "effect";
 
+import { adminAccess } from "./admin-access";
 import { TOO_MANY_ATTEMPTS } from "./attempt-guard";
 import { cimdOptions } from "./cimd";
 import { CLIENT_ADDRESS_HEADER } from "./client-address";
@@ -126,6 +127,9 @@ export function createAuth(env: AuthConfig, database: Database) {
           input: false,
           returned: false,
         },
+        // Whether the shortcuts made of one character fire: the user turns them off in the
+        // settings, through the app's own server function (apps/web, functions/shortcuts.ts).
+        singleKeyShortcuts: { type: "boolean", required: false, defaultValue: true, input: false },
       },
     },
     session: {
@@ -265,6 +269,12 @@ export function createAuth(env: AuthConfig, database: Database) {
       user: {
         create: {
           before: async (user, ctx) => {
+            // The administrator knows the temporary password: the user replaces it first, whatever
+            // the request says (`input: false` does not hold on the admin plugin's `data`).
+            if (ctx?.path === "/admin/create-user") {
+              return { data: { ...user, mustChangePassword: true } };
+            }
+
             // The user created by sign-up, on a fresh install, is the first one: the administrator.
             if (ctx?.path !== "/sign-up/email") {
               return;
@@ -276,7 +286,7 @@ export function createAuth(env: AuthConfig, database: Database) {
       },
     },
     plugins: [
-      admin({ defaultRole: "user", adminRoles: ["admin"] }),
+      admin({ defaultRole: "user", adminRoles: ["admin"], ...adminAccess }),
       ...(mcpResource === undefined ? [] : mcpPlugins(mcpResource)),
       tanstackStartCookies(),
     ],

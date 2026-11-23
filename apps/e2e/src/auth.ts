@@ -133,7 +133,7 @@ export async function createUser(baseURL: string, admin: TestUser, person: Perso
   try {
     await ensureOk(
       asAdmin.post(CREATE_USER_PATH, {
-        data: { ...person, role: "user", data: { mustChangePassword: true } },
+        data: { ...person, data: { mustChangePassword: true } },
       }),
       `Creating ${person.email}`,
     );

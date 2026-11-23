@@ -35,6 +35,7 @@ export const getViewer = createServerFn({ method: "GET" }).handler(() =>
               : "system",
             isAdmin: user.role === "admin",
             mustChangePassword: user.mustChangePassword === true,
+            singleKeyShortcuts: user.singleKeyShortcuts !== false,
           },
         };
       }
