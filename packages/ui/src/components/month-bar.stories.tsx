@@ -4,6 +4,7 @@ import { useState } from "react";
 import { InFrench } from "../stories/in-french";
 import { MONTH_FIGURES, OVERSPENT_FIGURES } from "../stories/made-up";
 import { Button } from "./button";
+import { Block } from "./data-block";
 import { Delta } from "./delta";
 import { MonthBar, MonthBarSkeleton } from "./month-bar";
 import type { MoneyRole } from "./month-bar";
@@ -138,8 +139,23 @@ export const French: Story = {
 /** Loading: the skeleton, shaped like the bar. */
 export const Loading: Story = { render: () => <MonthBarSkeleton /> };
 
-/** On the narrowest phone: the legend still fits on one line under the bar. */
+/**
+ * On the narrowest phone, in its block as the review shows it, with the part left's longest name:
+ * the legend stays on one line, that name cut short.
+ */
 export const Phone: Story = {
   globals: { viewport: { value: "mobile1", isRotated: false } },
-  render: () => <Choosing />,
+  render: () => (
+    <Block title="The month">
+      <MonthBar
+        {...october}
+        restricted={{ minor: 15_300, currency: "EUR" }}
+        note="salary and meal vouchers"
+        comparison={
+          <Delta value={october.spent} reference={average} referenceLabel="your 6-month average" />
+        }
+        onSelect={() => undefined}
+      />
+    </Block>
+  ),
 };

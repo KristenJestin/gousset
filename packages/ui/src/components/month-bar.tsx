@@ -178,7 +178,8 @@ function PartContent({
   );
 }
 
-const LEGEND_CLASSES = "flex gap-6";
+// Tighter on a phone, where the block leaves the legend about 250 px.
+const LEGEND_CLASSES = "flex gap-4 sm:gap-6";
 
 // Only the last key gives way on a narrow screen: its name is the one that grows ("left, €153
 // restricted"), and the amounts before it are never cut.
@@ -189,12 +190,13 @@ const PART_CLASSES =
  * The month in one bar (docs/wireframes, screen 1, block 1): the money received, cut into spent,
  * set aside and left, each in its role's colour, the total above and a legend under it. The
  * legend's keys (dot, amount, name) sit side by side from the bar's start rather than under their
- * parts: a part can be a sliver too narrow for its key, and the parts' widths move with the month
- * while the keys stay put. On one line on every width, a long name cut short, so the block's
- * height never changes. Each key is a button when `onSelect` is given. When more went out than
- * came in, the bar stretches to what went out, a dark mark shows where the money received ended,
- * and the part left says by how much the month is overspent, in red. With `restricted`, the end of the part
- * left is hatched (benefit accounts' money) and its label says how much of it.
+ * parts: a part can be a sliver too narrow for its key, and when the month changes the parts move
+ * while the keys stay side by side from the bar's start, their amounts rolling. On one line on every width, a long
+ * name cut short, so the block's height never changes. Each key is a button when `onSelect` is
+ * given. When more went out than came in, the bar stretches to what went out, a dark mark shows
+ * where the money received ended, and the part left says by how much the month is overspent, in
+ * red. With `restricted`, the end of the part left is hatched (benefit accounts' money) and its
+ * label says how much of it.
  *
  * Motion: when the month changes, the parts grow or shrink to their new widths in 200 ms
  * (ease-out) and the amounts roll; cut under reduced motion.

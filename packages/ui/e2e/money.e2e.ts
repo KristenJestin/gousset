@@ -260,7 +260,8 @@ test.describe("MonthBar", () => {
 
   // Under its parts, the legend sat at fixed thirds that matched none of them (#83): it is a
   // compact one, its keys side by side from the bar's start, whatever the parts' widths.
-  // The phone story at the narrowest phone it is drawn for (Storybook's `mobile1`).
+  // The phone story at the narrowest phone it is drawn for (Storybook's `mobile1`), in its block:
+  // Storybook's padding stands for the page's, which leaves the legend the app's width there.
   for (const { name, width } of [
     { name: "default", width: null },
     { name: "narrow-part", width: null },
