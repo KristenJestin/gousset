@@ -11,10 +11,10 @@ import {
   unpairLine,
 } from "@gousset/core";
 import type { LineStore, Transfers } from "@gousset/core";
-import { account, statementLine } from "@gousset/db/schema/ledger";
+import { account, entry, entryPart, statementLine } from "@gousset/db/schema/ledger";
 import { exampleStatement } from "@gousset/fixture";
 import type { Statement, StatementLine } from "@gousset/fixture";
-import { asc, eq } from "drizzle-orm";
+import { asc, eq, inArray } from "drizzle-orm";
 import { Effect, Layer } from "effect";
 
 import { addUser } from "../src/auth";
@@ -83,6 +83,20 @@ const reviewOf = (lineIds: ReadonlyArray<string>) =>
       return row?.reviewState;
     }),
   );
+
+/** How each line is classified: its entries' `classified_by`, none for a side of a transfer. */
+const entriesOf = (lineIds: ReadonlyArray<string>) =>
+  data.asUser(owner, async (transaction) => {
+    const parts = await transaction
+      .select({ lineId: entryPart.lineId, classifiedBy: entry.classifiedBy })
+      .from(entryPart)
+      .innerJoin(entry, eq(entry.id, entryPart.entryId))
+      .where(inArray(entryPart.lineId, [...lineIds]));
+
+    return lineIds.map((lineId) =>
+      parts.flatMap((part) => (part.lineId === lineId ? [part.classifiedBy] : [])),
+    );
+  });
 
 /** A new account of the user's, of this kind; a card settles into `settlesInto`. */
 async function newAccount(
@@ -178,6 +192,41 @@ test("a clear pair is paired", async () => {
 
   // One click goes from one side to the other: each side names the other.
   expect((await transferOf(into)).paired).toMatchObject({ direction: "in", other: { id: out } });
+});
+
+test("an import that pairs a transfer leaves its two lines without entries", async () => {
+  const current = await newAccount("Entries current", "current");
+  const savings = await newAccount("Entries savings", "savings");
+
+  await importInto(current, "entries-current", [
+    { bookedOn: "2026-10-08", amountMinor: -13_370, label: "SEPA TRF TO MY SAVINGS" },
+  ]);
+
+  const out = await lineOf(current, -13_370);
+
+  // Alone, the line is an expense, in its kind's fallback, until its other side comes.
+  expect(await entriesOf([out])).toEqual([["default"]]);
+
+  await importInto(savings, "entries-savings", [
+    { bookedOn: "2026-10-09", amountMinor: 13_370, label: "SEPA TRF FROM MY CURRENT" },
+  ]);
+
+  const into = await lineOf(savings, 13_370);
+
+  // Paired, both lines are the transfer: neither an expense nor an income.
+  expect((await transferOf(out)).paired).toMatchObject({ other: { id: into } });
+  expect(await entriesOf([out, into])).toEqual([[], []]);
+
+  // "Not a transfer": each line is an expense or an income again, to classify.
+  await run(unpairLine(owner, out));
+
+  expect(await entriesOf([out, into])).toEqual([["default"], ["default"]]);
+  expect(await toReview()).toEqual(expect.arrayContaining([out, into]));
+
+  // Paired by hand, their entries go again.
+  await run(pairLines(owner, out, into));
+
+  expect(await entriesOf([out, into])).toEqual([[], []]);
 });
 
 test("two candidates go to review", async () => {
@@ -321,6 +370,8 @@ test("undoing an import unpairs", async () => {
   expect(undone.transfersRemoved).toBe(1);
   expect((await transferOf(out)).paired).toBeNull();
   expect(await reviewOf([out])).toEqual(["to_review"]);
+  // An expense again, until the user says what it is.
+  expect(await entriesOf([out])).toEqual([["default"]]);
 
   // The current account's import undone, the side the app made on the card goes too.
   expect((await imports.undo(owner, debit.id)).transfersRemoved).toBe(1);
@@ -431,6 +482,8 @@ test("an MCP client shows a transfer, unpairs it, pairs it again and pairs every
   expect(shown.text).toContain(
     "Transfer to Livret A (Riverside Bank), paired by Gousset: never counted as spending. Set aside: money moved to savings or investments.",
   );
+  // A transfer is no expense: it has no category.
+  expect(shown.text).not.toContain("Category:");
 
   const unpaired = await callLines(session.client, { action: "unpair", line });
 
@@ -438,15 +491,20 @@ test("an MCP client shows a transfer, unpairs it, pairs it again and pairs every
   expect(unpaired.text).toMatch(
     /^No longer a transfer: the line and the line of \d{4}-\d\d-\d\d, Livret A/,
   );
-  expect((await callLines(session.client, { action: "show", line })).text).not.toContain(
-    "Transfer to",
-  );
+  const separate = await callLines(session.client, { action: "show", line });
+
+  expect(separate.text).not.toContain("Transfer to");
+  // An expense again, in its kind's fallback, until the user classifies it.
+  expect(separate.text).toContain("Category: Other (expense)");
 
   // Its only candidate is the Livret A's line it was paired with.
   const paired = await callLines(session.client, { action: "pair", line });
 
   expect(paired.isError, paired.text).toBe(false);
   expect(paired.text).toContain("Transfer to Livret A (Riverside Bank), paired by the user");
+  expect((await callLines(session.client, { action: "show", line })).text).not.toContain(
+    "Category:",
+  );
 
   const again = await callLines(session.client, { action: "pair", line });
 

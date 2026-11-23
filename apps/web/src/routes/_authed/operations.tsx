@@ -475,7 +475,11 @@ function TransferOf({
       }
 
       setError(undefined);
-      await invalidateTouched(queryClient, touchedBy(line, result.other));
+      // The lines are expenses or incomes again: the categories' figures change too.
+      await Promise.all([
+        invalidateTouched(queryClient, touchedBy(line, result.other)),
+        invalidateCategories(queryClient),
+      ]);
 
       // This line was the side Gousset had made: gone with the transfer, its other side opens.
       if (result.lineDeleted) {
@@ -497,13 +501,17 @@ function TransferOf({
       }
 
       setError(undefined);
-      await invalidateTouched(
-        queryClient,
-        touchedBy(
-          line,
-          transfer.candidates.find((candidate) => candidate.id === otherId),
+      // Both lines are no expense nor income any more: the categories' figures change too.
+      await Promise.all([
+        invalidateTouched(
+          queryClient,
+          touchedBy(
+            line,
+            transfer.candidates.find((candidate) => candidate.id === otherId),
+          ),
         ),
-      );
+        invalidateCategories(queryClient),
+      ]);
 
       return true;
     } catch {

@@ -486,10 +486,11 @@ export const importsLayer = Layer.effect(
               .returning({ id: statementLine.id, bookedOn: statementLine.bookedOn });
 
             // Its lines' transfers go with them (#26), and the sides the app made for them.
-            const transfersRemoved = await unpairForUndo(transaction, own);
+            const unpaired = await unpairForUndo(transaction, own);
 
             // The lines' parts go with them (`on delete cascade`); an entry left with no part goes
-            // too, and a line counted again gets its entry, in this same transaction.
+            // too, and a line counted again, or no side of a transfer any more, gets its entry, in
+            // this same transaction.
             const removed = await transaction
               .delete(statementLine)
               .where(eq(statementLine.importId, importId))
@@ -497,11 +498,10 @@ export const importsLayer = Layer.effect(
 
             await dropEntriesWithoutParts(transaction);
 
-            await entriesForLines(
-              transaction,
-              owner,
-              givenBack.map((line) => line.id),
-            );
+            await entriesForLines(transaction, owner, [
+              ...givenBack.map((line) => line.id),
+              ...unpaired.others,
+            ]);
 
             await transaction.delete(accountBalance).where(eq(accountBalance.importId, importId));
             await transaction.delete(importFile).where(eq(importFile.importId, importId));
@@ -529,7 +529,7 @@ export const importsLayer = Layer.effect(
             return {
               linesRemoved: removed.length,
               linesGivenBack: givenBack.length,
-              transfersRemoved,
+              transfersRemoved: unpaired.removed,
               laterOverlapping: overlapping.length,
               months: [...months].toSorted(),
             };

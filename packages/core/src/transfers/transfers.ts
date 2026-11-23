@@ -5,6 +5,7 @@ import type { QueryFailed, UserTransaction } from "@gousset/db/user-data";
 import { and, eq, gte, inArray, lte, or } from "drizzle-orm";
 import { Context, Effect, Layer } from "effect";
 
+import { dropEntriesOfTransferSides, entriesForLines } from "../entries";
 import { LineNotFound, NotATransfer, TransferRefused } from "../errors";
 import { isId } from "../imports/rows";
 import type { LineAccount } from "../lines";
@@ -75,7 +76,7 @@ export class Transfers extends Context.Service<
      * Pairs two lines as a transfer, the user's own pairing, across currencies too; with no other
      * line named, the line's only candidate. Refused (`TransferRefused`) for two lines that cannot
      * be the two sides of one transfer, a line that is a side already, and a line with no candidate
-     * or several.
+     * or several. Both lines lose their entry: a transfer is never an expense nor an income.
      */
     readonly pair: (
       owner: string,
@@ -84,7 +85,8 @@ export class Transfers extends Context.Service<
     ) => Effect.Effect<LineTransfer, LineNotFound | TransferRefused | Failure>;
     /**
      * Undoes the transfer the line is a side of: both lines are no transfer any more, and a side the
-     * app had made, this line or the other, is deleted. The other side, as it was.
+     * app had made, this line or the other, is deleted; each line left gets its entry back, in its
+     * kind's fallback. The other side, as it was.
      */
     readonly unpair: (
       owner: string,
@@ -363,11 +365,15 @@ async function pairInTransaction(
     .set({ reviewState: "done", transferRefused: false })
     .where(inArray(statementLine.id, [out.id, into.id]));
 
+  // A transfer is never an expense nor an income: both lines lose their entry (#23).
+  await dropEntriesOfTransferSides(transaction);
+
   return { done: await lineTransfer(transaction, line, day) };
 }
 
 async function unpairInTransaction(
   transaction: UserTransaction,
+  owner: string,
   lineId: string,
   day: string,
 ): Promise<Outcome<Unpaired> | { readonly notPaired: string }> {
@@ -402,6 +408,9 @@ async function unpairInTransaction(
     .update(statementLine)
     .set({ reviewState: "to_review", transferRefused: true })
     .where(inArray(statementLine.id, [line.id, otherId]));
+
+  // Each line left is an expense or an income again: its entry, in its kind's fallback (#23).
+  await entriesForLines(transaction, owner, [line.id, otherId]);
 
   return other === undefined
     ? { notPaired: lineId }
@@ -484,7 +493,7 @@ export const transfersLayer = Layer.effect(
           const day = yield* today;
 
           const outcome = yield* userData.transaction(owner, (transaction) =>
-            unpairInTransaction(transaction, lineId, day),
+            unpairInTransaction(transaction, owner, lineId, day),
           );
 
           if ("missing" in outcome) {
