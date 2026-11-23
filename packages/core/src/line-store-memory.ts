@@ -114,14 +114,16 @@ const sourceOf = (line: MemoryLineDetail): FoundLineDetail["source"] =>
 function severalCandidatesOf(own: MemoryLineRows, day: string): ReadonlyArray<string> {
   const pool = (own.lines ?? []).flatMap((line) => {
     const shown = withAccount(own, line);
+    const owned = own.accounts?.find((each) => each.id === line.accountId);
 
     return shown === undefined ||
+      owned === undefined ||
       shown.state !== "counted" ||
       sourceOf(line) === "balance" ||
       line.amountMinor === 0 ||
       line.bookedOn > day
       ? []
-      : [{ ...line, currency: shown.account.currency }];
+      : [{ ...line, accountKind: owned.kind, currency: shown.account.currency }];
   });
 
   const candidates = candidateFinder(pool);
