@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 import { usePageLanguage } from "../hooks/use-page-language";
 import { formatMoneyInput, parseMoneyInput } from "../lib/money";
@@ -25,6 +25,10 @@ export type MoneyFieldProps = FieldProps & {
  * currency symbol, the locale's separators, as many decimals as the currency takes. The typed
  * text is read back into minor units at each keystroke (`onValueChange`); it is only reformatted
  * to its canonical form once the field loses focus, so the digits being typed never jump.
+ *
+ * Changing `currency` (an account's create form, before it is saved) re-reads the field's own
+ * text with the new currency's decimals and reports the new minor value: a `100.00` typed in EUR
+ * (10000) becomes `100` in JPY (100), not the unchanged 10000 read as ¥10,000.
  */
 export function MoneyField({
   label,
@@ -49,6 +53,25 @@ export function MoneyField({
   const [text, setText] = useState(() =>
     initial === null ? "" : formatMoneyInput(initial, format),
   );
+
+  const previousCurrency = useRef(currency);
+
+  useEffect(() => {
+    if (previousCurrency.current === currency) {
+      return;
+    }
+
+    previousCurrency.current = currency;
+
+    const reread = { locale: writtenIn, currency };
+    const parsed = parseMoneyInput(text, reread);
+
+    setText(parsed === null ? text : formatMoneyInput(parsed, reread));
+    onValueChange?.(parsed);
+    // The guard above only acts once `currency` itself differs from the ref; `text`, `writtenIn`
+    // and `onValueChange` are listed too (plain values, read fresh on every render) so the effect
+    // always reads the latest of each, without ever acting on their own change alone.
+  }, [currency, text, writtenIn, onValueChange]);
 
   return (
     <TextField
