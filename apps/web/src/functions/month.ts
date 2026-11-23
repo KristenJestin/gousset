@@ -1,3 +1,4 @@
+import { AuthErrorCode, isHeldForPasswordChange } from "@gousset/auth";
 import {
   approveLine as approveCoreLine,
   currentMonth,
@@ -19,6 +20,11 @@ export const signedIn = createMiddleware({ type: "function" }).server(async ({ n
 
   if (!session) {
     throw new Error("Sign in to read your data.");
+  }
+
+  // A temporary password reaches no data: the administrator chose it (#70).
+  if (isHeldForPasswordChange(session)) {
+    throw new Error(AuthErrorCode.passwordChangeRequired);
   }
 
   return next({ context: { owner: session.user.id } });

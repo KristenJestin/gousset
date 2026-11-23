@@ -2,11 +2,12 @@ import { request as apiRequest } from "@playwright/test";
 import type { Browser, Page, Request } from "@playwright/test";
 import { Schema } from "effect";
 
-import { addUser, hasLiveSession, signIn, signInStatus } from "../src/auth";
+import { addUser, createUser, hasLiveSession, signIn, signInStatus } from "../src/auth";
 import type { TestUser } from "../src/auth";
-import { sessionsOf } from "../src/database";
+import { sessionsOf, setMustChangePassword } from "../src/database";
 import { authorizeByHand, clientWithToken, refreshStatus } from "../src/oauth-by-hand";
-import { expect, test, visit } from "../src/test";
+import { TEST_CLIENT_ID, TEST_REDIRECT_URL } from "../src/oauth-client";
+import { expect, fixDay, test, visit } from "../src/test";
 
 // The scenario of issue #70, "How to verify", and its refusal: the administrator gives a user a
 // new temporary password from the users page; the user must change it at the next sign-in, and
@@ -139,6 +140,10 @@ test("reset by the administrator, the old password refused, the temporary one le
 
     await expect(page).toHaveURL(/\/change-password$/);
     await expect(page.getByText("Your password is temporary")).toBeVisible();
+    // The user learns that, and when, the administrator reset it.
+    await expect(
+      page.getByText(/The administrator reset your password on [A-Z][a-z]+ \d{1,2}, \d{4}\./),
+    ).toBeVisible();
 
     await page.goto("/");
     await expect(page).toHaveURL(/\/change-password$/);
@@ -279,4 +284,244 @@ test("a non-administrator cannot reset a password", async ({
   } finally {
     await asSecond.dispose();
   }
+});
+
+/** A call a page made to a server function, kept to be sent again with other cookies. */
+type Call = {
+  url: string;
+  method: string;
+  headers: { [name: string]: string };
+  body: string | null;
+};
+
+function keep(sent: Request): Call {
+  const headers = Object.fromEntries(
+    Object.entries(sent.headers()).filter(
+      ([name]) => !["cookie", "host", "content-length"].includes(name.toLowerCase()),
+    ),
+  );
+
+  return { url: sent.url(), method: sent.method(), headers, body: sent.postData() };
+}
+
+/** The status and text the app answers a request carrying these cookies. */
+async function answerTo(
+  baseURL: string,
+  cookies: TestUser["cookies"],
+  call: Pick<Call, "url" | "method"> & { headers?: Call["headers"]; body?: string | null },
+) {
+  const context = await apiRequest.newContext({
+    baseURL,
+    extraHTTPHeaders: { Origin: baseURL },
+    storageState: { cookies: [...cookies], origins: [] },
+  });
+
+  // A call kept from a page carries its own content type; a body written here is JSON.
+  const headers =
+    call.body === undefined || call.body === null
+      ? { ...call.headers }
+      : { "content-type": "application/json", ...call.headers };
+
+  try {
+    const answer = await context.fetch(call.url, {
+      method: call.method,
+      headers,
+      data: call.body ?? undefined,
+      maxRedirects: 0,
+    });
+
+    return { status: answer.status(), text: await answer.text() };
+  } finally {
+    await context.dispose();
+  }
+}
+
+const HELD = "PASSWORD_CHANGE_REQUIRED";
+
+const isMonthCall = (call: Call) =>
+  call.method === "GET" && decodeURIComponent(call.url).includes("2026-10");
+
+test("a temporary password opens nothing but its change, on the server too", async ({
+  browser,
+  userPage,
+  app,
+  user,
+  secondUser,
+}) => {
+  test.setTimeout(90_000);
+
+  const person = await addUser(app.baseURL, user, {
+    name: "Ivy Example",
+    email: "ivy@example.com",
+    password: "ivy-password-e2e",
+  });
+
+  // While the password is their own: the calls their pages make for their month and a setting,
+  // kept to be sent again.
+  const calls: Array<Call> = [];
+  const context = await browser.newContext({ baseURL: app.baseURL });
+
+  try {
+    await context.addCookies([...person.cookies]);
+
+    const page = await context.newPage();
+
+    page.on("request", (sent) => {
+      if (sent.url().includes("/_serverFn/")) {
+        calls.push(keep(sent));
+      }
+    });
+
+    await fixDay(page, "2026-10-31");
+    await visit(page, "/accounts");
+    // The review's month loads on hover, from the browser.
+    await page.getByRole("link", { name: "Review" }).hover();
+    await expect.poll(() => calls.some(isMonthCall)).toBe(true);
+
+    await visit(page, "/settings");
+
+    const saved = page.waitForResponse(
+      (answer) => answer.request().method() === "POST" && answer.url().includes("/_serverFn/"),
+    );
+
+    await page.getByRole("switch", { name: "Single-key shortcuts" }).click();
+    expect((await saved).ok()).toBe(true);
+  } finally {
+    await context.close();
+  }
+
+  const monthCall = calls.find(isMonthCall);
+  const settingCall = calls.find((call) => call.method === "POST");
+
+  if (monthCall === undefined || settingCall === undefined) {
+    throw new Error("The pages made no call to read the month or to save the setting.");
+  }
+
+  for (const call of [monthCall, settingCall]) {
+    const own = await answerTo(app.baseURL, person.cookies, call);
+
+    expect(own.status, call.url).toBe(200);
+    expect(own.text).not.toContain(HELD);
+  }
+
+  // The administrator resets the password; the temporary one signs in, on two devices.
+  const dialog = await openReset(userPage, person);
+
+  await dialog.getByLabel("Temporary password").fill("ivy-temporary-e2e");
+  await dialog.getByRole("button", { name: "Reset the password", exact: true }).click();
+  await expect(dialog).toBeHidden();
+
+  const temporary = { ...person, password: "ivy-temporary-e2e" };
+  const held = await signIn(app.baseURL, temporary);
+  const otherDevice = await signIn(app.baseURL, temporary);
+
+  // No data and no setting: the server functions refuse it, whatever the pages show.
+  for (const call of [monthCall, settingCall]) {
+    expect((await answerTo(app.baseURL, held.cookies, call)).text, call.url).toContain(HELD);
+  }
+
+  // No job: another user's session is told the job is not theirs, this one is refused outright.
+  const job = { url: "/api/jobs/no-such-job/events", method: "GET" };
+
+  expect((await answerTo(app.baseURL, held.cookies, job)).status).toBe(403);
+  expect((await answerTo(app.baseURL, secondUser.cookies, job)).status).toBe(404);
+
+  // None of better-auth's own routes on the account.
+  const renamed = await answerTo(app.baseURL, held.cookies, {
+    url: "/api/auth/update-user",
+    method: "POST",
+    body: JSON.stringify({ name: "Someone Else" }),
+  });
+
+  expect(renamed.status).toBe(403);
+  expect(renamed.text).toContain(HELD);
+
+  // Signing out and the change itself stay open.
+  const signedOut = await answerTo(app.baseURL, otherDevice.cookies, {
+    url: "/api/auth/sign-out",
+    method: "POST",
+    body: "{}",
+  });
+
+  expect(signedOut.status).toBe(200);
+
+  const changed = await answerTo(app.baseURL, held.cookies, {
+    url: "/api/auth/change-password",
+    method: "POST",
+    body: JSON.stringify({
+      currentPassword: "ivy-temporary-e2e",
+      newPassword: "ivy-own-password-e2e",
+    }),
+  });
+
+  expect(changed.status).toBe(200);
+
+  // Their own password again: the same session reaches the month.
+  const after = await answerTo(app.baseURL, held.cookies, monthCall);
+
+  expect(after.status).toBe(200);
+  expect(after.text).not.toContain(HELD);
+});
+
+test("a temporary password authorizes no MCP client, and a held user's tokens reach nothing", async ({
+  browser,
+  app,
+  user,
+  secondUser,
+  mcpClientId,
+}) => {
+  test.setTimeout(60_000);
+  expect(mcpClientId).toBe(TEST_CLIENT_ID);
+
+  // A user the administrator just created, still on the temporary password.
+  const person = { name: "Pia Example", email: "pia@example.com", password: "pia-temporary-e2e" };
+
+  await createUser(app.baseURL, user, person);
+
+  const held = await signIn(app.baseURL, { ...person, cookies: [] });
+
+  const query = new URLSearchParams({
+    response_type: "code",
+    client_id: TEST_CLIENT_ID,
+    redirect_uri: TEST_REDIRECT_URL,
+    scope: "read",
+    state: "e2e-state",
+    code_challenge: "E9Melhoa2OwvFrEMTJguCHaoeK1t8URWbuGJSstw-cM",
+    code_challenge_method: "S256",
+  });
+
+  const authorize = { url: `/api/auth/oauth2/authorize?${query.toString()}`, method: "GET" };
+  const refused = await answerTo(app.baseURL, held.cookies, authorize);
+
+  expect(refused.status).toBe(403);
+  expect(refused.text).toContain(HELD);
+  // Another user's session goes on to the consent.
+  expect((await answerTo(app.baseURL, secondUser.cookies, authorize)).status).not.toBe(403);
+
+  const consent = await answerTo(app.baseURL, held.cookies, {
+    url: "/api/auth/oauth2/consent",
+    method: "POST",
+    body: JSON.stringify({ accept: true, scope: "read" }),
+  });
+
+  expect(consent.status).toBe(403);
+  expect(consent.text).toContain(HELD);
+
+  // A user whose tokens are live: while the flag is on, the MCP door lets none of them in.
+  const member = await addUser(app.baseURL, user, {
+    name: "Rui Example",
+    email: "rui@example.com",
+    password: "rui-password-e2e",
+  });
+
+  const tokens = await agentTokens(browser, app.baseURL, member);
+
+  expect(await agentGetsIn(app.baseURL, tokens.access_token)).toBe(true);
+
+  await setMustChangePassword(app.database, member.email, true);
+  expect(await agentGetsIn(app.baseURL, tokens.access_token)).toBe(false);
+
+  // The flag alone held them: cleared, the same token works again.
+  await setMustChangePassword(app.database, member.email, false);
+  expect(await agentGetsIn(app.baseURL, tokens.access_token)).toBe(true);
 });

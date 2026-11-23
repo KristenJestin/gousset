@@ -216,8 +216,9 @@ export type Grant = {
 };
 
 /**
- * The grant a token of this client may use now: none when the user revoked the client, or is
- * banned. Read on every call, since a signed access token stays valid until it expires.
+ * The grant a token of this client may use now: none when the user revoked the client, is banned,
+ * or holds a temporary password (#70). Read on every call, since a signed access token stays valid
+ * until it expires.
  */
 export async function currentGrant(
   database: Database,
@@ -231,6 +232,7 @@ export async function currentGrant(
       since: authOauthConsent.createdAt,
       banned: authUser.banned,
       banExpires: authUser.banExpires,
+      mustChangePassword: authUser.mustChangePassword,
     })
     .from(authOauthConsent)
     .innerJoin(authUser, eq(authUser.id, authOauthConsent.userId))
@@ -243,7 +245,7 @@ export async function currentGrant(
 
   const banned = row.banned === true && (row.banExpires === null || row.banExpires > now);
 
-  if (banned) {
+  if (banned || row.mustChangePassword) {
     return undefined;
   }
 

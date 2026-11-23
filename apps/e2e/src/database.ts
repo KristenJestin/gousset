@@ -202,6 +202,29 @@ export async function sessionsOf(
   }
 }
 
+/**
+ * Sets or clears the temporary-password flag of the user with this e-mail, straight in its table:
+ * for a state no route reaches, a flagged user whose MCP tokens are still live.
+ */
+export async function setMustChangePassword(
+  database: string,
+  email: string,
+  flagged: boolean,
+): Promise<void> {
+  const client = new pg.Client({ connectionString: databaseUrl(database) });
+
+  await client.connect();
+
+  try {
+    await client.query('UPDATE "auth_user" SET must_change_password = $1 WHERE email = $2', [
+      flagged,
+      email,
+    ]);
+  } finally {
+    await client.end();
+  }
+}
+
 /** Whether a unique index of that name exists in a database. */
 export async function hasUniqueIndex(database: string, name: string): Promise<boolean> {
   const client = new pg.Client({ connectionString: databaseUrl(database) });

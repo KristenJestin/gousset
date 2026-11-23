@@ -1,3 +1,4 @@
+import { isHeldForPasswordChange } from "@gousset/auth";
 import { resetPassword as resetUserPassword } from "@gousset/auth/password-reset";
 import { listUsers as listAllUsers } from "@gousset/auth/users";
 import { createMiddleware, createServerFn } from "@tanstack/react-start";
@@ -11,7 +12,7 @@ import { auth, db } from "@/services";
 const adminOnly = createMiddleware({ type: "function" }).server(async ({ next }) => {
   const session = await auth.api.getSession({ headers: getRequestHeaders() });
 
-  if (session?.user.role !== "admin") {
+  if (session?.user.role !== "admin" || isHeldForPasswordChange(session)) {
     throw new Error("Only the administrator manages users.");
   }
 
@@ -78,9 +79,11 @@ export const resetPassword = createServerFn({ method: "POST" })
   .handler(({ data }) =>
     Effect.runPromise(
       resetUserPassword(auth, db, data.userId, data.password).pipe(
-        Effect.match({
-          onSuccess: () => ({ reset: true as const }),
-          onFailure: ({ code }) => ({ reset: false as const, code }),
+        Effect.map(() => ({ reset: true as const })),
+        Effect.catchTags({
+          PasswordResetRefused: ({ code }) => Effect.succeed({ reset: false as const, code }),
+          // Said in the dialog like any refusal, rather than lost as a thrown error.
+          PasswordResetFailed: () => Effect.succeed({ reset: false as const, code: "UNKNOWN" }),
         }),
       ),
     ),

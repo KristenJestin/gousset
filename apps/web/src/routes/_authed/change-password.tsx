@@ -1,4 +1,5 @@
 import { m } from "@gousset/i18n/messages";
+import { getLocale } from "@gousset/i18n/runtime";
 import { Button } from "@gousset/ui/components/button";
 import { Card } from "@gousset/ui/components/card";
 import { FormMessage } from "@gousset/ui/components/form-message";
@@ -17,6 +18,20 @@ import { whileBusy } from "@/lib/while-busy";
 export const Route = createFileRoute("/_authed/change-password")({
   component: ChangePassword,
 });
+
+/** A calendar day (`YYYY-MM-DD`) in words, the same on the server and in the browser. */
+function dayInWords(day: string) {
+  return new Intl.DateTimeFormat(getLocale(), { dateStyle: "long", timeZone: "UTC" }).format(
+    new Date(`${day}T00:00:00Z`),
+  );
+}
+
+/** Why the password must change: temporary, and reset by the administrator on that day if so. */
+function whyChange(passwordResetOn: string | null) {
+  return passwordResetOn === null
+    ? m.changePasswordRequired()
+    : `${m.changePasswordResetOn({ date: dayInWords(passwordResetOn) })} ${m.changePasswordRequired()}`;
+}
 
 function ChangePassword() {
   const navigate = useNavigate();
@@ -53,7 +68,7 @@ function ChangePassword() {
       <Card
         title={m.changePasswordTitle()}
         description={
-          user.mustChangePassword ? m.changePasswordRequired() : m.changePasswordDescription()
+          user.mustChangePassword ? whyChange(user.passwordResetOn) : m.changePasswordDescription()
         }
       >
         <Form onSubmit={(event) => void submit(event)} onInput={() => setError(undefined)}>

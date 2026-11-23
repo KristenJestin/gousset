@@ -189,6 +189,8 @@ test("a created user must change their password", async ({ userPage, browser, ap
 
     await expect(page).toHaveURL(/\/change-password$/);
     await expect(page.getByText("Your password is temporary")).toBeVisible();
+    // Created, not reset: nothing to say about a reset.
+    await expect(page.getByText(/reset your password/)).toHaveCount(0);
     await expectAccessible(page);
 
     // Nothing else opens before the password is changed.

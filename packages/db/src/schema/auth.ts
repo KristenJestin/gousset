@@ -31,6 +31,9 @@ export const authUser = pgTable("auth_user", {
   banExpires: timestamp("ban_expires"),
   // Set when the administrator creates the user with a temporary password.
   mustChangePassword: boolean("must_change_password").default(false).notNull(),
+  // When the administrator last gave the user a temporary password (#70), shown to the user on the
+  // forced change; cleared once they choose their own.
+  passwordResetAt: timestamp("password_reset_at"),
   // The user created by sign-up on a fresh install. Two sign-ups at once could both see no user
   // yet: a unique index lets only one of them be written. That index is not declared here, since
   // `pnpm auth:generate` rewrites this file, but in a custom migration of its own

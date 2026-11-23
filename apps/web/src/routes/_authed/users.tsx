@@ -197,6 +197,8 @@ function ResetPassword({
           type="text"
           autoComplete="off"
           minLength={8}
+          // better-auth's own limit, which the reset holds on the server too.
+          maxLength={128}
           required
         />
         <FormMessage message={error} />
