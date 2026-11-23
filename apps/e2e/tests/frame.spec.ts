@@ -277,6 +277,13 @@ test.describe("in French", () => {
     // Following the browser saves nothing: the browser's next language still wins.
     expect(await languageCookie(userPage)).toBeUndefined();
 
+    // The browser now asks for English: the next page is in English.
+    await userPage.setExtraHTTPHeaders({ "Accept-Language": "en-US,en;q=0.9" });
+    await userPage.reload();
+    await expect(userPage.locator("html")).toHaveAttribute("lang", "en");
+    await expect(userPage.getByRole("heading", { level: 1, name: "Monthly review" })).toBeVisible();
+    await userPage.setExtraHTTPHeaders({ "Accept-Language": "fr-FR,fr;q=0.9" });
+
     await visit(userPage, "/settings");
     await userPage.getByRole("radio", { name: "English" }).click();
 
