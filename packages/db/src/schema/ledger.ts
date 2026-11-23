@@ -15,6 +15,7 @@ import {
   text,
   timestamp,
   unique,
+  uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
 
@@ -131,7 +132,9 @@ export const account = pgTable.withRLS(
     openingBalanceMinor: minor("opening_balance_minor").default(0).notNull(),
     openedOn: day("opened_on"),
     closedOn: day("closed_on"),
-    // How a statement names the account (CAMT and MT940 an IBAN, OFX a number).
+    // How a statement names the account (CAMT and MT940 an IBAN, OFX a number). The IBAN is upper
+    // case without spaces. The number is not unique: an OFX `ACCTID` is unique only with its
+    // `BANKID`, and a file whose number matches several accounts waits for the user's choice.
     iban: text("iban"),
     number: text("number"),
     // A deferred-debit card: the current account it is debited from. Its foreign key, cleared on
@@ -145,8 +148,9 @@ export const account = pgTable.withRLS(
   (table) => [
     unique("account_user_id_id_key").on(table.userId, table.id),
     unique("account_user_id_iban_key").on(table.userId, table.iban),
-    unique("account_user_id_number_key").on(table.userId, table.number),
     check("account_currency_iso_4217", sql`${table.currency} ~ '^[A-Z]{3}$'`),
+    // One written form, so that the unique key compares like with like.
+    check("account_iban_format", sql`${table.iban} ~ '^[A-Z]{2}[0-9]{2}[A-Z0-9]{11,30}$'`),
     check(
       "account_only_a_card_settles",
       sql`${table.settlesIntoAccountId} is null or ${table.kind} = 'card'`,
@@ -264,6 +268,11 @@ export const accountBalance = pgTable.withRLS(
     }).onDelete("cascade"),
     index("account_balance_account_id_day_idx").on(table.accountId, table.day),
     index("account_balance_import_id_idx").on(table.importId),
+    // One noted balance a day: balance mode makes one line from each noted balance and the one
+    // before it, which two on a day would leave ambiguous.
+    uniqueIndex("account_balance_one_noted_a_day")
+      .on(table.accountId, table.day)
+      .where(sql`${table.source} = 'noted'`),
     check(
       "account_balance_statement_has_import",
       sql`(${table.source} = 'statement') = (${table.importId} is not null)`,
@@ -292,6 +301,8 @@ export const statementLine = pgTable.withRLS(
     memo: text("memo"),
     counterpartyName: text("counterparty_name"),
     counterpartyIban: text("counterparty_iban"),
+    // The bank's own reference, unique or not: OFX's and QFX's FITID, QIF's N, CAMT.053's
+    // `Ntry/AcctSvcrRef` (never `NtryRef`), MT940's references.
     bankId: text("bank_id"),
     dedupKey: text("dedup_key"),
     // A held line: the line it looks like. Its foreign key, cleared on its own when that line is
@@ -327,9 +338,18 @@ export const statementLine = pgTable.withRLS(
       "statement_line_imported_has_import",
       sql`(${table.source} = 'import') = (${table.importId} is not null)`,
     ),
+    // Every imported line takes part in deduplication.
+    check(
+      "statement_line_imported_has_dedup_key",
+      sql`(${table.source} = 'import') = (${table.dedupKey} is not null)`,
+    ),
     check(
       "statement_line_original_amount_and_currency",
       sql`(${table.originalAmountMinor} is null) = (${table.originalCurrency} is null)`,
+    ),
+    check(
+      "statement_line_original_currency_iso_4217",
+      sql`${table.originalCurrency} ~ '^[A-Z]{3}$'`,
     ),
     ownRowsOnly("statement_line"),
   ],

@@ -2,7 +2,7 @@
   "type": "diff",
   "version": "10",
   "dialect": "postgres",
-  "id": "cca2e126-34d0-46be-86da-c1a6c539165a",
+  "id": "d3948648-6bdf-4d0e-89b7-383019574ab9",
   "prevIds": ["eb197cf6-6e97-4193-9b58-8824f81d6222"],
   "footprints": [
     {
@@ -126,8 +126,7 @@
         "n|type|public.account",
         "n|rel|public.account_pkey",
         "n|rel|public.account_user_id_id_key",
-        "n|rel|public.account_user_id_iban_key",
-        "n|rel|public.account_user_id_number_key"
+        "n|rel|public.account_user_id_iban_key"
       ],
       "reads": [
         "n|sch|public",
@@ -240,6 +239,22 @@
         "n|tbl|public.account_balance",
         "n|sch|public",
         "n|col|public.account_balance.import_id"
+      ]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": ["index", "public", "account_balance", "account_balance_one_noted_a_day"],
+      "writes": [
+        "s|idx|public.account_balance_one_noted_a_day",
+        "n|idx|public.account_balance_one_noted_a_day",
+        "e|idx|public.account_balance_one_noted_a_day",
+        "n|rel|public.account_balance_one_noted_a_day"
+      ],
+      "reads": [
+        "n|tbl|public.account_balance",
+        "n|sch|public",
+        "n|col|public.account_balance.account_id",
+        "n|col|public.account_balance.day"
       ]
     },
     {
@@ -2045,6 +2060,36 @@
       "op": "create",
       "row": {
         "schema": "public",
+        "table": "account_balance",
+        "name": "account_balance_one_noted_a_day",
+        "nameExplicit": true,
+        "columns": [
+          {
+            "value": "account_id",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          },
+          {
+            "value": "day",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          }
+        ],
+        "isUnique": true,
+        "where": "\"source\" = 'noted'",
+        "with": "",
+        "method": "btree",
+        "entityType": "indexes"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
         "table": "import",
         "name": "import_account_id_idx",
         "nameExplicit": true,
@@ -2463,18 +2508,6 @@
       "op": "create",
       "row": {
         "schema": "public",
-        "table": "account",
-        "name": "account_user_id_number_key",
-        "nameExplicit": true,
-        "columns": ["user_id", "number"],
-        "nullsNotDistinct": false,
-        "entityType": "uniques"
-      }
-    },
-    {
-      "op": "create",
-      "row": {
-        "schema": "public",
         "table": "import_profile",
         "name": "import_profile_user_id_id_key",
         "nameExplicit": true,
@@ -2534,6 +2567,16 @@
       "row": {
         "schema": "public",
         "table": "account",
+        "name": "account_iban_format",
+        "value": "\"iban\" ~ '^[A-Z]{2}[0-9]{2}[A-Z0-9]{11,30}$'",
+        "entityType": "checks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "account",
         "name": "account_only_a_card_settles",
         "value": "\"settles_into_account_id\" is null or \"kind\" = 'card'",
         "entityType": "checks"
@@ -2574,8 +2617,28 @@
       "row": {
         "schema": "public",
         "table": "statement_line",
+        "name": "statement_line_imported_has_dedup_key",
+        "value": "(\"source\" = 'import') = (\"dedup_key\" is not null)",
+        "entityType": "checks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "statement_line",
         "name": "statement_line_original_amount_and_currency",
         "value": "(\"original_amount_minor\" is null) = (\"original_currency\" is null)",
+        "entityType": "checks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "statement_line",
+        "name": "statement_line_original_currency_iso_4217",
+        "value": "\"original_currency\" ~ '^[A-Z]{3}$'",
         "entityType": "checks"
       }
     },

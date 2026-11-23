@@ -28,8 +28,8 @@ CREATE TABLE "account" (
 	"updated_at" timestamp with time zone DEFAULT now() NOT NULL,
 	CONSTRAINT "account_user_id_id_key" UNIQUE("user_id","id"),
 	CONSTRAINT "account_user_id_iban_key" UNIQUE("user_id","iban"),
-	CONSTRAINT "account_user_id_number_key" UNIQUE("user_id","number"),
 	CONSTRAINT "account_currency_iso_4217" CHECK ("currency" ~ '^[A-Z]{3}$'),
+	CONSTRAINT "account_iban_format" CHECK ("iban" ~ '^[A-Z]{2}[0-9]{2}[A-Z0-9]{11,30}$'),
 	CONSTRAINT "account_only_a_card_settles" CHECK ("settles_into_account_id" is null or "kind" = 'card')
 );
 --> statement-breakpoint
@@ -117,12 +117,15 @@ CREATE TABLE "statement_line" (
 	CONSTRAINT "statement_line_user_id_id_key" UNIQUE("user_id","id"),
 	CONSTRAINT "statement_line_account_id_dedup_key_key" UNIQUE("account_id","dedup_key"),
 	CONSTRAINT "statement_line_imported_has_import" CHECK (("source" = 'import') = ("import_id" is not null)),
-	CONSTRAINT "statement_line_original_amount_and_currency" CHECK (("original_amount_minor" is null) = ("original_currency" is null))
+	CONSTRAINT "statement_line_imported_has_dedup_key" CHECK (("source" = 'import') = ("dedup_key" is not null)),
+	CONSTRAINT "statement_line_original_amount_and_currency" CHECK (("original_amount_minor" is null) = ("original_currency" is null)),
+	CONSTRAINT "statement_line_original_currency_iso_4217" CHECK ("original_currency" ~ '^[A-Z]{3}$')
 );
 --> statement-breakpoint
 ALTER TABLE "statement_line" ENABLE ROW LEVEL SECURITY;--> statement-breakpoint
 CREATE INDEX "account_balance_account_id_day_idx" ON "account_balance" ("account_id","day");--> statement-breakpoint
 CREATE INDEX "account_balance_import_id_idx" ON "account_balance" ("import_id");--> statement-breakpoint
+CREATE UNIQUE INDEX "account_balance_one_noted_a_day" ON "account_balance" ("account_id","day") WHERE "source" = 'noted';--> statement-breakpoint
 CREATE INDEX "import_account_id_idx" ON "import" ("account_id");--> statement-breakpoint
 CREATE INDEX "import_user_id_file_sha256_idx" ON "import" ("user_id","file_sha256");--> statement-breakpoint
 CREATE INDEX "statement_line_account_id_booked_on_id_idx" ON "statement_line" ("account_id","booked_on","id");--> statement-breakpoint

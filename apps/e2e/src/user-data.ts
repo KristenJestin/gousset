@@ -69,6 +69,9 @@ export async function touchedKeys(
   return decodeKeys(result).rows.map((row) => row.key);
 }
 
+/** The code `attempt` raises to undo a write that Postgres accepted. */
+const ROLLED_BACK = "GSRBK";
+
 const Session = Schema.Struct({
   rows: Schema.Array(Schema.Struct({ role: Schema.String, owner: Schema.String })),
 });
@@ -124,6 +127,26 @@ export function openUserData(database: string) {
           Effect.match({
             onSuccess: () => "accepted",
             onFailure: (failure: QueryFailed) => failure.code,
+          }),
+        ),
+      ),
+
+    /**
+     * Postgres's code when it refuses `work`, or `accepted`; either way the transaction is rolled
+     * back, so that a rule is tried again and again on the same rows.
+     */
+    attempt: <A>(owner: string, work: (transaction: UserTransaction) => Promise<A>) =>
+      Effect.runPromise(
+        transaction(owner, async (each) => {
+          await work(each);
+          await each.execute(
+            sql`do $$ begin raise exception 'rolled back' using errcode = 'GSRBK'; end $$`,
+          );
+        }).pipe(
+          Effect.match({
+            onSuccess: () => "accepted",
+            onFailure: (failure: QueryFailed) =>
+              failure.code === ROLLED_BACK ? "accepted" : failure.code,
           }),
         ),
       ),
