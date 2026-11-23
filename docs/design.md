@@ -66,6 +66,16 @@ Geist, with **tabular numerals** wherever amounts line up.
 - 12 px corners.
 - No block inside a block.
 
+### Floating surfaces
+
+What floats above the page (menus, popovers, a select's or a combobox's list, the calendar, tooltips, toasts, dialogs and sheets) must never be mistaken for it, over the page, a block or the sidebar, in either scheme. It takes **all three**, never one alone, unlike blocks:
+
+- **Its own surface**: `--popover`. White in light, like the blocks: the edge and the shadow set it off. In dark, a step above the blocks (nearer is lighter).
+- **A visible edge**: a 1 px border in `--popover-border`, darker than the blocks' `--border` in light and lighter in dark. It keeps **1.7:1 or more** against the page, the blocks, the sidebar and its own inside, in both schemes (the blocks' `--border` gives 1.2 to 1.4:1). `src/lib/contrast.test.ts` measures it from `globals.css`, and the "Theme/Tokens" story lists the figures: 1.74:1 on the page and 1.87:1 on a block or the sidebar in light; 2.08:1 on the page, 1.90:1 on a block or the sidebar and 1.79:1 on its inside in dark.
+- **An elevation shadow**: `--popover-shadow` (`shadow-popover`), a tight contact shadow and a wide soft one. Deeper in dark, where a soft shadow is lost on the near-black page.
+
+The classes live once in `packages/ui` (`floatingSurfaceClasses`); a floating component uses them and adds only its size and spacing. A sheet keeps its edge on the side that faces the page.
+
 ## Motion
 
 Motion where it explains what changes, never as decoration:

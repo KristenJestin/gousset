@@ -11,6 +11,7 @@ import { useSyncExternalStore } from "react";
 import type { ReactElement, ReactNode } from "react";
 
 import { useUiMessages } from "../hooks/use-ui-messages";
+import { floatingSurfaceClasses } from "../lib/overlay-classes";
 import { cn } from "../lib/utils";
 import { IconButton } from "./icon-button";
 
@@ -79,8 +80,12 @@ export function Sheet({
       <DrawerBackdrop className="bg-background/70" />
       <DrawerContent
         className={cn(
-          "flex flex-col gap-4 bg-popover p-6 text-popover-foreground shadow-xl outline-none",
-          wide ? "h-full w-96 max-w-full rounded-l-lg" : "max-h-full w-full rounded-t-lg",
+          "flex flex-col gap-4 p-6 outline-none",
+          floatingSurfaceClasses,
+          // The edge shows on the side that faces the page, not along the screen's own edges.
+          wide
+            ? "h-full w-96 max-w-full rounded-l-lg border-y-0 border-r-0"
+            : "max-h-full w-full rounded-t-lg border-x-0 border-b-0",
         )}
       >
         <SheetHeader title={title} description={description} />
