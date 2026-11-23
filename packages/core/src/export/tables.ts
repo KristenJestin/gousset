@@ -127,10 +127,11 @@ export const IMPORTS: ExportTable = {
     { name: "lines_duplicate", holds: "lines already known, not added again" },
     { name: "lines_held", holds: "lines held for review as near duplicates" },
     { name: "error_code", holds: "why it failed, as a code" },
-    { name: "job_id", holds: "the background job that ran it" },
     { name: "created_at", holds: "when the file was dropped" },
     { name: "finished_at", holds: "when the import ended" },
     { name: "undone_at", holds: "when it was undone" },
+    // Added after the others (#20): the database keeps it last.
+    { name: "job_id", holds: "the background job that ran it" },
   ],
 };
 
