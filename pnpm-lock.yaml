@@ -629,6 +629,9 @@ importers:
       '@gousset/core':
         specifier: workspace:*
         version: link:../core
+      '@gousset/db':
+        specifier: workspace:*
+        version: link:../db
       '@gousset/import':
         specifier: workspace:*
         version: link:../import
@@ -673,6 +676,12 @@ importers:
       '@gousset/i18n':
         specifier: workspace:*
         version: link:../i18n
+      '@qnot/core':
+        specifier: 0.1.0
+        version: 0.1.0
+      '@qnot/react':
+        specifier: 0.1.0
+        version: 0.1.0(react@19.3.1)
       '@tabler/icons-react':
         specifier: ^3.52.0
         version: 3.52.0(react@19.3.1)
@@ -2650,6 +2659,12 @@ packages:
   '@qnot/core@0.1.0':
     resolution: {integrity: sha512-CMNyPhMYqKdyk3/ivFvGB2IBQaDE4WMejo21vIdCDoRgcyN4epA6Kk5JnOKWIHjfBVWLB3GWyCWjl6i4jWbXsg==}
     engines: {node: '>=18'}
+
+  '@qnot/react@0.1.0':
+    resolution: {integrity: sha512-p7ikxEn1Nt20wpMD5PBETXFZIy3a+ftYbcoyHomV6AYNfTOPnCYbbGEdgUD2zyYP+go3+kq9rnpihZp70TwRdw==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      react: '>=18'
 
   '@rolldown/binding-android-arm-eabi@1.3.3':
     resolution: {integrity: sha512-K1itOg1Xl50XyjLDa4qQZqaYsfiQbFbFRWXOEOupOsGr3whhm5ed4lgySd6Inohv2TB0+sdU4AxORKuS/TGang==}
@@ -7944,6 +7959,11 @@ snapshots:
   '@polka/url@1.0.0-next.29': {}
 
   '@qnot/core@0.1.0': {}
+
+  '@qnot/react@0.1.0(react@19.3.1)':
+    dependencies:
+      '@qnot/core': 0.1.0
+      react: 19.3.1
 
   '@rolldown/binding-android-arm-eabi@1.3.3':
     optional: true

@@ -6,6 +6,8 @@ import {
   IconAlertCircle,
   IconAlertTriangle,
   IconArrowBackUp,
+  IconArrowDown,
+  IconArrowUp,
   IconArrowsLeftRight,
   IconBabyCarriage,
   IconBarbell,
@@ -100,6 +102,9 @@ export const interfaceIcons = {
   // Overlays (menus, dialogs): editing and deleting a line.
   edit: IconPencil,
   delete: IconTrash,
+  // A list whose order the user sets (the rules): one place earlier, one later.
+  moveUp: IconArrowUp,
+  moveDown: IconArrowDown,
   // Money (Delta): a change too small to count.
   steady: IconMinus,
   // The app's screens, in its navigation.
