@@ -170,10 +170,16 @@ test("a created user must change their password", async ({ userPage, browser, ap
   await expect(status).toHaveCount(1);
   await expect(status).toBeEmpty();
 
-  await userPage.getByLabel("Name").fill("Robin Example");
-  await userPage.getByLabel("E-mail").fill("robin@example.com");
-  await userPage.getByLabel("Temporary password").fill("robin-temporary-e2e");
-  await userPage.getByRole("button", { name: "Create the user" }).click();
+  // Issue #103: the form is in a dialog, opened from the button beside the list's title.
+  await userPage.getByRole("button", { name: "Create a user" }).click();
+
+  const dialog = userPage.getByRole("dialog", { name: "Create a user" });
+
+  await dialog.getByLabel("Name").fill("Robin Example");
+  await dialog.getByLabel("E-mail").fill("robin@example.com");
+  await dialog.getByLabel("Temporary password").fill("robin-temporary-e2e");
+  await dialog.getByRole("button", { name: "Create the user" }).click();
+  await expect(dialog).toBeHidden();
 
   await expect(status).toHaveText("Robin Example can now sign in with the temporary password.");
   await expect(
@@ -259,7 +265,10 @@ test("the users page is a section of the settings, reached from the settings", a
     "page",
   );
   await expect(userPage.getByRole("heading", { level: 2, name: "Users" })).toBeVisible();
-  await expect(userPage.getByRole("heading", { level: 2, name: "Create a user" })).toBeVisible();
+  // Issue #103: creating a user is a button beside the list's title, its form in a dialog.
+  await expect(userPage.getByRole("button", { name: "Create a user" })).toBeVisible();
+  await expect(userPage.getByRole("heading", { level: 2, name: "Create a user" })).toHaveCount(0);
+  await expect(userPage.getByLabel("Temporary password")).toHaveCount(0);
   // The frame is the way back: the page has no link of its own for it.
   await expect(userPage.getByRole("main").getByRole("link", { name: "Back" })).toHaveCount(0);
 
@@ -268,7 +277,7 @@ test("the users page is a section of the settings, reached from the settings", a
   await expect(userPage).toHaveURL(/\/settings$/);
   await sections.getByRole("link", { name: "Users" }).click();
   await expect(userPage).toHaveURL(/\/settings\/users$/);
-  await expect(userPage.getByRole("heading", { level: 2, name: "Create a user" })).toBeVisible();
+  await expect(userPage.getByRole("button", { name: "Create a user" })).toBeVisible();
   // The screen reached fades in: axe checks it once drawn.
   await animationsDone(userPage);
 

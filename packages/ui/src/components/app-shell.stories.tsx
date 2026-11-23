@@ -15,13 +15,12 @@ import {
 } from "./app-shell";
 import { Button } from "./button";
 import { ColorSchemePicker } from "./color-scheme-picker";
-import { Dialog, DialogClose } from "./dialog";
+import { Dialog } from "./dialog";
 import { EmptyState } from "./empty-state";
 import type { IconName } from "./icon";
 import { List, ListItem } from "./list";
 import { MenuItem } from "./menu";
 import { MonthSwitcher } from "./month-switcher";
-import { Actions, Form } from "./screen";
 import { SegmentedChoice } from "./segmented-choice";
 import { StatusMessage } from "./status-message";
 import { Switch } from "./switch";
@@ -233,9 +232,36 @@ function GeneralSettings() {
  */
 export const GeneralSection: Story = { render: () => <GeneralSettings /> };
 
+/** Changing one's password: a button beside the block's title, opening the form in a dialog. */
+function ChangePassword() {
+  return (
+    <Dialog
+      trigger={<Button variant="secondary">Change password</Button>}
+      title="Change your password"
+      description="Other devices signed in to your account will be signed out."
+      onSubmit={(event) => event.preventDefault()}
+      actions={<Button type="submit">Change the password</Button>}
+    >
+      <TextField
+        label="Current password"
+        name="currentPassword"
+        type="password"
+        autoComplete="current-password"
+      />
+      <TextField
+        label="New password"
+        name="newPassword"
+        type="password"
+        autoComplete="new-password"
+        description="8 to 128 characters."
+      />
+    </Dialog>
+  );
+}
+
 /**
- * The user's own account in the settings (#105): the password is changed in a dialog that opens
- * from its block, its form inside, its submit among the dialog's actions.
+ * The user's own account in the settings (#105): beside the password block's title, the button
+ * that opens changing it in a dialog (a sheet on a phone); the block says so once it is changed.
  */
 export const AccountSection: Story = {
   render: () => (
@@ -244,51 +270,42 @@ export const AccountSection: Story = {
         <Block
           title="Password"
           description="The password you sign in with. Changing it signs out your other devices."
+          actions={<ChangePassword />}
         >
-          <Actions>
-            <Dialog
-              title="Change your password"
-              description="Other devices signed in to your account will be signed out."
-              trigger={<Button variant="secondary">Change password</Button>}
-              actions={
-                <>
-                  <DialogClose>
-                    <Button variant="secondary">Cancel</Button>
-                  </DialogClose>
-                  <Button type="submit" form="change-password">
-                    Change the password
-                  </Button>
-                </>
-              }
-            >
-              <Form id="change-password" onSubmit={(event) => event.preventDefault()}>
-                <TextField
-                  label="Current password"
-                  name="currentPassword"
-                  type="password"
-                  autoComplete="current-password"
-                />
-                <TextField
-                  label="New password"
-                  name="newPassword"
-                  type="password"
-                  autoComplete="new-password"
-                  description="8 to 128 characters."
-                />
-              </Form>
-            </Dialog>
-          </Actions>
-          <StatusMessage message={undefined} />
+          <StatusMessage message="Your password was changed." />
         </Block>
       </SectionLayout>
     </Page>
   ),
 };
 
+/** Creating a user: a button beside the list's title, opening the form in a dialog. */
+function CreateUser() {
+  return (
+    <Dialog
+      trigger={<Button icon="add">Create a user</Button>}
+      title="Create a user"
+      description="They will choose their own password at their first sign-in."
+      onSubmit={(event) => event.preventDefault()}
+      actions={<Button type="submit">Create the user</Button>}
+    >
+      <TextField label="Name" name="name" autoComplete="off" />
+      <TextField label="E-mail" name="email" type="email" autoComplete="off" />
+      <TextField
+        label="Temporary password"
+        name="password"
+        type="text"
+        autoComplete="off"
+        description="8 to 128 characters."
+      />
+    </Dialog>
+  );
+}
+
 /**
- * The administrator's section of the settings, as the app composes it: who has an account, then
- * creating a user, each in a block. No card alone on the page, no
- * way back of its own: the frame is the way.
+ * The administrator's section of the settings, as the app composes it: who has an account, and
+ * beside the list's title the button that opens creating a user in a dialog (a sheet on a phone).
+ * No card alone on the page, no way back of its own: the frame is the way.
  */
 export const UsersSection: Story = {
   render: () => (
@@ -304,7 +321,11 @@ export const UsersSection: Story = {
           </>
         }
       >
-        <Block title="Users" description="Everyone with an account on this installation.">
+        <Block
+          title="Users"
+          description="Everyone with an account on this installation."
+          actions={<CreateUser />}
+        >
           <List label="Users">
             <ListItem title="Ada Example" description="ada@example.com" tags={["Administrator"]} />
             <ListItem
@@ -314,19 +335,6 @@ export const UsersSection: Story = {
             />
             <ListItem title="Alan Example" description="alan@example.com" />
           </List>
-        </Block>
-        <Block
-          title="Create a user"
-          description="They will choose their own password at their first sign-in."
-        >
-          <Form onSubmit={(event) => event.preventDefault()}>
-            <TextField label="Name" name="name" autoComplete="off" />
-            <TextField label="E-mail" name="email" type="email" autoComplete="off" />
-            <TextField label="Temporary password" name="password" type="text" autoComplete="off" />
-            <Actions>
-              <Button type="submit">Create the user</Button>
-            </Actions>
-          </Form>
         </Block>
       </SectionLayout>
     </Page>

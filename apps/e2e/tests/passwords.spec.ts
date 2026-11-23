@@ -141,7 +141,11 @@ test("a temporary password too short says so on the users page, and keeps the na
   await visit(userPage, "/settings/users");
   await markPage(userPage);
 
-  const password = userPage.getByLabel("Temporary password", { exact: true });
+  // The form is in a dialog (issue #103), which stays open on a refusal.
+  await userPage.getByRole("button", { name: "Create a user" }).click();
+
+  const dialog = userPage.getByRole("dialog", { name: "Create a user" });
+  const password = dialog.getByLabel("Temporary password", { exact: true });
 
   const kept = [
     { label: "Name", value: "Wren Example" },
@@ -155,7 +159,7 @@ test("a temporary password too short says so on the users page, and keeps the na
   }
 
   await password.fill("wren");
-  await userPage.getByRole("button", { name: "Create the user" }).click();
+  await dialog.getByRole("button", { name: "Create the user" }).click();
 
   await expectRefused(userPage, {
     field: "Temporary password",
@@ -163,6 +167,7 @@ test("a temporary password too short says so on the users page, and keeps the na
     kept,
     emptied: ["Temporary password"],
   });
+  await expect(dialog).toBeVisible();
   expect(await hasUser(app.database, "wren@example.com")).toBe(false);
 });
 

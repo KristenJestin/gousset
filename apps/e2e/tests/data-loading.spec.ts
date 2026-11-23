@@ -370,6 +370,9 @@ test("changing month keeps the current data on screen while the next one loads",
   });
   expect(await spending.textContent()).not.toBe(october);
   expect((await counts()).skeletons).toBe(0);
+  // September's lines to review pop in: axe checks the screen once they are drawn, not halfway
+  // through their fade.
+  await animationsDone(page);
 });
 
 /** Records the server functions a page asks for from now on. */
