@@ -99,7 +99,8 @@ test.describe("BenefitCredits", () => {
     await page.goto(story("french"));
     await expect(page.getByText("Ce qui expire quand")).toBeVisible();
     await expect(page.getByText("Expiré le 31 Oct., toujours compté")).toHaveCount(2);
-    await expect(page.getByText("Ordre d'utilisation")).toBeVisible();
+    // Exact: the credits' heading, "Crédits, dans l'ordre d'utilisation", holds the words too.
+    await expect(page.getByText("Ordre d'utilisation", { exact: true })).toBeVisible();
   });
 
   test("its skeleton has the loaded block's height", async ({ page }) => {

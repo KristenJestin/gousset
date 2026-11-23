@@ -152,7 +152,8 @@ test("a benefit account uses its credits in the issuer's order", async ({ userPa
   await visit(page, `/accounts/${id}`);
   await expect(creditRows(page).nth(0)).toContainText("of €100.00");
 
-  await page.getByRole("button", { name: "Edit" }).click();
+  // Exact: a credit's "Expiry date of MEALCARD CREDIT" button holds "edit" in "CREDIT".
+  await page.getByRole("button", { name: "Edit", exact: true }).click();
 
   const dialog = page.getByRole("dialog", { name: "Edit the account" });
   const order = dialog.getByRole("combobox", { name: "Order of use" });
