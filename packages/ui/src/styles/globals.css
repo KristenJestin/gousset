@@ -269,6 +269,18 @@
   height: 1em;
 }
 
+/* Restricted money (docs/design.md, "Hatching for money apart"): a diagonal hatch over a faint
+   tint of `--money-restricted`, never a colour of its own, so it reads as "yours, but not the
+   same" without being mistaken for a `--money-*` role. */
+@utility bg-hatched-restricted {
+  background-color: color-mix(in oklab, var(--color-money-restricted) 10%, transparent);
+  background-image: repeating-linear-gradient(
+    135deg,
+    color-mix(in oklab, var(--color-money-restricted) 45%, transparent) 0 1px,
+    transparent 1px 6px
+  );
+}
+
 @layer base {
   * {
     @apply border-border outline-ring;
