@@ -235,6 +235,17 @@ code=$(health)
 [ "$code" = 200 ] || fail "/health of $tag answered $code."
 say "$tag serves: /health answers 200."
 
+# The app recognises every user's merchants at boot (#24): Camille's lines, kept before merchants
+# existed, get theirs without an import.
+recognised=0
+for _ in $(seq 60); do
+  recognised=$(sql "select count(*) from merchant_alias where user_id = '$camille'")
+  [ "$recognised" = 0 ] || break
+  sleep 1
+done
+[ "$recognised" != 0 ] || fail "Camille's lines got no merchant within a minute of the app's start."
+say "Camille's lines got their merchants at boot: $recognised cleaned label(s)."
+
 # 9. Everyone signs in as before; the session made before still works.
 signin() { call "$1" POST /api/auth/sign-in/email "$4" "{\"email\":\"$2\",\"password\":\"$3\"}"; }
 signin admin-after admin@example.com "$admin_password" 200 > /dev/null

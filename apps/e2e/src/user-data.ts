@@ -3,6 +3,7 @@ import type { APP_ROLE } from "@gousset/db/app-role";
 import { relations } from "@gousset/db/relations";
 import { authUser } from "@gousset/db/schema/auth";
 import { importProfile } from "@gousset/db/schema/ledger";
+import { recogniseMerchants } from "@gousset/core";
 import { seedMadeUpData } from "@gousset/db/seed";
 import type { SeedSummary } from "@gousset/db/seed";
 import { UserData, userDataLayer } from "@gousset/db/user-data";
@@ -33,6 +34,8 @@ export const USER_TABLES: ReadonlyArray<UserTable> = [
   { name: "entry", key: "id", rows: "entries" },
   { name: "entry_part", key: "id", rows: "entry parts" },
   { name: "transfer", key: "id", rows: "transfers" },
+  { name: "merchant", key: "id", rows: "merchants" },
+  { name: "merchant_alias", key: "id", rows: "merchants' cleaned labels" },
 ];
 
 /**
@@ -234,8 +237,9 @@ export function openUserData(database: string) {
     },
 
     /**
-     * The made-up data of two months, and a CSV profile, as `owner`'s rows. A user who already has
-     * accounts is left as they are, profile included.
+     * The made-up data of two months, and a CSV profile, as `owner`'s rows, with the merchants of its
+     * lines recognised as the app does at boot (the seed writes lines, not merchants). A user who
+     * already has accounts is left as they are, profile included.
      */
     seed: (owner: string): Promise<SeedSummary> =>
       Effect.runPromise(
@@ -256,6 +260,8 @@ export function openUserData(database: string) {
                   definition: { version: 1 },
                 }),
               );
+
+              yield* recogniseMerchants(owner);
             }),
           ),
           Effect.provide(layer),

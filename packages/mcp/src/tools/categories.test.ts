@@ -3,6 +3,7 @@ import {
   FixtureLedger,
   ImportProfiles,
   Imports,
+  Merchants,
   Transfers,
   memoryAccountStore,
   memoryCategory,
@@ -100,6 +101,7 @@ function onToday(rows: Map<string, MemoryCategoryRows>): Runner<GoussetServices>
     Layer.mock(ImportProfiles, {}),
     Layer.mock(DataExport, {}),
     Layer.mock(Transfers, {}),
+    Layer.mock(Merchants, {}),
     TestClock.layer(),
   );
 
@@ -598,6 +600,7 @@ describe("the categories tool", () => {
       "accounts",
       "data",
       "lines",
+      "merchants",
       "categories",
     ]);
     expect(tool?.title).toBe("Categories");

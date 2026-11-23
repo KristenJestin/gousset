@@ -3,6 +3,7 @@ import {
   FixtureLedger,
   ImportProfiles,
   Imports,
+  Merchants,
   Transfers,
   memoryAccountStore,
   memoryCategory,
@@ -180,6 +181,7 @@ function onToday(
     Layer.mock(Imports, {}),
     Layer.mock(ImportProfiles, {}),
     Layer.mock(DataExport, {}),
+    Layer.mock(Merchants, {}),
     // No line of these is a transfer; transfers are tried end to end (#26, lines-transfers.spec).
     Layer.mock(Transfers, {
       ofLine: () => Effect.succeed({ paired: null, candidates: [] }),
@@ -725,6 +727,7 @@ describe("the lines tool", () => {
       "accounts",
       "data",
       "lines",
+      "merchants",
       "categories",
     ]);
     expect(tool?.title).toBe("Lines");

@@ -1,0 +1,469 @@
+{
+  "type": "diff",
+  "version": "10",
+  "dialect": "postgres",
+  "id": "5ed319c5-92b6-4b1c-867d-4eb1b81bf3be",
+  "prevIds": ["8cb1c47a-75a7-4a23-bc8c-6a6d86c54c93"],
+  "footprints": [
+    {
+      "statementType": "create_table",
+      "statementTarget": ["table", "public", "merchant"],
+      "writes": [
+        "s|tbl|public.merchant",
+        "n|tbl|public.merchant",
+        "e|tbl|public.merchant",
+        "n|rel|public.merchant",
+        "n|type|public.merchant",
+        "n|rel|public.merchant_pkey",
+        "n|rel|public.merchant_user_id_id_key",
+        "n|rel|public.merchant_user_id_name_key"
+      ],
+      "reads": ["n|sch|public"]
+    },
+    {
+      "statementType": "create_table",
+      "statementTarget": ["table", "public", "merchant_alias"],
+      "writes": [
+        "s|tbl|public.merchant_alias",
+        "n|tbl|public.merchant_alias",
+        "e|tbl|public.merchant_alias",
+        "n|rel|public.merchant_alias",
+        "n|type|public.merchant_alias",
+        "n|rel|public.merchant_alias_pkey",
+        "n|rel|public.merchant_alias_user_id_alias_key"
+      ],
+      "reads": ["n|sch|public"]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": ["index", "public", "merchant_alias", "merchant_alias_merchant_id_idx"],
+      "writes": [
+        "s|idx|public.merchant_alias_merchant_id_idx",
+        "n|idx|public.merchant_alias_merchant_id_idx",
+        "e|idx|public.merchant_alias_merchant_id_idx",
+        "n|rel|public.merchant_alias_merchant_id_idx"
+      ],
+      "reads": [
+        "n|tbl|public.merchant_alias",
+        "n|sch|public",
+        "n|col|public.merchant_alias.merchant_id"
+      ]
+    },
+    {
+      "statementType": "create_fk",
+      "statementTarget": ["table", "public", "merchant"],
+      "writes": [
+        "s|fk|public.merchant.merchant_user_id_auth_user_id_fkey",
+        "n|fk|public.merchant.merchant_user_id_auth_user_id_fkey",
+        "e|fk|public.merchant.merchant_user_id_auth_user_id_fkey",
+        "n|con|public.merchant.merchant_user_id_auth_user_id_fkey"
+      ],
+      "reads": [
+        "n|tbl|public.merchant",
+        "n|sch|public",
+        "n|tbl|public.auth_user",
+        "n|sch|public",
+        "n|col|public.merchant.user_id",
+        "n|col|public.auth_user.id",
+        "e|uniqueness|public.auth_user.id"
+      ]
+    },
+    {
+      "statementType": "create_fk",
+      "statementTarget": ["table", "public", "merchant_alias"],
+      "writes": [
+        "s|fk|public.merchant_alias.merchant_alias_user_id_auth_user_id_fkey",
+        "n|fk|public.merchant_alias.merchant_alias_user_id_auth_user_id_fkey",
+        "e|fk|public.merchant_alias.merchant_alias_user_id_auth_user_id_fkey",
+        "n|con|public.merchant_alias.merchant_alias_user_id_auth_user_id_fkey"
+      ],
+      "reads": [
+        "n|tbl|public.merchant_alias",
+        "n|sch|public",
+        "n|tbl|public.auth_user",
+        "n|sch|public",
+        "n|col|public.merchant_alias.user_id",
+        "n|col|public.auth_user.id",
+        "e|uniqueness|public.auth_user.id"
+      ]
+    },
+    {
+      "statementType": "create_fk",
+      "statementTarget": ["table", "public", "merchant_alias"],
+      "writes": [
+        "s|fk|public.merchant_alias.merchant_alias_merchant_fk",
+        "n|fk|public.merchant_alias.merchant_alias_merchant_fk",
+        "e|fk|public.merchant_alias.merchant_alias_merchant_fk",
+        "n|con|public.merchant_alias.merchant_alias_merchant_fk"
+      ],
+      "reads": [
+        "n|tbl|public.merchant_alias",
+        "n|sch|public",
+        "n|tbl|public.merchant",
+        "n|sch|public",
+        "n|col|public.merchant_alias.user_id",
+        "n|col|public.merchant_alias.merchant_id",
+        "n|col|public.merchant.user_id",
+        "n|col|public.merchant.id",
+        "e|uniqueness|public.merchant.id.user_id"
+      ]
+    },
+    {
+      "statementType": "create_policy",
+      "statementTarget": ["table", "public", "merchant"],
+      "writes": [
+        "s|pol|public.merchant.merchant_own_rows_only",
+        "n|pol|public.merchant.merchant_own_rows_only",
+        "e|pol|public.merchant.merchant_own_rows_only"
+      ],
+      "reads": ["n|tbl|public.merchant", "n|sch|public", "e|rls|public.merchant"]
+    },
+    {
+      "statementType": "create_policy",
+      "statementTarget": ["table", "public", "merchant_alias"],
+      "writes": [
+        "s|pol|public.merchant_alias.merchant_alias_own_rows_only",
+        "n|pol|public.merchant_alias.merchant_alias_own_rows_only",
+        "e|pol|public.merchant_alias.merchant_alias_own_rows_only"
+      ],
+      "reads": ["n|tbl|public.merchant_alias", "n|sch|public", "e|rls|public.merchant_alias"]
+    }
+  ],
+  "deltas": [
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "name": "merchant",
+        "isRlsEnabled": true,
+        "entityType": "tables"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "name": "merchant_alias",
+        "isRlsEnabled": true,
+        "entityType": "tables"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "merchant",
+        "name": "id",
+        "type": "uuid",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "uuidv7()",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "merchant",
+        "name": "user_id",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "merchant",
+        "name": "name",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "merchant",
+        "name": "created_at",
+        "type": "timestamp with time zone",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "now()",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "merchant",
+        "name": "updated_at",
+        "type": "timestamp with time zone",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "now()",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "merchant_alias",
+        "name": "id",
+        "type": "uuid",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "uuidv7()",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "merchant_alias",
+        "name": "user_id",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "merchant_alias",
+        "name": "merchant_id",
+        "type": "uuid",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "merchant_alias",
+        "name": "alias",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "merchant_alias",
+        "name": "created_at",
+        "type": "timestamp with time zone",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "now()",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "merchant_alias",
+        "name": "merchant_alias_merchant_id_idx",
+        "nameExplicit": true,
+        "columns": [
+          {
+            "value": "merchant_id",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          }
+        ],
+        "isUnique": false,
+        "where": null,
+        "with": "",
+        "method": "btree",
+        "entityType": "indexes"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "merchant",
+        "name": "merchant_user_id_auth_user_id_fkey",
+        "nameExplicit": false,
+        "columns": ["user_id"],
+        "schemaTo": "public",
+        "tableTo": "auth_user",
+        "columnsTo": ["id"],
+        "onUpdate": "NO ACTION",
+        "onDelete": "CASCADE",
+        "entityType": "fks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "merchant_alias",
+        "name": "merchant_alias_user_id_auth_user_id_fkey",
+        "nameExplicit": false,
+        "columns": ["user_id"],
+        "schemaTo": "public",
+        "tableTo": "auth_user",
+        "columnsTo": ["id"],
+        "onUpdate": "NO ACTION",
+        "onDelete": "CASCADE",
+        "entityType": "fks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "merchant_alias",
+        "name": "merchant_alias_merchant_fk",
+        "nameExplicit": true,
+        "columns": ["user_id", "merchant_id"],
+        "schemaTo": "public",
+        "tableTo": "merchant",
+        "columnsTo": ["user_id", "id"],
+        "onUpdate": "NO ACTION",
+        "onDelete": "CASCADE",
+        "entityType": "fks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "merchant",
+        "name": "merchant_pkey",
+        "columns": ["id"],
+        "nameExplicit": false,
+        "entityType": "pks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "merchant_alias",
+        "name": "merchant_alias_pkey",
+        "columns": ["id"],
+        "nameExplicit": false,
+        "entityType": "pks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "merchant",
+        "name": "merchant_user_id_id_key",
+        "nameExplicit": true,
+        "columns": ["user_id", "id"],
+        "nullsNotDistinct": false,
+        "entityType": "uniques"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "merchant",
+        "name": "merchant_user_id_name_key",
+        "nameExplicit": true,
+        "columns": ["user_id", "name"],
+        "nullsNotDistinct": false,
+        "entityType": "uniques"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "merchant_alias",
+        "name": "merchant_alias_user_id_alias_key",
+        "nameExplicit": true,
+        "columns": ["user_id", "alias"],
+        "nullsNotDistinct": false,
+        "entityType": "uniques"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "merchant",
+        "name": "merchant_own_rows_only",
+        "as": "PERMISSIVE",
+        "for": "ALL",
+        "roles": ["public"],
+        "using": "\"user_id\" = current_setting('gousset.user_id', true)",
+        "withCheck": "\"user_id\" = current_setting('gousset.user_id', true)",
+        "entityType": "policies"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "merchant_alias",
+        "name": "merchant_alias_own_rows_only",
+        "as": "PERMISSIVE",
+        "for": "ALL",
+        "roles": ["public"],
+        "using": "\"user_id\" = current_setting('gousset.user_id', true)",
+        "withCheck": "\"user_id\" = current_setting('gousset.user_id', true)",
+        "entityType": "policies"
+      }
+    }
+  ]
+}

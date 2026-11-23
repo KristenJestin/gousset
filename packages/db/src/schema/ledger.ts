@@ -381,6 +381,50 @@ export const statementLine = pgTable.withRLS(
   ],
 );
 
+/** Who was paid, cleaned from the raw labels (#24); each user's own. */
+export const merchant = pgTable.withRLS(
+  "merchant",
+  {
+    id: id(),
+    userId: owner(),
+    // Unique per user: a rule, a merge and the MCP door name a merchant by it.
+    name: text("name").notNull(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    unique("merchant_user_id_id_key").on(table.userId, table.id),
+    unique("merchant_user_id_name_key").on(table.userId, table.name),
+    ownRowsOnly("merchant"),
+  ],
+);
+
+/**
+ * A cleaned label that names a merchant (packages/core, `merchantKey`): a line whose label cleans
+ * to it is that merchant's. One cleaned label names one merchant.
+ */
+export const merchantAlias = pgTable.withRLS(
+  "merchant_alias",
+  {
+    id: id(),
+    userId: owner(),
+    merchantId: uuid("merchant_id").notNull(),
+    alias: text("alias").notNull(),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    unique("merchant_alias_user_id_alias_key").on(table.userId, table.alias),
+    foreignKey({
+      name: "merchant_alias_merchant_fk",
+      columns: [table.userId, table.merchantId],
+      foreignColumns: [merchant.userId, merchant.id],
+    }).onDelete("cascade"),
+    // A merchant's aliases, for its page, a merge and the cascade.
+    index("merchant_alias_merchant_id_idx").on(table.merchantId),
+    ownRowsOnly("merchant_alias"),
+  ],
+);
+
 /**
  * An expense or income category, on two levels (#23). Its parent, and an entry's category, are
  * kept references (`on delete no action deferrable initially deferred`, which Drizzle cannot

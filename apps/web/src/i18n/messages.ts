@@ -88,6 +88,31 @@ export function categoryRefusalMessage(code: string, fallback?: string | null): 
   }
 }
 
+/**
+ * A merchant write or read's refusal (`MerchantRefusalCode`), by its code; `name` is the merchant
+ * it is about, when the refusal names one (the one that has the name already).
+ */
+export function merchantRefusalMessage(code: string, name?: string): string {
+  switch (code) {
+    case "MERCHANT_NOT_FOUND":
+      return m.merchantRefusalNotFound();
+    case "NAME_BLANK":
+      return m.merchantRefusalNameBlank();
+    case "NAME_TOO_LONG":
+      return m.merchantRefusalNameTooLong();
+    case "NAME_TAKEN":
+      return name === undefined ? m.errorUnknown() : m.merchantRefusalNameTaken({ name });
+    case "LABEL_NOT_FOUND":
+      return m.merchantRefusalLabelNotFound();
+    case "MERGE_INTO_ITSELF":
+      return m.merchantRefusalMergeIntoItself();
+    case "MERGE_INTO_UNKNOWN":
+      return m.merchantRefusalMergeIntoUnknown();
+    default:
+      return m.errorUnknown();
+  }
+}
+
 /** The message for a refusal of better-auth or of Gousset, by its code. */
 export function errorMessage(code: string | undefined): string {
   switch (code) {

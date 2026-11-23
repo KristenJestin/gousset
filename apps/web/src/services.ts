@@ -8,6 +8,7 @@ import {
   dataExportLayer,
   importProfilesLayer,
   importsLayer,
+  merchantsLayer,
   transfersLayer,
 } from "@gousset/core";
 import type {
@@ -18,6 +19,7 @@ import type {
   Imports,
   Ledger,
   LineStore,
+  Merchants,
   Transfers,
 } from "@gousset/core";
 import { getCookie } from "@tanstack/react-start/server";
@@ -35,7 +37,7 @@ export const auth = createAuth(ENV, db);
 /**
  * What Gousset's logic needs: the made-up month (v0.1), the user's accounts in the database, the
  * imports (#20) and their profiles (#19), the export (#22), every line searched across accounts
- * (#21), the categories (#23), and the transfers between accounts (#26).
+ * (#21), the transfers between accounts (#26), the merchants (#24), and the categories (#23).
  */
 export type CoreServices =
   | Ledger
@@ -44,8 +46,9 @@ export type CoreServices =
   | ImportProfiles
   | DataExport
   | LineStore
-  | CategoryStore
-  | Transfers;
+  | Transfers
+  | Merchants
+  | CategoryStore;
 
 /**
  * Gousset's logic (`@gousset/core`) runs on one runtime for the whole process, so that the server
@@ -62,6 +65,7 @@ const core = ManagedRuntime.make(
     importProfilesLayer.pipe(Layer.provide(userData)),
     dataExportLayer.pipe(Layer.provide(userData)),
     transfersLayer.pipe(Layer.provide(userData)),
+    merchantsLayer.pipe(Layer.provide(userData)),
   ),
 );
 

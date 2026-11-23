@@ -23,6 +23,8 @@ import {
   EXPORT_TABLES,
   IMPORTS,
   IMPORT_PROFILES,
+  MERCHANTS,
+  MERCHANT_ALIASES,
   STATEMENT_LINES,
   TRANSFERS,
 } from "./tables";
@@ -226,6 +228,28 @@ function madeUpExport(): ExportData {
     }),
   ];
 
+  const merchantId = nextId();
+
+  const merchants = [
+    row(MERCHANTS, {
+      id: merchantId,
+      user_id: OWNER,
+      name: "Greenmarket",
+      created_at: "2026-09-28T10:00:00+00:00",
+      updated_at: "2026-09-28T10:00:00+00:00",
+    }),
+  ];
+
+  const aliases = [
+    row(MERCHANT_ALIASES, {
+      id: nextId(),
+      user_id: OWNER,
+      merchant_id: merchantId,
+      alias: "GREENMARKET",
+      created_at: "2026-09-28T10:00:00+00:00",
+    }),
+  ];
+
   const byTable = new Map<ExportTable, ReadonlyArray<ExportRow>>([
     [ACCOUNTS, accounts],
     [ACCOUNT_BALANCES, balances],
@@ -236,6 +260,8 @@ function madeUpExport(): ExportData {
     [ENTRIES, entries],
     [ENTRY_PARTS, parts],
     [TRANSFERS, transfers],
+    [MERCHANTS, merchants],
+    [MERCHANT_ALIASES, aliases],
   ]);
 
   return {

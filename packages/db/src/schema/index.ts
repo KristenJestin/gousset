@@ -21,6 +21,8 @@ import {
   entryPart,
   importFile,
   importProfile,
+  merchant,
+  merchantAlias,
   statementImport,
   statementLine,
 } from "./ledger";
@@ -52,6 +54,8 @@ export const tables = {
   entry,
   entryPart,
   transfer,
+  merchant,
+  merchantAlias,
 };
 
 export { authRelations };
