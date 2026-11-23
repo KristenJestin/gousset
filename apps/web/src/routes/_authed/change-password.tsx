@@ -1,5 +1,5 @@
 import { m } from "@gousset/i18n/messages";
-import { getLocale } from "@gousset/i18n/runtime";
+import { getLocale, locales } from "@gousset/i18n/runtime";
 import { Button } from "@gousset/ui/components/button";
 import { Card } from "@gousset/ui/components/card";
 import { FormMessage } from "@gousset/ui/components/form-message";
@@ -19,11 +19,21 @@ export const Route = createFileRoute("/_authed/change-password")({
   component: ChangePassword,
 });
 
-/** A calendar day (`YYYY-MM-DD`) in words, the same on the server and in the browser. */
+/**
+ * A calendar day in words, one formatter per language, built once. In UTC, as the day is written:
+ * the same text on the server and in the browser.
+ */
+const dayFormats = new Map<string, Intl.DateTimeFormat>();
+
+for (const locale of locales) {
+  dayFormats.set(locale, new Intl.DateTimeFormat(locale, { dateStyle: "long", timeZone: "UTC" }));
+}
+
+const englishDays = new Intl.DateTimeFormat("en", { dateStyle: "long", timeZone: "UTC" });
+
+/** A calendar day (`YYYY-MM-DD`) in words, in the page's language. */
 function dayInWords(day: string) {
-  return new Intl.DateTimeFormat(getLocale(), { dateStyle: "long", timeZone: "UTC" }).format(
-    new Date(`${day}T00:00:00Z`),
-  );
+  return (dayFormats.get(getLocale()) ?? englishDays).format(new Date(`${day}T00:00:00Z`));
 }
 
 /** Why the password must change: temporary, and reset by the administrator on that day if so. */
