@@ -283,6 +283,11 @@ test("the password is changed from the settings, in a dialog that keeps a refusa
   await page.reload();
   await expect(page.getByRole("heading", { level: 1, name: "Settings" })).toBeVisible();
   await expect(page).toHaveURL(/\/settings\/account$/);
+
+  // The page of its own is the temporary password's alone: its address leads here.
+  await page.goto("/change-password");
+  await expect(page).toHaveURL(/\/settings\/account$/);
+  await expect(page.getByRole("button", { name: "Change password" })).toBeVisible();
 });
 
 test("a form sends nothing before the page is ready, so no password lands in an address", async ({

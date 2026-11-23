@@ -34,12 +34,6 @@ const SCREENS = [
   { path: "/settings/categories", name: "categories", en: "Settings", fr: "Réglages" },
   { path: "/settings/rules", name: "rules", en: "Settings", fr: "Réglages" },
   { path: "/settings/users", name: "users", en: "Settings", fr: "Réglages" },
-  {
-    path: "/change-password",
-    name: "change-password",
-    en: "Change your password",
-    fr: "Changer de mot de passe",
-  },
 ] as const;
 
 const WIDTHS = [
