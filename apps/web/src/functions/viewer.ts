@@ -29,6 +29,7 @@ export const getViewer = createServerFn({ method: "GET" }).handler(() =>
             email: user.email,
             isAdmin: user.role === "admin",
             mustChangePassword: user.mustChangePassword === true,
+            singleKeyShortcuts: user.singleKeyShortcuts !== false,
           },
         };
       }

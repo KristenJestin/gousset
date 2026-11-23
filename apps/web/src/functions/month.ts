@@ -19,7 +19,7 @@ import { devLatency } from "@/lib/dev-latency";
 import { auth, runCore } from "@/services";
 
 /** Only a signed-in user reads data, and only their own: the session says whose. */
-const signedIn = createMiddleware({ type: "function" }).server(async ({ next }) => {
+export const signedIn = createMiddleware({ type: "function" }).server(async ({ next }) => {
   const session = await auth.api.getSession({ headers: getRequestHeaders() });
 
   if (!session) {

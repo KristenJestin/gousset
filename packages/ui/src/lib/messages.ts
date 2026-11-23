@@ -109,6 +109,19 @@ function uiMessages(locale: Locale) {
       /** What an investment's gain is measured against: its net contributions. */
       putIn: m.uiMoneyPutIn({}, options),
     },
+    jobs: {
+      /** A background job's state, beside its title. */
+      waiting: m.uiJobWaiting({}, options),
+      step: (at: number, of: number) => m.uiJobStep({ at, of }, options),
+      retrying: (attempt: number, attempts: number) =>
+        m.uiJobRetrying({ attempt, attempts }, options),
+      completed: m.uiJobCompleted({}, options),
+      failed: (attempts: number) =>
+        attempts === 1 ? m.uiJobFailedOnce({}, options) : m.uiJobFailedAfter({ attempts }, options),
+      /** How much of a step is done: "312 of 1,204". */
+      counts: (done: string, total: string) => m.uiJobCounts({ done, total }, options),
+      retry: m.uiJobRetry({}, options),
+    },
   };
 }
 

@@ -220,6 +220,7 @@ test("on a phone, a tab bar holds review, operations, accounts and more", async 
     "Settings",
     "Change password",
     "Users",
+    "Keyboard shortcuts",
     "Sign out",
   ]);
 

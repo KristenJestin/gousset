@@ -24,7 +24,8 @@ export default defineConfig({
     varlockVitePlugin({ ssrInjectMode: "auto-load" }),
     tailwindcss(),
     tanstackStart(),
-    nitro({ preset: "node-server" }),
+    // The plugin loads the app as the server starts, and its job queue with it.
+    nitro({ preset: "node-server", plugins: ["./src/boot.nitro.ts"] }),
     viteReact(),
     // React Compiler: memoisation is automatic, nobody writes useMemo by hand.
     babel({ presets: [reactCompilerPreset()] }),

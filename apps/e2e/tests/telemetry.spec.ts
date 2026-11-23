@@ -71,6 +71,42 @@ exporting(
   },
 );
 
+exporting(
+  "each attempt of a background job gives a span, with its job and how it ended",
+  async ({ userPage: page, collector }) => {
+    await page.goto("/e2e/jobs");
+    await page.getByLabel("Items to count").fill("1");
+    await page.getByLabel("Milliseconds per item").fill("100");
+    await page.getByLabel("Attempts that fail").fill("0");
+    await page.getByRole("button", { name: "Start the test job" }).click();
+    await expect(page.locator('[data-slot="job-progress-status"]')).toHaveText("Done", {
+      timeout: 10_000,
+    });
+
+    await expect
+      .poll(() => collector.spans().map(({ name }) => name), {
+        timeout: EXPORT_INTERVAL_MS * 3,
+      })
+      .toContain("job");
+
+    const job = collector.spans().find(({ name }) => name === "job");
+
+    expect(job?.attributes.map(({ key }) => key)).toEqual(
+      expect.arrayContaining([
+        "gousset.job.name",
+        "gousset.job.id",
+        "gousset.job.attempt",
+        "gousset.job.outcome",
+      ]),
+    );
+    expect(
+      disallowedAttributes(
+        collector.spans().flatMap(({ attributes }) => attributes.map(({ key }) => key)),
+      ),
+    ).toEqual([]);
+  },
+);
+
 notExporting("without the endpoint, nothing is sent", async ({ page, collector }) => {
   await page.goto("/");
 

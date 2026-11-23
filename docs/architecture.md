@@ -133,14 +133,14 @@ There are some, but no extra service: the job queue lives in Postgres with **pg-
 
 What does **not** run in the background: the month's totals, benchmarks, balances and expiries. They are computed on read, in SQL. One person's volumes (a few thousand lines a year) do not justify a cache, and a recomputed total is never wrong.
 
-The interface follows a job's progress live (a server stream or short polling): that is what moves the import's steps forward and rolls the counter of updated lines.
+The interface follows a job's progress live, as Server-Sent Events (`/api/jobs/<id>/events`): that is what moves the import's steps forward and rolls the counter of updated lines. One-way like progress itself, plain HTTP through any reverse proxy, and the browser reconnects by itself, which carries a page across a restart of the app. A job is defined once with its input's schema, its steps, its retries and its timeout; each attempt runs it again from its first step, and nothing in the queue stops it from doing twice what an earlier attempt did: each job is written so that it does not (an import keeps what it already saved, a rule sets values rather than adds them).
 
 ## Packages
 
 A first split:
 
 - `apps/web`: the app (pages, API, jobs).
-- `packages/db`: the Drizzle schema and migrations. The data model is written in `docs/data-model.md` by its own ticket, before v0.2.
+- `packages/db`: the Drizzle schema and migrations. The data model, and how each user's rows are kept apart, is in [`data-model.md`](data-model.md).
 - `packages/import`: the format readers (OFX/QFX, QIF, CAMT.053, MT940, CSV and its profiles), with no dependency on the database, tested on sample files.
 - `packages/ui`: the styled components and the theme's variables.
 - `packages/fixture`: the shared made-up data.

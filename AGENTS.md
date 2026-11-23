@@ -27,7 +27,8 @@ installation serves several users, from the browser and from an AI agent over MC
 **Read the documents in [`docs/`](docs/) before any work**: [`vision.md`](docs/vision.md) (what
 and for whom, and the words), [`architecture.md`](docs/architecture.md) (the stack, data loading,
 quality, telemetry, jobs), [`design.md`](docs/design.md) (the look and the motion),
-[`mcp.md`](docs/mcp.md) (the MCP server and its tools). Those files are the specification; this
+[`mcp.md`](docs/mcp.md) (the MCP server and its tools), [`data-model.md`](docs/data-model.md) (the
+tables, money, dates and each user's rows kept apart). Those files are the specification; this
 file is how to work.
 
 ## Layout
@@ -56,7 +57,8 @@ vp test                  # unit tests (Vitest)
 pnpm build               # build every package
 pnpm dev                 # the app on http://localhost:3001
 pnpm storybook           # the components of packages/ui on http://localhost:6006
-pnpm db:start            # Postgres 18 in Docker; then pnpm db:push
+pnpm db:start            # Postgres 18 in Docker; then pnpm db:migrate
+pnpm db:seed             # the made-up data (packages/fixture) for every user without accounts
 pnpm hooks:setup         # once per clone: the Git hooks (vp staged)
 ```
 
