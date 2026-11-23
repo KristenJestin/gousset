@@ -33,6 +33,52 @@ function RenameDialog() {
   );
 }
 
+/**
+ * A form in a dialog, as a page holds an action that asks for input: it stays open while a refusal
+ * shows under its field, and closes once the form is accepted.
+ */
+function NoteBalance() {
+  const [open, setOpen] = useState(false);
+  const [refused, setRefused] = useState(false);
+  const [noted, setNoted] = useState(false);
+
+  return (
+    <div className="flex flex-col items-start gap-3">
+      <Dialog
+        trigger={<Button icon="add">Note a balance</Button>}
+        open={open}
+        onOpenChange={(next) => {
+          setOpen(next);
+          setRefused(false);
+        }}
+        title="Note a balance"
+        description="What the bank shows today for the current account."
+        onSubmit={(event) => {
+          event.preventDefault();
+
+          if (new FormData(event.currentTarget).get("balance") === "") {
+            setRefused(true);
+
+            return;
+          }
+
+          setNoted(true);
+          setOpen(false);
+        }}
+        onInput={() => setRefused(false)}
+        actions={<Button type="submit">Note it</Button>}
+      >
+        <TextField
+          label="Balance"
+          name="balance"
+          error={refused ? "Write the amount the bank shows." : undefined}
+        />
+      </Dialog>
+      <p className="text-sm text-muted-foreground">{noted ? "Noted" : "Nothing noted"}</p>
+    </div>
+  );
+}
+
 /** Opened from outside, with no trigger of its own. */
 function Controlled() {
   const [open, setOpen] = useState(false);
@@ -83,11 +129,16 @@ function DeleteRule() {
  * the agreeing answer); a press outside does not close it, and a confirmation that returns a
  * promise keeps it open, the button busy, until it settles.
  *
- * Motion: the dialog fades and grows in 200 ms, ease-out, the page behind veils in 200 ms; both
- * leave the same way. Cut under reduced motion.
+ * An action that asks for input (create, edit, reset, note a balance) is a button opening a
+ * dialog that holds its form (`onSubmit`): the body and actions are one form, Cancel comes first,
+ * and the page closes it once the form is accepted. On a phone (below 768 px) the dialog is a
+ * sheet along the bottom edge.
  *
- * Don't: open a dialog from a dialog, use it for what a page or a `Sheet` holds better (a line's
- * detail, a long form), or ask "Are you sure?" where an undo would do.
+ * Motion: the dialog fades and grows in 200 ms, ease-out (on a phone it slides up from the bottom
+ * edge), the page behind veils in 200 ms; both leave the same way. Cut under reduced motion.
+ *
+ * Don't: open a dialog from a dialog, put an action's form inline in a page, use it for what a
+ * page or a `Sheet` holds better (a line's detail), or ask "Are you sure?" where an undo would do.
  */
 const meta = {
   title: "Overlays/Dialog",
@@ -102,6 +153,15 @@ export const Default: Story = {};
 
 /** Controlled: opened from code, with only a title and a description. */
 export const OpenFromCode: Story = { render: () => <Controlled /> };
+
+/** A form: Cancel, then the submit button; an empty balance is refused under its field. */
+export const WithForm: Story = { render: () => <NoteBalance /> };
+
+/** A form on a phone: a sheet along the bottom edge. */
+export const WithFormOnPhone: Story = {
+  render: () => <NoteBalance />,
+  globals: { viewport: { value: "mobile1", isRotated: false } },
+};
 
 /** A confirmation: Cancel, and Delete, which stays busy while it runs. */
 export const Confirmation: Story = { render: () => <DeleteRule /> };
