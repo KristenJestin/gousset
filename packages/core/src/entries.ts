@@ -1,8 +1,9 @@
 import { insertDefaultEntries } from "@gousset/db/entries";
-import { category, entry, entryPart } from "@gousset/db/schema/ledger";
+import { category, entry, entryPart, statementLine } from "@gousset/db/schema/ledger";
 import { transfer } from "@gousset/db/schema/transfers";
 import type { UserTransaction } from "@gousset/db/user-data";
-import { and, eq, exists, notExists, or } from "drizzle-orm";
+import { and, eq, exists, inArray, notExists, or, sql } from "drizzle-orm";
+import type { SQL } from "drizzle-orm";
 
 import { insertDefaultSet } from "./default-categories";
 import { classifyByMerchants } from "./merchants/default-classification";
@@ -47,15 +48,90 @@ export async function entriesForLines(
   await classifyByMerchants(transaction, { lineIds });
 }
 
+/** A payment that left an entry: the entry, and the day its line was booked. */
+export type PaymentGone = { readonly entryId: string; readonly bookedOn: string };
+
+/** The payments the lines `lines` selects make, read before they leave their entries. */
+export function paymentsOfLines(
+  transaction: UserTransaction,
+  lines: SQL,
+): Promise<ReadonlyArray<PaymentGone>> {
+  return transaction
+    .select({ entryId: entryPart.entryId, bookedOn: statementLine.bookedOn })
+    .from(entryPart)
+    .innerJoin(statementLine, eq(statementLine.id, entryPart.lineId))
+    .where(and(lines, eq(entryPart.role, "payment")));
+}
+
 /**
- * Deletes the user's entries left without a payment: a line's deletion, a pairing or an unlinking
- * took their last one. The lines of the refunds such an entry had left are an expense or an income
- * again on their own: each gets its default entry back, in this same transaction.
+ * An entry happened on its first payment's day (docs/data-model.md, `entry.happened_on`): when the
+ * payment that day came from leaves, the day moves to the next payment's. A day that no payment
+ * that left gave is the user's, or its first payment's still, and stays.
  */
-export async function dropEntriesWithoutPayments(
+async function followFirstPayments(
+  transaction: UserTransaction,
+  gone: ReadonlyArray<PaymentGone>,
+): Promise<void> {
+  for (const entryId of new Set(gone.map((each) => each.entryId))) {
+    const [left] = await transaction
+      .select({
+        happenedOn: entry.happenedOn,
+        first: sql<
+          string | null
+        >`(select min(l.booked_on)::text from entry_part p inner join statement_line l on l.id = p.line_id where p.entry_id = ${entry.id} and p.role = 'payment')`,
+      })
+      .from(entry)
+      .where(eq(entry.id, entryId));
+
+    const cameFromGone = gone.some(
+      (each) => each.entryId === entryId && each.bookedOn === left?.happenedOn,
+    );
+
+    if (left !== undefined && left.first !== null && cameFromGone && left.first > left.happenedOn) {
+      await transaction.update(entry).set({ happenedOn: left.first }).where(eq(entry.id, entryId));
+    }
+  }
+}
+
+/**
+ * Settles the user's entries after payments left them (`gone`: a line's deletion, a pairing, an
+ * unlinking): an entry whose refunds now come to more than its payments loses its refunds, and an
+ * entry left without a payment goes. An expense never costs less than nothing (docs/data-model.md,
+ * #27). The lines of the refunds taken off are an expense or an income again on their own: each
+ * gets its default entry back, in this same transaction. An entry left happens on its first
+ * payment's day when its day came from a payment gone. How many entries went.
+ */
+export async function settleEntries(
   transaction: UserTransaction,
   owner: string,
+  gone: ReadonlyArray<PaymentGone>,
 ): Promise<number> {
+  await followFirstPayments(transaction, gone);
+
+  const overRefunded = await transaction
+    .select({ entryId: entryPart.entryId })
+    .from(entryPart)
+    .groupBy(entryPart.entryId)
+    .having(
+      sql`sum(case when ${entryPart.role} = 'payment' then ${entryPart.amountMinor} else -${entryPart.amountMinor} end) < 0`,
+    );
+
+  const refundsOff =
+    overRefunded.length === 0
+      ? []
+      : await transaction
+          .delete(entryPart)
+          .where(
+            and(
+              inArray(
+                entryPart.entryId,
+                overRefunded.map((each) => each.entryId),
+              ),
+              eq(entryPart.role, "refund"),
+            ),
+          )
+          .returning({ lineId: entryPart.lineId });
+
   const unpaid = notExists(
     transaction
       .select({ id: entryPart.id })
@@ -71,33 +147,61 @@ export async function dropEntriesWithoutPayments(
 
   const dropped = await transaction.delete(entry).where(unpaid).returning({ id: entry.id });
 
-  await entriesForLines(
-    transaction,
-    owner,
-    freed.map((part) => part.lineId),
-  );
+  await entriesForLines(transaction, owner, [
+    ...refundsOff.map((part) => part.lineId),
+    ...freed.map((part) => part.lineId),
+  ]);
 
   return dropped.length;
 }
 
 /**
  * Deletes the parts of every line of the user's that is a side of a transfer, then the entries left
- * with no payment: a line just paired stops being an expense or an income.
+ * the pairing leaves unsettled (`settleEntries`): a line just paired stops being an expense or an
+ * income.
  */
 export async function dropEntriesOfTransferSides(
   transaction: UserTransaction,
   owner: string,
 ): Promise<void> {
-  await transaction.delete(entryPart).where(
-    exists(
-      transaction
-        .select({ id: transfer.id })
-        .from(transfer)
-        .where(
-          or(eq(transfer.outLineId, entryPart.lineId), eq(transfer.inLineId, entryPart.lineId)),
-        ),
-    ),
-  );
+  const taken = await transaction
+    .delete(entryPart)
+    .where(
+      exists(
+        transaction
+          .select({ id: transfer.id })
+          .from(transfer)
+          .where(
+            or(eq(transfer.outLineId, entryPart.lineId), eq(transfer.inLineId, entryPart.lineId)),
+          ),
+      ),
+    )
+    .returning({ entryId: entryPart.entryId, lineId: entryPart.lineId, role: entryPart.role });
 
-  await dropEntriesWithoutPayments(transaction, owner);
+  const payments = taken.filter((part) => part.role === "payment");
+
+  const days =
+    payments.length === 0
+      ? []
+      : await transaction
+          .select({ id: statementLine.id, bookedOn: statementLine.bookedOn })
+          .from(statementLine)
+          .where(
+            inArray(
+              statementLine.id,
+              payments.map((part) => part.lineId),
+            ),
+          );
+
+  const dayOf = new Map(days.map((line) => [line.id, line.bookedOn]));
+
+  await settleEntries(
+    transaction,
+    owner,
+    payments.flatMap((part) => {
+      const bookedOn = dayOf.get(part.lineId);
+
+      return bookedOn === undefined ? [] : [{ entryId: part.entryId, bookedOn }];
+    }),
+  );
 }

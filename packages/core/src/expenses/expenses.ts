@@ -16,7 +16,7 @@ import { Context, Effect, Layer, Result } from "effect";
 
 import type { LineCategory } from "../category-store";
 import { takeCategoryTurn } from "../category-turn";
-import { dropEntriesWithoutPayments, entriesForLines } from "../entries";
+import { entriesForLines, settleEntries } from "../entries";
 import { CategoryNotFound, LineNotFound, LinkRefused, NotLinked, SplitRefused } from "../errors";
 import { isId } from "../imports/rows";
 import type { LineAccount } from "../lines";
@@ -134,8 +134,11 @@ export class Expenses extends Context.Service<
   }
 >()("@gousset/core/Expenses") {}
 
-/** How many lines before a line coming back are read for its proposals, nearest first. */
-const PROPOSAL_POOL = 200;
+/**
+ * How many lines before a line coming back are read for its proposals, those of its exact amount
+ * first, then the nearest: the merchant is compared once they are read.
+ */
+const PROPOSAL_POOL = 500;
 
 const parent = alias(category, "parent");
 
@@ -208,6 +211,21 @@ async function lockLines(
       .from(statementLine)
       .where(inArray(statementLine.id, ids))
       .orderBy(asc(statementLine.id))
+      .for("update");
+  }
+}
+
+/** Locks the user's entries among `entryIds`, in one order, as `lockLines` does their lines. */
+async function lockEntries(
+  transaction: UserTransaction,
+  entryIds: ReadonlyArray<string>,
+): Promise<void> {
+  if (entryIds.length > 0) {
+    await transaction
+      .select({ id: entry.id })
+      .from(entry)
+      .where(inArray(entry.id, [...entryIds]))
+      .orderBy(asc(entry.id))
       .for("update");
   }
 }
@@ -358,9 +376,17 @@ async function proposalsFor(
         gte(statementLine.bookedOn, shiftDay(line.bookedOn, -REFUND_DAYS)),
         lte(statementLine.bookedOn, line.bookedOn),
         lte(statementLine.bookedOn, day),
+        // A payment of an expense: no side of a transfer, no refund of another one.
+        sql`exists (select 1 from entry_part p where p.line_id = ${statementLine.id} and p.role = 'payment')`,
       ),
     )
-    .orderBy(desc(statementLine.bookedOn), desc(statementLine.id))
+    // The exact amount first, as `refundProposals` orders them, so that a cancellation is read
+    // whatever the user paid since; then the nearest day.
+    .orderBy(
+      sql`abs(${statementLine.amountMinor}) = ${back} desc`,
+      desc(statementLine.bookedOn),
+      desc(statementLine.id),
+    )
     .limit(PROPOSAL_POOL);
 
   if (pool.length === 0) {
@@ -535,6 +561,13 @@ async function linkIn(
     }
   }
 
+  // The expenses themselves take turns too: two links into one expense through two of its lines,
+  // or a link and an unlink, each read the net the other left.
+  await lockEntries(transaction, [
+    ...(await entryIdsOf(transaction, target.id)),
+    ...(await entryIdsOf(transaction, line.id)),
+  ]);
+
   const [expense, ...otherShares] = await readExpenses(
     transaction,
     await entryIdsOf(transaction, target.id),
@@ -620,6 +653,8 @@ async function unlinkIn(
     return Result.fail(new LineNotFound({ lineId }));
   }
 
+  await lockEntries(transaction, await entryIdsOf(transaction, line.id));
+
   const [expense, ...others] = await readExpenses(
     transaction,
     await entryIdsOf(transaction, line.id),
@@ -633,8 +668,16 @@ async function unlinkIn(
     .delete(entryPart)
     .where(and(eq(entryPart.entryId, expense.id), eq(entryPart.lineId, line.id)));
 
-  // The expense loses this line; with no payment left, its refunds are each their own again.
-  await dropEntriesWithoutPayments(transaction, owner);
+  // The expense loses this line: with refunds past its payments, it loses them; with no payment
+  // left, it goes; either way, those refunds are each their own again. When its day came from
+  // this payment, it happens on the next one's.
+  const leaving = expense.payments.some((part) => part.lineId === line.id);
+
+  await settleEntries(
+    transaction,
+    owner,
+    leaving ? [{ entryId: expense.id, bookedOn: line.bookedOn }] : [],
+  );
   await entriesForLines(transaction, owner, [line.id]);
 
   return Result.succeed(await lineExpenses(transaction, line, day));

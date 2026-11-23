@@ -218,7 +218,9 @@ test("an MCP client links a payment and a refund into one expense, splits a line
   const unlinked = await callLines(client, { action: "unlink", line: onCard ?? "" });
 
   expect(unlinked.isError, unlinked.text).toBe(false);
-  expect(unlinked.text).toContain("It counts 50.00 EUR.");
+  expect(unlinked.text).toContain(
+    "It is an expense of its own again, in Other, and counts 50.00 EUR.",
+  );
 
   const alone = await callLines(client, { action: "unlink", line: onCard ?? "" });
 

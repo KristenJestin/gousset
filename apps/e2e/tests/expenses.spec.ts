@@ -444,9 +444,65 @@ test("undoing the import of an expense's payment gives its refund back its own e
   await run(linkLine(owner, back, await lineOf(card, -4500)));
   await imports.undo(owner, paid.id);
 
+  // The tickets' expense is gone with its payment: the refund is an income of its own again.
   expect(await partsOf([back])).toEqual([
     expect.objectContaining({ role: "payment", amountMinor: 1500, kind: "income" }),
   ]);
+});
+
+test("a payment leaving an expense never leaves it costing less than nothing, and its day follows", async () => {
+  const current = await newAccount("Leaving current");
+  const card = await newAccount("Leaving card", "card");
+
+  await importInto(current, "leaving-current", [
+    { bookedOn: "2026-09-28", amountMinor: -10_000, label: "CB FOXGLOVE FLOWERS 2809 RIVERTON" },
+    {
+      bookedOn: "2026-10-05",
+      amountMinor: 12_000,
+      label: "VIR SEPA RECU /DE JO EXAMPLE /MOTIF FLOWERS",
+    },
+  ]);
+
+  await importInto(card, "leaving-card", [
+    { bookedOn: "2026-10-02", amountMinor: -5000, label: "CB FOXGLOVE FLOWERS 0210 RIVERTON" },
+  ]);
+
+  const first = await lineOf(current, -10_000);
+  const second = await lineOf(card, -5000);
+  const back = await lineOf(current, 12_000);
+
+  // Paid 100 then 50, 120 back: it costs 30, and happened on its first payment's day.
+  await run(linkLine(owner, first, second));
+
+  const refunded = await run(linkLine(owner, back, second));
+
+  expect(refunded.expense).toMatchObject({ happenedOn: "2026-09-28", net: { minor: 3000 } });
+
+  // The 100 leaves: 120 back would make 50 cost less than nothing, so the 120 is its own again.
+  await run(unlinkLine(owner, first));
+
+  const [left] = (await expensesOf(second)).expenses;
+
+  expect(left).toMatchObject({ happenedOn: "2026-10-02", net: { minor: 5000 }, refunds: [] });
+
+  expect(await partsOf([back])).toEqual([
+    expect.objectContaining({ role: "payment", amountMinor: 12_000, kind: "income" }),
+  ]);
+
+  // An earlier payment undone with its import: the day follows to the payment left.
+  const early = await newAccount("Leaving early");
+
+  const undone = await importInto(early, "leaving-early", [
+    { bookedOn: "2026-09-20", amountMinor: -700, label: "CB FOXGLOVE FLOWERS 2009 RIVERTON" },
+  ]);
+
+  const moved = await run(linkLine(owner, await lineOf(early, -700), second));
+
+  expect(moved.expense.happenedOn).toBe("2026-09-20");
+
+  await imports.undo(owner, undone.id);
+
+  expect((await expensesOf(second)).expenses[0]?.happenedOn).toBe("2026-10-02");
 });
 
 test("a link that would count a euro twice is refused", async () => {

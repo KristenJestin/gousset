@@ -137,9 +137,11 @@ const LinesInput = Schema.Struct({
             'Its share, a decimal in the account\'s currency, without sign nor currency ("30", "12.50").',
         }),
       }),
-    ).annotate({
-      description: `split: 1 to ${MAX_SHARES} shares, adding up to the line's absolute amount; one share puts the line back in one category.`,
-    }),
+    )
+      .check(Schema.isMaxLength(MAX_SHARES))
+      .annotate({
+        description: `split: 1 to ${MAX_SHARES} shares, adding up to the line's absolute amount; one share puts the line back in one category.`,
+      }),
   ),
   kind: Schema.optional(
     Schema.Literals(["transfer", "expense", "income"]).annotate({
@@ -647,10 +649,16 @@ function unlinkRun(input: LinesInput, owner: string) {
   }
 
   return unlinkLine(owner, line).pipe(
-    Effect.map(
-      (found) =>
-        `Unlinked: the line is an expense or an income of its own again, in its kind's fallback category ("Other"); an expense left with refunds alone gave them back theirs.${found.expenses.length === 1 && found.expenses[0] !== undefined ? ` It counts ${amount(found.expenses[0].net)}.` : ""}`,
-    ),
+    Effect.map((found) => {
+      const [own] = found.expenses;
+
+      const alone =
+        own === undefined
+          ? ""
+          : ` It is ${own.kind === "expense" ? "an expense" : "an income"} of its own again, in ${pathText(own.category)}, and counts ${amount(own.net)}.`;
+
+      return `Unlinked.${alone} Refunds the expense's payments no longer cover are each their own again.`;
+    }),
     Effect.catchTags({
       LineNotFound: (missing) => lineRefused(missing.lineId, NOT_FOUND),
       NotLinked: () =>
