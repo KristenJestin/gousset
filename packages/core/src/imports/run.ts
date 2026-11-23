@@ -8,7 +8,7 @@ import {
 import { UserData } from "@gousset/db/user-data";
 import type { QueryFailed, UserTransaction } from "@gousset/db/user-data";
 import { CsvProfile, detectCsvProfile } from "@gousset/import";
-import { and, count, eq, gte, inArray, isNull, lte, ne, or } from "drizzle-orm";
+import { and, count, eq, gte, inArray, isNotNull, isNull, lte, ne, or } from "drizzle-orm";
 import { Effect, Schema } from "effect";
 
 import { ImportFailed } from "./errors";
@@ -45,6 +45,29 @@ export type ImportRun = { readonly months: ReadonlyArray<string> };
 const CHUNK = 200;
 
 const nothing: ImportRun = { months: [] };
+
+/**
+ * The statuses in which an import is its job's to move on. Any other (waiting, done, undone) was
+ * decided meanwhile, by the user or by another attempt: the job then stops where it is.
+ */
+const RUNS: ReadonlySet<string> = new Set(["queued", "reading", "saving", "failed"]);
+
+/** The import was undone or answered while the job ran: it stops, writing nothing more. */
+class ImportTaken extends Schema.TaggedError<ImportTaken>()("ImportTaken", {}) {}
+
+/**
+ * Locks the import's row until the transaction ends, and says whether its job may still write:
+ * an undo or an answer, which take the same lock, waits for this transaction, or this one for it.
+ */
+async function stillRuns(transaction: UserTransaction, importId: string): Promise<boolean> {
+  const [row] = await transaction
+    .select({ status: statementImport.status })
+    .from(statementImport)
+    .where(eq(statementImport.id, importId))
+    .for("update");
+
+  return row !== undefined && RUNS.has(row.status);
+}
 
 const DAY_MS = 86_400_000;
 
@@ -147,14 +170,24 @@ export function runImport(
     const inTransaction = <A>(work: (transaction: UserTransaction) => Promise<A>) =>
       userData.transaction(owner, work);
 
+    /** Runs `work` on the import while it is still the job's; stops the run otherwise. */
+    const whileRunning = <A>(work: (transaction: UserTransaction) => Promise<A>) =>
+      inTransaction(async (transaction) =>
+        (await stillRuns(transaction, importId)) ? { done: await work(transaction) } : undefined,
+      ).pipe(
+        Effect.flatMap((ran) =>
+          ran === undefined ? Effect.fail(new ImportTaken()) : Effect.succeed(ran.done),
+        ),
+      );
+
     const setStatus = (values: Partial<typeof statementImport.$inferInsert>) =>
-      inTransaction((transaction) =>
+      whileRunning((transaction) =>
         transaction.update(statementImport).set(values).where(eq(statementImport.id, importId)),
       );
 
     const fail = (code: string, retry: boolean) =>
       setStatus({ status: "failed", errorCode: code }).pipe(
-        Effect.ignore,
+        Effect.catchTag("QueryFailed", () => Effect.void),
         Effect.andThen(Effect.fail(new ImportFailed({ code, retry }))),
       );
 
@@ -169,7 +202,7 @@ export function runImport(
       return yield* new ImportFailed({ code: "IMPORT_NOT_FOUND", retry: false });
     }
 
-    if (loaded.status === "done" || loaded.status === "undone" || loaded.status === "waiting") {
+    if (!RUNS.has(loaded.status)) {
       return nothing;
     }
 
@@ -292,9 +325,28 @@ export function runImport(
               ),
           );
 
+    // A known line an earlier attempt already held one of this import's lines against stays
+    // taken: it is the near duplicate of one read line at most, across attempts too.
+    const taken =
+      candidates.length === 0
+        ? []
+        : yield* inTransaction((transaction) =>
+            transaction
+              .select({ id: statementLine.duplicateOfLineId })
+              .from(statementLine)
+              .where(
+                and(
+                  eq(statementLine.importId, importId),
+                  isNotNull(statementLine.duplicateOfLineId),
+                ),
+              ),
+          );
+
+    const takenIds = new Set(taken.map((row) => row.id));
+
     const near = nearDuplicates(
       fresh.map((line): ReadLine => line),
-      candidates,
+      candidates.filter((candidate) => !takenIds.has(candidate.id)),
     );
 
     yield* progress("deduplicate", { done: keyed.length, total: keyed.length });
@@ -311,7 +363,7 @@ export function runImport(
     for (let start = 0; start < planned.length; start += CHUNK) {
       const chunk = planned.slice(start, start + CHUNK);
 
-      yield* inTransaction((transaction) =>
+      yield* whileRunning((transaction) =>
         transaction
           .insert(statementLine)
           .values(
@@ -344,7 +396,7 @@ export function runImport(
       });
     }
 
-    yield* inTransaction(async (transaction) => {
+    yield* whileRunning(async (transaction) => {
       // The balances are written again whole, so that a second attempt does not double them.
       await transaction.delete(accountBalance).where(eq(accountBalance.importId, importId));
 
@@ -392,8 +444,41 @@ export function runImport(
 
     return { months: [...new Set(days.map((day) => day.slice(0, 7)))] };
   }).pipe(
+    Effect.catchTag("ImportTaken", () => Effect.succeed(nothing)),
     Effect.catchTag("QueryFailed", (failed: QueryFailed) =>
       Effect.fail(new ImportFailed({ code: `QUERY_FAILED_${failed.code}`, retry: true })),
     ),
   );
+}
+
+/**
+ * Marks an import failed with `code`, when its job's last attempt ended without finishing it (a
+ * database that did not answer, a defect, a timeout): otherwise it would stay `reading` or `saving`
+ * for good. An import that was done, undone or answered meanwhile is left as it is. Never fails:
+ * the job's own failure is what counts.
+ */
+export function markFailed(
+  owner: string,
+  importId: string,
+  code: string,
+): Effect.Effect<void, never, UserData> {
+  return Effect.gen(function* () {
+    if (!isId(importId)) {
+      return;
+    }
+
+    const userData = yield* UserData;
+
+    yield* userData.transaction(owner, (transaction) =>
+      transaction
+        .update(statementImport)
+        .set({ status: "failed", errorCode: code })
+        .where(
+          and(
+            eq(statementImport.id, importId),
+            inArray(statementImport.status, ["queued", "reading", "saving"]),
+          ),
+        ),
+    );
+  }).pipe(Effect.ignore);
 }

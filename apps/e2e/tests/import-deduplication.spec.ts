@@ -1,7 +1,7 @@
 import { exampleStatement } from "@gousset/fixture";
 import type { Statement, StatementLine } from "@gousset/fixture";
-import { accountBalance, statementImport } from "@gousset/db/schema/ledger";
-import { eq } from "drizzle-orm";
+import { accountBalance, statementImport, statementLine } from "@gousset/db/schema/ledger";
+import { and, eq } from "drizzle-orm";
 
 import { addUser } from "../src/auth";
 import { importsOn, statementFile } from "../src/imports";
@@ -284,4 +284,83 @@ test("a CSV file whose dates read both ways waits for the user to say which", as
 
   expect(waiting).toMatchObject({ status: "waiting", waitingFor: "profile", linesAdded: 0 });
   expect(await imports.linesOf(owner, accountId)).toEqual([]);
+});
+
+/** Puts an import back as an attempt that stopped while saving would have left it. */
+const leftSaving = (importId: string) =>
+  data.asUser(owner, (transaction) =>
+    transaction
+      .update(statementImport)
+      .set({ status: "saving" })
+      .where(eq(statementImport.id, importId)),
+  );
+
+test("an import its job left saving can be undone once the job is over", async () => {
+  const accountId = await imports.createAccount(owner, "Left saving");
+
+  const imported = await imports.importFile(
+    owner,
+    accountId,
+    statementFile("ofx", exampleStatement),
+  );
+
+  // Its last attempt ended without saying so (a crash): the job is over, the import says saving.
+  await leftSaving(imported.id);
+
+  const undone = await imports.undo(owner, imported.id);
+
+  expect(undone).toMatchObject({ linesRemoved: lines.length });
+  expect(await imports.linesOf(owner, accountId)).toEqual([]);
+});
+
+test("an attempt left over after an undo writes nothing more", async () => {
+  const accountId = await imports.createAccount(owner, "Undone while running");
+
+  const imported = await imports.importFile(
+    owner,
+    accountId,
+    statementFile("ofx", exampleStatement),
+  );
+
+  await imports.undo(owner, imported.id);
+  await imports.run(owner, imported.id);
+
+  expect(await imports.linesOf(owner, accountId)).toEqual([]);
+  expect((await imports.show(owner, imported.id)).status).toBe("undone");
+});
+
+test("a known line stays the near duplicate of one read line, across attempts", async () => {
+  const accountId = await imports.createAccount(owner, "Near duplicates, run again");
+  const payment = lines[4];
+
+  if (payment === undefined) {
+    throw new Error("The example statement has no fifth line.");
+  }
+
+  await imports.importFile(owner, accountId, statementFile("ofx", withLines([payment])));
+
+  // Two lines alike to the same known payment: one is held against it, the other counted.
+  const readAgain = withLines([
+    { ...payment, bookedOn: "2026-10-16", label: "PRLV STREAMFLIX ABONNEMENT" },
+    { ...payment, bookedOn: "2026-10-14", label: "STREAMFLIX ABONNEMENT SEPA" },
+  ]);
+
+  const first = await imports.importFile(owner, accountId, statementFile("csv", readAgain));
+
+  expect(first).toMatchObject({ status: "done", linesAdded: 1, linesHeld: 1 });
+
+  // An attempt that saved the held line, then stopped before the counted one.
+  await data.asUser(owner, (transaction) =>
+    transaction
+      .delete(statementLine)
+      .where(and(eq(statementLine.importId, first.id), eq(statementLine.state, "counted"))),
+  );
+  await leftSaving(first.id);
+  await imports.run(owner, first.id);
+
+  expect(await imports.show(owner, first.id)).toMatchObject({
+    status: "done",
+    linesAdded: 1,
+    linesHeld: 1,
+  });
 });

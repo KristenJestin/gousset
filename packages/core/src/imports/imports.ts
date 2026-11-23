@@ -26,7 +26,7 @@ import {
 import { findSummary, isId, selectSummaries, summaryOf } from "./rows";
 import type { ImportJobInput } from "./run";
 import { MAX_FILE_BYTES } from "./summary";
-import type { ImportFormat, ImportSummary } from "./summary";
+import type { ImportFormat, ImportStatus, ImportSummary } from "./summary";
 
 // Importing statements (#20), as the import screen and the MCP door both do it: a file dropped
 // becomes an import and its job; the screen follows the job, answers what the file left open,
@@ -44,6 +44,12 @@ export class ImportJobs extends Context.Service<
       owner: string,
       input: ImportJobInput,
     ) => Effect.Effect<string, ImportUnavailable>;
+    /**
+     * Whether the job is over: completed, failed for good, or gone from the queue. An import whose
+     * job is over and which still says it runs was left by an attempt that could not say how it
+     * ended (a crash on the last one).
+     */
+    readonly isOver: (owner: string, jobId: string) => Effect.Effect<boolean>;
   }
 >()("@gousset/core/ImportJobs") {}
 
@@ -171,10 +177,13 @@ async function accountExists(transaction: UserTransaction, accountId: string): P
 }
 
 /** An import may be run again only when it waits for the user or failed. */
-const RESUMABLE = new Set(["waiting", "failed"]);
+const RESUMABLE: ReadonlySet<ImportStatus> = new Set(["waiting", "failed"]);
 
 /** An import may be undone once nothing runs it. */
-const UNDOABLE = new Set(["done", "waiting", "failed"]);
+const UNDOABLE: ReadonlySet<ImportStatus> = new Set(["done", "waiting", "failed"]);
+
+/** What an import says while its job runs it. */
+const UNDER_WAY: ReadonlySet<ImportStatus> = new Set(["queued", "reading", "saving"]);
 
 /** `Imports` on the database (`UserData`) and the app's job queue (`ImportJobs`). */
 export const importsLayer = Layer.effect(
@@ -194,6 +203,24 @@ export const importsLayer = Layer.effect(
             : Effect.succeed(found),
         ),
       );
+
+    /**
+     * The statuses an action accepts for this import, and which the transaction checks again under
+     * the row's lock (the job takes the same one): `accepted`, and the status of an import whose job
+     * is over though the import still says it runs.
+     */
+    const statusesFor = (
+      owner: string,
+      found: ImportSummary,
+      accepted: ReadonlySet<ImportStatus>,
+    ) =>
+      Effect.gen(function* () {
+        const stuck =
+          UNDER_WAY.has(found.status) &&
+          (found.jobId === null || (yield* jobs.isOver(owner, found.jobId)));
+
+        return stuck ? [...accepted, found.status] : [...accepted];
+      });
 
     /** Sends the import's job and keeps its id; an import the queue did not take has failed. */
     const sendJob = (owner: string, importId: string, csvProfile: CsvProfile | null) =>
@@ -307,12 +334,22 @@ export const importsLayer = Layer.effect(
       undo: (owner, importId) =>
         Effect.gen(function* () {
           const found = yield* show(owner, importId);
-
-          if (!UNDOABLE.has(found.status)) {
-            return yield* new ImportBusy({ importId, status: found.status });
-          }
+          const statuses = yield* statusesFor(owner, found, UNDOABLE);
 
           const counts = yield* inTransaction(owner, async (transaction) => {
+            // First, and under the row's lock: a job still writing waits, then finds it undone.
+            const [claimed] = await transaction
+              .update(statementImport)
+              .set({ status: "undone", undoneAt: new Date() })
+              .where(
+                and(eq(statementImport.id, importId), inArray(statementImport.status, statuses)),
+              )
+              .returning({ id: statementImport.id });
+
+            if (claimed === undefined) {
+              return undefined;
+            }
+
             const own = transaction
               .select({ id: statementLine.id })
               .from(statementLine)
@@ -338,11 +375,6 @@ export const importsLayer = Layer.effect(
 
             await transaction.delete(accountBalance).where(eq(accountBalance.importId, importId));
             await transaction.delete(importFile).where(eq(importFile.importId, importId));
-
-            await transaction
-              .update(statementImport)
-              .set({ status: "undone", undoneAt: new Date() })
-              .where(eq(statementImport.id, importId));
 
             const overlapping =
               found.account === null || found.periodFrom === null || found.periodTo === null
@@ -372,38 +404,49 @@ export const importsLayer = Layer.effect(
             };
           });
 
+          if (counts === undefined) {
+            const now = yield* show(owner, importId);
+
+            return yield* new ImportBusy({ importId, status: now.status });
+          }
+
           return { undone: yield* show(owner, importId), ...counts };
         }),
 
       resume: (owner, importId, answers) =>
         Effect.gen(function* () {
           const found = yield* show(owner, importId);
-
-          if (!RESUMABLE.has(found.status)) {
-            return yield* new ImportBusy({ importId, status: found.status });
-          }
-
+          const statuses = yield* statusesFor(owner, found, RESUMABLE);
           const { accountId } = answers;
 
-          const accepted = yield* inTransaction(owner, async (transaction) => {
+          const outcome = yield* inTransaction(owner, async (transaction) => {
             if (accountId !== null && !(await accountExists(transaction, accountId))) {
-              return false;
+              return "no-account" as const;
             }
 
-            await transaction
+            const [claimed] = await transaction
               .update(statementImport)
               .set({
                 status: "queued",
                 errorCode: null,
                 accountId: accountId ?? found.account?.id ?? null,
               })
-              .where(eq(statementImport.id, importId));
+              .where(
+                and(eq(statementImport.id, importId), inArray(statementImport.status, statuses)),
+              )
+              .returning({ id: statementImport.id });
 
-            return true;
+            return claimed === undefined ? ("busy" as const) : ("queued" as const);
           });
 
-          if (!accepted) {
+          if (outcome === "no-account") {
             return yield* new AccountNotFound({ accountId: accountId ?? "" });
+          }
+
+          if (outcome === "busy") {
+            const now = yield* show(owner, importId);
+
+            return yield* new ImportBusy({ importId, status: now.status });
           }
 
           yield* sendJob(owner, importId, answers.csvProfile);

@@ -16,8 +16,13 @@ type UserDataAccess = ReturnType<typeof openUserData>;
  * queue adds (retries, progress) is the jobs spec's and the import screen's.
  */
 export function importsOn(data: UserDataAccess) {
-  // The queue is not this harness's: a job is given an id and run below, by hand.
-  const noQueue = Layer.succeed(ImportJobs, { send: () => Effect.sync(() => crypto.randomUUID()) });
+  // The queue is not this harness's: a job is given an id and run below, by hand, so that no job
+  // is ever under way between two calls.
+  const noQueue = Layer.succeed(ImportJobs, {
+    send: () => Effect.sync(() => crypto.randomUUID()),
+    isOver: () => Effect.succeed(true),
+  });
+
   const imports = importsLayer.pipe(Layer.provide(Layer.mergeAll(data.layer, noQueue)));
 
   const withImports = <A, E>(work: (service: Imports["Service"]) => Effect.Effect<A, E>) =>
