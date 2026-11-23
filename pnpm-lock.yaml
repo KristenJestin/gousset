@@ -575,6 +575,9 @@ importers:
       '@gousset/core':
         specifier: workspace:*
         version: link:../core
+      '@gousset/import':
+        specifier: workspace:*
+        version: link:../import
       '@modelcontextprotocol/server':
         specifier: 2.4.0
         version: 2.4.0

@@ -20,5 +20,6 @@ Gousset's words, used in every result:
 
 Which tool answers what:
 - \`month\`: a month's summary (received, spent, set aside, left) and where the money went, by category and by merchant. Use it for "how much did I spend last month, and where?".
+- \`accounts\`: the user's accounts by group (available, restricted, savings and investments, owed) with their balances and totals per currency, and one account's last lines and the check of its balance against its bank statement. Use it for "how much do I have?" or "does my balance match my bank's?".
 
 Results are text, with names rather than ids. A long result comes in parts: its last line writes the next call to make. An error says what to do and gives a valid call. A write needs the connection to have been allowed to read and write; a refusal says how to get it.`;

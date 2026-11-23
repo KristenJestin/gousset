@@ -1,7 +1,7 @@
-import { FixtureLedger } from "@gousset/core";
+import { FixtureLedger, memoryAccountStore } from "@gousset/core";
 import { goussetServer } from "@gousset/mcp/gousset";
 import { callText, connectInProcess } from "@gousset/mcp/test-client";
-import { Effect, Tracer } from "effect";
+import { Effect, Layer, Tracer } from "effect";
 import { describe, expect, test } from "vite-plus/test";
 
 import { mcpCallObserver } from "./mcp-telemetry";
@@ -35,7 +35,13 @@ describe("a call to the MCP door", () => {
 
       const client = await connectInProcess(
         goussetServer,
-        { run: (effect) => Effect.runPromiseExit(Effect.provide(effect, FixtureLedger)), observe },
+        {
+          run: (effect) =>
+            Effect.runPromiseExit(
+              Effect.provide(effect, Layer.mergeAll(FixtureLedger, memoryAccountStore())),
+            ),
+          observe,
+        },
         { userId: "ada", canWrite: false },
         revision,
       );

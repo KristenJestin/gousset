@@ -1,10 +1,10 @@
-import { FixtureLedger, monthOverview } from "@gousset/core";
-import type { Ledger } from "@gousset/core";
+import { FixtureLedger, memoryAccountStore, monthOverview } from "@gousset/core";
 import { Effect, Exit, Layer } from "effect";
 import { TestClock } from "effect/testing";
 import { describe, expect, test } from "vite-plus/test";
 
 import { goussetServer } from "../gousset";
+import type { GoussetServices } from "../gousset";
 import { RESULT_LIMIT } from "../results";
 import { callText, connectInProcess } from "../test-client";
 import type { Runner } from "../tool";
@@ -12,14 +12,16 @@ import type { Runner } from "../tool";
 const TODAY = "2026-11-22";
 
 /** The made-up ledger, on a fixed day, as the app's runtime provides it. */
-function onDay(day: string): Runner<Ledger> {
+function onDay(day: string): Runner<GoussetServices> {
   return (effect) =>
     Effect.runPromiseExit(
       Effect.gen(function* () {
         yield* TestClock.setTime(Date.parse(`${day}T12:00:00Z`));
 
         return yield* effect;
-      }).pipe(Effect.provide(Layer.mergeAll(FixtureLedger, TestClock.layer()))),
+      }).pipe(
+        Effect.provide(Layer.mergeAll(FixtureLedger, memoryAccountStore(), TestClock.layer())),
+      ),
     );
 }
 

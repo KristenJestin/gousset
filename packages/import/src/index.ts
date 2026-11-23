@@ -10,6 +10,8 @@ export type { QifDateOrder, QifOptions, QifStatement } from "./qif";
 
 export type { DateOrder } from "./dates";
 
+export { minorDigits } from "./amount";
+
 export type { Balance, Statement, StatementLine } from "./statement";
 
 export {
