@@ -162,8 +162,8 @@ test("a created user must change their password", async ({ userPage, browser, ap
 
   // The confirmation's live region is there, empty, before the confirmation comes, so that a
   // screen reader announces it.
-  // In the page itself: the toaster keeps live regions of its own beside it.
-  const status = userPage.getByRole("main").locator('[role="status"]');
+  // In the creation form itself: the toaster and the users list keep live regions of their own.
+  const status = userPage.getByRole("main").locator("form").locator('[role="status"]');
 
   await expect(status).toHaveCount(1);
   await expect(status).toBeEmpty();
