@@ -8,6 +8,7 @@ import {
   ImportNotFound,
   Imports,
   UnknownFormat,
+  memoryAccountStore,
 } from "@gousset/core";
 import type { ImportAccount, ImportSummary, Started, Undone, Upload } from "@gousset/core";
 import { Effect, Fiber, Layer, Schema } from "effect";
@@ -135,13 +136,18 @@ function importsOf(state: Fake) {
   });
 }
 
-/** The app's runtime for these tests: the made-up ledger, and the fake imports. */
+/** The app's runtime for these tests: the made-up ledger, no accounts, and the fake imports. */
 function runnerOf(state: Fake): Runner<GoussetServices> {
   return (effect) =>
     Effect.runPromiseExit(
       Effect.provide(
         effect,
-        Layer.mergeAll(FixtureLedger, importsOf(state), Layer.mock(DataExport, {})),
+        Layer.mergeAll(
+          FixtureLedger,
+          memoryAccountStore(),
+          importsOf(state),
+          Layer.mock(DataExport, {}),
+        ),
       ),
     );
 }
@@ -162,6 +168,7 @@ function runnerWithTime(state: Fake): Runner<GoussetServices> {
         Effect.provide(
           Layer.mergeAll(
             FixtureLedger,
+            memoryAccountStore(),
             importsOf(state),
             Layer.mock(DataExport, {}),
             TestClock.layer(),

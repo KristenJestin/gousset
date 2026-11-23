@@ -24,6 +24,8 @@ export { CsvProfile } from "./csv-profile";
 
 export type { DateOrder } from "./dates";
 
+export { minorDigits } from "./amount";
+
 export type {
   Balance,
   Counterparty,
