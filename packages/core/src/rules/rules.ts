@@ -14,13 +14,15 @@ import type { SQL } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { Context, Effect, Option, Result, Schema } from "effect";
 
-import type { EntryKind, LineCategory } from "../category-store";
+import type { LineCategory } from "../category-store";
 import { takeCategoryTurn } from "../category-turn";
 import { CategoryNotFound } from "../errors";
 import { isId } from "../imports/rows";
 import { MerchantNotFound } from "../merchants/errors";
 import { Conditions, conditionRow, conditionsProblem, matcherOf } from "./conditions";
 import type { ConditionRow } from "./conditions";
+import { changes, firstApplying, targetOf } from "./effect";
+import type { EffectFacts, RuleEntry, RuleSets, RuleTarget } from "./effect";
 import { conditionsSql, unitsSql } from "./sql";
 import { RuleConditionsRefused, RuleEffectRefused, RuleNotFound, TooManyRules } from "./errors";
 import type { RuleJobUnavailable } from "./errors";
@@ -220,26 +222,6 @@ async function summaries(transaction: UserTransaction): Promise<ReadonlyArray<Ru
   });
 }
 
-/** An entry a rule may classify: one whole line's, with what it is now. */
-type RuleEntry = {
-  readonly id: string;
-  readonly kind: EntryKind;
-  readonly categoryId: string;
-  readonly merchantId: string | null;
-  readonly classifiedBy: "default" | "rule" | "user";
-  readonly ruleId: string | null;
-};
-
-/** The categories and merchants' defaults a rule's effect reads. */
-type EffectFacts = {
-  readonly categories: ReadonlyMap<
-    string,
-    { readonly kind: EntryKind; readonly archived: boolean }
-  >;
-  /** Each merchant's default category, when it has one. */
-  readonly defaults: ReadonlyMap<string, string>;
-};
-
 async function effectFacts(transaction: UserTransaction): Promise<EffectFacts> {
   const categories = await transaction
     .select({ id: category.id, kind: category.kind, archivedAt: category.archivedAt })
@@ -259,47 +241,6 @@ async function effectFacts(transaction: UserTransaction): Promise<EffectFacts> {
     ),
   };
 }
-
-/** What a rule makes of an entry: its category and merchant, or null when it does not apply. */
-function targetOf(
-  effect: Pick<RuleRow, "setMerchantId" | "setCategoryId">,
-  target: RuleEntry,
-  facts: EffectFacts,
-): { readonly categoryId: string; readonly merchantId: string | null } | null {
-  const usable = (categoryId: string) => {
-    const found = facts.categories.get(categoryId);
-
-    return found !== undefined && found.kind === target.kind && !found.archived;
-  };
-
-  if (effect.setCategoryId !== null) {
-    return usable(effect.setCategoryId)
-      ? { categoryId: effect.setCategoryId, merchantId: effect.setMerchantId ?? target.merchantId }
-      : null;
-  }
-
-  if (effect.setMerchantId === null) {
-    return null;
-  }
-
-  const fallback = facts.defaults.get(effect.setMerchantId);
-
-  return {
-    categoryId: fallback !== undefined && usable(fallback) ? fallback : target.categoryId,
-    merchantId: effect.setMerchantId,
-  };
-}
-
-/** Whether the entry would change: its category, merchant, or who classified it. */
-const changes = (
-  target: RuleEntry,
-  ruleId: string,
-  wanted: { readonly categoryId: string; readonly merchantId: string | null },
-) =>
-  target.categoryId !== wanted.categoryId ||
-  target.merchantId !== wanted.merchantId ||
-  target.classifiedBy !== "rule" ||
-  target.ruleId !== ruleId;
 
 /**
  * The lines as conditions read them, named as the fields are: `label`, `account`, `amount` (without
@@ -373,7 +314,7 @@ async function matchingEntries(
 /** A rule's effect on the entries `found`: those it applies to, and what each becomes. */
 function plan(
   ruleId: string,
-  effect: Pick<RuleRow, "setMerchantId" | "setCategoryId">,
+  effect: RuleSets,
   found: ReadonlyArray<RuleEntry>,
   facts: EffectFacts,
 ) {
@@ -388,7 +329,7 @@ async function reachOf(
   transaction: UserTransaction,
   ruleId: string,
   conditions: Conditions,
-  effect: Pick<RuleRow, "setMerchantId" | "setCategoryId">,
+  effect: RuleSets,
 ): Promise<RuleReach> {
   const planned = plan(
     ruleId,
@@ -413,7 +354,7 @@ async function writeEntries(
   ruleId: string,
   writes: ReadonlyArray<{
     readonly entry: RuleEntry;
-    readonly wanted: { readonly categoryId: string; readonly merchantId: string | null };
+    readonly wanted: RuleTarget;
   }>,
 ): Promise<void> {
   const groups = new Map<
@@ -473,7 +414,7 @@ export async function applyRulesToImport(
   const tried = rules.flatMap((row) => {
     const conditions = conditionsOf(row);
 
-    return Option.isNone(conditions) ? [] : [{ row, matches: matcherOf(conditions.value) }];
+    return Option.isNone(conditions) ? [] : [{ ...row, matches: matcherOf(conditions.value) }];
   });
 
   if (tried.length === 0) {
@@ -511,10 +452,7 @@ export async function applyRulesToImport(
     );
 
   const facts = await effectFacts(transaction);
-  const byRule = new Map<
-    string,
-    Array<{ entry: RuleEntry; wanted: { categoryId: string; merchantId: string | null } }>
-  >();
+  const byRule = new Map<string, Array<{ entry: RuleEntry; wanted: RuleTarget }>>();
 
   for (const line of lines) {
     // A whole line's only entry has one part, which both sides of the `or` name: any other part
@@ -533,21 +471,13 @@ export async function applyRulesToImport(
     };
 
     const row: ConditionRow = conditionRow(line);
+    const chosen = firstApplying(tried, (each) => each.matches(row), target, facts);
 
-    for (const each of tried) {
-      if (!each.matches(row)) {
-        continue;
-      }
+    if (chosen !== null) {
+      const writes = byRule.get(chosen.rule.id) ?? [];
 
-      const wanted = targetOf(each.row, target, facts);
-
-      if (wanted !== null) {
-        const writes = byRule.get(each.row.id) ?? [];
-
-        writes.push({ entry: target, wanted });
-        byRule.set(each.row.id, writes);
-        break;
-      }
+      writes.push({ entry: target, wanted: chosen.wanted });
+      byRule.set(chosen.rule.id, writes);
     }
   }
 

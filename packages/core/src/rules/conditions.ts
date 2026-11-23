@@ -150,6 +150,22 @@ function goesDownwards(each: Condition): boolean {
   }
 }
 
+/** Whether `day` (`YYYY-MM-DD`) is a day of the calendar: qnot reads 2026-02-30, Postgres does not. */
+const isCalendarDay = (day: string) =>
+  !Number.isNaN(Date.parse(`${day}T00:00:00Z`)) &&
+  new Date(`${day}T00:00:00Z`).toISOString().slice(0, 10) === day;
+
+/** Whether a date condition names a day that does not exist. */
+function namesNoDay(each: Condition): boolean {
+  if (each.field !== "date") {
+    return false;
+  }
+
+  return each.operator === "between"
+    ? !each.value.every(isCalendarDay)
+    : !isCalendarDay(each.value);
+}
+
 /** Why conditions were refused, and which one (its index) when one condition is the cause. */
 export type ConditionsProblem =
   | { readonly reason: "empty" | "too_many" }
@@ -158,8 +174,8 @@ export type ConditionsProblem =
 
 /**
  * What is wrong with conditions already decoded, against the user's accounts; null when nothing.
- * qnot checks each value for its field (an account the user has, a day of the month, a date that
- * exists); a range must also go upwards.
+ * qnot checks each value for its field (an account the user has, a day of the month); a date must
+ * also exist, and a range go upwards.
  */
 export function conditionsProblem(
   conditions: Conditions,
@@ -187,9 +203,9 @@ export function conditionsProblem(
       : { reason: "invalid", index };
   }
 
-  const backwards = conditions.children.findIndex(goesDownwards);
+  const wrong = conditions.children.findIndex((each) => goesDownwards(each) || namesNoDay(each));
 
-  return backwards === -1 ? null : { reason: "invalid", index: backwards };
+  return wrong === -1 ? null : { reason: "invalid", index: wrong };
 }
 
 /**
