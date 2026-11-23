@@ -37,6 +37,7 @@ const SHOTS: ReadonlyArray<Shot> = [
   { id: "overlays-dialog--default", open: "click" },
   { id: "overlays-sheet--default", open: "click" },
   { id: "feedback-toaster--failed" },
+  { id: "feedback-job-progress--running" },
   { id: "states-emptystate--in-a-block" },
   { id: "states-errorstate--beside-a-working-block" },
   { id: "layout-card--with-description" },
@@ -55,6 +56,10 @@ const SHOTS: ReadonlyArray<Shot> = [
   { id: "money-breakdown--loading" },
   { id: "charts-spending-chart--default" },
   { id: "charts-bar-chart--default" },
+  { id: "brand-brand--with-wordmark" },
+  { id: "layout-app-shell--desktop" },
+  { id: "layout-user-menu--default", open: "click" },
+  { id: "inputs-segmented-choice--default" },
 ];
 
 async function openPopup(page: Page, open: Shot["open"]) {

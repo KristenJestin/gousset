@@ -1,7 +1,9 @@
 import { startWorkerEnvironment } from "../src/app-server";
 import { hasUniqueIndex, hasUser } from "../src/database";
+import { openAccountMenu } from "../src/frame";
 import {
   SIGN_UP_PATH,
+  animationsDone,
   createUser,
   expect,
   expectAccessible,
@@ -33,13 +35,16 @@ test("the first visit creates the administrator", async ({ page, app }, testInfo
     await page.getByLabel("Password").fill("ada-password-e2e");
     await page.getByRole("button", { name: "Create the administrator" }).click();
 
-    await expect(
-      page.getByRole("heading", { level: 1, name: "Hello, Ada Example." }),
-    ).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1, name: "Monthly review" })).toBeVisible();
     // Only the administrator manages users.
-    await expect(page.getByRole("link", { name: "Users" })).toBeVisible();
+    const menu = await openAccountMenu(page, "Ada Example");
+
+    await expect(menu.getByRole("menuitem", { name: "Users" })).toBeVisible();
+    await page.keyboard.press("Escape");
     expect(await hasUser(fresh.database, "ada@example.com")).toBe(true);
 
+    // The menu fades out: axe would measure its items' contrast halfway.
+    await animationsDone(page);
     await expectAccessible(page);
 
     // The first setup is gone once the administrator exists.
@@ -194,11 +199,12 @@ test("a created user must change their password", async ({ userPage, browser, ap
     await page.getByLabel("New password").fill("robin-own-password-e2e");
     await page.getByRole("button", { name: "Change the password" }).click();
 
-    await expect(
-      page.getByRole("heading", { level: 1, name: "Hello, Robin Example." }),
-    ).toBeVisible();
+    await expect(page.getByRole("heading", { level: 1, name: "Monthly review" })).toBeVisible();
     // Not an administrator.
-    await expect(page.getByRole("link", { name: "Users" })).toHaveCount(0);
+    const menu = await openAccountMenu(page, "Robin Example");
+
+    await expect(menu.getByRole("menuitem", { name: "Users" })).toHaveCount(0);
+    await page.keyboard.press("Escape");
 
     expect(
       await signInStatus(app.baseURL, {
@@ -299,9 +305,7 @@ test("signing in goes to the app in one transition, with a session of 30 days", 
   await page.getByLabel("Password", { exact: true }).fill(secondUser.password);
   await page.getByRole("button", { name: "Sign in" }).click();
 
-  await expect(
-    page.getByRole("heading", { level: 1, name: `Hello, ${secondUser.name}.` }),
-  ).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: "Monthly review" })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.dataset.e2eNoReload)).toBe("yes");
 
   const session = (await page.context().cookies()).find((cookie) =>
@@ -314,6 +318,8 @@ test("signing in goes to the app in one transition, with a session of 30 days", 
   expect(session?.sameSite).toBe("Lax");
   expect(days).toBeGreaterThan(29.9);
   expect(days).toBeLessThanOrEqual(30);
+  // The review's blocks fade in: axe, at the end, would measure their contrast halfway.
+  await animationsDone(page);
 });
 
 test("form errors fade in and out, and do not move under reduced motion", async ({

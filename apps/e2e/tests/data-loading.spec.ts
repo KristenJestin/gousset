@@ -2,6 +2,7 @@ import { setTimeout as sleep } from "node:timers/promises";
 
 import type { Page } from "@playwright/test";
 
+import { openAccountMenu } from "../src/frame";
 import { SERVER_FUNCTIONS } from "../src/latency";
 import {
   SKELETON,
@@ -214,9 +215,11 @@ test("a block that failed shows the next month once the month changes", async ({
 
   await expect(spending.getByRole("alert")).toBeVisible({ timeout: 10_000 });
 
-  await page.getByRole("link", { name: "Previous month" }).click();
+  await page.getByRole("button", { name: "Previous month" }).click();
 
-  await expect(page.getByText("September 2026")).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByRole("group", { name: "Month" })).toContainText("September 2026", {
+    timeout: 10_000,
+  });
   await expect(spending).toContainText("Housing");
   await expect(spending.getByRole("alert")).toHaveCount(0);
   await animationsDone(page);
@@ -300,15 +303,15 @@ test("a user who signs in after another in the same tab never sees the other's d
   await page.evaluate(() => {
     document.documentElement.dataset.e2eNoReload = "yes";
   });
-  await page.getByRole("button", { name: "Sign out" }).click();
+  const menu = await openAccountMenu(page, user.name);
+
+  await menu.getByRole("menuitem", { name: "Sign out" }).click();
   await expect(page).toHaveURL(/\/sign-in$/);
   await page.getByLabel("E-mail").fill(secondUser.email);
   await page.getByLabel("Password", { exact: true }).fill(secondUser.password);
   await page.getByRole("button", { name: "Sign in" }).click();
 
-  await expect(
-    page.getByRole("heading", { level: 1, name: `Hello, ${secondUser.name}.` }),
-  ).toBeVisible();
+  await expect(page.getByRole("heading", { level: 1, name: "Monthly review" })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.dataset.e2eNoReload)).toBe("yes");
 
   // Their own July: every line still to review, not the first user's list.
@@ -327,29 +330,24 @@ test("changing month keeps the current data on screen while the next one loads",
   const october = await spending.textContent();
 
   await slowServerFunctions(page, LATENCY_MS);
-  await page.getByRole("link", { name: "Previous month" }).click();
+  const month = page.getByRole("group", { name: "Month" });
+
+  await month.getByRole("button", { name: "Previous month" }).click();
   await expect(page).toHaveURL(/month=2026-09/);
 
-  // September is on its way; October stays on screen, without a skeleton, and the links still
-  // lead from the month the header names.
+  // September is on its way; October stays on screen, without a skeleton, and the switcher still
+  // names the month shown.
   expect(await spending.textContent()).toBe(october);
-  await expect(page.getByText("October 2026")).toBeVisible();
-  await expect(page.getByRole("link", { name: "Previous month" })).toHaveAttribute(
-    "href",
-    /month=2026-09/,
-  );
-  await expect(page.getByRole("link", { name: "Next month" })).toHaveAttribute(
-    "href",
-    /month=2026-11/,
-  );
+  await expect(month).toContainText("October 2026");
 
-  await expect(page.getByText("September 2026")).toBeVisible({ timeout: 10_000 });
+  await expect(month).toContainText("September 2026", { timeout: 10_000 });
   expect(await spending.textContent()).not.toBe(october);
   expect((await counts()).skeletons).toBe(0);
 });
 
-test("a link preloads its route on hover and on focus", async ({ userPage: page }) => {
-  await visit(page, MONTH);
+/** Opens a screen without the review's data, and records the server functions asked after. */
+async function fromAccounts(page: Page) {
+  await visit(page, "/accounts");
 
   const asked: Array<string> = [];
 
@@ -359,12 +357,31 @@ test("a link preloads its route on hover and on focus", async ({ userPage: page 
     }
   });
 
-  await page.getByRole("link", { name: "Previous month" }).hover();
-  await expect.poll(() => asked.some((url) => url.includes("2026-09"))).toBe(true);
+  return asked;
+}
 
-  await page.getByRole("link", { name: "Next month" }).focus();
-  await expect.poll(() => asked.some((url) => url.includes("2026-11"))).toBe(true);
+test("a link preloads its route on hover and on focus", async ({ userPage: page }) => {
+  // The review opens on today's month, October.
+  await fixDay(page, "2026-10-31");
 
-  // Nothing was clicked: still October.
-  await expect(page).toHaveURL(/month=2026-10/);
+  const hovered = await fromAccounts(page);
+
+  await page.getByRole("link", { name: "Review" }).hover();
+  await expect.poll(() => hovered.some((url) => url.includes("2026-10"))).toBe(true);
+
+  const other = await page.context().newPage();
+
+  try {
+    await fixDay(other, "2026-10-31");
+
+    const focused = await fromAccounts(other);
+
+    await other.getByRole("link", { name: "Review" }).focus();
+    await expect.poll(() => focused.some((url) => url.includes("2026-10"))).toBe(true);
+  } finally {
+    await other.close();
+  }
+
+  // Nothing was clicked: still on the accounts.
+  await expect(page).toHaveURL(/\/accounts$/);
 });
