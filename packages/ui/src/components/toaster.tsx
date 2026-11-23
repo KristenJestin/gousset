@@ -14,6 +14,7 @@ import type { ReactNode } from "react";
 import { useUiMessages } from "../hooks/use-ui-messages";
 import { buttonClasses } from "../lib/button-classes";
 import { toaster } from "../lib/notify";
+import { floatingSurfaceClasses } from "../lib/overlay-classes";
 import { cn } from "../lib/utils";
 import { Icon } from "./icon";
 import { Loader } from "./loader";
@@ -92,7 +93,10 @@ function ToastCard({
 }) {
   return (
     <Toast
-      className="rounded-lg border bg-popover text-sm text-popover-foreground outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+      className={cn(
+        "rounded-lg text-sm outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
+        floatingSurfaceClasses,
+      )}
       // The toasts hidden behind a collapsed stack are out of reach until it expands.
       render={(props, state) => (
         <li {...props} inert={state.leaving || (!state.expanded && state.index > 0)} />

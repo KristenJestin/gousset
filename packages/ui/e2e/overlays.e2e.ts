@@ -1,4 +1,4 @@
-import type { Locator } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 import { expect, test } from "@playwright/test";
 
 const story = (title: string, name: string) => `/iframe.html?id=${title}--${name}&viewMode=story`;
@@ -532,4 +532,56 @@ test.describe("Sheet", () => {
     await page.emulateMedia({ reducedMotion: "reduce" });
     expect(await positions()).toBe(1);
   });
+});
+
+/** What a token resolves to on the page now, as the browser computes a colour. */
+async function resolveToken(page: Page, token: string) {
+  return page.evaluate((name) => {
+    const probe = document.createElement("span");
+
+    probe.style.color = `var(${name})`;
+    document.body.append(probe);
+
+    const color = getComputedStyle(probe).color;
+
+    probe.remove();
+
+    return color;
+  }, token);
+}
+
+test.describe("Floating surfaces", () => {
+  for (const scheme of ["light", "dark"] as const) {
+    test(`a menu and a select's list draw their own edge and a shadow, in ${scheme}`, async ({
+      page,
+    }) => {
+      await page.emulateMedia({ colorScheme: scheme });
+
+      const surfaces = [
+        {
+          url: story("overlays-menu", "default"),
+          trigger: page.getByRole("button", { name: "Actions on Greenmarket" }),
+          popup: page.getByRole("menu"),
+        },
+        {
+          url: story("forms-select", "in-a-card"),
+          trigger: page.getByRole("combobox", { name: "Category" }),
+          popup: page.locator('[data-slot="select-content"]'),
+        },
+      ];
+
+      for (const surface of surfaces) {
+        await page.goto(surface.url);
+        await surface.trigger.click();
+        await expect(surface.popup).toBeVisible();
+
+        const edge = await resolveToken(page, "--popover-border");
+
+        expect(edge).not.toBe(await resolveToken(page, "--border"));
+        await expect(surface.popup).toHaveCSS("border-top-width", "1px");
+        await expect(surface.popup).toHaveCSS("border-top-color", edge);
+        await expect(surface.popup).not.toHaveCSS("box-shadow", "none");
+      }
+    });
+  }
 });
