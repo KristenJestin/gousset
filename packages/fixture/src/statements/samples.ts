@@ -280,6 +280,68 @@ const ofxUnsigned = lf([
 ]);
 
 /**
+ * OFX 1.02, SGML, from a bank that writes every amount without its sign, with no line typed
+ * `DEBIT`: a cheque (`CHECK`) and a fee (`FEE`) say the money went out, a `CREDIT` and interest
+ * (`INT`) that it came in.
+ */
+const ofxUnsignedNoDebit = lf([
+  ...sgmlHeader("102"),
+  "<OFX>",
+  ...sgmlSignOn("20261130", "FRA"),
+  "<BANKMSGSRSV1>",
+  "<STMTTRNRS>",
+  "<TRNUID>1",
+  "<STATUS>",
+  "<CODE>0",
+  "<SEVERITY>INFO",
+  "</STATUS>",
+  "<STMTRS>",
+  "<CURDEF>EUR",
+  ...bankAccountSgml,
+  "<BANKTRANLIST>",
+  "<DTSTART>20261101",
+  "<DTEND>20261130",
+  "<STMTTRN>",
+  "<TRNTYPE>CREDIT",
+  "<DTPOSTED>20261102",
+  "<TRNAMT>1800.00",
+  "<FITID>EX2026110201",
+  "<NAME>VIR SEPA ACME SALAIRE",
+  "</STMTTRN>",
+  "<STMTTRN>",
+  "<TRNTYPE>CHECK",
+  "<DTPOSTED>20261109",
+  "<TRNAMT>45.00",
+  "<FITID>EX2026110901",
+  "<CHECKNUM>0000042",
+  "<NAME>CHEQUE 0000042",
+  "</STMTTRN>",
+  "<STMTTRN>",
+  "<TRNTYPE>INT",
+  "<DTPOSTED>20261130",
+  "<TRNAMT>1.25",
+  "<FITID>EX2026113001",
+  "<NAME>INTERETS",
+  "</STMTTRN>",
+  "<STMTTRN>",
+  "<TRNTYPE>FEE",
+  "<DTPOSTED>20261130",
+  "<TRNAMT>8.00",
+  "<FITID>EX2026113002",
+  "<NAME>COTISATION CARTE",
+  "</STMTTRN>",
+  "</BANKTRANLIST>",
+  "<LEDGERBAL>",
+  "<BALAMT>2500.00",
+  "<DTASOF>20261130",
+  "</LEDGERBAL>",
+  "</STMTRS>",
+  "</STMTTRNRS>",
+  "</BANKMSGSRSV1>",
+  "</OFX>",
+]);
+
+/**
  * QFX, a card's statement in US dollars as Quicken downloads it: OFX 1.02 SGML with Intuit's
  * `<INTU.BID>`, a card account (`CCSTMTRS`), dates at noon GMT, charges negative and a negative
  * ledger balance (what is owed).
@@ -455,6 +517,10 @@ export const statementSamples = {
   },
   ofxSgmlDates: { fileName: "ofx-sgml-dates.ofx", bytes: utf8.encode(ofxSgmlDates) },
   ofxUnsigned: { fileName: "ofx-unsigned.ofx", bytes: utf8.encode(ofxUnsigned) },
+  ofxUnsignedNoDebit: {
+    fileName: "ofx-unsigned-no-debit.ofx",
+    bytes: utf8.encode(ofxUnsignedNoDebit),
+  },
   qfxCreditCard: { fileName: "qfx-credit-card.qfx", bytes: utf8.encode(qfxCreditCard) },
   /** QIF, UTF-8, day first: the example statement as `writeQif` writes it. */
   qifDayFirst: { fileName: "qif-day-first.qif", bytes: utf8.encode(writeQif(exampleStatement)) },
