@@ -40,6 +40,25 @@ function Choosing({ limit }: { limit?: number }) {
   );
 }
 
+/** A row opens into its detail panel, and the panel closes back into its row. */
+function Opening() {
+  const [open, setOpen] = useState<string | null>(null);
+
+  return (
+    <div className="max-w-xl">
+      <Breakdown
+        rows={october}
+        limit={5}
+        onSelect={setOpen}
+        selectedId={open}
+        onClose={() => setOpen(null)}
+        benchmarkLabel="average"
+        detail={<p className="text-sm text-muted-foreground">What it cost, day by day.</p>}
+      />
+    </div>
+  );
+}
+
 /** Switches between this month and the one before: the bars grow, the amounts roll. */
 function SwitchingMonths() {
   const [current, setCurrent] = useState(true);
@@ -109,6 +128,9 @@ export const Empty: Story = { args: { rows: [] } };
 export const EmptyWithText: Story = {
   args: { rows: [], emptyText: "No subject this month. Tag a line to follow a project." },
 };
+
+/** A click opens the row into its detail: the row grows into the panel, the detail fades in. */
+export const OpeningADetail: Story = { render: () => <Opening /> };
 
 /** The month changes: the bars grow to their new lengths. */
 export const ChangingMonth: Story = { render: () => <SwitchingMonths /> };
