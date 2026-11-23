@@ -467,9 +467,15 @@ importers:
 
   packages/core:
     dependencies:
+      '@gousset/db':
+        specifier: workspace:*
+        version: link:../db
       '@gousset/fixture':
         specifier: workspace:*
         version: link:../fixture
+      drizzle-orm:
+        specifier: 'catalog:'
+        version: 1.0.0-rc.6(@opentelemetry/api@1.9.1)(@types/pg@8.23.1)(effect@4.1.5)(pg@8.23.1)(valibot@1.5.0(typescript@7.0.2))(zod@4.6.7)
       effect:
         specifier: 'catalog:'
         version: 4.1.5
@@ -477,6 +483,9 @@ importers:
       '@gousset/config':
         specifier: workspace:*
         version: link:../config
+      fast-check:
+        specifier: 'catalog:'
+        version: 4.10.3
       typescript:
         specifier: 'catalog:'
         version: 7.0.2
