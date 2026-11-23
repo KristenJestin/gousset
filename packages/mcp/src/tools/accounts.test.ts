@@ -3,6 +3,7 @@ import {
   FixtureLedger,
   ImportProfiles,
   Imports,
+  Merchants,
   memoryAccountStore,
   memoryId,
   memoryLineStore,
@@ -123,6 +124,7 @@ function onToday(rows: MemoryRows): Runner<GoussetServices> {
     Layer.mock(Imports, {}),
     Layer.mock(ImportProfiles, {}),
     Layer.mock(DataExport, {}),
+    Layer.mock(Merchants, {}),
     TestClock.layer(),
   );
 
@@ -524,6 +526,7 @@ describe("the accounts tool", () => {
       "accounts",
       "data",
       "lines",
+      "merchants",
     ]);
     expect(tool?.title).toBe("Accounts");
     expect(tool?.annotations).toEqual({

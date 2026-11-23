@@ -8,6 +8,7 @@ import {
   ImportNotFound,
   ImportProfiles,
   Imports,
+  Merchants,
   UnknownFormat,
   memoryAccountStore,
   memoryLineStore,
@@ -180,6 +181,7 @@ function runnerOf(state: Fake): Runner<GoussetServices> {
           importsOf(state),
           profilesOf(state),
           Layer.mock(DataExport, {}),
+          Layer.mock(Merchants, {}),
         ),
       ),
     );
@@ -206,6 +208,7 @@ function runnerWithTime(state: Fake): Runner<GoussetServices> {
             importsOf(state),
             profilesOf(state),
             Layer.mock(DataExport, {}),
+            Layer.mock(Merchants, {}),
             TestClock.layer(),
           ),
         ),

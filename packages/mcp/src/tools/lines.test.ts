@@ -3,6 +3,7 @@ import {
   FixtureLedger,
   ImportProfiles,
   Imports,
+  Merchants,
   memoryAccountStore,
   memoryId,
   memoryLineStore,
@@ -120,6 +121,7 @@ function onToday(rows: MemoryLineRows): Runner<GoussetServices> {
     Layer.mock(Imports, {}),
     Layer.mock(ImportProfiles, {}),
     Layer.mock(DataExport, {}),
+    Layer.mock(Merchants, {}),
     TestClock.layer(),
   );
 
@@ -460,7 +462,7 @@ describe("lines show", () => {
 });
 
 describe("the lines tool", () => {
-  test("only reads, and says so, last in the fixed order", async () => {
+  test("only reads, and says so, in the fixed order", async () => {
     const client = await connectInProcess(
       goussetServer,
       { run: onToday(ROWS) },
@@ -477,6 +479,7 @@ describe("the lines tool", () => {
       "accounts",
       "data",
       "lines",
+      "merchants",
     ]);
     expect(tool?.title).toBe("Lines");
     expect(tool?.annotations).toEqual({

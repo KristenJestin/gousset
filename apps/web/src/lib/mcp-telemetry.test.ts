@@ -3,6 +3,7 @@ import {
   FixtureLedger,
   ImportProfiles,
   Imports,
+  Merchants,
   memoryAccountStore,
   memoryLineStore,
 } from "@gousset/core";
@@ -55,6 +56,7 @@ describe("a call to the MCP door", () => {
                   Layer.mock(Imports, {}),
                   Layer.mock(ImportProfiles, {}),
                   Layer.mock(DataExport, {}),
+                  Layer.mock(Merchants, {}),
                 ),
               ),
             ),
