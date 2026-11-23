@@ -13,10 +13,16 @@ import {
   Merchants,
   Transfers,
   memoryAccountStore,
+  memoryCategory,
   memoryCategoryStore,
   memoryLineStore,
 } from "@gousset/core";
-import type { MerchantLine, MerchantSummary } from "@gousset/core";
+import type {
+  MemoryCategoryRows,
+  MerchantDefaultCategory,
+  MerchantLine,
+  MerchantSummary,
+} from "@gousset/core";
 import { Effect, Layer, Schema } from "effect";
 import { describe, expect, test } from "vite-plus/test";
 
@@ -38,6 +44,8 @@ type Store = {
   merchants: Array<StoredMerchant>;
   /** Each merchant's latest lines, by its id. */
   lines: Map<string, ReadonlyArray<MerchantLine>>;
+  /** Ada's categories, and her merchants' default categories, by owner. */
+  categories?: Map<string, MemoryCategoryRows>;
 };
 
 let made = 0;
@@ -58,17 +66,43 @@ function merchant(name: string, aliases: Array<string>): StoredMerchant {
   return { id: newId(), name, aliases };
 }
 
+/** Ada's categories, a few of the default set's, with Family archived. */
+function categoryRows(merchants: ReadonlyArray<StoredMerchant>): MemoryCategoryRows {
+  const groceries = memoryCategory("expense", "Groceries");
+
+  return {
+    categories: [
+      groceries,
+      memoryCategory("expense", "Bakery", { parentId: groceries.id }),
+      memoryCategory("expense", "Transport", { position: 1 }),
+      memoryCategory("expense", "Family", {
+        position: 2,
+        archivedAt: "2026-11-01T10:00:00.000Z",
+      }),
+      memoryCategory("expense", "Other", { position: 3, fallback: true }),
+      memoryCategory("income", "Salary"),
+      memoryCategory("income", "Other", { position: 1, fallback: true }),
+    ],
+    entries: [],
+    lines: [],
+    merchants: merchants.map((each) => ({ id: each.id, defaultCategoryId: null })),
+  };
+}
+
 /** Four made-up shops; Greenmarket under two cleaned labels, with two lines. */
 function store(): Store {
   const greenmarket = merchant("Greenmarket", ["GREENMARKET", "GREENMARKET RIVERTON"]);
 
+  const merchants = [
+    greenmarket,
+    merchant("Corner Cafe", ["CORNER CAFE"]),
+    merchant("Fuelstop", ["FUELSTOP"]),
+    merchant("Green Grocer", ["GREEN GROCER"]),
+  ];
+
   return {
-    merchants: [
-      greenmarket,
-      merchant("Corner Cafe", ["CORNER CAFE"]),
-      merchant("Fuelstop", ["FUELSTOP"]),
-      merchant("Green Grocer", ["GREEN GROCER"]),
-    ],
+    categories: new Map([[writer.userId, categoryRows(merchants)]]),
+    merchants,
     lines: new Map([
       [
         greenmarket.id,
@@ -98,6 +132,27 @@ const nameOf = (name: string) => {
     ? Effect.fail(new MerchantNameRefused({ reason: "too_long" }))
     : Effect.succeed(trimmed);
 };
+
+/** A merchant's default category, as the database reads it with the merchant. */
+function defaultOf(state: Store, merchantId: string): MerchantDefaultCategory | null {
+  const rows = state.categories?.get(writer.userId);
+  const chosen = rows?.merchants?.find((each) => each.id === merchantId)?.defaultCategoryId;
+  const category = rows?.categories.find((each) => each.id === chosen);
+
+  if (category === undefined) {
+    return null;
+  }
+
+  const parent = rows?.categories.find((each) => each.id === category.parentId);
+
+  return {
+    id: category.id,
+    name: category.name,
+    parentName: parent?.name ?? null,
+    kind: category.kind,
+    archived: category.archivedAt !== null,
+  };
+}
 
 /** `Merchants` over the store, as the database one answers. */
 function merchantsOf(state: Store) {
@@ -139,7 +194,7 @@ function merchantsOf(state: Store) {
       Effect.map(byId(merchantId), (found) => ({
         id: found.id,
         name: found.name,
-        defaultCategory: null,
+        defaultCategory: defaultOf(state, found.id),
         aliases: found.aliases.toSorted(),
         lines: state.lines.get(found.id) ?? [],
       })),
@@ -229,7 +284,7 @@ function runnerOf(state: Store): Runner<GoussetServices> {
     FixtureLedger,
     memoryAccountStore(),
     memoryLineStore(),
-    memoryCategoryStore(),
+    memoryCategoryStore(state.categories),
     // merchants never reaches the imports nor the export.
     Layer.mock(Imports, {}),
     Layer.mock(ImportProfiles, {}),
@@ -636,6 +691,151 @@ describe("merchants edit", () => {
     expect(isError).toBe(true);
     expect(text).toContain("Close names: Corner Cafe.");
     await expectValidExample(text);
+  });
+});
+
+describe("merchants edit with category", () => {
+  test("sets the merchant's default category, which show then gives", async () => {
+    const state = store();
+
+    const { text, isError } = await merchants(state, {
+      action: "edit",
+      merchant: "greenmarket",
+      category: "groceries > bakery",
+    });
+
+    expect(isError, text).toBe(false);
+    expect(text).toBe(
+      "Greenmarket's default category is now Groceries > Bakery (expense): the category its entries go in by default.",
+    );
+
+    const shown = await merchants(state, { action: "show", merchant: "Greenmarket" });
+
+    expect(shown.text).toContain("Default category: Groceries > Bakery (expense).");
+  });
+
+  test("an income category, and none to clear it", async () => {
+    const state = store();
+
+    const set = await merchants(state, {
+      action: "edit",
+      merchant: "Corner Cafe",
+      category: "Salary",
+    });
+
+    expect(set.text).toContain("is now Salary (income)");
+
+    const { text, isError } = await merchants(state, {
+      action: "edit",
+      merchant: "Corner Cafe",
+      category: "None",
+    });
+
+    expect(isError, text).toBe(false);
+    expect(text).toBe("Corner Cafe has no default category any more.");
+
+    const shown = await merchants(state, { action: "show", merchant: "Corner Cafe" });
+
+    expect(shown.text).toContain("No default category: edit with category sets one.");
+  });
+
+  test("an unknown category: the user's categories, and a call that answers", async () => {
+    const state = store();
+
+    const { text, isError } = await merchants(state, {
+      action: "edit",
+      merchant: "Fuelstop",
+      category: "Fuel",
+    });
+
+    expect(isError).toBe(true);
+    expect(text).toContain('No category of the user\'s is named "Fuel".');
+    expect(text).toContain("Groceries > Bakery");
+    expect(text).toContain('categories {"action":"list"}');
+    expect(text.length).toBeLessThan(ERROR_LIMIT);
+  });
+
+  test("a name an expense and an income category share: kind tells them apart", async () => {
+    const state = store();
+
+    const { text, isError } = await merchants(state, {
+      action: "edit",
+      merchant: "Fuelstop",
+      category: "Other",
+    });
+
+    expect(isError).toBe(true);
+    expect(text).toContain("Add kind, expense or income");
+
+    const example = await expectValidExample(text, state);
+
+    expect(example).toEqual({
+      action: "edit",
+      merchant: "Fuelstop",
+      category: "Other",
+      kind: "expense",
+    });
+  });
+
+  test("an archived category is refused, with the call that restores it", async () => {
+    const state = store();
+
+    const { text, isError } = await merchants(state, {
+      action: "edit",
+      merchant: "Fuelstop",
+      category: "Family",
+    });
+
+    expect(isError).toBe(true);
+    expect(text).toContain('"Family" is archived');
+    expect(text).toContain('categories {"action":"archive","category":"Family","restore":true}');
+
+    const shown = await merchants(state, { action: "show", merchant: "Fuelstop" });
+
+    expect(shown.text).toContain("No default category");
+  });
+
+  test("an archived default is shown as such", async () => {
+    const state = store();
+    const rows = state.categories?.get(writer.userId);
+    const family = rows?.categories.find((each) => each.name === "Family");
+    const fuelstop = state.merchants.find((each) => each.name === "Fuelstop");
+
+    if (rows !== undefined) {
+      rows.merchants = rows.merchants?.map((each) =>
+        each.id === fuelstop?.id ? { ...each, defaultCategoryId: family?.id ?? null } : each,
+      );
+    }
+
+    const { text } = await merchants(state, { action: "show", merchant: "Fuelstop" });
+
+    expect(text).toContain(
+      "Default category: Family (expense), archived: it can no longer be chosen; edit with category sets another.",
+    );
+  });
+
+  test("category goes alone", async () => {
+    const { text, isError } = await merchants(store(), {
+      action: "edit",
+      merchant: "Fuelstop",
+      name: "Fuel Stop",
+      category: "Transport",
+    });
+
+    expect(isError).toBe(true);
+    expect(text).toContain("one thing at a time");
+    await expectValidExample(text);
+  });
+
+  test("needs the write scope", async () => {
+    const { text, isError } = await merchants(
+      store(),
+      { action: "edit", merchant: "Fuelstop", category: "Transport" },
+      reader,
+    );
+
+    expect(isError).toBe(true);
+    expect(text).toContain("choose Read and write on Gousset's consent page");
   });
 });
 

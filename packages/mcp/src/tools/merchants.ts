@@ -4,10 +4,13 @@ import {
   MAX_MERCHANT_NAME,
   Merchants,
   listMerchants,
+  setMerchantDefaultCategory,
   showMerchant,
 } from "@gousset/core";
 import type {
   AliasMoved,
+  CategoryStore,
+  LineCategory,
   MerchantDetail,
   MerchantLine,
   MerchantPage,
@@ -18,6 +21,7 @@ import { Effect, Schema } from "effect";
 
 import { ToolRefusal, defineTool } from "../tool";
 import { amount, named } from "./accounts";
+import { namedCategory, pathText } from "./categories";
 
 /** The merchants `list` and `search` give when none are asked for, and the most. */
 const DEFAULT_MERCHANTS = 50;
@@ -26,7 +30,7 @@ const MAX_MERCHANTS = 100;
 const MerchantsInput = Schema.Struct({
   action: Schema.Literals(["list", "search", "show", "edit", "merge"]).annotate({
     description:
-      "list: every merchant by name. search: those whose name or a cleaned label contains text. show: one merchant, its cleaned labels and latest lines. edit: rename one, or move one of its cleaned labels to another merchant. merge: fold one merchant into another.",
+      "list: every merchant by name. search: those whose name or a cleaned label contains text. show: one merchant, its default category, cleaned labels and latest lines. edit: rename one, move one of its cleaned labels to another merchant, or set its default category. merge: fold one merchant into another.",
   }),
   text: Schema.optional(
     Schema.String.annotate({
@@ -65,6 +69,18 @@ const MerchantsInput = Schema.Struct({
   into: Schema.optional(
     Schema.String.annotate({ description: "merge: the name of the merchant kept." }),
   ),
+  category: Schema.optional(
+    Schema.String.annotate({
+      description:
+        'edit: the merchant\'s default category, by its name or "Parent > Child" as categories list writes it (any case); "none" clears it.',
+    }),
+  ),
+  kind: Schema.optional(
+    Schema.Literals(["expense", "income"]).annotate({
+      description:
+        'edit, with category: expense or income, when an expense and an income category share the name ("Other").',
+    }),
+  ),
 });
 
 type MerchantsInput = typeof MerchantsInput.Type;
@@ -80,11 +96,12 @@ Use it for "who is this shop?" or to tidy merchants up. Use \`lines\` instead fo
 Writes (need a connection allowed to read and write):
 - \`edit\` with \`name\`: renames; refused when another merchant has the name (merge instead).
 - \`edit\` with \`alias\` and \`to\`: moves one of the merchant's cleaned labels, and its lines, to the merchant named \`to\`, made when none has it: how a merchant is split.
-- \`merge\`: moves every cleaned label of \`merchant\` to \`into\`, then deletes \`merchant\`.
+- \`edit\` with \`category\`: sets the merchant's default category, the one its entries go in by default, expense or income, named as \`categories\` lists it ("Parent > Child" for a child; add \`kind\` when an expense and an income category share the name); "none" clears it. An archived or unknown category is refused. Merging categories moves it; archiving keeps it, shown archived.
+- \`merge\`: moves every cleaned label of \`merchant\` to \`into\`, then deletes \`merchant\`; \`into\` keeps its default category, or takes \`merchant\`'s when it has none.
 
 Names are any case. An unknown name is refused with close names; a blank name or one over ${MAX_MERCHANT_NAME} characters, a merge into itself, or a cleaned label the merchant lacks is refused with a valid call. \`limit\` is 1 to ${MAX_MERCHANTS}, ${DEFAULT_MERCHANTS} by default; when more remain, the result writes the next call with \`after\`: copy it.
 
-Examples: {"action":"search","text":"greenmarket"} · {"action":"edit","merchant":"Greenmarket","name":"Green Market"} · {"action":"edit","merchant":"Greenmarket","alias":"GREENMARKET FUEL","to":"Greenmarket Fuel"} · {"action":"merge","merchant":"Green Mkt","into":"Greenmarket"}`;
+Examples: {"action":"search","text":"greenmarket"} · {"action":"edit","merchant":"Greenmarket","name":"Green Market"} · {"action":"edit","merchant":"Greenmarket","alias":"GREENMARKET FUEL","to":"Greenmarket Fuel"} · {"action":"edit","merchant":"Greenmarket","category":"Groceries > Supermarket"} · {"action":"merge","merchant":"Green Mkt","into":"Greenmarket"}`;
 
 const call = (input: Encoded) => `merchants ${JSON.stringify(input)}`;
 
@@ -143,7 +160,23 @@ function lineText(line: MerchantLine): string {
   return `- ${line.bookedOn}, ${named(line.account)}: ${amount(line.amount)}, ${quoted(line.label)}`;
 }
 
-/** One merchant: its name, the cleaned labels that name it, its latest lines. */
+/** A category with its kind: "Groceries > Bakery (expense)". */
+const categoryText = (category: LineCategory) => `${pathText(category)} (${category.kind})`;
+
+/** The merchant's default category, archived or not, or how to set one. */
+function defaultText(detail: MerchantDetail): string {
+  const chosen = detail.defaultCategory;
+
+  if (chosen === null) {
+    return "No default category: edit with category sets one.";
+  }
+
+  return chosen.archived
+    ? `Default category: ${categoryText(chosen)}, archived: it can no longer be chosen; edit with category sets another.`
+    : `Default category: ${categoryText(chosen)}.`;
+}
+
+/** One merchant: its name, its default category, the cleaned labels that name it, its lines. */
 function showText(detail: MerchantDetail): string {
   const [first] = detail.aliases;
 
@@ -170,9 +203,11 @@ function showText(detail: MerchantDetail): string {
           `For every line of a cleaned label, search the lines: lines ${JSON.stringify({ action: "search", text: first })}`,
         ];
 
-  return [`Merchant: ${detail.name}.`, aliases.join("\n"), [...lines, ...more].join("\n")].join(
-    "\n\n",
-  );
+  return [
+    `Merchant: ${detail.name}.\n${defaultText(detail)}`,
+    aliases.join("\n"),
+    [...lines, ...more].join("\n"),
+  ].join("\n\n");
 }
 
 function renamedText(from: string, renamed: MerchantSummary): string {
@@ -329,8 +364,60 @@ function moveAlias(owner: string, merchant: string, alias: string, to: string) {
   );
 }
 
+/** "none", in any case: the default category cleared. */
+const NONE = "none";
+
+function setDefault(
+  owner: string,
+  merchant: string,
+  category: string,
+  kind: "expense" | "income" | undefined,
+) {
+  return Effect.gen(function* () {
+    const found = yield* merchantNamed(owner, merchant);
+
+    if (category.trim().toLowerCase() === NONE) {
+      yield* setMerchantDefaultCategory(owner, found.id, null);
+
+      return `${found.name} has no default category any more.`;
+    }
+
+    const chosen = yield* namedCategory(owner, category, kind, (name, of) =>
+      call({ action: "edit", merchant, category: name, kind: of }),
+    );
+
+    const set = yield* setMerchantDefaultCategory(owner, found.id, chosen.id);
+
+    return set === null
+      ? `${found.name} has no default category any more.`
+      : `${found.name}'s default category is now ${categoryText(set)}: the category its entries go in by default.`;
+  }).pipe(
+    Effect.catchTags({
+      // The one refusal a category in use never meets: it is archived.
+      CategoryRefused: () =>
+        Effect.fail(
+          new ToolRefusal({
+            message: `"${clip(category.trim())}" is archived: it can no longer be chosen. Choose a category in use, or restore it first.`,
+            example: `categories ${JSON.stringify({ action: "archive", category: category.trim(), restore: true })}`,
+          }),
+        ),
+      CategoryNotFound: () =>
+        refuse(`The category "${clip(category)}" is gone: it was just merged away.`, {
+          action: "edit",
+          merchant,
+          category: NONE,
+        }),
+      MerchantNotFound: () =>
+        refuse(`The merchant "${clip(merchant)}" is gone: it was just merged or split away.`, {
+          action: "list",
+        }),
+      QueryFailed: Effect.die,
+    }),
+  );
+}
+
 function edit(owner: string, input: MerchantsInput) {
-  const { merchant, name, alias, to } = input;
+  const { merchant, name, alias, to, category } = input;
 
   if (merchant === undefined || blank(merchant)) {
     return refuse(
@@ -339,11 +426,22 @@ function edit(owner: string, input: MerchantsInput) {
     );
   }
 
-  if (name !== undefined && (alias !== undefined || to !== undefined)) {
+  const asked = [name, alias ?? to, category].filter((each) => each !== undefined).length;
+
+  if (asked > 1) {
     return refuse(
-      "edit does one thing at a time: either name (a rename), or alias and to (a move). Make two calls.",
-      { action: "edit", merchant, name },
+      "edit does one thing at a time: either name (a rename), alias and to (a move), or category (its default category). Make one call for each.",
+      { action: "edit", merchant, name: name ?? merchant },
     );
+  }
+
+  if (category !== undefined) {
+    return blank(category)
+      ? refuse(
+          'category cannot be blank: name a category as categories list writes it, or "none" to clear it.',
+          { action: "edit", merchant, category: NONE },
+        )
+      : setDefault(owner, merchant, category, input.kind);
   }
 
   if (name !== undefined) {
@@ -369,7 +467,7 @@ function edit(owner: string, input: MerchantsInput) {
   }
 
   return refuse(
-    "edit needs either name, to rename the merchant, or alias and to, to move one of its cleaned labels (show lists them) to another merchant.",
+    "edit needs either name, to rename the merchant, alias and to, to move one of its cleaned labels (show lists them) to another merchant, or category, to set its default category.",
     { action: "show", merchant },
   );
 }
@@ -407,11 +505,12 @@ function merge(owner: string, input: MerchantsInput) {
 }
 
 /** The merchants family (docs/mcp.md, "Tools"): reads, and the user's edits and merges. */
-export const merchantsTool = defineTool<MerchantsInput, Encoded, Merchants>({
+export const merchantsTool = defineTool<MerchantsInput, Encoded, Merchants | CategoryStore>({
   name: "merchants",
   title: "Merchants",
   description: DESCRIPTION,
-  // A repeated rename, move or merge finds the work done, and changes nothing more.
+  // A repeated rename, move, merge or default category finds the work done, and changes nothing
+  // more.
   idempotent: true,
   input: MerchantsInput,
   example: { action: "search", text: "greenmarket" },

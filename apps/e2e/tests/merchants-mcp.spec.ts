@@ -217,4 +217,55 @@ test("the same shop under several labels becomes one merchant, which an MCP clie
   expect(itself.isError).toBe(true);
   expect(itself.text).toContain("never into itself");
   expect(itself.text).toContain('A valid call: merchants {"action":"search"');
+
+  // Its default category (#23): a category of the user's own, set, shown, kept archived, cleared.
+  const created = await callText(session.client, "categories", {
+    action: "create",
+    name: "Pantry runs",
+  });
+
+  expect(created.isError, created.text).toBe(false);
+
+  const set = await merchants({
+    action: "edit",
+    merchant: "Verdant Pantry Market",
+    category: "pantry runs",
+  });
+
+  expect(set.isError, set.text).toBe(false);
+  expect(set.text).toBe(
+    "Verdant Pantry Market's default category is now Pantry runs (expense): the category its entries go in by default.",
+  );
+
+  const withDefault = await merchants({ action: "show", merchant: "Verdant Pantry Market" });
+
+  expect(withDefault.text).toContain("Default category: Pantry runs (expense).");
+
+  const unknown = await merchants({
+    action: "edit",
+    merchant: "Verdant Pantry Market",
+    category: "Pantry trips",
+  });
+
+  expect(unknown.isError).toBe(true);
+  expect(unknown.text).toContain('No category of the user\'s is named "Pantry trips".');
+
+  const archived = await callText(session.client, "categories", {
+    action: "archive",
+    category: "Pantry runs",
+  });
+
+  expect(archived.isError, archived.text).toBe(false);
+
+  const keptArchived = await merchants({ action: "show", merchant: "Verdant Pantry Market" });
+
+  expect(keptArchived.text).toContain("Default category: Pantry runs (expense), archived");
+
+  const cleared = await merchants({
+    action: "edit",
+    merchant: "Verdant Pantry Market",
+    category: "none",
+  });
+
+  expect(cleared.text).toBe("Verdant Pantry Market has no default category any more.");
 });
