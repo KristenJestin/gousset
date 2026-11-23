@@ -37,6 +37,7 @@ function account(name: string, change: Partial<AccountRecord> = {}): AccountReco
     openedOn: null,
     closedOn: null,
     settlesIntoAccountId: null,
+    creditOrder: "oldest_first",
     ...change,
   };
 }
