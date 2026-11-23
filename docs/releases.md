@@ -193,20 +193,28 @@ review; it is never merged with the button, and GitHub shows it merged once `mai
 
 - **What it checks first**, reading only: it runs from `dev`; the commit is a full SHA or `dev`,
   and a commit of `dev`; `main`, when it exists, is its ancestor; something was committed since the
-  last release. Then, before writing anything, that `RELEASE_TOKEN` is set and that **the beta of
-  that commit was published** (`sha-<commit>`): a beta exists only once `verify` passed on its
+  last release. Then, before writing anything, that **the beta of that commit was published** (`sha-<commit>`): a beta exists only once `verify` passed on its
   push, so a release is never a commit no `verify` passed on, and is never built again. Any of these refused, nothing moves and the run fails,
   saying why.
-- **Then**, in this order: `main` moves forward to the commit through GitHub's API with
-  `RELEASE_TOKEN`, not forced (GitHub refuses anything but a fast-forward; before the first
-  release, `main` is made there);
+- **Then**, in this order: `main` moves forward to the commit through GitHub's API, not forced
+  (GitHub refuses anything but a fast-forward; before the first release, `main` is made there);
   the beta image is published again, unchanged, as `X.Y.Z` and `latest`; last, the GitHub release
   `vX.Y.Z`, marked latest, which makes the tag on that commit. Run again after a failure, it does
   what is left: the tag comes last, so the version is still the same. A version already published
   as another commit's image is refused, never replaced: a run again with `commit=dev` after `dev`
   moved on fails there, and is started again with the SHA of the commit first released.
-- The job that holds the tokens writing `main`, the tags and the images runs no code of any
-  branch: no checkout, only `gh` and `docker` on what the reading job decided.
+- **Everything is written with the workflow's own token** (`contents: write` for `main`, the
+  release and its tag, `packages: write` for the images): no secret, no environment. GitHub
+  refuses that token a `git push` that changes `.github/workflows`, not a ref moved through the API
+  to a commit already in the repository, so a release that carries a change of the workflows moves
+  `main` all the same.
+- The job that holds that token runs no code of any branch: no checkout, only `gh` and `docker` on
+  what the reading job decided.
+- **`main` runs no CI of its own after a release**, and the release starts none: a ref moved with
+  the workflow's token starts no workflow, and nothing is left to check. `main` is then a commit of
+  `dev`, the very one whose `verify` passed on its push (its beta exists only then), and GitHub
+  keeps a check by commit, not by branch; on `main`, `ci.yml` would run that same `verify` again
+  and nothing else, and `beta.yml` follows `dev` only.
 
 ## The notes
 
@@ -227,16 +235,10 @@ In the repository's settings, never in the repository:
 
 1. **The package is public.** The first beta creates `ghcr.io/kristenjestin/gousset` as a private
    package: in its settings, make it public, so that an installation pulls it without signing in.
-2. **The environment `release` and its secret `RELEASE_TOKEN`.** Create the environment before
-   the first release (Settings, Environments, New environment: `release`; a job naming one that
-   does not exist creates it unprotected). In it, *Deployment branches and tags*, *Selected
-   branches and tags*, and only `dev`. Then, as an *environment secret* (not a repository secret,
-   which any branch's workflow can read), `RELEASE_TOKEN`: a fine-grained personal access token
-   for this repository only, with the permissions **Contents: read and write** and **Workflows:
-   read and write**. Optionally, *Required reviewers* on the environment, to approve each release. `main` moves with it: GitHub refuses the workflow's
-   own token any push that changes `.github/workflows`, and its documentation does not say a ref
-   moved through the API is spared. Without the secret, the release fails at once, saying so,
-   before anything is written. If `main` has a ruleset or a branch protection, it lets this token
-   update it, by fast-forward only; nobody else pushes to it.
+2. **`main`'s ruleset blocks deletion and non-fast-forward, nothing more.** `main` moves only by
+   the release, with the workflow's own token, through the API, never by a pull request, to a
+   commit whose checks passed on `dev` and whose beta exists (which needs `verify`): the checks are
+   enforced on `dev`. A rule asking for a pull request or for status checks on `main` would refuse
+   the release. The release needs no secret and no environment.
 3. The beta follows the workflow named `ci` and its job named `verify`: renaming either means
    changing `beta.yml` with it.

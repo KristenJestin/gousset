@@ -1,6 +1,6 @@
 # Every pull request, and every push to dev and main, is verified here (issue #3). What reads a
 # pull request's title and description is in pull-request.yml, which runs again when they change.
-# Required on dev and main: verify, ui, e2e and react-doctor here, privacy there. ui and e2e also
+# Required on dev: verify, ui, e2e and react-doctor here, privacy there. ui and e2e also
 # run on each push to dev, so that what a merge breaks there shows at once. A pull request runs them
 # in Chromium on a desktop only; dev runs every browser and width, and a failure seen only there is
 # fixed at once.
