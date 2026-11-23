@@ -1,12 +1,22 @@
 # Every pull request, and every push to dev and to a next/x.y branch, is verified here (issue #3).
 # main runs no CI of its own: the release moves it with the workflow's token, which starts no run,
-# to a commit whose run here passed as a whole on its push to dev (docs/releases.md,
-# "Releasing"); a push to main by anyone else would run verify alone. What reads a pull request's
-# title and description is in pull-request.yml, which runs again when they change. Required on
-# dev: verify, ui, e2e and react-doctor here, privacy there. ui and e2e also run on each push to
-# dev and next/x.y, so that what a merge breaks there shows at once. A pull request runs them in
-# Chromium on a desktop only; dev and next/x.y run every browser and width, and a failure seen only
-# there is fixed at once.
+# to a commit of dev whose checks passed (docs/releases.md, "Releasing"); a push to main by anyone
+# else would run verify alone. What reads a pull request's title and description is in
+# pull-request.yml, which runs again when they change. Required on dev: verify, ui, e2e and
+# react-doctor here, privacy there.
+#
+# Fast by default, every browser where it pays (issue #115). A pull request and a push to dev or
+# next/x.y run ui and e2e in Chromium on a desktop; every browser and width runs on the release pull
+# request (dev -> main, whose run the release requires), each night on dev, by hand (Actions, "Run
+# workflow"), and on a pull request or push whose head commit carries the trailer line
+# `E2E-Matrix: full` (AGENTS.md, "Testing"). A failure seen only there is fixed at once. ui and e2e
+# are sharded, each shard on a runner of its own; `ui` and `e2e` are the checks that pass when every
+# shard did.
+#
+# The image is built once per commit, here (`image`), on each push to dev and next/x.y and on a pull
+# request that touches what it holds: checked as an installation, then tested as an update of the
+# last release (`upgrade`), then published as the beta of a push to dev (`beta`). The release takes
+# that very image by its commit.
 #
 # Actions are pinned by commit, the version beside it: a moved tag runs no new code here.
 name: ci
@@ -15,11 +25,17 @@ on:
   pull_request:
   push:
     branches: [dev, "next/**", main]
+  # Every browser and width on dev's head, each night.
+  schedule:
+    - cron: "17 3 * * *"
+  # Every browser and width, by hand, on any branch.
+  workflow_dispatch:
 
-# A new push makes the runs of the same pull request's older pushes useless. Not on dev, next/x.y
-# and main, whose runs always finish.
+# A new push makes the runs of the same pull request's older pushes useless. Elsewhere each commit
+# has a group of its own: GitHub cancels a pending run when another queues in its group, even
+# without cancel-in-progress, and the beta and the release need the run of each push to dev.
 concurrency:
-  group: ci-${{ github.event.pull_request.number || github.ref }}
+  group: ci-${{ github.event.pull_request.number || format('{0}-{1}-{2}', github.event_name, github.ref, github.sha) }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
@@ -27,8 +43,210 @@ permissions:
 
 env:
   NODE_VERSION: "26"
+  IMAGE: ghcr.io/kristenjestin/gousset
+  # Shards of the browser checks, each on its own runner, in Chromium and with every browser and
+  # width; Playwright splits the tests evenly between them (`--fully-parallel`). The numbers come
+  # from the timings of issue #115: a shard ends in two to three minutes.
+  E2E_SHARDS: "3"
+  E2E_FULL_SHARDS: "6"
+  UI_SHARDS: "2"
+  UI_FULL_SHARDS: "4"
 
 jobs:
+  # What this run checks: the browsers and widths, the shards, whether references are drawn and
+  # whether the image is built. Reads only.
+  plan:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # The files a pull request changes, for the image.
+      pull-requests: read
+    outputs:
+      browsers: ${{ steps.plan.outputs.browsers }}
+      trailer: ${{ steps.plan.outputs.trailer }}
+      draw: ${{ steps.plan.outputs.draw }}
+      image: ${{ steps.plan.outputs.image }}
+      e2e-scope: ${{ steps.plan.outputs.e2e-scope }}
+      e2e-total: ${{ steps.plan.outputs.e2e-total }}
+      e2e-shards: ${{ steps.plan.outputs.e2e-shards }}
+      ui-scope: ${{ steps.plan.outputs.ui-scope }}
+      ui-total: ${{ steps.plan.outputs.ui-total }}
+      ui-shards: ${{ steps.plan.outputs.ui-shards }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          persist-credentials: false
+      - name: Read the head commit's trailers, and the pull request's files
+        id: plan
+        env:
+          EVENT: ${{ github.event_name }}
+          REF: ${{ github.ref }}
+          BASE_REF: ${{ github.base_ref }}
+          HEAD_REF: ${{ github.head_ref }}
+          SAME_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
+          PULL_REQUEST: ${{ github.event.pull_request.number }}
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          message=$(git log -1 --format=%B)
+          # `E2E-Matrix: full`, a line of its own: every browser and width, and the Redact comparison.
+          trailer=false
+          if grep -qx 'E2E-Matrix: full' <<< "$message"; then trailer=true; fi
+          full=$trailer
+          case "$EVENT" in
+            schedule | workflow_dispatch) full=true ;;
+            # The release pull request: the release requires its run with every browser and width.
+            pull_request) if [ "$BASE_REF" = main ]; then full=true; fi ;;
+          esac
+          # `Update-Snapshots: missing`, a line of the body alone, on a pull request of a working
+          # branch of this repository (never dev, main, next/x.y nor the release's): ui draws the
+          # missing references in every browser (AGENTS.md, "Testing").
+          draw=false
+          case "$HEAD_REF" in
+            dev | main | next/*) working=false ;;
+            *) working=true ;;
+          esac
+          if [ "$EVENT" = pull_request ] && [ "$SAME_REPOSITORY" = true ] &&
+            [ "$working" = true ] && [ "$BASE_REF" != main ] &&
+            grep -qxF 'Update-Snapshots: missing' <<< "$(tail -n +2 <<< "$message")"; then
+            draw=true
+          fi
+          browsers=true
+          if [ "$EVENT" = push ] && [ "$REF" = refs/heads/main ]; then browsers=false; fi
+          # The image: every push to dev and next/x.y; a pull request (not the release's, whose
+          # commit is dev's, built on its push) when it touches what the image holds or checks.
+          image=false
+          if [ "$EVENT" = push ] && [ "$REF" != refs/heads/main ]; then image=true; fi
+          if [ "$EVENT" = pull_request ] && [ "$BASE_REF" != main ]; then
+            files=$(gh api --paginate "repos/$GH_REPO/pulls/$PULL_REQUEST/files?per_page=100" --jq '.[].filename')
+            while IFS= read -r file; do
+              case "$file" in
+                packages/db/* | packages/auth/* | Dockerfile | docker-compose*.yml | \
+                  tools/docker-entrypoint.sh | tools/check-image.sh | tools/check-upgrade.* | \
+                  .github/workflows/ci.yml)
+                  image=true ;;
+              esac
+            done <<< "$files"
+          fi
+          e2e_scope=chromium e2e_total=$E2E_SHARDS ui_scope=chromium ui_total=$UI_SHARDS
+          if [ "$full" = true ]; then e2e_scope=full e2e_total=$E2E_FULL_SHARDS; fi
+          if [ "$full" = true ] || [ "$draw" = true ]; then ui_scope=full ui_total=$UI_FULL_SHARDS; fi
+          shards() { echo "[$(seq -s , 1 "$1")]"; }
+          {
+            echo "browsers=$browsers"
+            echo "trailer=$trailer"
+            echo "draw=$draw"
+            echo "image=$image"
+            echo "e2e-scope=$e2e_scope"
+            echo "e2e-total=$e2e_total"
+            echo "e2e-shards=$(shards "$e2e_total")"
+            echo "ui-scope=$ui_scope"
+            echo "ui-total=$ui_total"
+            echo "ui-shards=$(shards "$ui_total")"
+          } | tee -a "$GITHUB_OUTPUT"
+
+  # First of the jobs after `plan`: the e2e shards are the longest, and when the account's runners
+  # are all taken, the jobs queued first are the first served.
+  #
+  # The end-to-end suite (apps/e2e), one shard: the chromium-desktop project, or every project
+  # (apps/e2e/playwright.config.ts) when `plan` says so. The job's name says its scope
+  # (`e2e full 3/6`): the release reads it.
+  e2e-shard:
+    name: e2e ${{ needs.plan.outputs.e2e-scope }} ${{ matrix.shard }}/${{ needs.plan.outputs.e2e-total }}
+    needs: plan
+    if: needs.plan.outputs.browsers == 'true'
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ${{ fromJSON(needs.plan.outputs.e2e-shards) }}
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: gousset
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      E2E_BROWSERS: ${{ needs.plan.outputs.e2e-scope == 'full' && 'chromium firefox' || 'chromium' }}
+      E2E_PROJECTS: ${{ needs.plan.outputs.e2e-scope != 'full' && '--project=chromium-desktop' || '' }}
+      SHARD: ${{ matrix.shard }}/${{ needs.plan.outputs.e2e-total }}
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/gousset
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: pnpm
+      - name: Install
+        run: pnpm install --frozen-lockfile
+      # The runner's image holds what both browsers need: no system package from apt, whose mirrors
+      # took up to five minutes (issue #115).
+      - name: Playwright's browsers
+        run: pnpm --dir apps/e2e exec playwright install $E2E_BROWSERS
+      # The suite runs the built app.
+      - name: Build
+        run: pnpm run build
+      - name: End-to-end tests, shard ${{ matrix.shard }}
+        # The configuration's two workers: four on a runner's four cores made no shard faster, and
+        # broke the tests that time a motion or a scroll in Firefox and at a phone's width.
+        run: pnpm e2e --shard=$SHARD $E2E_PROJECTS
+      - name: Keep the trace, video and screenshots
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: e2e-shard-${{ matrix.shard }}
+          path: |
+            apps/e2e/test-results
+            apps/e2e/playwright-report
+          if-no-files-found: ignore
+          retention-days: 14
+      # The films of the `motion-*` projects, which a run with every browser and width runs here in
+      # place of the `motion` job: kept whatever the result, as that job keeps them.
+      - name: Keep the motions' films
+        if: always() && needs.plan.outputs.e2e-scope == 'full'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: motion-recordings-shard-${{ matrix.shard }}
+          path: apps/e2e/test-results/**/*.webm
+          if-no-files-found: ignore
+          retention-days: 30
+      # The pictures a scenario takes on purpose (`testInfo.outputPath("screens", …)`), kept
+      # whatever the result: the screens shown in the pull request.
+      - name: Keep the screens' pictures
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: screens-shard-${{ matrix.shard }}
+          path: apps/e2e/test-results/**/screens/*.png
+          if-no-files-found: ignore
+          retention-days: 14
+
+  # The required check: one job named e2e that passes only when every shard passed, whatever the
+  # number of shards.
+  e2e:
+    if: always() && !(github.event_name == 'push' && github.ref == 'refs/heads/main')
+    needs: [plan, e2e-shard]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Every shard passed
+        env:
+          RESULT: ${{ needs.e2e-shard.result }}
+        run: |
+          echo "The shards: $RESULT"
+          [ "$RESULT" = success ]
+
   # Format, lint, types, unit tests, build, and React Doctor on the whole of apps/web and
   # packages/ui (doctor.config.ts), failing on an error.
   verify:
@@ -57,48 +275,27 @@ jobs:
           REACT_DOCTOR_NO_TELEMETRY: "1"
         run: pnpm exec react-doctor --no-telemetry --yes --blocking error
 
-  # Whether the browser checks cover every browser and width: always off a pull request; on a pull
-  # request only when its head commit carries the trailer line `E2E-Matrix: full` (AGENTS.md,
-  # "Testing"), as a pull request must before it merges when it touches what other browsers draw.
-  scope:
-    if: >-
-      github.event_name == 'pull_request' || github.ref == 'refs/heads/dev' ||
-      startsWith(github.ref, 'refs/heads/next/')
-    runs-on: ubuntu-latest
-    outputs:
-      full: ${{ steps.read.outputs.full }}
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          ref: ${{ github.event.pull_request.head.sha || github.sha }}
-          persist-credentials: false
-      - name: Read the head commit's trailer
-        id: read
-        env:
-          EVENT: ${{ github.event_name }}
-        run: |
-          if [ "$EVENT" != pull_request ] || git log -1 --format=%B | grep -qx 'E2E-Matrix: full'; then
-            echo "full=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "full=false" >> "$GITHUB_OUTPUT"
-          fi
-
-  # packages/ui's browser checks on Storybook (`pnpm test:ui`): Chromium, Firefox and a phone,
-  # screenshots compared, and the lint scenario. They run in the official Playwright image, the
-  # one tools/playwright-docker.sh renders the reference screenshots in, so both draw alike. Its
-  # version is @playwright/test's in packages/ui/package.json: they move together.
-  ui:
-    if: >-
-      github.event_name == 'pull_request' || github.ref == 'refs/heads/dev' ||
-      startsWith(github.ref, 'refs/heads/next/')
-    needs: scope
+  # packages/ui's browser checks on Storybook (`pnpm test:ui`), one shard: Chromium, Firefox and a
+  # phone, screenshots compared, and the lint scenario. They run in the official Playwright image,
+  # the one tools/playwright-docker.sh renders the reference screenshots in, so both draw alike. Its
+  # version is @playwright/test's in packages/ui/package.json: they move together. The job's name
+  # says its scope (`ui full 2/4`): the release reads it.
+  ui-shard:
+    name: ui ${{ needs.plan.outputs.ui-scope }} ${{ matrix.shard }}/${{ needs.plan.outputs.ui-total }}
+    needs: plan
+    if: needs.plan.outputs.browsers == 'true'
     runs-on: ubuntu-latest
     container:
       image: mcr.microsoft.com/playwright:v1.65.1-noble
       options: --ipc=host
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ${{ fromJSON(needs.plan.outputs.ui-shards) }}
     env:
       # Firefox refuses a home it does not own, which a runner's container gives it.
       HOME: /root
+      SCREENSHOTS: packages/ui/e2e/__screenshots__
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -110,110 +307,352 @@ jobs:
           cache: pnpm
       - name: Install
         run: pnpm install --frozen-lockfile
-      # A pull request runs Chromium and the lint scenario; dev, and a pull request whose head
-      # commit asks for it (`scope`), every project.
-      - name: Browser checks of packages/ui (Storybook)
+      # Chromium and the lint scenario, or every project (`plan`). A run that draws the missing
+      # references (`Update-Snapshots: missing`) writes them, and never changes an existing one.
+      - name: Browser checks of packages/ui (Storybook), shard ${{ matrix.shard }}
         env:
-          PROJECTS: ${{ needs.scope.outputs.full != 'true' && '--project=chromium --project=lint' || '' }}
-        run: pnpm --filter @gousset/ui test:e2e $PROJECTS
+          PROJECTS: ${{ needs.plan.outputs.ui-scope != 'full' && '--project=chromium --project=lint' || '' }}
+          SHARD: ${{ matrix.shard }}/${{ needs.plan.outputs.ui-total }}
+          UPDATE: ${{ needs.plan.outputs.draw == 'true' && '--update-snapshots=missing' || '' }}
+        run: pnpm --filter @gousset/ui test:e2e --fully-parallel --shard=$SHARD $PROJECTS $UPDATE
+      - name: Set the new references apart
+        id: drawn
+        if: always() && needs.plan.outputs.draw == 'true'
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          cd "$GITHUB_WORKSPACE"
+          mkdir -p "$RUNNER_TEMP/drawn"
+          git ls-files --others --exclude-standard -z -- "$SCREENSHOTS" |
+            xargs -0 -r cp --parents -t "$RUNNER_TEMP/drawn"
+          if [ -n "$(ls -A "$RUNNER_TEMP/drawn")" ]; then
+            echo "drawn=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "No missing reference in this shard."
+          fi
+      - if: always() && steps.drawn.outputs.drawn == 'true'
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: new-references-${{ matrix.shard }}
+          path: ${{ runner.temp }}/drawn
+          if-no-files-found: error
+          retention-days: 1
       - name: Keep the report and the screenshots
         if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: ui
+          name: ui-shard-${{ matrix.shard }}
           path: packages/ui/test-results
           if-no-files-found: ignore
           retention-days: 14
 
-  # The end-to-end suite (apps/e2e), sharded. Until the harness lands there is no `e2e` script,
-  # and each shard passes saying so. A pull request runs the chromium-desktop project only, dev
-  # (and a pull request whose head commit asks for it, `scope`) every project
-  # (apps/e2e/playwright.config.ts).
-  e2e-shard:
-    name: e2e shard ${{ matrix.shard }}
+  # Commits the references the shards drew to the pull request's branch. Holds the token that
+  # writes the branch, so it runs nothing of it: it checks the artifacts hold only new PNGs under
+  # packages/ui/e2e/__screenshots__, and commits them with Git's hooks off. A push made with
+  # GITHUB_TOKEN starts no new run: push a commit of your own afterwards to have `ui` compare
+  # against them.
+  references:
+    needs: [plan, ui-shard]
     if: >-
-      github.event_name == 'pull_request' || github.ref == 'refs/heads/dev' ||
-      startsWith(github.ref, 'refs/heads/next/')
-    needs: scope
+      always() && needs.plan.outputs.draw == 'true' &&
+      github.event.pull_request.head.repo.full_name == github.repository
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        shard: [1, 2]
-    services:
-      postgres:
-        image: postgres:18
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: gousset
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U postgres"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
+    permissions:
+      # The push of the new screenshots, and nothing else.
+      contents: write
+    outputs:
+      drawn: ${{ steps.check.outputs.drawn }}
     env:
-      E2E_BROWSERS: ${{ needs.scope.outputs.full == 'true' && 'chromium firefox' || 'chromium' }}
-      E2E_PROJECTS: ${{ needs.scope.outputs.full != 'true' && '--project=chromium-desktop' || '' }}
-      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/gousset
+      BRANCH: ${{ github.head_ref }}
+      SHA: ${{ github.event.pull_request.head.sha }}
+      SCREENSHOTS: packages/ui/e2e/__screenshots__
+    steps:
+      # The branch as it was drawn from; nothing of it runs here.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: new-references-*
+          merge-multiple: true
+          path: ${{ runner.temp }}/drawn
+      - name: Check the artifacts hold only new PNGs under the screenshots folder
+        id: check
+        run: |
+          mkdir -p "$RUNNER_TEMP/drawn"
+          cd "$RUNNER_TEMP/drawn"
+          if [ -n "$(find . ! -type f ! -type d)" ]; then
+            echo "::error::the artifacts hold something that is neither a file nor a folder"; exit 1
+          fi
+          find . -type f -print0 | while IFS= read -r -d '' file; do
+            path="${file#./}"
+            if ! printf '%s' "$path" |
+              grep -qxE "packages/ui/e2e/__screenshots__/[a-z0-9-]+/[A-Za-z0-9._-]+\.png"; then
+              echo "::error::not a reference screenshot: $path"; exit 1
+            fi
+            if [ "$(head -c 8 "$file" | od -An -tx1 | tr -d ' \n')" != 89504e470d0a1a0a ]; then
+              echo "::error::not a PNG: $path"; exit 1
+            fi
+            if [ -e "$GITHUB_WORKSPACE/$path" ]; then
+              echo "::error::already a reference, never replaced here: $path"; exit 1
+            fi
+          done
+          if [ -z "$(find . -type f)" ]; then
+            echo "No missing reference."
+          else
+            echo "drawn=true" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Commit and push them to the branch, if it has not moved
+        if: steps.check.outputs.drawn == 'true'
+        env:
+          TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          case "$BRANCH" in
+            "" | dev | main | next/* | refs/* | -* | */ | *..* | *[!A-Za-z0-9._/-]*)
+              echo "::error::references are committed to a working branch only, never '$BRANCH'"; exit 1 ;;
+          esac
+          now="$(git ls-remote --heads "https://github.com/${REPOSITORY}.git" "refs/heads/${BRANCH}" | cut -f1)"
+          if [ "$now" != "$SHA" ]; then
+            echo "::error::'$BRANCH' moved since the references were drawn; push again with the trailer"
+            exit 1
+          fi
+          cp -r "$RUNNER_TEMP/drawn/." .
+          git add -- "$SCREENSHOTS"
+          git -c core.hooksPath=/dev/null \
+            -c user.name="github-actions[bot]" \
+            -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -m "test(ui): add the missing reference screenshots"
+          git -c core.hooksPath=/dev/null push \
+            "https://x-access-token:${TOKEN}@github.com/${REPOSITORY}.git" "HEAD:refs/heads/${BRANCH}"
+
+  # The required check: one job named ui that passes only when every shard passed. A run that draws
+  # references never passes it: the next push compares against them.
+  ui:
+    if: always() && !(github.event_name == 'push' && github.ref == 'refs/heads/main')
+    needs: [plan, ui-shard, references]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Every shard passed, against references already committed
+        env:
+          RESULT: ${{ needs.ui-shard.result }}
+          DRAW: ${{ needs.plan.outputs.draw }}
+          DRAWN: ${{ needs.references.outputs.drawn }}
+        run: |
+          echo "The shards: $RESULT"
+          [ "$RESULT" = success ]
+          if [ "$DRAWN" = true ]; then
+            echo "::error::The missing references were drawn and committed to the branch: fetch them, check them, and push a commit of your own so that ui compares against them."
+            exit 1
+          fi
+          if [ "$DRAW" = true ]; then
+            echo "::error::This run was asked to draw the missing references (Update-Snapshots: missing) and committed none: push a commit without the trailer."
+            exit 1
+          fi
+
+  # The image of the commit (docs/releases.md, "The image"), built once and handed to `upgrade`
+  # and `beta` as the `image` artifact. The branch's code runs here, with a token that can only
+  # read. A pull request's and next/x.y's layers are kept in the Actions cache; a beta's are not.
+  image:
+    needs: plan
+    if: needs.plan.outputs.image == 'true'
+    runs-on: ubuntu-latest
+    outputs:
+      publish: ${{ steps.version.outputs.publish }}
+      version: ${{ steps.version.outputs.version }}
+      digest: ${{ steps.save.outputs.digest }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          # Every commit and tag: the beta's version counts from the last release.
+          fetch-depth: 0
           persist-credentials: false
-      - uses: pnpm/action-setup@73e46992e05b19abd31f2f3c20e0e7370d762115 # v6.1.1
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: ${{ env.NODE_VERSION }}
-          cache: pnpm
-      - name: Install
-        run: pnpm install --frozen-lockfile
-      - name: Is there a suite to run
-        id: harness
+
+      # Only a push to dev has a beta (docs/releases.md, "Betas").
+      - name: The beta's version
+        id: version
+        if: github.event_name == 'push' && github.ref == 'refs/heads/dev'
+        env:
+          SHA: ${{ github.sha }}
         run: |
-          if [ "$(node -p "Boolean(require('./package.json').scripts.e2e)")" != true ]; then
-            echo "::notice::No e2e script yet (the harness is its own ticket): nothing to run."
-            echo "present=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "present=true" >> "$GITHUB_OUTPUT"
+          status=0
+          version=$(tools/version.sh beta --at "$SHA") || status=$?
+          if [ "$status" -eq 3 ]; then
+            echo "::notice::$SHA is a release itself: it has no beta."
+            echo "publish=false" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
-      - name: Playwright's browsers
-        if: steps.harness.outputs.present == 'true'
-        run: pnpm --dir apps/e2e exec playwright install --with-deps $E2E_BROWSERS
-      # The suite runs the built app.
-      - name: Build
-        if: steps.harness.outputs.present == 'true'
-        run: pnpm run build
-      - name: End-to-end tests, shard ${{ matrix.shard }} of 2
-        if: steps.harness.outputs.present == 'true'
-        run: pnpm e2e --shard=${{ matrix.shard }}/2 $E2E_PROJECTS
-      - name: Keep the trace, video and screenshots
-        if: failure() && steps.harness.outputs.present == 'true'
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+          [ "$status" -eq 0 ] || exit "$status"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "publish=true" >> "$GITHUB_OUTPUT"
+          echo "::notice::The beta of $SHA is $version."
+
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+
+      - name: Build the image
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
-          name: e2e-shard-${{ matrix.shard }}
-          path: |
-            apps/e2e/test-results
-            apps/e2e/playwright-report
-          if-no-files-found: ignore
-          retention-days: 14
-      # The pictures a scenario takes on purpose (`testInfo.outputPath("screens", …)`), kept
-      # whatever the result: the screens shown in the pull request.
-      - name: Keep the screens' pictures
-        if: always() && steps.harness.outputs.present == 'true'
-        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+          context: .
+          load: true
+          tags: |
+            ${{ env.IMAGE }}:ci
+            ${{ steps.version.outputs.publish == 'true' && format('{0}:{1}', env.IMAGE, steps.version.outputs.version) || '' }}
+          build-args: ${{ steps.version.outputs.publish == 'true' && format('VERSION={0}', steps.version.outputs.version) || '' }}
+          labels: org.opencontainers.image.revision=${{ github.sha }}
+          # The layers of a pull request or of next/x.y come from the Actions cache; the beta's are
+          # built anew, so that no cached layer reaches a published image.
+          cache-from: ${{ steps.version.outputs.publish != 'true' && 'type=gha' || '' }}
+          cache-to: ${{ steps.version.outputs.publish != 'true' && 'type=gha,mode=max' || '' }}
+
+      - name: It installs, migrates and answers, as docker-compose.yml runs it
+        run: tools/check-image.sh ci
+
+      # Its digest goes to `beta` through the job's outputs: an artifact of the run can be replaced
+      # by another of its jobs, an output cannot.
+      - name: Save the image
+        id: save
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          tags=("$IMAGE:ci")
+          if [ -n "$VERSION" ]; then tags+=("$IMAGE:$VERSION"); fi
+          docker save --output "$RUNNER_TEMP/image.tar" "${tags[@]}"
+          echo "digest=$(sha256sum "$RUNNER_TEMP/image.tar" | cut -d ' ' -f 1)" >> "$GITHUB_OUTPUT"
+
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: screens-shard-${{ matrix.shard }}
-          path: apps/e2e/test-results/**/screens/*.png
-          if-no-files-found: ignore
-          retention-days: 14
+          name: image
+          path: ${{ runner.temp }}/image.tar
+          retention-days: 1
+
+  # Every commit is tested as an update of the last release (issue #102, docs/releases.md, "Every
+  # release is an upgrade"): the release's image, filled with invented data, then this commit's
+  # image in its place, as tools/check-upgrade.sh describes. The release reads this job by its name
+  # in the run of the commit's push to dev: renaming it means changing release.yml with it.
+  upgrade:
+    needs: [plan, image]
+    if: needs.plan.outputs.image == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The tags: the last release, its compose file and its migrations.
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: image
+          path: ${{ runner.temp }}/image
+
+      - name: Load the image
+        run: docker load --input "$RUNNER_TEMP/image/image.tar"
+
+      - name: The last release updates to it, losing and changing nothing
+        run: tools/check-upgrade.sh ci
+
+  # The beta of a push to dev (docs/releases.md, "Betas"), once verify passed and the image
+  # installs: ghcr.io/kristenjestin/gousset:X.Y.Z-beta.N, recorded as sha-<commit>, and the tag
+  # `beta` while the commit is still dev's head. Holds the token that writes the images: no
+  # checkout, no code of any branch, only `docker` and `gh` on the image `image` built.
+  beta:
+    needs: [verify, image]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/dev' && needs.image.outputs.publish == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      SHA: ${{ github.sha }}
+      VERSION: ${{ needs.image.outputs.version }}
+      DIGEST: ${{ needs.image.outputs.digest }}
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: image
+          path: ${{ runner.temp }}/image
+
+      - name: Load the image `image` saved, and no other
+        run: |
+          actual=$(sha256sum "$RUNNER_TEMP/image/image.tar" | cut -d ' ' -f 1)
+          if [ -z "$DIGEST" ] || [ "$actual" != "$DIGEST" ]; then
+            echo "::error::The image artifact is not the one the image job saved (${actual}, not ${DIGEST:-none}): nothing was published."
+            exit 1
+          fi
+          docker load --input "$RUNNER_TEMP/image/image.tar"
+
+      - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+
+      - name: Publish the beta
+        run: |
+          # The name comes from the branch's code: only a beta's name is ever written here.
+          if ! [[ $VERSION =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)-beta\.[1-9][0-9]*$ ]]; then
+            echo "::error::'$VERSION' is not a beta's version X.Y.Z-beta.N: nothing was published."
+            exit 1
+          fi
+          # The digest of a published image; exits 1 when it is not published, 2 when the registry
+          # cannot be read (never taken for "absent").
+          digest() {
+            local out
+            if out=$(docker buildx imagetools inspect "$1" --format '{{.Manifest.Digest}}' 2>&1); then
+              echo "$out"
+            elif [[ $out == *": not found"* ]]; then
+              return 1
+            else
+              echo "::error::$1 could not be read: $out" >&2
+              return 2
+            fi
+          }
+          # A carbon copy, not an index: the same digest as its source.
+          copy() { docker buildx imagetools create --prefer-index=false --tag "$2" "$1"; }
+          status=0
+          recorded=$(digest "$IMAGE:sha-$SHA") || status=$?
+          [ "$status" -ne 2 ] || exit 1
+          named_status=0
+          named=$(digest "$IMAGE:$VERSION") || named_status=$?
+          [ "$named_status" -ne 2 ] || exit 1
+          # sha-<commit> records the image of each commit: the release takes it by that name, and a
+          # version is reused only when it is that commit's image. A published version is never
+          # replaced.
+          if [ "$status" -eq 0 ]; then
+            if [ "$named_status" -eq 1 ]; then
+              copy "$IMAGE:sha-$SHA" "$IMAGE:$VERSION"
+            elif [ "$named" != "$recorded" ]; then
+              echo "::error::$IMAGE:$VERSION is another image than the one of $SHA: nothing was published."
+              exit 1
+            fi
+            echo "::notice::The image of $SHA is published already, as $VERSION."
+          elif [ "$named_status" -eq 0 ]; then
+            echo "::error::$IMAGE:$VERSION is published already, for another commit than $SHA: nothing was published."
+            exit 1
+          else
+            docker tag "$IMAGE:$VERSION" "$IMAGE:sha-$SHA"
+            docker push "$IMAGE:sha-$SHA"
+            docker push "$IMAGE:$VERSION"
+          fi
+          # `beta` follows dev's head: a push made since publishes its own.
+          head=$(gh api "repos/$GH_REPO/git/ref/heads/dev" --jq .object.sha)
+          if [ "$head" = "$SHA" ]; then
+            copy "$IMAGE:sha-$SHA" "$IMAGE:beta"
+            echo "::notice::$IMAGE:beta is $VERSION."
+          else
+            echo "::notice::dev moved on to $head: beta is left to its run."
+          fi
 
   # The monthly review's four motions filmed in Chromium, light and dark, desktop and phone (issue
   # #10): the `motion-*` projects of apps/e2e, whose every test records a video. The videos are
   # kept as the `motion-recordings` artifact of the run, whatever its result. Not a required check.
+  # Not in a run with every browser and width, whose e2e shards run the `motion-*` projects too and
+  # keep their videos as `motion-recordings-shard-<i>`.
   motion:
-    if: github.event_name == 'pull_request'
+    needs: plan
+    if: github.event_name == 'pull_request' && needs.plan.outputs.e2e-scope != 'full'
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -242,8 +681,9 @@ jobs:
           cache: pnpm
       - name: Install
         run: pnpm install --frozen-lockfile
+      # The runner's image holds what Chromium needs: no system package from apt (e2e-shard says why).
       - name: Playwright's browser
-        run: pnpm --dir apps/e2e exec playwright install --with-deps chromium
+        run: pnpm --dir apps/e2e exec playwright install chromium
       - name: Build
         run: pnpm run build
       - name: Film the motions
@@ -263,12 +703,13 @@ jobs:
   # its four motions and its chart among them, in Chromium and Firefox, on the app built on React and
   # on Redact (`GOUSSET_REDACT=1`), then the four motions filmed (Chromium). The report, the films
   # and a failure's trace are the `redact-<runtime>` artifacts. Not a required check: the app ships
-  # on React. It runs on a pull request whose head commit asks for every browser (`scope`), to
-  # compare again once Firefox runs the review (docs/architecture.md, "Redact").
+  # on React. It runs on a pull request whose head commit carries `E2E-Matrix: full` (`plan`), to
+  # compare again once Firefox runs the review (docs/architecture.md, "Redact"); not on the release
+  # pull request, which needs every browser but not this comparison.
   redact:
     name: redact (${{ matrix.runtime }})
-    if: github.event_name == 'pull_request' && needs.scope.outputs.full == 'true'
-    needs: scope
+    if: github.event_name == 'pull_request' && needs.plan.outputs.trailer == 'true'
+    needs: plan
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
@@ -302,8 +743,9 @@ jobs:
           cache: pnpm
       - name: Install
         run: pnpm install --frozen-lockfile
+      # No system package from apt (e2e-shard says why).
       - name: Playwright's browsers
-        run: pnpm --dir apps/e2e exec playwright install --with-deps chromium firefox
+        run: pnpm --dir apps/e2e exec playwright install chromium firefox
       - name: Build
         run: pnpm run build
       - name: The review's scenarios, Chromium and Firefox
@@ -325,22 +767,6 @@ jobs:
             apps/e2e/playwright-report
           if-no-files-found: warn
           retention-days: 14
-
-  # The required check: one job named e2e that passes only when every shard passed, whatever the
-  # number of shards.
-  e2e:
-    if: >-
-      always() && (github.event_name == 'pull_request' || github.ref == 'refs/heads/dev' ||
-      startsWith(github.ref, 'refs/heads/next/'))
-    needs: e2e-shard
-    runs-on: ubuntu-latest
-    steps:
-      - name: Every shard passed
-        env:
-          RESULT: ${{ needs.e2e-shard.result }}
-        run: |
-          echo "The shards: $RESULT"
-          [ "$RESULT" = success ]
 
   # React Doctor on what the pull request introduces, through its official Action: one summary
   # comment kept up to date and inline comments on the changed lines. An error fails the check; a
