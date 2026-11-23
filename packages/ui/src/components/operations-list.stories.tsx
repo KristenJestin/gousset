@@ -86,6 +86,41 @@ function Paging() {
   );
 }
 
+/** The first page of another search, as long as the last one's. */
+const SEARCHED_AGAIN: ReadonlyArray<OperationRow> = TEN_THOUSAND.slice(0, PAGE).map((row) => ({
+  ...row,
+  id: `again-${row.id}`,
+}));
+
+/**
+ * A new search whose first page is as long as the last one's: scrolled to its end, it asks for its
+ * own next page, as the last one did. The pages never come; the asks are counted.
+ */
+function NewSearch() {
+  const [again, setAgain] = useState(false);
+  const [asked, setAsked] = useState(0);
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex items-center gap-3">
+        <Button variant="secondary" size="sm" onClick={() => setAgain(!again)}>
+          Search again
+        </Button>
+        <output>Next page asked {asked} times</output>
+      </div>
+      <Frame>
+        <OperationsList
+          rows={again ? SEARCHED_AGAIN : TEN_THOUSAND.slice(0, PAGE)}
+          total={TEN_THOUSAND.length}
+          onEnd={() => setAsked((count) => count + 1)}
+          onOpen={() => undefined}
+          label="Operations"
+        />
+      </Frame>
+    </div>
+  );
+}
+
 /**
  * Every statement line, newest first (screen 2, block 2): its day, its raw label with a "To
  * review" chip on a held line, its account (from a tablet's width) and its amount, in tabular
@@ -134,6 +169,9 @@ export const ChangingRows: Story = { render: () => <Filtering /> };
 
 /** The next page loads near the end, said by a line under the rows. */
 export const LoadingMore: Story = { render: () => <Paging /> };
+
+/** A new search as long as the last one asks for its next page too. */
+export const SearchingAgain: Story = { render: () => <NewSearch /> };
 
 /** The line under the rows while the next page loads. */
 export const LoadingMoreLine: Story = {

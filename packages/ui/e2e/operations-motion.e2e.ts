@@ -168,6 +168,33 @@ test.describe("Operations list", () => {
     // A few dozen rows in the page out of ten thousand.
     expect(await page.locator(ROW).count()).toBeLessThan(60);
   });
+
+  test("a new search as long as the last one asks for its next page at its end", async ({
+    page,
+  }) => {
+    await page.goto(story("operationslist", "searching-again"));
+    await expect(page.locator(ROW).first()).toBeVisible();
+
+    const scroller = page.locator('[data-slot="operations-scroller"]');
+    const asked = page.locator("output");
+
+    const toEnd = () =>
+      scroller.evaluate((element) => {
+        element.scrollTop = element.scrollHeight;
+      });
+
+    await expect(asked).toHaveText("Next page asked 0 times");
+    await toEnd();
+    await expect(asked).toHaveText("Next page asked 1 times");
+
+    // As many rows, other lines: back to the top, then down to the end again.
+    await page.getByRole("button", { name: "Search again" }).click();
+    await scroller.evaluate((element) => {
+      element.scrollTop = 0;
+    });
+    await toEnd();
+    await expect(asked).toHaveText("Next page asked 2 times");
+  });
 });
 
 test.describe("Line detail", () => {

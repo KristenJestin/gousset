@@ -9,6 +9,7 @@ import { usePageLanguage } from "../hooks/use-page-language";
 import { useUiMessages } from "../hooks/use-ui-messages";
 import type { Money } from "../lib/money";
 import { transition } from "../lib/motion";
+import { asksNextPage, rowsMark } from "../lib/next-page";
 import { operationLayoutId } from "../lib/operations";
 import { cn } from "../lib/utils";
 import { Amount, AmountSkeleton } from "./amount";
@@ -68,7 +69,7 @@ const ROW_MOTION = {
     fading ? { opacity: 0 } : { opacity: 0, transition: { duration: 0 } },
 } satisfies Variants;
 
-type Followed = Pick<OperationsListProps, "rows" | "openId" | "onEnd">;
+type Followed = Pick<OperationsListProps, "rows" | "total" | "openId" | "onEnd">;
 
 /**
  * The virtualiser and what it reads when it runs, outside React's render: the latest rows, the
@@ -77,20 +78,40 @@ type Followed = Pick<OperationsListProps, "rows" | "openId" | "onEnd">;
 function rowWindow(first: Followed) {
   let props = first;
   let focusedId: string | null = null;
+  // The rows the list last asked the next page for (`rowsMark`).
+  let askedFor: string | null = null;
   const none: Array<VirtualItem> = [];
 
   const indexOf = (id: string | null | undefined) =>
     id === null || id === undefined ? -1 : props.rows.findIndex((row) => row.id === id);
 
+  // The open line and the focused one stay in the page wherever the list is scrolled: the detail
+  // folds back into its row, and the focus never falls to the page.
+  const kept = () => [indexOf(props.openId), indexOf(focusedId)].filter((index) => index >= 0);
+
+  // Not the virtualiser's `onEnd`, which asks once per row count for good: the list's rows are
+  // replaced, not only lengthened, and a new search with as many rows must ask again
+  // (`asksNextPage`). The list stays mounted across searches so that its rows slide.
   const virtual = createVirtualizer({
     count: () => props.rows.length,
     estimate: () => ROW_HEIGHT,
     key: (index) => props.rows[index]?.id ?? String(index),
-    // The open line and the focused one stay in the page wherever the list is scrolled: the
-    // detail folds back into its row, and the focus never falls to the page.
-    keep: () => [indexOf(props.openId), indexOf(focusedId)].filter((index) => index >= 0),
-    onEnd: () => props.onEnd?.(),
+    keep: kept,
   });
+
+  const askIfNearEnd = () => {
+    const keep = new Set(kept());
+    const lastShown = virtual.items().findLast((item) => !keep.has(item.index))?.index ?? -1;
+    const mark = rowsMark(props.rows, props.total);
+
+    if (asksNextPage(lastShown, props.rows.length, mark, askedFor)) {
+      askedFor = mark;
+      // Out of the virtualiser's update and React's commit, as the virtualiser's own does.
+      queueMicrotask(() => props.onEnd?.());
+    }
+  };
+
+  virtual.subscribe(askIfNearEnd);
 
   return {
     virtual,
@@ -98,9 +119,17 @@ function rowWindow(first: Followed) {
     items: () => virtual.items(),
     /** On the server and while hydrating: the list is drawn in the flow, not by the window. */
     none: () => none,
+    connect: (scroller: HTMLElement) => {
+      const disconnect = virtual.connect(scroller);
+
+      askIfNearEnd();
+
+      return disconnect;
+    },
     follow: (next: Followed) => {
       props = next;
       virtual.refresh();
+      askIfNearEnd();
     },
     focus: (id: string | null) => {
       focusedId = id;
@@ -153,7 +182,7 @@ export function OperationsList({
   const box = useRef<HTMLUListElement>(null);
   const buttons = useRef(new Map<string, HTMLButtonElement>());
   const lastOpen = useRef<string | undefined>(undefined);
-  const [shown] = useState(() => rowWindow({ rows, openId, onEnd }));
+  const [shown] = useState(() => rowWindow({ rows, total, openId, onEnd }));
   const virtual = shown.virtual;
   const items = useSyncExternalStore(shown.subscribe, shown.items, shown.none);
 
@@ -171,7 +200,7 @@ export function OperationsList({
   const fading = change.before !== null;
 
   useLayoutEffect(() => {
-    shown.follow({ rows, openId, onEnd });
+    shown.follow({ rows, total, openId, onEnd });
 
     if (box.current !== null) {
       box.current.style.height = `${virtual.size()}px`;
@@ -183,8 +212,8 @@ export function OperationsList({
       return;
     }
 
-    return virtual.connect(scroller.current);
-  }, [hydrated, virtual]);
+    return shown.connect(scroller.current);
+  }, [hydrated, shown]);
 
   // Opening a line brings its row into view (once: a page loaded later leaves the scroll alone);
   // closing gives the focus back to it.
