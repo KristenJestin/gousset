@@ -11,8 +11,9 @@ import { useState } from "react";
 import type { FormEvent } from "react";
 
 import { createUser, listUsers } from "@/functions/users";
-import { errorMessage } from "@/i18n/messages";
-import { formText } from "@/lib/form";
+import { passwordRules, refusalMessage, refusalOf } from "@/i18n/messages";
+import type { Refusal } from "@/i18n/messages";
+import { emptyPasswords, formText } from "@/lib/form";
 import { whileBusy } from "@/lib/while-busy";
 
 /**
@@ -33,7 +34,7 @@ export const Route = createFileRoute("/_authed/settings/users")({
 function Users() {
   const router = useRouter();
   const users = Route.useLoaderData();
-  const [error, setError] = useState<string>();
+  const [refusal, setRefusal] = useState<Refusal>();
   const [created, setCreated] = useState<string>();
   const [busy, setBusy] = useState(false);
 
@@ -55,12 +56,13 @@ function Users() {
 
     if (!result.created) {
       setCreated(undefined);
-      setError(errorMessage(result.code));
+      setRefusal(refusalOf(result.code));
+      emptyPasswords(formElement, ["password"]);
 
       return;
     }
 
-    setError(undefined);
+    setRefusal(undefined);
     setCreated(m.usersCreated({ name: result.name }));
     formElement.reset();
     await router.invalidate();
@@ -84,18 +86,26 @@ function Users() {
         </List>
       </Block>
       <Block title={m.usersCreateTitle()} description={m.usersCreateDescription()}>
-        <Form onSubmit={(event) => void submit(event)} onInput={() => setError(undefined)}>
+        <Form onSubmit={(event) => void submit(event)} onInput={() => setRefusal(undefined)}>
           <TextField label={m.fieldName()} name="name" autoComplete="off" required />
-          <TextField label={m.fieldEmail()} name="email" type="email" autoComplete="off" required />
+          <TextField
+            label={m.fieldEmail()}
+            name="email"
+            type="email"
+            autoComplete="off"
+            required
+            error={refusalMessage(refusal, "email")}
+          />
           <TextField
             label={m.fieldTemporaryPassword()}
             name="password"
             type="text"
             autoComplete="off"
-            minLength={8}
             required
+            description={passwordRules()}
+            error={refusalMessage(refusal, "password")}
           />
-          <FormMessage message={error} />
+          <FormMessage message={refusalMessage(refusal, undefined)} />
           <StatusMessage message={created} />
           <Actions>
             <Button type="submit" loading={busy}>

@@ -4,6 +4,7 @@ import { mcp } from "@better-auth/mcp";
 import type { Database } from "@gousset/db";
 import { tables } from "@gousset/db/schema/index";
 import { betterAuth } from "better-auth";
+import { BASE_ERROR_CODES } from "@better-auth/core/error";
 import { APIError, createAuthMiddleware, getSessionFromCtx, isAPIError } from "better-auth/api";
 import { admin, jwt } from "better-auth/plugins";
 import { tanstackStartCookies } from "better-auth/tanstack-start";
@@ -16,6 +17,7 @@ import { CLIENT_ADDRESS_HEADER } from "./client-address";
 import { CONSENT_PATH, ISSUED_AT_MS_CLAIM, McpScope, SIGN_IN_PATH, mcpResourceOf } from "./mcp";
 import { alignTokensWithConsents, currentGrant, revokeAllClients } from "./mcp-door";
 import { isMetadataDocumentClient, redirectBoundToClient, withReadForWrite } from "./mcp-guards";
+import { PASSWORD_LENGTH } from "./password";
 
 export { guardAttempt } from "./attempt-guard";
 
@@ -45,6 +47,9 @@ const SESSION_DAYS = 30;
 const passwordsOf = Schema.decodeUnknownOption(
   Schema.Struct({ currentPassword: Schema.String, newPassword: Schema.String }),
 );
+
+/** The temporary password the administrator gives a new user. */
+const newUserPasswordOf = Schema.decodeUnknownOption(Schema.Struct({ password: Schema.String }));
 
 /** What the authorize endpoint's guard reads of its query. */
 const authorizeQueryOf = Schema.decodeUnknownOption(
@@ -106,7 +111,11 @@ export function createAuth(env: AuthConfig, database: Database) {
     trustedOrigins: [env.BETTER_AUTH_URL],
     secret: env.BETTER_AUTH_SECRET,
     baseURL: env.BETTER_AUTH_URL,
-    emailAndPassword: { enabled: true },
+    emailAndPassword: {
+      enabled: true,
+      minPasswordLength: PASSWORD_LENGTH.min,
+      maxPasswordLength: PASSWORD_LENGTH.max,
+    },
     user: {
       modelName: "authUser",
       additionalFields: {
@@ -215,8 +224,26 @@ export function createAuth(env: AuthConfig, database: Database) {
           }
         }
 
+        // The admin plugin checks only the maximum of a new user's password: the minimum too.
+        if (ctx.path === "/admin/create-user") {
+          const created = newUserPasswordOf(ctx.body);
+
+          if (Option.isSome(created) && created.value.password.length < PASSWORD_LENGTH.min) {
+            throw APIError.from("BAD_REQUEST", BASE_ERROR_CODES.PASSWORD_TOO_SHORT);
+          }
+        }
+
         if (ctx.path === "/change-password") {
           const passwords = passwordsOf(ctx.body);
+
+          // No password longer than the maximum exists: a current one that long is wrong, and said
+          // so under its own field. better-auth answers it with the new password's "too long".
+          if (
+            Option.isSome(passwords) &&
+            passwords.value.currentPassword.length > PASSWORD_LENGTH.max
+          ) {
+            throw APIError.from("BAD_REQUEST", BASE_ERROR_CODES.INVALID_PASSWORD);
+          }
 
           if (
             Option.isSome(passwords) &&
