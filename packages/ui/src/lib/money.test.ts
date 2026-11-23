@@ -30,10 +30,16 @@ const currencies = fc.constantFrom("EUR", "USD", "JPY", "KWD", "GBP", "CHF");
 const locales = fc.constantFrom("en", "fr", "de", "en-GB", "fr-CH");
 
 describe("minor units", () => {
-  it("reads each currency's own minor units from Intl", () => {
+  it("reads each currency's own minor units from ISO 4217", () => {
     expect(minorDigits("EUR")).toBe(2);
     expect(minorDigits("JPY")).toBe(0);
     expect(minorDigits("KWD")).toBe(3);
+  });
+
+  it("never throws for a malformed or unknown currency: two digits by default", () => {
+    expect(minorDigits("")).toBe(2);
+    expect(minorDigits("U")).toBe(2);
+    expect(minorDigits("US")).toBe(2);
   });
 
   it("writes minor units as an exact decimal", () => {
@@ -43,6 +49,11 @@ describe("minor units", () => {
     expect(toDecimalString(1234, 0)).toBe("1234");
     expect(toDecimalString(-0, 2)).toBe("0.00");
     expect(toDecimalString(Number.MAX_SAFE_INTEGER, 2)).toBe("90071992547409.91");
+  });
+
+  it("never throws formatting a malformed currency: shown with no currency rather than lost", () => {
+    expect(() => formatMoney({ minor: 1234, currency: "" }, { locale: "en" })).not.toThrow();
+    expect(() => formatMoney({ minor: 1234, currency: "US" }, { locale: "en" })).not.toThrow();
   });
 
   it("refuses a minor amount that is not a safe integer", () => {

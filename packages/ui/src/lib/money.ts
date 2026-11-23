@@ -1,3 +1,7 @@
+import { minorDigits } from "@gousset/currency";
+
+export { CURRENCY_CODES, minorDigits } from "@gousset/currency";
+
 // Money as Gousset holds it: an integer of the currency's minor units, with its currency, never a
 // float. This file turns it into text for a locale, compares it to a reference, and lays out the
 // bars that show it. Pure functions; the components in `components/` draw what they return.
@@ -43,16 +47,14 @@ function cached(locale: string, options: Intl.NumberFormatOptions) {
   return created;
 }
 
-/** How many minor units the currency has, as Intl knows it: EUR 2, JPY 0, KWD 3. */
-export function minorDigits(currency: string): number {
-  const digits = cached("en", { style: "currency", currency }).resolvedOptions()
-    .maximumFractionDigits;
-
-  if (digits === undefined) {
-    throw new RangeError(`Intl gives no minor units for ${currency}.`);
-  }
-
-  return digits;
+/**
+ * A currency as Intl's `style: "currency"` takes it: three letters, or the constructor throws
+ * (`""`, `"U"`, `"US"`). Never what the form's `Combobox` sends (`CURRENCY_CODES`), but a stray
+ * value (bad data, an account from before #15) falls back to `XXX`, ISO 4217's own "no currency",
+ * so it is shown plainly rather than losing the page.
+ */
+function safeCurrencyCode(currency: string): string {
+  return /^[A-Za-z]{3}$/.test(currency) ? currency : "XXX";
 }
 
 /**
@@ -92,7 +94,7 @@ export function moneyParts(money: Money, format: MoneyFormat): Array<Intl.Number
 
   const formatter = cached(format.locale, {
     style: "currency",
-    currency: money.currency,
+    currency: safeCurrencyCode(money.currency),
     minimumFractionDigits: fraction,
     maximumFractionDigits: fraction,
     roundingMode: "halfExpand",
