@@ -75,6 +75,16 @@ export function importFailureMessage(code: string | null): string {
     case "IMPORT_UNAVAILABLE":
     case "QUEUE_UNAVAILABLE":
       return m.importFailureUnavailable();
+    case "IMPORT_BUSY":
+      return m.importRefusedBusy();
+    case "IMPORT_NOT_FOUND":
+      return m.importRefusedNotFound();
+    case "ACCOUNT_NOT_FOUND":
+      return m.importRefusedAccount();
+    case "READ_TIMEOUT":
+      return m.importFailureReadTimeout();
+    case "READ_CRASHED":
+      return m.importFailureReadCrashed();
     default:
       return m.importFailureOther();
   }

@@ -20,6 +20,7 @@ import { resumeImport, undoImport } from "@/functions/imports";
 import { IMPORT_STEP_LABELS, importFailureMessage } from "@/i18n/imports";
 import { jobFailureMessage } from "@/i18n/messages";
 import { isOver } from "@/jobs/view";
+import { answeredProfile, readsDayFirst } from "@/lib/csv-answers";
 import { formText } from "@/lib/form";
 import { whileBusy } from "@/lib/while-busy";
 import { importKeys, importQueries } from "@/queries/imports";
@@ -38,10 +39,14 @@ function useRefreshImports() {
   return () => queryClient.invalidateQueries({ queryKey: importKeys.all });
 }
 
-/** The import's job, followed live: its steps move with its real progress. */
+/**
+ * The import's job, followed live: its steps move with its real progress. A job over for good
+ * whose import still says it runs (its last attempt could not say how it ended) can be run again.
+ */
 function Running({ summary }: { summary: Import }) {
   const { view } = useJob(summary.jobId ?? undefined);
   const queryClient = useQueryClient();
+  const { resume } = useResume(summary);
   const over = view !== undefined && isOver(view);
 
   // Once the job is over the import's own row says how it ended (written with its last lines,
@@ -65,6 +70,7 @@ function Running({ summary }: { summary: Import }) {
       failure={jobFailureMessage(view?.failure ?? null)}
       result={m.importJobDone()}
       locale={getLocale()}
+      onRetry={view?.phase === "failed" ? async () => resume(null, null) : undefined}
     />
   );
 }
@@ -129,11 +135,6 @@ function ChooseAccount({ summary }: { summary: Import }) {
   );
 }
 
-/** The date format read the other way round: `DD/MM/YYYY` and `MM/DD/YYYY`. */
-function swapped(dateFormat: string): string {
-  return dateFormat.replace(/^(DD|MM)(.?)(DD|MM)/, "$3$2$1");
-}
-
 /** A CSV file detection could not read whole: the user says what it could not. */
 function ConfirmColumns({ summary }: { summary: Import }) {
   const { data: questions } = useQuery(importQueries.csv(summary.id));
@@ -155,7 +156,7 @@ function ConfirmColumns({ summary }: { summary: Import }) {
   const amount = profile.columns.amount;
   const firstAmount = amount.kind === "signed" ? amount.column : amount.debit;
   const credit = amount.kind === "signed" ? null : amount.credit;
-  const dayFirst = profile.dateFormat.startsWith("DD") || profile.dateFormat.startsWith("Y");
+  const dayFirst = readsDayFirst(profile.dateFormat);
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -163,24 +164,16 @@ function ConfirmColumns({ summary }: { summary: Import }) {
     const form = new FormData(event.currentTarget);
     const order = formText(form, "dates");
     const mark = formText(form, "decimal");
-    const amountColumn = Number(formText(form, "amount") || String(firstAmount));
+    const amountColumn = Number(formText(form, "amount") || "0");
     const creditColumn = Number(formText(form, "credit") || "0");
 
-    const answered: CsvProfile = {
-      ...profile,
-      dateFormat:
-        order === "" || order === (dayFirst ? "day" : "month")
-          ? profile.dateFormat
-          : swapped(profile.dateFormat),
-      decimalMark: mark === "," || mark === "." ? mark : profile.decimalMark,
-      columns: {
-        ...profile.columns,
-        amount:
-          creditColumn > 0
-            ? { kind: "debit-credit", debit: amountColumn, credit: creditColumn }
-            : { kind: "signed", column: amountColumn },
-      },
-    };
+    // Only what detection left open changes (`answeredProfile`).
+    const answered = answeredProfile(profile, unsure, {
+      dates: order === "day" || order === "month" ? order : null,
+      decimal: mark === "," || mark === "." ? mark : null,
+      amount: amountColumn > 0 ? amountColumn : null,
+      credit: creditColumn > 0 ? creditColumn : null,
+    });
 
     void whileBusy(setBusy, async () => resume(null, answered));
   }
