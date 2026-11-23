@@ -21,7 +21,7 @@ import type { CsvFile, CsvProfile, CsvUnsure } from "@gousset/import";
 import { and, asc, desc, eq, gt, inArray, isNull, lt, ne, or, sql } from "drizzle-orm";
 import { Context, Effect, Layer } from "effect";
 
-import { dropEntriesWithoutParts, entriesForLines } from "../entries";
+import { dropEntriesWithoutPayments, entriesForLines } from "../entries";
 import type { ImportUnavailable, ProfileNotFound, ProfileUnreadable } from "./errors";
 import {
   AccountNotFound,
@@ -488,15 +488,16 @@ export const importsLayer = Layer.effect(
             // Its lines' transfers go with them (#26), and the sides the app made for them.
             const unpaired = await unpairForUndo(transaction, own);
 
-            // The lines' parts go with them (`on delete cascade`); an entry left with no part goes
-            // too, and a line counted again, or no side of a transfer any more, gets its entry, in
-            // this same transaction.
+            // The lines' parts go with them (`on delete cascade`); an entry left with no payment
+            // goes too, the lines of its refunds getting their own entry back (#27), and a line
+            // counted again, or no side of a transfer any more, gets its entry, in this same
+            // transaction.
             const removed = await transaction
               .delete(statementLine)
               .where(eq(statementLine.importId, importId))
               .returning({ bookedOn: statementLine.bookedOn });
 
-            await dropEntriesWithoutParts(transaction);
+            await dropEntriesWithoutPayments(transaction, owner);
 
             await entriesForLines(transaction, owner, [
               ...givenBack.map((line) => line.id),

@@ -21,12 +21,37 @@ export {
   LineNotClassifiable,
   LineNotFound,
   LineSearchRefused,
+  LinkRefused,
   MonthOutOfRange,
   NotACredit,
   NotATransfer,
+  NotLinked,
   SettlementRefused,
+  SplitRefused,
   TransferRefused,
 } from "./errors";
+
+export {
+  Expenses,
+  expensesLayer,
+  lineExpensesOf,
+  linkLine,
+  splitLine,
+  unlinkLine,
+} from "./expenses/expenses";
+
+export type {
+  Expense,
+  ExpensePart,
+  LineExpenses,
+  Linked,
+  RefundProposal,
+  Share,
+} from "./expenses/expenses";
+
+export { MAX_SHARES, PROPOSALS_SHOWN, REFUND_DAYS } from "./expenses/parts";
+
+export type { PartRole } from "./expenses/parts";
 
 export { FixtureLedger, Ledger, MONTHS_FROM_TODAY } from "./ledger";
 

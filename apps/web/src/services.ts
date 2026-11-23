@@ -6,6 +6,7 @@ import {
   FixtureLedger,
   Today,
   dataExportLayer,
+  expensesLayer,
   importProfilesLayer,
   importsLayer,
   merchantsLayer,
@@ -15,6 +16,7 @@ import type {
   AccountStore,
   CategoryStore,
   DataExport,
+  Expenses,
   ImportProfiles,
   Imports,
   Ledger,
@@ -37,7 +39,8 @@ export const auth = createAuth(ENV, db);
 /**
  * What Gousset's logic needs: the made-up month (v0.1), the user's accounts in the database, the
  * imports (#20) and their profiles (#19), the export (#22), every line searched across accounts
- * (#21), the transfers between accounts (#26), the merchants (#24), and the categories (#23).
+ * (#21), the transfers between accounts (#26), the merchants (#24), the categories (#23), and the
+ * expenses made of several lines (#27).
  */
 export type CoreServices =
   | Ledger
@@ -48,7 +51,8 @@ export type CoreServices =
   | LineStore
   | Transfers
   | Merchants
-  | CategoryStore;
+  | CategoryStore
+  | Expenses;
 
 /**
  * Gousset's logic (`@gousset/core`) runs on one runtime for the whole process, so that the server
@@ -66,6 +70,7 @@ const core = ManagedRuntime.make(
     dataExportLayer.pipe(Layer.provide(userData)),
     transfersLayer.pipe(Layer.provide(userData)),
     merchantsLayer.pipe(Layer.provide(userData)),
+    expensesLayer.pipe(Layer.provide(userData)),
   ),
 );
 

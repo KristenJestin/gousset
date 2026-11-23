@@ -1,29 +1,41 @@
 import {
+  MAX_SHARES,
   accountNamed,
   classifyLine,
+  lineExpensesOf,
   lineTransferOf,
+  linkLine,
   pairEveryLine,
   pairLines,
   searchLines,
   showLine,
+  splitLine,
+  unlinkLine,
   unpairLine,
 } from "@gousset/core";
 import type {
   AccountStore,
   CategoryStore,
   EntryKind,
+  Expense,
+  ExpensePart,
+  Expenses,
   LineDetail,
+  LineExpenses,
   LineNotClassifiable,
   LinePage,
   LineRow,
   LineStore,
   LineTransfer,
+  LinkRefused,
   PairingSummary,
+  SplitRefused,
   TransferRefused,
   TransferSide,
   Transfers,
 } from "@gousset/core";
-import { Effect, Schema } from "effect";
+import { minorDigits } from "@gousset/import";
+import { Effect, Match, Schema } from "effect";
 
 import { ToolRefusal, defineTool } from "../tool";
 import { amount, named } from "./accounts";
@@ -34,9 +46,18 @@ const DEFAULT_LINES = 50;
 const MAX_LINES = 100;
 
 const LinesInput = Schema.Struct({
-  action: Schema.Literals(["search", "show", "pair", "classify", "unpair"]).annotate({
+  action: Schema.Literals([
+    "search",
+    "show",
+    "pair",
+    "classify",
+    "unpair",
+    "link",
+    "unlink",
+    "split",
+  ]).annotate({
     description:
-      "search: the lines that match, across accounts, newest first. show: one line, all that is known of it. pair: two lines as one transfer (writes). classify: what one line is (writes). unpair: undoes a line's transfer (writes).",
+      "search: the lines that match, across accounts, newest first. show: one line, all that is known of it. pair: two lines as one transfer (writes). classify: what one line is (writes). unpair: undoes a line's transfer (writes). link: a line becomes a payment or a refund of another line's expense (writes). unlink: a line leaves its expense (writes). split: a line across categories (writes).",
   }),
   text: Schema.optional(
     Schema.String.annotate({
@@ -89,13 +110,35 @@ const LinesInput = Schema.Struct({
   ),
   line: Schema.optional(
     Schema.String.annotate({
-      description: "show, pair, classify, unpair: the line's handle, as search gives it.",
+      description:
+        "show, pair, classify, unpair, link, unlink, split: the line's handle, as search gives it.",
     }),
   ),
   other: Schema.optional(
     Schema.String.annotate({
       description:
         "pair, classify: the handle of the transfer's other side; left out, the line's only candidate.",
+    }),
+  ),
+  into: Schema.optional(
+    Schema.String.annotate({
+      description:
+        "link: the handle of a line of the expense that line joins: one of its payments or refunds.",
+    }),
+  ),
+  shares: Schema.optional(
+    Schema.Array(
+      Schema.Struct({
+        category: Schema.String.annotate({
+          description: "A category of the line's kind, named as for classify.",
+        }),
+        amount: Schema.String.annotate({
+          description:
+            'Its share, a decimal in the account\'s currency, without sign nor currency ("30", "12.50").',
+        }),
+      }),
+    ).annotate({
+      description: `split: 1 to ${MAX_SHARES} shares, adding up to the line's absolute amount; one share puts the line back in one category.`,
     }),
   ),
   kind: Schema.optional(
@@ -121,6 +164,8 @@ Use it for "when did I pay this shop?", "what was this 42.90?", "which import br
 Writes, with the write scope: \`classify\` says what \`line\` is, by \`kind\`: "transfer", "expense" or "income". With "expense" or "income", the line goes in \`category\`, named as \`categories\` list writes it (any case): a name alone is the top-level category of that name, else its one child; "Parent > Child" names a child. Without \`category\`, the kind's fallback. \`kind\` may be left out with a category: the line's own. Kept as the user's choice: no rule changes it unasked. Refused, with what to do: a line held, discarded or of no amount (no expense nor income), a side of a transfer (unpair it first), a line split across several expenses, a kind or category of the other kind than the line's (money out is an expense, money in an income), an archived category, an unknown or ambiguous category name (with the names to choose from), a category with "transfer".
 
 \`pair\` pairs \`line\` and \`other\` as one transfer, never spending; \`line\` alone: its only candidate; neither: every clear pair. \`classify\` \`kind\` "transfer" is the same; \`unpair\` undoes it. Refused: lines of one account or direction, a paired line, several candidates.
+
+An expense is made of payments, on one or more accounts, and refunds, and counts once at its net cost. \`link\` makes \`line\` a part of the expense of \`into\`, another line: a payment when its money goes the expense's way (a 75 bill paid 25 + 50 on two accounts), else a refund (insurance, a friend's share, a cancelled purchase); its own category goes. \`unlink\` makes it a line of its own again. \`split\` splits \`line\` across categories: {"action":"split","line":"<handle>","shares":[{"category":"Groceries","amount":"30"},{"category":"Home","amount":"45"}]}. Refused: transfer sides, held lines, another currency, a refund above the net cost, a split line in a link. \`show\` gives the line's expense, and the purchases a line coming back may cancel: confirm one with link.
 
 \`account\` is the name as \`accounts\` lists it (any case); add \`institution\` when two accounts share it. An unknown or ambiguous name is refused with the names to choose from. Amounts are decimal strings in each account's own currency, without sign or currency, compared with the line's absolute amount: a -42.90 EUR payment matches "amount_min":"40". A period that ends before it starts, an amount that is no decimal, or an \`after\` no result gave is refused. \`limit\` is 1 to ${MAX_LINES} lines, ${DEFAULT_LINES} by default; when more remain, the result writes the exact next call with \`after\`: copy it.
 
@@ -288,8 +333,79 @@ function transferText(lineId: string, transfer: LineTransfer): Array<string> {
   ];
 }
 
+/** A part of an expense: how much, when, on which account, and its line. */
+const partText = (part: ExpensePart) =>
+  `${amount(part.amount)} on ${part.bookedOn}, ${named(part.account)}, ${quoted(part.label)}; line: ${part.lineId}`;
+
+/** An amount as a share is typed: a plain decimal in its currency's minor units. */
+const decimalOf = (minor: number, currency: string) => {
+  const digits = minorDigits(currency);
+
+  return (minor / 10 ** digits).toFixed(digits);
+};
+
+const KIND_WORDS = {
+  expense: { name: "Expense", net: "net cost" },
+  income: { name: "Income", net: "net amount received" },
+} as const satisfies {
+  readonly [Kind in EntryKind]: { readonly name: string; readonly net: string };
+};
+
+/** An expense made of several lines: its category, its net cost once, its payments and refunds. */
+function expenseText(expense: Expense): string {
+  const words = KIND_WORDS[expense.kind];
+
+  return [
+    `${words.name} of ${expense.happenedOn} in ${pathText(expense.category)}, counted once at its ${words.net} of ${amount(expense.net)}.`,
+    ...expense.payments.map((part) => `- paid ${partText(part)}`),
+    ...expense.refunds.map((part) => `- refunded ${partText(part)}`),
+  ].join("\n");
+}
+
+/** A line's expense: split, made of several lines, or proposed as a refund; nothing when alone. */
+function expensesText(lineId: string, found: LineExpenses): Array<string> {
+  const { expenses, role, proposals } = found;
+  const [only] = expenses;
+
+  if (expenses.length > 1) {
+    const whole = expenses.reduce((sum, expense) => sum + expense.net.minor, 0);
+    const currency = only?.net.currency ?? "EUR";
+
+    return [
+      [
+        `Split across ${expenses.length} categories, each counted on its own:`,
+        ...expenses.map((expense) => `- ${pathText(expense.category)}: ${amount(expense.net)}`),
+        `To put it back in one category: ${call({ action: "split", line: lineId, shares: [{ category: only === undefined ? "Other" : pathText(only.category), amount: decimalOf(whole, currency) }] })}`,
+      ].join("\n"),
+    ];
+  }
+
+  if (only !== undefined && only.payments.length + only.refunds.length > 1) {
+    return [
+      `${expenseText(only)}\nThis line is one of its ${role === "refund" ? "refunds" : "payments"}. To take it out: ${call({ action: "unlink", line: lineId })}`,
+    ];
+  }
+
+  const [first] = proposals;
+
+  if (first === undefined) {
+    return [];
+  }
+
+  return [
+    [
+      "Maybe a refund: this line may cancel all or part of an expense (a purchase cancelled, an order returned). Never applied unasked: the user confirms.",
+      ...proposals.map(
+        (proposal) =>
+          `- ${partText(proposal.line)}, in ${pathText(proposal.category)}, costing ${amount(proposal.net)}`,
+      ),
+      `Confirm one with: ${call({ action: "link", line: lineId, into: first.line.lineId })}`,
+    ].join("\n"),
+  ];
+}
+
 /** One line, in Gousset's words: where and when, how much, what the bank said, where it came from. */
-function showText(detail: LineDetail, transfer: LineTransfer): string {
+function showText(detail: LineDetail, transfer: LineTransfer, expenses: LineExpenses): string {
   const valueOn = detail.valueOn === null ? "" : `, value on ${detail.valueOn}`;
 
   const original =
@@ -317,6 +433,7 @@ function showText(detail: LineDetail, transfer: LineTransfer): string {
     ...(detail.expiresOn === null ? [] : [`Expires on: ${detail.expiresOn}`]),
     ...review,
     ...transferText(detail.id, transfer),
+    ...expensesText(detail.id, expenses),
     originText(detail),
   ].join("\n");
 }
@@ -438,6 +555,193 @@ function unpairRun(input: LinesInput, owner: string) {
           new ToolRefusal({
             message: `The line "${line.slice(0, 80)}" is no side of a transfer: there is nothing to unpair.`,
             example: call({ action: "show", line }),
+          }),
+        ),
+      QueryFailed: Effect.die,
+    }),
+  );
+}
+
+const LINK_REFUSALS = {
+  same_line: "A line is part of an expense once: give as into another line of the expense.",
+  not_counted:
+    "The line {line} is held for review as a near duplicate (or thrown away): it is not counted, so it is part of no expense.",
+  zero_amount: "The line {line} moves no money: it pays and refunds nothing.",
+  made_from_balance:
+    "The line {line} was made by Gousset from a balance the user noted: it stands for a month's movement, never for one payment.",
+  transfer:
+    "The line {line} is a side of a transfer between two of the user's accounts, never spending: unpair it first if it is no transfer.",
+  split:
+    "The line {line} is split across several categories: put it back in one (split with one share) before it joins an expense.",
+  linked:
+    "The line {line} is already part of an expense with other lines: unlink it first, or link the other way round (line the line alone, into a line of that expense).",
+  already_linked: "The line {line} is already part of that expense: nothing to do.",
+  currency:
+    "The line {line} is in another currency than the expense: an expense's parts share one currency.",
+  exceeds:
+    "The line {line} would refund more than the expense still costs: an expense never costs less than nothing. Link it to the expense it refunds, or leave it as it is.",
+} as const satisfies { readonly [Reason in LinkRefused["reason"]]: string };
+
+/**
+ * The call that helps after a refusal about `line`: unpair a transfer's side, unlink a line linked
+ * already, else `otherwise`.
+ */
+const helpingCall = (reason: string, line: string, otherwise: string) =>
+  Match.value(reason).pipe(
+    Match.when("transfer", () => call({ action: "unpair", line })),
+    Match.when("linked", () => call({ action: "unlink", line })),
+    Match.orElse(() => otherwise),
+  );
+
+function linkRun(input: LinesInput, owner: string) {
+  const line = input.line?.trim() ?? "";
+  const into = input.into?.trim() ?? "";
+
+  if (line === "" || into === "") {
+    return Effect.fail(
+      new ToolRefusal({
+        message:
+          "link needs line, the handle of the line that joins an expense, and into, the handle of a line of that expense, both as search gives them.",
+        example: call({
+          action: "link",
+          line: line || "<a refund's handle>",
+          into: into || "<a payment's handle>",
+        }),
+      }),
+    );
+  }
+
+  return linkLine(owner, line, into).pipe(
+    Effect.map(
+      ({ role, expense }) =>
+        `Linked as a ${role}.\n${expenseText(expense)}\nTo take it out: ${call({ action: "unlink", line })}`,
+    ),
+    Effect.catchTags({
+      LineNotFound: (missing) => lineRefused(missing.lineId, NOT_FOUND),
+      LinkRefused: (refused) =>
+        Effect.fail(
+          new ToolRefusal({
+            message: LINK_REFUSALS[refused.reason].replace("{line}", refused.lineId),
+            example: helpingCall(
+              refused.reason,
+              refused.lineId,
+              call({ action: "show", line: refused.lineId }),
+            ),
+          }),
+        ),
+      QueryFailed: Effect.die,
+    }),
+  );
+}
+
+function unlinkRun(input: LinesInput, owner: string) {
+  const line = input.line?.trim() ?? "";
+
+  if (line === "") {
+    return Effect.fail(
+      new ToolRefusal({
+        message: "unlink needs the handle of a line that is part of an expense with other lines.",
+        example: call({ action: "search", text: "corner cafe" }),
+      }),
+    );
+  }
+
+  return unlinkLine(owner, line).pipe(
+    Effect.map(
+      (found) =>
+        `Unlinked: the line is an expense or an income of its own again, in its kind's fallback category ("Other"); an expense left with refunds alone gave them back theirs.${found.expenses.length === 1 && found.expenses[0] !== undefined ? ` It counts ${amount(found.expenses[0].net)}.` : ""}`,
+    ),
+    Effect.catchTags({
+      LineNotFound: (missing) => lineRefused(missing.lineId, NOT_FOUND),
+      NotLinked: () =>
+        Effect.fail(
+          new ToolRefusal({
+            message: `The line "${line.slice(0, 80)}" is the only line of its expense: there is nothing to unlink it from.`,
+            example: call({ action: "show", line }),
+          }),
+        ),
+      QueryFailed: Effect.die,
+    }),
+  );
+}
+
+const SPLIT_REFUSALS = {
+  not_counted:
+    "This line is held for review as a near duplicate (or thrown away): it is no expense nor income to split.",
+  zero_amount: "This line moves no money: there is nothing to split.",
+  transfer:
+    "This line is a side of a transfer, never an expense nor an income: unpair it first if it is no transfer.",
+  linked: "This line is part of an expense with other lines: unlink it first, then split it.",
+  count: `Give 1 to ${MAX_SHARES} shares; one share puts the whole line in one category.`,
+  sum: "The shares must add up to the line's absolute amount, exactly.",
+  amount:
+    'Each share\'s amount is a positive decimal in the account\'s currency, with no more decimals than it has, without sign nor currency ("30", "12.50").',
+  kind: "A share's category is of the other kind: money out goes in expense categories, money in in income ones.",
+  archived: "A share's category is archived: it can no longer be chosen.",
+} as const satisfies { readonly [Reason in SplitRefused["reason"]]: string };
+
+function splitRun(input: LinesInput, owner: string) {
+  const line = input.line?.trim() ?? "";
+  const shares = input.shares ?? [];
+
+  const example = call({
+    action: "split",
+    line: line || "<a handle>",
+    shares: [
+      { category: "Groceries", amount: "30" },
+      { category: "Home", amount: "45" },
+    ],
+  });
+
+  if (line === "" || shares.length === 0) {
+    return Effect.fail(
+      new ToolRefusal({
+        message:
+          "split needs the line's handle and its shares: each a category, named as categories list writes it, and an amount, together the line's absolute amount.",
+        example,
+      }),
+    );
+  }
+
+  return Effect.gen(function* () {
+    const detail = yield* showLine(owner, line);
+    const kind: EntryKind = detail.amount.minor < 0 ? "expense" : "income";
+
+    const chosen = yield* Effect.forEach(shares, (share) =>
+      namedCategory(owner, share.category, kind, (other) =>
+        call({
+          ...input,
+          shares: shares.map((each) => (each === share ? { ...each, category: other } : each)),
+        }),
+      ).pipe(Effect.map((category) => ({ categoryId: category.id, amount: share.amount }))),
+    );
+
+    const split = yield* splitLine(owner, detail.id, chosen);
+
+    return split.expenses.length === 1
+      ? `The line of ${detail.bookedOn}, ${amount(detail.amount)}, ${quoted(detail.label)}, is now whole in ${split.expenses.map((expense) => pathText(expense.category)).join(", ")}. Kept as the user's choice.`
+      : [
+          `Split the line of ${detail.bookedOn}, ${amount(detail.amount)}, ${quoted(detail.label)}, across ${split.expenses.length} categories, together the whole line. Kept as the user's choice:`,
+          ...split.expenses.map(
+            (expense) => `- ${pathText(expense.category)}: ${amount(expense.net)}`,
+          ),
+        ].join("\n");
+  }).pipe(
+    Effect.catchTags({
+      LineNotFound: () => Effect.fail(UNKNOWN_LINE(line)),
+      SplitRefused: (refused) =>
+        Effect.fail(
+          new ToolRefusal({
+            message: `${refused.index === undefined ? "" : `Share ${refused.index + 1}: `}${SPLIT_REFUSALS[refused.reason]}`,
+            example: helpingCall(refused.reason, line, example),
+          }),
+        ),
+      // Found by name a moment before: changed in between.
+      CategoryNotFound: () =>
+        Effect.fail(
+          new ToolRefusal({
+            message: "A category is gone: list the categories again.",
+            example: `categories ${JSON.stringify({ action: "list" })}`,
           }),
         ),
       QueryFailed: Effect.die,
@@ -622,12 +926,13 @@ function classifyAction(owner: string, input: LinesInput, kind: EntryKind | unde
 
 /**
  * The lines family (docs/mcp.md, "Tools"): searched and read; put in a category (#23), paired as
- * transfers (#26) with the write scope.
+ * transfers (#26), linked into expenses of several parts and split across categories (#27), with
+ * the write scope.
  */
 export const linesTool = defineTool<
   LinesInput,
   typeof LinesInput.Encoded,
-  AccountStore | LineStore | CategoryStore | Transfers
+  AccountStore | LineStore | CategoryStore | Transfers | Expenses
 >({
   name: "lines",
   title: "Lines",
@@ -635,7 +940,16 @@ export const linesTool = defineTool<
   idempotent: true,
   input: LinesInput,
   example: { action: "search", text: "corner cafe", account: "Current account" },
-  access: { search: "read", show: "read", pair: "write", classify: "write", unpair: "write" },
+  access: {
+    search: "read",
+    show: "read",
+    pair: "write",
+    classify: "write",
+    unpair: "write",
+    link: "write",
+    unlink: "write",
+    split: "write",
+  },
   run: (input, caller) => {
     switch (input.action) {
       case "search": {
@@ -706,8 +1020,9 @@ export const linesTool = defineTool<
         return Effect.all([
           showLine(caller.userId, line.trim()),
           lineTransferOf(caller.userId, line.trim()),
+          lineExpensesOf(caller.userId, line.trim()),
         ]).pipe(
-          Effect.map(([detail, transfer]) => showText(detail, transfer)),
+          Effect.map(([detail, transfer, expenses]) => showText(detail, transfer, expenses)),
           Effect.catchTags({
             LineNotFound: () => Effect.fail(UNKNOWN_LINE(line)),
             QueryFailed: Effect.die,
@@ -753,6 +1068,18 @@ export const linesTool = defineTool<
 
       case "unpair": {
         return unpairRun(input, caller.userId);
+      }
+
+      case "link": {
+        return linkRun(input, caller.userId);
+      }
+
+      case "unlink": {
+        return unlinkRun(input, caller.userId);
+      }
+
+      case "split": {
+        return splitRun(input, caller.userId);
       }
     }
   },

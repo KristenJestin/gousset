@@ -1,6 +1,7 @@
 import {
   DataExport,
   EmptyFile,
+  Expenses,
   FileTooLarge,
   FixtureLedger,
   IMPORTS_LISTED,
@@ -192,6 +193,7 @@ function runnerOf(state: Fake): Runner<GoussetServices> {
           Layer.mock(DataExport, {}),
           Layer.mock(Merchants, {}),
           Layer.mock(Transfers, {}),
+          Layer.mock(Expenses, {}),
         ),
       ),
     );
@@ -221,6 +223,7 @@ function runnerWithTime(state: Fake): Runner<GoussetServices> {
             Layer.mock(DataExport, {}),
             Layer.mock(Merchants, {}),
             Layer.mock(Transfers, {}),
+            Layer.mock(Expenses, {}),
             TestClock.layer(),
           ),
         ),

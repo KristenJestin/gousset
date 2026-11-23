@@ -366,7 +366,7 @@ async function pairInTransaction(
     .where(inArray(statementLine.id, [out.id, into.id]));
 
   // A transfer is never an expense nor an income: both lines lose their entry (#23).
-  await dropEntriesOfTransferSides(transaction);
+  await dropEntriesOfTransferSides(transaction, owner);
 
   return { done: await lineTransfer(transaction, line, day) };
 }

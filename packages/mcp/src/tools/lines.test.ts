@@ -1,5 +1,6 @@
 import {
   DataExport,
+  Expenses,
   FixtureLedger,
   ImportProfiles,
   Imports,
@@ -185,6 +186,11 @@ function onToday(
     // No line of these is a transfer; transfers are tried end to end (#26, lines-transfers.spec).
     Layer.mock(Transfers, {
       ofLine: () => Effect.succeed({ paired: null, candidates: [] }),
+    }),
+    // No line of these is part of an expense of several lines; those are tried end to end (#27,
+    // expenses-mcp.spec).
+    Layer.mock(Expenses, {
+      ofLine: () => Effect.succeed({ expenses: [], role: null, proposals: [] }),
     }),
     TestClock.layer(),
   );

@@ -1,5 +1,6 @@
 import {
   DataExport,
+  Expenses,
   FixtureLedger,
   ImportProfiles,
   Imports,
@@ -43,6 +44,7 @@ async function listing() {
               Layer.mock(DataExport, {}),
               Layer.mock(Merchants, {}),
               Layer.mock(Transfers, {}),
+              Layer.mock(Expenses, {}),
             ),
           ),
         ),

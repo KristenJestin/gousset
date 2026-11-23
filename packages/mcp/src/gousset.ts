@@ -2,6 +2,7 @@ import type {
   AccountStore,
   CategoryStore,
   DataExport,
+  Expenses,
   ImportProfiles,
   Imports,
   Ledger,
@@ -24,7 +25,7 @@ import { monthTool } from "./tools/month";
 /**
  * The services Gousset's tools need (the made-up month, the user's accounts, the imports and their
  * profiles, the export, every line searched across accounts, the transfers between accounts, the
- * merchants, the categories).
+ * merchants, the categories, the expenses made of several lines).
  */
 export type GoussetServices =
   | Ledger
@@ -35,7 +36,8 @@ export type GoussetServices =
   | LineStore
   | Transfers
   | Merchants
-  | CategoryStore;
+  | CategoryStore
+  | Expenses;
 
 /**
  * Gousset's tools, in the order `tools/list` gives them: one family per concept

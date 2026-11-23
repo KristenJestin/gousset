@@ -1,5 +1,6 @@
 import {
   DataExport,
+  Expenses,
   FixtureLedger,
   ImportProfiles,
   Imports,
@@ -129,6 +130,7 @@ function onToday(rows: MemoryRows): Runner<GoussetServices> {
     Layer.mock(DataExport, {}),
     Layer.mock(Merchants, {}),
     Layer.mock(Transfers, {}),
+    Layer.mock(Expenses, {}),
     TestClock.layer(),
   );
 

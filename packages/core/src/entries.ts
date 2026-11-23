@@ -2,7 +2,7 @@ import { insertDefaultEntries } from "@gousset/db/entries";
 import { category, entry, entryPart } from "@gousset/db/schema/ledger";
 import { transfer } from "@gousset/db/schema/transfers";
 import type { UserTransaction } from "@gousset/db/user-data";
-import { eq, exists, notExists, or } from "drizzle-orm";
+import { and, eq, exists, notExists, or } from "drizzle-orm";
 
 import { insertDefaultSet } from "./default-categories";
 import { classifyByMerchants } from "./merchants/default-classification";
@@ -15,7 +15,8 @@ import { classifyByMerchants } from "./merchants/default-classification";
 // entries it leaves with no part. A line of no amount has no entry: there is nothing to classify.
 // Nor has a side of a transfer (#26): it is the transfer, never an expense nor an income. Whatever
 // pairs lines drops their entries in the transaction that pairs them, and whatever unpairs a line
-// gives it its entry back.
+// gives it its entry back. An entry is an expense or an income only while something pays it (#27):
+// one left with refunds alone goes, and the lines of those refunds get their own entry back.
 
 /**
  * Gives an entry to each line among `lineIds` that is `owner`'s, counted, has an amount, no part yet
@@ -46,28 +47,47 @@ export async function entriesForLines(
   await classifyByMerchants(transaction, { lineIds });
 }
 
-/** Deletes the user's entries left without any part: a line's deletion took their last one. */
-export async function dropEntriesWithoutParts(transaction: UserTransaction): Promise<number> {
-  const dropped = await transaction
-    .delete(entry)
-    .where(
-      notExists(
-        transaction
-          .select({ id: entryPart.id })
-          .from(entryPart)
-          .where(eq(entryPart.entryId, entry.id)),
-      ),
-    )
-    .returning({ id: entry.id });
+/**
+ * Deletes the user's entries left without a payment: a line's deletion, a pairing or an unlinking
+ * took their last one. The lines of the refunds such an entry had left are an expense or an income
+ * again on their own: each gets its default entry back, in this same transaction.
+ */
+export async function dropEntriesWithoutPayments(
+  transaction: UserTransaction,
+  owner: string,
+): Promise<number> {
+  const unpaid = notExists(
+    transaction
+      .select({ id: entryPart.id })
+      .from(entryPart)
+      .where(and(eq(entryPart.entryId, entry.id), eq(entryPart.role, "payment"))),
+  );
+
+  const freed = await transaction
+    .select({ lineId: entryPart.lineId })
+    .from(entryPart)
+    .innerJoin(entry, eq(entry.id, entryPart.entryId))
+    .where(unpaid);
+
+  const dropped = await transaction.delete(entry).where(unpaid).returning({ id: entry.id });
+
+  await entriesForLines(
+    transaction,
+    owner,
+    freed.map((part) => part.lineId),
+  );
 
   return dropped.length;
 }
 
 /**
  * Deletes the parts of every line of the user's that is a side of a transfer, then the entries left
- * with none: a line just paired stops being an expense or an income.
+ * with no payment: a line just paired stops being an expense or an income.
  */
-export async function dropEntriesOfTransferSides(transaction: UserTransaction): Promise<void> {
+export async function dropEntriesOfTransferSides(
+  transaction: UserTransaction,
+  owner: string,
+): Promise<void> {
   await transaction.delete(entryPart).where(
     exists(
       transaction
@@ -79,5 +99,5 @@ export async function dropEntriesOfTransferSides(transaction: UserTransaction): 
     ),
   );
 
-  await dropEntriesWithoutParts(transaction);
+  await dropEntriesWithoutPayments(transaction, owner);
 }

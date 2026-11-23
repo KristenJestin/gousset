@@ -1,6 +1,7 @@
 import {
   CategoryStore,
   DataExport,
+  Expenses,
   FixtureLedger,
   ImportProfiles,
   Imports,
@@ -320,6 +321,7 @@ function runnerOf(state: Store): Runner<GoussetServices> {
     Layer.mock(ImportProfiles, {}),
     Layer.mock(DataExport, {}),
     Layer.mock(Transfers, {}),
+    Layer.mock(Expenses, {}),
     merchantsOf(state),
   );
 

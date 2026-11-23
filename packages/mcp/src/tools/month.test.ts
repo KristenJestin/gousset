@@ -1,5 +1,6 @@
 import {
   DataExport,
+  Expenses,
   FixtureLedger,
   ImportProfiles,
   Imports,
@@ -52,6 +53,7 @@ function onDay(day: string, ledger: Layer.Layer<Ledger> = FixtureLedger): Runner
             Layer.mock(DataExport, {}),
             Layer.mock(Merchants, {}),
             Layer.mock(Transfers, {}),
+            Layer.mock(Expenses, {}),
             TestClock.layer(),
           ),
         ),
