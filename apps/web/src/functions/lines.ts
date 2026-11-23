@@ -1,4 +1,11 @@
-import { MAX_SEARCH_LINES, searchLines, showLine } from "@gousset/core";
+import {
+  MAX_SEARCH_LINES,
+  lineTransferOf,
+  pairLines,
+  searchLines,
+  showLine,
+  unpairLine as unpairCoreLine,
+} from "@gousset/core";
 import { AccountId } from "@gousset/core/account-values";
 import { MAX_FILTER_TEXT } from "@gousset/ui/lib/operations";
 import { createServerFn } from "@tanstack/react-start";
@@ -72,16 +79,76 @@ export const getLines = createServerFn({ method: "GET" })
     ),
   );
 
-/** One line with all that is known of it; a line the user does not have comes back as a code. */
+/**
+ * One line with all that is known of it, and its transfer: the other side it is paired with, or the
+ * lines that may be its other side. A line the user does not have comes back as a code.
+ */
 export const getLine = createServerFn({ method: "GET" })
   .middleware([signedIn, slowedInDevelopment])
   .validator(Schema.toStandardSchemaV1(Schema.Struct({ lineId: LineId })))
   .handler(({ data, context }) =>
     runCore(
-      showLine(context.owner, data.lineId).pipe(
-        Effect.map((line) => ({ ok: true as const, line })),
+      Effect.all([
+        showLine(context.owner, data.lineId),
+        lineTransferOf(context.owner, data.lineId),
+      ]).pipe(
+        Effect.map(([line, transfer]) => ({ ok: true as const, line, transfer })),
         Effect.catchTags({
           LineNotFound: () => refused("LINE_NOT_FOUND"),
+        }),
+      ),
+    ),
+  );
+
+/**
+ * Why pairing or unpairing a line was refused, as a code for the interface to translate: the line
+ * is gone, one of the two lines is a side of a transfer already or cannot be one, or the line is no
+ * transfer to unpair.
+ */
+export type TransferRefusalCode =
+  | "LINE_NOT_FOUND"
+  | "ALREADY_PAIRED"
+  | "CANNOT_PAIR"
+  | "NOT_A_TRANSFER";
+
+const transferRefused = (code: TransferRefusalCode) => Effect.succeed({ ok: false as const, code });
+
+/**
+ * Pairs the line with `otherId` as the two sides of a transfer, the user's own pairing. Refused
+ * with a code: a line the user does not have, a line that is a side already, two lines that cannot
+ * be the two sides of one transfer (the same account, the same sign, a held line).
+ */
+export const pairLine = createServerFn({ method: "POST" })
+  .middleware([signedIn, slowedInDevelopment])
+  .validator(Schema.toStandardSchemaV1(Schema.Struct({ lineId: LineId, otherId: LineId })))
+  .handler(({ data, context }) =>
+    runCore(
+      pairLines(context.owner, data.lineId, data.otherId).pipe(
+        Effect.map((transfer) => ({ ok: true as const, transfer })),
+        Effect.catchTags({
+          LineNotFound: () => transferRefused("LINE_NOT_FOUND"),
+          TransferRefused: (refusal) =>
+            transferRefused(refusal.reason === "already_paired" ? "ALREADY_PAIRED" : "CANNOT_PAIR"),
+        }),
+      ),
+    ),
+  );
+
+/**
+ * Undoes the transfer the line is a side of: both lines are no transfer any more, and a side the
+ * app had made is deleted. Answers the other side as it was; a line that is no transfer comes back
+ * as a code.
+ */
+export const unpairLine = createServerFn({ method: "POST" })
+  .middleware([signedIn, slowedInDevelopment])
+  .validator(Schema.toStandardSchemaV1(Schema.Struct({ lineId: LineId })))
+  .handler(({ data, context }) =>
+    runCore(
+      unpairCoreLine(context.owner, data.lineId).pipe(
+        Effect.map((other) => ({ ok: true as const, other })),
+        Effect.catchTags({
+          LineNotFound: () => transferRefused("LINE_NOT_FOUND"),
+          NotATransfer: () => transferRefused("NOT_A_TRANSFER"),
         }),
       ),
     ),
