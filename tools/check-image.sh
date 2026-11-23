@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # Installs an image as docker-compose.yml does, on an empty machine (docs/releases.md, "The
 # image"): a fresh project and volume, secrets made for the run, `migrate`, then the app. Checks
-# that `migrate` succeeded, that /health answers 200 and that the app serves its page; then that the
-# app is not healthy without BETTER_AUTH_SECRET, nor with a wrong database password. The database
-# password holds every character a URL reserves. Removes everything it started, whatever happened.
+# that `migrate` succeeded, that /health answers 200, that the app serves its page and logs in to
+# the database as its own role, never as the tables' owner; then that the app is not healthy
+# without BETTER_AUTH_SECRET, nor with a wrong database password. The database password holds every
+# character a URL reserves. Removes everything it started, whatever happened.
 #   tools/check-image.sh <tag>   a tag of ghcr.io/kristenjestin/gousset, local or pulled
 #   docker build -t ghcr.io/kristenjestin/gousset:local . && tools/check-image.sh local
 # GOUSSET_PORT chooses the port on the loopback (3901 by default).
@@ -50,6 +51,13 @@ health=$(curl --silent --show-error --max-time 10 --write-out '%{http_code}' --o
 # No session and no administrator yet: `/` sends the visitor to /setup, Gousset's page.
 "$root/tools/check-page.sh" "http://127.0.0.1:$port" || fail "the app's page is not Gousset's."
 
+# Every session of the app's, its pages' and its jobs' (`migrate` has exited), is gousset_app's
+# (docs/data-model.md, "Ownership and isolation"). Read as the image's user, on the socket.
+roles=$("${compose[@]}" exec -T postgres psql -U gousset -d gousset -tAc \
+  "select coalesce(string_agg(distinct usename, ','), 'none') from pg_stat_activity where datname = 'gousset' and backend_type = 'client backend' and pid <> pg_backend_pid()") ||
+  fail "the database's sessions could not be read."
+[ "$roles" = gousset_app ] || fail "the app logs in to the database as '$roles', not gousset_app."
+
 # The image beside the installation, on its network and database, one thing wrong: what its
 # /health answers once it answers (000: it never started, which is not healthy either).
 probe() { # <name> <host port> <docker run arguments>…
@@ -78,5 +86,6 @@ secret=$(cat "$work/secrets/better_auth_secret")
 wrong=$(probe wrong-password $((port + 2)) --env "BETTER_AUTH_SECRET=$secret" --env "DATABASE_PASSWORD=not-$password")
 [ "$wrong" != 200 ] || fail "/health answered 200 with a wrong database password."
 
-echo "check-image.sh: $tag installs: migrate ran, /health answers 200, the app serves its page;"
+echo "check-image.sh: $tag installs: migrate ran, /health answers 200, the app serves its page"
+echo "check-image.sh: and logs in as gousset_app;"
 echo "check-image.sh: /health answers $unsigned without BETTER_AUTH_SECRET, $wrong with a wrong database password."

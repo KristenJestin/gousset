@@ -122,7 +122,7 @@ The comparison #10 asked for, run on 2026-11-22 with `@tanstack/redact` 0.3.1 (i
 
 ## Background jobs
 
-There are some, but no extra service: the job queue lives in Postgres with **pg-boss** (12.39). It survives a restart and lets a job be retried or scheduled, with no Redis and no extra container. Jobs run inside the app's process. If they ever weigh too much, the same image can start a separate `worker` container without changing the code.
+There are some, but no extra service: the job queue lives in Postgres with **pg-boss** (12.39). It survives a restart and lets a job be retried or scheduled, with no Redis and no extra container. Jobs run inside the app's process. If they ever weigh too much, the same image can start a separate `worker` container without changing the code. pg-boss logs in as the app's role, `gousset_app`, which owns its schema `pgboss` and nothing of a user's ([`data-model.md`](data-model.md#ownership-and-isolation)); a job that works for a user opens `UserData` as a server function does.
 
 | Job | When | Why in the background |
 |---|---|---|
