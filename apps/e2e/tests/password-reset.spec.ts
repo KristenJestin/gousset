@@ -612,6 +612,100 @@ test("signing in for an MCP client on a temporary password goes to the change, t
   }
 });
 
+/** The app's own scripts, whatever bundle they come from. */
+const APP_SCRIPTS = /\.m?js(\?.*)?$/;
+
+/**
+ * Holds back the scripts a page at `path` asks for, until the returned function is called: the page
+ * stays as the server drew it, before hydration, as a slow phone shows it for a while.
+ */
+async function holdScriptsOf(page: Page, path: string) {
+  const { promise: released, resolve: release } = Promise.withResolvers<void>();
+
+  await page.route(APP_SCRIPTS, async (route) => {
+    if (new URL(route.request().frame().url()).pathname === path) {
+      await released;
+    }
+
+    await route.fallback();
+  });
+
+  return () => release();
+}
+
+test("the forced change and the consent offer their buttons only once they work, so the resumed authorization loses no tap", async ({
+  browser,
+  app,
+  user,
+  mcpClientId,
+}) => {
+  test.setTimeout(60_000);
+  expect(mcpClientId).toBe(TEST_CLIENT_ID);
+
+  // A user on the administrator's temporary password, signed in for their agent: the sign-in sent
+  // them to the change, the authorization to resume in its address (#97).
+  const person = {
+    name: "Noa Example",
+    email: "noa.reset@example.com",
+    password: "noa-temporary-e2e",
+  };
+
+  await createUser(app.baseURL, user, person);
+
+  const held = await signIn(app.baseURL, { ...person, cookies: [] });
+  const resume = new URL(authorizeUrl(app.baseURL)).searchParams.toString();
+  const context = await browser.newContext({ baseURL: app.baseURL });
+
+  try {
+    await context.addCookies([...held.cookies]);
+
+    const page = await context.newPage();
+
+    const callback = new Promise<URL>((resolve) => {
+      void page.route(`${TEST_REDIRECT_URL}**`, async (route) => {
+        resolve(new URL(route.request().url()));
+        await route.fulfill({
+          contentType: "text/html",
+          body: '<!doctype html><html lang="en"><title>Connected</title><main><h1>Connected</h1></main></html>',
+        });
+      });
+    });
+
+    const releaseChange = await holdScriptsOf(page, "/change-password");
+    const releaseConsent = await holdScriptsOf(page, "/consent");
+
+    // Before its scripts run, the change cannot be sent: a click would send the form as a plain
+    // page would, the passwords in the address and the authorization lost.
+    await page.goto(`/change-password?${new URLSearchParams({ resume }).toString()}`, {
+      waitUntil: "commit",
+    });
+
+    const change = page.getByRole("button", { name: "Change the password" });
+
+    await expect(change).toBeDisabled();
+    releaseChange();
+
+    await page.getByLabel("Current password").fill(person.password);
+    await page.getByLabel("New password").fill("noa-own-password-e2e");
+    await change.click();
+
+    // Before its scripts run, the consent answers nothing: a click there would be lost, and the
+    // client never called back.
+    const allow = page.getByRole("button", { name: "Allow", exact: true });
+
+    await expect(allow).toBeDisabled();
+    releaseConsent();
+    await allow.click();
+
+    const returned = (await callback).searchParams;
+
+    expect(returned.get("code")).not.toBeNull();
+    expect(returned.get("state")).toBe("e2e-state");
+  } finally {
+    await context.close();
+  }
+});
+
 test("a reset that lands during the user's own change keeps its flag", async ({ app, user }) => {
   const person = await addUser(app.baseURL, user, {
     name: "Kai Example",
