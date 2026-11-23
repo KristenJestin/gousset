@@ -1,4 +1,10 @@
-import { MAX_MERCHANTS_LISTED, Merchants, listMerchants, showMerchant } from "@gousset/core";
+import {
+  MAX_MERCHANTS_LISTED,
+  Merchants,
+  listMerchants,
+  setMerchantDefaultCategory,
+  showMerchant,
+} from "@gousset/core";
 import { createServerFn } from "@tanstack/react-start";
 import { Effect, Schema } from "effect";
 
@@ -17,7 +23,9 @@ export type MerchantRefusalCode =
   | "NAME_TAKEN"
   | "LABEL_NOT_FOUND"
   | "MERGE_INTO_ITSELF"
-  | "MERGE_INTO_UNKNOWN";
+  | "MERGE_INTO_UNKNOWN"
+  | "CATEGORY_NOT_FOUND"
+  | "CATEGORY_ARCHIVED";
 
 /** A refusal, with the merchant's name it is about when there is one (the one taken, say). */
 const refused = (code: MerchantRefusalCode, name?: string) =>
@@ -116,6 +124,30 @@ export const moveMerchantLabel = createServerFn({ method: "POST" })
           MerchantNotFound: () => refused("MERCHANT_NOT_FOUND"),
           MerchantAliasNotFound: () => refused("LABEL_NOT_FOUND"),
           MerchantNameRefused: (refusal) => refused(NAME_CODES[refusal.reason]),
+        }),
+      ),
+    ),
+  );
+
+/**
+ * Sets the category a merchant's entries go in by default, of either kind, or clears it (`null`).
+ * Refused with a code: a merchant the user does not have, a category gone, or one archived.
+ */
+export const setMerchantCategory = createServerFn({ method: "POST" })
+  .middleware([signedIn, slowedInDevelopment])
+  .validator(
+    Schema.toStandardSchemaV1(
+      Schema.Struct({ merchantId: MerchantId, categoryId: Schema.NullOr(MerchantId) }),
+    ),
+  )
+  .handler(({ data, context }) =>
+    runCore(
+      setMerchantDefaultCategory(context.owner, data.merchantId, data.categoryId).pipe(
+        Effect.map((category) => ({ ok: true as const, category })),
+        Effect.catchTags({
+          MerchantNotFound: () => refused("MERCHANT_NOT_FOUND"),
+          CategoryNotFound: () => refused("CATEGORY_NOT_FOUND"),
+          CategoryRefused: () => refused("CATEGORY_ARCHIVED"),
         }),
       ),
     ),

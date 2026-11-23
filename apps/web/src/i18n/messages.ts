@@ -108,6 +108,10 @@ export function merchantRefusalMessage(code: string, name?: string): string {
       return m.merchantRefusalMergeIntoItself();
     case "MERGE_INTO_UNKNOWN":
       return m.merchantRefusalMergeIntoUnknown();
+    case "CATEGORY_NOT_FOUND":
+      return m.merchantRefusalCategoryNotFound();
+    case "CATEGORY_ARCHIVED":
+      return m.merchantRefusalCategoryArchived();
     default:
       return m.errorUnknown();
   }
