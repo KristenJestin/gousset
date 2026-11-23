@@ -349,6 +349,8 @@
   "settingsShortcutsTitle": "Raccourcis clavier",
   "settingsSingleKeyShortcuts": "Raccourcis à une touche",
   "settingsSingleKeyShortcutsDescription": "Les raccourcis d'une seule touche, comme ? pour la liste des raccourcis. La saisie vocale peut les déclencher par mégarde : désactivez-les, et la liste reste dans le menu de votre compte et sur {keys}.",
+  "settingsCurrencyTitle": "Devise",
+  "settingsCurrencyDescription": "Votre devise, celle dans laquelle sont écrits les repères que vous fixez.",
   "categoriesEmptyTitle": "Aucune catégorie pour l'instant",
   "categoriesEmptyDescription": "Vos catégories, sur deux niveaux, seront listées ici avec leur moyenne sur 6 mois et leur repère.",
   "categoriesDescription": "Vos dépenses et vos revenus sur deux niveaux, chacun avec sa moyenne sur 6 mois et son repère.",

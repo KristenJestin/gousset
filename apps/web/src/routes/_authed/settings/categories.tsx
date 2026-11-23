@@ -38,12 +38,6 @@ import { choicesOf, parentsOf, rowsOf } from "@/lib/categories";
 import { categoryQueries, invalidateCategories } from "@/queries/categories";
 
 /**
- * The currency a set benchmark is written in. The user has no currency of their own yet: every
- * fixed benchmark is in euros until they do.
- */
-const BENCHMARK_CURRENCY = "EUR";
-
-/**
  * The categories (#23; docs/wireframes, screen 10): the expense and income categories on two
  * levels, with their six-month average, benchmark and lines, and the archived ones apart. Each
  * change asks in a dialog; a refusal says why in words. There is no "Delete": merging a category
@@ -86,6 +80,8 @@ function isView(value: string): value is CategoryView {
 
 function CategoriesContent() {
   const { data: tree } = useSuspenseQuery(categoryQueries.list());
+  // The currency set benchmarks are written in: the user's own (Settings › General).
+  const { currency } = Route.useRouteContext().user;
   const queryClient = useQueryClient();
   const locale = usePageLanguage();
   const [view, setView] = useState<CategoryView>("expense");
@@ -122,7 +118,7 @@ function CategoriesContent() {
     setOpen(true);
   };
 
-  const benchmarkText = (node: CategoryNode) => benchmarkOf(node, locale);
+  const benchmarkText = (node: CategoryNode) => benchmarkOf(node, currency, locale);
 
   const toRow = (row: ReturnType<typeof rowsOf>[number]): CategoryTreeRow => {
     const { node } = row;
@@ -238,6 +234,7 @@ function CategoriesContent() {
           open={open}
           onOpenChange={setOpen}
           change={change}
+          currency={currency}
         />
       )}
     </div>
@@ -245,7 +242,7 @@ function CategoriesContent() {
 }
 
 /** How a category's benchmark is written in its row: "automatic · €690", "set · €130", "none". */
-function benchmarkOf(node: CategoryNode, locale: string): string {
+function benchmarkOf(node: CategoryNode, currency: string, locale: string): string {
   const benchmark = node.benchmark;
 
   switch (benchmark.mode) {
@@ -264,7 +261,7 @@ function benchmarkOf(node: CategoryNode, locale: string): string {
     case "fixed":
       // As the user set it, to the cent.
       return m.categoriesBenchmarkShownFixed({
-        amount: formatMoney({ minor: benchmark.minor, currency: BENCHMARK_CURRENCY }, { locale }),
+        amount: formatMoney({ minor: benchmark.minor, currency }, { locale }),
       });
     case "none":
       return m.categoriesBenchmarkShownNone();
@@ -279,6 +276,7 @@ function ActionDialog({
   open,
   onOpenChange,
   change,
+  currency,
 }: {
   action: Action;
   node: CategoryNode;
@@ -286,6 +284,8 @@ function ActionDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   change: (call: () => Promise<CategoryAnswer>) => Promise<CategoryAnswer>;
+  /** The user's currency, the one a set benchmark is in. */
+  currency: string;
 }) {
   const categoryId = node.id;
   const kind: EntryKind = node.kind;
@@ -331,7 +331,7 @@ function ActionDialog({
           onOpenChange={onOpenChange}
           name={node.name}
           benchmark={node.benchmark}
-          currency={BENCHMARK_CURRENCY}
+          currency={currency}
           onSave={(benchmark) => edit({ benchmark })}
         />
       );

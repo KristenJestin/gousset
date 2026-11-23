@@ -349,6 +349,8 @@
   "settingsShortcutsTitle": "Keyboard shortcuts",
   "settingsSingleKeyShortcuts": "Single-key shortcuts",
   "settingsSingleKeyShortcutsDescription": "Shortcuts made of one key, like ? for the list of shortcuts. Speech input can press them by accident: turn them off, and the list stays in your account menu and on {keys}.",
+  "settingsCurrencyTitle": "Currency",
+  "settingsCurrencyDescription": "Your currency, the one the benchmarks you set are written in.",
   "categoriesEmptyTitle": "No category yet",
   "categoriesEmptyDescription": "Your categories, on two levels, will be listed here with their 6-month average and their benchmark.",
   "categoriesDescription": "Your expenses and income on two levels, each with its 6-month average and its benchmark.",

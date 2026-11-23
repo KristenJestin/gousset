@@ -7,6 +7,7 @@ import { E2E_DAY_COOKIE, localDay, today } from "@/lib/today";
 import { auth } from "@/services";
 
 import { ColorSchemeChoice } from "./color-scheme";
+import { UserCurrency } from "./currency";
 
 /**
  * Who is looking, whether the installation has its administrator yet, and, signed in, the current
@@ -41,6 +42,8 @@ export const getViewer = createServerFn({ method: "GET" }).handler(() =>
             // By the administrator, or from the server when the administrator's was recovered.
             passwordResetFromServer: user.passwordResetBy === "server",
             singleKeyShortcuts: user.singleKeyShortcuts !== false,
+            // The currency fixed benchmarks are written in: euros if the column holds no code.
+            currency: Schema.is(UserCurrency)(user.currency) ? user.currency : "EUR",
           },
         };
       }
