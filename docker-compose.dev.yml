@@ -1,6 +1,10 @@
 # The database of development (`pnpm db:start`), reachable from this machine only (127.0.0.1:5432).
 # POSTGRES_PASSWORD falls back to the one the defaults of apps/web/.env.schema expect. Not for an
 # installation: that is docker-compose.yml, whose secrets are required.
+#
+# Its user `postgres` owns the tables and runs `pnpm db:migrate`, which makes `gousset_app` and lets
+# it log in; the app (`pnpm dev`) logs in as it, with a password derived from this one
+# (docs/data-model.md, "Ownership and isolation").
 name: gousset-dev
 
 services:

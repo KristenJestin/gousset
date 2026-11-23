@@ -40,6 +40,11 @@ id keeps two runs on one Postgres (two worktrees on `pnpm db:start`) apart. Data
 dropped when their worker and the run end; a run killed before its teardown leaves its
 `gousset_e2e_<run>_*` databases behind, safe to drop by hand.
 
+The harness's own role runs the migrations, as the tables' owner, then lets `gousset_app` log in
+with the password derived from the harness's (`docs/data-model.md`, "Ownership and isolation"):
+every worker's app is given the harness's URL and logs in as `gousset_app`, as an installation's
+does. The role belongs to the whole server, so its password is set one run at a time.
+
 ## The server's clock
 
 `fixDay` fixes both clocks at once. The server reads "today" from one function

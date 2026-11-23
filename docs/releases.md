@@ -20,7 +20,12 @@ One `Dockerfile`, at the root of the repository, makes one image for everything 
 - **`serve`** (the default command): the app, its pages, server functions, API and background
   jobs, on port 3001, as the unprivileged user `node`.
 - **`migrate`**: applies Drizzle's migrations (`packages/db/src/migrations`) to `DATABASE_URL`,
-  then exits. It is safe to run again: what is applied is not applied twice.
+  as the tables' owner, then lets the app's role `gousset_app` log in, and exits. It is safe to
+  run again: what is applied is not applied twice.
+- **The app logs in to the database as `gousset_app`**, never as the owner `DATABASE_URL` names
+  (`docs/data-model.md`, "Ownership and isolation"): no superuser, it owns no table and cannot
+  step past row-level security. Its password is derived from the owner's, so `migrate` and the app
+  are given the same URL and nothing else.
 - **`GET /health`**: the container's health check. It answers 200 only when the app can serve
   someone: the auth configuration loaded (in production better-auth refuses to start without
   `BETTER_AUTH_SECRET`) and the database answers `select 1` with the credentials given; 503
@@ -68,6 +73,14 @@ Both secrets are required: without either file Compose refuses to start, and not
 to a default password. `migrate` and the app get the database password from the same file as
 Postgres (`DATABASE_PASSWORD_FILE`), never written into a URL.
 
+**The database's roles** are made by the migrations, not by hand: Postgres's image makes its user
+`gousset` (`POSTGRES_USER`), a superuser, which owns the tables and runs `migrate`; the migrations
+make `gousset_app`, the role the app logs in with, and `gousset_user`, which a user's transaction
+acts as. `migrate` gives `gousset_app` a password derived from `gousset`'s, and the app derives
+the same one from the URL it is given: the installation keeps one secret. A database of your own
+works the same way when `DATABASE_URL` names a superuser; a role that is none needs the right to
+create and grant these roles and to take on `gousset_app` (this is not tested).
+
 Variables, from the shell or a `.env` file beside `docker-compose.yml`:
 
 | Variable                      | What                                                       | Default                 |
@@ -83,6 +96,10 @@ statistics of Varlock's command line (`VARLOCK_TELEMETRY_DISABLED`): nothing lea
 installation unless its owner wants it to.
 
 **Updating**: `docker compose pull && docker compose up -d`; `migrate` runs again before the app.
+An installation made before the app had a role of its own (#66) needs nothing more: its next
+`migrate` makes `gousset_app`, hands
+pg-boss's schema over to it and lets it log in, and the app then logs in as it, with the same
+`docker-compose.yml` and the same secret.
 
 **Changing the database password.** Postgres takes `secrets/postgres_password` when its volume is
 first made, and never reads it again: changing the file alone leaves the database on the old
@@ -94,6 +111,8 @@ docker compose exec postgres psql -U gousset -d gousset -c "ALTER USER gousset P
 # write the new one into secrets/postgres_password
 docker compose up -d --force-recreate
 ```
+
+`migrate` runs again first, and gives `gousset_app` the password derived from the new one.
 
 (or start over on a fresh volume, `docker compose down --volumes`, which deletes all the data).
 

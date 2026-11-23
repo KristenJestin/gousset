@@ -505,6 +505,9 @@ importers:
       drizzle-kit:
         specifier: 1.0.0-rc.6
         version: 1.0.0-rc.6(drizzle-orm@1.0.0-rc.6(@opentelemetry/api@1.9.1)(@types/pg@8.23.1)(effect@4.1.5)(pg@8.23.1)(valibot@1.5.0(typescript@7.0.2))(zod@4.6.7))
+      fast-check:
+        specifier: 'catalog:'
+        version: 4.10.3
       rolldown:
         specifier: 1.3.3
         version: 1.3.3

@@ -1,13 +1,15 @@
+import { appDatabaseUrl } from "@gousset/db/app-role";
+import type { APP_ROLE } from "@gousset/db/app-role";
 import { relations } from "@gousset/db/relations";
 import { authUser } from "@gousset/db/schema/auth";
 import { importProfile } from "@gousset/db/schema/ledger";
 import { seedMadeUpData } from "@gousset/db/seed";
 import type { SeedSummary } from "@gousset/db/seed";
 import { UserData, userDataLayer } from "@gousset/db/user-data";
-import type { QueryFailed, UserTransaction } from "@gousset/db/user-data";
+import type { QueryFailed, USER_ROLE, UserTransaction } from "@gousset/db/user-data";
 import { eq, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
-import { Effect, Schema } from "effect";
+import { Effect, Option, Schema } from "effect";
 
 import { databaseUrl } from "./database";
 
@@ -29,6 +31,32 @@ export const USER_TABLES: ReadonlyArray<UserTable> = [
   { name: "import_profile", key: "id", rows: "import profiles" },
 ];
 
+/**
+ * Every table of the `public` schema the app's own role reaches, outside a user's transaction: what
+ * is not one user's data. better-auth's tables (the users, their sessions, the MCP door's clients
+ * and tokens), read and written by better-auth for every user, and the installation's settings. A
+ * table added later that the app's role reaches must be listed here, or the isolation spec fails.
+ * pg-boss's tables, in a schema of their own (`pgboss`), belong to the app's role.
+ */
+export const SHARED_TABLES: ReadonlyArray<string> = [
+  "auth_account",
+  "auth_jwks",
+  "auth_oauth_access_token",
+  "auth_oauth_client",
+  "auth_oauth_client_assertion",
+  "auth_oauth_client_resource",
+  "auth_oauth_consent",
+  "auth_oauth_refresh_token",
+  "auth_oauth_resource",
+  "auth_session",
+  "auth_user",
+  "auth_verification",
+  "installation_settings",
+];
+
+/** The schema pg-boss keeps its tables in (apps/web/src/jobs/queue.server.ts). */
+export const JOBS_SCHEMA = "pgboss";
+
 // A raw query's result, decoded: Drizzle types it as one result or several.
 const Keys = Schema.Struct({ rows: Schema.Array(Schema.Struct({ key: Schema.String })) });
 const decodeKeys = Schema.decodeUnknownSync(Keys);
@@ -41,9 +69,12 @@ export function keyArray(keys: ReadonlyArray<string>) {
   return sql`string_to_array(${keys.join(",")}, ',')`;
 }
 
-/** The keys of the rows of `table` a transaction sees, among `among` when given, in order. */
+/**
+ * The keys of the rows of `table` a transaction sees, among `among` when given, in order; on the
+ * app's own handle too, which a user's tables refuse.
+ */
 export async function keysOf(
-  transaction: UserTransaction,
+  transaction: Pick<UserTransaction, "execute">,
   table: UserTable,
   among?: ReadonlyArray<string>,
 ): Promise<ReadonlyArray<string>> {
@@ -72,6 +103,21 @@ export async function touchedKeys(
 /** The code `attempt` raises to undo a write that Postgres accepted. */
 const ROLLED_BACK = "GSRBK";
 
+// Drizzle wraps the driver's error, keeping it as the cause.
+const SqlState = Schema.Struct({ code: Schema.String });
+
+const sqlState = Schema.decodeUnknownOption(
+  Schema.Union([SqlState, Schema.Struct({ cause: SqlState })]),
+);
+
+/** Postgres's code for a failed query, or `UNKNOWN`. */
+function codeOf(error: Error): string {
+  return Option.match(sqlState(error), {
+    onNone: () => "UNKNOWN",
+    onSome: (state) => ("cause" in state ? state.cause.code : state.code),
+  });
+}
+
 const Session = Schema.Struct({
   rows: Schema.Array(Schema.Struct({ role: Schema.String, owner: Schema.String })),
 });
@@ -86,10 +132,22 @@ const UserRole = Schema.Struct({
   ),
 });
 
+const AppRole = Schema.Struct({
+  rows: Schema.Array(
+    Schema.Struct({
+      role: Schema.String,
+      superuser: Schema.Boolean,
+      bypassesRowSecurity: Schema.Boolean,
+      ownsTables: Schema.Boolean,
+    }),
+  ),
+});
+
 const Isolation = Schema.Struct({
   rows: Schema.Array(
     Schema.Struct({
       rowSecurity: Schema.Boolean,
+      forced: Schema.Boolean,
       ownerPolicy: Schema.Boolean,
       granted: Schema.Boolean,
     }),
@@ -99,12 +157,15 @@ const Isolation = Schema.Struct({
 /**
  * A worker's database reached as the app reaches it: the role it logs in with, and `UserData` for a
  * user's rows. One connection, so that what a transaction leaves on it is what the next one meets.
+ * The catalog is read apart, as the harness's own role, which sees every table.
  */
 export function openUserData(database: string) {
   const db = drizzle({
-    connection: { connectionString: databaseUrl(database), max: 1 },
+    connection: { connectionString: appDatabaseUrl(databaseUrl(database)), max: 1 },
     relations,
   });
+
+  const catalog = drizzle({ connection: { connectionString: databaseUrl(database), max: 1 } });
 
   const layer = userDataLayer(db);
 
@@ -194,6 +255,66 @@ export function openUserData(database: string) {
         ),
       ),
 
+    /**
+     * Postgres's code when it refuses `work` run on the app's own handle, outside any user's
+     * transaction, or `accepted`.
+     */
+    outside: async <A>(work: (app: typeof db) => Promise<A>): Promise<string> => {
+      try {
+        await work(db);
+
+        return "accepted";
+      } catch (error) {
+        if (!(error instanceof Error)) {
+          throw error;
+        }
+
+        return codeOf(error);
+      }
+    },
+
+    /** The role the app logs in with, and what it may do beyond its grants. */
+    async appRole() {
+      const result = await db.execute(sql`
+        select r.rolname::text as role, r.rolsuper as "superuser",
+          r.rolbypassrls as "bypassesRowSecurity",
+          exists (
+            select 1 from pg_class c
+            where c.relnamespace = 'public'::regnamespace and c.relowner = r.oid
+          ) as "ownsTables"
+        from pg_roles r where r.rolname = current_user`);
+
+      return Schema.decodeUnknownSync(AppRole)(result).rows;
+    },
+
+    /**
+     * Every table, view or sequence of the database `role` holds any privilege on, its own or a
+     * column's, as `schema.name`: what it reaches, whatever the table holds.
+     */
+    async reachableTables(
+      role: typeof APP_ROLE | typeof USER_ROLE,
+    ): Promise<ReadonlyArray<string>> {
+      const result = await catalog.execute(sql`
+        select format('%s.%s', n.nspname, c.relname) as key
+        from pg_class c
+        join pg_namespace n on n.oid = c.relnamespace
+        where c.relkind in ('r', 'p', 'v', 'm', 'f', 'S')
+          and n.nspname not in ('pg_catalog', 'information_schema', 'pg_toast')
+          and (
+            has_table_privilege(${role}, c.oid, 'SELECT')
+            or has_table_privilege(${role}, c.oid, 'INSERT')
+            or has_table_privilege(${role}, c.oid, 'UPDATE')
+            or has_table_privilege(${role}, c.oid, 'DELETE')
+            or has_table_privilege(${role}, c.oid, 'TRUNCATE')
+            or has_table_privilege(${role}, c.oid, 'REFERENCES')
+            or has_table_privilege(${role}, c.oid, 'TRIGGER')
+            or (c.relkind <> 'S' and has_any_column_privilege(${role}, c.oid, 'SELECT, INSERT, UPDATE, REFERENCES'))
+          )
+        order by 1`);
+
+      return decodeKeys(result).rows.map((row) => row.key);
+    },
+
     /** The role and the user a plain query of the app's meets on the connection. */
     async session() {
       const result = await db.execute(
@@ -205,7 +326,7 @@ export function openUserData(database: string) {
 
     /** Every table of the database's public schema that has a `user_id`, but better-auth's. */
     async tablesWithOwner(): Promise<ReadonlyArray<string>> {
-      const result = await db.execute(sql`
+      const result = await catalog.execute(sql`
         select c.table_name::text as key
         from information_schema.columns c
         join information_schema.tables t using (table_schema, table_name)
@@ -218,18 +339,22 @@ export function openUserData(database: string) {
 
     /** What `gousset_user` may do beyond its grants: nothing, or row-level security means nothing. */
     async userRole() {
-      const result = await db.execute(sql`
+      const result = await catalog.execute(sql`
         select rolsuper as "superuser", rolbypassrls as "bypassesRowSecurity", rolcanlogin as "logsIn"
         from pg_roles where rolname = 'gousset_user'`);
 
       return Schema.decodeUnknownSync(UserRole)(result).rows;
     },
 
-    /** Whether a table has row-level security on, the owner's policy, and `gousset_user`'s grants. */
+    /**
+     * Whether a table has row-level security on, forced on its owner too, the owner's policy, and
+     * `gousset_user`'s grants.
+     */
     async isolationOf(table: string) {
-      const result = await db.execute(sql`
+      const result = await catalog.execute(sql`
         select
           c.relrowsecurity as "rowSecurity",
+          c.relforcerowsecurity as "forced",
           exists (
             select 1 from pg_policies p
             where p.schemaname = 'public' and p.tablename = ${table} and p.cmd = 'ALL'
@@ -247,6 +372,9 @@ export function openUserData(database: string) {
       return Schema.decodeUnknownSync(Isolation)(result).rows;
     },
 
-    close: () => db.$client.end(),
+    close: async () => {
+      await db.$client.end();
+      await catalog.$client.end();
+    },
   };
 }

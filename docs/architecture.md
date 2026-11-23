@@ -111,7 +111,7 @@ From v0.1, the app serves MCP at `/mcp`, so that each user reaches their own dat
 
 ## Background jobs
 
-There are some, but no extra service: the job queue lives in Postgres with **pg-boss** (12.39). It survives a restart and lets a job be retried or scheduled, with no Redis and no extra container. Jobs run inside the app's process. If they ever weigh too much, the same image can start a separate `worker` container without changing the code.
+There are some, but no extra service: the job queue lives in Postgres with **pg-boss** (12.39). It survives a restart and lets a job be retried or scheduled, with no Redis and no extra container. Jobs run inside the app's process. If they ever weigh too much, the same image can start a separate `worker` container without changing the code. pg-boss logs in as the app's role, `gousset_app`, which owns its schema `pgboss` and nothing of a user's ([`data-model.md`](data-model.md#ownership-and-isolation)); a job that works for a user opens `UserData` as a server function does.
 
 | Job | When | Why in the background |
 |---|---|---|

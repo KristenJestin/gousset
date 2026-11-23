@@ -22,7 +22,10 @@ export class JobQueueUnavailable extends Schema.TaggedError<JobQueueUnavailable>
   {},
 ) {}
 
-/** The schema pg-boss keeps its tables in, apart from Gousset's own. */
+/**
+ * The schema pg-boss keeps its tables in, apart from Gousset's own. A migration makes it, owned by
+ * the app's role (packages/db, #66), which may create no schema of its own.
+ */
 const BOSS_SCHEMA = "pgboss";
 
 /**
@@ -184,6 +187,9 @@ export class JobQueue extends Context.Service<
             const created = new PgBoss({
               connectionString,
               schema: BOSS_SCHEMA,
+              // Made by the migrations: `create schema if not exists` asks for a right the app's
+              // role does not have, even when the schema is there.
+              createSchema: false,
               application_name: "gousset-jobs",
               // A worker gone silent (a crash) is found within two passes: its attempt is retried.
               superviseIntervalSeconds: HEARTBEAT_SECONDS,
