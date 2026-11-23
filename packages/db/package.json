@@ -11,9 +11,11 @@
     "db:generate": "drizzle-kit generate",
     "db:migrate:deploy": "drizzle-kit migrate",
     "db:studio": "drizzle-kit studio",
-    "db:migrate": "drizzle-kit migrate"
+    "db:migrate": "drizzle-kit migrate",
+    "db:seed": "rolldown src/seed-development.ts --platform node -f esm -o node_modules/.seed/seed.mjs && varlock run -- node node_modules/.seed/seed.mjs"
   },
   "dependencies": {
+    "@gousset/fixture": "workspace:*",
     "drizzle-orm": "catalog:",
     "effect": "catalog:",
     "pg": "^8.23.1"
@@ -22,6 +24,7 @@
     "@gousset/config": "workspace:*",
     "@types/pg": "^8.23.1",
     "drizzle-kit": "1.0.0-rc.6",
+    "rolldown": "1.3.3",
     "typescript": "catalog:",
     "varlock": "catalog:"
   }

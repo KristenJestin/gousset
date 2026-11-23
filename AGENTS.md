@@ -57,7 +57,8 @@ vp test                  # unit tests (Vitest)
 pnpm build               # build every package
 pnpm dev                 # the app on http://localhost:3001
 pnpm storybook           # the components of packages/ui on http://localhost:6006
-pnpm db:start            # Postgres 18 in Docker; then pnpm db:push
+pnpm db:start            # Postgres 18 in Docker; then pnpm db:migrate
+pnpm db:seed             # the made-up data (packages/fixture) for every user without accounts
 pnpm hooks:setup         # once per clone: the Git hooks (vp staged)
 ```
 
