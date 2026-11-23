@@ -88,6 +88,10 @@ const SHOTS: ReadonlyArray<Shot> = [
   { id: "accounts-accountsettings--benefit-account" },
   { id: "accounts-benefitcredits--default" },
   { id: "accounts-benefitcredits--uncovered" },
+  { id: "operations-operationslist--default" },
+  { id: "operations-linedetail--to-review" },
+  { id: "operations-operationsfilters--set" },
+  { id: "operations-operationslayout--line-open" },
 ];
 
 async function openPopup(page: Page, open: Shot["open"]) {

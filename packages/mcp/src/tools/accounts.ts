@@ -59,7 +59,7 @@ Use \`list\` for "how much do I have, and where?", \`show\` for one account's la
 Examples: {"action":"list"} · {"action":"show","name":"Livret A","institution":"Riverside Bank"}`;
 
 /** `1,234.56 EUR`, with the currency's own minor units (`1,235 JPY`, `1.235 KWD`). */
-function amount(money: Money): string {
+export function amount(money: Money): string {
   const digits = minorDigits(money.currency);
 
   const units = (money.minor / 10 ** digits).toLocaleString("en-US", {
@@ -90,7 +90,10 @@ const CHOICE_NAMES = {
 } as const satisfies { readonly [Choice in AccountChoice]: string };
 
 /** `Livret A (Riverside Bank)`: names are not unique, the institution tells them apart. */
-function named(account: { readonly name: string; readonly institution: string | null }): string {
+export function named(account: {
+  readonly name: string;
+  readonly institution: string | null;
+}): string {
   return account.institution === null ? account.name : `${account.name} (${account.institution})`;
 }
 

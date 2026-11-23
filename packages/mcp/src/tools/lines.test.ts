@@ -1,0 +1,488 @@
+import {
+  DataExport,
+  FixtureLedger,
+  ImportProfiles,
+  Imports,
+  memoryAccountStore,
+  memoryId,
+  memoryLineStore,
+} from "@gousset/core";
+import type { AccountRecord, MemoryLineDetail, MemoryLineRows } from "@gousset/core";
+import { Effect, Layer, Schema } from "effect";
+import { TestClock } from "effect/testing";
+import { describe, expect, test } from "vite-plus/test";
+
+import { goussetServer } from "../gousset";
+import type { GoussetServices } from "../gousset";
+import { ERROR_LIMIT, RESULT_LIMIT } from "../results";
+import { connectInProcess } from "../test-client";
+import type { Runner } from "../tool";
+
+// The lines tool through the official client, on in-memory stores of made-up lines, as a token
+// allowed to read only.
+
+const TODAY = "2026-11-23";
+const reader = { userId: "ada", canWrite: false };
+
+function account(name: string, change: Partial<AccountRecord> = {}): AccountRecord {
+  return {
+    id: memoryId(),
+    name,
+    kind: "current",
+    envelope: null,
+    institution: "Riverside Bank",
+    currency: "EUR",
+    mode: "lines",
+    openingBalanceMinor: 0,
+    openedOn: null,
+    closedOn: null,
+    settlesIntoAccountId: null,
+    ...change,
+  };
+}
+
+function line(
+  accountId: string,
+  bookedOn: string,
+  amountMinor: number,
+  label: string,
+  change: Partial<MemoryLineDetail> = {},
+): MemoryLineDetail {
+  return {
+    id: memoryId(),
+    accountId,
+    bookedOn,
+    valueOn: null,
+    amountMinor,
+    label,
+    memo: null,
+    counterpartyName: null,
+    ...change,
+  };
+}
+
+const current = account("Current account");
+const livret = account("Livret A", { kind: "savings", envelope: "livret_a" });
+const otherLivret = account("Livret A", { kind: "savings", institution: "Northbank" });
+const brokerage = account("US brokerage", { currency: "USD", institution: "Harbor Securities" });
+
+const OCTOBER = {
+  id: memoryId(),
+  accountId: current.id,
+  status: "done",
+  periodTo: "2026-10-31",
+  fileName: "october-statement.xml",
+  format: "camt053",
+  importedAt: "2026-11-02T08:30:00.000Z",
+  periodFrom: "2026-10-01",
+} as const;
+
+const salary = line(current.id, "2026-10-01", 250_000, "SALARY EXAMPLE CORP", {
+  importId: OCTOBER.id,
+  counterpartyName: "Example Corp",
+});
+
+const fuel = line(current.id, "2026-10-12", -4290, "CB FUELSTOP 0412 RIVERTON", {
+  importId: OCTOBER.id,
+  valueOn: "2026-10-13",
+  memo: "Pump 4",
+});
+
+const cafe = line(current.id, "2026-11-03", -2380, "CB CORNER CAFE", {
+  originalAmountMinor: -2600,
+  originalCurrency: "USD",
+});
+
+const heldCafe = line(current.id, "2026-11-04", -2380, "CB CORNER CAFE", {
+  state: "held",
+  duplicateOfLineId: cafe.id,
+});
+
+const interest = line(livret.id, "2026-10-31", 1520, "INTERESTS 2026");
+const deposit = line(brokerage.id, "2026-10-05", 100_000, "DEPOSIT");
+const future = line(current.id, "2026-12-01", -1000, "CB CORNER CAFE");
+
+const ROWS: MemoryLineRows = {
+  accounts: [current, livret, otherLivret, brokerage],
+  lines: [salary, fuel, cafe, heldCafe, interest, deposit, future],
+  imports: [OCTOBER],
+};
+
+function onToday(rows: MemoryLineRows): Runner<GoussetServices> {
+  const byOwner = new Map([[reader.userId, rows]]);
+
+  const layer = Layer.mergeAll(
+    FixtureLedger,
+    memoryAccountStore(byOwner),
+    memoryLineStore(byOwner),
+    // lines never reaches the imports.
+    Layer.mock(Imports, {}),
+    Layer.mock(ImportProfiles, {}),
+    Layer.mock(DataExport, {}),
+    TestClock.layer(),
+  );
+
+  return (effect) =>
+    Effect.runPromiseExit(
+      Effect.gen(function* () {
+        yield* TestClock.setTime(Date.parse(`${TODAY}T12:00:00Z`));
+
+        return yield* effect;
+      }).pipe(Effect.provide(layer)),
+    );
+}
+
+type Arguments = { readonly [key: string]: string | number | boolean };
+
+async function lines(args: Arguments, rows: MemoryLineRows = ROWS) {
+  const client = await connectInProcess(
+    goussetServer,
+    { run: onToday(rows) },
+    reader,
+    "2025-11-25",
+  );
+
+  const result = await client.callTool({ name: "lines", arguments: args });
+  const [first] = result.content ?? [];
+
+  return { text: first?.type === "text" ? first.text : "", isError: result.isError === true };
+}
+
+const Written = Schema.Record(
+  Schema.String,
+  Schema.Union([Schema.String, Schema.Number, Schema.Boolean]),
+);
+
+/** The arguments of a call a result writes after `before` (`lines {…}`), read back. */
+function writtenCall(text: string, before: string): Arguments | undefined {
+  const at = text.indexOf(`${before}lines {`);
+
+  if (at === -1) {
+    return undefined;
+  }
+
+  const json = text.slice(at + before.length + "lines ".length).split("\n")[0] ?? "";
+
+  return Schema.decodeUnknownSync(Written)(JSON.parse(json));
+}
+
+/** The handles a search result gives, in order. */
+const handlesOf = (text: string) => [...text.matchAll(/; line: (\S+)$/gm)].map(([, id]) => id);
+
+/** A refusal: under the error limit, with a valid call that answers. */
+async function expectValidExample(text: string, rows: MemoryLineRows = ROWS) {
+  expect(text.length).toBeLessThan(ERROR_LIMIT);
+
+  const example = writtenCall(text, "A valid call: ");
+
+  expect(example, text).toBeDefined();
+
+  const answered = await lines(example ?? {}, rows);
+
+  expect(answered.isError, answered.text).toBe(false);
+}
+
+describe("lines search", () => {
+  test("gives every counted line newest first, with its account, amount, label and handle", async () => {
+    const { text, isError } = await lines({ action: "search" });
+
+    expect(isError).toBe(false);
+    expect(text).toContain(
+      "5 line(s) match: every line counted (add to_review: true for the lines held for review).",
+    );
+    expect(text).toContain(
+      `- 2026-11-03, Current account (Riverside Bank): -23.80 EUR, "CB CORNER CAFE"; line: ${cafe.id}`,
+    );
+    expect(text).toContain(
+      `- 2026-10-05, US brokerage (Harbor Securities): 1,000.00 USD, "DEPOSIT"; line: ${deposit.id}`,
+    );
+    expect(handlesOf(text)).toEqual([cafe.id, interest.id, fuel.id, deposit.id, salary.id]);
+    // Held and future lines are not counted ones; accounts are named, never by id.
+    expect(text).not.toContain(heldCafe.id);
+    expect(text).not.toContain(future.id);
+    expect(text).not.toContain(current.id);
+    expect(text).not.toContain("More lines remain");
+  });
+
+  test("finds by text and account, and says the filters it understood", async () => {
+    const { text, isError } = await lines({
+      action: "search",
+      text: "fuelstop",
+      account: "current account",
+      from: "2026-10-01",
+      to: "2026-10-31",
+    });
+
+    expect(isError).toBe(false);
+    expect(text).toContain(
+      '1 line(s) match: lines counted (add to_review: true for the lines held for review), containing "fuelstop", in Current account (Riverside Bank), booked from 2026-10-01, booked until 2026-10-31.',
+    );
+    expect(handlesOf(text)).toEqual([fuel.id]);
+  });
+
+  test("finds by the counterparty's name too", async () => {
+    const { text } = await lines({ action: "search", text: "example corp" });
+
+    expect(handlesOf(text)).toEqual([salary.id]);
+  });
+
+  test("compares amounts with the absolute amount in each account's currency", async () => {
+    const { text, isError } = await lines({
+      action: "search",
+      amount_min: "40",
+      amount_max: "45.50",
+    });
+
+    expect(isError).toBe(false);
+    expect(text).toContain("an absolute amount between 40 and 45.50 in the account's currency");
+    expect(handlesOf(text)).toEqual([fuel.id]);
+  });
+
+  test("lists the lines held for review when asked, marked so", async () => {
+    const { text, isError } = await lines({ action: "search", to_review: true });
+
+    expect(isError).toBe(false);
+    expect(text).toContain(
+      "1 line(s) match: every line held for review (near duplicates waiting for the user).",
+    );
+    expect(text).toContain(
+      `- 2026-11-04, Current account (Riverside Bank): -23.80 EUR, "CB CORNER CAFE", to review; line: ${heldCafe.id}`,
+    );
+  });
+
+  test("says when nothing matches", async () => {
+    const { text, isError } = await lines({ action: "search", text: "no such shop" });
+
+    expect(isError).toBe(false);
+    expect(text).toContain("0 line(s) match");
+    expect(text).toContain("No line on this page.");
+  });
+
+  test("reads every page with the next call it writes, never a line twice", async () => {
+    const busy = account("Busy account");
+
+    const many = Array.from({ length: 23 }, (_, index) =>
+      line(
+        busy.id,
+        `2026-${String(1 + (index % 10)).padStart(2, "0")}-15`,
+        -(index + 1) * 100,
+        "CB GREENMARKET",
+      ),
+    );
+
+    const rows = { accounts: [busy], lines: many };
+    const seen: Array<string | undefined> = [];
+    let next: Arguments | undefined = { action: "search", text: "greenmarket", limit: 10 };
+    let pages = 0;
+
+    while (next !== undefined) {
+      const { text, isError } = await lines(next, rows);
+
+      expect(isError, text).toBe(false);
+      expect(text).toContain("23 line(s) match");
+
+      seen.push(...handlesOf(text));
+      next = writtenCall(text, "More lines remain. Read them with: ");
+      pages += 1;
+
+      if (next !== undefined) {
+        expect(next).toMatchObject({ action: "search", text: "greenmarket", limit: 10 });
+      }
+    }
+
+    expect(pages).toBe(3);
+    expect(seen).toHaveLength(23);
+    expect(new Set(seen).size).toBe(23);
+  });
+
+  test(`stays under ${RESULT_LIMIT} characters, in one part, at the most lines with long labels`, async () => {
+    const busy = account("Joint current account", { institution: "Riverside Cooperative Bank" });
+
+    // A long card label as banks write them, and six-figure amounts.
+    const many = Array.from({ length: 150 }, (_, index) =>
+      line(
+        busy.id,
+        `2026-${String(1 + (index % 10)).padStart(2, "0")}-15`,
+        -(index + 1) * 100_000,
+        "CB GREENMARKET 2110 RIVERTON SUPERSTORE 15/10 CARD 4412 XXXX",
+      ),
+    );
+
+    const { text, isError } = await lines(
+      { action: "search", limit: 100 },
+      { accounts: [busy], lines: many },
+    );
+
+    expect(isError).toBe(false);
+    expect(text.length).toBeLessThan(RESULT_LIMIT);
+    expect(text).not.toContain("Part 1 of");
+    expect(handlesOf(text)).toHaveLength(100);
+    expect(text).toContain("More lines remain. Read them with:");
+  });
+
+  test("refuses more lines than it gives, with a valid call", async () => {
+    const { text, isError } = await lines({ action: "search", limit: 500 });
+
+    expect(isError).toBe(true);
+    await expectValidExample(text);
+  });
+});
+
+describe("lines search refusals", () => {
+  test("an unknown account: the user's accounts, and a call that answers", async () => {
+    const { text, isError } = await lines({ action: "search", account: "Joint account" });
+
+    expect(isError).toBe(true);
+    expect(text).toContain('No account of the user\'s is named "Joint account".');
+    expect(text).toContain("Current account (Riverside Bank), Livret A (Riverside Bank)");
+    await expectValidExample(text);
+  });
+
+  test("a name two accounts share, until the institution tells them apart", async () => {
+    const { text, isError } = await lines({ action: "search", account: "Livret A" });
+
+    expect(isError).toBe(true);
+    expect(text).toContain("Livret A (Riverside Bank), Livret A (Northbank). Add institution");
+    await expectValidExample(text);
+
+    const apart = await lines({
+      action: "search",
+      account: "livret a",
+      institution: "riverside bank",
+    });
+
+    expect(apart.isError).toBe(false);
+    expect(handlesOf(apart.text)).toEqual([interest.id]);
+  });
+
+  test("an institution without an account", async () => {
+    const { text, isError } = await lines({ action: "search", institution: "Northbank" });
+
+    expect(isError).toBe(true);
+    expect(text).toContain("give account too");
+    await expectValidExample(text);
+  });
+
+  test.each([
+    ["an amount that is no decimal", { amount_min: "forty" }, "amount_min and amount_max"],
+    ["a minimum above the maximum", { amount_min: "50", amount_max: "40" }, "at most the maximum"],
+    ["a day that is no day", { from: "2026-13-01" }, "YYYY-MM-DD"],
+    [
+      "a period that ends before it starts",
+      { from: "2026-11-01", to: "2026-10-01" },
+      "on or before",
+    ],
+    ["a made-up cursor", { text: "cafe", after: "page-2" }, "after is a handle"],
+  ])("%s", async (_, wrong, said) => {
+    const { text, isError } = await lines({ action: "search", ...wrong });
+
+    expect(isError).toBe(true);
+    expect(text).toContain(said);
+    await expectValidExample(text);
+  });
+
+  test("a made-up cursor's example keeps the search's other arguments", async () => {
+    const { text } = await lines({ action: "search", text: "cafe", after: "page-2" });
+
+    expect(writtenCall(text, "A valid call: ")).toEqual({ action: "search", text: "cafe" });
+  });
+});
+
+describe("lines show", () => {
+  test("gives an imported line with its days, memo and the import it came from", async () => {
+    const { text, isError } = await lines({ action: "show", line: fuel.id });
+
+    expect(isError).toBe(false);
+    expect(text).toBe(
+      [
+        "Line of Current account (Riverside Bank), booked on 2026-10-12, value on 2026-10-13.",
+        "Amount: -42.90 EUR.",
+        'Label: "CB FUELSTOP 0412 RIVERTON"',
+        "Memo: Pump 4",
+        'Imported from "october-statement.xml" (CAMT.053) on 2026-11-02, covering 2026-10-01 to 2026-10-31.',
+      ].join("\n"),
+    );
+  });
+
+  test("gives the counterparty, the original amount and how a line was made", async () => {
+    const paid = await lines({ action: "show", line: salary.id });
+
+    expect(paid.text).toContain("Counterparty: Example Corp");
+
+    const { text } = await lines({ action: "show", line: cafe.id });
+
+    expect(text).toContain("Amount: -23.80 EUR (originally -26.00 USD).");
+    expect(text).toContain("Entered by hand.");
+  });
+
+  test("gives a held line, and the line it looks like with its handle", async () => {
+    const { text, isError } = await lines({ action: "show", line: heldCafe.id });
+
+    expect(isError).toBe(false);
+    expect(text).toContain(
+      `To review: held as a near duplicate of the line of 2026-11-03, -23.80 EUR, "CB CORNER CAFE" (line: ${cafe.id}); not counted until the user decides.`,
+    );
+  });
+
+  test("gives a benefit account's expiry", async () => {
+    const meal = account("MealCard", { kind: "benefit", institution: "MealCard" });
+
+    const credit = line(meal.id, "2026-11-02", 18_000, "MEALCARD CREDIT", {
+      expiresOn: "2027-12-31",
+    });
+
+    const { text } = await lines(
+      { action: "show", line: credit.id },
+      { accounts: [meal], lines: [credit] },
+    );
+
+    expect(text).toContain("Expires on: 2027-12-31");
+  });
+
+  test("refuses a handle no search gave, and a line booked after today", async () => {
+    for (const handle of ["not-a-line", future.id]) {
+      const { text, isError } = await lines({ action: "show", line: handle });
+
+      expect(isError).toBe(true);
+      expect(text).toContain("Handles come from search");
+      await expectValidExample(text);
+    }
+  });
+
+  test("asks for the handle when show is called without one", async () => {
+    const { text, isError } = await lines({ action: "show" });
+
+    expect(isError).toBe(true);
+    expect(text).toContain("show needs the line's handle");
+    await expectValidExample(text);
+  });
+});
+
+describe("the lines tool", () => {
+  test("only reads, and says so, last in the fixed order", async () => {
+    const client = await connectInProcess(
+      goussetServer,
+      { run: onToday(ROWS) },
+      reader,
+      "2026-07-28",
+    );
+
+    const { tools } = await client.listTools();
+    const tool = tools.find((each) => each.name === "lines");
+
+    expect(tools.map((each) => each.name)).toEqual([
+      "month",
+      "imports",
+      "accounts",
+      "data",
+      "lines",
+    ]);
+    expect(tool?.title).toBe("Lines");
+    expect(tool?.annotations).toEqual({
+      readOnlyHint: true,
+      destructiveHint: false,
+      idempotentHint: true,
+      openWorldHint: false,
+    });
+  });
+});

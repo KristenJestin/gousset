@@ -4,6 +4,7 @@ import {
   ImportProfiles,
   Imports,
   memoryAccountStore,
+  memoryLineStore,
 } from "@gousset/core";
 import { goussetServer } from "@gousset/mcp/gousset";
 import { callText, connectInProcess } from "@gousset/mcp/test-client";
@@ -50,6 +51,7 @@ describe("a call to the MCP door", () => {
                 Layer.mergeAll(
                   FixtureLedger,
                   memoryAccountStore(),
+                  memoryLineStore(),
                   Layer.mock(Imports, {}),
                   Layer.mock(ImportProfiles, {}),
                   Layer.mock(DataExport, {}),

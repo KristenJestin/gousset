@@ -10,6 +10,7 @@ import {
   Imports,
   UnknownFormat,
   memoryAccountStore,
+  memoryLineStore,
 } from "@gousset/core";
 import type {
   ImportAccount,
@@ -175,6 +176,7 @@ function runnerOf(state: Fake): Runner<GoussetServices> {
         Layer.mergeAll(
           FixtureLedger,
           memoryAccountStore(),
+          memoryLineStore(),
           importsOf(state),
           profilesOf(state),
           Layer.mock(DataExport, {}),
@@ -200,6 +202,7 @@ function runnerWithTime(state: Fake): Runner<GoussetServices> {
           Layer.mergeAll(
             FixtureLedger,
             memoryAccountStore(),
+            memoryLineStore(),
             importsOf(state),
             profilesOf(state),
             Layer.mock(DataExport, {}),

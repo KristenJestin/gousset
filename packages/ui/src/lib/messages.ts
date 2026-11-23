@@ -177,6 +177,47 @@ function uiMessages(locale: Locale) {
       /** Said in place of the dash of a value the import has not found yet. */
       notKnown: m.uiImportNotKnown({}, options),
     },
+    operations: {
+      /** The chip on a line held for review. */
+      toReview: m.uiOperationsToReview({}, options),
+      empty: m.uiOperationsEmpty({}, options),
+      loadingMore: m.uiOperationsLoadingMore({}, options),
+      columns: {
+        day: m.uiOperationsColumnDay({}, options),
+        label: m.uiOperationsColumnLabel({}, options),
+        account: m.uiOperationsColumnAccount({}, options),
+        amount: m.uiOperationsColumnAmount({}, options),
+      },
+      /** How many lines match, the count already written: "1,234 lines". */
+      lines: (count: number, written: string) =>
+        pluralRules[locale].select(count) === "one"
+          ? m.uiOperationsLinesOne({ count: written }, options)
+          : m.uiOperationsLinesOther({ count: written }, options),
+      filters: m.uiOperationsFilters({}, options),
+      search: m.uiOperationsSearch({}, options),
+      searchPlaceholder: m.uiOperationsSearchPlaceholder({}, options),
+      account: m.uiOperationsColumnAccount({}, options),
+      allAccounts: m.uiOperationsAllAccounts({}, options),
+      from: m.uiOperationsFrom({}, options),
+      to: m.uiOperationsTo({}, options),
+      min: m.uiOperationsMin({}, options),
+      max: m.uiOperationsMax({}, options),
+      onlyToReview: m.uiOperationsOnlyToReview({}, options),
+      clear: m.uiOperationsClear({}, options),
+      bookedOn: m.uiOperationsBookedOn({}, options),
+      valueOn: m.uiOperationsValueOn({}, options),
+      rawLabel: m.uiOperationsRawLabel({}, options),
+      memo: m.uiOperationsMemo({}, options),
+      counterparty: m.uiOperationsCounterparty({}, options),
+      originalAmount: m.uiOperationsOriginalAmount({}, options),
+      expiresOn: m.uiOperationsExpiresOn({}, options),
+      looksLike: (line: string) => m.uiOperationsLooksLike({ line }, options),
+      source: m.uiOperationsSource({}, options),
+      importedFrom: m.uiOperationsImportedFrom({}, options),
+      importedOn: m.uiOperationsImportedOn({}, options),
+      period: m.uiOperationsPeriod({}, options),
+      enteredByHand: m.uiOperationsEnteredByHand({}, options),
+    },
   };
 }
 

@@ -1,0 +1,18 @@
+import type { LineSearchInput } from "@/functions/lines";
+
+/** A search of the lines without its paging: what one list of the operations page shows. */
+export type LineFilters = Omit<LineSearchInput, "after" | "limit">;
+
+/**
+ * The lines domain's query keys, from one factory (docs/architecture.md, "Data loading and
+ * skeletons"). Every key starts with `lineKeys.all`, so that one call reaches every search and
+ * every line's detail. Kept apart from the queries, which call the server, so that what only needs
+ * the keys can be tested alone.
+ */
+export const lineKeys = {
+  all: ["lines"] as const,
+  searches: () => [...lineKeys.all, "search"] as const,
+  search: (filters: LineFilters) => [...lineKeys.searches(), filters] as const,
+  details: () => [...lineKeys.all, "detail"] as const,
+  detail: (lineId: string) => [...lineKeys.details(), lineId] as const,
+};

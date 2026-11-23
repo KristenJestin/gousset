@@ -16,6 +16,30 @@ export function shortDay(day: string, locale: string): string {
   }).format(asDate(day));
 }
 
+/**
+ * `shortDay` for many days at once, as the operations' rows need: one formatter, built once, since
+ * building one is slow.
+ */
+export function shortDays(locale: string): (day: string) => string {
+  const format = new Intl.DateTimeFormat(locale, {
+    day: "numeric",
+    month: "short",
+    timeZone: "UTC",
+  });
+
+  return (day) => format.format(asDate(day));
+}
+
+/** "1–31 Oct 2026": a statement's period, from its first day to its last. */
+export function dayRange(from: string, to: string, locale: string): string {
+  return new Intl.DateTimeFormat(locale, {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+    timeZone: "UTC",
+  }).formatRange(asDate(from), asDate(to));
+}
+
 /** "31 October 2026": an account's settings, a close confirmation. */
 export function longDay(day: string, locale: string): string {
   return new Intl.DateTimeFormat(locale, {

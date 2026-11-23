@@ -335,6 +335,8 @@ export const statementLine = pgTable.withRLS(
       table.bookedOn,
       table.id,
     ),
+    // Every line of every account in order, as the operations page lists them (#21).
+    index("statement_line_user_id_booked_on_id_idx").on(table.userId, table.bookedOn, table.id),
     index("statement_line_import_id_idx").on(table.importId),
     index("statement_line_duplicate_of_line_id_idx").on(table.duplicateOfLineId),
     check(
