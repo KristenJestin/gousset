@@ -3,10 +3,12 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vite-plus/test";
 
 import {
+  EDGE_MINIMUM,
   MONEY_COLORS,
   contrastRatio,
   hexToLinearRgb,
   hueDistance,
+  measureEdgePairs,
   measureTextPairs,
   readDeclarations,
   resolveColor,
@@ -51,6 +53,21 @@ describe("the theme", () => {
   it.each(measureTextPairs(css))("sets $text on $surface at 4.5:1 or more", (pair) => {
     expect(pair.light).toBeGreaterThanOrEqual(4.5);
     expect(pair.dark).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it.each(measureEdgePairs(css))(
+    "draws the edge of a floating surface ($text) on $surface at 1.7:1 or more",
+    (pair) => {
+      expect(pair.light).toBeGreaterThanOrEqual(EDGE_MINIMUM);
+      expect(pair.dark).toBeGreaterThanOrEqual(EDGE_MINIMUM);
+    },
+  );
+
+  it("gives floating surfaces their own edge and shadow, not the blocks' border", () => {
+    const declarations = readDeclarations(css);
+
+    expect(declarations.get("--popover-border")).not.toBe(declarations.get("--border"));
+    expect(declarations.get("--popover-shadow")).toContain("light-dark(");
   });
 
   it.each(["light", "dark"] as const)(

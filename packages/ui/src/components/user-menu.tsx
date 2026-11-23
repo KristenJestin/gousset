@@ -1,70 +1,45 @@
-import type { ColorSchemeValue } from "@ui-sdk/core";
-import { usePreference } from "@ui-sdk/react/preferences";
+import { MenuGroup, MenuGroupLabel } from "@ui-sdk/react/menu";
 import type { ReactNode } from "react";
 
-import { colorScheme } from "../lib/color-scheme";
 import { NavButton } from "./app-shell";
-import { Menu, MenuChoices, MenuSeparator } from "./menu";
+import { Menu, MenuSeparator } from "./menu";
 
-const SCHEMES = ["system", "light", "dark"] as const satisfies ReadonlyArray<ColorSchemeValue>;
-
-export type UserMenuProps<Language extends string> = {
-  /** Who is signed in: the trigger's words. */
+export type UserMenuProps = {
+  /** Who is signed in: the trigger's words, and the menu's heading with their e-mail. */
   name: string;
-  /** The language heading, the language shown, and each language in its own words. */
-  languageLabel: string;
-  language: Language;
-  languages: ReadonlyArray<{ value: Language; label: string }>;
-  /** Changing the language (the app reloads the page in it). */
-  onLanguageChange: (language: Language) => void;
-  /** The colour scheme heading, and each choice's words. */
-  colorSchemeLabel: string;
-  colorSchemes: { readonly [Scheme in ColorSchemeValue]: string };
-  /** Called once the choice changed, already applied: to keep it beyond this browser. */
-  onColorSchemeChange?: (scheme: ColorSchemeValue) => void;
-  /** The account's actions after them: change the password, the users, sign out. */
+  email: string;
+  /** The account's few actions: the settings, the keyboard shortcuts, sign out. */
   children: ReactNode;
 };
 
 /**
- * The user's menu at the sidebar's foot: the language, the colour scheme (applied at once, kept
- * in this browser, and wherever `onColorSchemeChange` keeps it) and the account's actions.
+ * The user's menu at the sidebar's foot: who is signed in, then the account's few actions. What
+ * can be set (the language, the colour scheme, the password) lives in the settings, not here.
  * Motion: as `Menu`.
  */
-export function UserMenu<Language extends string>({
-  name,
-  languageLabel,
-  language,
-  languages,
-  onLanguageChange,
-  colorSchemeLabel,
-  colorSchemes,
-  onColorSchemeChange,
-  children,
-}: UserMenuProps<Language>) {
-  const { value } = usePreference(colorScheme);
-
+export function UserMenu({ name, email, children }: UserMenuProps) {
   return (
     <Menu trigger={<NavButton icon="user" label={name} />} align="start">
-      <MenuChoices
-        label={languageLabel}
-        value={language}
-        choices={languages}
-        onChange={onLanguageChange}
-      />
-      <MenuSeparator />
-      <MenuChoices
-        label={colorSchemeLabel}
-        value={value}
-        choices={SCHEMES.map((scheme) => ({ value: scheme, label: colorSchemes[scheme] }))}
-        onChange={(scheme) => {
-          if (colorScheme.set(scheme)) {
-            onColorSchemeChange?.(scheme);
-          }
-        }}
-      />
+      <UserMenuAccount name={name} email={email}>
+        {children}
+      </UserMenuAccount>
+    </Menu>
+  );
+}
+
+/**
+ * The account's part of a menu, the user's menu or the phone's "More": a group named by who is
+ * signed in (their name and e-mail at its top, never a focus stop), holding their actions.
+ */
+export function UserMenuAccount({ name, email, children }: UserMenuProps) {
+  return (
+    <MenuGroup>
+      <MenuGroupLabel className="flex min-w-0 flex-col px-2 py-1.5">
+        <span className="truncate text-sm font-medium">{name}</span>
+        <span className="truncate text-xs text-muted-foreground">{email}</span>
+      </MenuGroupLabel>
       <MenuSeparator />
       {children}
-    </Menu>
+    </MenuGroup>
   );
 }

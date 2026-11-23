@@ -1,4 +1,4 @@
-import type { Locator } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 import { expect, test } from "@playwright/test";
 
 const story = (title: string, name: string) => `/iframe.html?id=${title}--${name}&viewMode=story`;
@@ -320,6 +320,79 @@ test.describe("Dialog", () => {
     expect(await transitionSeconds(backdrop)).toBe(0);
   });
 
+  test("a form dialog stays open on a refusal, and closes once accepted, focus back on its button", async ({
+    page,
+  }) => {
+    await page.goto(story("overlays-dialog", "with-form"));
+
+    const trigger = page.getByRole("button", { name: "Note a balance" });
+    const dialog = page.getByRole("dialog", { name: "Note a balance" });
+
+    await trigger.focus();
+    await page.keyboard.press("Enter");
+    await expect(dialog).toBeVisible();
+    // Its actions: Cancel, then the submit button, last.
+    await expect(dialog.getByRole("button", { name: /^(Cancel|Note it)$/ })).toHaveText([
+      "Cancel",
+      "Note it",
+    ]);
+
+    // Enter in the field sends the form; the refusal shows under it, the dialog stays.
+    const balance = dialog.getByLabel("Balance");
+
+    await balance.focus();
+    await page.keyboard.press("Enter");
+    await expect(balance).toHaveAttribute("aria-invalid", "true");
+    await expect(dialog).toBeVisible();
+
+    // Typing takes the refusal away.
+    await page.keyboard.type("1,234.56");
+    await expect(balance).not.toHaveAttribute("aria-invalid", "true");
+    await dialog.getByRole("button", { name: "Note it" }).click();
+    await expect(dialog).toBeHidden();
+    await expect(trigger).toBeFocused();
+    await expect(page.getByText("Noted", { exact: true })).toBeVisible();
+
+    // Cancel sends nothing.
+    await page.keyboard.press("Enter");
+    await dialog.getByRole("button", { name: "Cancel" }).click();
+    await expect(dialog).toBeHidden();
+    await expect(trigger).toBeFocused();
+  });
+
+  test("on a phone it is a sheet along the bottom edge; centred on a wide screen", async ({
+    page,
+  }) => {
+    await page.goto(story("overlays-dialog", "with-form"));
+    await page.getByRole("button", { name: "Note a balance" }).click();
+
+    const dialog = page.getByRole("dialog", { name: "Note a balance" });
+    const viewport = page.viewportSize();
+    const width = viewport?.width ?? 0;
+    const height = viewport?.height ?? 0;
+
+    await expect(dialog).toBeVisible();
+
+    // Once it has come to rest.
+    await expect.poll(async () => page.evaluate(() => document.getAnimations().length)).toBe(0);
+
+    const box = await dialog.boundingBox();
+
+    if (width < 768) {
+      expect(box?.x).toBe(0);
+      expect(Math.round(box?.width ?? 0)).toBe(width);
+      expect(Math.round((box?.y ?? 0) + (box?.height ?? 0))).toBe(height);
+      await expect(dialog).toHaveCSS("border-bottom-left-radius", "0px");
+      expect(await transitionSeconds(dialog)).toBe(0.2);
+      await page.emulateMedia({ reducedMotion: "reduce" });
+      expect(await transitionSeconds(dialog)).toBe(0);
+    } else {
+      // Centred, with room around it.
+      expect(Math.round((box?.x ?? 0) * 2 + (box?.width ?? 0))).toBe(width);
+      expect(box?.width ?? 0).toBeLessThan(width);
+    }
+  });
+
   test("a confirmation starts on Cancel, ignores a press outside, and runs its answer", async ({
     page,
   }) => {
@@ -411,6 +484,48 @@ test.describe("Sheet", () => {
     await expect(sheet).toBeHidden();
   });
 
+  test("a form sheet stays open on a refusal, and closes once accepted, focus back on its button", async ({
+    page,
+  }) => {
+    await page.goto(story("overlays-sheet", "with-form"));
+
+    const trigger = page.getByRole("button", { name: "New account" });
+    const sheet = page.getByRole("dialog", { name: "New account" });
+
+    await trigger.focus();
+    await page.keyboard.press("Enter");
+    await expect(sheet).toBeVisible();
+    // Its actions: Cancel, then the submit button, last.
+    await expect(sheet.getByRole("button", { name: /^(Cancel|Create the account)$/ })).toHaveText([
+      "Cancel",
+      "Create the account",
+    ]);
+
+    // Enter in the field sends the form; the refusal shows under it, the sheet stays.
+    const name = sheet.getByLabel("Name");
+
+    await name.focus();
+    await page.keyboard.press("Enter");
+    await expect(name).toHaveAttribute("aria-invalid", "true");
+    await expect(sheet).toBeVisible();
+
+    // Typing takes the refusal away.
+    await page.keyboard.type("Joint account");
+    await expect(name).not.toHaveAttribute("aria-invalid", "true");
+    await page.keyboard.press("Enter");
+    await expect(sheet).toBeHidden();
+    await expect(trigger).toBeFocused();
+    await expect(page.getByText("Created", { exact: true })).toBeVisible();
+
+    // Cancel sends nothing.
+    await page.keyboard.press("Enter");
+    await expect(sheet).toBeVisible();
+    await sheet.getByRole("button", { name: "Cancel" }).focus();
+    await page.keyboard.press("Enter");
+    await expect(sheet).toBeHidden();
+    await expect(trigger).toBeFocused();
+  });
+
   test("it slides in, and only fades under reduced motion", async ({ page, hasTouch }) => {
     const positions = async () => {
       await page.goto(story("overlays-sheet", "default"));
@@ -459,4 +574,56 @@ test.describe("Sheet", () => {
     await page.emulateMedia({ reducedMotion: "reduce" });
     expect(await positions()).toBe(1);
   });
+});
+
+/** What a token resolves to on the page now, as the browser computes a colour. */
+async function resolveToken(page: Page, token: string) {
+  return page.evaluate((name) => {
+    const probe = document.createElement("span");
+
+    probe.style.color = `var(${name})`;
+    document.body.append(probe);
+
+    const color = getComputedStyle(probe).color;
+
+    probe.remove();
+
+    return color;
+  }, token);
+}
+
+test.describe("Floating surfaces", () => {
+  for (const scheme of ["light", "dark"] as const) {
+    test(`a menu and a select's list draw their own edge and a shadow, in ${scheme}`, async ({
+      page,
+    }) => {
+      await page.emulateMedia({ colorScheme: scheme });
+
+      const surfaces = [
+        {
+          url: story("overlays-menu", "default"),
+          trigger: page.getByRole("button", { name: "Actions on Greenmarket" }),
+          popup: page.getByRole("menu"),
+        },
+        {
+          url: story("forms-select", "in-a-card"),
+          trigger: page.getByRole("combobox", { name: "Category" }),
+          popup: page.locator('[data-slot="select-content"]'),
+        },
+      ];
+
+      for (const surface of surfaces) {
+        await page.goto(surface.url);
+        await surface.trigger.click();
+        await expect(surface.popup).toBeVisible();
+
+        const edge = await resolveToken(page, "--popover-border");
+
+        expect(edge).not.toBe(await resolveToken(page, "--border"));
+        await expect(surface.popup).toHaveCSS("border-top-width", "1px");
+        await expect(surface.popup).toHaveCSS("border-top-color", edge);
+        await expect(surface.popup).not.toHaveCSS("box-shadow", "none");
+      }
+    });
+  }
 });

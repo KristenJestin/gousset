@@ -2,7 +2,8 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import type { ReactNode } from "react";
 
 import { cn } from "@gousset/ui/lib/utils";
-import { measureTextPairs } from "@gousset/ui/lib/contrast";
+import { measureEdgePairs, measureTextPairs } from "@gousset/ui/lib/contrast";
+import type { MeasuredPair } from "@gousset/ui/lib/contrast";
 import { duration, easeOut } from "@gousset/ui/lib/motion";
 import { themeTokens } from "@gousset/ui/lib/tokens";
 import type { ThemeToken } from "@gousset/ui/lib/tokens";
@@ -19,6 +20,7 @@ const SWATCHES = new Map(
     "--card-foreground": "bg-card-foreground",
     "--popover": "bg-popover",
     "--popover-foreground": "bg-popover-foreground",
+    "--popover-border": "bg-popover-border",
     "--primary": "bg-primary",
     "--primary-foreground": "bg-primary-foreground",
     "--secondary": "bg-secondary",
@@ -87,6 +89,9 @@ const NOTES = new Map(
     "--brand-light": "the violet on light: --primary in light",
     "--brand-dark": "the violet on dark: --primary in dark",
     "--card": "blocks, one step above the background",
+    "--popover": "floating surfaces: menus, popovers, lists, tooltips, toasts, dialogs",
+    "--popover-border": "the edge of a floating surface, 1.7:1 or more around it",
+    "--popover-shadow": "the shadow of a floating surface, deeper in dark",
     "--primary": "the brand violet: the accent",
     "--ring": "the focus ring: the accent",
     "--radius": "rounded-lg: 12 px corners on blocks",
@@ -157,19 +162,19 @@ function TokenGroup({ title, holds }: { title: string; holds: (name: string) => 
   );
 }
 
-function ContrastTable() {
+function ContrastTable({ label, pairs }: { label: string; pairs: ReadonlyArray<MeasuredPair> }) {
   return (
     <table className="w-full text-sm tabular-nums">
       <thead className="text-left text-muted-foreground">
         <tr>
-          <th className="py-1 font-medium">Text</th>
+          <th className="py-1 font-medium">{label}</th>
           <th className="py-1 font-medium">On</th>
           <th className="py-1 text-right font-medium">Light</th>
           <th className="py-1 text-right font-medium">Dark</th>
         </tr>
       </thead>
       <tbody>
-        {measureTextPairs(globals).map((pair) => (
+        {pairs.map((pair) => (
           <tr key={`${pair.text} ${pair.surface}`} className="border-t">
             <td className="py-1">
               <code>{pair.text}</code>
@@ -215,7 +220,14 @@ function TokenSheet() {
         <h2 className="text-sm font-medium text-muted-foreground">
           Contrast of every text pair (WCAG, computed from globals.css)
         </h2>
-        <ContrastTable />
+        <ContrastTable label="Text" pairs={measureTextPairs(globals)} />
+      </section>
+
+      <section className="flex flex-col gap-2">
+        <h2 className="text-sm font-medium text-muted-foreground">
+          Contrast of the edge of a floating surface (1.7:1 or more, computed from globals.css)
+        </h2>
+        <ContrastTable label="Edge" pairs={measureEdgePairs(globals)} />
       </section>
     </div>
   );
