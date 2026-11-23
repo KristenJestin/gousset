@@ -23,6 +23,7 @@ import type {
   LineCategory,
   LineEntries,
 } from "./category-store";
+import { takeCategoryTurn } from "./category-turn";
 import { CategoryNotFound, LineNotFound } from "./errors";
 import { classifyByMerchants } from "./merchants/default-classification";
 import { MerchantNotFound } from "./merchants/errors";
@@ -155,15 +156,6 @@ async function apply(
 
 const parent = alias(category, "parent");
 
-/** The first key of the lock a user's changes of the categories take, the user's the second. */
-const CHANGE_LOCK = "gousset.category.change";
-
-/** Takes the user's turn among the changes of the categories, until the transaction ends. */
-const takeTurn = (transaction: UserTransaction, owner: string) =>
-  transaction.execute(
-    sql`select pg_advisory_xact_lock(hashtext(${CHANGE_LOCK}), hashtext(${owner}))`,
-  );
-
 /** A category with its parent's name, as a line's or a merchant's default shows it. */
 async function shownCategory(
   transaction: UserTransaction,
@@ -238,7 +230,7 @@ export const DatabaseCategoryStore = Layer.effect(
             // A user's changes of the categories take turns until the transaction ends, so that
             // each decides on what the other left (a name taken, the cap, a parent archived): a
             // lock on the existing rows would let two inserts through at once.
-            await takeTurn(transaction, owner);
+            await takeCategoryTurn(transaction, owner);
 
             const rows = await transaction.select().from(category).for("update");
             const decided = decide(rows.map(record));
@@ -338,8 +330,9 @@ export const DatabaseCategoryStore = Layer.effect(
               }
 
               // Its turn among the changes of the categories: the category chosen is not archived
-              // nor merged away before it commits.
-              await takeTurn(transaction, owner);
+              // nor merged away before it commits, and no recognition, merge or move of merchants
+              // classifies entries by the default it replaces meanwhile (`./category-turn`).
+              await takeCategoryTurn(transaction, owner);
 
               const [found] = await transaction
                 .select({ id: merchant.id })

@@ -11,6 +11,7 @@ import { CsvProfile, detectCsvProfile } from "@gousset/import";
 import { and, count, eq, gte, inArray, isNotNull, isNull, lte, ne, or } from "drizzle-orm";
 import { Effect, Schema } from "effect";
 
+import { takeCategoryTurn } from "../category-turn";
 import { entriesForLines } from "../entries";
 import { recogniseIn } from "../merchants/merchants";
 import { ImportFailed } from "./errors";
@@ -428,6 +429,10 @@ export function runImport(
     }
 
     yield* whileRunning(async (transaction) => {
+      // The user's turn first, before this transaction locks any row its recognition's
+      // classification may meet (`../category-turn`): a default set meanwhile waits for it.
+      await takeCategoryTurn(transaction, owner);
+
       // The balances are written again whole, so that a second attempt does not double them.
       await transaction.delete(accountBalance).where(eq(accountBalance.importId, importId));
 

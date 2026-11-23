@@ -12,6 +12,7 @@ import { alias as aliasOf } from "drizzle-orm/pg-core";
 import { Context, Effect, Layer, Result } from "effect";
 
 import type { LineCategory } from "../category-store";
+import { takeCategoryTurn } from "../category-turn";
 import { isId } from "../imports/rows";
 import { classifyByMerchants } from "./default-classification";
 import type { Money } from "../month";
@@ -205,12 +206,15 @@ const summaryColumns = { id: merchant.id, name: merchant.name, aliases: aliasCou
  * new one otherwise (`assignMerchants`). A cleaned label already known is never moved: what the
  * user split or merged stays. The entries of the lines it gave a merchant then go in that
  * merchant's default category (`./default-classification`). Safe to run at once in two
- * transactions, and again: a row the other added first is kept.
+ * transactions, and again: a row the other added first is kept. It takes the user's turn first
+ * (`../category-turn`), so that a default set meanwhile waits for it, or it for the default.
  */
 export async function recogniseIn(
   transaction: UserTransaction,
   owner: string,
 ): Promise<Recognised> {
+  await takeCategoryTurn(transaction, owner);
+
   const labels = await transaction
     .selectDistinct({
       label: statementLine.label,
@@ -607,6 +611,9 @@ export const merchantsLayer = Layer.effect(
             async (
               transaction,
             ): Promise<Result.Result<AliasMoved, MerchantNotFound | MerchantAliasNotFound>> => {
+              // Its entries follow the defaults as they are: a default set meanwhile waits.
+              await takeCategoryTurn(transaction, owner);
+
               const from = await summaryById(transaction, merchantId);
 
               if (from === undefined) {
@@ -665,6 +672,9 @@ export const merchantsLayer = Layer.effect(
             async (
               transaction,
             ): Promise<Result.Result<Merged, MerchantNotFound | MerchantMergeRefused>> => {
+              // The defaults it reads and moves stay as they are until it commits.
+              await takeCategoryTurn(transaction, owner);
+
               const from = await summaryById(transaction, merchantId);
               const into = await summaryById(transaction, intoId);
 
