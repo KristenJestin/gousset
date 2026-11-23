@@ -74,30 +74,34 @@ function GeneralSettings() {
 
 /**
  * Turns the single-key shortcuts off or on again (WCAG 2.2, 2.1.4 Character Key Shortcuts), kept
- * on the account. The switch moves at once; a refusal puts it back and says so.
+ * on the account. The switch moves at once and shows the value being saved; one save at a time,
+ * so that two quick toggles cannot land out of order. Otherwise it shows what the account holds:
+ * a refusal puts it back to that, and says so.
  */
 function ShortcutSettings() {
   const router = useRouter();
   const { user } = Route.useRouteContext();
   const formatForDisplay = useFormatForDisplay();
-  const [on, setOn] = useState(user.singleKeyShortcuts);
+  const [saving, setSaving] = useState<boolean>();
   const [error, setError] = useState<string>();
 
   async function turn(next: boolean) {
-    setOn(next);
-
-    const refusal = await refusalOf(() => setSingleKeyShortcuts({ data: { on: next } }));
-
-    if (refusal !== undefined) {
-      setOn(!next);
-      setError(errorMessage(refusal));
-
+    if (saving !== undefined) {
       return;
     }
 
-    setError(undefined);
-    // The root reads the setting again: the shortcuts follow it without a reload.
-    await router.invalidate();
+    setSaving(next);
+
+    const refusal = await refusalOf(() => setSingleKeyShortcuts({ data: { on: next } }));
+
+    setError(refusal === undefined ? undefined : errorMessage(refusal));
+
+    if (refusal === undefined) {
+      // The root reads the setting again: the shortcuts, and this switch, follow it.
+      await router.invalidate();
+    }
+
+    setSaving(undefined);
   }
 
   return (
@@ -105,7 +109,7 @@ function ShortcutSettings() {
       <Switch
         label={m.settingsSingleKeyShortcuts()}
         description={m.settingsSingleKeyShortcutsDescription({ keys: formatForDisplay("Mod+/") })}
-        checked={on}
+        checked={saving ?? user.singleKeyShortcuts}
         onCheckedChange={(next) => void turn(next)}
       />
       <FormMessage message={error} />

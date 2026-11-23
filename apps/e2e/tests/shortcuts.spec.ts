@@ -119,7 +119,11 @@ async function setSingleKeyShortcuts(page: Page, on: boolean) {
   const setting = page.getByRole("switch", { name: "Single-key shortcuts" });
 
   if ((await setting.isChecked()) !== on) {
+    // The save has answered before the reload, which would otherwise cut it short.
+    const saved = page.waitForResponse((response) => response.request().method() === "POST");
+
     await setting.click();
+    await saved;
   }
 
   await expect(setting).toBeChecked({ checked: on });
