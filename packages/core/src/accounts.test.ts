@@ -52,6 +52,7 @@ function accountOf(
     closedOn: null,
     settlesIntoAccountId: null,
     creditOrder: "oldest_first",
+    balanceCategoryId: null,
     ...change,
   };
 }

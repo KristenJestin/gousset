@@ -1,7 +1,15 @@
 import { Effect, Result } from "effect";
 
 import { AccountStore } from "./account-store";
-import type { AccountChange, AccountFacts, AccountRecord, NewAccount } from "./account-store";
+import type {
+  AccountChange,
+  AccountFacts,
+  AccountRecord,
+  BalanceCategory,
+  ChoosableCategory,
+  EditFacts,
+  NewAccount,
+} from "./account-store";
 import {
   DEFAULT_CHART_DAYS,
   DEFAULT_LINES,
@@ -38,6 +46,7 @@ import {
   AccountNameUnknown,
   AccountNotClosed,
   AccountNotFound,
+  BalanceCategoryRefused,
   CurrencyLocked,
   DayRangeRefused,
   ExpiryBeforeCredit,
@@ -100,6 +109,8 @@ export type AccountLine = {
   readonly balanceAfter: Money | null;
   /** A credit of a benefit account: the day it expires. */
   readonly expiresOn: string | null;
+  /** The movement a noted balance makes (#31): it has no label, the interface names it. */
+  readonly fromBalance: boolean;
 };
 
 /** A credit of a benefit account with something left on it. */
@@ -152,6 +163,8 @@ export type AccountDetail = {
     readonly creditOrder: CreditOrder;
     /** A card's current account. */
     readonly settlesInto: { readonly id: string; readonly name: string } | null;
+    /** Read for an account kept by its balance: the category its movement goes to (#31). */
+    readonly balanceCategory: BalanceCategory | null;
   };
   readonly day: string;
   readonly balance: Money;
@@ -354,6 +367,7 @@ export const showAccount = (owner: string, accountId: string, view: AccountView 
           settlesInto === undefined
             ? null
             : { id: settlesInto.account.id, name: settlesInto.account.name },
+        balanceCategory: found.balanceCategory,
       },
       day,
       balance: money(balanceAt(account, found.countedMinor, found.noted, day), account.currency),
@@ -369,6 +383,7 @@ export const showAccount = (owner: string, accountId: string, view: AccountView 
         amount: money(line.amountMinor, account.currency),
         balanceAfter: byLines ? money(after[index] ?? 0, account.currency) : null,
         expiresOn: line.expiresOn,
+        fromBalance: line.source === "balance",
       })),
       olderBefore: page.more && last !== undefined ? last.id : null,
       daily: {
@@ -470,11 +485,40 @@ function settlement(
   return Result.succeed(target.id);
 }
 
+/**
+ * The category an account kept by its balance sends its movement to: one of the user's, and not an
+ * archived one unless the account already has it (an archived category keeps what it has).
+ */
+function balanceCategoryOf(
+  input: AccountInput,
+  categories: ReadonlyArray<ChoosableCategory>,
+  current: string | null,
+): Result.Result<string | null, BalanceCategoryRefused> {
+  const wanted = input.balanceCategoryId;
+
+  if (wanted === undefined) {
+    return Result.succeed(null);
+  }
+
+  const found = categories.find((each) => each.id === wanted);
+
+  if (found === undefined) {
+    return Result.fail(new BalanceCategoryRefused({ categoryId: wanted, reason: "unknown" }));
+  }
+
+  if (found.archived && wanted !== current) {
+    return Result.fail(new BalanceCategoryRefused({ categoryId: wanted, reason: "archived" }));
+  }
+
+  return Result.succeed(wanted);
+}
+
 /** The settings an input sets, the choice stored as its kind and envelope. */
 function settingsOf(
   input: AccountInput,
   settlesIntoAccountId: string | null,
   creditOrder: CreditOrder,
+  balanceCategoryId: string | null,
 ) {
   const { kind, envelope } = storedAs(input.choice);
 
@@ -490,54 +534,78 @@ function settingsOf(
     openedOn: input.openedOn ?? null,
     settlesIntoAccountId,
     creditOrder: input.creditOrder ?? creditOrder,
+    balanceCategoryId,
   };
 }
 
 /**
  * Creates an account; a benefit account's credits are used oldest first unless the input says
  * otherwise. Fails with `SettlementRefused` when a card does not name one of the user's
- * open current accounts, or another kind names one.
+ * open current accounts, or another kind names one, and with `BalanceCategoryRefused` for a
+ * category that is none of the user's, or archived.
  */
 export const createAccount = (owner: string, input: AccountInput) =>
   Effect.gen(function* () {
     const store = yield* AccountStore;
 
-    return yield* store.create(owner, (accounts) =>
-      Result.map(settlement(input, accounts, undefined), (settlesInto): NewAccount => ({
-        ...settingsOf(input, settlesInto, "oldest_first"),
-        closedOn: null,
-      })),
+    return yield* store.create(owner, (accounts, categories) =>
+      decideNew(input, accounts, categories),
     );
   });
+
+function decideNew(
+  input: AccountInput,
+  accounts: ReadonlyArray<AccountRecord>,
+  categories: ReadonlyArray<ChoosableCategory>,
+): Result.Result<NewAccount, SettlementRefused | BalanceCategoryRefused> {
+  const settlesInto = settlement(input, accounts, undefined);
+
+  if (Result.isFailure(settlesInto)) {
+    return Result.fail(settlesInto.failure);
+  }
+
+  return Result.map(balanceCategoryOf(input, categories, null), (category) => ({
+    ...settingsOf(input, settlesInto.success, "oldest_first", category),
+    closedOn: null,
+  }));
+}
 
 /**
  * Changes an account's settings, all at once, as the edit form sends them; a credit order left
  * out stays as it is. Fails with
- * `AccountNotFound`, `CurrencyLocked` (a new currency once the account has a line or a balance)
- * or `SettlementRefused`.
+ * `AccountNotFound`, `CurrencyLocked` (a new currency once the account has a line or a balance),
+ * `SettlementRefused` or `BalanceCategoryRefused`. An account kept by its balance has its movement
+ * lines made again in the same transaction: its opening balance, mode and category shape them.
  */
 export const editAccount = (owner: string, accountId: string, input: AccountInput) =>
   Effect.gen(function* () {
     const store = yield* AccountStore;
 
-    return yield* store.update(
-      owner,
-      accountId,
-      ({
-        account,
-        accounts,
-        hasEntries,
-      }): Result.Result<AccountChange, CurrencyLocked | SettlementRefused> => {
-        if (hasEntries && input.currency !== account.currency) {
-          return Result.fail(new CurrencyLocked({ accountId }));
-        }
-
-        return Result.map(settlement(input, accounts, accountId), (settlesInto): AccountChange =>
-          settingsOf(input, settlesInto, account.creditOrder),
-        );
-      },
-    );
+    return yield* store.update(owner, accountId, (facts) => decideEdit(input, facts));
   });
+
+function decideEdit(
+  input: AccountInput,
+  facts: EditFacts,
+): Result.Result<AccountChange, CurrencyLocked | SettlementRefused | BalanceCategoryRefused> {
+  const { account, accounts, hasEntries, categories } = facts;
+
+  if (hasEntries && input.currency !== account.currency) {
+    return Result.fail(new CurrencyLocked({ accountId: account.id }));
+  }
+
+  const settlesInto = settlement(input, accounts, account.id);
+
+  if (Result.isFailure(settlesInto)) {
+    return Result.fail(settlesInto.failure);
+  }
+
+  const category = balanceCategoryOf(input, categories, account.balanceCategoryId);
+
+  return Result.map(category, (chosen) =>
+    settingsOf(input, settlesInto.success, account.creditOrder, chosen),
+  );
+}
 
 /**
  * Closes an account on a day: it keeps its lines and leaves the totals. Fails with
@@ -567,8 +635,10 @@ export const reopenAccount = (owner: string, accountId: string) =>
   });
 
 /**
- * Notes the balance at the end of a day on an account kept by its balance. Fails with
- * `AccountNotFound`, `AccountKeptByLines` or `BalanceAlreadyNoted` (one a day).
+ * Notes the balance at the end of a day on an account kept by its balance: it makes the month's
+ * movement, one line, an expense or an income in the account's category (#31), and the movement of
+ * the next noted balance changes with it. Fails with `AccountNotFound`, `AccountKeptByLines` or
+ * `BalanceAlreadyNoted` (one a day).
  */
 export const noteBalance = (owner: string, accountId: string, day: string, balanceMinor: number) =>
   Effect.gen(function* () {

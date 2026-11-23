@@ -66,6 +66,7 @@ function accountOf(name: string, currency = "EUR"): AccountRecord {
     closedOn: null,
     settlesIntoAccountId: null,
     creditOrder: "oldest_first",
+    balanceCategoryId: null,
   };
 }
 

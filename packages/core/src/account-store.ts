@@ -22,6 +22,23 @@ export type AccountRecord = {
   readonly settlesIntoAccountId: string | null;
   /** Read for a benefit account only: in which order its credits are used. */
   readonly creditOrder: CreditOrder;
+  /** Read for an account kept by its balance only: the category its movement goes to (#31). */
+  readonly balanceCategoryId: string | null;
+};
+
+/** A category an account's movement may go to, as a write checks it. */
+export type ChoosableCategory = {
+  readonly id: string;
+  readonly archived: boolean;
+};
+
+/** The category an account kept by its balance sends its movement to, as its page names it. */
+export type BalanceCategory = {
+  readonly id: string;
+  /** With its parent's, for a child: "Food > Meals out". */
+  readonly name: string;
+  readonly kind: "expense" | "income";
+  readonly archived: boolean;
 };
 
 /** What a write sets on an account; the rest stays. */
@@ -39,6 +56,8 @@ export type StatementBalanceAt = DayBalance & {
 /** What the balances of one account are computed from, as of a day (`facts`). */
 export type AccountFacts = {
   readonly account: AccountRecord;
+  /** The account's `balanceCategoryId`, read; null when it has none. */
+  readonly balanceCategory: BalanceCategory | null;
   /** The sum of the counted lines booked on or before the day. */
   readonly countedMinor: number;
   /** The noted balances on or before the day, oldest first. */
@@ -65,6 +84,8 @@ export type StoredLine = {
   readonly counterpartyName: string | null;
   /** A credit of a benefit account: the day it expires. */
   readonly expiresOn: string | null;
+  /** `balance`: the movement a noted balance makes (#31), which has no label of its own. */
+  readonly source: "import" | "manual" | "balance" | "counterpart";
 };
 
 /** A line of the user's, as a change of its expiry is decided from, with its account. */
@@ -116,6 +137,8 @@ export type EditFacts = {
   readonly accounts: ReadonlyArray<AccountRecord>;
   /** The account has a line or a balance: its currency is fixed. */
   readonly hasEntries: boolean;
+  /** Every category of the user's. */
+  readonly categories: ReadonlyArray<ChoosableCategory>;
 };
 
 /**
@@ -164,10 +187,13 @@ export class AccountStore extends Context.Service<
       accountId: string,
       day: string,
     ) => Effect.Effect<ReadonlyArray<CountedLine>, QueryFailed>;
-    /** Creates the account `decide` makes from the user's accounts, in one transaction. */
+    /** Creates the account `decide` makes from the user's accounts and categories, at once. */
     readonly create: <E>(
       owner: string,
-      decide: (accounts: ReadonlyArray<AccountRecord>) => Result.Result<NewAccount, E>,
+      decide: (
+        accounts: ReadonlyArray<AccountRecord>,
+        categories: ReadonlyArray<ChoosableCategory>,
+      ) => Result.Result<NewAccount, E>,
     ) => Effect.Effect<AccountRecord, E | QueryFailed>;
     /** Changes an account as `decide` says from what it read, in one transaction. */
     readonly update: <E>(
@@ -175,7 +201,11 @@ export class AccountStore extends Context.Service<
       accountId: string,
       decide: (facts: EditFacts) => Result.Result<AccountChange, E>,
     ) => Effect.Effect<AccountRecord, E | AccountNotFound | QueryFailed>;
-    /** Notes the balance `decide` gives for the account, in one transaction: one a day. */
+    /**
+     * Notes the balance `decide` gives for the account, in one transaction: one a day. An account
+     * kept by its balance gets its movement line in the same transaction (`./balance-lines`); an
+     * account's update does too, since its opening balance, mode and category shape them.
+     */
     readonly noteBalance: <E>(
       owner: string,
       accountId: string,

@@ -360,6 +360,10 @@ const TRANSFER_REFUSALS = {
     "No line of another of the user's accounts has the opposite amount within a few days: name the other side with other (across currencies too).",
   several_candidates:
     "Several lines may be the other side of this transfer: show the line to list them, then pair it with other.",
+  account_kept_by_lines:
+    "That account is kept by its lines: its own side of the transfer is one of its lines. Pair the line {line} with that line, named with other.",
+  other_currency:
+    "That account is in another currency than the line {line}: Gousset makes its side only in the line's currency. Pair it with a line of that account, named with other.",
 } as const satisfies { readonly [Reason in TransferRefused["reason"]]: string };
 
 function transferRefused(input: LinesInput, refused: TransferRefused) {
