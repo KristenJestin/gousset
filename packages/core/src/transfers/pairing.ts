@@ -2,8 +2,19 @@
 // rules alone, on lines already read, so that the import's pairing, the pairing on demand and the
 // line's detail all decide alike.
 
+import type { AccountKind } from "../account-values";
+
 /** How many days apart the two sides of a transfer may be booked: a few, as banks book them. */
 export const TRANSFER_DAYS = 4;
+
+/**
+ * The kinds whose banks date money in and out by fortnights (docs/data-model.md, `transfer`): a
+ * side on one may be booked as late as the next fortnight's start, plus `TRANSFER_DAYS`.
+ */
+const BY_FORTNIGHT: ReadonlySet<AccountKind> = new Set(["savings"]);
+
+/** How many days apart two sides may be at most: a fortnight starts 16 days after a day at most. */
+export const LONGEST_TRANSFER_DAYS = 16 + TRANSFER_DAYS;
 
 /** How many days before its debit a deferred card's balance may have been what the debit pays. */
 export const CARD_DAYS = 35;
@@ -12,6 +23,7 @@ export const CARD_DAYS = 35;
 export type PairableLine = {
   readonly id: string;
   readonly accountId: string;
+  readonly accountKind: AccountKind;
   readonly currency: string;
   readonly bookedOn: string;
   readonly valueOn: string | null;
@@ -39,9 +51,54 @@ function daysApart(a: PairableLine, b: PairableLine): number {
     : Math.min(booked, Math.abs(dayNumber(a.valueOn) - dayNumber(b.valueOn)));
 }
 
+/** The day the fortnight after `day`'s starts: the 16th, or the 1st of the next month. */
+function nextFortnight(day: string): string {
+  if (Number(day.slice(8, 10)) < 16) {
+    return `${day.slice(0, 8)}16`;
+  }
+
+  // Months count from 0 here: the month of `day` names the next one.
+  return new Date(Date.UTC(Number(day.slice(0, 4)), Number(day.slice(5, 7)), 1))
+    .toISOString()
+    .slice(0, 10);
+}
+
+/**
+ * Whether two days are close enough for a transfer's two sides: `TRANSFER_DAYS` apart, or, by the
+ * fortnight, the later no more than `TRANSFER_DAYS` after the start of the earlier's next fortnight.
+ */
+function closeDays(a: string, b: string, byFortnight: boolean): boolean {
+  const [early, late] = a <= b ? [a, b] : [b, a];
+
+  return (
+    dayNumber(late) - dayNumber(early) <= TRANSFER_DAYS ||
+    (byFortnight && late <= shiftDay(nextFortnight(early), TRANSFER_DAYS))
+  );
+}
+
+/**
+ * Whether two lines are close enough, by booking date, or by value date when both have one: by the
+ * fortnight when one side's account dates by it, unless `fortnights` is `never`.
+ */
+function closeEnough(
+  a: PairableLine,
+  b: PairableLine,
+  fortnights: "when either dates by it" | "never" = "when either dates by it",
+): boolean {
+  const byFortnight =
+    fortnights === "when either dates by it" &&
+    (BY_FORTNIGHT.has(a.accountKind) || BY_FORTNIGHT.has(b.accountKind));
+
+  return (
+    closeDays(a.bookedOn, b.bookedOn, byFortnight) ||
+    (a.valueOn !== null && b.valueOn !== null && closeDays(a.valueOn, b.valueOn, byFortnight))
+  );
+}
+
 /**
  * Whether two lines may be the two sides of one transfer: on two accounts in the same currency, of
- * opposite amounts, booked a few days apart (`TRANSFER_DAYS`).
+ * opposite amounts, booked a few days apart (`TRANSFER_DAYS`), or up to the next fortnight when
+ * one side is on an account that dates by the fortnight (`BY_FORTNIGHT`).
  */
 export function isCandidate(a: PairableLine, b: PairableLine): boolean {
   return (
@@ -50,7 +107,7 @@ export function isCandidate(a: PairableLine, b: PairableLine): boolean {
     a.currency === b.currency &&
     a.amountMinor !== 0 &&
     a.amountMinor === -b.amountMinor &&
-    daysApart(a, b) <= TRANSFER_DAYS
+    closeEnough(a, b)
   );
 }
 
@@ -72,8 +129,23 @@ export function candidatesOf<Line extends PairableLine>(
 const amountKey = (line: PairableLine) => `${line.currency} ${Math.abs(line.amountMinor)}`;
 
 /**
- * `candidatesOf` over one pool, read many times: the pool is grouped once by currency and amount, so
- * that pairing every line of a user's stays linear.
+ * The candidates the automatic pairing weighs (#131): those within `TRANSFER_DAYS` when there are
+ * any, as before the fortnight; the fortnight's farther ones only for a line with none that near,
+ * so that a weekly transfer to a savings account still pairs each line with its own day's.
+ */
+function nearestTier<Line extends PairableLine>(
+  line: PairableLine,
+  candidates: ReadonlyArray<Line>,
+): ReadonlyArray<Line> {
+  const near = candidates.filter((other) => closeEnough(line, other, "never"));
+
+  return near.length > 0 ? near : candidates;
+}
+
+/**
+ * The candidates the automatic pairing weighs for each line of one pool, read many times (the
+ * line's detail offers them all, `candidatesOf`): the pool is grouped once by currency and amount,
+ * so that pairing every line of a user's stays linear.
  */
 export function candidateFinder<Line extends PairableLine>(
   pool: ReadonlyArray<Line>,
@@ -87,7 +159,7 @@ export function candidateFinder<Line extends PairableLine>(
     groups.set(amountKey(line), group);
   }
 
-  return (line) => candidatesOf(line, groups.get(amountKey(line)) ?? []);
+  return (line) => nearestTier(line, candidatesOf(line, groups.get(amountKey(line)) ?? []));
 }
 
 const pairOf = (a: PairableLine, b: PairableLine): Pair =>
@@ -117,7 +189,10 @@ export function clearPairs(
       continue;
     }
 
-    if (candidates(only).length === 1) {
+    // The line must be its candidate's only one too: a far candidate may have a near one of its own.
+    const [back, ...more] = candidates(only);
+
+    if (back?.id === line.id && more.length === 0) {
       pairs.push(pairOf(line, only));
       paired.add(line.id);
       paired.add(only.id);

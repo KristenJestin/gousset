@@ -1,5 +1,5 @@
 import type { Client } from "@modelcontextprotocol/client";
-import type { Page } from "@playwright/test";
+import type { Cookie, Page } from "@playwright/test";
 import {
   DatabaseLineStore,
   Today,
@@ -32,6 +32,7 @@ import { openUserData } from "../src/user-data";
 let data: ReturnType<typeof openUserData>;
 let imports: ReturnType<typeof importsOn>;
 let owner = "";
+let cookies: ReadonlyArray<Cookie> = [];
 
 test.beforeAll(async ({ app, user }) => {
   const person = await addUser(app.baseURL, user, {
@@ -43,6 +44,7 @@ test.beforeAll(async ({ app, user }) => {
   data = openUserData(app.database);
   imports = importsOn(data);
   owner = await data.ownerOf(person.email);
+  cookies = person.cookies;
 });
 
 test.afterAll(async () => {
@@ -425,6 +427,140 @@ test("a line the user says is no transfer is not paired again by itself", async 
   expect((await transferOf(out)).candidates.map((side) => side.id)).toEqual([into]);
 });
 
+// Issue #131, "How to verify": a savings account dates money by the fortnight (the 1st or the
+// 16th), so its side of a transfer may be booked up to 4 days after the next fortnight's start.
+
+test("an outflow on the current account on a fortnight's first day and the same inflow on the savings account at the next boundary pair", async () => {
+  const current = await newAccount("Fortnight current", "current");
+  const savings = await newAccount("Fortnight savings", "savings");
+
+  await importInto(current, "fortnight-current", [
+    { bookedOn: "2026-10-01", amountMinor: -30_100, label: "SEPA TRF TO MY SAVINGS" },
+  ]);
+
+  await importInto(savings, "fortnight-savings", [
+    { bookedOn: "2026-10-16", amountMinor: 30_100, label: "SEPA TRF FROM MY CURRENT" },
+  ]);
+
+  const out = await lineOf(current, -30_100);
+  const into = await lineOf(savings, 30_100);
+
+  expect((await transferOf(out)).paired).toMatchObject({
+    direction: "out",
+    other: { id: into, account: { id: savings } },
+    setAside: true,
+    pairedBy: "import",
+  });
+  expect(await entriesOf([out, into])).toEqual([[], []]);
+});
+
+test("the same gap between two current accounts doesn't pair", async () => {
+  const current = await newAccount("Gap current", "current");
+  const other = await newAccount("Gap other current", "current");
+
+  await importInto(current, "gap-current", [
+    { bookedOn: "2026-10-01", amountMinor: -30_200, label: "SEPA TRF TO MY OTHER ACCOUNT" },
+  ]);
+
+  await importInto(other, "gap-other", [
+    { bookedOn: "2026-10-16", amountMinor: 30_200, label: "SEPA TRF RECEIVED" },
+  ]);
+
+  const out = await lineOf(current, -30_200);
+  const shown = await transferOf(out);
+
+  // Fifteen days apart, the two lines are not even offered as each other's other side.
+  expect(shown.paired).toBeNull();
+  expect(shown.candidates).toEqual([]);
+  expect(await entriesOf([out])).toEqual([["default"]]);
+});
+
+test("two candidates in a fortnight go to review", async () => {
+  const current = await newAccount("Fortnight review current", "current");
+  const savings = await newAccount("Fortnight review savings", "savings");
+
+  await importInto(savings, "fortnight-review-savings", [
+    { bookedOn: "2026-10-09", amountMinor: 30_300, label: "SEPA TRF RECEIVED" },
+    { bookedOn: "2026-10-16", amountMinor: 30_300, label: "SEPA TRF RECEIVED" },
+  ]);
+
+  await importInto(current, "fortnight-review-current", [
+    { bookedOn: "2026-10-01", amountMinor: -30_300, label: "SEPA TRF TO MY SAVINGS" },
+  ]);
+
+  const out = await lineOf(current, -30_300);
+  const waiting = await transferOf(out);
+
+  // Nothing is written: the line waits, its two candidates in the fortnight offered.
+  expect(waiting.paired).toBeNull();
+  expect(waiting.candidates.map((side) => side.bookedOn)).toEqual(["2026-10-09", "2026-10-16"]);
+  expect(await toReview()).toContain(out);
+});
+
+test("a weekly transfer to a savings account still pairs each line with the one of its own day", async () => {
+  const current = await newAccount("Weekly current", "current");
+  const savings = await newAccount("Weekly savings", "savings");
+  const days = ["2026-10-02", "2026-10-09", "2026-10-16"];
+
+  await importInto(
+    savings,
+    "weekly-savings",
+    days.map((bookedOn) => ({ bookedOn, amountMinor: 30_600, label: "SEPA TRF RECEIVED" })),
+  );
+
+  await importInto(
+    current,
+    "weekly-current",
+    days.map((bookedOn) => ({ bookedOn, amountMinor: -30_600, label: "SEPA TRF TO MY SAVINGS" })),
+  );
+
+  // Each savings line is in the fortnight of two or three of them: the same day's is its own.
+  const paired = await Promise.all(
+    (await linesOf(current)).map(
+      async (line) => (await transferOf(line.id)).paired?.other.bookedOn,
+    ),
+  );
+
+  expect(paired).toEqual(days);
+});
+
+test("a savings line with a candidate a month before a new line's import still goes to review", async () => {
+  const current = await newAccount("Reach current", "current");
+  const other = await newAccount("Reach other current", "current");
+  const savings = await newAccount("Reach savings", "savings");
+
+  // The savings line has two candidates when it comes: neither is paired.
+  await importInto(current, "reach-first", [
+    { bookedOn: "2026-10-01", amountMinor: -30_400, label: "SEPA TRF TO MY SAVINGS" },
+  ]);
+
+  const second = await importInto(other, "reach-second", [
+    { bookedOn: "2026-10-18", amountMinor: -30_400, label: "SEPA TRF TO MY SAVINGS" },
+  ]);
+
+  await importInto(savings, "reach-savings", [
+    { bookedOn: "2026-10-20", amountMinor: 30_400, label: "SEPA TRF RECEIVED" },
+  ]);
+
+  // One of them goes: the savings line is left with the first, of October 1st.
+  await imports.undo(owner, second.id);
+
+  // A new line 35 days after the first is the savings line's other candidate: still two of them.
+  await importInto(other, "reach-last", [
+    { bookedOn: "2026-11-05", amountMinor: -30_400, label: "SEPA TRF TO MY SAVINGS" },
+  ]);
+
+  const into = await lineOf(savings, 30_400);
+  const waiting = await transferOf(into);
+
+  expect(waiting.paired).toBeNull();
+  expect(waiting.candidates.map((side) => side.bookedOn).toSorted()).toEqual([
+    "2026-10-01",
+    "2026-11-05",
+  ]);
+  expect(await toReview()).toContain(into);
+});
+
 const allowReadAndWrite = (page: Page) =>
   page.getByRole("button", { name: "Allow read and write" }).click();
 
@@ -521,4 +657,58 @@ test("an MCP client shows a transfer, unpairs it, pairs it again and pairs every
   expect((await callLines(session.client, { action: "show", line })).text).not.toContain(
     "Transfer to",
   );
+});
+
+test("an MCP client pairs a transfer to a savings account across its fortnight", async ({
+  page,
+  baseURL,
+  mcpClientId,
+}) => {
+  test.setTimeout(90_000);
+
+  const current = await newAccount("Fortnight MCP current", "current");
+  const savings = await newAccount("Fortnight MCP savings", "savings");
+
+  await importInto(current, "fortnight-mcp-current", [
+    { bookedOn: "2026-09-16", amountMinor: -30_500, label: "SEPA TRF TO MY LIVRET" },
+  ]);
+
+  await importInto(savings, "fortnight-mcp-savings", [
+    { bookedOn: "2026-10-03", amountMinor: 30_500, label: "SEPA TRF FROM MY CURRENT" },
+  ]);
+
+  await page.context().addCookies([...cookies]);
+
+  const session = await connectMcp({
+    baseURL: baseURL ?? "",
+    page,
+    consent: allowReadAndWrite,
+    scope: "read write",
+    clientId: mcpClientId,
+  });
+
+  const found = await callLines(session.client, {
+    action: "search",
+    text: "sepa trf to my livret",
+    account: "Fortnight MCP current",
+  });
+
+  const line = firstHandle(found.text);
+
+  expect(line, found.text).not.toBe("");
+
+  // Seventeen days apart, from the 16th to the 3rd: the import paired them.
+  const shown = await callLines(session.client, { action: "show", line });
+
+  expect(shown.text).toContain("Transfer to Fortnight MCP savings, paired by Gousset");
+
+  const unpaired = await callLines(session.client, { action: "unpair", line });
+
+  expect(unpaired.isError, unpaired.text).toBe(false);
+
+  // The savings line is the line's only candidate, across the fortnight.
+  const paired = await callLines(session.client, { action: "pair", line });
+
+  expect(paired.isError, paired.text).toBe(false);
+  expect(paired.text).toContain("Transfer to Fortnight MCP savings, paired by the user");
 });
