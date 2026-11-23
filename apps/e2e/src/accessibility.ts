@@ -13,8 +13,12 @@ const WCAG_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"];
  * focus of a ui-sdk text field (a `<label>` and its `<input>` in a `Field`) kills the content
  * process (signal 11). The same pages, focused and typed into without axe, stay alive; every
  * other rule alone leaves them alive too.
+ *
+ * `button-name`: the same crash, on the app's frame. After that rule alone runs on the review, the
+ * next click (the month, the user's menu, the tab bar's "More") kills the content process; every
+ * other WCAG rule alone, run on the same page, leaves it alive, and so does no axe at all.
  */
-const FIREFOX_CRASHING_RULES = ["label"];
+const FIREFOX_CRASHING_RULES = ["label", "button-name"];
 
 /**
  * Runs axe on the screen as it is now; any violation fails the test, listed by rule, then each

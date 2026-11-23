@@ -22,6 +22,13 @@ const SCREENS = [
   { path: "/settings", name: "settings", en: "Settings", fr: "Réglages" },
   { path: "/settings/categories", name: "categories", en: "Settings", fr: "Réglages" },
   { path: "/settings/rules", name: "rules", en: "Settings", fr: "Réglages" },
+  { path: "/users", name: "users", en: "Users", fr: "Utilisateurs" },
+  {
+    path: "/change-password",
+    name: "change-password",
+    en: "Change your password",
+    fr: "Changer de mot de passe",
+  },
 ] as const;
 
 const WIDTHS = [
@@ -33,6 +40,82 @@ const WIDTHS = [
 const Manifest = Schema.Struct({
   icons: Schema.Array(Schema.Struct({ sizes: Schema.String, purpose: Schema.String })),
 });
+
+/** The language the user chose, kept in Paraglide's cookie; none while they chose nothing. */
+async function languageCookie(page: Page) {
+  const cookies = await page.context().cookies();
+
+  return cookies.find((cookie) => cookie.name === LANGUAGE_COOKIE)?.value;
+}
+
+/** One frame of a move between screens: when, from the press, and what the frame showed. */
+type MoveFrame = { at: number; opacity: number; markTop: number };
+
+/**
+ * Clicks the sidebar's link named `name` and, from the press, samples at every frame for 700 ms
+ * the screen's opacity and where the sidebar's current-item mark stands. Nothing depends on how
+ * fast frames come.
+ */
+async function moveTo(page: Page, name: string) {
+  const frames = page.evaluate(
+    (duration) =>
+      new Promise<Array<MoveFrame>>((resolve) => {
+        const seen: Array<MoveFrame> = [];
+
+        document.addEventListener(
+          "pointerdown",
+          () => {
+            const start = performance.now();
+
+            const sample = () => {
+              const screen = document.querySelector('[data-slot="screen"]');
+              const mark = document.querySelector('aside [data-slot="current-mark"]');
+
+              seen.push({
+                at: performance.now() - start,
+                opacity: screen === null ? 1 : Number(getComputedStyle(screen).opacity),
+                markTop: mark === null ? Number.NaN : mark.getBoundingClientRect().top,
+              });
+
+              if (performance.now() - start < duration) {
+                requestAnimationFrame(sample);
+              } else {
+                resolve(seen);
+              }
+            };
+
+            requestAnimationFrame(sample);
+          },
+          { once: true, capture: true },
+        );
+      }),
+    700,
+  );
+
+  await page.getByRole("navigation", { name: "Main" }).getByRole("link", { name }).click();
+
+  return frames;
+}
+
+/** The frames where the screen was neither hidden nor fully drawn: its fade. */
+function fading(frames: Array<MoveFrame>) {
+  return frames.filter((frame) => frame.opacity > 0.01 && frame.opacity < 0.99);
+}
+
+/** The frames where the mark stood between the item it left and the item it reached: its slide. */
+function sliding(frames: Array<MoveFrame>) {
+  const from = frames.at(0)?.markTop ?? Number.NaN;
+  const to = frames.at(-1)?.markTop ?? Number.NaN;
+  const low = Math.min(from, to) + 0.5;
+  const high = Math.max(from, to) - 0.5;
+
+  return frames.filter((frame) => frame.markTop > low && frame.markTop < high);
+}
+
+/** How long, in ms, from the first of these frames to the last. */
+function spanOf(frames: Array<MoveFrame>) {
+  return (frames.at(-1)?.at ?? 0) - (frames.at(0)?.at ?? 0);
+}
 
 async function chooseLanguage(page: Page, language: "en" | "fr") {
   await page
@@ -80,8 +163,8 @@ test("every route renders signed in at 1440 px and at 390 px, light and dark, in
   }
 });
 
-// "A test fails when a component holds text outside the messages": a unit test, since it is the
-// lint that refuses it (tools/lint/gousset/no-text-outside-messages.test.ts, run by `vp test`).
+// "A test fails when a component holds text outside the messages": it is the lint that refuses
+// it, so the scenario runs `vp lint` on probes, in packages/ui/e2e/lint.e2e.ts (`lint` project).
 
 test("the sidebar names every screen, the current one marked", async ({ userPage }) => {
   test.skip(onPhone(userPage), "The sidebar is the desktop's; the tab bar has its own test.");
@@ -160,10 +243,17 @@ test("the month is kept in the url and moves with the switcher", async ({ userPa
   await month.getByRole("button", { name: "Previous month" }).click();
   await expect(userPage).toHaveURL(/\?month=2026-10$/);
   await expect(month).toContainText("October 2026");
+  // Another month is still the review: its link stays the current one.
+  await expect(
+    userPage.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Review" }),
+  ).toHaveAttribute("aria-current", "page");
 
   // The address alone opens the month, the operations' too.
   await userPage.reload();
   await expect(userPage.getByRole("group", { name: "Month" })).toContainText("October 2026");
+  await expect(
+    userPage.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Review" }),
+  ).toHaveAttribute("aria-current", "page");
 
   await visit(userPage, "/operations?month=2025-02");
   await expect(userPage.getByRole("group", { name: "Month" })).toContainText("February 2025");
@@ -176,7 +266,12 @@ test("the month is kept in the url and moves with the switcher", async ({ userPa
 test.describe("in French", () => {
   test.use({ locale: "fr-FR" });
 
-  test("the language follows the browser, and the user changes it", async ({ userPage }) => {
+  test("the language follows the browser, and the user changes it", async ({
+    userPage,
+    browser,
+    baseURL,
+    viewport,
+  }) => {
     await fixDay(userPage, "2026-11-15");
     await visit(userPage, "/");
 
@@ -184,12 +279,33 @@ test.describe("in French", () => {
     await expect(userPage.getByRole("heading", { level: 1, name: "Bilan du mois" })).toBeVisible();
     // Dates by the user's locale.
     await expect(userPage.getByRole("group", { name: "Mois" })).toContainText(/novembre 2026/i);
+    // Following the browser saves nothing: the browser's next language still wins.
+    expect(await languageCookie(userPage)).toBeUndefined();
+
+    // The same browser, its cookies kept, now set to English: the next visit is in English.
+    const english = await browser.newContext({
+      baseURL,
+      viewport,
+      locale: "en-US",
+      storageState: await userPage.context().storageState(),
+    });
+
+    try {
+      const page = await english.newPage();
+
+      await page.goto("/");
+      await expect(page.locator("html")).toHaveAttribute("lang", "en");
+      await expect(page.getByRole("heading", { level: 1, name: "Monthly review" })).toBeVisible();
+    } finally {
+      await english.close();
+    }
 
     await visit(userPage, "/settings");
     await userPage.getByRole("radio", { name: "English" }).click();
 
     // Kept on this browser: the next visit is in English, whatever the browser says.
     await expect(userPage.getByRole("heading", { level: 1, name: "Settings" })).toBeVisible();
+    expect(await languageCookie(userPage)).toBe("en");
     await userPage.goto("/");
     await expect(userPage.locator("html")).toHaveAttribute("lang", "en");
     await expect(userPage.getByRole("heading", { level: 1, name: "Monthly review" })).toBeVisible();
@@ -225,23 +341,30 @@ test("moving between screens fades the screen, the current item slides, empty st
   await expect(block).toHaveCSS("animation-duration", "0.2s");
   await expect(block).toHaveCSS("animation-name", "enter");
 
-  // The current item's background is one element, which moves to the item reached.
-  const current = userPage
-    .getByRole("navigation", { name: "Main" })
-    .locator("[aria-current=page] > span")
-    .first();
+  // The screen reached fades in, and the current item's mark slides from the item left to it:
+  // 200 ms each, so a few frames in between, all within 400 ms of each other.
+  const moved = await moveTo(userPage, "Subjects");
 
-  await expect(current).toBeVisible();
-  await userPage.getByRole("link", { name: "Subjects" }).click();
   await expect(userPage.getByRole("link", { name: "Subjects" })).toHaveAttribute(
     "aria-current",
     "page",
   );
+  expect(fading(moved).length).toBeGreaterThan(1);
+  expect(spanOf(fading(moved))).toBeLessThan(400);
+  expect(sliding(moved).length).toBeGreaterThan(1);
+  expect(spanOf(sliding(moved))).toBeLessThan(400);
 
-  // The screen reached fades in and ends fully drawn.
-  await expect(userPage.locator('[data-slot="screen"]')).toHaveCSS("opacity", "1");
-
+  // Cut under reduced motion: the screen shows at once, the mark is at once on its item.
   await userPage.emulateMedia({ reducedMotion: "reduce" });
+
+  const cut = await moveTo(userPage, "Accounts");
+
+  await expect(userPage.getByRole("link", { name: "Accounts" })).toHaveAttribute(
+    "aria-current",
+    "page",
+  );
+  expect(fading(cut)).toEqual([]);
+  expect(sliding(cut)).toEqual([]);
   await expect(block).toHaveCSS("animation-duration", "0s");
 });
 
@@ -257,7 +380,11 @@ test("the brand: favicons, the iOS icon and a web manifest with its icons", asyn
     "href",
     "/manifest.webmanifest",
   );
-  await expect(userPage.getByRole("img", { name: "Gousset" }).first()).toBeAttached();
+
+  // The mark tops the sidebar; a phone has neither (the `mobile` wireframe).
+  if (!onPhone(userPage)) {
+    await expect(userPage.getByRole("img", { name: "Gousset" }).first()).toBeVisible();
+  }
 
   const manifest = await request.get("/manifest.webmanifest");
 

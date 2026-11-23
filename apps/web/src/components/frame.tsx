@@ -17,6 +17,9 @@ const LANGUAGE_NAMES = {
   fr: m.languageFrench,
 } satisfies { [locale in Locale]: () => string };
 
+/** The review is current on `/` alone, whatever month its address holds (`?month=…`). */
+const REVIEW_ACTIVE = { exact: true, includeSearch: false };
+
 type FrameProps = {
   user: { name: string; isAdmin: boolean };
   children: ReactNode;
@@ -58,7 +61,7 @@ export function Frame({ user, children }: FrameProps) {
       navigationLabel={m.navLabel()}
       navigation={
         <>
-          <AppNavLink to="/" activeOptions={{ exact: true }} icon="review" label={m.navReview()} />
+          <AppNavLink to="/" activeOptions={REVIEW_ACTIVE} icon="review" label={m.navReview()} />
           <AppNavLink to="/operations" icon="operations" label={m.navOperations()} />
           <AppNavLink to="/accounts" icon="accounts" label={m.navAccounts()} />
           <AppNavLink to="/investments" icon="investments" label={m.navInvestments()} />
@@ -91,7 +94,7 @@ export function Frame({ user, children }: FrameProps) {
       }
       tabBar={
         <>
-          <AppTabLink to="/" activeOptions={{ exact: true }} icon="review" label={m.navReview()} />
+          <AppTabLink to="/" activeOptions={REVIEW_ACTIVE} icon="review" label={m.navReview()} />
           <AppTabLink to="/operations" icon="operations" label={m.navOperations()} />
           <AppTabLink to="/accounts" icon="accounts" label={m.navAccounts()} />
           <Menu trigger={<TabButton icon="more" label={m.navMore()} />} align="end">

@@ -1,4 +1,4 @@
-import { motion } from "motion/react";
+import { domAnimation, domMax, LazyMotion, m } from "motion/react";
 import { useState, useSyncExternalStore } from "react";
 import type { AnchorHTMLAttributes, ButtonHTMLAttributes, ReactNode, Ref } from "react";
 
@@ -116,13 +116,16 @@ function CurrentMark({ layoutId, place }: { layoutId: string; place: "nav" | "ta
     return <span data-slot="current-mark" className={className} />;
   }
 
+  // A shared layout needs layout projection: `domMax`, not `domAnimation`.
   return (
-    <motion.span
-      data-slot="current-mark"
-      layoutId={layoutId}
-      transition={transition.base}
-      className={className}
-    />
+    <LazyMotion features={domMax}>
+      <m.span
+        data-slot="current-mark"
+        layoutId={layoutId}
+        transition={transition.base}
+        className={className}
+      />
+    </LazyMotion>
   );
 }
 
@@ -207,33 +210,45 @@ export function ScreenTransition({ id, children }: { id: string; children: React
   }
 
   return (
-    <motion.div
-      key={id}
-      data-slot="screen"
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      transition={transition.base}
-      className="flex min-w-0 flex-1 flex-col"
-    >
-      {children}
-    </motion.div>
+    <LazyMotion features={domAnimation}>
+      <m.div
+        key={id}
+        data-slot="screen"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={transition.base}
+        className="flex min-w-0 flex-1 flex-col"
+      >
+        {children}
+      </m.div>
+    </LazyMotion>
   );
 }
 
 export type PageProps = {
   /** The screen's name: its only `h1`. */
   title: string;
+  /** A sentence under the title, about the whole screen ("Made-up data…"). */
+  description?: string;
   /** Beside the title: the month switcher of a month's screen, a screen's main action. */
   actions?: ReactNode;
   children: ReactNode;
 };
 
-/** A screen of the app: its title, what sits beside it, then its blocks one under the other. */
-export function Page({ title, actions, children }: PageProps) {
+/**
+ * A screen of the app: its title and the sentence under it, what sits beside them, then its
+ * blocks one under the other.
+ */
+export function Page({ title, description, actions, children }: PageProps) {
   return (
     <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-6 p-4 md:p-8">
       <header className="flex min-h-9 flex-wrap items-center justify-between gap-3">
-        <h1 className="text-xl font-semibold">{title}</h1>
+        <div className="flex flex-col gap-1">
+          <h1 className="text-xl font-semibold">{title}</h1>
+          {description === undefined ? null : (
+            <p className="text-sm text-muted-foreground">{description}</p>
+          )}
+        </div>
         {actions === undefined ? null : <div className="flex items-center gap-2">{actions}</div>}
       </header>
       {children}
