@@ -111,8 +111,10 @@ the engine's heap holds.
   reversal (`RvslInd`) is signed by its own indicator, as ISO 20022 defines it.
 - **Only booked entries are lines**: `BOOK`, or no status. Pending (`PDNG`) and information (`INFO`)
   entries are read past: they are not on the account yet.
-- **A batch entry is one line**, as booked: several `TxDtls` under one `Ntry` give its parts, which
-  name no single counterparty nor remittance; only the bank's label (`AddtlNtryInf`) is kept.
+- **A batch entry is one line**, as booked: it is the line the bank shows, the one the balances are
+  made of, and its `AcctSvcrRef` recognises it in a later import. Its parts (several `TxDtls` under
+  one `Ntry`) name no single counterparty nor remittance; only the bank's label (`AddtlNtryInf`) is
+  kept.
 - **Label**: the bank's own text (`AddtlNtryInf`), else the remittance information (every `Ustrd`,
   joined by a space, else the structured references, `Strd/CdtrRefInf/Ref`), else the
   counterparty's name. **Memo**: the remittance information, when the bank's text is the label.
@@ -142,7 +144,8 @@ the engine's heap holds.
 - **`:86:`**, in its three forms:
   - free text: the label, its line breaks read as spaces;
   - the German banks' subfields (`166?00GUTSCHRIFT?20…?32…`): the label the remittance information
-    (`?20` to `?29`, `?60` to `?63`), else the booking text (`?00`), else the name; the memo the
+    (`?20` to `?29`, `?60` to `?63`, joined without a space: they are one text cut at a fixed
+    width, often in the middle of a word), else the booking text (`?00`), else the name; the memo the
     booking text beside the remittance information; the counterparty `?32` and `?33`, with `?31`
     when it is an IBAN;
   - the `/CODE/` form (`/TRTP/…/NAME/…/IBAN/…/REMI/USTD//…`): the label `/REMI/`, else `/TRTP/`,
