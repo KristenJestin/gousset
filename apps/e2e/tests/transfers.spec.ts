@@ -497,6 +497,33 @@ test("two candidates in a fortnight go to review", async () => {
   expect(await toReview()).toContain(out);
 });
 
+test("a weekly transfer to a savings account still pairs each line with the one of its own day", async () => {
+  const current = await newAccount("Weekly current", "current");
+  const savings = await newAccount("Weekly savings", "savings");
+  const days = ["2026-10-02", "2026-10-09", "2026-10-16"];
+
+  await importInto(
+    savings,
+    "weekly-savings",
+    days.map((bookedOn) => ({ bookedOn, amountMinor: 30_600, label: "SEPA TRF RECEIVED" })),
+  );
+
+  await importInto(
+    current,
+    "weekly-current",
+    days.map((bookedOn) => ({ bookedOn, amountMinor: -30_600, label: "SEPA TRF TO MY SAVINGS" })),
+  );
+
+  // Each savings line is in the fortnight of two or three of them: the same day's is its own.
+  const paired = await Promise.all(
+    (await linesOf(current)).map(
+      async (line) => (await transferOf(line.id)).paired?.other.bookedOn,
+    ),
+  );
+
+  expect(paired).toEqual(days);
+});
+
 test("a savings line with a candidate a month before a new line's import still goes to review", async () => {
   const current = await newAccount("Reach current", "current");
   const other = await newAccount("Reach other current", "current");
