@@ -138,6 +138,11 @@ async function accounts(args: { [key: string]: string | number }, rows: MemoryRo
   return { text: first?.type === "text" ? first.text : "", isError: result.isError === true };
 }
 
+/** Each shown line's own amount (unique in `busyLines`), as `showText` writes it. */
+function amountsOf(text: string): Array<string> {
+  return [...text.matchAll(/: (-[\d,.]+ EUR),/g)].map((match) => match[1] ?? "");
+}
+
 describe("accounts list", () => {
   test("gives every group in order, its accounts and its totals per currency, closed apart", async () => {
     const { text, isError } = await accounts({ action: "list" });
@@ -218,6 +223,30 @@ describe("accounts show", () => {
     );
   });
 
+  test("names an earlier statement balance that disagrees, even once the latest agrees", async () => {
+    const solo = account("Solo account", { openingBalanceMinor: 10_000 });
+
+    const rows: MemoryRows = {
+      accounts: [solo],
+      lines: [line(solo.id, "2026-10-05", -1000, "CB CORNER CAFE")],
+      balances: [
+        // The app counts 9000 at the end of 2026-10-05 (10,000 opening minus the 1000 line); the
+        // bank said 8800 that day, a difference the latest (agreeing) statement does not show.
+        { accountId: solo.id, day: "2026-10-05", minor: 8800, source: "statement" },
+        { accountId: solo.id, day: "2026-10-31", minor: 9000, source: "statement" },
+      ],
+    };
+
+    const { text, isError } = await accounts({ action: "show", name: "Solo account" }, rows);
+
+    expect(isError).toBe(false);
+    expect(text).toContain("Check: on 2026-10-31 the statement and Gousset agree, both 90.00 EUR.");
+    expect(text).toContain("Also differs on these earlier statements:");
+    expect(text).toContain(
+      "- 2026-10-05: the statement said 88.00 EUR, Gousset counted 90.00 EUR (Gousset counts more).",
+    );
+  });
+
   test("refuses an unknown name with the user's accounts and a valid call", async () => {
     const { text, isError } = await accounts({ action: "show", name: "Joint account" });
 
@@ -278,7 +307,39 @@ describe("accounts show", () => {
     }
 
     expect(shown.text).toContain("Last 100 line(s), newest first");
-    expect(shown.text).toContain('Older lines are not shown: ask for more with "lines"');
+    expect(shown.text).toContain("Older lines remain. Read them with:");
+  });
+
+  test("reaches lines beyond the newest 100 with the before it writes", async () => {
+    const busy = account("Busy account");
+    const rows = { accounts: [busy], lines: busyLines(busy.id, "CB GREENMARKET") };
+
+    const first = await accounts({ action: "show", name: "Busy account", lines: 100 }, rows);
+
+    expect(first.isError).toBe(false);
+    expect(first.text).toContain('"lines":100');
+
+    const before = /"before":"([^"]+)"/.exec(first.text)?.[1];
+
+    if (before === undefined) {
+      throw new Error("The result gave no before cursor to read on with.");
+    }
+
+    const second = await accounts(
+      { action: "show", name: "Busy account", lines: 100, before },
+      rows,
+    );
+
+    expect(second.isError).toBe(false);
+
+    const firstAmounts = amountsOf(first.text);
+    const secondAmounts = amountsOf(second.text);
+
+    expect(firstAmounts).toHaveLength(100);
+    expect(secondAmounts).toHaveLength(100);
+    // Each line's amount is unique (busyLines): the second page's lines are the ones beyond the
+    // first, never repeating one of them.
+    expect(new Set([...firstAmounts, ...secondAmounts]).size).toBe(200);
   });
 
   test("pages a longer result, each part under the limit, writing the next call", async () => {

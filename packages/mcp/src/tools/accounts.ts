@@ -6,6 +6,7 @@ import type {
   AccountStore,
   AccountSummary,
   Money,
+  StatementCheck,
   StatementsUntil,
 } from "@gousset/core";
 import type { AccountChoice, AccountGroup } from "@gousset/core/account-values";
@@ -36,13 +37,19 @@ const AccountsInput = Schema.Struct({
       description: `show: how many of the last lines to give, 1 to ${MAX_LINES}; ${DEFAULT_LINES} if left out.`,
     }),
   ),
+  before: Schema.optional(
+    Schema.String.annotate({
+      description:
+        "show: an opaque handle to read lines older than the last page, exactly as the result gives it. Never made up.",
+    }),
+  ),
 });
 
 const DESCRIPTION = `The user's accounts and their balances. \`list\` gives every open account by group: available (current accounts, deferred debit cards), restricted (benefit accounts: meal vouchers, gift cards), savings and investments, owed (loans), each with its balance today and how far its statements go, and each group's totals per currency (never converted); then the closed accounts, apart and out of the totals. \`show\` gives one account: its balance today, its last lines newest first with the balance after each, and the check of its balance against its latest statement balance, with the difference when they disagree.
 
 Use \`list\` for "how much do I have, and where?", \`show\` for one account's latest lines or "does my balance match my bank's?". Both only read.
 
-\`show\` names the account by \`name\`, as \`list\` writes it (case does not matter); when two accounts share a name, add \`institution\`, the bank written after the name in \`list\`. An unknown or ambiguous name is refused with the names to choose from. \`lines\` says how many of the last lines to give (1 to ${MAX_LINES}, ${DEFAULT_LINES} by default).
+\`show\` names the account by \`name\`, as \`list\` writes it (case does not matter); when two accounts share a name, add \`institution\`, the bank written after the name in \`list\`. An unknown or ambiguous name is refused with the names to choose from. \`lines\` says how many of the last lines to give (1 to ${MAX_LINES}, ${DEFAULT_LINES} by default); when more remain, the result gives the exact call to read on with \`before\`.
 
 Examples: {"action":"list"} · {"action":"show","name":"Livret A","institution":"Riverside Bank"}`;
 
@@ -144,13 +151,17 @@ function listText(list: AccountList): string {
   ].join("\n\n");
 }
 
-function checkText(detail: AccountDetail): string {
-  const { check } = detail;
+function mismatchLine(mismatch: {
+  readonly day: string;
+  readonly statement: Money;
+  readonly app: Money;
+}): string {
+  const way = mismatch.app.minor - mismatch.statement.minor > 0 ? "more" : "less";
 
-  if (check === null) {
-    return "Check: no statement gave a balance yet, so there is nothing to check against.";
-  }
+  return `- ${mismatch.day}: the statement said ${amount(mismatch.statement)}, Gousset counted ${amount(mismatch.app)} (Gousset counts ${way}).`;
+}
 
+function headlineText(check: StatementCheck): string {
   if (check.agrees) {
     return `Check: on ${check.day} the statement and Gousset agree, both ${amount(check.statement)}.`;
   }
@@ -160,8 +171,28 @@ function checkText(detail: AccountDetail): string {
   return `Check: on ${check.day} they disagree. The statement says ${amount(check.statement)}, Gousset counts ${amount(check.app)}: a difference of ${amount(check.difference)} (Gousset counts ${way}). A line may be missing, held as a near duplicate, or the opening balance may be wrong.`;
 }
 
+function checkText(detail: AccountDetail): string {
+  const { check } = detail;
+
+  if (check === null) {
+    return "Check: no statement gave a balance yet, so there is nothing to check against.";
+  }
+
+  if (check.earlierMismatches.length === 0) {
+    return headlineText(check);
+  }
+
+  return [
+    headlineText(check),
+    [
+      "Also differs on these earlier statements:",
+      ...check.earlierMismatches.map(mismatchLine),
+    ].join("\n"),
+  ].join("\n");
+}
+
 /** One account's page, in Gousset's words: balance, check, then the last lines. */
-function showText(detail: AccountDetail): string {
+function showText(detail: AccountDetail, linesCount: number): string {
   const { account } = detail;
 
   const kept =
@@ -188,7 +219,15 @@ function showText(detail: AccountDetail): string {
   const older =
     detail.olderBefore === null
       ? []
-      : [`Older lines are not shown: ask for more with "lines" (up to ${MAX_LINES}).`];
+      : [
+          `Older lines remain. Read them with: ${call({
+            action: "show",
+            name: account.name,
+            institution: account.institution ?? undefined,
+            lines: linesCount,
+            before: detail.olderBefore,
+          })}`,
+        ];
 
   return [
     [
@@ -239,11 +278,17 @@ export const accountsTool = defineTool<
           );
         }
 
+        const linesCount = input.lines ?? DEFAULT_LINES;
+
         return Effect.gen(function* () {
           const found = yield* accountNamed(caller.userId, name, input.institution);
 
           return showText(
-            yield* showAccount(caller.userId, found.id, { limit: input.lines ?? DEFAULT_LINES }),
+            yield* showAccount(caller.userId, found.id, {
+              limit: linesCount,
+              before: input.before,
+            }),
+            linesCount,
           );
         }).pipe(
           Effect.catchTags({
