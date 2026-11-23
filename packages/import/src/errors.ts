@@ -6,9 +6,12 @@ import { Schema } from "effect";
 // a log, a trace or a metric, which record an error by its tag alone, with `line`, `field`,
 // `format` or `option` at most (docs/architecture.md, "Telemetry").
 
-/** The bytes are not a statement of the format asked for: no `<OFX>` element, no QIF header. */
+/**
+ * The bytes are not a statement of the format asked for: no `<OFX>` element, no QIF header, no
+ * CAMT.053 `BkToCstmrStmt`, no MT940 `:20:` field.
+ */
 export class NotAStatement extends Schema.TaggedError<NotAStatement>()("NotAStatement", {
-  format: Schema.Literals(["ofx", "qif"]),
+  format: Schema.Literals(["ofx", "qif", "camt053", "mt940"]),
 }) {}
 
 /**

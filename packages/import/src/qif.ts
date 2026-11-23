@@ -192,6 +192,7 @@ function book(entry: Entry, order: DateOrder): Effect.Effect<StatementLine, Inva
     label: textOf(entry.record, "P") ?? "",
     memo: textOf(entry.record, "M"),
     bankId: textOf(entry.record, "N"),
+    counterparty: null,
   });
 }
 
@@ -253,7 +254,7 @@ export const readQif = (
     const [firstRecord] = records;
 
     if (first === undefined || firstRecord === undefined || !isOpeningBalance(firstRecord)) {
-      return { currency, lines: booked, balance: null, dateOrder };
+      return { currency, lines: booked, openingBalance: null, balance: null, dateOrder };
     }
 
     const lines = booked.slice(1);
@@ -275,5 +276,5 @@ export const readQif = (
       on = line.bookedOn > on ? line.bookedOn : on;
     }
 
-    return { currency, lines, balance: { amountMinor, on }, dateOrder };
+    return { currency, lines, openingBalance: null, balance: { amountMinor, on }, dateOrder };
   });

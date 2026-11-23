@@ -31,13 +31,23 @@ function writtenByWriteQif(statement: MadeUpStatement): Omit<QifStatement, "date
       label: madeUp.label,
       memo: null,
       bankId: madeUp.reference,
+      counterparty: null,
     })),
+    openingBalance: null,
     balance: null,
   };
 }
 
 function line(bookedOn: string, amountMinor: number, label: string) {
-  return { bookedOn, valueOn: null, amountMinor, label, memo: null, bankId: null };
+  return {
+    bookedOn,
+    valueOn: null,
+    amountMinor,
+    label,
+    memo: null,
+    bankId: null,
+    counterparty: null,
+  };
 }
 
 // One test per sample file: the lines read are the lines the file holds.
@@ -61,6 +71,7 @@ describe("reading QIF files", () => {
         line("2026-10-03", -8645, "Example Grocery"),
         line("2026-10-15", 234_567, "Example Corp Payroll"),
       ],
+      openingBalance: null,
       balance: { amountMinor: 210_922, on: "2026-10-15" },
       dateOrder: { order: "month-first", decidedBy: "file" },
     });
@@ -84,6 +95,7 @@ describe("reading QIF files", () => {
           memo: "Échéance de novembre",
         },
       ],
+      openingBalance: null,
       balance: null,
       dateOrder: { order: "day-first", decidedBy: "default" },
     });
@@ -113,6 +125,7 @@ describe("reading QIF files", () => {
         line("2026-10-15", -4590, "TANKSTELLE BEISPIEL"),
         { ...line("2026-10-31", 128_046, "ZAHLUNG DANKE"), memo: "Ausgleich Kartenkonto" },
       ],
+      openingBalance: null,
       balance: null,
       dateOrder: { order: "day-first", decidedBy: "file" },
     });

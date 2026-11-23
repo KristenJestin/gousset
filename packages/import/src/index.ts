@@ -8,9 +8,13 @@ export { readQif } from "./qif";
 
 export type { QifDateOrder, QifOptions, QifStatement } from "./qif";
 
+export { readCamt053 } from "./camt053";
+
+export { readMt940 } from "./mt940";
+
 export type { DateOrder } from "./dates";
 
-export type { Balance, Statement, StatementLine } from "./statement";
+export type { Balance, Counterparty, Statement, StatementLine } from "./statement";
 
 export {
   InvalidField,

@@ -77,6 +77,48 @@ export function quote(text: string): string {
   return JSON.stringify(excerpt(text)).replaceAll(UNSAFE, escapeCharacter);
 }
 
+const ENTITIES = new Map([
+  ["amp", "&"],
+  ["lt", "<"],
+  ["gt", ">"],
+  ["quot", '"'],
+  ["apos", "'"],
+  ["nbsp", " "],
+]);
+
+/**
+ * XML's entities and the few SGML files use, named or numeric; a bare `&`, as some banks write,
+ * stays as it is. No other entity is ever defined: the readers read no document type declaration.
+ */
+export function decodeEntities(text: string): string {
+  return text.replaceAll(/&(#x[\da-f]+|#\d+|[a-z]+);/gi, (entity: string, name: string) => {
+    if (!name.startsWith("#")) {
+      return ENTITIES.get(name.toLowerCase()) ?? entity;
+    }
+
+    const hexadecimal = name.startsWith("#x") || name.startsWith("#X");
+    const code = Number.parseInt(name.slice(hexadecimal ? 2 : 1), hexadecimal ? 16 : 10);
+
+    // Unicode's last code point, U+10FFFF: anything above is no character.
+    return code <= 1_114_111 ? String.fromCodePoint(code) : entity;
+  });
+}
+
+/**
+ * An IBAN as the readers return it, upper case without spaces (`FR76 9999 …` is
+ * `FR769999…`); `null` when the text is not shaped as one (a domestic account number).
+ */
+export function ibanOf(text: string | null): string | null {
+  const compact = (text ?? "").replaceAll(/\s/g, "").toUpperCase();
+
+  return /^[A-Z]{2}\d{2}[A-Z\d]{11,30}$/.test(compact) ? compact : null;
+}
+
+/** The text, or `null` when it is empty. */
+export function nonEmpty(text: string): string | null {
+  return text === "" ? null : text;
+}
+
 /** The text's lines, whatever ends them: `\r\n`, `\n` or a lone `\r`. */
 export function splitLines(text: string): Array<string> {
   return text.split(/\r\n|\r|\n/);

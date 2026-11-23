@@ -14,14 +14,25 @@ export function invalidField(written: FieldText, expected: string): InvalidField
 /**
  * How a format writes amounts. `ofx`: an optional sign, digits and at most one decimal mark, `.` or
  * `,` (French banks write a comma), never a thousands separator. `qif`: the same, and thousands
- * may be grouped (`1,234.56`, `1.234,56`, `1 234,56`, `1'234.56`).
+ * may be grouped (`1,234.56`, `1.234,56`, `1 234,56`, `1'234.56`). `camt053`: digits and a decimal
+ * point, never a sign (the credit or debit indicator gives the direction). `mt940`: the same with a
+ * decimal comma.
  */
-export type AmountSyntax = "ofx" | "qif";
+export type AmountSyntax = "ofx" | "qif" | "camt053" | "mt940";
 
 const EXAMPLES = {
   ofx: "an amount such as -1234.56 or -1234,56",
   qif: "an amount such as -1,234.56, -1.234,56 or -1234,56",
+  camt053: "an amount such as 1234.56",
+  mt940: "an amount such as 1234,56",
 } satisfies { [syntax in AmountSyntax]: string };
+
+/** The syntaxes of digits and one decimal mark, with no thousands separator. */
+const DECIMAL = {
+  ofx: /^(\d*)(?:[.,](\d*))?$/,
+  camt053: /^(\d*)(?:\.(\d*))?$/,
+  mt940: /^(\d*)(?:,(\d*))?$/,
+} satisfies { [syntax in Exclude<AmountSyntax, "qif">]: RegExp };
 
 const SEPARATORS = /[.,'   ]/;
 
@@ -66,11 +77,11 @@ export function minorDigits(currency: string): number {
 
 type Split = { whole: string; fraction: string } | { expected: string };
 
-function splitOfx(unsigned: string): Split {
-  const parts = /^(\d*)(?:[.,](\d*))?$/.exec(unsigned);
+function splitDecimal(unsigned: string, syntax: Exclude<AmountSyntax, "qif">): Split {
+  const parts = DECIMAL[syntax].exec(unsigned);
 
   if (parts === null) {
-    return { expected: EXAMPLES.ofx };
+    return { expected: EXAMPLES[syntax] };
   }
 
   return { whole: parts[1] ?? "", fraction: parts[2] ?? "" };
@@ -117,16 +128,23 @@ function splitQif(unsigned: string, digits: number): Split {
 
 /**
  * The amount a field writes, in minor units of `currency`, read from its digits: exact, never
- * through a float. A sign may lead (`-12.34`, `+12.34`); more decimals than the currency has are
- * refused unless they are zeros (`12.340` is `12.34` in EUR).
+ * through a float. A sign may lead in OFX and QIF (`-12.34`, `+12.34`), never in CAMT.053 and
+ * MT940; more decimals than the currency has are refused unless they are zeros (`12.340` is
+ * `12.34` in EUR).
  */
 export const readAmount = (field: FieldText, currency: string, syntax: AmountSyntax) =>
   Effect.gen(function* () {
     const digits = minorDigits(currency);
     const written = field.text.trim();
+    const signed = /^[+-]/.test(written);
+
+    if (signed && (syntax === "camt053" || syntax === "mt940")) {
+      return yield* invalidField(field, EXAMPLES[syntax]);
+    }
+
     const negative = written.startsWith("-");
-    const unsigned = /^[+-]/.test(written) ? written.slice(1).trimStart() : written;
-    const split = syntax === "ofx" ? splitOfx(unsigned) : splitQif(unsigned, digits);
+    const unsigned = signed ? written.slice(1).trimStart() : written;
+    const split = syntax === "qif" ? splitQif(unsigned, digits) : splitDecimal(unsigned, syntax);
 
     if ("expected" in split) {
       return yield* invalidField(field, split.expected);
