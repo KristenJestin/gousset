@@ -46,7 +46,7 @@ for (const { choice, group } of KINDS) {
 
     // A card needs one of the user's open current accounts: made here, not by another test, so
     // the test still passes whatever order the file's tests run in.
-    const settlesIntoName = `E2E ${choice} Settlement Current`;
+    const settlesIntoName = `E2E Settlement for the ${choice.toLowerCase()}`;
 
     if (choice === "Card") {
       const [settlement] = await data.asUser(owner, (each) =>
@@ -87,7 +87,8 @@ for (const { choice, group } of KINDS) {
 
     const region = page.getByRole("region", { name: group });
 
-    await expect(region.getByRole("link", { name: new RegExp(name) })).toBeVisible();
+    // The row's accessible name starts with the account's own name, then its other columns.
+    await expect(region.getByRole("link", { name: new RegExp(`^${name}( |$)`) })).toBeVisible();
     // The group's total is shown beside its heading, in the account's currency.
     await expect(region.locator("header")).toContainText("€");
   });
@@ -186,7 +187,8 @@ test("closing an account leaves it apart, shown with the closed accounts; reopen
 
   const closed = page.locator('[data-slot="closed-accounts"]');
 
-  await closed.getByRole("button", { name: /closed account/ }).click();
+  // A native disclosure: its <summary> opens it, and has no button role.
+  await closed.locator("summary").click();
   await expect(closed.getByRole("link", { name: /E2E Close Target/ })).toBeVisible();
 
   await closed.getByRole("link", { name: /E2E Close Target/ }).click();
