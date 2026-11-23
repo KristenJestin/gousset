@@ -3,7 +3,8 @@ import { expect, test } from "@playwright/test";
 
 /**
  * One representative story per component, in light and in dark, screenshotted headless on the
- * desktop Chromium (the issue's "How to verify"). Each component's other stories, its phone
+ * desktop Chromium (the issue's "How to verify"), and the month bar's `Phone` story at a phone's
+ * width, whose legend must hold on one line (#83). Each component's other stories, its phone
  * layout included (its `Phone` story), are covered by its behaviour tests; screenshotting every
  * story in every browser would put over a thousand images in Git. Reduced motion: each story is
  * caught in its final state, never on its way.
@@ -14,6 +15,8 @@ type Shot = {
   id: string;
   /** What to do before the screenshot, for a popup that opens from its trigger. */
   open?: "click" | "focus";
+  /** A phone's width, for a story whose layout is the phone's (its `Phone` story). */
+  width?: number;
 };
 
 const SHOTS: ReadonlyArray<Shot> = [
@@ -61,6 +64,9 @@ const SHOTS: ReadonlyArray<Shot> = [
   { id: "money-delta--spending-up" },
   { id: "money-month-bar--default" },
   { id: "money-month-bar--overspent" },
+  { id: "money-month-bar--narrow-part" },
+  // The legend on one line at the narrowest phone (#83), Storybook's `mobile1`.
+  { id: "money-month-bar--phone", width: 320 },
   { id: "money-breakdown--default" },
   { id: "money-breakdown--loading" },
   { id: "money-amount--counting" },
@@ -114,6 +120,11 @@ for (const scheme of ["light", "dark"] as const) {
       test.skip(testInfo.project.name !== "chromium", "Screenshotted on the desktop Chromium");
 
       await page.emulateMedia({ colorScheme: scheme, reducedMotion: "reduce" });
+
+      if (shot.width !== undefined) {
+        await page.setViewportSize({ width: shot.width, height: 568 });
+      }
+
       await page.goto(`/iframe.html?id=${shot.id}&viewMode=story`);
       await page.locator("#storybook-root > *").first().waitFor();
       await page.evaluate(async () => {

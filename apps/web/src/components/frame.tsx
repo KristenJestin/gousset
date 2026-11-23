@@ -48,7 +48,7 @@ export function Frame({ user, children }: FrameProps) {
         {m.userMenuChangePassword()}
       </MenuItem>
       {user.isAdmin ? (
-        <MenuItem icon="users" onSelect={() => navigate({ to: "/users" })}>
+        <MenuItem icon="users" onSelect={() => navigate({ to: "/settings/users" })}>
           {m.userMenuUsers()}
         </MenuItem>
       ) : null}

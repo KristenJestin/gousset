@@ -124,7 +124,7 @@ test("recovered from the server, the old password refused, the temporary one lea
     ).toBeVisible();
     await expect(page.getByText(/The administrator reset your password/)).toHaveCount(0);
 
-    await page.goto("/users");
+    await page.goto("/settings/users");
     await expect(page).toHaveURL(/\/change-password$/);
 
     await page.getByLabel("Current password").fill(temporary);
@@ -139,9 +139,9 @@ test("recovered from the server, the old password refused, the temporary one lea
 
     expect(changed.mustChangePassword).toBe(false);
 
-    // Still the administrator: the users page opens.
-    await visit(page, "/users");
-    await expect(page).toHaveURL(/\/users$/);
+    // Still the administrator: Settings, Users opens.
+    await visit(page, "/settings/users");
+    await expect(page).toHaveURL(/\/settings\/users$/);
   } finally {
     await context.close();
   }

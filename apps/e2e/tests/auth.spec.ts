@@ -158,7 +158,7 @@ test("sign-up is refused once a user exists", async ({ page, app, user }) => {
 });
 
 test("a created user must change their password", async ({ userPage, browser, app }) => {
-  await visit(userPage, "/users");
+  await visit(userPage, "/settings/users");
 
   // The confirmation's live region is there, empty, before the confirmation comes, so that a
   // screen reader announces it.
@@ -168,10 +168,16 @@ test("a created user must change their password", async ({ userPage, browser, ap
   await expect(status).toHaveCount(1);
   await expect(status).toBeEmpty();
 
-  await userPage.getByLabel("Name").fill("Robin Example");
-  await userPage.getByLabel("E-mail").fill("robin@example.com");
-  await userPage.getByLabel("Temporary password").fill("robin-temporary-e2e");
-  await userPage.getByRole("button", { name: "Create the user" }).click();
+  // Issue #103: the form is in a dialog, opened from the button beside the list's title.
+  await userPage.getByRole("button", { name: "Create a user" }).click();
+
+  const dialog = userPage.getByRole("dialog", { name: "Create a user" });
+
+  await dialog.getByLabel("Name").fill("Robin Example");
+  await dialog.getByLabel("E-mail").fill("robin@example.com");
+  await dialog.getByLabel("Temporary password").fill("robin-temporary-e2e");
+  await dialog.getByRole("button", { name: "Create the user" }).click();
+  await expect(dialog).toBeHidden();
 
   await expect(status).toHaveText("Robin Example can now sign in with the temporary password.");
   await expect(
@@ -219,6 +225,50 @@ test("a created user must change their password", async ({ userPage, browser, ap
   }
 });
 
+test("the users page is a section of the settings, reached from the user's menu and from the settings", async ({
+  userPage,
+  user,
+  secondUserPage,
+}) => {
+  // Issue #82: in the app's frame, laid out as the settings are, never a card alone on the page.
+  await visit(userPage, "/");
+
+  const menu = await openAccountMenu(userPage, user.name);
+
+  await menu.getByRole("menuitem", { name: "Users" }).click();
+  await expect(userPage).toHaveURL(/\/settings\/users$/);
+  await expect(userPage.getByRole("heading", { level: 1, name: "Settings" })).toBeVisible();
+
+  const sections = userPage.getByRole("navigation", { name: "Settings" });
+
+  await expect(sections.getByRole("link", { name: "Users" })).toHaveAttribute(
+    "aria-current",
+    "page",
+  );
+  await expect(userPage.getByRole("heading", { level: 2, name: "Users" })).toBeVisible();
+  // Issue #103: creating a user is a button beside the list's title, its form in a dialog.
+  await expect(userPage.getByRole("button", { name: "Create a user" })).toBeVisible();
+  await expect(userPage.getByRole("heading", { level: 2, name: "Create a user" })).toHaveCount(0);
+  await expect(userPage.getByLabel("Temporary password")).toHaveCount(0);
+  // The frame is the way back: the page has no link of its own for it.
+  await expect(userPage.getByRole("main").getByRole("link", { name: "Back" })).toHaveCount(0);
+
+  // From the settings too.
+  await sections.getByRole("link", { name: "General" }).click();
+  await expect(userPage).toHaveURL(/\/settings$/);
+  await sections.getByRole("link", { name: "Users" }).click();
+  await expect(userPage).toHaveURL(/\/settings\/users$/);
+  await expect(userPage.getByRole("button", { name: "Create a user" })).toBeVisible();
+  // The screen reached fades in: axe checks it once drawn.
+  await animationsDone(userPage);
+
+  // Another user's settings have no users section.
+  await visit(secondUserPage, "/settings");
+  await expect(
+    secondUserPage.getByRole("navigation", { name: "Settings" }).getByRole("link"),
+  ).toHaveText(["General", "Categories", "Rules"]);
+});
+
 test("a new password equal to the current one is refused", async ({ page, app, user }) => {
   const person = { name: "Lou Example", email: "lou@example.com", password: "lou-temporary-e2e" };
 
@@ -234,10 +284,16 @@ test("a new password equal to the current one is refused", async ({ page, app, u
   await page.getByLabel("New password").fill(person.password);
   await page.getByRole("button", { name: "Change the password" }).click();
 
-  const error = page.getByRole("main").getByRole("alert");
+  // Under the field at fault (#80), the passwords emptied to be typed again.
+  const message = "The new password must differ from the current one.";
+  const newPassword = page.getByLabel("New password", { exact: true });
 
-  await expect(error).toHaveText("The new password must differ from the current one.");
-  await expect(error).toHaveCSS("opacity", "1");
+  // In the page: ui-sdk's screen-reader announcer beside it says the same words.
+  await expect(page.getByRole("main").getByText(message, { exact: true })).toBeVisible();
+  await expect(newPassword).toHaveAccessibleDescription(
+    new RegExp(message.replaceAll(".", String.raw`\.`)),
+  );
+  await expect(newPassword).toHaveValue("");
 
   // Still temporary: nothing else opens.
   await page.goto("/");
@@ -247,7 +303,7 @@ test("a new password equal to the current one is refused", async ({ page, app, u
 test("a page without a session redirects to sign-in", async ({ page, app, user }) => {
   expect(await hasUser(app.database, user.email)).toBe(true);
 
-  for (const path of ["/", "/users", "/change-password"]) {
+  for (const path of ["/", "/settings/users", "/change-password"]) {
     await page.goto(path);
     await expect(page).toHaveURL(/\/sign-in$/);
   }

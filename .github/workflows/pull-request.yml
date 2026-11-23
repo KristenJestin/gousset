@@ -1,6 +1,6 @@
 # What reads a pull request's title and description (issue #3): it runs again when they are
 # edited, which would be too costly for the build and test jobs of ci.yml. privacy is required on
-# dev and main; commit-messages fails on a bad subject; shape warns, and fails only on a template
+# dev; commit-messages fails on a bad subject; shape warns, and fails only on a template
 # left unfilled.
 #
 # Actions are pinned by commit, the version beside it: a moved tag runs no new code here.
