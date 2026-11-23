@@ -1,5 +1,12 @@
-import { ImportJobs, Imports, importsLayer, inlineStatementReader, runImport } from "@gousset/core";
-import type { ImportSummary } from "@gousset/core";
+import {
+  ImportJobs,
+  Imports,
+  importsLayer,
+  inlineStatementReader,
+  markFailed,
+  runImport,
+} from "@gousset/core";
+import type { ImportProgress, ImportSummary } from "@gousset/core";
 import { account, statementLine } from "@gousset/db/schema/ledger";
 import { writeStatement } from "@gousset/fixture";
 import type { Statement, StatementFormat } from "@gousset/fixture";
@@ -16,11 +23,14 @@ type UserDataAccess = ReturnType<typeof openUserData>;
  * queue adds (retries, progress) is the jobs spec's and the import screen's.
  */
 export function importsOn(data: UserDataAccess) {
+  // What the queue says of a job's end: over, unless a test says it still runs.
+  let jobsOver = true;
+
   // The queue is not this harness's: a job is given an id and run below, by hand, so that no job
-  // is ever under way between two calls.
+  // is under way between two calls unless a test says so.
   const noQueue = Layer.succeed(ImportJobs, {
     send: () => Effect.sync(() => crypto.randomUUID()),
-    isOver: () => Effect.succeed(true),
+    isOver: () => Effect.sync(() => jobsOver),
   });
 
   const imports = importsLayer.pipe(Layer.provide(Layer.mergeAll(data.layer, noQueue)));
@@ -34,16 +44,47 @@ export function importsOn(data: UserDataAccess) {
       }).pipe(Effect.provide(imports)),
     );
 
-  /** Runs the import's job once, as an attempt of the queue would. */
-  const run = (owner: string, importId: string) =>
+  /**
+   * Runs the import's job once, as an attempt of the queue would; `progress` sees each step as it
+   * starts, for a test to act in the middle of a run.
+   */
+  const run = (owner: string, importId: string, progress: ImportProgress = () => Effect.void) =>
     Effect.runPromise(
-      runImport(owner, { importId, csvProfile: null }, () => Effect.void).pipe(
+      runImport(owner, { importId, csvProfile: null }, progress).pipe(
         Effect.provide(Layer.mergeAll(data.layer, inlineStatementReader)),
       ),
     );
 
+  /** Keeps the file as the upload does, its job not run yet; the import's summary. */
+  const keep = async (
+    owner: string,
+    accountId: string | null,
+    file: { fileName: string; contents: string },
+  ) =>
+    withImports((service) =>
+      service.start(owner, {
+        fileName: file.fileName,
+        content: new TextEncoder().encode(file.contents),
+        format: null,
+        accountId,
+      }),
+    );
+
   return {
     run,
+    keep,
+
+    /** Whether the queue says an import's job is over (it does by default). */
+    jobsAreOver(over: boolean) {
+      jobsOver = over;
+    },
+
+    /** What the job's last attempt does when it ends unfinished. */
+    markFailed: (owner: string, importId: string, code: string) =>
+      Effect.runPromise(markFailed(owner, importId, code).pipe(Effect.provide(data.layer))),
+
+    resume: (owner: string, importId: string, accountId: string | null) =>
+      withImports((service) => service.resume(owner, importId, { accountId, csvProfile: null })),
 
     /** Keeps the file for the account and runs its import to the end; its summary. */
     async importFile(
@@ -51,14 +92,7 @@ export function importsOn(data: UserDataAccess) {
       accountId: string | null,
       file: { fileName: string; contents: string },
     ): Promise<ImportSummary & { sameFile: boolean }> {
-      const { started, sameFile } = await withImports((service) =>
-        service.start(owner, {
-          fileName: file.fileName,
-          content: new TextEncoder().encode(file.contents),
-          format: null,
-          accountId,
-        }),
-      );
+      const { started, sameFile } = await keep(owner, accountId, file);
 
       await run(owner, started.id);
 

@@ -1,4 +1,4 @@
-import { writeFile } from "node:fs/promises";
+import { readFile, writeFile } from "node:fs/promises";
 import { basename } from "node:path";
 
 import type { Page } from "@playwright/test";
@@ -145,4 +145,17 @@ test("a file of no known format is refused, saying why", async ({ userPage }, te
     userPage.getByText("photo.png: Gousset cannot tell this file's format"),
   ).toBeVisible();
   await animationsDone(userPage);
+});
+
+test("an upload sent as a page of another site could send it is refused", async ({
+  userPage,
+  statements,
+}) => {
+  // Plain text, the type a cross-site form or a no-cors fetch can send without asking first.
+  const answer = await userPage.request.post("/api/imports?name=statement.xml", {
+    headers: { "content-type": "text/plain" },
+    data: await readFile(statements.camt053, "utf8"),
+  });
+
+  expect(answer.status()).toBe(415);
 });

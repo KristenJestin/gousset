@@ -2,6 +2,7 @@ import { exampleStatement } from "@gousset/fixture";
 import type { Statement, StatementLine } from "@gousset/fixture";
 import { accountBalance, statementImport, statementLine } from "@gousset/db/schema/ledger";
 import { and, eq } from "drizzle-orm";
+import { Effect } from "effect";
 
 import { addUser } from "../src/auth";
 import { importsOn, statementFile } from "../src/imports";
@@ -363,4 +364,72 @@ test("a known line stays the near duplicate of one read line, across attempts", 
     linesAdded: 1,
     linesHeld: 1,
   });
+});
+
+test("an import whose job still runs cannot be undone", async () => {
+  const accountId = await imports.createAccount(owner, "Still running");
+
+  const imported = await imports.importFile(
+    owner,
+    accountId,
+    statementFile("ofx", exampleStatement),
+  );
+
+  await leftSaving(imported.id);
+  imports.jobsAreOver(false);
+
+  try {
+    await expect(imports.undo(owner, imported.id)).rejects.toThrow();
+    expect(await imports.linesOf(owner, accountId)).toHaveLength(lines.length);
+  } finally {
+    imports.jobsAreOver(true);
+  }
+});
+
+test("an undo while the job saves stops the job, which writes nothing more", async () => {
+  const accountId = await imports.createAccount(owner, "Undone while saving");
+  const { started } = await imports.keep(owner, accountId, statementFile("ofx", exampleStatement));
+
+  // As the job reaches its save, the user undoes the import: the job's next write finds it undone.
+  await imports.run(owner, started.id, (step) =>
+    step === "save"
+      ? Effect.promise(async () => {
+          await imports.undo(owner, started.id);
+        })
+      : Effect.void,
+  );
+
+  expect(await imports.linesOf(owner, accountId)).toEqual([]);
+  expect(await imports.show(owner, started.id)).toMatchObject({ status: "undone", linesAdded: 0 });
+});
+
+test("the last attempt that ends unfinished marks the import failed, never one done", async () => {
+  const accountId = await imports.createAccount(owner, "Last attempt");
+  const done = await imports.importFile(owner, accountId, statementFile("ofx", exampleStatement));
+  const { started } = await imports.keep(owner, accountId, statementFile("qif", exampleStatement));
+
+  await imports.markFailed(owner, done.id, "UNEXPECTED");
+  await leftSaving(started.id);
+  await imports.markFailed(owner, started.id, "UNEXPECTED");
+
+  expect((await imports.show(owner, done.id)).status).toBe("done");
+  expect(await imports.show(owner, started.id)).toMatchObject({
+    status: "failed",
+    errorCode: "UNEXPECTED",
+  });
+});
+
+test("two answers to one waiting import at once start one run", async () => {
+  const accountId = await imports.createAccount(owner, "Answered twice");
+  const waiting = await imports.importFile(owner, null, statementFile("qif", exampleStatement));
+
+  expect(waiting.status).toBe("waiting");
+
+  const answers = await Promise.allSettled([
+    imports.resume(owner, waiting.id, accountId),
+    imports.resume(owner, waiting.id, accountId),
+  ]);
+
+  expect(answers.filter((answer) => answer.status === "fulfilled")).toHaveLength(1);
+  expect((await imports.show(owner, waiting.id)).status).toBe("queued");
 });
