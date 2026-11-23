@@ -25,10 +25,61 @@ const RECONNECT_MS = { first: 1000, last: 30_000 };
 const eventsOf = (id: string) => `/api/jobs/${encodeURIComponent(id)}/events`;
 
 /**
- * Follows a job live, from its Server-Sent Events: where it stands now, then each change, until it
- * is over. Its end invalidates the queries of what it touched, once, so that what is on screen is
- * read again. The browser connects again by itself when the stream drops (an app restart); a
- * stream refused while the app starts is asked for again, waiting longer each time.
+ * Subscribes to a job's Server-Sent Events: each view it decodes goes to `onView`, until the job
+ * is over. The browser connects again by itself when the stream drops (an app restart); a stream
+ * the server refused (the app still starting) is asked for again, waiting longer each time.
+ * Returns what ends the subscription: its connection and any reconnection planned.
+ */
+function followJob(id: string, onView: (view: JobView) => void): () => void {
+  let source: EventSource | undefined;
+  let retry: ReturnType<typeof setTimeout> | undefined;
+  let delay = RECONNECT_MS.first;
+  let finished = false;
+
+  const connect = () => {
+    const opened = new EventSource(eventsOf(id));
+
+    source = opened;
+
+    opened.addEventListener("message", (event) => {
+      const view = decodeView(event.data);
+
+      if (Option.isNone(view)) {
+        return;
+      }
+
+      delay = RECONNECT_MS.first;
+      onView(view.value);
+
+      if (isOver(view.value)) {
+        finished = true;
+        opened.close();
+      }
+    });
+
+    opened.addEventListener("error", () => {
+      if (finished || opened.readyState !== EventSource.CLOSED) {
+        return;
+      }
+
+      retry = setTimeout(connect, delay);
+      delay = Math.min(delay * 2, RECONNECT_MS.last);
+    });
+  };
+
+  connect();
+
+  return () => {
+    finished = true;
+    clearTimeout(retry);
+    source?.close();
+  };
+}
+
+/**
+ * Follows a job live: where it stands now, then each change, until it is over, kept in the Query
+ * cache under `jobKeys.of(id)`. Its end invalidates the queries of what it touched, once, so that
+ * what is on screen is read again.
  */
 export function useJob(id: string | undefined): JobView | undefined {
   const queryClient = useQueryClient();
@@ -44,55 +95,16 @@ export function useJob(id: string | undefined): JobView | undefined {
       return;
     }
 
-    let source: EventSource | undefined;
-    let retry: ReturnType<typeof setTimeout> | undefined;
-    let delay = RECONNECT_MS.first;
     let invalidated = false;
-    let finished = false;
 
-    const connect = () => {
-      const opened = new EventSource(eventsOf(id));
+    return followJob(id, (view) => {
+      queryClient.setQueryData(jobKeys.of(id), view);
 
-      source = opened;
-
-      opened.addEventListener("message", (event) => {
-        const view = decodeView(event.data);
-
-        if (Option.isNone(view)) {
-          return;
-        }
-
-        delay = RECONNECT_MS.first;
-        queryClient.setQueryData(jobKeys.of(id), view.value);
-
-        if (view.value.touched !== null && !invalidated) {
-          invalidated = true;
-          void invalidateTouched(queryClient, view.value.touched);
-        }
-
-        if (isOver(view.value)) {
-          finished = true;
-          opened.close();
-        }
-      });
-
-      opened.addEventListener("error", () => {
-        if (finished || opened.readyState !== EventSource.CLOSED) {
-          return;
-        }
-
-        retry = setTimeout(connect, delay);
-        delay = Math.min(delay * 2, RECONNECT_MS.last);
-      });
-    };
-
-    connect();
-
-    return () => {
-      finished = true;
-      clearTimeout(retry);
-      source?.close();
-    };
+      if (view.touched !== null && !invalidated) {
+        invalidated = true;
+        void invalidateTouched(queryClient, view.touched);
+      }
+    });
   }, [id, queryClient]);
 
   return id === undefined ? undefined : data;
