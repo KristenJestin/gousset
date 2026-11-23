@@ -28,6 +28,10 @@ export type { StatementFile, StatementFormat } from "./statements/formats";
 
 export { ibanWithCheckDigits } from "./statements/iban";
 
+export { encodeWindows1252, statementSamples } from "./statements/samples";
+
+export type { SampleFile } from "./statements/samples";
+
 export { closingBalanceMinor, formatMinor } from "./statements/statement";
 
 export type { Statement, StatementLine } from "./statements/statement";
