@@ -148,6 +148,8 @@ export function createAuth(env: AuthConfig, database: Database) {
         mustChangePassword: { type: "boolean", required: false, defaultValue: false, input: false },
         // When the administrator last reset the password; cleared by the user's own change.
         passwordResetAt: { type: "date", required: false, input: false },
+        // Who gave the temporary password: the administrator, or the server's recovery (#79).
+        passwordResetBy: { type: ["administrator", "server"], required: false, input: false },
         // The colour scheme the user chose, kept on the account: the user's menu and the settings
         // change it through the app's own server function (apps/web, functions/color-scheme.ts).
         colorScheme: {

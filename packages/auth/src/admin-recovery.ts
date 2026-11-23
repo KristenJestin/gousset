@@ -65,7 +65,7 @@ export function recoverAdministrator(
     const temporaryPassword = randomBytes(TEMPORARY_PASSWORD_BYTES).toString("base64url");
     const hash = yield* attempt(() => hashPassword(temporaryPassword));
 
-    yield* attempt(() => replaceWithTemporaryPassword(database, administrator.id, hash));
+    yield* attempt(() => replaceWithTemporaryPassword(database, administrator.id, hash, "server"));
 
     return temporaryPassword;
   });

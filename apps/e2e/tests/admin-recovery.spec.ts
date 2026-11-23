@@ -118,6 +118,11 @@ test("recovered from the server, the old password refused, the temporary one lea
 
     await expect(page).toHaveURL(/\/change-password$/);
     await expect(page.getByText("Your password is temporary")).toBeVisible();
+    // Said as it happened: from the server, not by "the administrator", who is the one reading.
+    await expect(
+      page.getByText(/Your password was reset from the server on [A-Z][a-z]+ \d{1,2}, \d{4}\./),
+    ).toBeVisible();
+    await expect(page.getByText(/The administrator reset your password/)).toHaveCount(0);
 
     await page.goto("/users");
     await expect(page).toHaveURL(/\/change-password$/);

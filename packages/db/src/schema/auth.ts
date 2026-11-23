@@ -34,6 +34,10 @@ export const authUser = pgTable("auth_user", {
   // When the administrator last gave the user a temporary password (#70), shown to the user on the
   // forced change; cleared once they choose their own.
   passwordResetAt: timestamp("password_reset_at"),
+  // Who gave that temporary password, for the forced change to say: the administrator, from the
+  // users page (#70), or whoever runs the installation, recovering the administrator's from the
+  // server (#79). Cleared with `passwordResetAt`.
+  passwordResetBy: text("password_reset_by", { enum: ["administrator", "server"] }),
   // The colour scheme the user chose ("system", "light" or "dark"), kept on the account so that it
   // follows them from one browser to the next; the server reads it for the first paint.
   colorScheme: text("color_scheme", { enum: ["system", "light", "dark"] })
