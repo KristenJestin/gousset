@@ -3,7 +3,13 @@
 // superuser and does not bypass row-level security: a query outside `UserData`, or one that undoes
 // its role, reaches nothing of a user's. Its password is derived from the owner's, so that an
 // installation keeps giving one URL to `migrate` and to the app, and nothing new is made or kept.
+//
+// A URL is read by the driver's own parser (pg-connection-string), never by `new URL`: what `pg`
+// accepts is accepted here (a socket's host, a stray `%`, `?user=` and `?password=`), and a URL it
+// cannot read fails with the URL redacted from the error.
 import { createHash, createHmac, pbkdf2Sync, randomBytes } from "node:crypto";
+
+import { parse, toClientConfig } from "pg-connection-string";
 
 /** The role the app logs in with; a migration makes it, `migrate` lets it log in. */
 export const APP_ROLE = "gousset_app";
@@ -16,31 +22,30 @@ export function appRolePassword(ownerPassword: string): string {
   return createHmac("sha256", ownerPassword).update(APP_ROLE).digest("base64url");
 }
 
+/** The role a connection string logs in as, query parameters included; empty when it names none. */
+export function connectionUser(connectionString: string): string {
+  return parse(connectionString).user ?? "";
+}
+
 /**
- * The URL the app logs in with, from the one it is given: the owner's becomes the app role's, with
- * the derived password; one that already names the app role is kept as it is.
+ * How the app connects, from the URL it is given: the owner's becomes the app role's, with the
+ * derived password, whatever else the URL says (host, socket, port, database, SSL) kept; one that
+ * already names the app role is kept as it is. An owner's URL without a password gives none.
  */
-export function appDatabaseUrl(given: string): string {
-  const url = new URL(given);
+export function appConnection(given: string) {
+  const options = parse(given);
 
-  if (decodeURIComponent(url.username) === APP_ROLE) {
-    return given;
+  if (options.user === APP_ROLE) {
+    return toClientConfig(options);
   }
 
-  if (url.host === "") {
-    throw new Error(
-      "DATABASE_URL names no host: give it as postgresql://<owner>:<password>@<host>:5432/<database>.",
-    );
-  }
+  const { password = "", ...rest } = options;
 
-  // The driver decodes the password with decodeURIComponent, as the image's entry point encodes it.
-  const password = decodeURIComponent(url.password);
-
-  url.username = APP_ROLE;
-  // base64url needs no encoding in a URL.
-  url.password = password === "" ? "" : appRolePassword(password);
-
-  return url.href;
+  return toClientConfig(
+    password === ""
+      ? { ...rest, user: APP_ROLE }
+      : { ...rest, user: APP_ROLE, password: appRolePassword(password) },
+  );
 }
 
 const SCRAM_ITERATIONS = 4096;
@@ -62,10 +67,11 @@ export function scramVerifier(password: string, salt: Buffer = randomBytes(16)):
 /**
  * The statement `migrate` runs, as the owner, once the migrations are applied: the app role logs
  * in, with the password derived from the owner's. An owner's URL without a password (a socket's
- * trust) leaves the app role's password as it is.
+ * trust) leaves the app role's password as it is; the owner's password is read from the URL only,
+ * never from PGPASSWORD or a password file, as the app reads it.
  */
 export function appLoginStatement(ownerUrl: string, salt?: Buffer): string {
-  const password = decodeURIComponent(new URL(ownerUrl).password);
+  const password = parse(ownerUrl).password ?? "";
 
   if (password === "") {
     return `ALTER ROLE ${APP_ROLE} WITH LOGIN`;

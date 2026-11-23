@@ -1,4 +1,4 @@
-import { appDatabaseUrl } from "@gousset/db/app-role";
+import { appConnection } from "@gousset/db/app-role";
 import type { APP_ROLE } from "@gousset/db/app-role";
 import { relations } from "@gousset/db/relations";
 import { authUser } from "@gousset/db/schema/auth";
@@ -161,7 +161,7 @@ const Isolation = Schema.Struct({
  */
 export function openUserData(database: string) {
   const db = drizzle({
-    connection: { connectionString: appDatabaseUrl(databaseUrl(database)), max: 1 },
+    connection: { ...appConnection(databaseUrl(database)), max: 1 },
     relations,
   });
 

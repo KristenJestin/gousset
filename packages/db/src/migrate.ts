@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 
-import { APP_ROLE, appLoginStatement } from "./app-role";
+import { APP_ROLE, appLoginStatement, connectionUser } from "./app-role";
 
 const url = process.env.DATABASE_URL;
 
@@ -16,7 +16,7 @@ if (!url) {
   process.exit(1);
 }
 
-if (decodeURIComponent(new URL(url).username) === APP_ROLE) {
+if (connectionUser(url) === APP_ROLE) {
   process.stderr.write(
     `migrate: DATABASE_URL names ${APP_ROLE}, the app's role: migrations run as the tables' owner.\n`,
   );

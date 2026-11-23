@@ -4,7 +4,8 @@
 -- not bypass row-level security. Outside a user's transaction it reaches only what is no user's
 -- data; inside one it acts as `gousset_user`, and `reset role` takes it back to a role that
 -- reaches less. `migrate` (packages/db/src/migrate.ts) then lets it log in, with a password
--- derived from the owner's. Kept out of the Drizzle schema on purpose, as #13's grants are.
+-- derived from the owner's. Kept out of the Drizzle schema on purpose, as #13's grants are; where
+-- #13's migration says the app logs in as the role the migrations run as, this one ends that.
 --
 -- Roles belong to the whole server (the end-to-end harness clones one database per worker, and two
 -- runs may migrate at once): the role is made only when missing, without the right to log in until
@@ -16,7 +17,9 @@ EXCEPTION
   WHEN duplicate_object OR unique_violation THEN NULL;
 END
 $$;--> statement-breakpoint
--- A role of that name made beforehand is used only if row-level security binds it.
+-- A role of that name made beforehand is used only if row-level security binds it: no right that
+-- steps past it, no other role it may become (the tables' owner, a server role), nothing of its own
+-- among the tables.
 DO $$
 BEGIN
   IF EXISTS (
@@ -24,6 +27,20 @@ BEGIN
     WHERE rolname = 'gousset_app' AND (rolsuper OR rolbypassrls OR rolcreaterole OR rolreplication)
   ) THEN
     RAISE EXCEPTION 'The role gousset_app exists and is a superuser, bypasses row-level security, creates roles or replicates: Gousset cannot keep its users apart with it. Make it NOSUPERUSER NOBYPASSRLS NOCREATEROLE NOREPLICATION, then migrate again.';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM pg_auth_members m
+    WHERE m.member = 'gousset_app'::regrole AND m.roleid <> 'gousset_user'::regrole
+  ) THEN
+    RAISE EXCEPTION 'The role gousset_app exists and is a member of another role than gousset_user: it could act as that role. Revoke those memberships, then migrate again.';
+  END IF;
+
+  IF EXISTS (
+    SELECT 1 FROM pg_class c
+    WHERE c.relnamespace = 'public'::regnamespace AND c.relowner = 'gousset_app'::regrole
+  ) THEN
+    RAISE EXCEPTION 'The role gousset_app exists and owns tables of the schema public: their owner is not bound by their grants. Give them to the role that runs the migrations, then migrate again.';
   END IF;
 
   IF current_user = 'gousset_app' THEN

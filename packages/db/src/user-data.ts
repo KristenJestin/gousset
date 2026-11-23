@@ -30,7 +30,7 @@ const wrappedSqlState = Schema.decodeUnknownOption(Schema.Struct({ cause: SqlSta
 /**
  * The one door to a user's tables (docs/data-model.md, "Ownership and isolation"). Every server
  * function, MCP tool and job that works for a user goes through it; a query on those tables
- * elsewhere runs as the app's own role, which row-level security does not restrict, and is a bug.
+ * elsewhere runs as the app's own role, `gousset_app`, which has no grant on them, and fails.
  */
 export class UserData extends Context.Service<
   UserData,

@@ -43,7 +43,9 @@ dropped when their worker and the run end; a run killed before its teardown leav
 The harness's own role runs the migrations, as the tables' owner, then lets `gousset_app` log in
 with the password derived from the harness's (`docs/data-model.md`, "Ownership and isolation"):
 every worker's app is given the harness's URL and logs in as `gousset_app`, as an installation's
-does. The role belongs to the whole server, so its password is set one run at a time.
+does. The role belongs to the whole server, so its password is set one run at a time, from the
+harness's password: on `pnpm db:start`, keep `E2E_DATABASE_URL`'s password the one
+`apps/web/.env.schema` gives, or `pnpm dev` cannot log in until `pnpm db:migrate` runs again.
 
 ## The server's clock
 

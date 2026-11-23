@@ -79,7 +79,12 @@ make `gousset_app`, the role the app logs in with, and `gousset_user`, which a u
 acts as. `migrate` gives `gousset_app` a password derived from `gousset`'s, and the app derives
 the same one from the URL it is given: the installation keeps one secret. A database of your own
 works the same way when `DATABASE_URL` names a superuser; a role that is none needs the right to
-create and grant these roles and to take on `gousset_app` (this is not tested).
+create and grant these roles and to take on `gousset_app` (this is not tested). The owner's
+password is read from `DATABASE_URL` (or `DATABASE_PASSWORD`) only, never from `PGPASSWORD` or a
+password file: a URL without one leaves `gousset_app` without a password, which only a socket's
+trust lets in. Roles belong to the whole Postgres server, so one server holds one Gousset: two
+installations on one server, each with its own owner, would each give `gousset_app` a password of
+their own and lock the other out.
 
 Variables, from the shell or a `.env` file beside `docker-compose.yml`:
 
