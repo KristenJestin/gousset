@@ -16,6 +16,7 @@ import { CLIENT_ADDRESS_HEADER } from "./client-address";
 import { CONSENT_PATH, ISSUED_AT_MS_CLAIM, McpScope, SIGN_IN_PATH, mcpResourceOf } from "./mcp";
 import { alignTokensWithConsents, currentGrant, revokeAllClients } from "./mcp-door";
 import { isMetadataDocumentClient, redirectBoundToClient, withReadForWrite } from "./mcp-guards";
+import { clearTemporaryPassword } from "./password-reset";
 
 export { guardAttempt } from "./attempt-guard";
 
@@ -38,7 +39,21 @@ export const AuthErrorCode = {
   signUpClosed: "SIGN_UP_CLOSED",
   tooManyAttempts: TOO_MANY_ATTEMPTS,
   passwordUnchanged: "PASSWORD_UNCHANGED",
+  passwordChangeRequired: "PASSWORD_CHANGE_REQUIRED",
 } as const;
+
+/**
+ * The only routes a session with a temporary password reaches: signing in and out, reading the
+ * session (the pages' guard sends it to the change), and the change itself. Everything else waits
+ * for a password only the user knows: the administrator chose the temporary one (#70).
+ */
+const OPEN_WHILE_TEMPORARY = new Set([
+  "/sign-in/email",
+  "/sign-up/email",
+  "/sign-out",
+  "/get-session",
+  "/change-password",
+]);
 
 const SESSION_DAYS = 30;
 
@@ -56,11 +71,31 @@ const authorizeQueryOf = Schema.decodeUnknownOption(
   }),
 );
 
-/** The user an administrator's action is about (ban, new password). */
+/** A session's user and the one flag the hooks read of it. */
+const flaggedSessionOf = Schema.decodeUnknownOption(
+  Schema.Struct({
+    user: Schema.Struct({ mustChangePassword: Schema.optional(Schema.NullOr(Schema.Boolean)) }),
+  }),
+);
+
+/** Who changes their password, and the reset their temporary one came from, if any. */
+const changerOf = Schema.decodeUnknownOption(
+  Schema.Struct({
+    id: Schema.String,
+    passwordResetAt: Schema.optional(
+      Schema.NullOr(Schema.Union([Schema.Date, Schema.String, Schema.Number])),
+    ),
+  }),
+);
+
+/** The user an administrator's action is about (a ban). */
 const targetUserOf = Schema.decodeUnknownOption(Schema.Struct({ userId: Schema.String }));
 
-/** The administrator's actions after which a user's MCP clients lose their access. */
-const CUTTING_ADMIN_ACTIONS = new Set(["/admin/ban-user", "/admin/set-user-password"]);
+/**
+ * The admin plugin's routes after which a user's MCP clients lose their access. The administrator's
+ * password reset is Gousset's own (password-reset.ts), which revokes them itself.
+ */
+const CUTTING_ADMIN_ACTIONS = new Set(["/admin/ban-user"]);
 
 /**
  * The MCP door's authorization server (docs/mcp.md): OAuth 2.1 with tokens bound to the `/mcp`
@@ -111,6 +146,8 @@ export function createAuth(env: AuthConfig, database: Database) {
       modelName: "authUser",
       additionalFields: {
         mustChangePassword: { type: "boolean", required: false, defaultValue: false, input: false },
+        // When the administrator last reset the password; cleared by the user's own change.
+        passwordResetAt: { type: "date", required: false, input: false },
         // The colour scheme the user chose, kept on the account: the user's menu and the settings
         // change it through the app's own server function (apps/web, functions/color-scheme.ts).
         colorScheme: {
@@ -153,6 +190,18 @@ export function createAuth(env: AuthConfig, database: Database) {
     },
     hooks: {
       before: createAuthMiddleware(async (ctx) => {
+        if (!OPEN_WHILE_TEMPORARY.has(ctx.path)) {
+          // The hook's session is typed loosely: the flag is read through a schema.
+          const session = flaggedSessionOf(await getSessionFromCtx(ctx));
+
+          if (Option.isSome(session) && isHeldForPasswordChange(session.value)) {
+            throw new APIError("FORBIDDEN", {
+              code: AuthErrorCode.passwordChangeRequired,
+              message: "Change your temporary password first.",
+            });
+          }
+        }
+
         if (ctx.path === "/sign-up/email") {
           // Sign-up exists only to create the first user, the administrator. Two sign-ups at once
           // may both get past this count: the unique index on the first user stops the second.
@@ -238,12 +287,21 @@ export function createAuth(env: AuthConfig, database: Database) {
         }
 
         if (ctx.path === "/change-password") {
-          const userId = ctx.context.session?.user.id;
+          // The session as the change found it, read from the database before the new password.
+          const changer = changerOf(ctx.context.session?.user);
 
-          if (userId !== undefined) {
-            await ctx.context.internalAdapter.updateUser(userId, { mustChangePassword: false });
+          if (Option.isSome(changer)) {
+            const { id, passwordResetAt } = changer.value;
+
+            await clearTemporaryPassword(
+              database,
+              id,
+              passwordResetAt === undefined || passwordResetAt === null
+                ? null
+                : new Date(passwordResetAt),
+            );
             // A new password ends what the old one allowed, MCP clients included.
-            await revokeAllClients(database, userId);
+            await revokeAllClients(database, id);
           }
         }
 
@@ -296,3 +354,14 @@ export function createAuth(env: AuthConfig, database: Database) {
 export type Auth = ReturnType<typeof createAuth>;
 
 export type Session = Auth["$Infer"]["Session"];
+
+/**
+ * Whether a session is held until its user changes a temporary password: it then opens nothing but
+ * that change, on the server as on the pages (#70). No session at all is not held: each caller
+ * refuses it in its own words.
+ */
+export function isHeldForPasswordChange(
+  session: { user: { mustChangePassword?: boolean | null } } | null,
+): boolean {
+  return session?.user.mustChangePassword === true;
+}

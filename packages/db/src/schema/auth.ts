@@ -31,6 +31,9 @@ export const authUser = pgTable("auth_user", {
   banExpires: timestamp("ban_expires"),
   // Set when the administrator creates the user with a temporary password.
   mustChangePassword: boolean("must_change_password").default(false).notNull(),
+  // When the administrator last gave the user a temporary password (#70), shown to the user on the
+  // forced change; cleared once they choose their own.
+  passwordResetAt: timestamp("password_reset_at"),
   // The colour scheme the user chose ("system", "light" or "dark"), kept on the account so that it
   // follows them from one browser to the next; the server reads it for the first paint.
   colorScheme: text("color_scheme", { enum: ["system", "light", "dark"] })

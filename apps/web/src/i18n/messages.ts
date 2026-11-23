@@ -38,6 +38,14 @@ export function errorMessage(code: string | undefined): string {
       return m.errorSignInRequired();
     case "ADMIN_ONLY":
       return m.errorAdminOnly();
+    case "CANNOT_RESET_ADMINISTRATOR":
+      return m.errorCannotResetAdministrator();
+    case "PASSWORD_CHANGE_REQUIRED":
+      return m.errorPasswordChangeRequired();
+    case "PASSWORD_TOO_LONG":
+      return m.errorPasswordTooLong();
+    case "USER_NOT_FOUND":
+      return m.errorUserNotFound();
     default:
       return m.errorUnknown();
   }
