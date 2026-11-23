@@ -7,13 +7,18 @@
 name: upgrade
 
 # A pull request runs it only when it touches what an update runs through (the migrations and
-# schema, the auth tables, the image and its installation) or the job itself: an image build on
-# every pull request would slow them all. Every push to dev and next/** runs it whatever changed.
+# schema, the auth tables, the image and its installation), what reads again the statement the
+# release imported (the readers, the import and its route, #132) or the job itself: an image build
+# on every pull request would slow them all. Every push to dev and next/** runs it whatever changed.
 on:
   pull_request:
     paths:
       - packages/db/**
       - packages/auth/**
+      - packages/import/**
+      - packages/core/src/imports/**
+      - apps/web/src/jobs/**
+      - apps/web/src/routes/api/imports.ts
       - Dockerfile
       - docker-compose*.yml
       - tools/docker-entrypoint.sh

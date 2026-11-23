@@ -370,7 +370,9 @@ and a squash add a commit `dev` does not have; GitHub's rebase always writes new
 From v0.2 on, installations hold real data, and an update must keep every row of it (#102).
 `.github/workflows/upgrade.yml` runs on every push to `dev` and `next/**`, and on a pull request that
 touches what an update runs through (`packages/db`, `packages/auth`, the `Dockerfile`, the compose
-files, `tools/docker-entrypoint.sh`) or the job itself (`tools/check-upgrade.*`, the workflow): it
+files, `tools/docker-entrypoint.sh`), what reads again the statement the release imported (the
+readers of `packages/import`, the import of `packages/core/src/imports`, the app's jobs and its
+import route) or the job itself (`tools/check-upgrade.*`, the workflow): it
 builds the commit's image and runs `tools/check-upgrade.sh` on it, which, on a fresh project
 and volume:
 
