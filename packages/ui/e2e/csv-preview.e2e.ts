@@ -146,9 +146,14 @@ test.describe("FileButton", () => {
   test("its button opens the picker, and the file chosen is handed over", async ({ page }) => {
     await page.goto("/iframe.html?id=forms-file-button--default&viewMode=story");
 
+    const button = page.getByRole("button", { name: "Import a profile file" });
+
+    // A click before the button works is lost (button.tsx, `data-hydrated`).
+    await expect(button).toHaveAttribute("data-hydrated", "");
+
     const chooser = page.waitForEvent("filechooser");
 
-    await page.getByRole("button", { name: "Import a profile file" }).click();
+    await button.click();
     await (
       await chooser
     ).setFiles({
