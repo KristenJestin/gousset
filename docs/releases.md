@@ -22,6 +22,8 @@ One `Dockerfile`, at the root of the repository, makes one image for everything 
 - **`migrate`**: applies Drizzle's migrations (`packages/db/src/migrations`) to `DATABASE_URL`,
   as the tables' owner, then lets the app's role `gousset_app` log in, and exits. It is safe to
   run again: what is applied is not applied twice.
+- **`recover-admin <e-mail>`**: gives the administrator who forgot their password a temporary
+  one (below, "Recovering the administrator"), as the tables' owner, and exits.
 - **The app logs in to the database as `gousset_app`**, never as the owner `DATABASE_URL` names
   (`docs/data-model.md`, "Ownership and isolation"): no superuser, it owns no table and cannot
   step past row-level security. Its password is derived from the owner's, so `migrate` and the app
@@ -121,6 +123,25 @@ docker compose up -d --force-recreate
 `migrate` runs again first, and gives `gousset_app` the password derived from the new one.
 
 (or start over on a fresh volume, `docker compose down --volumes`, which deletes all the data).
+
+**Recovering the administrator.** In the app, the administrator resets any user's password but
+their own. If the administrator forgets it, whoever runs the installation gives them a temporary
+one from the server, in the running app's container:
+
+```sh
+docker compose exec web gousset recover-admin admin@example.com
+```
+
+The command (`packages/auth/src/recover-admin.ts`) does what the administrator's reset of a user
+does (#70): the password becomes a temporary one, drawn at random and printed once on its output,
+which the administrator must replace with their own at the next sign-in, before anything else;
+every session of theirs ends, and every MCP client they allowed loses its access. The old password
+no longer works. It is refused, changing nothing, for any e-mail but the administrator's, and then
+names the administrator's. `gousset` is the image's entry point: called this way, it reads the
+database password from its secret, as the app does, and the command logs in as the tables' owner,
+like `migrate`. It logs nothing: the temporary password stays in the terminal it was run from,
+and is kept nowhere but as its hash. Without Compose, `docker run --rm` the image with the same
+`DATABASE_URL` and password, and `recover-admin <e-mail>` as its command.
 
 In a clone, `docker compose up --build` builds the image instead of pulling it. The database of
 development is another file, `docker-compose.dev.yml` (`pnpm db:start`): another Compose project

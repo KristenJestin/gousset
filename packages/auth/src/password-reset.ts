@@ -12,7 +12,8 @@ export const PasswordResetCode = Schema.Literals([
   "USER_NOT_FOUND",
   // The administrator changes their own password themselves, knowing the current one. There is
   // one administrator per installation (no second one can be named, admin-access.ts), so this is
-  // always their own account; recovering it when they forget is #79.
+  // always their own account; when they forget it, whoever runs the installation recovers it from
+  // the server (admin-recovery.ts).
   "CANNOT_RESET_ADMINISTRATOR",
   "PASSWORD_TOO_SHORT",
   "PASSWORD_TOO_LONG",
@@ -53,6 +54,32 @@ export class PasswordResetFailed extends Schema.TaggedError<PasswordResetFailed>
 
 const attempt = <A>(run: () => Promise<A>) =>
   Effect.tryPromise({ try: run, catch: () => new PasswordResetFailed() });
+
+/**
+ * The reset itself, in one transaction: the password becomes the temporary one (`hash`), the user
+ * must change it at the next sign-in, the reset's time is kept to show them, every session of the
+ * user ends and every MCP client they allowed loses its access.
+ */
+export async function replaceWithTemporaryPassword(
+  database: Database,
+  userId: string,
+  hash: string,
+): Promise<void> {
+  await database.transaction(async (transaction) => {
+    await transaction
+      .update(authAccount)
+      .set({ password: hash })
+      .where(and(eq(authAccount.userId, userId), eq(authAccount.providerId, "credential")));
+
+    await transaction
+      .update(authUser)
+      .set({ mustChangePassword: true, passwordResetAt: new Date() })
+      .where(eq(authUser.id, userId));
+
+    await transaction.delete(authSession).where(eq(authSession.userId, userId));
+    await revokeAllClientsWithin(transaction, userId);
+  });
+}
 
 /**
  * The administrator gives a user a new temporary password, for a user who forgot theirs. In one
@@ -104,21 +131,6 @@ export function resetPassword(
 
     const hash = yield* attempt(() => context.password.hash(temporaryPassword));
 
-    yield* attempt(() =>
-      database.transaction(async (transaction) => {
-        await transaction
-          .update(authAccount)
-          .set({ password: hash })
-          .where(and(eq(authAccount.userId, userId), eq(authAccount.providerId, "credential")));
-
-        await transaction
-          .update(authUser)
-          .set({ mustChangePassword: true, passwordResetAt: new Date() })
-          .where(eq(authUser.id, userId));
-
-        await transaction.delete(authSession).where(eq(authSession.userId, userId));
-        await revokeAllClientsWithin(transaction, userId);
-      }),
-    );
+    yield* attempt(() => replaceWithTemporaryPassword(database, userId, hash));
   });
 }
