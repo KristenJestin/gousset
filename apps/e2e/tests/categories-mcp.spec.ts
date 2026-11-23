@@ -254,6 +254,63 @@ test("a line is classified by its category's name", async ({ userPage, baseURL, 
   expect(wrong.text).toContain('A valid call: categories {"action":"list"}');
 });
 
+test("lines classify by MCP as an expense with a category", async ({
+  userPage,
+  baseURL,
+  mcpClientId,
+}) => {
+  const client = await writer({ userPage, baseURL, mcpClientId });
+  const [line = "", other = ""] = await expensesInOther(client, 2);
+
+  const placed = await callTool(client, "lines", {
+    action: "classify",
+    line,
+    kind: "expense",
+    category: "Groceries > Bakery",
+  });
+
+  expect(placed.isError, placed.text).toBe(false);
+  expect(placed.text).toContain("is now in Groceries > Bakery (expense)");
+  expect(await categoryOf(client, line)).toBe("Groceries > Bakery (expense)");
+
+  // A kind alone: the line stays in its fallback, now the user's choice, no longer to review.
+  const kept = await callTool(client, "lines", {
+    action: "classify",
+    line: other,
+    kind: "expense",
+  });
+
+  expect(kept.isError, kept.text).toBe(false);
+  expect(kept.text).toContain("is now in Other (expense)");
+
+  const { text } = await callTool(client, "lines", {
+    action: "search",
+    to_review: true,
+    limit: 100,
+  });
+
+  expect(text).not.toContain(`line: ${other}`);
+
+  // A side of a transfer is the transfer: it is no expense to classify.
+  const transfers = await callTool(client, "lines", {
+    action: "search",
+    text: "sepa trf to livret a",
+  });
+
+  const side = /; line: (\S+)$/m.exec(transfers.text)?.[1] ?? "";
+
+  const refused = await callTool(client, "lines", {
+    action: "classify",
+    line: side,
+    kind: "expense",
+    category: "Groceries",
+  });
+
+  expect(refused.isError).toBe(true);
+  expect(refused.text).toContain("is a side of a transfer");
+  expect(refused.text).toContain('A valid call: lines {"action":"unpair"');
+});
+
 test("a user whose currency is USD reads and sets a fixed benchmark in dollars", async ({
   page,
   app,

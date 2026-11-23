@@ -82,6 +82,8 @@ export type LineEntries = {
   readonly amountMinor: number;
   /** The entries the line is a part of. */
   readonly entries: ReadonlyArray<{ readonly id: string; readonly kind: EntryKind }>;
+  /** A side of a transfer (#26): it is the transfer, and has no entry. */
+  readonly paired: boolean;
   readonly categories: ReadonlyArray<CategoryRecord>;
 };
 

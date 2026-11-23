@@ -186,12 +186,12 @@ export class CategoryNameAmbiguous extends Schema.TaggedError<CategoryNameAmbigu
 
 /**
  * A line's category is chosen through its one entry: a line held, discarded or of no amount has
- * none (`no_entry`), and a line split across several entries is classified entry by entry
- * (`split`).
+ * none (`no_entry`), nor has a side of a transfer, which is the transfer (`transfer`, #26), and a
+ * line split across several entries is classified entry by entry (`split`).
  */
 export class LineNotClassifiable extends Schema.TaggedError<LineNotClassifiable>()(
   "LineNotClassifiable",
-  { lineId: Schema.String, reason: Schema.Literals(["no_entry", "split"]) },
+  { lineId: Schema.String, reason: Schema.Literals(["no_entry", "transfer", "split"]) },
 ) {}
 
 /** A line's kind follows its sign: an expense category for money out, an income one for money in. */

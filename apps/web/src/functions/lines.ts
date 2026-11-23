@@ -116,7 +116,7 @@ export const classifyLine = createServerFn({ method: "POST" })
   .validator(Schema.toStandardSchemaV1(Schema.Struct({ lineId: LineId, categoryId: CategoryId })))
   .handler(({ data, context }) =>
     runCore(
-      classifyCoreLine(context.owner, data.lineId, data.categoryId).pipe(
+      classifyCoreLine(context.owner, data.lineId, { categoryId: data.categoryId }).pipe(
         Effect.map((category) => ({ ok: true as const, category })),
         Effect.catchTags({
           LineNotFound: () => refused("LINE_NOT_FOUND"),

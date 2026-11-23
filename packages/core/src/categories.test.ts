@@ -429,7 +429,11 @@ describe("classifying a line", () => {
     const { rows, bakery, other, salary } = startingRows();
     const paid = entryIn(rows, other, "2026-11-02", 420);
     const lineId = paid.parts[0]?.lineId ?? "";
-    const { result, rows: after } = await run(rows, classifyLine(ADA, lineId, bakery.id));
+
+    const { result, rows: after } = await run(
+      rows,
+      classifyLine(ADA, lineId, { categoryId: bakery.id }),
+    );
 
     expect(result).toMatchObject({
       success: { id: bakery.id, name: "Bakery", parentName: "Groceries", kind: "expense" },
@@ -440,7 +444,31 @@ describe("classifying a line", () => {
     });
 
     // Money out is an expense: an income category is refused.
-    expect(await outcome(after, classifyLine(ADA, lineId, salary.id))).toBe("CategoryKindMismatch");
+    expect(await outcome(after, classifyLine(ADA, lineId, { categoryId: salary.id }))).toBe(
+      "CategoryKindMismatch",
+    );
+  });
+
+  test("with no category named, the line goes to its kind's fallback, as the user's choice", async () => {
+    const { rows, bakery, other } = startingRows();
+    const paid = entryIn(rows, bakery, "2026-11-03", 380);
+    const lineId = paid.parts[0]?.lineId ?? "";
+
+    const { result, rows: after } = await run(
+      rows,
+      classifyLine(ADA, lineId, { fallbackOf: "expense" }),
+    );
+
+    expect(result).toMatchObject({ success: { id: other.id, kind: "expense" } });
+    expect(after.entries.find((each) => each.id === paid.id)).toMatchObject({
+      categoryId: other.id,
+      classifiedBy: "user",
+    });
+
+    // Money out is no income.
+    expect(await outcome(after, classifyLine(ADA, lineId, { fallbackOf: "income" }))).toBe(
+      "CategoryKindMismatch",
+    );
   });
 
   test("a line with no entry, or of another user, is not classified", async () => {
@@ -449,9 +477,22 @@ describe("classifying a line", () => {
 
     rows.lines.push({ id: held, amountMinor: -100 });
 
-    expect(await outcome(rows, classifyLine(ADA, held, bakery.id))).toBe(
+    expect(await outcome(rows, classifyLine(ADA, held, { categoryId: bakery.id }))).toBe(
       "LineNotClassifiable:no_entry",
     );
-    expect(await outcome(rows, classifyLine(ADA, memoryId(), bakery.id))).toBe("LineNotFound");
+    expect(await outcome(rows, classifyLine(ADA, memoryId(), { categoryId: bakery.id }))).toBe(
+      "LineNotFound",
+    );
+  });
+
+  test("a side of a transfer is no expense nor income: it is not classified", async () => {
+    const { rows, bakery } = startingRows();
+    const side = memoryId();
+
+    rows.lines.push({ id: side, amountMinor: -25_000, paired: true });
+
+    expect(await outcome(rows, classifyLine(ADA, side, { categoryId: bakery.id }))).toBe(
+      "LineNotClassifiable:transfer",
+    );
   });
 });

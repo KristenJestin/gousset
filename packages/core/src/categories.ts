@@ -675,13 +675,19 @@ export const categoryNamed = (owner: string, name: string, kind?: EntryKind) =>
     return only;
   });
 
+/** What a line is put in: a category, or its kind's fallback ("Other") when none is named. */
+export type LineClassification =
+  | { readonly categoryId: string }
+  | { readonly fallbackOf: EntryKind };
+
 /**
- * Puts a line in a category: the category of its one entry, as the user's choice, which no rule
- * overwrites unasked (`classified_by = user`). The line's kind follows its sign. Fails with
- * `LineNotFound`, `LineNotClassifiable` (held, discarded or of no amount: no entry; or split),
- * `CategoryNotFound`, `CategoryKindMismatch` or `CategoryRefused` (`archived`).
+ * Puts a line in a category: the category of its one entry, or the fallback of the kind named, as
+ * the user's choice, which no rule overwrites unasked (`classified_by = user`). The line's kind
+ * follows its sign. Fails with `LineNotFound`, `LineNotClassifiable` (held, discarded or of no
+ * amount: no entry; a side of a transfer; or split), `CategoryNotFound`, `CategoryKindMismatch` or
+ * `CategoryRefused` (`archived`).
  */
-export const classifyLine = (owner: string, lineId: string, categoryId: string) =>
+export const classifyLine = (owner: string, lineId: string, chosen: LineClassification) =>
   Effect.gen(function* () {
     const store = yield* CategoryStore;
 
@@ -698,26 +704,54 @@ export const classifyLine = (owner: string, lineId: string, categoryId: string) 
           const [only, ...others] = facts.entries;
 
           if (only === undefined) {
-            return yield* Result.fail(new LineNotClassifiable({ lineId, reason: "no_entry" }));
+            return yield* Result.fail(
+              new LineNotClassifiable({ lineId, reason: facts.paired ? "transfer" : "no_entry" }),
+            );
           }
 
           if (others.length > 0) {
             return yield* Result.fail(new LineNotClassifiable({ lineId, reason: "split" }));
           }
 
-          const chosen = yield* found(facts.categories, categoryId);
+          if ("fallbackOf" in chosen) {
+            const fallback = facts.categories.find(
+              (each) => each.fallback && each.kind === chosen.fallbackOf,
+            );
 
-          if (chosen.kind !== only.kind) {
+            if (fallback === undefined) {
+              return yield* Result.fail(new CategoryNotFound({ categoryId: "" }));
+            }
+
+            if (fallback.kind !== only.kind) {
+              return yield* Result.fail(
+                new CategoryKindMismatch({
+                  lineId,
+                  lineKind: only.kind,
+                  categoryKind: fallback.kind,
+                }),
+              );
+            }
+
+            return { entryId: only.id, categoryId: fallback.id };
+          }
+
+          const category = yield* found(facts.categories, chosen.categoryId);
+
+          if (category.kind !== only.kind) {
             return yield* Result.fail(
-              new CategoryKindMismatch({ lineId, lineKind: only.kind, categoryKind: chosen.kind }),
+              new CategoryKindMismatch({
+                lineId,
+                lineKind: only.kind,
+                categoryKind: category.kind,
+              }),
             );
           }
 
-          if (chosen.archivedAt !== null) {
+          if (category.archivedAt !== null) {
             return yield* refused("archived");
           }
 
-          return { entryId: only.id, categoryId: chosen.id };
+          return { entryId: only.id, categoryId: category.id };
         }),
     );
 

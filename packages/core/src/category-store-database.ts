@@ -1,7 +1,8 @@
 import { account, category, entry, entryPart, statementLine } from "@gousset/db/schema/ledger";
+import { transfer } from "@gousset/db/schema/transfers";
 import { UserData } from "@gousset/db/user-data";
 import type { UserTransaction } from "@gousset/db/user-data";
-import { and, count, eq, gte, inArray, lte, sql } from "drizzle-orm";
+import { and, count, eq, gte, inArray, lte, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { Effect, Layer, Result } from "effect";
 
@@ -239,10 +240,16 @@ export const DatabaseCategoryStore = Layer.effect(
                 .where(eq(entryPart.lineId, lineId))
                 .orderBy(entry.id);
 
+              const sides = await transaction
+                .select({ id: transfer.id })
+                .from(transfer)
+                .where(or(eq(transfer.outLineId, lineId), eq(transfer.inLineId, lineId)));
+
               const decided = decide({
                 lineId,
                 amountMinor: line.amountMinor,
                 entries,
+                paired: sides.length > 0,
                 categories: await readAll(transaction),
               });
 

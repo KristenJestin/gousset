@@ -115,6 +115,7 @@ export type {
   CategoryMerge,
   CategoryNode,
   CategoryTree,
+  LineClassification,
 } from "./categories";
 
 export { CategoryStore } from "./category-store";

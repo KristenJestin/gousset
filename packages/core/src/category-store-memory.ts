@@ -36,8 +36,8 @@ export type MemoryEntry = {
 export type MemoryCategoryRows = {
   categories: Array<CategoryRecord>;
   entries: Array<MemoryEntry>;
-  /** The lines that exist, by id, with their amount. */
-  lines: Array<{ readonly id: string; readonly amountMinor: number }>;
+  /** The lines that exist, by id, with their amount, and whether each is a side of a transfer. */
+  lines: Array<{ readonly id: string; readonly amountMinor: number; readonly paired?: boolean }>;
 };
 
 /** A category of the memory store: top-level, in use, automatic, unless said otherwise. */
@@ -177,7 +177,13 @@ export function memoryCategoryStore(rows: Map<string, MemoryCategoryRows> = new 
           .map((each) => ({ id: each.id, kind: each.kind }));
 
         const chosen = yield* Effect.fromResult(
-          decide({ lineId, amountMinor: line.amountMinor, entries, categories: own.categories }),
+          decide({
+            lineId,
+            amountMinor: line.amountMinor,
+            entries,
+            paired: line.paired === true,
+            categories: own.categories,
+          }),
         );
 
         const category = own.categories.find((each) => each.id === chosen.categoryId);

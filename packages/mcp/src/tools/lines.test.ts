@@ -315,7 +315,7 @@ describe("lines search", () => {
 
     expect(isError).toBe(false);
     expect(text).toContain(
-      "1 line(s) match: every line to review (near duplicates held, and transfers whose other side the user chooses).",
+      "1 line(s) match: every line to review (near duplicates held, transfers whose other side the user chooses, and lines not classified yet).",
     );
     expect(text).toContain(
       `- 2026-11-04, Current account (Riverside Bank): -23.80 EUR, "CB CORNER CAFE", to review; line: ${heldCafe.id}`,
@@ -596,6 +596,66 @@ describe("lines classify", () => {
     expect(isError).toBe(true);
     expect(text).toContain("choose Read and write on Gousset's consent page");
     expect(entryOf(categories, fuel)?.categoryId).toBe(otherExpense.id);
+  });
+
+  test("classifies a line as an expense, in the category named of that kind", async () => {
+    const categories = new Map([[writer.userId, categoryRows()]]);
+
+    const { text, isError } = await lines(
+      { action: "classify", line: fuel.id, kind: "expense", category: "Fuel" },
+      ROWS,
+      writer,
+      categories,
+    );
+
+    expect(isError, text).toBe(false);
+    expect(text).toContain("is now in Transport > Fuel (expense).");
+    expect(entryOf(categories.get(writer.userId), fuel)).toMatchObject({
+      categoryId: fuelCategory.id,
+      classifiedBy: "user",
+    });
+  });
+
+  test("with a kind and no category, puts the line in that kind's fallback, as the user's choice", async () => {
+    const categories = new Map([[writer.userId, categoryRows()]]);
+
+    const { text, isError } = await lines(
+      { action: "classify", line: salary.id, kind: "income" },
+      ROWS,
+      writer,
+      categories,
+    );
+
+    expect(isError, text).toBe(false);
+    expect(text).toContain("is now in Other (income).");
+    expect(entryOf(categories.get(writer.userId), salary)).toMatchObject({
+      categoryId: otherIncome.id,
+      classifiedBy: "user",
+    });
+
+    // Money in is no expense: the kind says what the line is, and must be its own.
+    const wrong = await lines(
+      { action: "classify", line: salary.id, kind: "expense" },
+      ROWS,
+      writer,
+      categories,
+    );
+
+    expect(wrong.isError).toBe(true);
+    expect(wrong.text).toContain(
+      "This line is an income (money in), not an expense: give kind income",
+    );
+  });
+
+  test("refuses a category for a transfer: it has none", async () => {
+    const { text, isError } = await lines(
+      { action: "classify", line: fuel.id, kind: "transfer", category: "Fuel" },
+      ROWS,
+      writer,
+    );
+
+    expect(isError).toBe(true);
+    expect(text).toContain("it has no category");
   });
 
   test("asks for the line and the category", async () => {
