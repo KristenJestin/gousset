@@ -201,6 +201,11 @@ test("opening a detail turns the row into its panel, and closing folds it back i
 
   await expect(panel).toHaveCount(0);
   await expect(spendingRow(page, "Housing")).toBeFocused();
+  // The row shrinks back by a layout move, drawn frame by frame, which `getAnimations` does not
+  // list: the list is settled once the button under it takes the pointer again.
+  await block(page, "Where the money goes")
+    .getByRole("button", { name: /^Show the other \d+$/ })
+    .click({ trial: true });
   await animationsDone(page);
 });
 
