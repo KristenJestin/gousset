@@ -217,15 +217,28 @@ An update that goes wrong is undone with the dump made just before it, under the
 it. The previous image never runs on a database a later `migrate` changed: its code does not know
 the new columns and tables, and nothing removes them (`docs/data-model.md`, "Migrations").
 
+One line at a time, stopping at the first that fails; `<dump>` is the file of that dump, as
+`gousset-$(date +%F).dump` named it, and `<version>` the version it was made with:
+
 ```sh
+test -s <dump> && echo found                     # the dump is there and not empty: go on only then
 docker compose down                              # the app and migrate stop; the volume stays
-echo GOUSSET_VERSION=0.1.1 >> .env               # the version the dump was made with
+echo GOUSSET_VERSION=<version> >> .env           # the previous image, as 0.1.1
 docker compose up -d postgres
 docker compose exec -T postgres dropdb -U gousset gousset
 docker compose exec -T postgres createdb -U gousset gousset
-docker compose exec -T postgres pg_restore -U gousset -d gousset --exit-on-error --single-transaction < gousset-2026-11-23.dump
-docker compose up -d                             # the previous image's migrate (nothing to apply), then its app
+docker compose exec -T postgres pg_restore -U gousset -d gousset --exit-on-error --single-transaction < <dump>
 ```
+
+Only once `pg_restore` ended without an error, start the previous image's `migrate` (nothing to
+apply) and its app:
+
+```sh
+docker compose up -d
+```
+
+If `pg_restore` failed, the database is empty: do not start the app, which would offer `/setup` to
+whoever reaches it first. Mend what failed and run the last three lines again.
 
 The roles are there already: the same server keeps them. What was written after the dump, under
 the new version, is lost with it. Take `GOUSSET_VERSION` out of `.env` to follow `latest` again
@@ -320,7 +333,8 @@ review; it is never merged with the button, and GitHub shows it merged once `mai
 From v0.2 on, installations hold real data, and an update must keep every row of it (#102).
 `.github/workflows/upgrade.yml` runs on every push to `dev` and `next/**`, and on a pull request that
 touches what an update runs through (`packages/db`, `packages/auth`, the `Dockerfile`, the compose
-files, the entry point) or the job itself: it builds the commit's image and runs `tools/check-upgrade.sh` on it, which, on a fresh project
+files, `tools/docker-entrypoint.sh`) or the job itself (`tools/check-upgrade.*`, the workflow): it
+builds the commit's image and runs `tools/check-upgrade.sh` on it, which, on a fresh project
 and volume:
 
 1. installs **the last release** (the highest tag `vX.Y.Z`, `--from` to choose another) with that

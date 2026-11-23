@@ -22,10 +22,11 @@ on:
   push:
     branches: [dev, "next/**"]
 
-# A new push makes the runs of the same pull request's older pushes useless. Not on a branch, whose
-# runs always finish: the release reads dev's.
+# A new push makes the runs of the same pull request's older pushes useless. A push to a branch has a
+# group of its own: GitHub cancels a pending run when another queues in its group, even without
+# cancel-in-progress, and the release reads the run of each push to dev (as beta.yml, which has none).
 concurrency:
-  group: upgrade-${{ github.event.pull_request.number || github.ref }}
+  group: upgrade-${{ github.event.pull_request.number || format('{0}-{1}', github.ref, github.sha) }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:

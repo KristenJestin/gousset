@@ -247,7 +247,8 @@ From v0.2 on, installations hold real data: an update must never lose, duplicate
   generated again.
 - **The `upgrade` workflow** (`tools/check-upgrade.sh`) updates the last release, filled with
   invented data, to the commit, on every push to `dev` and `next/**` and on a pull request that
-  touches `packages/db`, `packages/auth` or the image, and compares every row before and after; the release refuses a commit whose push to `dev` did not
+  touches what an update runs through (`packages/db`, `packages/auth`, the image, its compose
+  files and entry point, or the job; `docs/releases.md` lists them), and compares every row before and after; the release refuses a commit whose push to `dev` did not
   pass it. A column or a table the new migrations add is expected by name (`ALTER TABLE "t" ADD
   COLUMN "c"`, `CREATE TABLE "t"`); any other difference fails it.
 
