@@ -224,7 +224,10 @@ The lead reviews every change to the tools against `docs/mcp.md` before merging.
   whose head commit ends with the trailer line `E2E-Matrix: full` runs every browser and width as
   `dev` does: use it to reproduce a failure of another browser, and make the last run before
   merging a full one when the change touches what other browsers draw.
-- **Required checks** on `dev` and `main`: `verify`, `ui`, `e2e`, `react-doctor` and `privacy`.
+- **Required checks** on `dev`: `verify`, `ui`, `e2e`, `react-doctor` and `privacy`. `main` is
+  moved by the release alone, to a commit of `dev` whose checks passed (`docs/releases.md`,
+  "Releasing"); this is a convention: its ruleset only blocks deletion and non-fast-forward, and
+  asks for no check.
 
 ## How the work is organised
 
