@@ -1,5 +1,6 @@
 import {
   FixtureLedger,
+  Imports,
   Ledger,
   flags,
   importState,
@@ -32,7 +33,12 @@ function onDay(day: string, ledger: Layer.Layer<Ledger> = FixtureLedger): Runner
         yield* TestClock.setTime(Date.parse(`${day}T12:00:00Z`));
 
         return yield* effect;
-      }).pipe(Effect.provide(Layer.mergeAll(ledger, memoryAccountStore(), TestClock.layer()))),
+      }).pipe(
+        // month never reaches the imports.
+        Effect.provide(
+          Layer.mergeAll(ledger, memoryAccountStore(), Layer.mock(Imports, {}), TestClock.layer()),
+        ),
+      ),
     );
 }
 

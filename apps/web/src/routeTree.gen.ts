@@ -24,6 +24,7 @@ import { Route as AuthedOperationsRouteImport } from './routes/_authed/operation
 import { Route as AuthedSettingsRouteRouteImport } from './routes/_authed/settings/route'
 import { Route as AuthedSubjectsRouteImport } from './routes/_authed/subjects'
 import { Route as AuthedUsersRouteImport } from './routes/_authed/users'
+import { Route as ApiImportsRouteImport } from './routes/api/imports'
 import { Route as E2eTodayRouteImport } from './routes/e2e/today'
 import { Route as AuthedAccountsIndexRouteImport } from './routes/_authed/accounts/index'
 import { Route as AuthedAccountsAccountIdRouteImport } from './routes/_authed/accounts/$accountId'
@@ -108,6 +109,11 @@ const AuthedUsersRoute = AuthedUsersRouteImport.update({
   path: '/users',
   getParentRoute: () => AuthedRoute,
 } as any)
+const ApiImportsRoute = ApiImportsRouteImport.update({
+  id: '/api/imports',
+  path: '/api/imports',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const E2eTodayRoute = E2eTodayRouteImport.update({
   id: '/e2e/today',
   path: '/e2e/today',
@@ -170,6 +176,7 @@ export interface FileRoutesByFullPath {
   '/operations': typeof AuthedOperationsRoute
   '/subjects': typeof AuthedSubjectsRoute
   '/users': typeof AuthedUsersRoute
+  '/api/imports': typeof ApiImportsRoute
   '/e2e/today': typeof E2eTodayRoute
   '/accounts/$accountId': typeof AuthedAccountsAccountIdRoute
   '/e2e/jobs': typeof AuthedE2eJobsRoute
@@ -193,6 +200,7 @@ export interface FileRoutesByTo {
   '/operations': typeof AuthedOperationsRoute
   '/subjects': typeof AuthedSubjectsRoute
   '/users': typeof AuthedUsersRoute
+  '/api/imports': typeof ApiImportsRoute
   '/e2e/today': typeof E2eTodayRoute
   '/': typeof AuthedIndexRoute
   '/accounts/$accountId': typeof AuthedAccountsAccountIdRoute
@@ -220,6 +228,7 @@ export interface FileRoutesById {
   '/_authed/operations': typeof AuthedOperationsRoute
   '/_authed/subjects': typeof AuthedSubjectsRoute
   '/_authed/users': typeof AuthedUsersRoute
+  '/api/imports': typeof ApiImportsRoute
   '/e2e/today': typeof E2eTodayRoute
   '/_authed/': typeof AuthedIndexRoute
   '/_authed/accounts/$accountId': typeof AuthedAccountsAccountIdRoute
@@ -248,6 +257,7 @@ export interface FileRouteTypes {
     | '/operations'
     | '/subjects'
     | '/users'
+    | '/api/imports'
     | '/e2e/today'
     | '/accounts/$accountId'
     | '/e2e/jobs'
@@ -271,6 +281,7 @@ export interface FileRouteTypes {
     | '/operations'
     | '/subjects'
     | '/users'
+    | '/api/imports'
     | '/e2e/today'
     | '/'
     | '/accounts/$accountId'
@@ -297,6 +308,7 @@ export interface FileRouteTypes {
     | '/_authed/operations'
     | '/_authed/subjects'
     | '/_authed/users'
+    | '/api/imports'
     | '/e2e/today'
     | '/_authed/'
     | '/_authed/accounts/$accountId'
@@ -316,6 +328,7 @@ export interface RootRouteChildren {
   SetupRoute: typeof SetupRoute
   SignInRoute: typeof SignInRoute
   DotwellKnownSplatRoute: typeof DotwellKnownSplatRoute
+  ApiImportsRoute: typeof ApiImportsRoute
   E2eTodayRoute: typeof E2eTodayRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ApiJobsJobIdEventsRoute: typeof ApiJobsJobIdEventsRoute
@@ -427,6 +440,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/users'
       preLoaderRoute: typeof AuthedUsersRouteImport
       parentRoute: typeof AuthedRoute
+    }
+    '/api/imports': {
+      id: '/api/imports'
+      path: '/api/imports'
+      fullPath: '/api/imports'
+      preLoaderRoute: typeof ApiImportsRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/e2e/today': {
       id: '/e2e/today'
@@ -549,6 +569,7 @@ const rootRouteChildren: RootRouteChildren = {
   SetupRoute: SetupRoute,
   SignInRoute: SignInRoute,
   DotwellKnownSplatRoute: DotwellKnownSplatRoute,
+  ApiImportsRoute: ApiImportsRoute,
   E2eTodayRoute: E2eTodayRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiJobsJobIdEventsRoute: ApiJobsJobIdEventsRoute,

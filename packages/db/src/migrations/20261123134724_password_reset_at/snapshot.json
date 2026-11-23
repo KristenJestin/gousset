@@ -1,0 +1,37 @@
+{
+  "type": "diff",
+  "version": "10",
+  "dialect": "postgres",
+  "id": "a89e879a-f3c5-407c-af6e-f4569e87e7f2",
+  "prevIds": ["8b5607b4-e1e2-4016-93e7-428fbce48ed8"],
+  "footprints": [
+    {
+      "statementType": "add_column",
+      "statementTarget": ["column", "public", "auth_user", "password_reset_at"],
+      "writes": [
+        "s|col|public.auth_user.password_reset_at",
+        "n|col|public.auth_user.password_reset_at",
+        "e|col|public.auth_user.password_reset_at"
+      ],
+      "reads": ["n|tbl|public.auth_user", "n|sch|public"]
+    }
+  ],
+  "deltas": [
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "auth_user",
+        "name": "password_reset_at",
+        "type": "timestamp",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    }
+  ]
+}

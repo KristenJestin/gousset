@@ -76,7 +76,7 @@ async function sampleWhile(page: Page, trigger: string, read: Reading, forMs = 5
 /** How many frames, from the press, had at least one digit column drawing two digits. */
 async function rollingFrames(page: Page) {
   const samples = await sampleWhile(page, "Previous month", {
-    selector: '[data-slot="amount-digit"]',
+    selector: '[data-slot="rolling-digit"]',
     attribute: null,
   });
 
@@ -144,7 +144,7 @@ test.describe("Amount", () => {
     // More than 2 leaves room for a slow runner, and is still far from reduced motion's 0.
     expect(await rollingFrames(page)).toBeGreaterThan(2);
     await expect(spokenAmount(page, "€1,934")).toBeAttached();
-    await expect(page.locator('[data-slot="amount-digit"]').first().locator("> *")).toHaveCount(1);
+    await expect(page.locator('[data-slot="rolling-digit"]').first().locator("> *")).toHaveCount(1);
   });
 
   test("does not roll under reduced motion", async ({ page }) => {

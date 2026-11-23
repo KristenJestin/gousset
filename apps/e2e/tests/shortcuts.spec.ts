@@ -1,7 +1,7 @@
 import type { Page } from "@playwright/test";
 
 import { openAccountMenu } from "../src/frame";
-import { expect, test, visit } from "../src/test";
+import { animationsDone, expect, test, visit } from "../src/test";
 
 /** The page, once its scripts are loaded and the shortcuts listen. */
 async function openHome(page: Page) {
@@ -35,6 +35,8 @@ test("Mod+/ opens the list of shortcuts too", async ({ page }) => {
   await page.keyboard.press("ControlOrMeta+/");
 
   await expect(page.getByRole("dialog", { name: "Keyboard shortcuts" })).toBeVisible();
+  // The dialog still fading in would fail axe's contrast check at the end.
+  await animationsDone(page);
 });
 
 test("Mod+K opens the search, empty for now", async ({ page }) => {

@@ -8,6 +8,8 @@ export const duration = {
   fast: 0.15,
   /** The default: a value that moves, a line that folds. */
   base: 0.2,
+  /** Content that unfolds in place: a row's detail, a summary that appears. */
+  unfold: 0.25,
   /** A panel that opens, a layout that changes. */
   slow: 0.3,
 } as const;
@@ -19,5 +21,6 @@ export const easeOut = [0, 0, 0.2, 1] as const;
 export const transition = {
   fast: { duration: duration.fast, ease: easeOut },
   base: { duration: duration.base, ease: easeOut },
+  unfold: { duration: duration.unfold, ease: easeOut },
   slow: { duration: duration.slow, ease: easeOut },
 } as const;

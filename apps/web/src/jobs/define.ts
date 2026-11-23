@@ -24,6 +24,9 @@ export class JobProgress extends Context.Service<
   { readonly step: (step: string, counts?: StepCounts) => Effect.Effect<void> }
 >()("@gousset/web/JobProgress") {}
 
+/** Which attempt runs: the last one may not leave its work half done for a next one to finish. */
+export type JobAttempt = { readonly last: boolean };
+
 /** A job, defined once: its input, its steps, its retries, its timeout and what it does. */
 export type JobDefinition<Input, Encoded> = {
   /** Its queue's name in pg-boss, and its name in telemetry: never renamed once released. */
@@ -44,9 +47,13 @@ export type JobDefinition<Input, Encoded> = {
   /**
    * What it does, for the user who sent it, ending on what it touched for their pages to read
    * again. It is run again from the start on each attempt, so it must not double what an earlier
-   * attempt did.
+   * attempt did. `attempt` says whether no other attempt will follow a failure.
    */
-  readonly run: (input: Input, owner: string) => Effect.Effect<Touched, JobFailed, JobProgress>;
+  readonly run: (
+    input: Input,
+    owner: string,
+    attempt: JobAttempt,
+  ) => Effect.Effect<Touched, JobFailed, JobProgress>;
 };
 
 /** A job's definition, typed from its input's schema. */

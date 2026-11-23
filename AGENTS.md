@@ -106,7 +106,8 @@ The whole toolchain is vite-plus: no ESLint, no Prettier, no Jest beside it.
   `tailwind-merge`); only the theme's variables (`docs/architecture.md`, "Shared components").
 - **Every UI issue states its motion, and tests it** (`docs/design.md`, "Motion"): what moves,
   how long, and that it is cut under reduced motion.
-- **A feature is reachable from the MCP server in the same pull request** (see [MCP](#mcp)).
+- **A feature is reachable from the MCP server in the same pull request** (see [MCP](#mcp)),
+  but the administration of users, which has no tool.
 
 ## Lint
 
@@ -178,7 +179,10 @@ wrapper lives beside them, linted like the rest.
 The app serves MCP at `/mcp` (`docs/mcp.md`). For every change to its tools:
 
 - **A feature ships with its tool**: its family tool and actions, in the same pull request, with
-  end-to-end tests through a real MCP client.
+  end-to-end tests through a real MCP client. **One exception: the administration of users**
+  (creating one, a ban, a password reset) has no tool and stays on the users page: an agent
+  holding the administrator's token could otherwise reset a user's password and sign in with the
+  temporary one before the user does, unattended (`docs/mcp.md`, "Tools").
 - **One family tool per concept, with actions** (`accounts` with `list`, `show`…), never one tool
   per verb; about ten tools in all.
 - **Every tool has a `title`, a description and annotations**: the description says what it does,

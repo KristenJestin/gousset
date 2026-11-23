@@ -12,8 +12,10 @@ export default defineConfig({
   // The supply-chain pass asks a third party (Socket.dev) about every dependency.
   supplyChain: { enabled: false },
   // Vendored code keeps its upstream form (AGENTS.md, "Lint"): Bklit's charts, as its shadcn
-  // registry installs them. Paths are relative to each project.
+  // registry installs them. The build's output (`.output`, which `verify` builds before this
+  // runs) is the dependencies' code bundled, not Gousset's: how the bundler splits it decides
+  // what lands where, and none of it is ours to fix. Paths are relative to each project.
   ignore: {
-    files: ["src/components/charts/**", "src/components/shimmering-text.tsx"],
+    files: ["src/components/charts/**", "src/components/shimmering-text.tsx", ".output/**"],
   },
 });

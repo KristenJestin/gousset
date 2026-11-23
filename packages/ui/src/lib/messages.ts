@@ -156,6 +156,12 @@ function uiMessages(locale: Locale) {
       counts: (done: string, total: string) => m.uiJobCounts({ done, total }, options),
       retry: m.uiJobRetry({}, options),
     },
+    imports: {
+      /** The file drop's button, which opens the file picker. */
+      chooseFiles: m.uiImportChooseFiles({}, options),
+      /** Said in place of the dash of a value the import has not found yet. */
+      notKnown: m.uiImportNotKnown({}, options),
+    },
   };
 }
 

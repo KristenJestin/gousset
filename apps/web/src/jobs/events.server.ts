@@ -20,16 +20,49 @@ const RECONNECT_MS = 1000;
 const event = (view: JobView) => `data: ${JSON.stringify(view)}\n\n`;
 
 /**
+ * How many streams one user may hold open at once: each reads the database every second while its
+ * job waits. A screen follows a few imports at a time; more is a page left open many times over.
+ */
+export const STREAMS_PER_USER = 8;
+
+/** The streams open in this process, by user. */
+const openStreams = new Map<string, number>();
+
+function release(owner: string) {
+  const left = (openStreams.get(owner) ?? 1) - 1;
+
+  if (left <= 0) {
+    openStreams.delete(owner);
+  } else {
+    openStreams.set(owner, left);
+  }
+}
+
+/**
  * A job's views as Server-Sent Events, for the page that follows it: where it stands now, then
- * each change, until it is over. `null` when `owner` has no job with this id. Each change of an
- * attempt this process runs is pushed at once; the row is read again every second otherwise.
+ * each change, until it is over. `null` when `owner` has no job with this id, `"busy"` when they
+ * already hold `STREAMS_PER_USER` streams. Each change of an attempt this process runs is pushed at
+ * once; the row is read again every second otherwise.
  */
 export const jobEvents = (id: string, owner: string) =>
   Effect.gen(function* () {
     const queue = yield* JobQueue;
-    const first = yield* queue.view(id, owner);
+
+    if ((openStreams.get(owner) ?? 0) >= STREAMS_PER_USER) {
+      return "busy" as const;
+    }
+
+    // Counted before the first read waits, so that streams asked for at once cannot all pass the
+    // check; given back when there is no stream to open after all.
+    openStreams.set(owner, (openStreams.get(owner) ?? 0) + 1);
+
+    const first = yield* queue
+      .view(id, owner)
+      .pipe(Effect.tapError(() => Effect.sync(() => release(owner))));
 
     if (first === null) {
+      release(owner);
+
       return null;
     }
 
@@ -59,10 +92,16 @@ export const jobEvents = (id: string, owner: string) =>
       Stream.takeUntil(isOver),
     );
 
+    // Ended, or cut by the browser: the stream no longer counts.
+    const released = Stream.ensuring(
+      views,
+      Effect.sync(() => release(owner)),
+    );
+
     const lines = Stream.concat(
       Stream.make(`retry: ${RECONNECT_MS}\n\n`),
       Stream.merge(
-        views.pipe(Stream.map(event)),
+        released.pipe(Stream.map(event)),
         Stream.tick(KEEPALIVE_EVERY).pipe(
           Stream.drop(1),
           Stream.map(() => ": keepalive\n\n"),

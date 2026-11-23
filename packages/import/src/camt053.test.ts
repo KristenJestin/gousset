@@ -28,12 +28,16 @@ const refusal = (text: string) =>
 
 const IBAN = "DE39999999990012345678";
 
+/** The samples' account (`Acct/Id/IBAN`). */
+const ACCOUNT = { iban: "FR7699999000010001234567809", number: null };
+
 /**
  * What `writeCamt053` writes: the label as `Ustrd`, the reference as `AcctSvcrRef`, the value date
  * the booking date, the opening balance (`OPBD`) on the first day.
  */
 function writtenByWriteCamt053(statement: MadeUpStatement): Statement {
   return {
+    account: { iban: statement.account.iban, number: null },
     currency: statement.account.currency,
     lines: statement.lines.map((line) => ({
       bookedOn: line.bookedOn,
@@ -74,6 +78,7 @@ describe("reading CAMT.053 files", () => {
 
   test("reads camt053-version-02.xml (001.02, bank labels, parties, a reversal, PRCD)", () => {
     expect(read(statementSamples.camt053Version02.bytes)).toEqual({
+      account: ACCOUNT,
       currency: "EUR",
       lines: [
         {
@@ -103,6 +108,7 @@ describe("reading CAMT.053 files", () => {
 
   test("reads camt053-batch.xml (001.04, a batch entry, an overdrawn opening balance)", () => {
     expect(read(statementSamples.camt053Batch.bytes)).toEqual({
+      account: ACCOUNT,
       currency: "EUR",
       lines: [
         {
@@ -125,6 +131,7 @@ describe("reading CAMT.053 files", () => {
 
   test("reads camt053-daily.xml (001.10, prefixed, two daily statements of one account)", () => {
     expect(read(statementSamples.camt053Daily.bytes)).toEqual({
+      account: ACCOUNT,
       currency: "EUR",
       lines: [
         {
@@ -144,6 +151,25 @@ describe("reading CAMT.053 files", () => {
       ],
       openingBalance: { amountMinor: 50_000, on: "2026-11-30" },
       balance: { amountMinor: -32_920, on: "2026-12-02" },
+    });
+  });
+
+  test("reads the account's IBAN spaced and lower case, or its other identifier", () => {
+    const spaced = camt().replace(
+      "FR7699999000010001234567809",
+      "fr76 9999 9000 0100 0123 4567 809",
+    );
+
+    expect(read(new TextEncoder().encode(spaced)).account).toEqual(ACCOUNT);
+
+    const other = camt().replace(
+      "<IBAN>FR7699999000010001234567809</IBAN>",
+      "<Othr><Id> 00012345678 </Id></Othr>",
+    );
+
+    expect(read(new TextEncoder().encode(other)).account).toEqual({
+      iban: null,
+      number: "00012345678",
     });
   });
 

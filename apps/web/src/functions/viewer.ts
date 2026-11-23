@@ -3,7 +3,7 @@ import { getCookie, getRequestHeaders } from "@tanstack/react-start/server";
 import { Effect, Schema } from "effect";
 
 import { monthOfDay } from "@/lib/month";
-import { E2E_DAY_COOKIE, today } from "@/lib/today";
+import { E2E_DAY_COOKIE, localDay, today } from "@/lib/today";
 import { auth } from "@/services";
 
 import { ColorSchemeChoice } from "./color-scheme";
@@ -35,6 +35,9 @@ export const getViewer = createServerFn({ method: "GET" }).handler(() =>
               : "system",
             isAdmin: user.role === "admin",
             mustChangePassword: user.mustChangePassword === true,
+            // The day the administrator reset the password, on the server's calendar: the same
+            // text on the server and in the browser, whatever their time zones.
+            passwordResetOn: user.passwordResetAt ? localDay(user.passwordResetAt) : null,
             singleKeyShortcuts: user.singleKeyShortcuts !== false,
           },
         };

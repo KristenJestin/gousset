@@ -1,4 +1,4 @@
-import { FixtureLedger, memoryAccountStore, memoryId } from "@gousset/core";
+import { FixtureLedger, Imports, memoryAccountStore, memoryId } from "@gousset/core";
 import type { AccountRecord, MemoryLine, MemoryRows } from "@gousset/core";
 import type { Client } from "@modelcontextprotocol/client";
 import { Effect, Layer } from "effect";
@@ -102,6 +102,8 @@ function onToday(rows: MemoryRows): Runner<GoussetServices> {
   const layer = Layer.mergeAll(
     FixtureLedger,
     memoryAccountStore(new Map([[reader.userId, rows]])),
+    // accounts never reaches the imports.
+    Layer.mock(Imports, {}),
     TestClock.layer(),
   );
 
@@ -383,7 +385,7 @@ describe("the accounts tool", () => {
     const { tools } = await (await client()).listTools();
     const tool = tools.find((each) => each.name === "accounts");
 
-    expect(tools.map((each) => each.name)).toEqual(["month", "accounts"]);
+    expect(tools.map((each) => each.name)).toEqual(["month", "imports", "accounts"]);
     expect(tool?.title).toBe("Accounts");
     expect(tool?.annotations).toEqual({
       readOnlyHint: true,

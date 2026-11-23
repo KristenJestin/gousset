@@ -1,3 +1,5 @@
+import { isHeldForPasswordChange } from "@gousset/auth";
+import { resetPassword as resetUserPassword } from "@gousset/auth/password-reset";
 import { listUsers as listAllUsers } from "@gousset/auth/users";
 import { createMiddleware, createServerFn } from "@tanstack/react-start";
 import { getRequestHeaders } from "@tanstack/react-start/server";
@@ -10,7 +12,7 @@ import { auth, db } from "@/services";
 const adminOnly = createMiddleware({ type: "function" }).server(async ({ next }) => {
   const session = await auth.api.getSession({ headers: getRequestHeaders() });
 
-  if (session?.user.role !== "admin") {
+  if (session?.user.role !== "admin" || isHeldForPasswordChange(session)) {
     throw new Error("Only the administrator manages users.");
   }
 
@@ -59,6 +61,29 @@ export const createUser = createServerFn({ method: "POST" })
         Effect.match({
           onSuccess: ({ user }) => ({ created: true as const, name: user.name }),
           onFailure: (code) => ({ created: false as const, code }),
+        }),
+      ),
+    ),
+  );
+
+const PasswordReset = Schema.Struct({ userId: Schema.String, password: Schema.String });
+
+/**
+ * The administrator gives a user who forgot their password a new temporary one: the user changes
+ * it at the next sign-in, and every session and MCP client of theirs ends (packages/auth,
+ * password-reset.ts).
+ */
+export const resetPassword = createServerFn({ method: "POST" })
+  .middleware([adminOnly])
+  .validator(Schema.toStandardSchemaV1(PasswordReset))
+  .handler(({ data }) =>
+    Effect.runPromise(
+      resetUserPassword(auth, db, data.userId, data.password).pipe(
+        Effect.map(() => ({ reset: true as const })),
+        Effect.catchTags({
+          PasswordResetRefused: ({ code }) => Effect.succeed({ reset: false as const, code }),
+          // Said in the dialog like any refusal, rather than lost as a thrown error.
+          PasswordResetFailed: () => Effect.succeed({ reset: false as const, code: "UNKNOWN" }),
         }),
       ),
     ),

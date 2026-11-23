@@ -6,8 +6,14 @@ import { earliest, latest } from "./balances";
 import { dayBefore, mt940Day, mt940EntryDay } from "./dates";
 import { MissingField, NotAStatement, UnsupportedContent } from "./errors";
 import type { ReadError } from "./errors";
-import type { Balance, Counterparty, Statement, StatementLine } from "./statement";
-import { cleanValue, decodeText, ibanOf, nonEmpty } from "./text";
+import type {
+  Balance,
+  Counterparty,
+  Statement,
+  StatementAccount,
+  StatementLine,
+} from "./statement";
+import { cleanValue, decodeText, ibanOf, nonEmpty, statementAccount } from "./text";
 
 // SWIFT MT940, the customer statement message: fields of a tag and a value (`:61:` a line, `:86:`
 // what the bank says of it), a field's value running on over the lines that start no field. A file
@@ -404,6 +410,25 @@ function openingOf(balance: Balance, booked: ReadonlyArray<Read>): Balance {
     : balance;
 }
 
+/**
+ * The account `:25:` names: the part after a bank's identifier (`BEXAFRPPXXX/…`, a bank code
+ * `99999999/…`), or the whole value. Some banks write the account's currency after its IBAN
+ * (`FR76…809EUR`): it is no part of the IBAN, whose shape alone would not tell.
+ */
+function readAccount(field: Mt940Field, currency: string): StatementAccount | null {
+  const value = cleanValue(field.text);
+  const written = cleanValue(value.slice(value.indexOf("/") + 1));
+  const compact = written.replaceAll(/\s/g, "").toUpperCase();
+
+  const withoutCurrency = compact.endsWith(currency)
+    ? ibanOf(compact.slice(0, -currency.length))
+    : null;
+
+  const iban = withoutCurrency ?? ibanOf(written);
+
+  return statementAccount(iban, iban === null ? nonEmpty(written) : null);
+}
+
 /** The statements of the file, each from its `:20:`; fields before the first are read past. */
 function readStatements(fields: ReadonlyArray<Mt940Field>): Array<Mt940Statement> {
   const statements: Array<Mt940Statement> = [];
@@ -446,6 +471,7 @@ export const readMt940 = (bytes: Uint8Array): Effect.Effect<Statement, ReadError
 
     const account = yield* accountOf(first);
     const { currency } = yield* readBalance(yield* required(first, ["60F", "60M"]));
+    const named = readAccount(yield* required(first, ["25"]), currency);
     const openings: Array<Balance> = [];
     const closings: Array<Balance> = [];
     const lines: Array<StatementLine> = [];
@@ -484,5 +510,11 @@ export const readMt940 = (bytes: Uint8Array): Effect.Effect<Statement, ReadError
       }
     }
 
-    return { currency, lines, openingBalance: earliest(openings), balance: latest(closings) };
+    return {
+      account: named,
+      currency,
+      lines,
+      openingBalance: earliest(openings),
+      balance: latest(closings),
+    };
   });

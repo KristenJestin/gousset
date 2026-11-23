@@ -1,3 +1,4 @@
+import { AuthErrorCode, isHeldForPasswordChange } from "@gousset/auth";
 import {
   consentClient,
   isMcpDoorOpen,
@@ -24,6 +25,11 @@ export const signedIn = createMiddleware({ type: "function" }).server(async ({ n
 
   if (session === null) {
     throw new Error(McpRefusal.signInRequired);
+  }
+
+  // A temporary password reaches no setting of the user's: the administrator chose it (#70).
+  if (isHeldForPasswordChange(session)) {
+    throw new Error(AuthErrorCode.passwordChangeRequired);
   }
 
   return next({ context: { userId: session.user.id, isAdmin: session.user.role === "admin" } });

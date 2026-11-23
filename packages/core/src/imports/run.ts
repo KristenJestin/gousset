@@ -1,0 +1,484 @@
+import {
+  account,
+  accountBalance,
+  importFile,
+  statementImport,
+  statementLine,
+} from "@gousset/db/schema/ledger";
+import { UserData } from "@gousset/db/user-data";
+import type { QueryFailed, UserTransaction } from "@gousset/db/user-data";
+import { CsvProfile, detectCsvProfile } from "@gousset/import";
+import { and, count, eq, gte, inArray, isNotNull, isNull, lte, ne, or } from "drizzle-orm";
+import { Effect, Schema } from "effect";
+
+import { ImportFailed } from "./errors";
+import { dedupKeys, NEAR_DAYS, nearDuplicates } from "./keys";
+import type { ExistingLine, ImportFormat, ReadLine } from "./keys";
+import { StatementReader } from "./read";
+import type { ReadStatement } from "./read";
+import { isId } from "./rows";
+import type { ImportStep } from "./summary";
+
+// The import's job (docs/architecture.md, "Background jobs"): read the file, deduplicate its
+// lines against the account's, save what is new. Each attempt runs it again from the start, so
+// every step is safe to run twice: what an earlier attempt saved is the import's own and is kept,
+// and the counts are read back from the lines, never added up.
+
+/** What the job is sent: the import, and how to read its CSV once the user said so. */
+export const ImportJobInput = Schema.Struct({
+  importId: Schema.String,
+  csvProfile: Schema.NullOr(CsvProfile),
+});
+
+export type ImportJobInput = typeof ImportJobInput.Type;
+
+/** Where the job reports its step, and how much of it is done when it counts lines. */
+export type ImportProgress = (
+  step: ImportStep,
+  counts?: { readonly done: number; readonly total: number },
+) => Effect.Effect<void>;
+
+/** What an import's run changed: the months of its lines, for the pages to read again. */
+export type ImportRun = { readonly months: ReadonlyArray<string> };
+
+/** How many lines one insert writes, and the screen's progress moves by. */
+const CHUNK = 200;
+
+const nothing: ImportRun = { months: [] };
+
+/**
+ * The statuses in which an import is its job's to move on. Any other (waiting, done, undone) was
+ * decided meanwhile, by the user or by another attempt: the job then stops where it is.
+ */
+const RUNS: ReadonlySet<string> = new Set(["queued", "reading", "saving", "failed"]);
+
+/** The import was undone or answered while the job ran: it stops, writing nothing more. */
+class ImportTaken extends Schema.TaggedError<ImportTaken>()("ImportTaken", {}) {}
+
+/**
+ * Locks the import's row until the transaction ends, and says whether its job may still write:
+ * an undo or an answer, which take the same lock, waits for this transaction, or this one for it.
+ */
+async function stillRuns(transaction: UserTransaction, importId: string): Promise<boolean> {
+  const [row] = await transaction
+    .select({ status: statementImport.status })
+    .from(statementImport)
+    .where(eq(statementImport.id, importId))
+    .for("update");
+
+  return row !== undefined && RUNS.has(row.status);
+}
+
+const DAY_MS = 86_400_000;
+
+function shiftDay(day: string, days: number): string {
+  return new Date(Date.parse(`${day}T00:00:00Z`) + days * DAY_MS).toISOString().slice(0, 10);
+}
+
+/** The account a statement names, when exactly one of the user's accounts is it. */
+async function recognise(
+  transaction: UserTransaction,
+  named: ReadStatement["account"],
+): Promise<{ id: string; currency: string } | undefined> {
+  const columns = { id: account.id, currency: account.currency };
+  const iban = named?.iban ?? null;
+  const number = named?.number ?? null;
+
+  if (iban !== null) {
+    const [found] = await transaction.select(columns).from(account).where(eq(account.iban, iban));
+
+    if (found !== undefined) {
+      return found;
+    }
+  }
+
+  if (number !== null) {
+    // A number is unique only with its bank: two accounts with it, and the user chooses.
+    const found = await transaction
+      .select(columns)
+      .from(account)
+      .where(eq(account.number, number))
+      .limit(2);
+
+    if (found.length === 1) {
+      return found[0];
+    }
+  }
+
+  return undefined;
+}
+
+type Loaded = {
+  readonly status: string;
+  readonly format: ImportFormat;
+  readonly account: { readonly id: string; readonly currency: string } | undefined;
+  readonly bytes: Uint8Array;
+};
+
+async function load(transaction: UserTransaction, importId: string): Promise<Loaded | undefined> {
+  const [row] = await transaction
+    .select({
+      status: statementImport.status,
+      format: statementImport.format,
+      accountId: account.id,
+      currency: account.currency,
+      content: importFile.content,
+    })
+    .from(statementImport)
+    .leftJoin(account, eq(account.id, statementImport.accountId))
+    .leftJoin(importFile, eq(importFile.importId, statementImport.id))
+    .where(eq(statementImport.id, importId));
+
+  if (row === undefined) {
+    return undefined;
+  }
+
+  return {
+    status: row.status,
+    format: row.format,
+    account:
+      row.accountId === null || row.currency === null
+        ? undefined
+        : { id: row.accountId, currency: row.currency },
+    bytes: row.content ?? new Uint8Array(),
+  };
+}
+
+/** A line read, with its key, in the file's order. */
+type Keyed = ReadStatement["lines"][number] & { readonly dedupKey: string; readonly order: number };
+
+/** What deduplication decided for the lines that are new: held against a line, or counted. */
+type Planned = Keyed & { readonly duplicateOf: string | null };
+
+/**
+ * Runs the import `input.importId` of `owner`: reads its file, recognises its account, adds the
+ * lines the account does not have yet, holds its near duplicates and keeps its balances. An import
+ * that needs the user (its account, how to read its CSV) is left `waiting`, and one already done is
+ * left as it is.
+ */
+export function runImport(
+  owner: string,
+  input: ImportJobInput,
+  progress: ImportProgress,
+): Effect.Effect<ImportRun, ImportFailed, UserData | StatementReader> {
+  const { importId } = input;
+
+  return Effect.gen(function* () {
+    const userData = yield* UserData;
+    const reader = yield* StatementReader;
+
+    const inTransaction = <A>(work: (transaction: UserTransaction) => Promise<A>) =>
+      userData.transaction(owner, work);
+
+    /** Runs `work` on the import while it is still the job's; stops the run otherwise. */
+    const whileRunning = <A>(work: (transaction: UserTransaction) => Promise<A>) =>
+      inTransaction(async (transaction) =>
+        (await stillRuns(transaction, importId)) ? { done: await work(transaction) } : undefined,
+      ).pipe(
+        Effect.flatMap((ran) =>
+          ran === undefined ? Effect.fail(new ImportTaken()) : Effect.succeed(ran.done),
+        ),
+      );
+
+    const setStatus = (values: Partial<typeof statementImport.$inferInsert>) =>
+      whileRunning((transaction) =>
+        transaction.update(statementImport).set(values).where(eq(statementImport.id, importId)),
+      );
+
+    const fail = (code: string, retry: boolean) =>
+      setStatus({ status: "failed", errorCode: code }).pipe(
+        Effect.catchTag("QueryFailed", () => Effect.void),
+        Effect.andThen(Effect.fail(new ImportFailed({ code, retry }))),
+      );
+
+    const wait = setStatus({ status: "waiting", errorCode: null }).pipe(Effect.as(nothing));
+
+    const loaded = isId(importId)
+      ? yield* inTransaction((transaction) => load(transaction, importId))
+      : undefined;
+
+    // An attempt left over once the import is over, or before the user answers, does nothing.
+    if (loaded === undefined) {
+      return yield* new ImportFailed({ code: "IMPORT_NOT_FOUND", retry: false });
+    }
+
+    if (!RUNS.has(loaded.status)) {
+      return nothing;
+    }
+
+    yield* progress("read");
+    yield* setStatus({ status: "reading", errorCode: null });
+
+    // QIF and CSV name neither their account nor their currency: the user chooses the account.
+    const namesNoAccount = loaded.format === "qif" || loaded.format === "csv";
+
+    if (loaded.account === undefined && namesNoAccount) {
+      return yield* wait;
+    }
+
+    let csvProfile = input.csvProfile;
+
+    if (loaded.format === "csv" && csvProfile === null) {
+      // Detection reads the top of the file only (a mebibyte at most): it stays in this thread.
+      const proposal = yield* detectCsvProfile(loaded.bytes).pipe(
+        Effect.matchEffect({
+          onFailure: (error) => fail(error._tag, false),
+          onSuccess: Effect.succeed,
+        }),
+      );
+
+      if (proposal.unsure.length > 0) {
+        return yield* wait;
+      }
+
+      csvProfile = proposal.profile;
+    }
+
+    const statement = yield* reader
+      .read({
+        format: loaded.format,
+        bytes: loaded.bytes,
+        currency: loaded.account?.currency ?? null,
+        csvProfile,
+      })
+      .pipe(Effect.catchTag("ReadFailed", (failed) => fail(failed.code, false)));
+
+    const target =
+      loaded.account ??
+      (yield* inTransaction((transaction) => recognise(transaction, statement.account)));
+
+    if (target === undefined) {
+      return yield* wait;
+    }
+
+    if (target.currency !== statement.currency) {
+      return yield* fail("CURRENCY_MISMATCH", false);
+    }
+
+    const days = statement.lines.map((line) => line.bookedOn).toSorted();
+    const periodFrom = days[0] ?? statement.balance?.on ?? null;
+    const periodTo = days.at(-1) ?? statement.balance?.on ?? null;
+
+    yield* setStatus({
+      accountId: target.id,
+      linesRead: statement.lines.length,
+      periodFrom,
+      periodTo,
+    });
+
+    const keys = dedupKeys(loaded.format, statement.lines);
+
+    const keyed: ReadonlyArray<Keyed> = statement.lines.map((line, order) => ({
+      ...line,
+      dedupKey: keys[order] ?? "",
+      order,
+    }));
+
+    yield* progress("deduplicate", { done: 0, total: keyed.length });
+
+    // Which keys the account has already, and whether they are this import's own (an earlier
+    // attempt saved them) or another's (a duplicate).
+    const known = new Map<string, string | null>();
+
+    for (let start = 0; start < keys.length; start += CHUNK) {
+      const chunk = keys.slice(start, start + CHUNK);
+
+      const found = yield* inTransaction((transaction) =>
+        transaction
+          .select({ dedupKey: statementLine.dedupKey, importId: statementLine.importId })
+          .from(statementLine)
+          .where(
+            and(eq(statementLine.accountId, target.id), inArray(statementLine.dedupKey, chunk)),
+          ),
+      );
+
+      for (const row of found) {
+        if (row.dedupKey !== null) {
+          known.set(row.dedupKey, row.importId);
+        }
+      }
+    }
+
+    const fresh = keyed.filter((line) => !known.has(line.dedupKey));
+
+    const candidates: ReadonlyArray<ExistingLine> =
+      fresh.length === 0 || periodFrom === null || periodTo === null
+        ? []
+        : yield* inTransaction((transaction) =>
+            transaction
+              .select({
+                id: statementLine.id,
+                bookedOn: statementLine.bookedOn,
+                amountMinor: statementLine.amountMinor,
+                label: statementLine.label,
+                dedupKey: statementLine.dedupKey,
+              })
+              .from(statementLine)
+              .where(
+                and(
+                  eq(statementLine.accountId, target.id),
+                  eq(statementLine.state, "counted"),
+                  gte(statementLine.bookedOn, shiftDay(periodFrom, -NEAR_DAYS)),
+                  lte(statementLine.bookedOn, shiftDay(periodTo, NEAR_DAYS)),
+                  or(isNull(statementLine.importId), ne(statementLine.importId, importId)),
+                ),
+              ),
+          );
+
+    // A known line an earlier attempt already held one of this import's lines against stays
+    // taken: it is the near duplicate of one read line at most, across attempts too.
+    const taken =
+      candidates.length === 0
+        ? []
+        : yield* inTransaction((transaction) =>
+            transaction
+              .select({ id: statementLine.duplicateOfLineId })
+              .from(statementLine)
+              .where(
+                and(
+                  eq(statementLine.importId, importId),
+                  isNotNull(statementLine.duplicateOfLineId),
+                ),
+              ),
+          );
+
+    const takenIds = new Set(taken.map((row) => row.id));
+
+    const near = nearDuplicates(
+      fresh.map((line): ReadLine => line),
+      candidates.filter((candidate) => !takenIds.has(candidate.id)),
+    );
+
+    yield* progress("deduplicate", { done: keyed.length, total: keyed.length });
+
+    // Oldest first, the file's order kept within a day: ids follow creation, so the account's
+    // order is the statement's.
+    const planned: ReadonlyArray<Planned> = fresh
+      .map((line, index) => ({ ...line, duplicateOf: near.get(index) ?? null }))
+      .toSorted((a, b) => a.bookedOn.localeCompare(b.bookedOn) || a.order - b.order);
+
+    yield* progress("save", { done: 0, total: planned.length });
+    yield* setStatus({ status: "saving" });
+
+    for (let start = 0; start < planned.length; start += CHUNK) {
+      const chunk = planned.slice(start, start + CHUNK);
+
+      yield* whileRunning((transaction) =>
+        transaction
+          .insert(statementLine)
+          .values(
+            chunk.map((line) => ({
+              userId: owner,
+              accountId: target.id,
+              importId,
+              source: "import" as const,
+              state: line.duplicateOf === null ? ("counted" as const) : ("held" as const),
+              bookedOn: line.bookedOn,
+              valueOn: line.valueOn,
+              amountMinor: line.amountMinor,
+              label: line.label,
+              memo: line.memo,
+              counterpartyName: line.counterparty?.name ?? null,
+              counterpartyIban: line.counterparty?.iban ?? null,
+              bankId: line.bankId,
+              dedupKey: line.dedupKey,
+              duplicateOfLineId: line.duplicateOf,
+            })),
+          )
+          // Another import running at once may have added the same line meanwhile: it is a
+          // duplicate, counted as one below.
+          .onConflictDoNothing({ target: [statementLine.accountId, statementLine.dedupKey] }),
+      );
+
+      yield* progress("save", {
+        done: Math.min(start + CHUNK, planned.length),
+        total: planned.length,
+      });
+    }
+
+    yield* whileRunning(async (transaction) => {
+      // The balances are written again whole, so that a second attempt does not double them.
+      await transaction.delete(accountBalance).where(eq(accountBalance.importId, importId));
+
+      const balances = [statement.openingBalance, statement.balance].flatMap((balance) =>
+        balance === null
+          ? []
+          : [
+              {
+                userId: owner,
+                accountId: target.id,
+                day: balance.on,
+                balanceMinor: balance.amountMinor,
+                source: "statement" as const,
+                importId,
+              },
+            ],
+      );
+
+      if (balances.length > 0) {
+        await transaction.insert(accountBalance).values(balances);
+      }
+
+      const states = await transaction
+        .select({ state: statementLine.state, lines: count() })
+        .from(statementLine)
+        .where(eq(statementLine.importId, importId))
+        .groupBy(statementLine.state);
+
+      const of = (state: string) => states.find((row) => row.state === state)?.lines ?? 0;
+      const added = of("counted");
+      const held = of("held") + of("discarded");
+
+      await transaction
+        .update(statementImport)
+        .set({
+          status: "done",
+          errorCode: null,
+          linesAdded: added,
+          linesHeld: held,
+          linesDuplicate: Math.max(statement.lines.length - added - held, 0),
+          finishedAt: new Date(),
+        })
+        .where(eq(statementImport.id, importId));
+    });
+
+    return { months: [...new Set(days.map((day) => day.slice(0, 7)))] };
+  }).pipe(
+    Effect.catchTag("ImportTaken", () => Effect.succeed(nothing)),
+    Effect.catchTag("QueryFailed", (failed: QueryFailed) =>
+      Effect.fail(new ImportFailed({ code: `QUERY_FAILED_${failed.code}`, retry: true })),
+    ),
+  );
+}
+
+/**
+ * Marks an import failed with `code`, when its job's last attempt ended without finishing it (a
+ * database that did not answer, a defect, a timeout): otherwise it would stay `reading` or `saving`
+ * for good. An import that was done, undone or answered meanwhile is left as it is. Never fails:
+ * the job's own failure is what counts.
+ */
+export function markFailed(
+  owner: string,
+  importId: string,
+  code: string,
+): Effect.Effect<void, never, UserData> {
+  return Effect.gen(function* () {
+    if (!isId(importId)) {
+      return;
+    }
+
+    const userData = yield* UserData;
+
+    yield* userData.transaction(owner, (transaction) =>
+      transaction
+        .update(statementImport)
+        .set({ status: "failed", errorCode: code })
+        .where(
+          and(
+            eq(statementImport.id, importId),
+            inArray(statementImport.status, ["queued", "reading", "saving"]),
+          ),
+        ),
+    );
+  }).pipe(Effect.ignore);
+}

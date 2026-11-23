@@ -1,3 +1,4 @@
+import { isHeldForPasswordChange } from "@gousset/auth";
 import { createFileRoute } from "@tanstack/react-router";
 import { Effect } from "effect";
 
@@ -22,6 +23,14 @@ export const Route = createFileRoute("/api/jobs/$jobId/events")({
           return new Response("Sign in to follow a job.", { status: 401, headers: NO_STORE });
         }
 
+        // A temporary password follows no job: the administrator chose it (#70).
+        if (isHeldForPasswordChange(session)) {
+          return new Response("Change your temporary password first.", {
+            status: 403,
+            headers: NO_STORE,
+          });
+        }
+
         const body = await jobs.runPromise(
           jobEvents(params.jobId, session.user.id).pipe(
             Effect.catchTag("JobQueueUnavailable", () => Effect.succeed(undefined)),
@@ -37,6 +46,13 @@ export const Route = createFileRoute("/api/jobs/$jobId/events")({
 
         if (body === null) {
           return new Response("No job of yours has this id.", { status: 404, headers: NO_STORE });
+        }
+
+        if (body === "busy") {
+          return new Response("You follow too many jobs at once: close a page that follows one.", {
+            status: 429,
+            headers: { ...NO_STORE, "Retry-After": "5" },
+          });
         }
 
         return new Response(body, {
