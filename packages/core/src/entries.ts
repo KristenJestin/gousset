@@ -72,23 +72,42 @@ async function followFirstPayments(
   transaction: UserTransaction,
   gone: ReadonlyArray<PaymentGone>,
 ): Promise<void> {
-  for (const entryId of new Set(gone.map((each) => each.entryId))) {
-    const [left] = await transaction
-      .select({
-        happenedOn: entry.happenedOn,
-        first: sql<
-          string | null
-        >`(select min(l.booked_on)::text from entry_part p inner join statement_line l on l.id = p.line_id where p.entry_id = ${entry.id} and p.role = 'payment')`,
-      })
-      .from(entry)
-      .where(eq(entry.id, entryId));
+  if (gone.length === 0) {
+    return;
+  }
+
+  const entryIds = [...new Set(gone.map((each) => each.entryId))];
+
+  // Two reads for every entry a change touched (an undone import touches many), the ids as one
+  // array parameter (uuids hold no comma): their days, and their first payment's day.
+  const among = sql`any(string_to_array(${entryIds.join(",")}, ',')::uuid[])`;
+
+  const left = await transaction
+    .select({ id: entry.id, happenedOn: entry.happenedOn })
+    .from(entry)
+    .where(sql`${entry.id} = ${among}`);
+
+  const firsts = await transaction
+    .select({
+      entryId: entryPart.entryId,
+      first: sql<string>`min(${statementLine.bookedOn})::text`,
+    })
+    .from(entryPart)
+    .innerJoin(statementLine, eq(statementLine.id, entryPart.lineId))
+    .where(and(sql`${entryPart.entryId} = ${among}`, eq(entryPart.role, "payment")))
+    .groupBy(entryPart.entryId);
+
+  const firstOf = new Map(firsts.map((each) => [each.entryId, each.first]));
+
+  for (const each of left) {
+    const first = firstOf.get(each.id);
 
     const cameFromGone = gone.some(
-      (each) => each.entryId === entryId && each.bookedOn === left?.happenedOn,
+      (payment) => payment.entryId === each.id && payment.bookedOn === each.happenedOn,
     );
 
-    if (left !== undefined && left.first !== null && cameFromGone && left.first > left.happenedOn) {
-      await transaction.update(entry).set({ happenedOn: left.first }).where(eq(entry.id, entryId));
+    if (first !== undefined && cameFromGone && first > each.happenedOn) {
+      await transaction.update(entry).set({ happenedOn: first }).where(eq(entry.id, each.id));
     }
   }
 }
