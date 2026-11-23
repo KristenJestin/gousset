@@ -142,6 +142,41 @@ test.describe("CsvSettings", () => {
   });
 });
 
+test.describe("FileButton", () => {
+  test("its button opens the picker, and the file chosen is handed over", async ({ page }) => {
+    await page.goto("/iframe.html?id=forms-file-button--default&viewMode=story");
+
+    const chooser = page.waitForEvent("filechooser");
+
+    await page.getByRole("button", { name: "Import a profile file" }).click();
+    await (
+      await chooser
+    ).setFiles({
+      name: "shared.gousset-profile.json",
+      mimeType: "application/json",
+      buffer: Buffer.from("{}"),
+    });
+    await expect(page.getByTestId("received")).toHaveText("shared.gousset-profile.json");
+  });
+});
+
+test.describe("CsvPreview", () => {
+  test("lays out the profile, the lines, the settings, the test read, then the import", async ({
+    page,
+  }) => {
+    await page.goto("/iframe.html?id=import-csv-preview--default&viewMode=story");
+
+    const preview = page.locator('[data-slot="csv-preview"]');
+
+    await expect(preview.getByRole("combobox", { name: "Read with" })).toBeVisible();
+    await expect(
+      preview.getByRole("table", { name: "The first lines of mealcard.csv" }),
+    ).toBeVisible();
+    await expect(preview.getByRole("heading", { name: "Test read" })).toBeVisible();
+    await expect(preview.getByRole("button").last()).toHaveText("Read the file this way");
+  });
+});
+
 test.describe("CsvTestRead", () => {
   test("shows the first lines as the import would save them", async ({ page }) => {
     await page.goto(story("test-read", "default"));
