@@ -1,4 +1,10 @@
-import { DataExport, FixtureLedger, Imports, memoryAccountStore } from "@gousset/core";
+import {
+  DataExport,
+  FixtureLedger,
+  ImportProfiles,
+  Imports,
+  memoryAccountStore,
+} from "@gousset/core";
 import { Effect, Layer } from "effect";
 import { describe, expect, test } from "vite-plus/test";
 
@@ -27,6 +33,7 @@ async function listing() {
               FixtureLedger,
               memoryAccountStore(),
               Layer.mock(Imports, {}),
+              Layer.mock(ImportProfiles, {}),
               Layer.mock(DataExport, {}),
             ),
           ),

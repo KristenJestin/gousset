@@ -1,4 +1,4 @@
-import type { AccountStore, DataExport, Imports, Ledger } from "@gousset/core";
+import type { AccountStore, DataExport, ImportProfiles, Imports, Ledger } from "@gousset/core";
 
 import { INSTRUCTIONS } from "./instructions";
 import type { ServerDefinition } from "./server";
@@ -9,10 +9,10 @@ import { importsTool } from "./tools/imports";
 import { monthTool } from "./tools/month";
 
 /**
- * The services Gousset's tools need (the made-up month, the user's accounts, the imports, the
- * export).
+ * The services Gousset's tools need (the made-up month, the user's accounts, the imports and their
+ * profiles, the export).
  */
-export type GoussetServices = Ledger | AccountStore | Imports | DataExport;
+export type GoussetServices = Ledger | AccountStore | Imports | ImportProfiles | DataExport;
 
 /**
  * Gousset's tools, in the order `tools/list` gives them: one family per concept

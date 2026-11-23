@@ -1,4 +1,11 @@
-import { DataExport, FixtureLedger, Imports, memoryAccountStore, memoryId } from "@gousset/core";
+import {
+  DataExport,
+  FixtureLedger,
+  ImportProfiles,
+  Imports,
+  memoryAccountStore,
+  memoryId,
+} from "@gousset/core";
 import type { AccountRecord, MemoryLine, MemoryRows } from "@gousset/core";
 import type { Client } from "@modelcontextprotocol/client";
 import { Effect, Layer } from "effect";
@@ -104,6 +111,7 @@ function onToday(rows: MemoryRows): Runner<GoussetServices> {
     memoryAccountStore(new Map([[reader.userId, rows]])),
     // accounts never reaches the imports nor the export.
     Layer.mock(Imports, {}),
+    Layer.mock(ImportProfiles, {}),
     Layer.mock(DataExport, {}),
     TestClock.layer(),
   );
