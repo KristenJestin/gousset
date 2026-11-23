@@ -8,6 +8,7 @@ import { useLocation, useNavigate } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 
 import { authClient } from "@/lib/auth-client";
+import { useShowShortcuts } from "@/shortcuts";
 
 import { AppNavLink, AppTabLink } from "./app-link";
 
@@ -33,6 +34,7 @@ type FrameProps = {
 export function Frame({ user, children }: FrameProps) {
   const navigate = useNavigate();
   const pathname = useLocation({ select: (location) => location.pathname });
+  const showShortcuts = useShowShortcuts();
 
   async function signOut() {
     await authClient.signOut();
@@ -49,6 +51,10 @@ export function Frame({ user, children }: FrameProps) {
           {m.userMenuUsers()}
         </MenuItem>
       ) : null}
+      {/* Always here, whatever the setting: the list's way in that needs no shortcut at all. */}
+      <MenuItem icon="shortcuts" onSelect={showShortcuts}>
+        {m.userMenuShortcuts()}
+      </MenuItem>
       <MenuItem icon="signOut" onSelect={signOut}>
         {m.userMenuSignOut()}
       </MenuItem>

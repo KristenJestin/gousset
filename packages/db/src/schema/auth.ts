@@ -36,6 +36,9 @@ export const authUser = pgTable("auth_user", {
   // `pnpm auth:generate` rewrites this file, but in a custom migration of its own
   // (migrations/*_first_user_index), which regenerating the schema never drops.
   isFirstUser: boolean("is_first_user").default(false).notNull(),
+  // The shortcuts made of one character, `?` among them: on by default, turned off in the settings
+  // (WCAG 2.2, 2.1.4 Character Key Shortcuts).
+  singleKeyShortcuts: boolean("single_key_shortcuts").default(true).notNull(),
 });
 
 export const authSession = pgTable(

@@ -118,6 +118,9 @@ export function createAuth(env: AuthConfig, database: Database) {
           input: false,
           returned: false,
         },
+        // Whether the shortcuts made of one character fire: the user turns them off in the
+        // settings, through the app's own server function (apps/web, functions/shortcuts.ts).
+        singleKeyShortcuts: { type: "boolean", required: false, defaultValue: true, input: false },
       },
     },
     session: {
