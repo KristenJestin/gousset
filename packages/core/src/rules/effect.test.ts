@@ -81,7 +81,18 @@ describe("a rule's effect on an entry", () => {
 
     expect(changes(done, "rule-1", wanted)).toBe(false);
     expect(changes(done, "rule-2", wanted)).toBe(true);
-    expect(changes({ ...done, classifiedBy: "user", ruleId: null }, "rule-1", wanted)).toBe(true);
+    expect(changes({ ...done, classifiedBy: "default", ruleId: null }, "rule-1", wanted)).toBe(
+      true,
+    );
+    // The user's own classification, as the rule would make it, is not "otherwise": left as it is.
+    expect(changes({ ...done, classifiedBy: "user", ruleId: null }, "rule-1", wanted)).toBe(false);
+    expect(
+      changes(
+        { ...done, classifiedBy: "user", ruleId: null, categoryId: "other" },
+        "rule-1",
+        wanted,
+      ),
+    ).toBe(true);
     expect(changes({ ...done, merchantId: null }, "rule-1", wanted)).toBe(true);
   });
 });

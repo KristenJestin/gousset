@@ -64,12 +64,18 @@ export function targetOf(sets: RuleSets, target: RuleEntry, facts: EffectFacts):
   };
 }
 
-/** Whether the rule `ruleId` would change the entry: its category, merchant, or who classified it. */
-export const changes = (target: RuleEntry, ruleId: string, wanted: RuleTarget) =>
-  target.categoryId !== wanted.categoryId ||
-  target.merchantId !== wanted.merchantId ||
-  target.classifiedBy !== "rule" ||
-  target.ruleId !== ruleId;
+/**
+ * Whether the rule `ruleId` would change the entry: its category, its merchant, or who classified
+ * it. An entry the user classified as the rule would is left as theirs: nothing to change.
+ */
+export const changes = (target: RuleEntry, ruleId: string, wanted: RuleTarget) => {
+  const differs =
+    target.categoryId !== wanted.categoryId || target.merchantId !== wanted.merchantId;
+
+  return target.classifiedBy === "user"
+    ? differs
+    : differs || target.classifiedBy !== "rule" || target.ruleId !== ruleId;
+};
 
 /**
  * The first of `rules`, in their order, that the entry's line meets and that applies to the entry,
