@@ -1,14 +1,16 @@
 import {
   DatabaseAccountStore,
+  DatabaseLineStore,
   Today,
   editAccount,
   noteBalance,
   pairLineWithAccount,
   remakeEveryBalanceLine,
+  searchLines,
   transfersLayer,
   unpairLine,
 } from "@gousset/core";
-import type { AccountStore, Transfers } from "@gousset/core";
+import type { AccountStore, LineStore, Transfers } from "@gousset/core";
 import type { AccountInput } from "@gousset/core/account-values";
 import type { UserData } from "@gousset/db/user-data";
 import { account, category, entry, entryPart, statementLine } from "@gousset/db/schema/ledger";
@@ -47,11 +49,13 @@ test.afterAll(async () => {
 const TODAY = "2026-11-30";
 
 /** Runs the accounts' and the transfers' logic on the worker's database, `TODAY` as today. */
-const run = <A, E>(effect: Effect.Effect<A, E, AccountStore | Transfers | UserData>) =>
+const run = <A, E>(effect: Effect.Effect<A, E, AccountStore | Transfers | LineStore | UserData>) =>
   Effect.runPromise(
     effect.pipe(
       Effect.provide(
-        Layer.mergeAll(DatabaseAccountStore, transfersLayer).pipe(Layer.provideMerge(data.layer)),
+        Layer.mergeAll(DatabaseAccountStore, transfersLayer, DatabaseLineStore).pipe(
+          Layer.provideMerge(data.layer),
+        ),
       ),
       Effect.provideService(Today, { day: Effect.succeed(TODAY) }),
     ),
@@ -251,4 +255,24 @@ test("making the movements again changes nothing once they agree", async () => {
   await run(remakeEveryBalanceLine(owner));
 
   expect(await movementsOf(card)).toEqual(before);
+});
+
+test("a movement in its fallback is to review, one in its account's category is not", async () => {
+  const meals = await categoryNamed("expense", "Restaurants");
+  const chosen = await newAccount("Reviewed card", "benefit", "balance", meals);
+  const none = await newAccount("Unreviewed card", "benefit", "balance");
+
+  for (const card of [chosen, none]) {
+    await note(card, "2026-09-30", 4000);
+    await note(card, "2026-10-31", 1000);
+  }
+
+  const toReview = await run(
+    searchLines(owner, { toReview: true, from: "2026-10-31", to: "2026-10-31", limit: 500 }),
+  );
+
+  const accounts = toReview.lines.flatMap((line) => (line.fromBalance ? [line.account.id] : []));
+
+  expect(accounts).toContain(none);
+  expect(accounts).not.toContain(chosen);
 });

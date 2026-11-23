@@ -672,7 +672,12 @@ export const transfersLayer = Layer.effect(
 
       pairAll: (owner) =>
         userData.transaction(owner, async (transaction) => {
+          // A card's side made or replaced may be on an account kept by its balance (#31).
+          await takeCategoryTurn(transaction, owner);
+
           const written = await pairTransfers(transaction, owner, { kind: "all" });
+
+          await remakeBalanceLines(transaction, owner);
 
           return {
             ...written,
