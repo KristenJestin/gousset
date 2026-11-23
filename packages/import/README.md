@@ -82,6 +82,20 @@ CSV: `bookedOn`, `valueOn`, the amount, `label`, `memo` and `bankId` come from t
 profile names; `bankId` is whatever the bank put there, which nothing makes unique. A CSV file
 gives no counterparty and no balance, opening or closing.
 
+**Entities are decoded until none is left** (#132). OFX, QFX and CAMT.053 write `&`, `<`, `>`, `"`
+and `'` as entities (`&amp;`, `&apos;`…), with `&nbsp;` and character references (`&#39;`,
+`&#x27;`), in any case. Some banks encode their text twice, `&amp;apos;` for an apostrophe: one
+decoding would give `L&apos;EST` where the bank meant `L'EST`. So every value (label, memo,
+counterparty, bank id) is decoded until it holds no known entity: `&amp;apos;` is `'`,
+`&amp;amp;` is `&`, `&amp;#39;` is `'`, a single `&apos;` is `'` as before. A bare `&` (`R&D`)
+and what names no entity (`&unknown;`, `&#99999999;`) stay as written, once what encodes them is
+decoded (`&amp;unknown;` is `&unknown;`). XML would read `&amp;apos;` as the six characters
+`&apos;`, but no bank's label means them: a text that looks like an entity once decoded is
+decoded too, and the label is the text the bank meant. Entities never overlap, so the order they
+are decoded in changes nothing: the readers decode a value in one pass from left to right, linear
+in its length, decoding an entity as soon as its `;` comes, also when the entity before gave it.
+QIF, MT940 and CSV have no entities: a `&apos;` in them is text, and stays.
+
 ## Which format
 
 `detectFormat(bytes, fileName)` (`src/format.ts`) proposes a file's format (`StatementFormat`, the
