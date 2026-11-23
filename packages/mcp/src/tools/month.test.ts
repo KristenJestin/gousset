@@ -7,6 +7,7 @@ import {
   linesToReview,
   monthOverview,
   movements,
+  spending,
   spendingDays,
 } from "@gousset/core";
 import { Effect, Exit, Layer } from "effect";
@@ -387,7 +388,7 @@ describe("month days", () => {
     expect(underWay).toContain("- 2026-11-22: 690.00 EUR, against 690.00 EUR");
   });
 
-  test("says when a row has nothing approved in either month, naming the rows as summary does", async () => {
+  test("reads a row named in another case, when only one row has that name", async () => {
     const { text, isError } = await month({
       action: "days",
       month: OCTOBER,
@@ -396,9 +397,48 @@ describe("month days", () => {
     });
 
     expect(isError).toBe(false);
+    expect(text).toContain("Housing, by category, day by day in October 2026");
+  });
+
+  test("refuses a row the month's summary does not list, naming the rows it has", async () => {
+    // A merchant, asked under the categories.
+    const { text, isError } = await month({
+      action: "days",
+      month: OCTOBER,
+      by: "category",
+      row: "Fuelstop",
+    });
+
+    const { rows } = await computed(spending(reader.userId, OCTOBER, "category"));
+
+    expect(isError).toBe(true);
     expect(text).toContain(
-      'housing, by category: nothing approved in October 2026 nor in September 2026. A row is named exactly as the summary action lists it ("Groceries").',
+      '"Fuelstop" is not a row by category in the summary of October 2026, nor of September 2026.',
     );
+
+    for (const row of rows.slice(0, 8)) {
+      expect(text).toContain(row.name);
+    }
+
+    expect(text).toContain(
+      `A valid call: month {"action":"days","month":"2026-10","by":"category","row":"${rows[0]?.name}"}`,
+    );
+    expect(text.length).toBeLessThan(2000);
+  });
+
+  test("names eight rows at most, and how many more there are", async () => {
+    const { text } = await month({
+      action: "days",
+      month: OCTOBER,
+      by: "merchant",
+      row: "Nowhere",
+    });
+
+    const { rows } = await computed(spending(reader.userId, OCTOBER, "merchant"));
+
+    expect(rows.length).toBeGreaterThan(8);
+    expect(text).toContain(`${rows[7]?.name}, and ${rows.length - 8} more.`);
+    expect(text).not.toContain(`${rows[8]?.name}`);
   });
 
   test("refuses a call without its grouping or its row, with a valid call", async () => {

@@ -10,6 +10,7 @@ import {
   monthOverview,
   monthSummary,
   movements,
+  spending,
   spendingDays,
 } from "@gousset/core";
 import type {
@@ -59,7 +60,7 @@ summary: what came in (received, and from what), what the expenses cost (spent, 
 
 review: what the month still asks of the user: how far its statements were imported, the lines the rules were not sure of (with what they proposed), the movements between the user's accounts and what came in, the investment accounts at the end of the month (today in the month under way), and what is flagged (a subscription whose price changed, an account not imported). Use it for "what is left to check this month?".
 
-days: one row of summary (by category, merchant or subject, named by \`by\` and \`row\`, both required) day by day: what it had cost by each day of the month, against what it had cost by the same day of the month before. Approved expenses only, as the row counts them. Use it for "how did my Groceries spending go this month compared with last month?".
+days: one row of summary (by category, merchant or subject, named by \`by\` and \`row\`, both required) day by day: what it had cost by each day of the month, against what it had cost by the same day of the month before. Approved expenses only, as the row counts them. A row that summary lists neither in the month nor in the month before is refused, with the month's rows. Use it for "how did my Groceries spending go this month compared with last month?".
 
 \`month\` is written YYYY-MM and is the current month when left out; for last month, work it out from today (in November 2026, last month is 2026-10). A month written another way is refused.
 
@@ -254,13 +255,6 @@ function daysText(madeUp: boolean, { month, by, name, currency, days }: Spending
   const before = monthName(addMonths(month, -1));
   const sum = (minor: number) => amount({ minor, currency });
 
-  if (days.every(({ current, previous }) => (current ?? 0) === 0 && (previous ?? 0) === 0)) {
-    return [
-      heading(month, madeUp),
-      `${name}, by ${by}: nothing approved in ${monthName(month)} nor in ${before}. A row is named exactly as the summary action lists it ("Groceries").`,
-    ].join("\n\n");
-  }
-
   const lines = days.map(({ date, current, previous }) => {
     const day = Number(date.slice(8, 10));
 
@@ -281,6 +275,43 @@ function daysText(madeUp: boolean, { month, by, name, currency, days }: Spending
       ...lines,
     ].join("\n"),
   ].join("\n\n");
+}
+
+/** How many of a month's rows a refused row name lists. */
+const ROWS_NAMED = 8;
+
+const daysCall = (month: string, by: SpendingGroup, row: string) =>
+  `month ${JSON.stringify({ action: "days", month, by, row })}`;
+
+/**
+ * The row a name means among the rows of summary, this month's and the month before's: the one of
+ * that very name, or else the only one of that name in another case.
+ */
+function rowNamed(name: string, rows: ReadonlyArray<string>): string | undefined {
+  if (rows.includes(name)) {
+    return name;
+  }
+
+  const alike = new Set(rows.filter((row) => row.toLowerCase() === name.toLowerCase()));
+
+  return alike.size === 1 ? [...alike][0] : undefined;
+}
+
+/** A name summary does not list: refused, naming the month's rows and a call with the first. */
+function unknownRow(month: string, by: SpendingGroup, name: string, rows: ReadonlyArray<string>) {
+  const before = monthName(addMonths(month, -1));
+  const named = rows.slice(0, ROWS_NAMED).join(", ");
+  const more = rows.length > ROWS_NAMED ? `, and ${rows.length - ROWS_NAMED} more` : "";
+
+  const listed =
+    rows.length === 0
+      ? `${monthName(month)} has no row by ${by} yet.`
+      : `Its rows by ${by}, the largest first: ${named}${more}.`;
+
+  return new ToolRefusal({
+    message: `${JSON.stringify(name)} is not a row by ${by} in the summary of ${monthName(month)}, nor of ${before}. ${listed} Name a row as summary lists it.`,
+    example: daysCall(month, by, rows[0] ?? "Groceries"),
+  });
 }
 
 const exampleOf = (action: "summary" | "review") =>
@@ -356,10 +387,31 @@ export const monthTool = defineTool<typeof MonthInput.Type, typeof MonthInput.En
 
         return Effect.gen(function* () {
           const month = yield* wanted;
-          const { madeUp } = yield* monthSummary(caller.userId, month);
 
-          return daysText(madeUp, yield* spendingDays(caller.userId, month, by, row));
-        }).pipe(refusingOutside(DAYS_EXAMPLE));
+          const [{ madeUp }, { rows }] = yield* Effect.all([
+            monthSummary(caller.userId, month),
+            spending(caller.userId, month, by),
+          ]).pipe(refusingOutside(DAYS_EXAMPLE));
+
+          // The month before may be out of range: then it has no row.
+          const before = yield* spending(caller.userId, addMonths(month, -1), by).pipe(
+            Effect.map((previous) => previous.rows),
+            Effect.catchTag("MonthOutOfRange", () => Effect.succeed([])),
+          );
+
+          const names = rows.map((listed) => listed.name);
+          const known = rowNamed(row, [...names, ...before.map((listed) => listed.name)]);
+
+          if (known === undefined) {
+            return yield* unknownRow(month, by, row, names);
+          }
+
+          const days = yield* spendingDays(caller.userId, month, by, known).pipe(
+            refusingOutside(DAYS_EXAMPLE),
+          );
+
+          return daysText(madeUp, days);
+        });
       }
     }
   },
