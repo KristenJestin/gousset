@@ -1,5 +1,5 @@
 /**
- * The server's instructions (docs/mcp.md, rule 15): under 400 words, what Gousset is, its words,
+ * The server's instructions (docs/mcp.md, rule 15): under 600 words, what Gousset is, its words,
  * and which tool answers what. Every tool is named between backticks, and a test checks that
  * each name so written is a tool of the server.
  */
