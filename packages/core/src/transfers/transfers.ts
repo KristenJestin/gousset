@@ -9,6 +9,7 @@ import { remakeBalanceLines } from "../balance-lines";
 import { takeCategoryTurn } from "../category-turn";
 import { dropEntriesOfTransferSides, entriesForLines } from "../entries";
 import { AccountNotFound, LineNotFound, NotATransfer, TransferRefused } from "../errors";
+import type { AccountKind } from "../account-values";
 import { isId } from "../imports/rows";
 import type { LineAccount } from "../lines";
 import type { Money } from "../month";
@@ -140,7 +141,7 @@ type ReadLine = {
   readonly source: "import" | "manual" | "balance" | "counterpart";
   readonly accountName: string;
   readonly institution: string | null;
-  readonly kind: string;
+  readonly kind: AccountKind;
   readonly currency: string;
 };
 
@@ -216,7 +217,7 @@ async function candidatesOfLine(
     "by hand",
   );
 
-  const found = candidatesOf({ ...line }, pool);
+  const found = candidatesOf({ ...line, accountKind: line.kind }, pool);
 
   const read = await readLines(
     transaction,
