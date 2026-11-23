@@ -244,6 +244,25 @@ test.describe("List", () => {
       "true",
     );
   });
+
+  test("on a phone, a row's tags and action go under its name, which stays whole", async ({
+    page,
+  }) => {
+    // The width of the e2e harness's phone, whatever the project.
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto(story("data-list--phone"));
+
+    const row = page.getByRole("listitem").filter({ hasText: "grace@example.com" });
+    const name = row.getByText("Grace Example", { exact: true });
+    const action = row.getByRole("button", { name: "Reset the password of Grace Example" });
+
+    const nameBox = await name.boundingBox();
+    const actionBox = await action.boundingBox();
+
+    expect(actionBox?.y).toBeGreaterThan((nameBox?.y ?? 0) + (nameBox?.height ?? 0));
+    // Not cut short: the whole name is drawn.
+    expect(await name.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+  });
 });
 
 test.describe("AccountChip", () => {
