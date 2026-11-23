@@ -47,15 +47,20 @@ function fieldName(field: string | null): string {
   return known === undefined ? (field ?? "") : FIELD_NAMES[known]();
 }
 
+const lists = new Map<string, Intl.ListFormat>();
+
 /** What a profile still lacks, in a sentence: "Say which column holds: Label and …". */
 export function missingMessage(missing: ReadonlyArray<RequiredField>): string {
   const names = missing.map((field) =>
     field === "amount" ? m.importCsvMissingAmount() : FIELD_NAMES[field](),
   );
 
-  return m.importCsvMissing({
-    fields: new Intl.ListFormat(getLocale(), { type: "conjunction" }).format(names),
-  });
+  const locale = getLocale();
+  const list = lists.get(locale) ?? new Intl.ListFormat(locale, { type: "conjunction" });
+
+  lists.set(locale, list);
+
+  return m.importCsvMissing({ fields: list.format(names) });
 }
 
 /** Why a test read refused the file, naming the line and the column where the reader says them. */

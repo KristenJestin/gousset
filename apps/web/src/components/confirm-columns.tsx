@@ -82,6 +82,8 @@ function profileNameOf(fileName: string): string {
 
 const days = new Map<string, Intl.DateTimeFormat>();
 
+const plainAmounts = new Map<string, Intl.NumberFormat>();
+
 function dayText(day: string): string {
   const locale = getLocale();
 
@@ -102,11 +104,16 @@ function amountText(minor: number, currency: string | null): string {
     return formatMoney({ minor, currency }, { locale: getLocale() });
   }
 
+  const locale = getLocale();
+
+  const format =
+    plainAmounts.get(locale) ??
+    new Intl.NumberFormat(locale, { minimumFractionDigits: 2, maximumFractionDigits: 4 });
+
+  plainAmounts.set(locale, format);
+
   // Shown only, never summed: a float is exact enough for four decimals of a statement's amount.
-  return new Intl.NumberFormat(getLocale(), {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 4,
-  }).format(minor / 10_000);
+  return format.format(minor / 10_000);
 }
 
 /** What the test read shows: the lines read, why the file is refused, or nothing yet. */
@@ -151,24 +158,25 @@ export function ConfirmColumns({ summary }: { summary: Import }) {
     <ColumnsPreview
       key={summary.id}
       summary={summary}
-      startSettings={proposal === undefined ? BLANK : settingsOf(proposal)}
-      startMapping={proposal === undefined ? [] : mappingOf(proposal, 0)}
+      initialSettings={proposal === undefined ? BLANK : settingsOf(proposal)}
+      initialMapping={proposal === undefined ? [] : mappingOf(proposal, 0)}
     />
   );
 }
 
 function ColumnsPreview({
   summary,
-  startSettings,
-  startMapping,
+  initialSettings,
+  initialMapping,
 }: {
   summary: Import;
-  startSettings: CsvFileSettings;
-  startMapping: ReadonlyArray<CsvField>;
+  /** What detection proposed, kept as the start: the user changes it from there. */
+  initialSettings: CsvFileSettings;
+  initialMapping: ReadonlyArray<CsvField>;
 }) {
   const queryClient = useQueryClient();
-  const [settings, setSettings] = useState(startSettings);
-  const [mapping, setMapping] = useState(startMapping);
+  const [settings, setSettings] = useState(initialSettings);
+  const [mapping, setMapping] = useState(initialMapping);
   // The profile chosen from the list, until the user changes a column or a setting.
   const [chosen, setChosen] = useState<ProfileChoice | null>(null);
   const [name, setName] = useState("");
