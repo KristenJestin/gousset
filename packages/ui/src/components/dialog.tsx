@@ -17,10 +17,11 @@ import {
   DialogTrigger,
 } from "@ui-sdk/react/dialog";
 import { useState } from "react";
-import type { ReactElement, ReactNode } from "react";
+import type { FormEvent, ReactElement, ReactNode } from "react";
 
 import { useUiMessages } from "../hooks/use-ui-messages";
 import { backdropClasses, dialogClasses } from "../lib/overlay-classes";
+import { cn } from "../lib/utils";
 import { Button } from "./button";
 import { IconButton } from "./icon-button";
 
@@ -33,6 +34,15 @@ export type DialogProps = {
   children?: ReactNode;
   /** `Button`s at the bottom, the main one last; wrap one in `DialogClose` to close with it. */
   actions?: ReactNode;
+  /**
+   * The dialog holds a form: the body (its fields, one under the other) and the actions are one
+   * `<form>`, sent by the submit `Button` among the actions or by Enter in a field, and Cancel
+   * comes before the actions. The dialog stays open until the page closes it (`open`), so that a
+   * refusal shows under its field.
+   */
+  onSubmit?: (event: FormEvent<HTMLFormElement>) => void;
+  /** With `onSubmit`: something was typed in the form (to take a refusal away). */
+  onInput?: () => void;
   /** The element that opens it, forwarding its props and ref (a `Button`); or control `open`. */
   trigger?: ReactElement;
   open?: boolean;
@@ -42,20 +52,47 @@ export type DialogProps = {
 /**
  * A focused task over the page, on ui-sdk's `Dialog`: a title, a description, a body, actions and
  * a close button. Modal: focus stays inside, the page behind is inert; Escape, the close button
- * or a press outside closes it, and focus returns to what opened it.
+ * or a press outside closes it, and focus returns to what opened it. An action that asks for input
+ * is a button opening one, holding the form (`onSubmit`); docs/design.md, "Actions and forms".
  *
- * Motion: the dialog fades and grows in 200 ms, ease-out, the page behind veils in 200 ms; both
- * leave the same way. Cut under reduced motion.
+ * On a phone (below 768 px) it is a sheet: along the screen's bottom edge, its whole width.
+ *
+ * Motion: the dialog fades and grows in 200 ms, ease-out (on a phone it slides up from the bottom
+ * edge instead), the page behind veils in 200 ms; both leave the same way. Cut under reduced
+ * motion.
  */
 export function Dialog({
   title,
   description,
   children,
   actions,
+  onSubmit,
+  onInput,
   trigger,
   open,
   onOpenChange,
 }: DialogProps) {
+  const body = (
+    <>
+      {children === undefined ? null : (
+        // A form's fields one under the other, as `Form` lays them out on a page.
+        <div className={cn("mt-4 text-sm", onSubmit !== undefined && "flex flex-col gap-4")}>
+          {children}
+        </div>
+      )}
+      {onSubmit === undefined ? (
+        actions === undefined ? null : (
+          <DialogActions>{actions}</DialogActions>
+        )
+      ) : (
+        <DialogActions>
+          <CancelButton />
+          {actions}
+        </DialogActions>
+      )}
+    </>
+  );
+
   return (
     <DialogRoot open={open} onOpenChange={(next) => onOpenChange?.(next)}>
       {trigger === undefined ? null : <DialogTrigger render={trigger} />}
@@ -74,8 +111,13 @@ export function Dialog({
           </div>
           <CloseButton />
         </div>
-        {children === undefined ? null : <div className="mt-4 text-sm">{children}</div>}
-        {actions === undefined ? null : <DialogActions>{actions}</DialogActions>}
+        {onSubmit === undefined ? (
+          body
+        ) : (
+          <form className="flex flex-col" onSubmit={onSubmit} onInput={() => onInput?.()}>
+            {body}
+          </form>
+        )}
       </DialogContent>
     </DialogRoot>
   );
@@ -89,6 +131,15 @@ function CloseButton() {
     <DialogClosePart
       render={<IconButton icon="close" label={messages.overlays.close} size="sm" />}
     />
+  );
+}
+
+/** A form dialog's Cancel, in the page's language: closes it, sending nothing. */
+function CancelButton() {
+  const messages = useUiMessages();
+
+  return (
+    <DialogClosePart render={<Button variant="secondary">{messages.overlays.cancel}</Button>} />
   );
 }
 
