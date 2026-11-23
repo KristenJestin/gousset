@@ -348,7 +348,11 @@ async function reachOf(
 /** How many entry ids one update names. */
 const CHUNK = 500;
 
-/** Writes what a rule makes of each entry, grouped by what they become. */
+/**
+ * Writes what a rule makes of each entry, grouped by what they become, to the entries still
+ * classified as `from` allows when written: one the user classified by hand meanwhile (on the
+ * operations page, while a rule is applied to the past) keeps the user's choice. The ids written.
+ */
 async function writeEntries(
   transaction: UserTransaction,
   ruleId: string,
@@ -356,7 +360,10 @@ async function writeEntries(
     readonly entry: RuleEntry;
     readonly wanted: RuleTarget;
   }>,
-): Promise<void> {
+  from: ReadonlyArray<RuleEntry["classifiedBy"]>,
+): Promise<ReadonlySet<string>> {
+  const written = new Set<string>();
+
   const groups = new Map<
     string,
     { categoryId: string; merchantId: string | null; ids: Array<string> }
@@ -372,7 +379,7 @@ async function writeEntries(
 
   for (const group of groups.values()) {
     for (let start = 0; start < group.ids.length; start += CHUNK) {
-      await transaction
+      const updated = await transaction
         .update(entry)
         .set({
           categoryId: group.categoryId,
@@ -380,9 +387,21 @@ async function writeEntries(
           classifiedBy: "rule",
           ruleId,
         })
-        .where(inArray(entry.id, group.ids.slice(start, start + CHUNK)));
+        .where(
+          and(
+            inArray(entry.id, group.ids.slice(start, start + CHUNK)),
+            inArray(entry.classifiedBy, [...from]),
+          ),
+        )
+        .returning({ id: entry.id });
+
+      for (const each of updated) {
+        written.add(each.id);
+      }
     }
   }
+
+  return written;
 }
 
 /** Adds `lines` to how many lines the rule classified. */
@@ -484,9 +503,10 @@ export async function applyRulesToImport(
   let classified = 0;
 
   for (const [ruleId, writes] of byRule) {
-    await writeEntries(transaction, ruleId, writes);
-    await countApplied(transaction, ruleId, writes.length);
-    classified += writes.length;
+    const written = await writeEntries(transaction, ruleId, writes, ["default"]);
+
+    await countApplied(transaction, ruleId, written.size);
+    classified += written.size;
   }
 
   return classified;
@@ -870,12 +890,20 @@ export const applyRuleToPast = (owner: string, ruleId: string, includeByHand: bo
           await effectFacts(transaction),
         ).filter((each) => each.changes && (includeByHand || each.entry.classifiedBy !== "user"));
 
-        await writeEntries(transaction, row.id, planned);
-        await countApplied(transaction, row.id, planned.length);
+        const written = await writeEntries(
+          transaction,
+          row.id,
+          planned,
+          includeByHand ? ["default", "rule", "user"] : ["default", "rule"],
+        );
+
+        await countApplied(transaction, row.id, written.size);
 
         return Result.succeed({
-          changed: planned.length,
-          byHand: planned.filter((each) => each.entry.classifiedBy === "user").length,
+          changed: written.size,
+          byHand: planned.filter(
+            (each) => each.entry.classifiedBy === "user" && written.has(each.entry.id),
+          ).length,
         });
       },
     );
