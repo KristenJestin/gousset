@@ -144,3 +144,43 @@ test("the administrator cannot reach a user's sessions, password, role, e-mail o
   expect(after.user.email).toBe(target.email);
   expect(after.user.role).toBe("user");
 });
+
+test("a user the administrator creates must change their password, whatever the request says", async ({
+  app,
+  user,
+}) => {
+  const person = { name: "Io Example", email: "io@example.com", password: "io-temporary-e2e" };
+  const asAdmin = await asUser(app.baseURL, user);
+
+  try {
+    const created = await asAdmin.post("/api/auth/admin/create-user", {
+      data: { ...person, data: { mustChangePassword: false } },
+    });
+
+    expect(created.status()).toBe(200);
+  } finally {
+    await asAdmin.dispose();
+  }
+
+  const asNew = await apiRequest.newContext({
+    baseURL: app.baseURL,
+    extraHTTPHeaders: { Origin: app.baseURL },
+  });
+
+  try {
+    const signedIn = await asNew.post("/api/auth/sign-in/email", {
+      data: { email: person.email, password: person.password },
+    });
+
+    expect(signedIn.status()).toBe(200);
+
+    // The temporary password the administrator knows must be replaced before anything else.
+    const { user: created } = Schema.decodeUnknownSync(
+      Schema.Struct({ user: Schema.Struct({ mustChangePassword: Schema.Boolean }) }),
+    )(await (await asNew.get("/api/auth/get-session")).json());
+
+    expect(created.mustChangePassword).toBe(true);
+  } finally {
+    await asNew.dispose();
+  }
+});

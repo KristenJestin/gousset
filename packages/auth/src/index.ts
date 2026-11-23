@@ -258,6 +258,12 @@ export function createAuth(env: AuthConfig, database: Database) {
       user: {
         create: {
           before: async (user, ctx) => {
+            // The administrator knows the temporary password: the user replaces it first, whatever
+            // the request says (`input: false` does not hold on the admin plugin's `data`).
+            if (ctx?.path === "/admin/create-user") {
+              return { data: { ...user, mustChangePassword: true } };
+            }
+
             // The user created by sign-up, on a fresh install, is the first one: the administrator.
             if (ctx?.path !== "/sign-up/email") {
               return;
