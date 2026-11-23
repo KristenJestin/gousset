@@ -4,6 +4,7 @@ import {
   ImportProfiles,
   Imports,
   Merchants,
+  Transfers,
   memoryAccountStore,
   memoryId,
   memoryLineStore,
@@ -125,6 +126,7 @@ function onToday(rows: MemoryRows): Runner<GoussetServices> {
     Layer.mock(ImportProfiles, {}),
     Layer.mock(DataExport, {}),
     Layer.mock(Merchants, {}),
+    Layer.mock(Transfers, {}),
     TestClock.layer(),
   );
 

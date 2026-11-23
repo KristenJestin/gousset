@@ -23,7 +23,7 @@ Which tool answers what:
 - \`imports\`: imports a bank statement file into an account without duplicates, and lists, follows and undoes imports. Use it when the user gives a statement or asks what was imported.
 - \`accounts\`: the user's accounts by group (available, restricted, savings and investments, owed) with their balances and totals per currency, and one account's last lines and the check of its balance against its bank statement. Use it for "how much do I have?" or "does my balance match my bank's?".
 - \`data\`: what an export of all the user's data holds, and where they download it. Use it when the user asks to export or back up their data.
-- \`lines\`: searches every line by text, account, period, amount or to review, and shows one with the import it came from.
+- \`lines\`: searches every line by text, account, period, amount or to review, and shows one with the import it came from and its transfer; pairs two lines as a transfer, or undoes one. Use it for "is this a transfer to my savings?".
 - \`merchants\`: lists, searches and shows the merchants with the cleaned labels that name them; renames one, merges two, or splits one by moving a cleaned label to another merchant. Use it for "which shop is this?" or to tidy merchants up.
 
 Results are text, with names rather than ids. A long result comes in parts: its last line writes the next call to make. An error says what to do and gives a valid call. A write needs the connection to have been allowed to read and write; a refusal says how to get it.`;

@@ -9,6 +9,7 @@ import {
   ImportProfiles,
   Imports,
   Merchants,
+  Transfers,
   UnknownFormat,
   memoryAccountStore,
   memoryLineStore,
@@ -103,7 +104,13 @@ function fake(changes: Partial<Fake> = {}): Fake {
     settled: null,
     sameFile: null,
     startFailure: null,
-    undoCounts: { linesRemoved: 6, linesGivenBack: 0, laterOverlapping: 0, months: ["2026-10"] },
+    undoCounts: {
+      linesRemoved: 6,
+      linesGivenBack: 0,
+      transfersRemoved: 0,
+      laterOverlapping: 0,
+      months: ["2026-10"],
+    },
     profiles: [],
     profilesFor: {},
     ...changes,
@@ -182,6 +189,7 @@ function runnerOf(state: Fake): Runner<GoussetServices> {
           profilesOf(state),
           Layer.mock(DataExport, {}),
           Layer.mock(Merchants, {}),
+          Layer.mock(Transfers, {}),
         ),
       ),
     );
@@ -209,6 +217,7 @@ function runnerWithTime(state: Fake): Runner<GoussetServices> {
             profilesOf(state),
             Layer.mock(DataExport, {}),
             Layer.mock(Merchants, {}),
+            Layer.mock(Transfers, {}),
             TestClock.layer(),
           ),
         ),
@@ -478,10 +487,16 @@ describe("imports list", () => {
 });
 
 describe("imports undo", () => {
-  test("says what was removed, what counts again, and the later imports that overlap", async () => {
+  test("says what was removed, what counts again, the transfers undone and the later imports that overlap", async () => {
     const state = fake({
       imports: [summary()],
-      undoCounts: { linesRemoved: 6, linesGivenBack: 2, laterOverlapping: 1, months: ["2026-10"] },
+      undoCounts: {
+        linesRemoved: 6,
+        linesGivenBack: 2,
+        transfersRemoved: 1,
+        laterOverlapping: 1,
+        months: ["2026-10"],
+      },
     });
 
     const { text, isError } = await imports(state, { action: "undo", import: idOf(1) });
@@ -491,6 +506,7 @@ describe("imports undo", () => {
       "Undid the import of october.xml (Current account, 2026-10-01 to 2026-10-31): 6 lines removed.",
     );
     expect(text).toContain("2 lines of other imports count again");
+    expect(text).toContain("1 transfers its lines were a side of are undone with them");
     expect(text).toContain("1 later imports of this account overlap its period");
     expect(text).toContain("Importing its file again brings them back.");
   });
@@ -502,6 +518,7 @@ describe("imports undo", () => {
     expect(text).toContain("6 lines removed.");
     expect(text).not.toContain("overlap");
     expect(text).not.toContain("count again");
+    expect(text).not.toContain("transfers");
   });
 
   test("refuses an import still running, and one already undone", async () => {

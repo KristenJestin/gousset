@@ -5,6 +5,7 @@ import {
   ImportProfiles,
   Imports,
   Merchants,
+  Transfers,
   memoryAccountStore,
   memoryLineStore,
 } from "@gousset/core";
@@ -57,6 +58,7 @@ async function connect(contents: Effect.Effect<ExportContents> = Effect.succeed(
               Layer.mock(ImportProfiles, {}),
               exportLayer,
               Layer.mock(Merchants, {}),
+              Layer.mock(Transfers, {}),
             ),
           ),
         ),

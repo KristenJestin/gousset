@@ -4,6 +4,7 @@ import {
   ImportProfiles,
   Imports,
   Merchants,
+  Transfers,
   memoryAccountStore,
   memoryLineStore,
 } from "@gousset/core";
@@ -57,6 +58,7 @@ describe("a call to the MCP door", () => {
                   Layer.mock(ImportProfiles, {}),
                   Layer.mock(DataExport, {}),
                   Layer.mock(Merchants, {}),
+                  Layer.mock(Transfers, {}),
                 ),
               ),
             ),

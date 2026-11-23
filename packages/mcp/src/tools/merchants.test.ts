@@ -11,6 +11,7 @@ import {
   MerchantNameUnknown,
   MerchantNotFound,
   Merchants,
+  Transfers,
   memoryAccountStore,
   memoryLineStore,
 } from "@gousset/core";
@@ -230,6 +231,7 @@ function runnerOf(state: Store): Runner<GoussetServices> {
     Layer.mock(Imports, {}),
     Layer.mock(ImportProfiles, {}),
     Layer.mock(DataExport, {}),
+    Layer.mock(Transfers, {}),
     merchantsOf(state),
   );
 

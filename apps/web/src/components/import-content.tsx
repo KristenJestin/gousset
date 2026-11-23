@@ -127,15 +127,20 @@ function useUndo(summary: Import) {
     if ("refused" in answer) {
       notify.failed({ description: importFailureMessage(answer.refused) });
     } else {
-      const description = m.importUndoneDescription({
-        removed: answer.linesRemoved,
-        givenBack: answer.linesGivenBack,
-      });
+      const said = [
+        m.importUndoneDescription({
+          removed: answer.linesRemoved,
+          givenBack: answer.linesGivenBack,
+        }),
+        answer.transfersRemoved > 0
+          ? m.importUndoneTransfers({ count: answer.transfersRemoved })
+          : undefined,
+        answer.laterOverlapping > 0 ? m.importUndoneOverlap() : undefined,
+      ];
 
       notify.progress(`undo-${summary.id}`).succeed({
         title: m.importUndoneTitle(),
-        description:
-          answer.laterOverlapping > 0 ? `${description} ${m.importUndoneOverlap()}` : description,
+        description: said.filter((text) => text !== undefined).join(" "),
       });
 
       await invalidateTouched(queryClient, { months: answer.months });

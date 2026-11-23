@@ -103,6 +103,15 @@ export const STATEMENT_LINES: ExportTable = {
     { name: "expires_on", holds: "a credit of a benefit account: the day it expires" },
     CREATED_AT,
     UPDATED_AT,
+    // Added after the others (v0.3): the database keeps it last.
+    {
+      name: "review_state",
+      holds: "to_review (the monthly review lists it) or done (you, or a sure rule, settled it)",
+    },
+    {
+      name: "transfer_refused",
+      holds: "true once you said the line is no transfer: Gousset no longer pairs it by itself",
+    },
   ],
 };
 
@@ -181,6 +190,19 @@ export const MERCHANT_ALIASES: ExportTable = {
   ],
 };
 
+export const TRANSFERS: ExportTable = {
+  table: "transfer",
+  file: "transfers",
+  holds: "money moved between two of your accounts: the two lines paired as one transfer",
+  columns: [
+    ID,
+    OWNER,
+    { name: "out_line_id", holds: "the line money left by (statement-lines.id)" },
+    { name: "in_line_id", holds: "the line it came in by (statement-lines.id)" },
+    { name: "paired_by", holds: "who paired them: import (found by Gousset), rule or user" },
+  ],
+};
+
 /** Every table an export writes, in the manifest's order. */
 export const EXPORT_TABLES: ReadonlyArray<ExportTable> = [
   ACCOUNTS,
@@ -188,6 +210,7 @@ export const EXPORT_TABLES: ReadonlyArray<ExportTable> = [
   STATEMENT_LINES,
   IMPORTS,
   IMPORT_PROFILES,
+  TRANSFERS,
   MERCHANTS,
   MERCHANT_ALIASES,
 ];

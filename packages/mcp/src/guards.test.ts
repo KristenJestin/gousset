@@ -4,6 +4,7 @@ import {
   ImportProfiles,
   Imports,
   Merchants,
+  Transfers,
   memoryAccountStore,
   memoryLineStore,
 } from "@gousset/core";
@@ -39,6 +40,7 @@ async function listing() {
               Layer.mock(ImportProfiles, {}),
               Layer.mock(DataExport, {}),
               Layer.mock(Merchants, {}),
+              Layer.mock(Transfers, {}),
             ),
           ),
         ),
