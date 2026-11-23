@@ -40,7 +40,8 @@ export type AccountFormValues = {
   creditOrder: CreditOrder | null;
   /**
    * An account kept by its balance: the category its movements go to (#31); `null` for none, each
-   * movement then going to its kind's fallback. Not sent for an account kept by its lines.
+   * movement then going to its kind's fallback. Not sent for an account kept by its lines, which
+   * keeps it.
    */
   balanceCategoryId: string | null;
 };
@@ -92,8 +93,8 @@ export function accountFormInput(values: AccountFormValues) {
     openedOn: values.openedOn ?? undefined,
     settlesIntoAccountId: values.settlesIntoAccountId ?? undefined,
     creditOrder: values.choice === "benefit" ? (values.creditOrder ?? undefined) : undefined,
-    balanceCategoryId:
-      values.mode === "balance" ? (values.balanceCategoryId ?? undefined) : undefined,
+    // None is sent as `null`, which clears it; left out, an edit keeps the account's own.
+    balanceCategoryId: values.mode === "balance" ? values.balanceCategoryId : undefined,
   };
 }
 

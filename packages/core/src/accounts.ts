@@ -487,7 +487,8 @@ function settlement(
 
 /**
  * The category an account kept by its balance sends its movement to: one of the user's, and not an
- * archived one unless the account already has it (an archived category keeps what it has).
+ * archived one unless the account already has it (an archived category keeps what it has). Left
+ * out, the account's current one (none for a new account); `null`, none.
  */
 function balanceCategoryOf(
   input: AccountInput,
@@ -497,6 +498,10 @@ function balanceCategoryOf(
   const wanted = input.balanceCategoryId;
 
   if (wanted === undefined) {
+    return Result.succeed(current);
+  }
+
+  if (wanted === null) {
     return Result.succeed(null);
   }
 

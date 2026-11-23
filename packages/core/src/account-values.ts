@@ -173,10 +173,11 @@ export const AccountInput = Schema.Struct({
   /** Read for a benefit account only. Left out: `oldest_first` on create, unchanged on edit. */
   creditOrder: Schema.optional(CreditOrder),
   /**
-   * Read for an account kept by its balance only: the category its movement goes to (#31). Left
-   * out: none, and each movement goes to its kind's fallback.
+   * Read for an account kept by its balance only: the category its movement goes to (#31); `null`
+   * for none, each movement then going to its kind's fallback. Left out: none on create, unchanged
+   * on edit, so that an edit of other settings never clears it.
    */
-  balanceCategoryId: Schema.optional(CategoryId),
+  balanceCategoryId: Schema.optional(Schema.NullOr(CategoryId)),
 });
 
 export type AccountInput = typeof AccountInput.Type;
