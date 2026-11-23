@@ -4,7 +4,6 @@ import { Button } from "@gousset/ui/components/button";
 import { Card } from "@gousset/ui/components/card";
 import { FormMessage } from "@gousset/ui/components/form-message";
 import { Actions, Screen } from "@gousset/ui/components/screen";
-import { useHydrated } from "@gousset/ui/hooks/use-hydrated";
 import { createFileRoute } from "@tanstack/react-router";
 import { Option, Schema } from "effect";
 import { useState } from "react";
@@ -50,9 +49,6 @@ function Consent() {
   const back = hostOf(redirectUri);
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
-  // The page comes from the server, reached by a full load: until it hydrates, a click on an answer
-  // does nothing and is lost, so no answer is offered before it works (#97).
-  const ready = useHydrated();
   const requested = scope.split(" ").filter((part) => part !== "");
   const asksWrite = requested.includes(McpScope.write);
 
@@ -102,29 +98,23 @@ function Consent() {
         <Actions>
           {asksWrite ? (
             <>
-              <Button loading={busy} disabled={!ready} onClick={() => void answer(true, readOnly)}>
+              <Button loading={busy} onClick={() => void answer(true, readOnly)}>
                 {m.consentAllowRead()}
               </Button>
               <Button
                 variant="secondary"
                 loading={busy}
-                disabled={!ready}
                 onClick={() => void answer(true, everything)}
               >
                 {m.consentAllowReadWrite()}
               </Button>
             </>
           ) : (
-            <Button loading={busy} disabled={!ready} onClick={() => void answer(true, everything)}>
+            <Button loading={busy} onClick={() => void answer(true, everything)}>
               {m.consentAllow()}
             </Button>
           )}
-          <Button
-            variant="secondary"
-            loading={busy}
-            disabled={!ready}
-            onClick={() => void answer(false, [])}
-          >
+          <Button variant="secondary" loading={busy} onClick={() => void answer(false, [])}>
             {m.consentDeny()}
           </Button>
         </Actions>

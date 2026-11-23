@@ -5,7 +5,6 @@ import { Card } from "@gousset/ui/components/card";
 import { FormMessage } from "@gousset/ui/components/form-message";
 import { Actions, Form, Screen } from "@gousset/ui/components/screen";
 import { TextField } from "@gousset/ui/components/text-field";
-import { useHydrated } from "@gousset/ui/hooks/use-hydrated";
 import { createFileRoute, useNavigate, useRouter } from "@tanstack/react-router";
 import { Schema } from "effect";
 import { useState } from "react";
@@ -68,9 +67,6 @@ function ChangePassword() {
   const { resume } = Route.useSearch();
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
-  // Reached by a full load after the sign-in: until the page hydrates, the form would go out as a
-  // plain page's, the passwords in the address and the authorization to resume lost (#97).
-  const ready = useHydrated();
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -131,7 +127,7 @@ function ChangePassword() {
           />
           <FormMessage message={error} />
           <Actions>
-            <Button type="submit" loading={busy} disabled={!ready}>
+            <Button type="submit" loading={busy}>
               {m.changePasswordSubmit()}
             </Button>
             {user.mustChangePassword ? null : <AppLink to="/">{m.usersBack()}</AppLink>}
