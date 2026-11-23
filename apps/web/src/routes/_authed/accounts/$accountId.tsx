@@ -97,6 +97,9 @@ function AccountPage() {
   const [closeError, setCloseError] = useState<string>();
   const [reopenBusy, setReopenBusy] = useState(false);
   const [reopenError, setReopenError] = useState<string>();
+  const [noteOpen, setNoteOpen] = useState(false);
+  const [noteOpened, setNoteOpened] = useState(0);
+  const [noteSaved, setNoteSaved] = useState<string>();
 
   const { data: list } = useSuspenseQuery(accountQueries.list());
 
@@ -158,25 +161,38 @@ function AccountPage() {
     <Page
       title={account.name}
       actions={
-        account.closedOn === null ? (
-          <Button
-            variant="secondary"
-            loading={closeBusy}
-            onClick={() => {
-              setClosedOn(detail.day);
-              setCloseOpen(true);
-            }}
-          >
-            {m.accountClose()}
-          </Button>
-        ) : (
-          <Button variant="secondary" loading={reopenBusy} onClick={() => void handleReopen()}>
-            {m.accountReopen()}
-          </Button>
-        )
+        <>
+          {account.mode === "balance" ? (
+            <Button
+              onClick={() => {
+                setNoteOpened((count) => count + 1);
+                setNoteOpen(true);
+              }}
+            >
+              {m.accountBlockNoteBalance()}
+            </Button>
+          ) : null}
+          {account.closedOn === null ? (
+            <Button
+              variant="secondary"
+              loading={closeBusy}
+              onClick={() => {
+                setClosedOn(detail.day);
+                setCloseOpen(true);
+              }}
+            >
+              {m.accountClose()}
+            </Button>
+          ) : (
+            <Button variant="secondary" loading={reopenBusy} onClick={() => void handleReopen()}>
+              {m.accountReopen()}
+            </Button>
+          )}
+        </>
       }
     >
       {account.closedOn === null ? null : <FormMessage message={reopenError} />}
+      <StatusMessage message={noteSaved} />
       <DataBlock
         title={m.accountBlockFigures()}
         skeleton={<AccountFiguresSkeleton />}
@@ -227,7 +243,16 @@ function AccountPage() {
         <Lines accountId={accountId} />
       </DataBlock>
       {account.mode === "balance" ? (
-        <NoteBalance accountId={accountId} currency={account.currency} day={detail.day} />
+        <NoteBalanceDialog
+          // Each opening starts from today's day and an empty amount, with no past refusal.
+          key={noteOpened}
+          open={noteOpen}
+          onOpenChange={setNoteOpen}
+          accountId={accountId}
+          currency={account.currency}
+          day={detail.day}
+          onSaved={setNoteSaved}
+        />
       ) : null}
       <AccountForm
         key={account.id}
@@ -616,15 +641,24 @@ function Lines({ accountId }: { accountId: string }) {
   );
 }
 
-/** A balance-mode account's page: note its balance at the end of a day, one a day. */
-function NoteBalance({
+/**
+ * A balance-mode account: note its balance at the end of a day, one a day, in a dialog the page's
+ * "Note a balance" button opens (an action that asks for input never sits inline in a page).
+ */
+function NoteBalanceDialog({
+  open,
+  onOpenChange,
   accountId,
   currency,
   day,
+  onSaved,
 }: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
   accountId: string;
   currency: string;
   day: string;
+  onSaved: (message: string) => void;
 }) {
   const queryClient = useQueryClient();
   const formId = useId();
@@ -632,9 +666,7 @@ function NoteBalance({
   const [noteDay, setNoteDay] = useState(day);
   const [balanceMinor, setBalanceMinor] = useState<number | null>(null);
   const [error, setError] = useState<string>();
-  const [saved, setSaved] = useState<string>();
   const [busy, setBusy] = useState(false);
-  const [resetKey, setResetKey] = useState(0);
 
   async function submit() {
     if (balanceMinor === null) {
@@ -646,57 +678,58 @@ function NoteBalance({
     );
 
     if (!result.ok) {
-      setSaved(undefined);
       setError(accountRefusalMessage(result.code));
 
       return;
     }
 
     setError(undefined);
-    setSaved(m.accountNoteBalanceSaved({ day: shortDay(noteDay, locale) }));
-    setBalanceMinor(null);
-    setResetKey((key) => key + 1);
+    onSaved(m.accountNoteBalanceSaved({ day: shortDay(noteDay, locale) }));
     await invalidateAccounts(queryClient);
+    onOpenChange(false);
   }
 
   return (
-    <DataBlock
+    <Dialog
       title={m.accountBlockNoteBalance()}
-      skeleton={
-        <p className="text-sm text-muted-foreground">{m.accountNoteBalanceDescription()}</p>
-      }
-      resetKey={accountId}
-    >
-      <div className="flex flex-col gap-4">
-        <p className="text-sm text-muted-foreground">{m.accountNoteBalanceDescription()}</p>
-        <form
-          id={formId}
-          onSubmit={(event) => {
-            event.preventDefault();
-            void submit();
-          }}
-          className="flex flex-wrap items-end gap-3"
-        >
-          <DatePicker
-            label={m.fieldDay()}
-            value={noteDay}
-            onValueChange={(value) => setNoteDay(value ?? noteDay)}
-            required
-          />
-          <MoneyField
-            key={resetKey}
-            label={m.fieldAmount()}
-            currency={currency}
-            onValueChange={setBalanceMinor}
-            required
-          />
-          <Button type="submit" loading={busy}>
+      description={m.accountNoteBalanceDescription()}
+      open={open}
+      onOpenChange={onOpenChange}
+      actions={
+        <>
+          <DialogClose>
+            <Button type="button" variant="secondary">
+              {m.uiCancel()}
+            </Button>
+          </DialogClose>
+          <Button type="submit" form={formId} loading={busy}>
             {m.accountNoteBalanceSubmit()}
           </Button>
-        </form>
+        </>
+      }
+    >
+      <form
+        id={formId}
+        onSubmit={(event) => {
+          event.preventDefault();
+          void submit();
+        }}
+        className="flex flex-col gap-4"
+      >
+        <DatePicker
+          label={m.fieldDay()}
+          value={noteDay}
+          onValueChange={(value) => setNoteDay(value ?? noteDay)}
+          required
+        />
+        <MoneyField
+          label={m.fieldAmount()}
+          currency={currency}
+          onValueChange={setBalanceMinor}
+          required
+        />
         <FormMessage message={error} />
-        <StatusMessage message={saved} />
-      </div>
-    </DataBlock>
+      </form>
+    </Dialog>
   );
 }

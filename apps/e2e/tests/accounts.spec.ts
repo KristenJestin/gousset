@@ -308,8 +308,15 @@ test("noting a balance on a balance-mode account shows it as the account's balan
   await page.getByRole("link", { name: /E2E PerksHub/ }).click();
   await expect(page.getByText("Nothing noted yet")).toBeVisible();
 
-  await page.getByRole("textbox", { name: "Amount" }).fill("312.40");
-  await page.getByRole("button", { name: "Note the balance" }).click();
+  // An action that asks for input opens a dialog, never a form inline in the page (#103).
+  await expect(page.getByRole("textbox", { name: "Amount" })).toHaveCount(0);
+  await page.getByRole("button", { name: "Note a balance", exact: true }).click();
+
+  const noteDialog = page.getByRole("dialog", { name: "Note a balance" });
+
+  await noteDialog.getByRole("textbox", { name: "Amount" }).fill("312.40");
+  await noteDialog.getByRole("button", { name: "Note the balance" }).click();
+  await expect(noteDialog).toBeHidden();
 
   await expect(page.getByText(/Balance noted for/)).toBeVisible();
   await expect(page.getByText("€312.40").first()).toBeVisible();
