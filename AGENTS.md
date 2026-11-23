@@ -231,6 +231,26 @@ The lead reviews every change to the tools against `docs/mcp.md` before merging.
   merging a full one when the change touches what other browsers draw.
 - **Required checks** on `dev` and `main`: `verify`, `ui`, `e2e`, `react-doctor` and `privacy`.
 
+## Migrations
+
+From v0.2 on, installations hold real data: an update must never lose, duplicate or change a row
+(`docs/data-model.md`, "Migrations", says why and how).
+
+- **Forward only**: a migration on `dev` or `next/x.y` is never edited, and none is undone.
+- **A destructive change takes two releases**: a drop, a rename, a narrowed type or a `not null`
+  on a column with rows first adds the new column or table and copies into it; the next release
+  removes the old one.
+- **Every migration runs in a transaction and is safe to run again** on a database that has it:
+  nothing that must run outside a transaction; what Drizzle does not write is idempotent.
+- **Its timestamp follows every migration of its target branch** when it lands: after merging
+  `origin/dev` (or `origin/next/x.y`), a migration of yours that is no longer the last is
+  generated again.
+- **The `upgrade` workflow** (`tools/check-upgrade.sh`) updates the last release, filled with
+  invented data, to the commit, on every pull request and every push to `dev` and `next/**`, and
+  compares every row before and after; the release refuses a commit whose push to `dev` did not
+  pass it. A column or a table the new migrations add is expected by name (`ALTER TABLE "t" ADD
+  COLUMN "c"`, `CREATE TABLE "t"`); any other difference fails it.
+
 ## How the work is organised
 
 | Who               | What                                                                                                             |

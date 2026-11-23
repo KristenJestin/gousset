@@ -103,7 +103,10 @@ Variables, from the shell or a `.env` file beside `docker-compose.yml`:
 statistics of Varlock's command line (`VARLOCK_TELEMETRY_DISABLED`): nothing leaves an
 installation unless its owner wants it to.
 
-**Updating**: `docker compose pull && docker compose up -d`; `migrate` runs again before the app.
+**Updating**: back up first ([Backing up and restoring](#backing-up-and-restoring): a dump and
+`secrets/`), then `docker compose pull && docker compose up -d`; `migrate` runs again before the
+app. Migrations only go forward: an update is undone by restoring that dump under the previous
+image ([Going back](#going-back)), never by running the previous image on the updated database.
 An installation made before the app had a role of its own (#66) needs nothing more: its next
 `migrate` makes `gousset_app`, hands
 pg-boss's schema over to it and lets it log in, and the app then logs in as it, with the same
@@ -208,6 +211,27 @@ It restores into an empty volume of the same name (`tar -xzf … -C /data`, the 
 stopped), on the same major version of Postgres only (18): a dump is the one that moves to a later
 Postgres. This copy is not tested.
 
+### Going back
+
+An update that goes wrong is undone with the dump made just before it, under the image that made
+it. The previous image never runs on a database a later `migrate` changed: its code does not know
+the new columns and tables, and nothing removes them (`docs/data-model.md`, "Migrations").
+
+```sh
+docker compose down                              # the app and migrate stop; the volume stays
+echo GOUSSET_VERSION=0.1.1 >> .env               # the version the dump was made with
+docker compose up -d postgres
+docker compose exec -T postgres dropdb -U gousset gousset
+docker compose exec -T postgres createdb -U gousset gousset
+docker compose exec -T postgres pg_restore -U gousset -d gousset --exit-on-error --single-transaction < gousset-2026-11-23.dump
+docker compose up -d                             # the previous image's migrate (nothing to apply), then its app
+```
+
+The roles are there already: the same server keeps them. What was written after the dump, under
+the new version, is lost with it. Take `GOUSSET_VERSION` out of `.env` to follow `latest` again
+once a fixed release is out. These are the restore's steps above, on a server that has its roles;
+the end-to-end test of the restore runs them, not this way back as a whole.
+
 ## The version
 
 Computed, never typed: `tools/version.sh stable|beta|base [--at <commit>]`, for HEAD by default.
@@ -274,7 +298,9 @@ review; it is never merged with the button, and GitHub shows it merged once `mai
 
 - **What it checks first**, reading only: it runs from `dev`; the commit is a full SHA or `dev`,
   and a commit of `dev`; `main`, when it exists, is its ancestor; something was committed since the
-  last release. Then, before writing anything, that `RELEASE_TOKEN` is set and that **the beta of
+  last release; and that **the `upgrade` job passed on the commit's push to `dev`**
+  ([Every release is an upgrade](#every-release-is-an-upgrade)). Then, before writing anything,
+  that `RELEASE_TOKEN` is set and that **the beta of
   that commit was published** (`sha-<commit>`): a beta exists only once `verify` passed on its
   push, so a release is never a commit no `verify` passed on, and is never built again. Any of these refused, nothing moves and the run fails,
   saying why.
@@ -288,6 +314,54 @@ review; it is never merged with the button, and GitHub shows it merged once `mai
   moved on fails there, and is started again with the SHA of the commit first released.
 - The job that holds the tokens writing `main`, the tags and the images runs no code of any
   branch: no checkout, only `gh` and `docker` on what the reading job decided.
+
+## Every release is an upgrade
+
+From v0.2 on, installations hold real data, and an update must keep every row of it (#102).
+`.github/workflows/upgrade.yml` runs on every pull request and every push to `dev` and `next/**`:
+it builds the commit's image and runs `tools/check-upgrade.sh` on it, which, on a fresh project
+and volume:
+
+1. installs **the last release** (the highest tag `vX.Y.Z`, `--from` to choose another) with that
+   release's own `docker-compose.yml`, its image pulled from the registry;
+2. fills it with invented data, **through the app's API where the release has one**: the
+   administrator by sign-up, a user given a temporary password who replaced it with her own,
+   one still on her temporary password, one banned; and **through the tables' owner
+   (`tools/check-upgrade.sql`) for what the release offers no route for**: 0.1.1 has neither an
+   accounts screen nor an import route, so two users' accounts of every kind, balances, an import
+   with its file and its lines (a held duplicate, a foreign currency, a discarded line), a CSV
+   profile, and an MCP client with its consent and tokens are written as the app would write them;
+3. stops the app, as an update does, and reads every row of every table of the `public` schema;
+4. puts the image under test in its place, as the [update](#installing) does, the compose file
+   unchanged: **`migrate` runs and ends**, and has recorded every migration of the commit; run
+   again, it applies nothing and changes nothing;
+5. reads every row again: **every table and column of before is still there, and every row is
+   identical**, but in the columns and tables the new migrations add (those of the commit's
+   `packages/db/src/migrations` the release did not have), each of which must be named in them
+   (`ALTER TABLE "t" ADD COLUMN "c"`, `CREATE TABLE "t"`);
+6. starts the app: `/health` answers 200; **the administrator and both users sign in with the same
+   passwords**, the temporary one still has to be replaced, the banned one is still refused, and a
+   session made before the update still works;
+7. downloads the user's **export** (#22, `/api/export`), which the last release may not have: each
+   of its tables holds that user's rows exactly as the release held them, and each imported file
+   its bytes;
+8. migrates an empty database beside it with the same image: **the updated schema is a fresh
+   installation's**, to the column order and the grant.
+
+It removes everything it started, whatever happened. To run it on a clone, with the release's tag
+fetched (`git fetch --tags`):
+
+```sh
+docker build -t ghcr.io/kristenjestin/gousset:local .
+tools/check-upgrade.sh local
+```
+
+The Release workflow refuses a commit whose push to `dev` did not pass the job (the run's last
+attempt), as it refuses one without a beta. **When a release changes the tables
+`tools/check-upgrade.sql` writes, or gives them a route of their own, that file changes in the
+same pull request**: from a release with the import route, the lines come through it. A commit
+released after an earlier commit of `dev` was released since its push was tested from the release
+before that one only.
 
 ## The notes
 
