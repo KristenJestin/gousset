@@ -5,6 +5,7 @@ import { usePageLanguage } from "../hooks/use-page-language";
 import type { Money } from "../lib/money";
 import { Amount } from "./amount";
 import { Chip } from "./chip";
+import { RestrictedAmount } from "./restricted-amount";
 import { Skeleton, SkeletonFrame } from "./skeleton";
 
 function FigureBox({ label, children }: { label: string; children: ReactNode }) {
@@ -27,11 +28,14 @@ export type AccountFiguresProps = {
   institution?: string;
   /** The group's words, already translated ("Available"). */
   groupLabel?: string;
+  /** A benefit account's: its balance is hatched, restricted money (docs/design.md). */
+  restricted?: boolean;
 };
 
 /**
  * An account page's header figures (docs/wireframes, screen 7): its institution and group as
- * chips, then its balance on a day, what came in and what went out over a period.
+ * chips, then its balance on a day, what came in and what went out over a period. With
+ * `restricted` (a benefit account), the balance sits on a hatched chip.
  */
 export function AccountFigures({
   balanceDay,
@@ -41,6 +45,7 @@ export function AccountFigures({
   out,
   institution,
   groupLabel,
+  restricted = false,
 }: AccountFiguresProps) {
   const messages = useUiMessages().accounts;
   const locale = usePageLanguage();
@@ -56,7 +61,13 @@ export function AccountFigures({
       ) : null}
       <div className="flex flex-wrap gap-3">
         <FigureBox label={messages.balanceOnDay(balanceDay)}>
-          <Amount value={balance} size="lg" locale={locale} />
+          {restricted ? (
+            <span className="flex">
+              <RestrictedAmount value={balance} size="lg" whole={false} locale={locale} roll />
+            </span>
+          ) : (
+            <Amount value={balance} size="lg" locale={locale} />
+          )}
         </FigureBox>
         <FigureBox label={messages.inPeriod(period)}>
           <Amount value={amountIn} size="lg" locale={locale} />

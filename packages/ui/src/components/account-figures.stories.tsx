@@ -7,7 +7,8 @@ const eur = (minor: number) => ({ minor, currency: "EUR" });
 
 /**
  * An account page's header figures (docs/wireframes, screen 7, block 1): the institution and
- * group as chips, then the balance on a day, what came in and what went out over a period.
+ * group as chips, then the balance on a day, what came in and what went out over a period. A
+ * benefit account's balance (`restricted`) sits on a hatched chip.
  *
  * Loading: `AccountFiguresSkeleton`, the chips' place and the three figures at the same heights.
  */
@@ -41,6 +42,20 @@ export const Loan: Story = {
     out: eur(61_000),
     institution: "Harbor Savings",
     groupLabel: "Loans",
+  },
+};
+
+/** A benefit account: its balance is restricted money, hatched. */
+export const Restricted: Story = {
+  args: {
+    balanceDay: "31 Oct.",
+    balance: eur(33_240),
+    period: "October",
+    in: eur(20_000),
+    out: eur(14_760),
+    institution: "PerksHub",
+    groupLabel: "Restricted use",
+    restricted: true,
   },
 };
 

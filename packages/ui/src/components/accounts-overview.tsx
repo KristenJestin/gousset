@@ -3,10 +3,12 @@ import type { AnchorHTMLAttributes, ReactNode, Ref } from "react";
 import { useUiMessages } from "../hooks/use-ui-messages";
 import { usePageLanguage } from "../hooks/use-page-language";
 import type { Money } from "../lib/money";
+import { staggerDelay } from "../lib/stagger";
 import { cn } from "../lib/utils";
 import { Amount } from "./amount";
 import { Chip } from "./chip";
 import { Icon } from "./icon";
+import { RestrictedAmount } from "./restricted-amount";
 import { Skeleton, SkeletonFrame } from "./skeleton";
 
 // The accounts overview (docs/wireframes, screen 3): the four totals, the accounts grouped under
@@ -22,37 +24,6 @@ export type AccountTrackingMode = "lines" | "balance";
 type AnchorProps = Omit<AnchorHTMLAttributes<HTMLAnchorElement>, "className" | "children"> & {
   ref?: Ref<HTMLAnchorElement>;
 };
-
-/** A handful of steps so a short list staggers without naming an exact delay per row. */
-const STAGGER_DELAYS = [
-  "",
-  "delay-75",
-  "delay-100",
-  "delay-150",
-  "delay-200",
-  "delay-300",
-] as const;
-
-function staggerDelay(index: number) {
-  return STAGGER_DELAYS[index % STAGGER_DELAYS.length];
-}
-
-/** A hatched chip behind restricted money (docs/design.md, "Hatching for money apart"). */
-function RestrictedAmount({
-  value,
-  size,
-  locale,
-}: {
-  value: Money;
-  size: "sm" | "lg";
-  locale: string;
-}) {
-  return (
-    <span className="inline-flex items-center rounded-md bg-hatched-restricted px-1.5 py-0.5">
-      <Amount value={value} size={size} whole={size === "lg"} locale={locale} roll={false} />
-    </span>
-  );
-}
 
 export type AccountRowProps = AnchorProps & {
   /** As the user calls the account: "Current account". */

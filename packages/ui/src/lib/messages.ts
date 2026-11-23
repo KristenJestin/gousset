@@ -142,6 +142,21 @@ function uiMessages(locale: Locale) {
       settingsInstitution: m.uiAccountsSettingsInstitution({}, options),
       settingsSettlesInto: m.uiAccountsSettingsSettlesInto({}, options),
       settingsNotSet: m.uiAccountsSettingsNotSet({}, options),
+      /** A benefit account's setting: the order its credits are used in. */
+      settingsCreditOrder: m.uiAccountsSettingsCreditOrder({}, options),
+      /** `BenefitCredits`: a benefit account's credits and when they expire. */
+      creditsTitle: m.uiAccountsCreditsTitle({}, options),
+      creditsExpiring: m.uiAccountsCreditsExpiring({}, options),
+      creditsExpiredOn: (day: string) => m.uiAccountsCreditsExpiredOn({ day }, options),
+      /** A credit's chip: "expires 31 Dec." */
+      creditsExpires: (day: string) => m.uiAccountsCreditsExpires({ day }, options),
+      /** After what is left of a credit: "of €200.00". */
+      creditsOf: (amount: string) => m.uiAccountsCreditsOf({ amount }, options),
+      creditsEditExpiry: m.uiAccountsCreditsEditExpiry({}, options),
+      /** The expiry button's name, unique on the page: "Expiry date of MEALCARD CREDIT". */
+      creditsEditExpiryOf: (label: string) => m.uiAccountsCreditsEditExpiryOf({ label }, options),
+      creditsUncovered: (amount: string) => m.uiAccountsCreditsUncovered({ amount }, options),
+      creditsEmpty: m.uiAccountsCreditsEmpty({}, options),
     },
     jobs: {
       /** A background job's state, beside its title. */
