@@ -145,7 +145,11 @@ test("a profile made from a preview reads the file", async ({ app, user, page },
   await expect(testRead(page)).toContainText("−€18.40");
   await expect(testRead(page)).toContainText("€75.00");
 
-  await page.getByRole("textbox", { name: "Name of the profile" }).fill("Market bank");
+  // Saved without a name, it is refused in the user's words; then named.
+  await page.getByRole("button", { name: "Save as a profile" }).click();
+  await expect(page.getByText("Give the profile a name.")).toBeVisible();
+
+  await page.getByRole("textbox", { name: "Name of the profile" }).fill("  Market bank ");
   await page.getByRole("button", { name: "Save as a profile" }).click();
   await expect(page.getByText("Saved as Market bank")).toBeVisible();
 
@@ -195,6 +199,13 @@ test("a profile exported as a file is imported back and reads the file", async (
     "french-style-debit-and-credit-columns.gousset-profile.json",
   );
   await download.saveAs(exported);
+
+  // A file that holds no profile is refused in the user's words.
+  const junk = testInfo.outputPath("not-a-profile.json");
+
+  await writeFile(junk, JSON.stringify({ version: 2, separator: "#" }));
+  await page.locator('[data-slot="file-button-input"]').setInputFiles(junk);
+  await expect(page.getByText("This file holds no profile Gousset reads")).toBeVisible();
 
   // Imported back under the file's name, it becomes the user's and reads the file.
   await page.locator('[data-slot="file-button-input"]').setInputFiles(exported);
