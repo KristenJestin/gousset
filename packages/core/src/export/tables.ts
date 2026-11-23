@@ -247,6 +247,11 @@ export const MERCHANTS: ExportTable = {
     { name: "name", holds: "the merchant's name, as you see it" },
     CREATED_AT,
     UPDATED_AT,
+    // Added after the others (#23): the database keeps it last.
+    {
+      name: "default_category_id",
+      holds: "the category (categories.id) its entries go in by default; empty for none",
+    },
   ],
 };
 

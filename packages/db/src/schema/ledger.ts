@@ -391,10 +391,16 @@ export const merchant = pgTable.withRLS(
     name: text("name").notNull(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
+    // Added with the categories (#23), after the others: the category its entries go in by default.
+    // Its key (`on delete set null (default_category_id)`, which Drizzle cannot write) is in the
+    // custom migration `*_merchant_default_category_key`.
+    defaultCategoryId: uuid("default_category_id"),
   },
   (table) => [
     unique("merchant_user_id_id_key").on(table.userId, table.id),
     unique("merchant_user_id_name_key").on(table.userId, table.name),
+    // A merge of categories moves the defaults, and a deleted category clears them.
+    index("merchant_default_category_id_idx").on(table.defaultCategoryId),
     ownRowsOnly("merchant"),
   ],
 );
