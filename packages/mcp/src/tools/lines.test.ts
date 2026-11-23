@@ -30,8 +30,8 @@ import type { Runner } from "../tool";
 // allowed to read only.
 
 const TODAY = "2026-11-23";
-const reader = { userId: "ada", canWrite: false };
-const writer = { userId: "ada", canWrite: true };
+const reader = { userId: "ada", canWrite: false, currency: "EUR" };
+const writer = { userId: "ada", canWrite: true, currency: "EUR" };
 
 const transport = memoryCategory("expense", "Transport");
 const fuelCategory = memoryCategory("expense", "Fuel", { parentId: transport.id });

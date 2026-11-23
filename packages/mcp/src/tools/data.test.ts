@@ -16,7 +16,7 @@ import { goussetServer } from "../gousset";
 import { callText, connectInProcess } from "../test-client";
 import type { Caller } from "../tool";
 
-const reader: Caller = { userId: "ada", canWrite: false };
+const reader: Caller = { userId: "ada", canWrite: false, currency: "EUR" };
 
 /** What the user's export holds: a row count per table, and the files imported. */
 const CONTENTS: ExportContents = {

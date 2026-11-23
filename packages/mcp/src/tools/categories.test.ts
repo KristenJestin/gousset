@@ -24,8 +24,8 @@ import type { Runner } from "../tool";
 // and entries, as a token allowed to read and write unless said otherwise.
 
 const TODAY = "2026-11-23";
-const writer = { userId: "ada", canWrite: true };
-const reader = { userId: "ada", canWrite: false };
+const writer = { userId: "ada", canWrite: true, currency: "EUR" };
+const reader = { userId: "ada", canWrite: false, currency: "EUR" };
 
 const housing = memoryCategory("expense", "Housing", { position: 0 });
 const rent = memoryCategory("expense", "Rent", { parentId: housing.id });
@@ -217,6 +217,35 @@ describe("categories create and edit", () => {
       kind: "expense",
       benchmark: { mode: "fixed", minor: 3000 },
     });
+  });
+
+  test("reads and writes a fixed benchmark in the user's currency", async () => {
+    const inDollars = { ...writer, currency: "USD" };
+    const rows = new Map([[writer.userId, freshRows()]]);
+    const listed = await categories({ action: "list" }, rows, inDollars);
+
+    expect(listed.text).toContain("\n  - Energy: 0 entries; benchmark: 85.50 USD a month;");
+
+    const created = await categories(
+      { action: "create", name: "Water", parent: "Housing", benchmark: "30" },
+      rows,
+      inDollars,
+    );
+
+    expect(created.isError, created.text).toBe(false);
+    expect(created.text).toContain("benchmark: 30.00 USD a month.");
+    expect(named(rows, "Water")?.benchmark).toEqual({ mode: "fixed", minor: 3000 });
+
+    const refused = await categories(
+      { action: "edit", category: "Rent", benchmark: "12.5" },
+      rows,
+      { ...writer, currency: "JPY" },
+    );
+
+    expect(refused.isError).toBe(true);
+    expect(refused.text).toContain(
+      "a fixed amount a month in JPY, a decimal from 0 with at most 0 decimals",
+    );
   });
 
   test("takes its parent's kind when kind is left out", async () => {

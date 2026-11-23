@@ -32,8 +32,8 @@ import { ERROR_LIMIT, RESULT_LIMIT } from "../results";
 import { callText, connectInProcess } from "../test-client";
 import type { Caller, Runner } from "../tool";
 
-const writer: Caller = { userId: "ada", canWrite: true };
-const reader: Caller = { userId: "ada", canWrite: false };
+const writer: Caller = { userId: "ada", canWrite: true, currency: "EUR" };
+const reader: Caller = { userId: "ada", canWrite: false, currency: "EUR" };
 
 const idOf = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
 

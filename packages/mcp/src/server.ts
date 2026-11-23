@@ -44,7 +44,11 @@ export function createServer<R>(
 }
 
 /** What the door puts in `AuthInfo.extra` for the server it builds. */
-const CallerExtra = Schema.Struct({ userId: Schema.String, canWrite: Schema.Boolean });
+const CallerExtra = Schema.Struct({
+  userId: Schema.String,
+  canWrite: Schema.Boolean,
+  currency: Schema.String,
+});
 
 const callerOf = Schema.decodeUnknownOption(CallerExtra);
 
@@ -54,7 +58,7 @@ export function authInfoOf(caller: Caller, token: string, clientId: string): Aut
     token,
     clientId,
     scopes: caller.canWrite ? ["read", "write"] : ["read"],
-    extra: { userId: caller.userId, canWrite: caller.canWrite },
+    extra: { userId: caller.userId, canWrite: caller.canWrite, currency: caller.currency },
   };
 }
 

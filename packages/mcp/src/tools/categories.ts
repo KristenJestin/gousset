@@ -27,11 +27,10 @@ import { amount } from "./accounts";
 
 /**
  * The currency fixed benchmarks are written in: the user's own (`auth_user.currency`, v0.3,
- * docs/data-model.md). The one place the tools read it; until the door gives it with the caller,
- * it is the column's default.
+ * docs/data-model.md), as the door read it with the caller. The one place the tools read it.
  */
-export function benchmarkCurrency(_caller: Caller): string {
-  return "EUR";
+export function benchmarkCurrency(caller: Caller): string {
+  return caller.currency;
 }
 
 const Kind = Schema.Literals(["expense", "income"]);

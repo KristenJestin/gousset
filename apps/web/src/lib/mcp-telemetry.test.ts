@@ -62,7 +62,7 @@ describe("a call to the MCP door", () => {
             ),
           observe,
         },
-        { userId: "ada", canWrite: false },
+        { userId: "ada", canWrite: false, currency: "EUR" },
         revision,
       );
 

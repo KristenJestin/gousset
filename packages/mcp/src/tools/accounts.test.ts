@@ -23,7 +23,7 @@ import type { Runner } from "../tool";
 // The accounts tool through the official client, on an in-memory store of made-up accounts.
 
 const TODAY = "2026-11-23";
-const reader = { userId: "ada", canWrite: false };
+const reader = { userId: "ada", canWrite: false, currency: "EUR" };
 
 function account(name: string, change: Partial<AccountRecord> = {}): AccountRecord {
   return {

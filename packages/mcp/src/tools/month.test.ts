@@ -55,7 +55,7 @@ function onDay(day: string, ledger: Layer.Layer<Ledger> = FixtureLedger): Runner
     );
 }
 
-const reader = { userId: "ada", canWrite: false };
+const reader = { userId: "ada", canWrite: false, currency: "EUR" };
 
 async function month(
   args: { [key: string]: string },

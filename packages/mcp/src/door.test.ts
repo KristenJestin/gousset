@@ -85,8 +85,8 @@ function connect(caller: Caller, revision: Revision, observe?: CallObserver) {
   );
 }
 
-const reader: Caller = { userId: "user-1", canWrite: false };
-const writer: Caller = { userId: "user-1", canWrite: true };
+const reader: Caller = { userId: "user-1", canWrite: false, currency: "EUR" };
+const writer: Caller = { userId: "user-1", canWrite: true, currency: "EUR" };
 
 type Connected = Awaited<ReturnType<typeof connect>>;
 
