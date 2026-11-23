@@ -4,6 +4,7 @@ import {
   ImportProfiles,
   Imports,
   Merchants,
+  RuleJobs,
   Transfers,
   memoryAccountStore,
   memoryCategoryStore,
@@ -11,6 +12,7 @@ import {
   memoryLineStore,
 } from "@gousset/core";
 import type { AccountRecord, MemoryLine, MemoryRows } from "@gousset/core";
+import { UserData } from "@gousset/db/user-data";
 import type { Client } from "@modelcontextprotocol/client";
 import { Effect, Layer } from "effect";
 import { TestClock } from "effect/testing";
@@ -129,6 +131,8 @@ function onToday(rows: MemoryRows): Runner<GoussetServices> {
     Layer.mock(DataExport, {}),
     Layer.mock(Merchants, {}),
     Layer.mock(Transfers, {}),
+    Layer.mock(UserData, {}),
+    Layer.mock(RuleJobs, {}),
     TestClock.layer(),
   );
 
@@ -532,6 +536,7 @@ describe("the accounts tool", () => {
       "lines",
       "merchants",
       "categories",
+      "rules",
     ]);
     expect(tool?.title).toBe("Accounts");
     expect(tool?.annotations).toEqual({
