@@ -37,6 +37,7 @@ file is how to work.
 | ----------------------------------- | --------------------------------------------------------------------- |
 | `apps/web`                          | The app: TanStack Start (pages, server functions, API, jobs, `/mcp`)  |
 | `packages/ui`                       | Every component and the theme, each described in Storybook            |
+| `packages/core`                     | The logic (the month's figures, reviews) the app and `/mcp` both call |
 | `packages/db`                       | The Drizzle schema and migrations                                     |
 | `packages/auth`                     | better-auth, wired to the database; the MCP door's OAuth              |
 | `packages/mcp`                      | The MCP tool framework, its guards, the instructions and the tools    |
