@@ -107,11 +107,13 @@ test.describe("FileDrop", () => {
     const button = page.getByRole("button", { name: "Choose files" });
 
     await expect(button).toHaveAccessibleDescription("OFX, QIF, CAMT.053, MT940 or CSV");
-    await button.focus();
+    // A press before the button works is lost (button.tsx, `data-hydrated`): wait for what is
+    // drawn to say it works, then focus and press the button as it is now, in one step.
+    await expect(button).toHaveAttribute("data-hydrated", "");
 
     const chooser = page.waitForEvent("filechooser");
 
-    await page.keyboard.press("Enter");
+    await button.press("Enter");
 
     const picker = await chooser;
 

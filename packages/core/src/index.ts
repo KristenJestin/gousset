@@ -12,6 +12,7 @@ export {
   DayRangeRefused,
   LineAlreadyReviewed,
   LineNotFound,
+  LineSearchRefused,
   MonthOutOfRange,
   SettlementRefused,
 } from "./errors";
@@ -74,6 +75,18 @@ export { memoryAccountStore, memoryId } from "./account-store-memory";
 export type { MemoryBalance, MemoryImport, MemoryLine, MemoryRows } from "./account-store-memory";
 
 export type { DayBalance } from "./balances";
+
+export { DEFAULT_SEARCH_LINES, MAX_SEARCH_LINES, searchLines, showLine } from "./lines";
+
+export type { LineAccount, LineDetail, LinePage, LineRow, LineSearch } from "./lines";
+
+export { LineStore } from "./line-store";
+
+export { DatabaseLineStore } from "./line-store-database";
+
+export { memoryLineStore } from "./line-store-memory";
+
+export type { MemoryLineDetail, MemoryLineImport, MemoryLineRows } from "./line-store-memory";
 
 export { flags, importState, investments, movements } from "./review";
 

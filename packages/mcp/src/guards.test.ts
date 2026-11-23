@@ -4,6 +4,7 @@ import {
   ImportProfiles,
   Imports,
   memoryAccountStore,
+  memoryLineStore,
 } from "@gousset/core";
 import { Effect, Layer } from "effect";
 import { describe, expect, test } from "vite-plus/test";
@@ -32,6 +33,7 @@ async function listing() {
             Layer.mergeAll(
               FixtureLedger,
               memoryAccountStore(),
+              memoryLineStore(),
               Layer.mock(Imports, {}),
               Layer.mock(ImportProfiles, {}),
               Layer.mock(DataExport, {}),

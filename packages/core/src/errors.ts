@@ -5,6 +5,16 @@ export class LineNotFound extends Schema.TaggedError<LineNotFound>()("LineNotFou
   lineId: Schema.String,
 }) {}
 
+/**
+ * A search of the lines cannot be read: an amount that is no decimal or a minimum above the maximum
+ * (`amount`), a day that is no `YYYY-MM-DD` or a period that ends before it starts (`period`), a
+ * cursor no page gave (`cursor`).
+ */
+export class LineSearchRefused extends Schema.TaggedError<LineSearchRefused>()(
+  "LineSearchRefused",
+  { reason: Schema.Literals(["amount", "period", "cursor"]) },
+) {}
+
 /** A month too far from today to be read: more than ten years before or after it. */
 export class MonthOutOfRange extends Schema.TaggedError<MonthOutOfRange>()("MonthOutOfRange", {
   month: Schema.String,

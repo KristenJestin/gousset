@@ -4,18 +4,8 @@ import type { QueryClient } from "@tanstack/react-query";
 
 import { getAccount, getAccounts } from "@/functions/accounts";
 
-/**
- * The accounts domain's query keys, from one factory (docs/architecture.md, "Data loading and
- * skeletons"). Every key starts with `accountKeys.all`, so that one call reaches the list and every
- * account's page; `accountKeys.of(id)` reaches all of one account's.
- */
-export const accountKeys = {
-  all: ["accounts"] as const,
-  list: () => [...accountKeys.all, "list"] as const,
-  of: (accountId: string) => [...accountKeys.all, accountId] as const,
-  detail: (accountId: string, view: AccountView = {}) =>
-    [...accountKeys.of(accountId), "detail", view] as const,
-};
+import { accountKeys } from "./account-keys";
+import { lineKeys } from "./line-keys";
 
 /** The query of the accounts page and of an account's, for loaders and components alike. */
 export const accountQueries = {
@@ -37,8 +27,12 @@ export const accountQueries = {
 
 /**
  * After a write to an account (create, edit, close, reopen, a noted balance): the list's groups and
- * totals and the account's page may all have changed, so every accounts query is read again.
+ * totals and the account's page may all have changed, so every accounts query is read again; the
+ * operations name each line's account, so theirs are too.
  */
-export function invalidateAccounts(queryClient: QueryClient): Promise<void> {
-  return queryClient.invalidateQueries({ queryKey: accountKeys.all });
+export async function invalidateAccounts(queryClient: QueryClient): Promise<void> {
+  await Promise.all([
+    queryClient.invalidateQueries({ queryKey: accountKeys.all }),
+    queryClient.invalidateQueries({ queryKey: lineKeys.all }),
+  ]);
 }

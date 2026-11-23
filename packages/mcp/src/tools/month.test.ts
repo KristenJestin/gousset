@@ -9,6 +9,7 @@ import {
   investments,
   linesToReview,
   memoryAccountStore,
+  memoryLineStore,
   monthOverview,
   movements,
   spending,
@@ -41,6 +42,7 @@ function onDay(day: string, ledger: Layer.Layer<Ledger> = FixtureLedger): Runner
           Layer.mergeAll(
             ledger,
             memoryAccountStore(),
+            memoryLineStore(),
             Layer.mock(Imports, {}),
             Layer.mock(ImportProfiles, {}),
             Layer.mock(DataExport, {}),
