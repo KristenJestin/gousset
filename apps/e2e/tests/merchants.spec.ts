@@ -194,7 +194,10 @@ test("renaming a merchant shows its new name; a name another merchant has says t
   await name.fill("Quillbrook Grocer");
   await dialog.getByRole("button", { name: "Rename", exact: true }).click();
   await expect(dialog).toBeHidden();
-  await expect(page.getByText("Quillbrook is now Quillbrook Grocer.")).toBeVisible();
+  // The toast's own text; the announcer repeats it after "Saved." for screen readers.
+  await expect(
+    page.getByText("Quillbrook is now Quillbrook Grocer.", { exact: true }),
+  ).toBeVisible();
   await expect(
     page.getByRole("heading", { level: 2, name: "Quillbrook Grocer", exact: true }),
   ).toBeVisible();
@@ -225,7 +228,9 @@ test("moving a label to a new name splits the merchant", async ({ page, app, use
   await dialog.getByRole("button", { name: "Move the label" }).click();
   await expect(dialog).toBeHidden();
   await expect(
-    page.getByText("QUILLBROOK MARKET HALL now names Quillbrook Market Hall, a new merchant."),
+    page.getByText("QUILLBROOK MARKET HALL now names Quillbrook Market Hall, a new merchant.", {
+      exact: true,
+    }),
   ).toBeVisible();
 
   // The merchant keeps its other labels, and the lines of the one moved left with it.
@@ -285,7 +290,9 @@ test("merging a merchant into another gathers their labels, and the merged one i
   await expect(into).toHaveValue("Quillbrook");
   await dialog.getByRole("button", { name: "Merge", exact: true }).click();
   await expect(dialog).toBeHidden();
-  await expect(page.getByText("Hall Stall is merged into Quillbrook.")).toBeVisible();
+  await expect(
+    page.getByText("Hall Stall is merged into Quillbrook.", { exact: true }),
+  ).toBeVisible();
 
   // The page of the merchant kept, with every label again.
   await expect(
