@@ -2,7 +2,7 @@ import type { Browser, Page } from "@playwright/test";
 
 import type { TestUser } from "../src/auth";
 import { colorSchemeOf } from "../src/database";
-import { onPhone, openAccountMenu } from "../src/frame";
+import { openAccountMenu } from "../src/frame";
 import { addUser, animationsDone, expect, personOfItsOwn, signIn, test, visit } from "../src/test";
 
 // The scenarios of issue #50 (the colour scheme kept on the user's account), "How to verify", one
@@ -12,27 +12,15 @@ import { addUser, animationsDone, expect, personOfItsOwn, signIn, test, visit } 
 /** The app's own scripts, whatever bundle they come from: kept from running, no hydration. */
 const APP_SCRIPTS = /\.m?js(\?.*)?$/;
 
-/**
- * Picks a colour scheme as the user would, and waits until their account keeps it: the user's
- * menu on a desktop, the settings on a phone, whose menu holds only the account's actions.
- */
+/** Picks a colour scheme as the user would, in the settings, and waits until their account keeps it. */
 async function pickScheme(
   page: Page,
   database: string,
   person: TestUser,
   scheme: { name: "Light" | "Dark"; value: "light" | "dark" },
 ) {
-  if (onPhone(page)) {
-    await visit(page, "/settings");
-    await page.getByRole("radio", { name: scheme.name }).click();
-  } else {
-    const menu = await openAccountMenu(page, person.name);
-
-    await menu.getByRole("menuitemradio", { name: scheme.name }).click();
-    await page.keyboard.press("Escape");
-    // The menu fades out: axe, at the end, would measure its items' contrast halfway.
-    await animationsDone(page);
-  }
+  await visit(page, "/settings");
+  await page.getByRole("radio", { name: scheme.name }).click();
 
   // Applied at once, without a reload, then kept on the account.
   await expect(page.locator("html")).toHaveAttribute("data-color-scheme", scheme.value);

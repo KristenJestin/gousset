@@ -27,6 +27,7 @@ import { Route as AuthedSubjectsRouteImport } from './routes/_authed/subjects'
 import { Route as E2eTodayRouteImport } from './routes/e2e/today'
 import { Route as AuthedE2eJobsRouteImport } from './routes/_authed/e2e/jobs'
 import { Route as AuthedSettingsIndexRouteImport } from './routes/_authed/settings/index'
+import { Route as AuthedSettingsAccountRouteImport } from './routes/_authed/settings/account'
 import { Route as AuthedSettingsCategoriesRouteImport } from './routes/_authed/settings/categories'
 import { Route as AuthedSettingsRulesRouteImport } from './routes/_authed/settings/rules'
 import { Route as AuthedSettingsUsersRouteImport } from './routes/_authed/settings/users'
@@ -122,6 +123,11 @@ const AuthedSettingsIndexRoute = AuthedSettingsIndexRouteImport.update({
   path: '/',
   getParentRoute: () => AuthedSettingsRouteRoute,
 } as any)
+const AuthedSettingsAccountRoute = AuthedSettingsAccountRouteImport.update({
+  id: '/account',
+  path: '/account',
+  getParentRoute: () => AuthedSettingsRouteRoute,
+} as any)
 const AuthedSettingsCategoriesRoute =
   AuthedSettingsCategoriesRouteImport.update({
     id: '/categories',
@@ -166,6 +172,7 @@ export interface FileRoutesByFullPath {
   '/subjects': typeof AuthedSubjectsRoute
   '/e2e/today': typeof E2eTodayRoute
   '/e2e/jobs': typeof AuthedE2eJobsRoute
+  '/settings/account': typeof AuthedSettingsAccountRoute
   '/settings/categories': typeof AuthedSettingsCategoriesRoute
   '/settings/rules': typeof AuthedSettingsRulesRoute
   '/settings/users': typeof AuthedSettingsUsersRoute
@@ -189,6 +196,7 @@ export interface FileRoutesByTo {
   '/e2e/today': typeof E2eTodayRoute
   '/': typeof AuthedIndexRoute
   '/e2e/jobs': typeof AuthedE2eJobsRoute
+  '/settings/account': typeof AuthedSettingsAccountRoute
   '/settings/categories': typeof AuthedSettingsCategoriesRoute
   '/settings/rules': typeof AuthedSettingsRulesRoute
   '/settings/users': typeof AuthedSettingsUsersRoute
@@ -215,6 +223,7 @@ export interface FileRoutesById {
   '/e2e/today': typeof E2eTodayRoute
   '/_authed/': typeof AuthedIndexRoute
   '/_authed/e2e/jobs': typeof AuthedE2eJobsRoute
+  '/_authed/settings/account': typeof AuthedSettingsAccountRoute
   '/_authed/settings/categories': typeof AuthedSettingsCategoriesRoute
   '/_authed/settings/rules': typeof AuthedSettingsRulesRoute
   '/_authed/settings/users': typeof AuthedSettingsUsersRoute
@@ -241,6 +250,7 @@ export interface FileRouteTypes {
     | '/subjects'
     | '/e2e/today'
     | '/e2e/jobs'
+    | '/settings/account'
     | '/settings/categories'
     | '/settings/rules'
     | '/settings/users'
@@ -264,6 +274,7 @@ export interface FileRouteTypes {
     | '/e2e/today'
     | '/'
     | '/e2e/jobs'
+    | '/settings/account'
     | '/settings/categories'
     | '/settings/rules'
     | '/settings/users'
@@ -289,6 +300,7 @@ export interface FileRouteTypes {
     | '/e2e/today'
     | '/_authed/'
     | '/_authed/e2e/jobs'
+    | '/_authed/settings/account'
     | '/_authed/settings/categories'
     | '/_authed/settings/rules'
     | '/_authed/settings/users'
@@ -437,6 +449,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedSettingsIndexRouteImport
       parentRoute: typeof AuthedSettingsRouteRoute
     }
+    '/_authed/settings/account': {
+      id: '/_authed/settings/account'
+      path: '/account'
+      fullPath: '/settings/account'
+      preLoaderRoute: typeof AuthedSettingsAccountRouteImport
+      parentRoute: typeof AuthedSettingsRouteRoute
+    }
     '/_authed/settings/categories': {
       id: '/_authed/settings/categories'
       path: '/categories'
@@ -476,6 +495,7 @@ declare module '@tanstack/react-router' {
 }
 
 interface AuthedSettingsRouteRouteChildren {
+  AuthedSettingsAccountRoute: typeof AuthedSettingsAccountRoute
   AuthedSettingsCategoriesRoute: typeof AuthedSettingsCategoriesRoute
   AuthedSettingsRulesRoute: typeof AuthedSettingsRulesRoute
   AuthedSettingsUsersRoute: typeof AuthedSettingsUsersRoute
@@ -483,6 +503,7 @@ interface AuthedSettingsRouteRouteChildren {
 }
 
 const AuthedSettingsRouteRouteChildren: AuthedSettingsRouteRouteChildren = {
+  AuthedSettingsAccountRoute: AuthedSettingsAccountRoute,
   AuthedSettingsCategoriesRoute: AuthedSettingsCategoriesRoute,
   AuthedSettingsRulesRoute: AuthedSettingsRulesRoute,
   AuthedSettingsUsersRoute: AuthedSettingsUsersRoute,

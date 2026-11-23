@@ -36,14 +36,16 @@ test("the first visit creates the administrator", async ({ page, app }, testInfo
     await page.getByRole("button", { name: "Create the administrator" }).click();
 
     await expect(page.getByRole("heading", { level: 1, name: "Monthly review" })).toBeVisible();
-    // Only the administrator manages users.
+    // Only the administrator manages users, in a section of the settings.
     const menu = await openAccountMenu(page, "Ada Example");
 
-    await expect(menu.getByRole("menuitem", { name: "Users" })).toBeVisible();
-    await page.keyboard.press("Escape");
+    await menu.getByRole("menuitem", { name: "Settings" }).click();
+    await expect(
+      page.getByRole("navigation", { name: "Settings" }).getByRole("link", { name: "Users" }),
+    ).toBeVisible();
     expect(await hasUser(fresh.database, "ada@example.com")).toBe(true);
 
-    // The menu fades out: axe would measure its items' contrast halfway.
+    // The menu fades out and the screen in: axe would measure their contrast halfway.
     await animationsDone(page);
     await expectAccessible(page);
 
@@ -200,11 +202,15 @@ test("a created user must change their password", async ({ userPage, browser, ap
     await page.getByRole("button", { name: "Change the password" }).click();
 
     await expect(page.getByRole("heading", { level: 1, name: "Monthly review" })).toBeVisible();
-    // Not an administrator.
+    // Not an administrator: no users section in the settings.
     const menu = await openAccountMenu(page, "Robin Example");
 
-    await expect(menu.getByRole("menuitem", { name: "Users" })).toHaveCount(0);
-    await page.keyboard.press("Escape");
+    await menu.getByRole("menuitem", { name: "Settings" }).click();
+    await expect(page.getByRole("heading", { level: 1, name: "Settings" })).toBeVisible();
+    await expect(
+      page.getByRole("navigation", { name: "Settings" }).getByRole("link", { name: "Users" }),
+    ).toHaveCount(0);
+    await animationsDone(page);
 
     expect(
       await signInStatus(app.baseURL, {
@@ -217,22 +223,26 @@ test("a created user must change their password", async ({ userPage, browser, ap
   }
 });
 
-test("the users page is a section of the settings, reached from the user's menu and from the settings", async ({
+test("the users page is a section of the settings, reached from the settings", async ({
   userPage,
   user,
   secondUserPage,
 }) => {
   // Issue #82: in the app's frame, laid out as the settings are, never a card alone on the page.
+  // Issue #105: reached from the settings, which the user's menu leads to; not from the menu itself.
   await visit(userPage, "/");
 
   const menu = await openAccountMenu(userPage, user.name);
 
-  await menu.getByRole("menuitem", { name: "Users" }).click();
-  await expect(userPage).toHaveURL(/\/settings\/users$/);
+  await expect(menu.getByRole("menuitem", { name: "Users" })).toHaveCount(0);
+  await menu.getByRole("menuitem", { name: "Settings" }).click();
+  await expect(userPage).toHaveURL(/\/settings$/);
   await expect(userPage.getByRole("heading", { level: 1, name: "Settings" })).toBeVisible();
 
   const sections = userPage.getByRole("navigation", { name: "Settings" });
 
+  await sections.getByRole("link", { name: "Users" }).click();
+  await expect(userPage).toHaveURL(/\/settings\/users$/);
   await expect(sections.getByRole("link", { name: "Users" })).toHaveAttribute(
     "aria-current",
     "page",
@@ -255,7 +265,7 @@ test("the users page is a section of the settings, reached from the user's menu 
   await visit(secondUserPage, "/settings");
   await expect(
     secondUserPage.getByRole("navigation", { name: "Settings" }).getByRole("link"),
-  ).toHaveText(["General", "Categories", "Rules"]);
+  ).toHaveText(["General", "Account", "Categories", "Rules"]);
 });
 
 test("a new password equal to the current one is refused", async ({ page, app, user }) => {

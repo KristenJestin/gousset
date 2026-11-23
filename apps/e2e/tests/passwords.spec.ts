@@ -2,7 +2,16 @@ import type { Page } from "@playwright/test";
 
 import { startWorkerEnvironment } from "../src/app-server";
 import { hasUser } from "../src/database";
-import { createUser, expect, expectAccessible, personOfItsOwn, test, visit } from "../src/test";
+import {
+  addUser,
+  createUser,
+  expect,
+  expectAccessible,
+  personOfItsOwn,
+  signInStatus,
+  test,
+  visit,
+} from "../src/test";
 
 // The scenario of issue #80, "How to verify", then the same refusals on the other forms that
 // choose a password: each says what is expected under the field at fault, and the form keeps
@@ -201,6 +210,79 @@ test("a new password too long says so when changing the password, a current one 
   // Still temporary: nothing else opens.
   await page.goto("/");
   await expect(page).toHaveURL(/\/change-password$/);
+});
+
+// Issue #105: changing one's own password moved from the user's menu to the settings, in a dialog.
+test("the password is changed from the settings, in a dialog that keeps a refusal under its field", async ({
+  page,
+  app,
+  user,
+}) => {
+  // The password is the account's: a user of the test's own.
+  const piper = await addUser(app.baseURL, user, personOfItsOwn("piper"));
+  const chosen = "piper-own-new-password";
+
+  await page.context().addCookies([...piper.cookies]);
+  await visit(page, "/settings/account");
+  await expect(
+    page.getByRole("navigation", { name: "Settings" }).getByRole("link", { name: "Account" }),
+  ).toHaveAttribute("aria-current", "page");
+
+  const trigger = page.getByRole("button", { name: "Change password" });
+  const dialog = page.getByRole("dialog", { name: "Change your password" });
+  const currentPassword = dialog.getByLabel("Current password", { exact: true });
+  const newPassword = dialog.getByLabel("New password", { exact: true });
+  const submit = dialog.getByRole("button", { name: "Change the password" });
+
+  const transition = () => dialog.evaluate((node) => getComputedStyle(node).transitionDuration);
+
+  // It grows in 200 ms (the dialog's motion), at once under reduced motion. Cancel closes it,
+  // nothing changed, and focus is back on the button that opened it.
+  await trigger.click();
+  await expect(dialog).toBeVisible();
+  expect(await transition()).toContain("0.2s");
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  expect(await transition()).not.toMatch(/[1-9]/);
+  await dialog.getByRole("button", { name: "Cancel" }).click();
+  await expect(dialog).toBeHidden();
+  await expect(trigger).toBeFocused();
+
+  await trigger.click();
+  await expect(newPassword).toHaveAccessibleDescription(RULES);
+
+  // A wrong current password, sent with Enter: said under its field, the dialog still open.
+  await currentPassword.fill("not-the-password");
+  await newPassword.fill(chosen);
+  await newPassword.press("Enter");
+  await expect(currentPassword).toHaveAttribute("aria-invalid", "true");
+  await expect(newPassword).not.toHaveAttribute("aria-invalid", "true");
+  await expect(currentPassword).toHaveValue("");
+  await expect(newPassword).toHaveValue("");
+  await expect(dialog).toBeVisible();
+
+  // A new password too short: said under it, the rules beside the message.
+  await currentPassword.fill(piper.password);
+  await newPassword.fill("short");
+  await submit.click();
+  await expect(dialog.getByText(TOO_SHORT, { exact: true })).toBeVisible();
+  await expect(newPassword).toHaveAttribute("aria-invalid", "true");
+  await expect(newPassword).toHaveAccessibleDescription(within(TOO_SHORT));
+  await expect(currentPassword).not.toHaveAttribute("aria-invalid", "true");
+
+  // Accepted: the dialog closes and the page says so; the user stays signed in.
+  await currentPassword.fill(piper.password);
+  await newPassword.fill(chosen);
+  await submit.click();
+  await expect(dialog).toBeHidden();
+  await expect(page.getByRole("main").locator('[role="status"]')).toHaveText(
+    "Your password was changed.",
+  );
+  expect(await signInStatus(app.baseURL, { email: piper.email, password: chosen })).toBe(200);
+  expect(await signInStatus(app.baseURL, piper)).toBe(401);
+
+  await page.reload();
+  await expect(page.getByRole("heading", { level: 1, name: "Settings" })).toBeVisible();
+  await expect(page).toHaveURL(/\/settings\/account$/);
 });
 
 test("a form sends nothing before the page is ready, so no password lands in an address", async ({
