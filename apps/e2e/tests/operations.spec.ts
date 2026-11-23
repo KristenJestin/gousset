@@ -161,7 +161,7 @@ async function signedInAs(page: Page, person: TestUser) {
 const list = (page: Page) => page.getByRole("list", { name: "Operations" });
 const rows = (page: Page) => list(page).getByRole("listitem");
 const row = (page: Page, label: string) => rows(page).filter({ hasText: label });
-const count = (page: Page) => page.locator('[data-slot="operations-layout"] > p');
+const count = (page: Page) => page.locator('[data-slot="operations-count"]');
 const detail = (page: Page, label: string) => page.getByRole("region", { name: label });
 
 /** Once hydrated, the list places its rows itself, from script: the browser runs the page. */
@@ -623,8 +623,8 @@ for (const reduced of [false, true]) {
 
     // Its own height, as laid out (`offsetHeight` leaves the motion's transform out); settled
     // once the frames draw it so.
-    const final = Schema.decodeUnknownSync(Schema.Number)(
-      await panel.evaluate("(element) => element.offsetHeight"),
+    const final = await panel.evaluate<number, undefined, HTMLElement>(
+      (element) => element.offsetHeight,
     );
 
     await expect
@@ -632,11 +632,19 @@ for (const reduced of [false, true]) {
       .toBeLessThanOrEqual(1);
     await boxes.stop();
 
-    const smallest = Math.min(...(await boxes.read()).map((box) => box.height));
+    const heights = (await boxes.read()).map((box) => box.height);
+    const smallest = Math.min(...heights);
+
+    expect(final).toBeGreaterThan(48);
 
     if (reduced) {
-      // In place at once, at its own size.
-      expect(smallest).toBeGreaterThan(final - 1);
+      // In place at once, at its own size. Motion still measures the change and may draw the panel
+      // where its row was for the frame of the change, then puts it in place with no tween: at most
+      // that one frame, the first, may be smaller.
+      const smaller = heights.flatMap((height, index) => (height < final - 1 ? [index] : []));
+
+      expect(smaller.length).toBeLessThanOrEqual(1);
+      expect(smaller.every((index) => index === 0)).toBe(true);
     } else {
       // It grew out of its 48 px row: some frame drew it far smaller than it ends.
       expect(smallest).toBeLessThan(final / 2);
