@@ -4,13 +4,15 @@ The statement readers: a file's bytes in, one account's statement out. No databa
 no clock: the import job (#20) stores what they return.
 
 ```ts
-import { readOfx, readQif } from "@gousset/import";
+import { detectCsvProfile, readCsv, readOfx, readQif } from "@gousset/import";
 import { Effect } from "effect";
 
 const program = Effect.gen(function* () {
   const statement = yield* readOfx(bytes); // OFX 1.x (SGML), OFX 2.x (XML), QFX
   const unsigned = yield* readOfx(bytes, { amountSigns: "by-type" }); // when the user says so
   const fromQif = yield* readQif(bytes, { currency: "EUR" }); // QIF names no currency
+  const { profile, unsure } = yield* detectCsvProfile(bytes); // a CSV file's profile, proposed
+  const fromCsv = yield* readCsv(bytes, profile, { currency: "EUR" }); // once the user agrees
 });
 ```
 
@@ -41,24 +43,88 @@ controls):
   OFX: the ledger balance (`LEDGERBAL`), never the available one. QIF: see below.
 
 `readOfx` adds `amountSigns` (`OfxAmountSigns`): how the file's amounts were signed. `readQif` adds
-`dateOrder` (`QifDateOrder`): how the file's dates were read.
+`dateOrder` (`QifDateOrder`): how the file's dates were read. `readCsv` adds nothing: its profile
+said how to read everything.
+
+CSV: `bookedOn`, `valueOn`, the amount, `label`, `memo` and `bankId` come from the columns the
+profile names; `bankId` is whatever the bank put there, which nothing makes unique. A CSV file
+gives no balance.
+
+## CSV and import profiles
+
+A CSV file is read with an import profile (`CsvProfile`, `src/csv-profile.ts`), the definition
+that `import_profile.definition` stores (`docs/data-model.md`, "Import profiles"): the same JSON
+is the file a user exports to share a profile, decoded by the `CsvProfile` schema
+(`Schema.fromJsonString(CsvProfile)`). Version 1:
+
+- `separator`: `;`, `,`, a tab or `|`. A value holding it, a quote (written `""`) or a line break is
+  quoted, as RFC 4180 says; a quote inside a value that does not start with one is a character.
+  Rows end in CRLF, LF or a lone CR;
+- `encoding`: `utf8` or `windows-1252` (which also reads Latin-1). A byte order mark is dropped;
+  bytes that are not UTF-8 in a file said to be are `MalformedFile`, at their line, rather than
+  read with replacement characters;
+- `skipRows`: the lines read past before the table (an account's name, a period); `headerRow`:
+  whether the table's first row names its columns;
+- `dateFormat`: `DD`, `MM`, and `YYYY` or `YY`, day, month, year or month, day, year or year, month,
+  day, separated by `/`, `.`, `-`, a space or nothing (`DD/MM/YYYY`, `MM/DD/YY`, `YYYY-MM-DD`,
+  `YYYYMMDD`). With a separator, a day or a month may take one digit (`3/10/2026`). Two-digit years
+  are QIF's: `00` to `69` are 2000 to 2069;
+- `decimalMark`: `.` or `,`. Since the profile says which, every other mark may group thousands, by
+  three digits (`1,234.56`, `1 234,56` with a space or a no-break space, `1.234,56`, `1'234.56`),
+  and `1,234` is no longer ambiguous;
+- `columns`, each counted from 1, as the preview and the errors number them: `bookedOn`, `label`
+  and `amount`, required; `valueOn`, `memo`, `bankId` and `currency`, or `null`. `amount` is
+  `{ kind: "signed", column }`, negative for money out, or
+  `{ kind: "debit-credit", debit, credit }`.
+
+The name, the institution and the kind (`statement`, or a broker's `operations` from v0.6) are the
+table's columns, not the definition's. `normalizeHeader` and `readCsvHeader` give the header row as
+`import_profile.header` keeps it (trimmed, lower case, joined by `;`), for the import to choose the
+user's profile whose header a file has.
+
+**Detection** (`detectCsvProfile`, `src/csv-detect.ts`) proposes a profile for a file it has none
+for, which the import screen shows over the preview: UTF-8 when the bytes are, Windows-1252
+otherwise; the separator most rows agree on (the widest table on a tie); the lines before the
+first row of that table; a header when no value of the first row is a date; the columns whose every
+value is a date, an amount (with a decimal mark or a sign somewhere: digits alone may be a
+reference) or a currency code. A header's words, accents and case left out, say which is which
+(`Date de valeur`, `Libellé`, `Débit`, `Crédit`, `Memo`, `Transaction ID`, `Booking date`, in
+English, French and German); without them, the first date column is the booking date, two amount
+columns of which no row fills both are a debit and a credit, and the longest text is the label.
+`unsure` names what the file left open, for the screen to ask: `dateFormat` (every date reads day
+first and month first: day first was taken), `decimalMark` (no amount tells: `,` was taken beside
+`;` and tabs, `.` beside `,` and `|`), `amount` (several amount columns and no header word, or no
+sign, says which). A file with no table of a date and an amount column is `NotAStatement`; the user
+then picks every column.
+
+Not handled yet: a currency symbol inside an amount (`12,34 €`), a trailing minus (`12,34-`), a
+column saying the direction (`D`/`C`) beside an unsigned amount, a balance column, a footer of
+totals (its date cannot be read: refused at its line), and profiles shipped for named banks.
 
 ## Errors
 
 Every error is a tagged error (`src/errors.ts`); all but `NotAStatement` and `InvalidOption` name
-the file's line, counted from 1:
+the file's line, counted from 1, and a CSV file's errors the `column` too, counted from 1, when one
+is at fault (a row that starts on one line and holds a quoted line break names each value's own
+line):
 
-- `NotAStatement`: no `<OFX>` element, or no QIF header before the first record;
+- `NotAStatement`: no `<OFX>` element, no QIF header before the first record, or no CSV table in
+  which detection finds a date and an amount column;
 - `MalformedFile` (`line`, `problem`): the structure is broken, or the file was cut short;
 - `MissingField` (`line`, `field`): a required field is missing from the record starting there;
 - `InvalidField` (`line`, `field`, `text`, `expected`): a value cannot be read;
 - `UnsupportedContent` (`line`, `problem`): an investment statement, several accounts in one file,
   a line in another currency than the account's, an amount whose direction its type does not say, a
-  QIF balance too large to be held exactly, a file of more than 64 MiB;
+  QIF balance too large to be held exactly, a file of more than 64 MiB; in CSV, a line with both a
+  debit and a credit, and debits signed both ways in one file;
 - `InvalidOption` (`option`, `text`, `expected`): the caller's option cannot be used (`readQif`'s
   `currency` is no ISO 4217 code), whatever the file holds.
 
-`field` is the format's own name (`TRNAMT`, `DTPOSTED`; QIF's letter, `T`, `D`). `problem` and
+`field` is the format's own name (`TRNAMT`, `DTPOSTED`; QIF's letter, `T`, `D`); in CSV, which has
+none, the profile's (`bookedOn`, `valueOn`, `amount`, `debit`, `credit`), the header being the file's
+content. A CSV `MalformedFile` is a quoted value that never ends, text after a closing quote, bytes
+that are not the profile's UTF-8, no header row, or a header with fewer columns than the profile
+reads: the file is another bank's, or its separator differs. `problem` and
 `expected` are English, for the user and agents; the interface translates from the tag and the
 fields. The file's own text in them is quoted, cut to 40 characters, and its control, format and
 separator characters escaped (U+2028 and U+202E among them), so that a crafted file cannot write
@@ -117,6 +183,10 @@ statement nests about eight) is `MalformedFile`, and every step is linear in the
   account's export (`POpening Balance`, `L[Account]`). That record is no line; the balance is the
   opening balance plus every line, as of the latest line's day, refused (`UnsupportedContent`) when
   too large to be held exactly.
+- **CSV debits and credits**: a bank writes its debits `23,90` or `-23,90`; either way the money
+  went out, as long as every debit of the file is signed alike. A debit column holding both signs is
+  refused, since either sign may then be a refund; a negative credit is refused too. A zero in the
+  other column counts as empty (`-80.00` and `0.00`).
 - **One account per file.** OFX can hold several statements and QIF several accounts; a reader
   refuses the second one, and the user exports one account per file.
 - **Read past**, and not returned: the account's identifiers (`BANKID`, `ACCTID`), OFX `DTUSER`,
@@ -125,7 +195,8 @@ statement nests about eight) is `MalformedFile`, and every step is linear in the
 
 ## Tests
 
-`src/*.test.ts`: one test per invented sample file of `@gousset/fixture` (`statementSamples`),
-comparing the lines read with the lines the file holds; tests naming the line of each error; and
-property tests on amounts, dates, and whole statements written by the fixture's writers and read
-back.
+`src/*.test.ts`: one test per invented sample file of `@gousset/fixture` (`statementSamples`, and
+`csvSamples` with a profile each), comparing the lines read with the lines the file holds, and for
+each CSV sample the profile detection proposes; tests naming the line (and the CSV column) of each
+error; and property tests on amounts, dates, CSV quoting, and whole statements written by the
+fixture's writers and read back.

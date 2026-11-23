@@ -9,7 +9,7 @@ const windows1252 = new TextDecoder("windows-1252");
  * The largest file read, 64 MiB. Years of a bank's statements weigh a few megabytes; refusing more
  * keeps the decoded text well under the engine's longest string, past which decoding throws.
  */
-const MAX_FILE_BYTES = 64 * 1024 * 1024;
+export const MAX_FILE_BYTES = 64 * 1024 * 1024;
 
 /**
  * A file's text from its bytes: UTF-8 when the bytes are valid UTF-8, Windows-1252 otherwise,
