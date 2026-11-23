@@ -70,9 +70,12 @@ function amountCondition(
   return or(...each) ?? sql`false`;
 }
 
-/** A line whose entry is still where the import put it, in its kind's fallback: to classify. */
+/**
+ * A line whose entry is still where the import put it, in its kind's fallback: to classify. A noted
+ * balance's movement in its account's own category is not (#31): the user chose that category.
+ */
 const byDefault = exists(
-  sql`(select 1 from ${entryPart} inner join ${entry} on ${entry.id} = ${entryPart.entryId} where ${entryPart.lineId} = ${statementLine.id} and ${entry.classifiedBy} = 'default')`,
+  sql`(select 1 from ${entryPart} inner join ${entry} on ${entry.id} = ${entryPart.entryId} where ${entryPart.lineId} = ${statementLine.id} and ${entry.classifiedBy} = 'default' and not (${statementLine.source} = 'balance' and ${entry.categoryId} = (select ${account.balanceCategoryId} from ${account} where ${account.id} = ${statementLine.accountId})))`,
 );
 
 function conditions(accounts: ReadonlyArray<AccountColumns>, query: LineQuery) {
@@ -110,6 +113,7 @@ const lineColumns = {
   accountName: account.name,
   institution: account.institution,
   currency: account.currency,
+  source: statementLine.source,
 };
 
 type LineColumns = {
@@ -125,6 +129,7 @@ type LineColumns = {
   readonly accountName: string;
   readonly institution: string | null;
   readonly currency: string;
+  readonly source: "import" | "manual" | "balance" | "counterpart";
 };
 
 /** A row of `lineColumns`, with its category; a discarded one is never asked for. */
@@ -145,6 +150,7 @@ function found(row: LineColumns, category: LineCategory | null): FoundLine {
       currency: row.currency,
     },
     category,
+    fromBalance: row.source === "balance",
   };
 }
 
@@ -185,6 +191,7 @@ async function search(transaction: UserTransaction, query: LineQuery) {
       amountMinor: statementLine.amountMinor,
       state: statementLine.state,
       accountId: statementLine.accountId,
+      source: statementLine.source,
     })
     .from(statementLine)
     .where(and(where, older))
@@ -238,7 +245,6 @@ async function show(
   const [row] = await transaction
     .select({
       ...lineColumns,
-      source: statementLine.source,
       originalAmountMinor: statementLine.originalAmountMinor,
       originalCurrency: statementLine.originalCurrency,
       counterpartyIban: statementLine.counterpartyIban,

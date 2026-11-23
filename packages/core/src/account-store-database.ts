@@ -376,12 +376,16 @@ export const DatabaseAccountStore = Layer.effect(
 
       create: <E>(
         owner: string,
-        decide: (accounts: ReadonlyArray<AccountRecord>) => Result.Result<NewAccount, E>,
+        decide: (
+          accounts: ReadonlyArray<AccountRecord>,
+          categories: ReadonlyArray<ChoosableCategory>,
+        ) => Result.Result<NewAccount, E>,
       ) =>
         userData
           .transaction(owner, async (transaction): Promise<Result.Result<AccountRecord, E>> => {
             const accounts = await transaction.select().from(account);
-            const decided = decide(accounts.map(record), await choosableCategories(transaction));
+            const categories = await choosableCategories(transaction);
+            const decided = decide(accounts.map(record), categories);
 
             if (Result.isFailure(decided)) {
               return Result.fail(decided.failure);

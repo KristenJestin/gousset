@@ -412,6 +412,7 @@ describe("showLine", () => {
       toReview: true,
       // Held, it has no entry yet: no category.
       category: null,
+      fromBalance: false,
       originalAmount: { minor: -4500, currency: "USD" },
       counterpartyIban: "FR7699999000010001234567809",
       expiresOn: null,

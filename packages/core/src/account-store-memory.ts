@@ -228,10 +228,8 @@ export function memoryAccountStore(rows: ReadonlyMap<string, MemoryRows> = new M
       create: (owner, decide) =>
         Effect.gen(function* () {
           const own = of(owner);
-          const created = {
-            id: memoryId(),
-            ...(yield* Effect.fromResult(decide(own.accounts, []))),
-          };
+          const decided = yield* Effect.fromResult(decide(own.accounts, []));
+          const created = { id: memoryId(), ...decided };
 
           own.accounts.push(created);
 
