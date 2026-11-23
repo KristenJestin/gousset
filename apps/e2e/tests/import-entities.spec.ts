@@ -36,8 +36,10 @@ const statementsOfMigration = () =>
 /** The account `ofx-double-encoded.ofx` names by its number. */
 const OFX_ACCOUNT = "Entities current account";
 
-/** The account `camt053-double-encoded.xml` names by its IBAN. */
+/** The account `camt053-double-encoded.xml` names by its IBAN, an invented one. */
 const CAMT_ACCOUNT = "Entities CAMT account";
+
+const SAMPLES_IBAN = "FR7699999000010001234567809";
 
 const LineRow = Schema.Struct({
   id: Schema.String,
@@ -200,7 +202,7 @@ async function userWithAccounts(
             name: CAMT_ACCOUNT,
             kind: "current",
             currency: "EUR",
-            iban: exampleStatement.account.iban,
+            iban: SAMPLES_IBAN,
           },
         ])
         .returning({ id: account.id, name: account.name }),
@@ -599,6 +601,121 @@ test("the migration keeps a line's key when another line holds the new one, and 
   const again = await importAgain(app.database, owner, ofxAccount);
 
   expect(again).toMatchObject({ status: "done", linesAdded: 0, linesDuplicate: 6, linesHeld: 0 });
+});
+
+/** The direct debit's line of `ofx-double-encoded.ofx`, as the fixed import keys it. */
+const DEBIT = "content:0ed9eec6279a398b247bc1b58a17cbcf76a88d781735c561514156a1691d7558#1";
+
+/** The first of the lines booked that day. */
+const onDay = (lines: ReadonlyArray<LineRow>, day: string) =>
+  lines.find((line) => line.booked_on === day);
+
+test("the migration leaves as they are the lines it cannot read as the reader does", async ({
+  app,
+  user,
+}, testInfo) => {
+  const { owner, ofxAccount, camtAccount } = await userWithAccounts(
+    app,
+    user,
+    "Ari",
+    testInfo.repeatEachIndex,
+  );
+
+  const data = openUserData(app.database);
+  const imports = importsOn(data);
+  const camtText = new TextDecoder().decode(statementSamples.camt053DoubleEncoded.bytes);
+
+  try {
+    const read = [
+      await imports.importFile(owner, ofxAccount, {
+        fileName: statementSamples.ofxDoubleEncoded.fileName,
+        bytes: statementSamples.ofxDoubleEncoded.bytes,
+      }),
+      // A CDATA section is read as written: its `&amp;apos;` stays.
+      await imports.importFile(owner, ofxAccount, {
+        fileName: "cdata.ofx",
+        contents: ofxWithLabels(["<![CDATA[CB L&amp;apos;EXEMPLE CDATA]]>", "CB L&amp;apos;AUTRE"]),
+      }),
+      await imports.importFile(owner, camtAccount, {
+        fileName: statementSamples.camt053DoubleEncoded.fileName,
+        bytes: statementSamples.camt053DoubleEncoded.bytes,
+      }),
+      // The same entries a month earlier, in a file that holds a comment.
+      await imports.importFile(owner, camtAccount, {
+        fileName: "commented.xml",
+        contents: camtText
+          .replace("<Stmt>", "<Stmt>\n<!-- an invented comment -->")
+          .replaceAll("2026-11-02", "2026-10-22")
+          .replaceAll("2026-11-06", "2026-10-26"),
+      }),
+    ];
+
+    expect(read.map((summary) => [summary.status, summary.linesAdded])).toEqual([
+      ["done", 6],
+      ["done", 2],
+      ["done", 2],
+      ["done", 2],
+    ]);
+  } finally {
+    await data.close();
+  }
+
+  await asOwner(app.database, async (client) => {
+    const ofxLines = await linesOf(client, ofxAccount);
+    const camtLines = await linesOf(client, camtAccount);
+    const keyed = (key: string) => ofxLines.find((line) => line.dedup_key === key);
+
+    const fixedDebit = keyed(DEBIT);
+    const debitBefore = BEFORE_THE_FIX.get(DEBIT);
+
+    expect(fixedDebit).toBeDefined();
+    expect(debitBefore).toBeDefined();
+
+    /** Gives a line another label, and memo, as 0.2.0 may have stored them. */
+    const store = async (line: LineRow | undefined, label: string, memo = line?.memo ?? null) => {
+      expect(line, label).toBeDefined();
+      await putBack(client, line?.id ?? "", { label, memo, dedupKey: line?.dedup_key ?? "" });
+    };
+
+    // The control: a line encoded twice, as 0.2.0 stored it, which the migration decodes and keys
+    // again.
+    await putBack(
+      client,
+      fixedDebit?.id ?? "",
+      debitBefore ?? { label: "", memo: null, dedupKey: "" },
+    );
+
+    // More than ten levels, a million characters: refused at the eleventh pass.
+    await store(keyed("bank:EX2026110201"), `L&${"amp;".repeat(250_000)}apos;EXEMPLE`);
+    // A surrogate pair, which the reader joins into one character.
+    await store(keyed(BAKER.first), "CAFE &#55357;&#56832; L&apos;EXEMPLE");
+    // A label that decodes to a space, which the reader leaves empty and takes the memo for.
+    await store(keyed(BAKER.second), "&#32;", "X");
+    // NUL, which the reader drops.
+    await store(onDay(ofxLines, "2026-11-06"), "A&#0;B");
+    // A line of a file that holds a CDATA section.
+    await store(onDay(ofxLines, "2026-10-02"), "CB L&apos;AUTRE");
+    // A CAMT.053 memo that decodes to its label: the reader would give no memo.
+    await store(onDay(camtLines, "2026-11-02"), "TICKET L&apos;EXEMPLE");
+    // A line of a CAMT.053 file that holds a comment.
+    await store(onDay(camtLines, "2026-10-22"), "CB CAFE DE L&apos;EXEMPLE");
+
+    const before = [
+      ...(await linesOf(client, ofxAccount)),
+      ...(await linesOf(client, camtAccount)),
+    ];
+
+    const started = Date.now();
+
+    await runMigration(client);
+
+    // Each pass reads the text once, and there are eleven at most.
+    expect(Date.now() - started).toBeLessThan(30_000);
+
+    const after = [...(await linesOf(client, ofxAccount)), ...(await linesOf(client, camtAccount))];
+
+    expect(after).toEqual(before.map((line) => (line.id === fixedDebit?.id ? fixedDebit : line)));
+  });
 });
 
 /** Imports `ofx-double-encoded.ofx` again into the account; the import's summary. */
