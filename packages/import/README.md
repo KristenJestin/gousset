@@ -132,7 +132,8 @@ file's first row only, and looks for it within 64 KiB of text for the lines skip
 and 64 KiB past them: a header further down is none, so that trying every profile on a large file
 costs what its top costs. `matchCsvHeader(file, candidates)` gives the first of the candidates (a
 definition and its header) whose header the file has, each read with its own profile;
-`testReadCsv(file, profile, currency)` reads the file's first 50 lines as `readCsv` would, and
+`testReadCsv(file, profile, currency)` reads the file's first 50 lines (within 200 lines and 64 KiB
+past those skipped, as the header search does) as `readCsv` would, and
 succeeds with them when the profile fits them (with no currency, amounts are read with up to four
 decimals, in `CLF`, and the lines' currency goes unchecked, though the header must still have its
 column): how a profile without a header is tried on a file, and the import screen's test read.

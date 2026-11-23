@@ -834,6 +834,15 @@ describe("previewing a CSV file with a profile", () => {
     ]);
   });
 
+  test("a test read reads the file's top alone, 64 KiB past the lines skipped", () => {
+    const long = Array.from({ length: 5 }, () => `13/11/2026;${"A".repeat(20_000)};-1,00;EUR;R`);
+    const text = [HEADER, ...long, "31/02/2026;LATE;-1,00;EUR;R", ""].join("\n");
+    const read = Effect.runSync(testReadCsv(csvFile(utf8.encode(text)), semicolon, "EUR"));
+
+    // Three long lines fit; the fourth, and the bad date after them, are past the top.
+    expect(read.lines).toHaveLength(3);
+  });
+
   test("a test read gives the lines of the file's top as the import reads them", () => {
     const text = utf8.encode(`${HEADER}\n13/11/2026;EXAMPLE GROCER;-12,40;EUR;R1\n`);
 

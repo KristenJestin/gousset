@@ -357,14 +357,16 @@ export const readCsv = (
   );
 
 /**
- * The rows a test read reads: enough to find a profile that does not fit a file, few enough that
- * trying several profiles on a large file costs little.
+ * The rows a test read reads: the header and 50 lines, within 200 lines and 64 KiB of text past
+ * those skipped, as the header search reads (`HEADER_SEARCH`). Enough to find a profile that does
+ * not fit a file; few enough that trying fifty profiles on the server's thread costs what parsing
+ * their tops costs, never a mebibyte each.
  */
-const SAMPLE: ParseLimit = { rows: 51, lines: 2000, characters: 1024 * 1024 };
+const SAMPLE: ParseLimit = { rows: 51, lines: 200, characters: 64 * 1024 };
 
 /**
- * Reads the top of a file with a profile, as `readCsv` reads it whole: its first 50 lines, past the
- * header, which it gives. Fails with what `readCsv` would fail with there; succeeds when the profile
+ * Reads the top of a file with a profile, as `readCsv` reads it whole: its first 50 lines past the
+ * header, within 64 KiB of text (`SAMPLE`), which it gives. Fails with what `readCsv` would fail with there; succeeds when the profile
  * fits the file, as far as its top tells. With no `currency` (an import whose account is not chosen
  * yet), amounts are read with up to four decimals, in `CLF`, and the lines' currency is not
  * checked; the header must still have the currency column.
