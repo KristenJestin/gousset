@@ -30,6 +30,8 @@ jobs:
   prepare:
     runs-on: ubuntu-latest
     permissions:
+      # To read the upgrade job of the commit's push.
+      actions: read
       contents: read
       # The notes read the pull requests' descriptions.
       pull-requests: read
@@ -78,6 +80,26 @@ jobs:
             exit 1
           fi
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
+
+      # As verify through its beta, the commit passed the upgrade job (upgrade.yml) on its push to
+      # dev: a release never reaches an installation it was not tested to update.
+      - name: The upgrade job passed on the commit's push
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          SHA: ${{ steps.commit.outputs.sha }}
+        run: |
+          run=$(gh api "repos/$GH_REPO/actions/workflows/upgrade.yml/runs?head_sha=$SHA&event=push&branch=dev" --jq '.workflow_runs[0].id // empty')
+          if [ -z "$run" ]; then
+            echo "::error::The upgrade workflow never ran on the push of $SHA to dev: nothing was released."
+            exit 1
+          fi
+          # The run's last attempt: a job run again counts as it ended.
+          conclusion=$(gh api "repos/$GH_REPO/actions/runs/$run/jobs" --paginate --jq '.jobs[] | select(.name == "upgrade") | .conclusion')
+          if [ "$conclusion" != success ]; then
+            echo "::error::The upgrade job of the push of $SHA to dev did not pass (${conclusion:-not found}, run $run): nothing was released."
+            exit 1
+          fi
 
       # Computed now, from the releases the commit holds: the version its beta had without the
       # pre-release, unless another release was made since its push.

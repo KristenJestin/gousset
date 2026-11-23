@@ -286,6 +286,17 @@ PR #60 (#13) writes this document's v0.2 tables, its foreign keys, its role and 
    - `import.job_id`: added by #20, which writes the import's job;
    - `statement_line`'s `(user_id, booked_on, id)` index and its trigram index: #21, which searches every line.
 
+## Migrations
+
+From v0.2 on, installations hold real households' data, and every update runs the migrations on it (`migrate`, [`releases.md`](releases.md#installing)). An update must never lose, duplicate or silently change a row, and an installation updated from the last release must be what a fresh one is (#102). The rules:
+
+- **Forward only.** A migration is never edited once it is on `dev` or a `next/x.y` branch, and none is ever undone: going back is restoring the backup made before the update ([`releases.md`](releases.md#going-back)). A mistake is mended by the next migration.
+- **A destructive change takes two releases.** Dropping or renaming a table or a column, narrowing a type (`text` to `varchar(n)`, `bigint` to `integer`), or a `not null` on a column that has rows: the first release adds the new column or table and copies the data into it, and the code reads the new one; the release after removes the old one. An installation that skips a release still goes through both, in order. Adding a table, a nullable or defaulted column, an index, or a value to an enum is one release.
+- **Every migration runs inside a transaction**, and is safe to run on a database that already has it. Drizzle's migrator applies every pending migration in one transaction and records each by name in `drizzle.__drizzle_migrations`, so a migration that fails leaves the database as it was. Nothing in a migration may need to run outside one (`create index concurrently`, `alter type … add value` used in the same migration); what Drizzle does not write (roles, grants, policies, a `do` block) is written so that it does nothing the second time (`if not exists`, `when duplicate_object`), as `user_data_isolation` and `app_role` are.
+- **A migration's timestamp follows every migration of its target branch** (`dev` or `next/x.y`) when it lands. The migrator applies, in the order of their names, the migrations a database has not recorded: one that lands with an older timestamp than a migration already released runs last on an updated installation and in its place on a fresh one, and the two schemas may differ. After merging the target branch into one's own, a migration made before the merge that is no longer the last is generated again (`drizzle-kit generate` after removing it), never renamed by hand.
+
+The `upgrade` workflow checks every push to `dev` and `next/**`, and every pull request that touches what an update runs through (the list is in [`releases.md`](releases.md#every-release-is-an-upgrade): `packages/db` among it), against these rules ([`releases.md`](releases.md#every-release-is-an-upgrade)): the last release, filled with invented data, updated to the commit, with every row of every table compared before and after, and the schema compared with a fresh installation's.
+
 ## What later milestones add
 
 Each later table carries `user_id`, composite foreign keys and the same policy ([Ownership and isolation](#ownership-and-isolation)), and `created_at` and `updated_at` when its rows are edited. None changes a column of v0.2: they add tables, and the nullable or defaulted columns named here. Columns are given as `name type` (**null** when they may be).
