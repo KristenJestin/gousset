@@ -379,6 +379,9 @@ jobs:
           --health-retries 10
     env:
       E2E_BROWSERS: ${{ needs.plan.outputs.e2e-scope == 'full' && 'chromium firefox' || 'chromium' }}
+      # The runner's image holds what Chromium needs; Firefox's system packages come from apt,
+      # whose mirrors took up to three minutes (issue #115).
+      E2E_DEPS: ${{ needs.plan.outputs.e2e-scope == 'full' && '--with-deps' || '' }}
       E2E_PROJECTS: ${{ needs.plan.outputs.e2e-scope != 'full' && '--project=chromium-desktop' || '' }}
       SHARD: ${{ matrix.shard }}/${{ needs.plan.outputs.e2e-total }}
       DATABASE_URL: postgresql://postgres:postgres@localhost:5432/gousset
@@ -394,7 +397,7 @@ jobs:
       - name: Install
         run: pnpm install --frozen-lockfile
       - name: Playwright's browsers
-        run: pnpm --dir apps/e2e exec playwright install --with-deps $E2E_BROWSERS
+        run: pnpm --dir apps/e2e exec playwright install $E2E_DEPS $E2E_BROWSERS
       # The suite runs the built app.
       - name: Build
         run: pnpm run build
@@ -663,8 +666,9 @@ jobs:
           cache: pnpm
       - name: Install
         run: pnpm install --frozen-lockfile
+      # The runner's image holds what Chromium needs: no system package from apt (e2e-shard says why).
       - name: Playwright's browser
-        run: pnpm --dir apps/e2e exec playwright install --with-deps chromium
+        run: pnpm --dir apps/e2e exec playwright install chromium
       - name: Build
         run: pnpm run build
       - name: Film the motions
