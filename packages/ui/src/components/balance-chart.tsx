@@ -42,7 +42,9 @@ function BalanceTooltip({
 
   return (
     <div data-slot="balance-tooltip" className="flex min-w-40 flex-col gap-1 px-3 py-2 text-sm">
-      <span className="text-xs text-chart-tooltip-muted">{formatChartDay(row.date, locale)}</span>
+      <span className="text-xs text-chart-tooltip-muted">
+        {formatChartDay(row.date, locale, "UTC")}
+      </span>
       <div className="flex items-center justify-between gap-6">
         <span className="text-chart-tooltip-muted">{valueLabel}</span>
         <span className="font-medium text-chart-tooltip-foreground tabular-nums">
@@ -103,7 +105,7 @@ export function BalanceChart({ days, currency, label, valueLabel }: BalanceChart
             fadeEdges={false}
             showMarkers={rows.length === 1}
           />
-          <XAxis labels={rows.map((row) => formatChartDay(row.date, locale))} />
+          <XAxis labels={rows.map((row) => formatChartDay(row.date, locale, "UTC"))} />
           <ChartTooltip
             showCrosshair
             showDatePill={false}
@@ -129,7 +131,7 @@ export function BalanceChart({ days, currency, label, valueLabel }: BalanceChart
           rows={rows.map((row) => ({
             key: row.date.toISOString(),
             cells: [
-              formatChartDay(row.date, locale),
+              formatChartDay(row.date, locale, "UTC"),
               formatMoney({ minor: row.minor, currency }, { locale }),
             ],
           }))}

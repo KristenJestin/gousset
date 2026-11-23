@@ -92,12 +92,16 @@ export function balanceRows(days: ReadonlyArray<BalanceDay>, currency: string): 
   }));
 }
 
-/** A day under the chart: "Oct 3", "3 oct.". */
-export function formatChartDay(date: Date, locale: string) {
-  return new Intl.DateTimeFormat(locale, { day: "numeric", month: "short" }).format(date);
+/**
+ * A day under the chart: "Oct 3", "3 oct.". `timeZone` is left out for a plain calendar date; a
+ * bank day (parsed as UTC midnight) is passed `"UTC"`, or a reader west of the bank would see the
+ * day before.
+ */
+export function formatChartDay(date: Date, locale: string, timeZone?: string) {
+  return new Intl.DateTimeFormat(locale, { day: "numeric", month: "short", timeZone }).format(date);
 }
 
-/** A month under a bar: "Oct", "oct.". */
-export function formatChartMonth(date: Date, locale: string) {
-  return new Intl.DateTimeFormat(locale, { month: "short" }).format(date);
+/** A month under a bar: "Oct", "oct.". `timeZone`: see `formatChartDay`. */
+export function formatChartMonth(date: Date, locale: string, timeZone?: string) {
+  return new Intl.DateTimeFormat(locale, { month: "short", timeZone }).format(date);
 }
