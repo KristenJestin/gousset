@@ -13,6 +13,7 @@ import { Context, Effect, Layer, Result } from "effect";
 
 import type { LineCategory } from "../category-store";
 import { isId } from "../imports/rows";
+import { classifyByMerchants } from "./default-classification";
 import type { Money } from "../month";
 import { today } from "../today";
 import {
@@ -202,8 +203,9 @@ const summaryColumns = { id: merchant.id, name: merchant.name, aliases: aliasCou
  * Recognises, in a transaction of `owner`'s, the merchant of every line (counted or held) whose
  * cleaned label names none yet: an existing merchant when the label matches one of its names, a
  * new one otherwise (`assignMerchants`). A cleaned label already known is never moved: what the
- * user split or merged stays. Safe to run at once in two transactions, and again: a row the other
- * added first is kept.
+ * user split or merged stays. The entries of the lines it gave a merchant then go in that
+ * merchant's default category (`./default-classification`). Safe to run at once in two
+ * transactions, and again: a row the other added first is kept.
  */
 export async function recogniseIn(
   transaction: UserTransaction,
@@ -306,6 +308,8 @@ export async function recogniseIn(
 
     added += inserted.length;
   }
+
+  await classifyByMerchants(transaction, { every: true });
 
   return { merchants: made, aliases: added };
 }
@@ -639,6 +643,9 @@ export const merchantsLayer = Layer.effect(
                 .set({ merchantId: target.id })
                 .where(eq(merchantAlias.id, row.id));
 
+              // Its lines' entries follow their new merchant's default category.
+              await classifyByMerchants(transaction, { every: true });
+
               return Result.succeed({
                 alias: cleaned,
                 from: { ...from, aliases: from.aliases - 1 },
@@ -689,6 +696,9 @@ export const merchantsLayer = Layer.effect(
                 .where(eq(merchant.id, into.id));
 
               await transaction.delete(merchant).where(eq(merchant.id, from.id));
+
+              // The merged one's entries follow the kept one's default category.
+              await classifyByMerchants(transaction, { every: true });
 
               return Result.succeed({
                 into: { ...into, aliases: into.aliases + moved.length },

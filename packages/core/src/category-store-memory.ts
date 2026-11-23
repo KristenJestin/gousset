@@ -10,6 +10,8 @@ import type {
   LineCategory,
 } from "./category-store";
 import { CategoryNotFound, LineNotFound } from "./errors";
+import { defaultCategoryMoves } from "./merchants/default-classification";
+import type { DefaultEntry, MerchantDefault } from "./merchants/default-classification";
 import { MerchantNotFound } from "./merchants/errors";
 
 // An in-memory `CategoryStore`, for tests: each user's categories, entries with their parts, and
@@ -33,11 +35,61 @@ export type MemoryEntry = {
   readonly parts: ReadonlyArray<MemoryPart>;
 };
 
-/** A merchant, with the category its entries go in by default. */
+/** A merchant, with the category its entries go in by default, and the lines its labels name. */
 export type MemoryMerchant = {
   readonly id: string;
   readonly defaultCategoryId: string | null;
+  readonly lineIds?: ReadonlyArray<string>;
 };
+
+/**
+ * The entries of `merchant`'s lines moved as its default category says, as the database does
+ * (`./merchants/default-classification`): an entry is the merchant's when every line paying it is.
+ */
+function classifiedBy(
+  rows: MemoryCategoryRows,
+  merchant: MemoryMerchant,
+): ReadonlyArray<MemoryEntry> {
+  const lines = new Set(merchant.lineIds ?? []);
+  const chosen = rows.categories.find((each) => each.id === merchant.defaultCategoryId);
+
+  const defaults = new Map<string, MerchantDefault>(
+    chosen === undefined
+      ? []
+      : [
+          [
+            merchant.id,
+            { categoryId: chosen.id, kind: chosen.kind, archived: chosen.archivedAt !== null },
+          ],
+        ],
+  );
+
+  const fallbacks = new Map(
+    rows.categories.flatMap((each) => (each.fallback ? [[each.kind, each.id] as const] : [])),
+  );
+
+  const entries = rows.entries.map((each): DefaultEntry => {
+    const payments = each.parts.filter((part) => part.role === "payment");
+
+    const own =
+      payments.length > 0 && payments.every((part) => lines.has(part.lineId)) ? merchant.id : null;
+
+    return { ...each, merchantId: own };
+  });
+
+  const moves = new Map(
+    defaultCategoryMoves(entries, defaults, fallbacks).map((move) => [
+      move.entryId,
+      move.categoryId,
+    ]),
+  );
+
+  return rows.entries.map((each) => {
+    const target = moves.get(each.id);
+
+    return target === undefined ? each : { ...each, categoryId: target };
+  });
+}
 
 /** One user's rows. */
 export type MemoryCategoryRows = {
@@ -246,11 +298,16 @@ export function memoryCategoryStore(rows: Map<string, MemoryCategoryRows> = new 
         const categoryId = yield* Effect.fromResult(decide(own.categories));
         const category = own.categories.find((each) => each.id === categoryId);
 
+        const updated = merchants.map((each) =>
+          each.id === merchantId ? { ...each, defaultCategoryId: category?.id ?? null } : each,
+        );
+
+        const changed = updated.find((each) => each.id === merchantId);
+        const withDefault = { ...own, merchants: updated };
+
         rows.set(owner, {
-          ...own,
-          merchants: merchants.map((each) =>
-            each.id === merchantId ? { ...each, defaultCategoryId: category?.id ?? null } : each,
-          ),
+          ...withDefault,
+          entries: changed === undefined ? own.entries : [...classifiedBy(withDefault, changed)],
         });
 
         if (category === undefined) {

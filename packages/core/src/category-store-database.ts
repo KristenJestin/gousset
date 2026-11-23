@@ -24,6 +24,7 @@ import type {
   LineEntries,
 } from "./category-store";
 import { CategoryNotFound, LineNotFound } from "./errors";
+import { classifyByMerchants } from "./merchants/default-classification";
 import { MerchantNotFound } from "./merchants/errors";
 
 // The categories, through `UserData` only (docs/data-model.md, "Ownership and isolation"). Every
@@ -362,6 +363,10 @@ export const DatabaseCategoryStore = Layer.effect(
                 .update(merchant)
                 .set({ defaultCategoryId: categoryId })
                 .where(eq(merchant.id, found.id));
+
+              // Its entries still classified by default follow: to the new category, or back to
+              // their kind's fallback.
+              await classifyByMerchants(transaction, { merchantId: found.id });
 
               return Result.succeed(
                 categoryId === null

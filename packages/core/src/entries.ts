@@ -5,6 +5,7 @@ import type { UserTransaction } from "@gousset/db/user-data";
 import { eq, exists, notExists, or } from "drizzle-orm";
 
 import { insertDefaultSet } from "./default-categories";
+import { classifyByMerchants } from "./merchants/default-classification";
 
 // Every counted line with an amount has exactly one entry (#23; docs/data-model.md, v0.3): an
 // expense when money leaves, an income when it comes in, in its kind's fallback category, with one
@@ -19,7 +20,8 @@ import { insertDefaultSet } from "./default-categories";
 /**
  * Gives an entry to each line among `lineIds` that is `owner`'s, counted, has an amount, no part yet
  * and is no side of a transfer; a line that has one is left as it is, so a second call adds nothing.
- * A user with no category at all gets the English set first.
+ * A user with no category at all gets the English set first. An entry of a merchant with a default
+ * category of its kind goes in it, still classified by default.
  */
 export async function entriesForLines(
   transaction: UserTransaction,
@@ -41,6 +43,7 @@ export async function entriesForLines(
   }
 
   await insertDefaultEntries(transaction, owner, lineIds);
+  await classifyByMerchants(transaction, { lineIds });
 }
 
 /** Deletes the user's entries left without any part: a line's deletion took their last one. */

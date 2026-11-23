@@ -630,6 +630,10 @@ function merchantIn(rows: MemoryCategoryRows, defaultCategory?: CategoryRecord):
 const defaultOf = (rows: MemoryCategoryRows, merchant: MemoryMerchant) =>
   rows.merchants?.find((each) => each.id === merchant.id)?.defaultCategoryId;
 
+/** The entry as `after` holds it. */
+const categoryOf = (after: MemoryCategoryRows, made: MemoryEntry) =>
+  after.entries.find((each) => each.id === made.id);
+
 describe("a merchant's default category", () => {
   test("is set to a category in use, of either kind, and cleared", async () => {
     const { rows, bakery, salary } = startingRows();
@@ -707,6 +711,45 @@ describe("a merchant's default category", () => {
 
     expect(defaultOf(merged, baker)).toBe(homeBakery.id);
     expect(defaultOf(merged, grocer)).toBe(housing.id);
+  });
+
+  test("set or changed, it moves its entries still classified by default, of its kind; cleared, back to the fallback", async () => {
+    const { rows, other, bakery, rent, salary, otherIncome } = startingRows();
+    const guessed = entryIn(rows, other, "2026-11-02", 420);
+    const chosen = { ...entryIn(rows, rent, "2026-11-03", 380), classifiedBy: "user" as const };
+    const income = entryIn(rows, otherIncome, "2026-11-04", 1500);
+    const elsewhere = entryIn(rows, other, "2026-11-05", 990);
+
+    rows.entries = rows.entries.map((each) => (each.id === chosen.id ? chosen : each));
+
+    const shop: MemoryMerchant = {
+      id: memoryId(),
+      defaultCategoryId: null,
+      lineIds: [guessed, chosen, income].flatMap((each) => each.parts.map((part) => part.lineId)),
+    };
+
+    rows.merchants = [shop];
+
+    const { rows: set } = await run(rows, setMerchantDefaultCategory(ADA, shop.id, bakery.id));
+
+    // Still a guess: the review lists it, a rule may overwrite it.
+    expect(categoryOf(set, guessed)).toMatchObject({
+      categoryId: bakery.id,
+      classifiedBy: "default",
+    });
+    expect(categoryOf(set, chosen)).toMatchObject({ categoryId: rent.id, classifiedBy: "user" });
+    expect(categoryOf(set, income)?.categoryId).toBe(otherIncome.id);
+    expect(categoryOf(set, elsewhere)?.categoryId).toBe(other.id);
+
+    const { rows: changed } = await run(set, setMerchantDefaultCategory(ADA, shop.id, salary.id));
+
+    expect(categoryOf(changed, guessed)?.categoryId).toBe(other.id);
+    expect(categoryOf(changed, income)?.categoryId).toBe(salary.id);
+
+    const { rows: cleared } = await run(changed, setMerchantDefaultCategory(ADA, shop.id, null));
+
+    expect(categoryOf(cleared, income)?.categoryId).toBe(otherIncome.id);
+    expect(categoryOf(cleared, chosen)?.categoryId).toBe(rent.id);
   });
 
   test("a deleted category clears it, as its key does", async () => {

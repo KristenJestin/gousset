@@ -210,7 +210,8 @@ export const ENTRIES: ExportTable = {
     { name: "note", holds: "your note" },
     {
       name: "classified_by",
-      holds: "default (in its kind's fallback, not classified yet), rule or user (by you)",
+      holds:
+        "default (not classified yet: in its merchant's default category, or its kind's fallback), rule or user (by you)",
     },
     CREATED_AT,
     UPDATED_AT,

@@ -269,3 +269,132 @@ test("the same shop under several labels becomes one merchant, which an MCP clie
 
   expect(cleared.text).toBe("Verdant Pantry Market has no default category any more.");
 });
+
+/** An invented bakery, under one label, on three days: two lines first, a third imported later. */
+const EMBERWOOD = [
+  {
+    bookedOn: "2026-10-05",
+    amountMinor: -480,
+    label: "CB EMBERWOOD BAKERY 0510",
+    reference: "EB05",
+  },
+  {
+    bookedOn: "2026-10-12",
+    amountMinor: -615,
+    label: "CB EMBERWOOD BAKERY 1210",
+    reference: "EB12",
+  },
+  {
+    bookedOn: "2026-10-19",
+    amountMinor: -390,
+    label: "CB EMBERWOOD BAKERY 1910",
+    reference: "EB19",
+  },
+] as const;
+
+/** The row of a search that holds `label`: the line's text, and its handle. */
+function rowOf(text: string, label: string) {
+  const row = text.split("\n").find((line) => line.includes(`"${label}"`)) ?? "";
+
+  return { row, handle: /; line: (\S+)$/.exec(row)?.[1] ?? "" };
+}
+
+test("a merchant's default category classifies its lines' entries, still to review; the user's choice stays", async ({
+  app,
+  user,
+  page,
+  baseURL,
+  mcpClientId,
+}, testInfo) => {
+  // Two uploads waiting for the app's import job, then the calls.
+  test.setTimeout(120_000);
+
+  const baker = await addUser(app.baseURL, user, {
+    name: "Bea Example",
+    email: `bea.merchants.worker${app.slot}.${testInfo.repeatEachIndex}@example.com`,
+    password: `e2e-bea-password-${app.slot}`,
+  });
+
+  const data = openUserData(app.database);
+
+  try {
+    const owner = await data.ownerOf(baker.email);
+
+    await data.asUser(owner, (transaction) =>
+      transaction.insert(account).values({
+        userId: owner,
+        name: ACCOUNT_NAME,
+        kind: "current",
+        currency: "EUR",
+        iban: statement.account.iban,
+      }),
+    );
+  } finally {
+    await data.close();
+  }
+
+  await page.context().addCookies([...baker.cookies]);
+
+  const session = await connectMcp({
+    baseURL: baseURL ?? "",
+    page,
+    consent: allowReadAndWrite,
+    scope: "read write",
+    clientId: mcpClientId,
+  });
+
+  const call = (name: string, args: Arguments) => callText(session.client, name, args);
+
+  const upload = async (lines: ReadonlyArray<(typeof EMBERWOOD)[number]>) => {
+    const file = writeStatement("camt053", { ...exampleStatement, lines: [...lines] });
+
+    const uploaded = await call("imports", {
+      action: "upload",
+      file_name: file.fileName,
+      content: file.contents,
+    });
+
+    expect(uploaded.isError, uploaded.text).toBe(false);
+  };
+
+  const search = async () => (await call("lines", { action: "search", text: "emberwood" })).text;
+
+  await upload(EMBERWOOD.slice(0, 2));
+
+  // The user puts the second line in a category of their own choosing.
+  const chosen = rowOf(await search(), EMBERWOOD[1].label);
+
+  const classified = await call("lines", {
+    action: "classify",
+    line: chosen.handle,
+    category: "Groceries > Supermarket",
+  });
+
+  expect(classified.isError, classified.text).toBe(false);
+
+  const [bakery = ""] = namesOf(
+    (await call("merchants", { action: "search", text: "emberwood" })).text,
+  );
+
+  const set = await call("merchants", {
+    action: "edit",
+    merchant: bakery,
+    category: "Groceries > Bakery",
+  });
+
+  expect(set.isError, set.text).toBe(false);
+
+  // The line not classified yet goes in the default, and is still to review; the other stays.
+  const afterSet = await search();
+
+  expect(rowOf(afterSet, EMBERWOOD[0].label).row).toContain("in Groceries > Bakery, to review;");
+  expect(rowOf(afterSet, EMBERWOOD[1].label).row).toContain("in Groceries > Supermarket;");
+
+  // A line of the merchant imported afterwards goes in its default category at once.
+  await upload(EMBERWOOD.slice(2));
+
+  const afterImport = await search();
+
+  expect(rowOf(afterImport, EMBERWOOD[2].label).row).toContain("in Groceries > Bakery, to review;");
+  expect(rowOf(afterImport, EMBERWOOD[1].label).row).toContain("in Groceries > Supermarket;");
+});
