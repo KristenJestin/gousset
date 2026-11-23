@@ -66,6 +66,7 @@ better-auth's `auth_user` is the user; its tables keep their `auth_` prefix (its
 | Column | Type | Null | Default | What |
 |---|---|---|---|---|
 | `single_key_shortcuts` | `boolean` | | `true` | whether the shortcuts made of one character fire (#54) |
+| `color_scheme` | `text` | | `'system'` | `system`, `light` or `dark`; the server paints the first page in it, and the browser's own choice shows only before sign-in (#50) |
 | `currency` (v0.3) | `text` | | `'EUR'` | ISO 4217; the default currency of a new account and the currency fixed benchmarks are written in |
 
 `auth_user` has no row-level security: better-auth reaches it as the app's role, and `gousset_user` has no grant on it. A query in a user's transaction that needs the user's currency is given it from the session. The interface's language stays the browser's, as in v0.1: no column for it.

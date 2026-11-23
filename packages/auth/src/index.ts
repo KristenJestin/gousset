@@ -111,6 +111,14 @@ export function createAuth(env: AuthConfig, database: Database) {
       modelName: "authUser",
       additionalFields: {
         mustChangePassword: { type: "boolean", required: false, defaultValue: false, input: false },
+        // The colour scheme the user chose, kept on the account: the user's menu and the settings
+        // change it through the app's own server function (apps/web, functions/color-scheme.ts).
+        colorScheme: {
+          type: ["system", "light", "dark"],
+          required: false,
+          defaultValue: "system",
+          input: false,
+        },
         // The one user created by sign-up; a unique index allows a single one (packages/db).
         isFirstUser: {
           type: "boolean",

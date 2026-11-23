@@ -7,6 +7,7 @@ import { UserMenu } from "@gousset/ui/components/user-menu";
 import { useLocation, useNavigate } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 
+import { colorSchemeKept, keepColorScheme } from "@/lib/account-color-scheme";
 import { authClient } from "@/lib/auth-client";
 import { useShowShortcuts } from "@/shortcuts";
 
@@ -86,13 +87,16 @@ export function Frame({ user, children }: FrameProps) {
               value: locale,
               label: LANGUAGE_NAMES[locale](),
             }))}
-            onLanguageChange={(locale) => void setLocale(locale)}
+            // The new language reloads the page, which the server paints in the account's scheme:
+            // a scheme just picked reaches the account first.
+            onLanguageChange={(locale) => void colorSchemeKept().then(() => setLocale(locale))}
             colorSchemeLabel={m.userMenuColorScheme()}
             colorSchemes={{
               system: m.colorSchemeSystem(),
               light: m.colorSchemeLight(),
               dark: m.colorSchemeDark(),
             }}
+            onColorSchemeChange={(scheme) => void keepColorScheme(scheme)}
           >
             {account}
           </UserMenu>
