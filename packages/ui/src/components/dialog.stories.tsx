@@ -138,7 +138,7 @@ function DeleteRule() {
  * edge), the page behind veils in 200 ms; both leave the same way. Cut under reduced motion.
  *
  * Don't: open a dialog from a dialog, put an action's form inline in a page, use it for what a
- * page or a `Sheet` holds better (a line's detail), or ask "Are you sure?" where an undo would do.
+ * page or a `Sheet` holds better (a line's detail, a long form), or ask "Are you sure?" where an undo would do.
  */
 const meta = {
   title: "Overlays/Dialog",
