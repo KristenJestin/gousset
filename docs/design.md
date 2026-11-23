@@ -66,6 +66,18 @@ Geist, with **tabular numerals** wherever amounts line up.
 - 12 px corners.
 - No block inside a block.
 
+## Actions and forms
+
+A page shows things; it does not hold an action's form.
+
+- **An action that asks for input** (create, edit, reset, note a balance, set an expiry…) is a button that opens a **dialog** holding the form (`Dialog` with `onSubmit`). The button sits where the action applies: beside the title of the block it changes ("Create a user" beside the list of users), or beside the page's title for the screen's main action.
+- **On a phone** (below 768 px, where the tab bar shows) the dialog is a **sheet** along the bottom edge, its whole width.
+- The dialog's actions are Cancel, then the submit button. A refusal keeps the dialog open and says why under the field at fault; once the form is accepted the dialog closes, focus goes back to the button that opened it, and the page shows the result (the new line in its list, a sentence saying what was done).
+- **Settings that apply at once** (a switch, a choice, a button that turns something on) stay inline in the page: they ask for nothing to fill in.
+- A screen that is itself the task (signing in, the first setup, changing a temporary password, an MCP client's consent) is not a page that shows things: its form is the screen.
+
+Motion: the dialog fades and grows in 200 ms, ease-out, and on a phone slides up from the bottom edge; it leaves the same way. Cut under reduced motion.
+
 ## Motion
 
 Motion where it explains what changes, never as decoration:
