@@ -36,9 +36,17 @@ const errorToast = (page: Page) =>
     .getByRole("region", { name: "Notifications" })
     .locator('[data-slot="toast"][data-type="error"]');
 
-/** Leaves the review for a page that links back to it, so that the way back is a client navigation. */
+/** Leaves the review for another screen, so that the way back is a client navigation. */
 async function openUsersPage(page: Page) {
-  await visit(page, "/users");
+  await visit(page, "/settings/users");
+}
+
+/** Back to the review through the frame's link, the sidebar's or the tab bar's. */
+async function backToReview(page: Page) {
+  await page
+    .getByRole("navigation", { name: "Main" })
+    .getByRole("link", { name: "Review" })
+    .click();
 }
 
 test("the first visit shows no skeleton", async ({ userPage: page }) => {
@@ -73,7 +81,7 @@ test("with latency on, each block shows its own skeleton and the page's layout d
 
   await openUsersPage(page);
   await slowServerFunctions(page, LATENCY_MS);
-  await page.getByRole("link", { name: "Back" }).click();
+  await backToReview(page);
 
   for (const title of BLOCKS) {
     await expect(block(page, title).getByRole("status", { name: "Loading" })).toBeVisible();
@@ -110,7 +118,7 @@ test("under reduced motion a skeleton appears without its fade", async ({ userPa
   await page.emulateMedia({ reducedMotion: "reduce" });
   await openUsersPage(page);
   await slowServerFunctions(page, LATENCY_MS);
-  await page.getByRole("link", { name: "Back" }).click();
+  await backToReview(page);
 
   const skeleton = page.locator(SKELETON).first();
 
@@ -179,7 +187,7 @@ test("an error stays in its block, with a retry, and the rest of the page works"
     await route.fallback();
   });
 
-  await page.getByRole("link", { name: "Back" }).click();
+  await backToReview(page);
 
   const spending = block(page, "Where the money goes");
 
@@ -221,7 +229,7 @@ test("a block that failed shows the next month once the month changes", async ({
     await route.fallback();
   });
 
-  await page.getByRole("link", { name: "Back" }).click();
+  await backToReview(page);
 
   const spending = block(page, "Where the money goes");
 
