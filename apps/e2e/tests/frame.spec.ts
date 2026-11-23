@@ -343,6 +343,9 @@ test("the user's menu changes the language and the colour scheme", async ({ page
 
   await expect(page.getByRole("heading", { level: 1, name: "Bilan du mois" })).toBeVisible();
   await expect(page.locator("html")).toHaveAttribute("lang", "fr");
+  // The new language reloads the page; the server paints it in the scheme just picked, which
+  // reached the account first.
+  await expect(page.locator("html")).toHaveAttribute("data-color-scheme", "dark");
 });
 
 test("moving between screens fades the screen, the current item slides, empty states fade in", async ({

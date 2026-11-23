@@ -88,7 +88,11 @@ function RootDocument() {
         <HeadContent />
       </head>
       <body>
-        <ThemeProvider nonce={nonce} accountScheme={viewer.user?.colorScheme}>
+        <ThemeProvider
+          nonce={nonce}
+          accountScheme={viewer.user?.colorScheme}
+          accountOwner={viewer.user?.email}
+        >
           <Shortcuts singleKeyShortcuts={viewer.user?.singleKeyShortcuts ?? true}>
             <Outlet />
           </Shortcuts>

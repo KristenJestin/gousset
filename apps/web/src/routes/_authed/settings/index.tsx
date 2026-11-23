@@ -22,7 +22,7 @@ import {
 } from "@/functions/mcp";
 import { setSingleKeyShortcuts } from "@/functions/shortcuts";
 import { errorMessage } from "@/i18n/messages";
-import { keepColorScheme } from "@/lib/account-color-scheme";
+import { colorSchemeKept, keepColorScheme } from "@/lib/account-color-scheme";
 import { refusalOf } from "@/lib/refusal";
 import { whileBusy } from "@/lib/while-busy";
 
@@ -54,7 +54,8 @@ function GeneralSettings() {
           label={m.settingsLanguageTitle()}
           value={getLocale()}
           choices={locales.map((locale) => ({ value: locale, label: LANGUAGE_NAMES[locale]() }))}
-          onChange={(locale) => void setLocale(locale)}
+          // The reload waits for a scheme just picked to reach the account (frame.tsx says why).
+          onChange={(locale) => void colorSchemeKept().then(() => setLocale(locale))}
         />
       </Block>
       <Block title={m.settingsColorSchemeTitle()} description={m.settingsColorSchemeDescription()}>
