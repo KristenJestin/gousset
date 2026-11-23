@@ -86,7 +86,9 @@ function AccountPage() {
   const [closeOpen, setCloseOpen] = useState(false);
   const [closedOn, setClosedOn] = useState(detail.day);
   const [closeBusy, setCloseBusy] = useState(false);
+  const [closeError, setCloseError] = useState<string>();
   const [reopenBusy, setReopenBusy] = useState(false);
+  const [reopenError, setReopenError] = useState<string>();
 
   const { data: list } = useSuspenseQuery(accountQueries.list());
 
@@ -114,15 +116,33 @@ function AccountPage() {
   }
 
   async function handleClose() {
-    await whileBusy(setCloseBusy, () =>
+    const result = await whileBusy(setCloseBusy, () =>
       closeAccount({ data: { accountId: account.id, closedOn } }),
     );
+
+    if (!result.ok) {
+      setCloseError(accountRefusalMessage(result.code));
+
+      return;
+    }
+
+    setCloseError(undefined);
     await invalidateAccounts(queryClient);
     setCloseOpen(false);
   }
 
   async function handleReopen() {
-    await whileBusy(setReopenBusy, () => reopenAccount({ data: { accountId: account.id } }));
+    const result = await whileBusy(setReopenBusy, () =>
+      reopenAccount({ data: { accountId: account.id } }),
+    );
+
+    if (!result.ok) {
+      setReopenError(accountRefusalMessage(result.code));
+
+      return;
+    }
+
+    setReopenError(undefined);
     await invalidateAccounts(queryClient);
   }
 
@@ -148,6 +168,7 @@ function AccountPage() {
         )
       }
     >
+      {account.closedOn === null ? null : <FormMessage message={reopenError} />}
       <DataBlock
         title={m.accountBlockFigures()}
         skeleton={<AccountFiguresSkeleton />}
@@ -212,6 +233,7 @@ function AccountPage() {
         closedOn={closedOn}
         onClosedOnChange={setClosedOn}
         busy={closeBusy}
+        error={closeError}
         onConfirm={() => void handleClose()}
       />
     </Page>
@@ -225,6 +247,7 @@ function CloseDialog({
   closedOn,
   onClosedOnChange,
   busy,
+  error,
   onConfirm,
 }: {
   open: boolean;
@@ -233,6 +256,7 @@ function CloseDialog({
   closedOn: string;
   onClosedOnChange: (day: string) => void;
   busy: boolean;
+  error: string | undefined;
   onConfirm: () => void;
 }) {
   const formId = useId();
@@ -269,6 +293,7 @@ function CloseDialog({
           onValueChange={(day) => onClosedOnChange(day ?? closedOn)}
           required
         />
+        <FormMessage message={error} />
       </form>
     </Dialog>
   );
@@ -301,12 +326,20 @@ function Check({ accountId }: { accountId: string }) {
     return <BalanceCheck state="no-statement" />;
   }
 
+  const earlierMismatches = check.earlierMismatches.map((mismatch) => ({
+    day: shortDay(mismatch.day, locale),
+    app: mismatch.app,
+    statement: mismatch.statement,
+    difference: mismatch.difference,
+  }));
+
   return check.agrees ? (
     <BalanceCheck
       state="agrees"
       app={check.app}
       statement={check.statement}
       day={shortDay(check.day, locale)}
+      earlierMismatches={earlierMismatches}
     />
   ) : (
     <BalanceCheck
@@ -315,6 +348,7 @@ function Check({ accountId }: { accountId: string }) {
       statement={check.statement}
       day={shortDay(check.day, locale)}
       difference={check.difference}
+      earlierMismatches={earlierMismatches}
     />
   );
 }
@@ -359,15 +393,13 @@ function Settings({ accountId, onEdit }: { accountId: string; onEdit: () => void
   );
 }
 
-const money = (minor: number, currency: string) => ({ minor, currency });
-
 function toRow(line: AccountLine, locale: string): AccountLineRow {
   return {
     id: line.id,
     day: shortDay(line.bookedOn, locale),
     label: line.label,
     amount: line.amount,
-    balanceAfter: line.balanceAfter ?? money(0, line.amount.currency),
+    balanceAfter: line.balanceAfter ?? undefined,
   };
 }
 
@@ -378,26 +410,38 @@ function Lines({ accountId }: { accountId: string }) {
   const [firstPage, setFirstPage] = useState(detail.lines);
   const [older, setOlder] = useState<ReadonlyArray<AccountLine>>([]);
   const [olderBefore, setOlderBefore] = useState(detail.olderBefore);
+  const [loadingOlder, setLoadingOlder] = useState(false);
+  const [olderError, setOlderError] = useState<string>();
 
   // The first page changed (a mutation, another account): drop whatever older lines were loaded.
   if (firstPage !== detail.lines) {
     setFirstPage(detail.lines);
     setOlder([]);
     setOlderBefore(detail.olderBefore);
+    setOlderError(undefined);
   }
 
   async function showOlder() {
-    if (olderBefore === null) {
+    if (olderBefore === null || loadingOlder) {
       return;
     }
 
-    const result = await getAccount({ data: { accountId, before: olderBefore } });
+    setLoadingOlder(true);
 
-    if (result.ok) {
-      setOlder((current) => [...current, ...result.account.lines]);
-      setOlderBefore(result.account.olderBefore);
-    } else {
-      setOlderBefore(null);
+    try {
+      const result = await getAccount({ data: { accountId, before: olderBefore } });
+
+      if (result.ok) {
+        setOlder((current) => [...current, ...result.account.lines]);
+        setOlderBefore(result.account.olderBefore);
+        setOlderError(undefined);
+      } else {
+        setOlderBefore(null);
+      }
+    } catch {
+      setOlderError(m.accountLinesOlderFailed());
+    } finally {
+      setLoadingOlder(false);
     }
   }
 
@@ -408,6 +452,8 @@ function Lines({ accountId }: { accountId: string }) {
       rows={rows}
       emptyText={account.mode === "balance" ? m.accountLinesEmptyBalance() : undefined}
       onShowOlder={olderBefore === null ? undefined : () => void showOlder()}
+      loadingOlder={loadingOlder}
+      olderError={olderError}
     />
   );
 }
