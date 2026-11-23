@@ -22,6 +22,14 @@ export function categoryPath(category: { name: string; parentName: string | null
     : `${category.parentName}${PATH}${category.name}`;
 }
 
+/**
+ * A category's path as the core writes it for an account's category ("Housing > Rent"), as the app
+ * shows it ("Housing › Rent"); a name never holds `>`, so the core's separator is the only one.
+ */
+export function shownPath(path: string): string {
+  return path.split(" > ").join(PATH);
+}
+
 const inUse = (node: CategoryNode) => node.archivedAt === null;
 
 /**

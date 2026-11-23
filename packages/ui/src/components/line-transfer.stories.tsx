@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import type { ReactNode } from "react";
 
 import { InFrench } from "../stories/in-french";
-import { LineTransfer, LineTransferCandidates } from "./line-transfer";
+import { LineTransfer, LineTransferCandidates, LineTransferToAccount } from "./line-transfer";
 
 const eur = (minor: number) => ({ minor, currency: "EUR" });
 
@@ -46,7 +46,9 @@ const savingsPot = {
  * opens its detail; "Made by Gousset: …" when the app made that side, which its own statement does
  * not show. "Not a transfer" asks first, then unpairs. A line that may be a transfer shows
  * `LineTransferCandidates`: its candidates under "Maybe a transfer", and "Pair as a transfer",
- * which opens a dialog to choose one. Every value comes worded from the page.
+ * which opens a dialog to choose one. A line whose other side may be on an account kept by its
+ * balance shows `LineTransferToAccount`: "Pair with an account" opens a dialog to choose that
+ * account, whose side Gousset makes. Every value comes worded from the page.
  *
  * Motion: none of its own: the dialogs are `Dialog`'s and `AlertDialog`'s (200 ms), and going to
  * the other side is the detail's own close and open. Cut under reduced motion.
@@ -124,6 +126,30 @@ export const OneCandidate: Story = {
   ),
 };
 
+const balanceAccounts = [
+  { id: "account-perkshub", name: "PerksHub" },
+  { id: "account-mealcard", name: "MealCard" },
+];
+
+/** Its other side may be on an account kept by its balance: the user chooses it in the dialog. */
+export const ToAccount: Story = {
+  render: () => (
+    <Column>
+      <LineTransferToAccount accounts={balanceAccounts} onPair={pairLater} />
+    </Column>
+  ),
+};
+
+/** Candidates and accounts kept by their balance alike: the candidates first. */
+export const CandidatesAndAccount: Story = {
+  render: () => (
+    <Column>
+      <LineTransferCandidates candidates={[livretA]} onPair={pairLater} />
+      <LineTransferToAccount accounts={balanceAccounts} onPair={pairLater} />
+    </Column>
+  ),
+};
+
 export const French: Story = {
   args: { other: { ...livretA, day: "10 oct." }, madeOn: "Livret A" },
   render: (args) => (
@@ -137,6 +163,7 @@ export const French: Story = {
           ]}
           onPair={pairLater}
         />
+        <LineTransferToAccount accounts={balanceAccounts} onPair={pairLater} />
       </Column>
     </InFrench>
   ),

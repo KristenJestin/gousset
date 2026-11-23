@@ -34,7 +34,10 @@ export type LineDetailProps = {
   /** Already worded ("21 October 2026"), as every date below. */
   bookedOn: string;
   valueOn?: string;
-  /** The bank's raw label, as imported, shown in a fixed-width font. */
+  /**
+   * The bank's raw label, as imported, shown in a fixed-width font; empty for a line the app made
+   * (a balance's movement), which has none: the row is left out.
+   */
   rawLabel: string;
   memo?: string;
   counterparty?: string;
@@ -44,8 +47,13 @@ export type LineDetailProps = {
   expiresOn?: string;
   /** A line held for review: the line it looks like, worded ("21 Oct., CB GREENMARKET, €52.00"). */
   looksLike?: string;
-  /** The import it came from; left out, the line was entered by hand. */
+  /** The import it came from; left out, the line was entered by hand, unless `origin` says. */
   importedFrom?: LineImport;
+  /**
+   * Where a line no import read comes from, already worded ("Made from a noted balance"); left
+   * out, "Entered by hand".
+   */
+  origin?: string;
   /** Its category, to see and change: a `CategoryPicker`; left out for a line with none. */
   category?: ReactNode;
   /** The line's transfer or its candidates (`LineTransfer`), after its account and days. */
@@ -68,14 +76,42 @@ function DetailGroup({ children }: { children: ReactNode }) {
   return <dl className="flex flex-col gap-2 border-t pt-4">{children}</dl>;
 }
 
+/** The bank's words: its raw label, memo and counterparty; nothing for a line the app made. */
+function BankWords({
+  rawLabel,
+  memo,
+  counterparty,
+}: Pick<LineDetailProps, "rawLabel" | "memo" | "counterparty">) {
+  const words = useUiMessages().operations;
+
+  if (rawLabel === "" && memo === undefined && counterparty === undefined) {
+    return null;
+  }
+
+  return (
+    <DetailGroup>
+      {rawLabel === "" ? null : (
+        <div className="flex flex-col gap-1 text-sm">
+          <dt className="text-muted-foreground">{words.rawLabel}</dt>
+          <dd className="font-mono text-xs break-all text-foreground">{rawLabel}</dd>
+        </div>
+      )}
+      {memo === undefined ? null : <DetailRow label={words.memo}>{memo}</DetailRow>}
+      {counterparty === undefined ? null : (
+        <DetailRow label={words.counterparty}>{counterparty}</DetailRow>
+      )}
+    </DetailGroup>
+  );
+}
+
 /**
  * One line's detail (docs/wireframes, screen 2, block 3): its label and amount, its account, the
  * day it was booked and its value date, the bank's raw label (fixed-width) with its memo and
  * counterparty, the original amount when it was in another currency, its expiry, "To review:
  * looks like …" on a held line, its transfer (`transfer`, a `LineTransfer`), and the import it
- * came from or "Entered by hand"; first, its category, through the control the page gives
- * (`category`). Every text comes
- * worded from the page. The close button or Escape closes it; the focus goes into it when it opens.
+ * came from, "Entered by hand" or where the app made it from (`origin`); first, its category,
+ * through the control the page gives (`category`). Every text comes worded from the page. The
+ * close button or Escape closes it; the focus goes into it when it opens.
  * `OperationsLayout` sets it beside the list on a wide screen and over it on a phone.
  *
  * Motion: it grows out of its row of `OperationsList` (a shared layout on `operationLayoutId`,
@@ -98,6 +134,7 @@ export function LineDetail({
   expiresOn,
   looksLike,
   importedFrom,
+  origin,
   category,
   transfer,
   onClose,
@@ -149,19 +186,10 @@ export function LineDetail({
         )}
       </DetailGroup>
       {transfer}
-      <DetailGroup>
-        <div className="flex flex-col gap-1 text-sm">
-          <dt className="text-muted-foreground">{words.rawLabel}</dt>
-          <dd className="font-mono text-xs break-all text-foreground">{rawLabel}</dd>
-        </div>
-        {memo === undefined ? null : <DetailRow label={words.memo}>{memo}</DetailRow>}
-        {counterparty === undefined ? null : (
-          <DetailRow label={words.counterparty}>{counterparty}</DetailRow>
-        )}
-      </DetailGroup>
+      <BankWords rawLabel={rawLabel} memo={memo} counterparty={counterparty} />
       <DetailGroup>
         {importedFrom === undefined ? (
-          <DetailRow label={words.source}>{words.enteredByHand}</DetailRow>
+          <DetailRow label={words.source}>{origin ?? words.enteredByHand}</DetailRow>
         ) : (
           <>
             <DetailRow label={words.importedFrom}>{importedFrom.fileName}</DetailRow>

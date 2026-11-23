@@ -1,3 +1,4 @@
+import type { BalanceCategory, CategoryTree, EntryKind } from "@gousset/core";
 import type { AccountChoice, AccountMode, CreditOrder } from "@gousset/core/account-values";
 import { ACCOUNT_CHOICES } from "@gousset/core/account-values";
 import { m } from "@gousset/i18n/messages";
@@ -12,12 +13,15 @@ import type { ChoiceItem } from "@gousset/ui/components/select";
 import { TextField } from "@gousset/ui/components/text-field";
 import { useUiMessages } from "@gousset/ui/hooks/use-ui-messages";
 import { CURRENCY_CODES } from "@gousset/ui/lib/money";
+import { useQuery } from "@tanstack/react-query";
 import { useId, useState } from "react";
 
 import { accountRefusalMessage } from "@/i18n/messages";
 import { accountChoiceLabel } from "@/lib/account-labels";
 import { creditOrderLabel } from "@/lib/benefit-credits";
+import { categoryPath, choicesOf, shownPath } from "@/lib/categories";
 import { whileBusy } from "@/lib/while-busy";
+import { categoryQueries } from "@/queries/categories";
 
 /** What the create and edit forms send: `AccountInput`'s shape, with `institution` never `undefined`. */
 export type AccountFormValues = {
@@ -34,6 +38,11 @@ export type AccountFormValues = {
    * balance), which leaves it as it is.
    */
   creditOrder: CreditOrder | null;
+  /**
+   * An account kept by its balance: the category its movements go to (#31); `null` for none, each
+   * movement then going to its kind's fallback. Not sent for an account kept by its lines.
+   */
+  balanceCategoryId: string | null;
 };
 
 /** What a submit answers: the id of the account written (new, or the one edited), or a refusal. */
@@ -83,7 +92,56 @@ export function accountFormInput(values: AccountFormValues) {
     openedOn: values.openedOn ?? undefined,
     settlesIntoAccountId: values.settlesIntoAccountId ?? undefined,
     creditOrder: values.choice === "benefit" ? (values.creditOrder ?? undefined) : undefined,
+    balanceCategoryId:
+      values.mode === "balance" ? (values.balanceCategoryId ?? undefined) : undefined,
   };
+}
+
+/** The category field's value for none: a category's id is a UUID, never this word. */
+const NO_CATEGORY = "none";
+
+/** A category's path with its kind, so that two of the same name stay apart: "Other (income)". */
+function withKind(kind: EntryKind, path: string): string {
+  return kind === "expense"
+    ? m.accountFormCategoryExpense({ name: path })
+    : m.accountFormCategoryIncome({ name: path });
+}
+
+/**
+ * The categories an account kept by its balance can send its movements to: none, then the user's
+ * expense and income categories in use, each top-level one before its children; and the account's
+ * own when it is archived, which it keeps.
+ */
+function balanceCategoryItems(
+  tree: CategoryTree | undefined,
+  current: BalanceCategory | null,
+): ReadonlyArray<ChoiceItem> {
+  const inUse = (["expense", "income"] as const).flatMap((kind) =>
+    (tree === undefined ? [] : choicesOf(tree, kind)).flatMap((top) => [
+      { value: top.id, label: withKind(kind, top.name) },
+      ...top.children.map((child) => ({
+        value: child.id,
+        label: withKind(kind, categoryPath({ name: child.name, parentName: top.name })),
+      })),
+    ]),
+  );
+
+  const kept =
+    current === null || inUse.some((item) => item.value === current.id)
+      ? []
+      : [
+          {
+            value: current.id,
+            label: withKind(
+              current.kind,
+              current.archived
+                ? m.accountBalanceCategoryArchived({ name: shownPath(current.name) })
+                : shownPath(current.name),
+            ),
+          },
+        ];
+
+  return [{ value: NO_CATEGORY, label: m.accountBalanceCategoryNone() }, ...inUse, ...kept];
 }
 
 export type AccountFormProps = {
@@ -94,6 +152,11 @@ export type AccountFormProps = {
   initial: AccountFormValues;
   /** The user's open current accounts, for a card's "settles into"; by id and name. */
   settlesIntoChoices: ReadonlyArray<{ id: string; name: string }>;
+  /**
+   * The account's category as it is, for an account kept by its balance: still offered when it is
+   * archived, which no other account may choose.
+   */
+  balanceCategory?: BalanceCategory | null;
   onSubmit: (values: AccountFormValues) => Promise<AccountFormResult>;
   /** Called once a write succeeds, before the dialog closes, with the account's id when given. */
   onSaved?: (accountId: string | undefined) => void;
@@ -102,8 +165,10 @@ export type AccountFormProps = {
 /**
  * The account create and edit form, a `Dialog` composed of `packages/ui` fields: name, kind,
  * institution, currency, tracking, opening balance, opened on and, for a card, the current account
- * it settles into; for a benefit account, the order its credits are used in. `key`d by the account's id (or "new") at the call site so that editing another
- * account starts from its own values.
+ * it settles into; for a benefit account, the order its credits are used in; for an account kept by
+ * its balance, the category its movements go to, among the categories it reads itself (the page's
+ * loader reads them first). `key`d by the account's id (or "new") at the call site so that editing
+ * another account starts from its own values.
  */
 export function AccountForm({
   open,
@@ -112,10 +177,12 @@ export function AccountForm({
   submitLabel,
   initial,
   settlesIntoChoices,
+  balanceCategory = null,
   onSubmit,
   onSaved,
 }: AccountFormProps) {
   const messages = useUiMessages();
+  const { data: categories } = useQuery(categoryQueries.list());
   const formId = useId();
   const [name, setName] = useState(initial.name);
   const [choice, setChoice] = useState<AccountChoice>(initial.choice);
@@ -131,6 +198,11 @@ export function AccountForm({
   );
 
   const [creditOrder, setCreditOrder] = useState<CreditOrder | null>(initial.creditOrder);
+
+  const [balanceCategoryId, setBalanceCategoryId] = useState<string | null>(
+    initial.balanceCategoryId,
+  );
+
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
 
@@ -188,6 +260,7 @@ export function AccountForm({
         openedOn,
         settlesIntoAccountId: choice === "card" ? settlesIntoAccountId : null,
         creditOrder: choice === "benefit" ? creditOrder : null,
+        balanceCategoryId: mode === "balance" ? balanceCategoryId : null,
       }),
     );
 
@@ -263,6 +336,18 @@ export function AccountForm({
           onValueChange={onModeChange}
           required
         />
+        {mode === "balance" ? (
+          <Combobox
+            label={m.fieldBalanceCategory()}
+            description={m.fieldBalanceCategoryDescription()}
+            placeholder={m.categoriesSearch()}
+            items={balanceCategoryItems(categories, balanceCategory)}
+            value={balanceCategoryId ?? NO_CATEGORY}
+            onValueChange={(value) =>
+              setBalanceCategoryId(value === null || value === NO_CATEGORY ? null : value)
+            }
+          />
+        ) : null}
         <MoneyField
           label={m.fieldOpeningBalance()}
           currency={currency}

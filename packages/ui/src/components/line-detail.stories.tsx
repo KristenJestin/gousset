@@ -17,7 +17,8 @@ function Column({ children }: { children: ReactNode }) {
  * One line's detail (screen 2, block 3): its label and amount, its account, the day it was booked
  * and its value date, the bank's raw label (fixed-width) with its memo and counterparty, the
  * original amount of a line in another currency, its expiry, "To review: looks like …" on a held
- * line, and the import it came from or "Entered by hand"; first, a counted line's category, through
+ * line, and the import it came from, "Entered by hand" or where the app made it from (`origin`);
+ * first, a counted line's category, through
  * the control the page gives (`category`, a `CategoryPicker`). Every value comes worded from the
  * page; the close button or Escape closes it.
  *
@@ -146,6 +147,25 @@ export const Transfer: Story = {
 /** Entered by hand: no import, no value date. */
 export const ByHand: Story = {
   args: { importedFrom: undefined, valueOn: undefined, memo: undefined, counterparty: undefined },
+};
+
+/**
+ * The movement a noted balance makes on an account kept by its balance: named by the page, with no
+ * raw label, and made from the balance rather than entered by hand.
+ */
+export const BalanceMovement: Story = {
+  args: {
+    label: "Balance movement",
+    rawLabel: "",
+    account: "PerksHub",
+    amount: eur(-9000),
+    bookedOn: "31 October 2026",
+    valueOn: undefined,
+    memo: undefined,
+    counterparty: undefined,
+    importedFrom: undefined,
+    origin: "Made from a noted balance",
+  },
 };
 
 export const Loading: Story = {

@@ -2,11 +2,13 @@ import {
   MAX_SEARCH_LINES,
   classifyLine as classifyCoreLine,
   lineTransferOf,
+  pairLineWithAccount as pairCoreLineWithAccount,
   pairLines,
   searchLines,
   showLine,
   unpairLine as unpairCoreLine,
 } from "@gousset/core";
+import type { TransferRefused } from "@gousset/core";
 import { AccountId } from "@gousset/core/account-values";
 import { MAX_FILTER_TEXT } from "@gousset/ui/lib/operations";
 import { createServerFn } from "@tanstack/react-start";
@@ -133,13 +135,22 @@ export const classifyLine = createServerFn({ method: "POST" })
 /**
  * Why pairing or unpairing a line was refused, as a code for the interface to translate: the line
  * is gone, one of the two lines is a side of a transfer already or cannot be one, or the line is no
- * transfer to unpair.
+ * transfer to unpair. Paired with an account kept by its balance (#31): the account is gone, is
+ * the line's own, is kept by its lines or is in another currency, or the line cannot be a side (of
+ * no amount, held for review, made from a noted balance).
  */
 export type TransferRefusalCode =
   | "LINE_NOT_FOUND"
   | "ALREADY_PAIRED"
   | "CANNOT_PAIR"
-  | "NOT_A_TRANSFER";
+  | "NOT_A_TRANSFER"
+  | "ACCOUNT_NOT_FOUND"
+  | "SAME_ACCOUNT"
+  | "ZERO_AMOUNT"
+  | "NOT_COUNTED"
+  | "MADE_FROM_BALANCE"
+  | "ACCOUNT_KEPT_BY_LINES"
+  | "OTHER_CURRENCY";
 
 const transferRefused = (code: TransferRefusalCode) => Effect.succeed({ ok: false as const, code });
 
@@ -159,6 +170,44 @@ export const pairLine = createServerFn({ method: "POST" })
           LineNotFound: () => transferRefused("LINE_NOT_FOUND"),
           TransferRefused: (refusal) =>
             transferRefused(refusal.reason === "already_paired" ? "ALREADY_PAIRED" : "CANNOT_PAIR"),
+        }),
+      ),
+    ),
+  );
+
+/** A refusal to pair a line with an account kept by its balance, by its reason. */
+const ACCOUNT_PAIRING_CODES = {
+  same_line: "CANNOT_PAIR",
+  same_account: "SAME_ACCOUNT",
+  same_sign: "CANNOT_PAIR",
+  zero_amount: "ZERO_AMOUNT",
+  not_counted: "NOT_COUNTED",
+  made_from_balance: "MADE_FROM_BALANCE",
+  already_paired: "ALREADY_PAIRED",
+  no_candidate: "CANNOT_PAIR",
+  several_candidates: "CANNOT_PAIR",
+  account_kept_by_lines: "ACCOUNT_KEPT_BY_LINES",
+  other_currency: "OTHER_CURRENCY",
+} as const satisfies { readonly [Reason in TransferRefused["reason"]]: TransferRefusalCode };
+
+/**
+ * Pairs the line with an account kept by its balance (#31), which has no line of its own to pair
+ * with: Gousset makes that account's side, the same day, of the opposite amount, and makes the
+ * account's movements again. Refused with a code: a line or an account the user does not have, an
+ * account that is the line's own, kept by its lines or in another currency, a line that is a side
+ * already or cannot be one.
+ */
+export const pairLineWithAccount = createServerFn({ method: "POST" })
+  .middleware([signedIn, slowedInDevelopment])
+  .validator(Schema.toStandardSchemaV1(Schema.Struct({ lineId: LineId, accountId: AccountId })))
+  .handler(({ data, context }) =>
+    runCore(
+      pairCoreLineWithAccount(context.owner, data.lineId, data.accountId).pipe(
+        Effect.map((transfer) => ({ ok: true as const, transfer })),
+        Effect.catchTags({
+          LineNotFound: () => transferRefused("LINE_NOT_FOUND"),
+          AccountNotFound: () => transferRefused("ACCOUNT_NOT_FOUND"),
+          TransferRefused: (refusal) => transferRefused(ACCOUNT_PAIRING_CODES[refusal.reason]),
         }),
       ),
     ),
