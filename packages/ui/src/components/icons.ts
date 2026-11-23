@@ -34,6 +34,7 @@ import {
   IconInbox,
   IconInfoCircle,
   IconKey,
+  IconKeyboard,
   IconLanguage,
   IconListDetails,
   IconLogout,
@@ -115,6 +116,7 @@ export const interfaceIcons = {
   password: IconKey,
   language: IconLanguage,
   colorScheme: IconSunMoon,
+  shortcuts: IconKeyboard,
   signOut: IconLogout,
 } as const;
 

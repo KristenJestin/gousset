@@ -1,0 +1,37 @@
+{
+  "type": "diff",
+  "version": "10",
+  "dialect": "postgres",
+  "id": "f68388a2-47c3-4b36-8ac0-3aade02b6792",
+  "prevIds": ["eb197cf6-6e97-4193-9b58-8824f81d6222"],
+  "footprints": [
+    {
+      "statementType": "add_column",
+      "statementTarget": ["column", "public", "auth_user", "single_key_shortcuts"],
+      "writes": [
+        "s|col|public.auth_user.single_key_shortcuts",
+        "n|col|public.auth_user.single_key_shortcuts",
+        "e|col|public.auth_user.single_key_shortcuts"
+      ],
+      "reads": ["n|tbl|public.auth_user", "n|sch|public"]
+    }
+  ],
+  "deltas": [
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "auth_user",
+        "name": "single_key_shortcuts",
+        "type": "boolean",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "true",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    }
+  ]
+}
