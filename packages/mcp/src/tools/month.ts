@@ -1,12 +1,16 @@
 import {
   Month,
+  SpendingGroup,
+  addMonths,
   currentMonth,
   flags,
   importState,
   investments,
   linesToReview,
   monthOverview,
+  monthSummary,
   movements,
+  spendingDays,
 } from "@gousset/core";
 import type {
   Flag,
@@ -21,32 +25,47 @@ import type {
   MonthSummary,
   Movements,
   Spending,
+  SpendingDays,
 } from "@gousset/core";
 import { Effect, Schema } from "effect";
 
 import { ToolRefusal, defineTool } from "../tool";
 
 const MonthInput = Schema.Struct({
-  action: Schema.Literals(["summary", "review"]).annotate({
+  action: Schema.Literals(["summary", "review", "days"]).annotate({
     description:
-      "summary: the month's figures and where its money went. review: what is left to check in the month (imports, lines to review, movements, investments, flags).",
+      "summary: the month's figures and where its money went. review: what is left to check in the month (imports, lines to review, movements, investments, flags). days: one row of summary, day by day, against the month before.",
   }),
   month: Schema.optional(
     Month.annotate({ description: "The month, YYYY-MM (2026-10); the current month if left out." }),
   ),
+  by: Schema.optional(
+    SpendingGroup.annotate({
+      description: "days only: the grouping the row belongs to, as summary groups them.",
+    }),
+  ),
+  row: Schema.optional(
+    Schema.String.annotate({
+      description: 'days only: the row\'s name, exactly as summary lists it ("Groceries").',
+    }),
+  ),
 });
 
-const DESCRIPTION = `One month of the user's money, as the monthly review shows it. Two actions, both read only.
+const DAYS_EXAMPLE = `month ${JSON.stringify({ action: "days", month: "2026-10", by: "category", row: "Groceries" })}`;
+
+const DESCRIPTION = `One month of the user's money, as the monthly review shows it. Three actions, all read only.
 
 summary: what came in (received, and from what), what the expenses cost (spent, against the average of the six months before), what went to savings and investments (set aside) and what is left, with the part of it restricted to benefit accounts; then where the money went, by category, by merchant and by subject, the largest first, each row with its benchmark (its own 6-month average). Expenses whose lines still wait in the review are not in the rows yet: their total is given apart. Use it for "how much did I spend last month, and where?" and any question about a month's totals.
 
 review: what the month still asks of the user: how far its statements were imported, the lines the rules were not sure of (with what they proposed), the movements between the user's accounts and what came in, the investment accounts at the end of the month (today in the month under way), and what is flagged (a subscription whose price changed, an account not imported). Use it for "what is left to check this month?".
 
+days: one row of summary (by category, merchant or subject, named by \`by\` and \`row\`, both required) day by day: what it had cost by each day of the month, against what it had cost by the same day of the month before. Approved expenses only, as the row counts them. Use it for "how did my Groceries spending go this month compared with last month?".
+
 \`month\` is written YYYY-MM and is the current month when left out; for last month, work it out from today (in November 2026, last month is 2026-10). A month written another way is refused.
 
 In this version of Gousset every figure comes from made-up example data, and the result says so.
 
-Examples: {"action":"summary","month":"2026-10"}, {"action":"review","month":"2026-10"}`;
+Examples: {"action":"summary","month":"2026-10"}, {"action":"review","month":"2026-10"}, {"action":"days","month":"2026-10","by":"category","row":"Groceries"}`;
 
 /** `1,234.56 EUR`: amounts are kept in minor units and shown with their currency. */
 function amount(money: Money): string {
@@ -227,15 +246,55 @@ const reviewText = (
     flagsText(parts[4]),
   ].join("\n\n");
 
-/** A month outside what Gousset reads: refused, saying which months it reads, for the same action. */
-function refusingOutside(action: "summary" | "review") {
+/** `29th`, `30th`, `31st`: the only days a month before may not have. */
+const ordinal = (day: number) => (day === 31 ? "31st" : `${day}th`);
+
+/** A row day by day: its running total, then the month before's by the same day. */
+function daysText(madeUp: boolean, { month, by, name, currency, days }: SpendingDays): string {
+  const before = monthName(addMonths(month, -1));
+  const sum = (minor: number) => amount({ minor, currency });
+
+  if (days.every(({ current, previous }) => (current ?? 0) === 0 && (previous ?? 0) === 0)) {
+    return [
+      heading(month, madeUp),
+      `${name}, by ${by}: nothing approved in ${monthName(month)} nor in ${before}. A row is named exactly as the summary action lists it ("Groceries").`,
+    ].join("\n\n");
+  }
+
+  const lines = days.map(({ date, current, previous }) => {
+    const day = Number(date.slice(8, 10));
+
+    const then =
+      previous !== null
+        ? sum(previous)
+        : day > 28
+          ? `nothing (${before} has no ${ordinal(day)})`
+          : `nothing (${before} is outside the months Gousset reads)`;
+
+    return `- ${date}: ${current === null ? "not yet" : sum(current)}, against ${then}`;
+  });
+
+  return [
+    heading(month, madeUp),
+    [
+      `${name}, by ${by}, day by day in ${monthName(month)}: what it had cost by each day, against what it had cost by the same day of ${before}. Approved expenses only, as the row counts them: lines still waiting in the review are not counted yet.`,
+      ...lines,
+    ].join("\n"),
+  ].join("\n\n");
+}
+
+const exampleOf = (action: "summary" | "review") =>
+  `month ${JSON.stringify({ action, month: "2026-10" })}`;
+
+/** A month outside what Gousset reads: refused, saying which months it reads, with a valid call. */
+function refusingOutside(example: string) {
   return <A, R>(answer: Effect.Effect<A, MonthOutOfRange, R>): Effect.Effect<A, ToolRefusal, R> =>
     answer.pipe(
       Effect.catchTag("MonthOutOfRange", (outside) =>
         Effect.fail(
           new ToolRefusal({
             message: `Gousset reads months from ${outside.earliest} to ${outside.latest}: ${outside.month} is outside. Ask for a month in that range.`,
-            example: `month ${JSON.stringify({ action, month: "2026-10" })}`,
+            example,
           }),
         ),
       ),
@@ -250,7 +309,7 @@ export const monthTool = defineTool<typeof MonthInput.Type, typeof MonthInput.En
   idempotent: true,
   input: MonthInput,
   example: { action: "summary", month: "2026-10" },
-  access: { summary: "read", review: "read" },
+  access: { summary: "read", review: "read", days: "read" },
   run: (input, caller) => {
     const wanted = Effect.gen(function* () {
       return input.month ?? (yield* currentMonth);
@@ -262,7 +321,7 @@ export const monthTool = defineTool<typeof MonthInput.Type, typeof MonthInput.En
           const month = yield* wanted;
 
           return summaryText(yield* monthOverview(caller.userId, month));
-        }).pipe(refusingOutside(input.action));
+        }).pipe(refusingOutside(exampleOf(input.action)));
       }
 
       case "review": {
@@ -279,7 +338,28 @@ export const monthTool = defineTool<typeof MonthInput.Type, typeof MonthInput.En
           ]);
 
           return reviewText(summary, parts);
-        }).pipe(refusingOutside(input.action));
+        }).pipe(refusingOutside(exampleOf(input.action)));
+      }
+
+      case "days": {
+        const { by, row } = input;
+
+        if (by === undefined || row === undefined) {
+          return Effect.fail(
+            new ToolRefusal({
+              message:
+                "The days action needs by (category, merchant or subject) and row (the row's name, exactly as summary lists it).",
+              example: DAYS_EXAMPLE,
+            }),
+          );
+        }
+
+        return Effect.gen(function* () {
+          const month = yield* wanted;
+          const { madeUp } = yield* monthSummary(caller.userId, month);
+
+          return daysText(madeUp, yield* spendingDays(caller.userId, month, by, row));
+        }).pipe(refusingOutside(DAYS_EXAMPLE));
       }
     }
   },

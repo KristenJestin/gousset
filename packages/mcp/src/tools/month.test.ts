@@ -1,13 +1,14 @@
 import {
   FixtureLedger,
+  Ledger,
   flags,
   importState,
   investments,
   linesToReview,
   monthOverview,
   movements,
+  spendingDays,
 } from "@gousset/core";
-import type { Ledger } from "@gousset/core";
 import { Effect, Exit, Layer } from "effect";
 import { TestClock } from "effect/testing";
 import { describe, expect, test } from "vite-plus/test";
@@ -20,22 +21,31 @@ import type { Runner } from "../tool";
 
 const TODAY = "2026-11-22";
 
-/** The made-up ledger, on a fixed day, as the app's runtime provides it. */
-function onDay(day: string): Runner<Ledger> {
+/** A ledger, the made-up one by default, on a fixed day, as the app's runtime provides it. */
+function onDay(day: string, ledger: Layer.Layer<Ledger> = FixtureLedger): Runner<Ledger> {
   return (effect) =>
     Effect.runPromiseExit(
       Effect.gen(function* () {
         yield* TestClock.setTime(Date.parse(`${day}T12:00:00Z`));
 
         return yield* effect;
-      }).pipe(Effect.provide(Layer.mergeAll(FixtureLedger, TestClock.layer()))),
+      }).pipe(Effect.provide(Layer.mergeAll(ledger, TestClock.layer()))),
     );
 }
 
 const reader = { userId: "ada", canWrite: false };
 
-async function month(args: { [key: string]: string }, day = TODAY) {
-  const client = await connectInProcess(goussetServer, { run: onDay(day) }, reader, "2025-11-25");
+async function month(
+  args: { [key: string]: string },
+  day = TODAY,
+  ledger: Layer.Layer<Ledger> = FixtureLedger,
+) {
+  const client = await connectInProcess(
+    goussetServer,
+    { run: onDay(day, ledger) },
+    reader,
+    "2025-11-25",
+  );
 
   return callText(client, "month", args);
 }
@@ -259,5 +269,166 @@ describe("month review", () => {
     for (const line of waiting.lines) {
       expect(text).not.toContain(line.id);
     }
+  });
+
+  test("pages a month with hundreds of lines to review, the next call written in each part", async () => {
+    const many = Array.from({ length: 400 }, (_, index) => ({
+      id: `${OCTOBER}-x${index}`,
+      accountId: "current",
+      bookedOn: `${OCTOBER}-20`,
+      amountMinor: -1000,
+      label: `CB CORNER SHOP ${index}`,
+      kind: "expense" as const,
+      merchant: null,
+      category: null,
+      counterpartLineId: null,
+      reviewed: false,
+    }));
+
+    // The made-up ledger, October given 400 more lines the rules were not sure of.
+    const crowded = Layer.effect(
+      Ledger,
+      Effect.gen(function* () {
+        const made = yield* Ledger;
+
+        return {
+          month: (owner: string, wanted: string) =>
+            Effect.map(made.month(owner, wanted), (data) =>
+              wanted === OCTOBER ? { ...data, lines: [...data.lines, ...many] } : data,
+            ),
+          markReviewed: made.markReviewed,
+        };
+      }),
+    ).pipe(Layer.provide(FixtureLedger));
+
+    const first = await month({ action: "review", month: OCTOBER }, TODAY, crowded);
+
+    expect(first.isError).toBe(false);
+    expect(first.text.length).toBeLessThanOrEqual(RESULT_LIMIT);
+    expect(first.text).toContain(
+      `Read on with: month {"action":"review","month":"${OCTOBER}","cursor":"2"})`,
+    );
+
+    const parts = [first.text];
+
+    for (let part = 2; !(parts.at(-1) ?? "").includes(", the last.)"); part++) {
+      const next = await month(
+        { action: "review", month: OCTOBER, cursor: String(part) },
+        TODAY,
+        crowded,
+      );
+
+      expect(next.isError).toBe(false);
+      expect(next.text.length).toBeLessThanOrEqual(RESULT_LIMIT);
+      parts.push(next.text);
+    }
+
+    const whole = parts.join("\n");
+
+    expect(parts.length).toBeGreaterThan(1);
+
+    for (const line of many) {
+      expect(whole).toContain(`${line.label}: -10.00 EUR on Current account`);
+    }
+
+    expect(whole).toContain("Flagged:");
+  });
+});
+
+describe("month days", () => {
+  const OCTOBER = "2026-10";
+
+  test("gives a row's running total by day, against the month before by the same day", async () => {
+    const { text, isError } = await month({
+      action: "days",
+      month: OCTOBER,
+      by: "category",
+      row: "Housing",
+    });
+
+    const { days } = await computed(spendingDays(reader.userId, OCTOBER, "category", "Housing"));
+
+    expect(isError).toBe(false);
+    expect(text).toContain("October 2026, made-up data");
+    expect(text).toContain("Housing, by category, day by day in October 2026");
+    expect(text).toContain("September 2026");
+    // The rent is paid on the 5th, every month.
+    expect(text).toContain("- 2026-10-05: 690.00 EUR, against 690.00 EUR");
+
+    for (const { date, current, previous } of days) {
+      if (current !== null && previous !== null) {
+        expect(text).toContain(`- ${date}: ${euros(current)}, against ${euros(previous)}`);
+      }
+    }
+
+    expect(text).toContain(
+      "- 2026-10-31: 690.00 EUR, against nothing (September 2026 has no 31st)",
+    );
+  });
+
+  test("says a day the month before does not have, and a day not come yet", async () => {
+    const { text } = await month({
+      action: "days",
+      month: "2026-12",
+      by: "category",
+      row: "Housing",
+    });
+
+    const { text: underWay } = await month({
+      action: "days",
+      month: "2026-11",
+      by: "category",
+      row: "Housing",
+    });
+
+    // November has no 31st; on the 22nd of November, the 23rd has not come.
+    expect(text).toContain("- 2026-12-31: not yet, against nothing (November 2026 has no 31st)");
+    expect(underWay).toContain("- 2026-11-23: not yet, against 690.00 EUR");
+    expect(underWay).toContain("- 2026-11-22: 690.00 EUR, against 690.00 EUR");
+  });
+
+  test("says when a row has nothing approved in either month, naming the rows as summary does", async () => {
+    const { text, isError } = await month({
+      action: "days",
+      month: OCTOBER,
+      by: "category",
+      row: "housing",
+    });
+
+    expect(isError).toBe(false);
+    expect(text).toContain(
+      'housing, by category: nothing approved in October 2026 nor in September 2026. A row is named exactly as the summary action lists it ("Groceries").',
+    );
+  });
+
+  test("refuses a call without its grouping or its row, with a valid call", async () => {
+    const calls: ReadonlyArray<{ [key: string]: string }> = [
+      { action: "days", month: OCTOBER, by: "category" },
+      { action: "days", month: OCTOBER, row: "Housing" },
+    ];
+
+    for (const args of calls) {
+      const { text, isError } = await month(args);
+
+      expect(isError).toBe(true);
+      expect(text).toContain("by (category, merchant or subject) and row");
+      expect(text).toContain(
+        'A valid call: month {"action":"days","month":"2026-10","by":"category","row":"Groceries"}',
+      );
+    }
+  });
+
+  test("refuses a month too far from today with a valid call of the same action", async () => {
+    const { text, isError } = await month({
+      action: "days",
+      month: "0042-03",
+      by: "category",
+      row: "Housing",
+    });
+
+    expect(isError).toBe(true);
+    expect(text).toContain(
+      'A valid call: month {"action":"days","month":"2026-10","by":"category","row":"Groceries"}',
+    );
   });
 });
