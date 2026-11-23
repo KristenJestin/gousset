@@ -1,3 +1,4 @@
+import { QueryFailed } from "@gousset/db/user-data";
 import { Effect, Layer, Result } from "effect";
 import { TestClock } from "effect/testing";
 import { describe, expect, test } from "vite-plus/test";
@@ -14,7 +15,8 @@ import {
   mergeCategory,
   restoreCategory,
 } from "./categories";
-import type { CategoryStore, CategoryRecord, EntryKind } from "./category-store";
+import { CategoryStore } from "./category-store";
+import type { CategoryRecord, EntryKind } from "./category-store";
 import { memoryCategory, memoryCategoryStore } from "./category-store-memory";
 import type { MemoryCategoryRows, MemoryEntry } from "./category-store-memory";
 
@@ -182,6 +184,42 @@ describe("two levels", () => {
     expect(
       await outcome(rows, createCategory(ADA, { kind: "expense", name: "a".repeat(100) })),
     ).toBe("succeeded");
+  });
+
+  test("a name the database finds taken at commit is a name taken", async () => {
+    const { rows, housing } = startingRows();
+
+    // The database's unique key refuses a row a concurrent change wrote first (23505).
+    const racing = (code: string) =>
+      Layer.effect(
+        CategoryStore,
+        Effect.gen(function* () {
+          const store = yield* CategoryStore;
+
+          return { ...store, change: () => Effect.fail(new QueryFailed({ code })) };
+        }),
+      ).pipe(Layer.provide(memoryCategoryStore(new Map([[ADA, rows]]))));
+
+    const tagOf = <A, E extends { readonly _tag: string }>(
+      code: string,
+      effect: Effect.Effect<A, E, CategoryStore>,
+    ) =>
+      Effect.runPromise(
+        effect.pipe(
+          Effect.match({ onSuccess: () => "succeeded", onFailure: (error) => error._tag }),
+          Effect.provide(racing(code)),
+        ),
+      );
+
+    expect(await tagOf("23505", createCategory(ADA, { kind: "expense", name: "Water" }))).toBe(
+      "CategoryNameTaken",
+    );
+    expect(await tagOf("23505", editCategory(ADA, housing.id, { name: "Home" }))).toBe(
+      "CategoryNameTaken",
+    );
+    expect(await tagOf("40001", createCategory(ADA, { kind: "expense", name: "Water" }))).toBe(
+      "QueryFailed",
+    );
   });
 
   test("a user has 300 categories at most", async () => {

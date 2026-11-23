@@ -1,3 +1,4 @@
+import type { QueryFailed } from "@gousset/db/user-data";
 import { Clock, Effect, Result } from "effect";
 
 import { CategoryStore } from "./category-store";
@@ -121,6 +122,20 @@ export type CategoryMerge = {
 };
 
 const refused = (reason: CategoryRefused["reason"]) => Result.fail(new CategoryRefused({ reason }));
+
+/** Postgres's code for a row its unique key refuses. */
+const UNIQUE_VIOLATION = "23505";
+
+/**
+ * A name the database's unique key refuses at commit, taken by a change of another session: the
+ * name taken it is, as the rules would have said.
+ */
+const takenAtCommit = (name: () => string) =>
+  Effect.catchTag("QueryFailed", (failed: QueryFailed) =>
+    failed.code === UNIQUE_VIOLATION
+      ? Effect.fail(new CategoryNameTaken({ name: name() }))
+      : Effect.fail(failed),
+  );
 
 /** A change that would archive or delete a fallback, which names it. */
 const fallbackRefused = (fallback: CategoryRecord) =>
@@ -344,7 +359,7 @@ export const listCategories = (owner: string, listing: CategoryListing = {}) =>
 export const createCategory = (owner: string, input: CategoryInput) =>
   Effect.gen(function* () {
     const store = yield* CategoryStore;
-    let name = "";
+    let name = input.name.trim();
 
     const change = yield* store.change(
       owner,
@@ -397,7 +412,7 @@ export const createCategory = (owner: string, input: CategoryInput) =>
 
           return [step];
         }),
-    );
+    ).pipe(takenAtCommit(() => name));
 
     const [id] = change.inserted;
 
@@ -418,6 +433,7 @@ export const createCategory = (owner: string, input: CategoryInput) =>
 export const editCategory = (owner: string, categoryId: string, edit: CategoryEdit) =>
   Effect.gen(function* () {
     const store = yield* CategoryStore;
+    let taken = edit.name?.trim() ?? "";
 
     const change = yield* store.change(
       owner,
@@ -430,6 +446,8 @@ export const editCategory = (owner: string, categoryId: string, edit: CategoryEd
         Result.gen(function* () {
           const category = yield* found(categories, categoryId);
           const name = edit.name === undefined ? category.name : yield* nameOf(edit.name);
+
+          taken = name;
           const parentId = edit.parentId === undefined ? category.parentId : edit.parentId;
           const moved = parentId !== category.parentId;
 
@@ -468,7 +486,7 @@ export const editCategory = (owner: string, categoryId: string, edit: CategoryEd
 
           return [step];
         }),
-    );
+    ).pipe(takenAtCommit(() => taken));
 
     return yield* Effect.fromResult(found(change.categories, categoryId));
   });

@@ -137,6 +137,9 @@ async function apply(
 
 const parent = alias(category, "parent");
 
+/** The first key of the lock a user's changes of the categories take, the user's the second. */
+const CHANGE_LOCK = "gousset.category.change";
+
 /** `CategoryStore` on the user's tables, through `UserData`. */
 export const DatabaseCategoryStore = Layer.effect(
   CategoryStore,
@@ -189,8 +192,13 @@ export const DatabaseCategoryStore = Layer.effect(
       ) =>
         userData
           .transaction(owner, async (transaction): Promise<Result.Result<CategoryChange, E>> => {
-            // The user's categories are locked until the end: two changes at once take turns, so
-            // that each decides on what the other left (a name taken, the cap, a parent archived).
+            // A user's changes of the categories take turns until the transaction ends, so that
+            // each decides on what the other left (a name taken, the cap, a parent archived): a
+            // lock on the existing rows would let two inserts through at once.
+            await transaction.execute(
+              sql`select pg_advisory_xact_lock(hashtext(${CHANGE_LOCK}), hashtext(${owner}))`,
+            );
+
             const rows = await transaction.select().from(category).for("update");
             const decided = decide(rows.map(record));
 

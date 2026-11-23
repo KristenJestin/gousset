@@ -1,5 +1,5 @@
 import { request } from "@playwright/test";
-import { defaultRows } from "@gousset/core";
+import { DatabaseCategoryStore, createCategory, defaultRows } from "@gousset/core";
 import {
   category,
   entry,
@@ -10,6 +10,7 @@ import {
 import { exampleStatement } from "@gousset/fixture";
 import type { Statement } from "@gousset/fixture";
 import { asc, eq } from "drizzle-orm";
+import { Effect, Layer } from "effect";
 
 import { CREATE_USER_PATH, addUser } from "../src/auth";
 import { importsOn, statementFile } from "../src/imports";
@@ -252,6 +253,45 @@ test("a line counted again by an undo gets its entry", async () => {
       partMinor: Math.abs(payment.amountMinor),
     }),
   ]);
+});
+
+test("two categories created at once under one name: one is made, the other refused", async ({
+  app,
+  user,
+}) => {
+  // A user of its own: the tests of this file run in any order.
+  const person = await addUser(app.baseURL, user, {
+    name: "Ivo Example",
+    email: `ivo.categories.worker${app.slot}.${crypto.randomUUID().slice(0, 8)}@example.com`,
+    password: `e2e-ivo-password-${app.slot}`,
+  });
+
+  const ivo = await data.ownerOf(person.email);
+
+  // Each on a connection of its own, as two requests of the app would be.
+  const second = openUserData(app.database);
+
+  const create = (handle: ReturnType<typeof openUserData>, name: string) =>
+    Effect.runPromise(
+      createCategory(ivo, { kind: "expense", name }).pipe(
+        Effect.match({ onSuccess: () => "created", onFailure: (error) => error._tag }),
+        Effect.provide(DatabaseCategoryStore.pipe(Layer.provide(handle.layer))),
+      ),
+    );
+
+  try {
+    const outcomes = await Promise.all([create(data, "Pets"), create(second, "pets")]);
+
+    expect(outcomes.toSorted()).toEqual(["CategoryNameTaken", "created"]);
+  } finally {
+    await second.close();
+  }
+
+  const names = await data.asUser(ivo, (transaction) =>
+    transaction.select({ name: category.name }).from(category),
+  );
+
+  expect(names.filter((each) => each.name.toLowerCase() === "pets")).toHaveLength(1);
 });
 
 test("a category in use can't be deleted while a user with data still can be", async ({
