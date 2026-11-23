@@ -13,7 +13,13 @@ type Reading = { selector: string; attribute: string | null };
 /**
  * Presses the button named `trigger` and, from that press, samples at every frame for `forMs`
  * what `read` names: with an attribute, its value on the first element `selector` matches;
- * without, whether any element it matches has more than one child. Returns the values seen.
+ * without, whether any element it matches draws more than one child inside its own box (by at
+ * least a pixel). Returns the values seen.
+ *
+ * What is drawn, not what is in the DOM: a leaving digit stays in the DOM until Motion's exit
+ * ends and React renders again, a frame or two later even when reduced motion skips the exit
+ * (it is moved out of its clipped column at once), so counting children would measure React's
+ * scheduling, not the motion.
  */
 async function sampleWhile(page: Page, trigger: string, read: Reading, forMs = 500) {
   const samples = page.evaluate(
@@ -21,9 +27,17 @@ async function sampleWhile(page: Page, trigger: string, read: Reading, forMs = 5
       const reading = () =>
         attribute === null
           ? String(
-              [...document.querySelectorAll(selector)].some(
-                (element) => element.children.length > 1,
-              ),
+              [...document.querySelectorAll(selector)].some((element) => {
+                const box = element.getBoundingClientRect();
+
+                const drawn = [...element.children].filter((child) => {
+                  const inner = child.getBoundingClientRect();
+
+                  return Math.min(box.bottom, inner.bottom) - Math.max(box.top, inner.top) >= 1;
+                });
+
+                return drawn.length > 1;
+              }),
             )
           : String(document.querySelector(selector)?.getAttribute(attribute));
 
@@ -59,7 +73,7 @@ async function sampleWhile(page: Page, trigger: string, read: Reading, forMs = 5
   return samples;
 }
 
-/** How many frames, from the press, had at least one digit column showing two digits. */
+/** How many frames, from the press, had at least one digit column drawing two digits. */
 async function rollingFrames(page: Page) {
   const samples = await sampleWhile(page, "Previous month", {
     selector: '[data-slot="amount-digit"]',
@@ -126,8 +140,9 @@ test.describe("Amount", () => {
   test("rolls its digits to the next value", async ({ page }) => {
     await page.goto(story("amount", "changing-month"));
     await expect(spokenAmount(page, "€2,030")).toBeAttached();
-    // The roll lasts 200 ms: about a dozen frames show two digits in a column.
-    expect(await rollingFrames(page)).toBeGreaterThan(4);
+    // The roll lasts 200 ms, about 150 of them with both digits drawn: some nine frames at 60 fps.
+    // More than 2 leaves room for a slow runner, and is still far from reduced motion's 0.
+    expect(await rollingFrames(page)).toBeGreaterThan(2);
     await expect(spokenAmount(page, "€1,934")).toBeAttached();
     await expect(page.locator('[data-slot="amount-digit"]').first().locator("> *")).toHaveCount(1);
   });
@@ -136,7 +151,7 @@ test.describe("Amount", () => {
     await page.emulateMedia({ reducedMotion: "reduce" });
     await page.goto(story("amount", "changing-month"));
     await expect(spokenAmount(page, "€2,030")).toBeAttached();
-    expect(await rollingFrames(page)).toBeLessThanOrEqual(1);
+    expect(await rollingFrames(page)).toBe(0);
     await expect(spokenAmount(page, "€1,934")).toBeAttached();
   });
 
