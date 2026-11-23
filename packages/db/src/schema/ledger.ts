@@ -205,6 +205,9 @@ export const statementImport = pgTable.withRLS(
     linesHeld: integer("lines_held").default(0).notNull(),
     // Why it failed, as a code; never the file's content.
     errorCode: text("error_code"),
+    // The pg-boss job that runs it, so that the import screen follows it again after a reload. No
+    // foreign key: pg-boss keeps its tables in a schema of its own, and purges old jobs.
+    jobId: uuid("job_id"),
     createdAt: createdAt(),
     finishedAt: timestamp("finished_at", { withTimezone: true }),
     undoneAt: timestamp("undone_at", { withTimezone: true }),

@@ -254,7 +254,14 @@ export const readQif = (
     const [firstRecord] = records;
 
     if (first === undefined || firstRecord === undefined || !isOpeningBalance(firstRecord)) {
-      return { currency, lines: booked, openingBalance: null, balance: null, dateOrder };
+      return {
+        account: null,
+        currency,
+        lines: booked,
+        openingBalance: null,
+        balance: null,
+        dateOrder,
+      };
     }
 
     const lines = booked.slice(1);
@@ -276,5 +283,12 @@ export const readQif = (
       on = line.bookedOn > on ? line.bookedOn : on;
     }
 
-    return { currency, lines, openingBalance: null, balance: { amountMinor, on }, dateOrder };
+    return {
+      account: null,
+      currency,
+      lines,
+      openingBalance: null,
+      balance: { amountMinor, on },
+      dateOrder,
+    };
   });

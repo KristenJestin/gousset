@@ -1,5 +1,6 @@
 import {
   FixtureLedger,
+  Imports,
   Ledger,
   flags,
   importState,
@@ -23,14 +24,17 @@ import type { Runner } from "../tool";
 const TODAY = "2026-11-22";
 
 /** A ledger, the made-up one by default, on a fixed day, as the app's runtime provides it. */
-function onDay(day: string, ledger: Layer.Layer<Ledger> = FixtureLedger): Runner<Ledger> {
+function onDay(day: string, ledger: Layer.Layer<Ledger> = FixtureLedger): Runner<Ledger | Imports> {
   return (effect) =>
     Effect.runPromiseExit(
       Effect.gen(function* () {
         yield* TestClock.setTime(Date.parse(`${day}T12:00:00Z`));
 
         return yield* effect;
-      }).pipe(Effect.provide(Layer.mergeAll(ledger, TestClock.layer()))),
+      }).pipe(
+        // month never reaches the imports.
+        Effect.provide(Layer.mergeAll(ledger, Layer.mock(Imports, {}), TestClock.layer())),
+      ),
     );
 }
 

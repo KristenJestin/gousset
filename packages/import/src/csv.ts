@@ -294,6 +294,7 @@ export const readCsv = (
     yield* checkDebitSigns(read);
 
     return {
+      account: null,
       currency,
       lines: read.map((entry) => entry.line),
       openingBalance: null,

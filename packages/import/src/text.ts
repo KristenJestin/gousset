@@ -1,6 +1,7 @@
 import { Effect } from "effect";
 
 import { UnsupportedContent } from "./errors";
+import type { StatementAccount } from "./statement";
 
 const utf8 = new TextDecoder("utf-8", { fatal: true });
 const windows1252 = new TextDecoder("windows-1252");
@@ -112,6 +113,14 @@ export function ibanOf(text: string | null): string | null {
   const compact = (text ?? "").replaceAll(/\s/g, "").toUpperCase();
 
   return /^[A-Z]{2}\d{2}[A-Z\d]{11,30}$/.test(compact) ? compact : null;
+}
+
+/** An account as a statement names it, `null` when it gives neither its IBAN nor its number. */
+export function statementAccount(
+  iban: string | null,
+  number: string | null,
+): StatementAccount | null {
+  return iban === null && number === null ? null : { iban, number };
 }
 
 /** The text, or `null` when it is empty. */

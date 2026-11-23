@@ -3,6 +3,7 @@ import { Config, Effect, Exit, Layer, ManagedRuntime, Option } from "effect";
 
 import { ENV } from "../env.server";
 import { telemetry } from "../telemetry.server";
+import { importJob } from "./import-job.server";
 import { JobQueue, register } from "./queue.server";
 import { E2E_JOBS_VARIABLE, testJob } from "./test-job";
 
@@ -13,9 +14,13 @@ export const e2eJobs = Config.option(Config.Literal("on", E2E_JOBS_VARIABLE));
 const queue = Layer.unwrap(
   Effect.gen(function* () {
     const testing = Option.isSome(yield* e2eJobs);
+    const jobs = [register(importJob)];
 
     // As the app's role, which owns pg-boss's schema (#66), never as the tables' owner.
-    return JobQueue.layer(appConnection(ENV.DATABASE_URL), testing ? [register(testJob)] : []);
+    return JobQueue.layer(
+      appConnection(ENV.DATABASE_URL),
+      testing ? [...jobs, register(testJob)] : jobs,
+    );
   }).pipe(Effect.orDie),
 );
 

@@ -126,7 +126,7 @@ test("changing month moves the bars and amounts to the next month, the digits ro
 
   // While a digit rolls, its column holds the old digit and the new one.
   await expect
-    .poll(async () => page.locator('[data-slot="amount-digit"]:has(> :nth-child(2))').count())
+    .poll(async () => page.locator('[data-slot="rolling-digit"]:has(> :nth-child(2))').count())
     .toBeGreaterThan(0);
   await animationsDone(page);
   expect(await received.textContent()).not.toBe(october);

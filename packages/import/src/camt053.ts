@@ -6,8 +6,14 @@ import { earliest, latest } from "./balances";
 import { dayBefore, isoDay } from "./dates";
 import { MissingField, NotAStatement, UnsupportedContent } from "./errors";
 import type { ReadError } from "./errors";
-import type { Balance, Counterparty, Statement, StatementLine } from "./statement";
-import { cleanValue, decodeText, ibanOf, nonEmpty, quote } from "./text";
+import type {
+  Balance,
+  Counterparty,
+  Statement,
+  StatementAccount,
+  StatementLine,
+} from "./statement";
+import { cleanValue, decodeText, ibanOf, nonEmpty, quote, statementAccount } from "./text";
 import { readXml } from "./xml";
 import type { XmlElement } from "./xml";
 
@@ -126,11 +132,15 @@ const readSigned = (holder: XmlElement, currency: string) =>
     }
   });
 
-/** The account a statement is of: its IBAN, or the other identifier it is given. */
-function accountOf(statement: XmlElement): string {
+/** The account a statement is of: its IBAN (`Acct/Id/IBAN`), or the other identifier it is given. */
+function accountOf(statement: XmlElement): StatementAccount | null {
   const id = child(statement, "Acct", "Id");
 
-  return ibanOf(textAt(id, "IBAN")) ?? textAt(id, "Othr", "Id") ?? "";
+  return statementAccount(ibanOf(textAt(id, "IBAN")), textAt(id, "Othr", "Id"));
+}
+
+function sameAccount(one: StatementAccount | null, other: StatementAccount | null): boolean {
+  return one?.iban === other?.iban && one?.number === other?.number;
 }
 
 /** The account's currency: `Acct/Ccy`, else the currency of its first balance or entry. */
@@ -316,7 +326,7 @@ export const readCamt053 = (bytes: Uint8Array): Effect.Effect<Statement, ReadErr
     const lines: Array<StatementLine> = [];
 
     for (const statement of statements) {
-      if (accountOf(statement) !== account) {
+      if (!sameAccount(accountOf(statement), account)) {
         return yield* new UnsupportedContent({
           line: statement.line,
           problem: "A second account's statement: export one account per file.",
@@ -349,5 +359,11 @@ export const readCamt053 = (bytes: Uint8Array): Effect.Effect<Statement, ReadErr
       }
     }
 
-    return { currency, lines, openingBalance: earliest(openings), balance: latest(closings) };
+    return {
+      account,
+      currency,
+      lines,
+      openingBalance: earliest(openings),
+      balance: latest(closings),
+    };
   });

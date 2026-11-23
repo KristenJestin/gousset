@@ -191,7 +191,7 @@ test("both protocol revisions list the same tools in the same order", async ({
   const modernTools = (await modern.listTools()).tools;
 
   // Gousset's tools, then the harness's test-only write action.
-  expect(legacyTools.map((tool) => tool.name)).toEqual(["month", "e2e_probe"]);
+  expect(legacyTools.map((tool) => tool.name)).toEqual(["month", "imports", "e2e_probe"]);
   expect(modernTools).toEqual(legacyTools);
   expect(modern.getInstructions()).toBe(session.client.getInstructions());
 });

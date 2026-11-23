@@ -274,7 +274,7 @@ PR #60 (#13) writes this document's v0.2 tables, its foreign keys, its role and 
 
 1. **#60 adds** the checks `account.iban ~ '^[A-Z]{2}[0-9]{2}[A-Z0-9]{11,30}$'`, `statement_line.original_currency ~ '^[A-Z]{3}$'` and `(source = 'import') = (dedup_key is not null)` on `statement_line`, and the unique index `account_balance (account_id, day) where source = 'noted'`. It drops the unique key `account (user_id, number)`, which refuses two accounts of two banks with the same number. These are cheap before any data exists, and each guards a rule that later code relies on.
 2. **Left to the ticket that needs it**, each an addition that changes nothing #60 wrote:
-   - `import.job_id`: #20, which writes the import's job;
+   - `import.job_id`: added by #20, which writes the import's job;
    - `statement_line`'s `(user_id, booked_on, id)` index and its trigram index: #21, which searches every line.
 
 ## What later milestones add

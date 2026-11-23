@@ -1,5 +1,5 @@
-import { FixtureLedger } from "@gousset/core";
-import { Effect } from "effect";
+import { FixtureLedger, Imports } from "@gousset/core";
+import { Effect, Layer } from "effect";
 import { describe, expect, test } from "vite-plus/test";
 
 import { goussetServer } from "./gousset";
@@ -17,7 +17,13 @@ const reader = { userId: "guard", canWrite: false };
 async function listing() {
   const client = await connectInProcess(
     goussetServer,
-    { run: (effect) => Effect.runPromiseExit(Effect.provide(effect, FixtureLedger)) },
+    {
+      // Listing calls no tool: the imports are never reached.
+      run: (effect) =>
+        Effect.runPromiseExit(
+          Effect.provide(effect, Layer.merge(FixtureLedger, Layer.mock(Imports, {}))),
+        ),
+    },
     reader,
     "2025-11-25",
   );
