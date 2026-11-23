@@ -3,7 +3,8 @@ import { expect, test } from "@playwright/test";
 
 /**
  * One representative story per component, in light and in dark, screenshotted headless on the
- * desktop Chromium (the issue's "How to verify"). Each component's other stories, its phone
+ * desktop Chromium (the issue's "How to verify"), and the month bar's `Phone` story at a phone's
+ * width, whose legend must hold on one line (#83). Each component's other stories, its phone
  * layout included (its `Phone` story), are covered by its behaviour tests; screenshotting every
  * story in every browser would put over a thousand images in Git. Reduced motion: each story is
  * caught in its final state, never on its way.
