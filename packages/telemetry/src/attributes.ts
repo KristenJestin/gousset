@@ -23,6 +23,13 @@ export const ALLOWED_SPAN_ATTRIBUTES = [
   "gousset.mcp.tool",
   "gousset.mcp.action",
   "gousset.mcp.outcome",
+  // One attempt of a background job (`job` spans): the job's name in its definition, the id
+  // pg-boss gave it, which attempt this is, and how it ended, from a closed set (completed,
+  // retrying, failed, interrupted). Never the job's input nor what it read.
+  "gousset.job.name",
+  "gousset.job.id",
+  "gousset.job.attempt",
+  "gousset.job.outcome",
   // Added by Effect's OTLP exporter to a span whose fiber was interrupted.
   "effect.fiber.interrupted",
 ] as const;
@@ -62,6 +69,8 @@ export const SPAN_NAMES = [
   "server function",
   // A call to an MCP tool (`mcpToolCall`), its tool and action in attributes.
   "mcp tool call",
+  // One attempt of a background job, its job and outcome in attributes.
+  "job",
 ] as const;
 
 export type SpanName = (typeof SPAN_NAMES)[number];
