@@ -177,6 +177,30 @@ export async function hasUser(database: string, email: string): Promise<boolean>
   }
 }
 
+/**
+ * The sessions of the user with this e-mail, read straight from its tables: how many there are, and
+ * how many someone else opened as them (better-auth's impersonation).
+ */
+export async function sessionsOf(
+  database: string,
+  email: string,
+): Promise<{ all: number; impersonated: number }> {
+  const client = new pg.Client({ connectionString: databaseUrl(database) });
+
+  await client.connect();
+
+  try {
+    const result = await client.query<{ all: number; impersonated: number }>(
+      'SELECT count(*)::int AS "all", count(s.impersonated_by)::int AS impersonated FROM "auth_session" s JOIN "auth_user" u ON u.id = s.user_id WHERE u.email = $1',
+      [email],
+    );
+
+    return result.rows[0] ?? { all: 0, impersonated: 0 };
+  } finally {
+    await client.end();
+  }
+}
+
 /** Whether a unique index of that name exists in a database. */
 export async function hasUniqueIndex(database: string, name: string): Promise<boolean> {
   const client = new pg.Client({ connectionString: databaseUrl(database) });
