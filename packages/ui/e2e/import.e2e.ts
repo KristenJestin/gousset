@@ -326,8 +326,9 @@ test.describe("ImportSummary", () => {
       read: "rolling",
     });
 
-    // The roll lasts 200 ms: about a dozen frames show two digits in a column.
-    expect(samples.filter((sample) => sample === "true").length).toBeGreaterThan(4);
+    // The roll lasts 200 ms: about a dozen frames show two digits in a column. More than 2 leaves
+    // room for a slow runner, as Amount's own check does, and is far from reduced motion's.
+    expect(samples.filter((sample) => sample === "true").length).toBeGreaterThan(2);
     await expect(page.locator('[data-figure="read"] .sr-only')).toHaveText("1,315");
   });
 
