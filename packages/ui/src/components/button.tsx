@@ -46,9 +46,11 @@ export type ButtonProps = {
 /**
  * A button on ui-sdk's `Button`: native `<button>`, `type="button"` unless told otherwise.
  *
- * A submit button stays disabled until the page hydrates: before, the browser alone would send
+ * A submit button is a plain button until the page hydrates: before, the browser alone would send
  * its form to the page's own address, the fields (a password too) in the query, and draw the page
- * again with the form empty.
+ * again with the form empty. Plain rather than disabled, so that it looks the same throughout;
+ * with no submit button, Enter sends no form of two text fields or more (HTML's implicit
+ * submission).
  *
  * Motion: colours change in 150 ms on hover, it presses in slightly (scale 0.97) and back; cut
  * under reduced motion.
@@ -69,8 +71,8 @@ export function Button({
   return (
     <ButtonPart
       {...props}
-      type={type}
-      disabled={disabled || loading || (type === "submit" && !hydrated)}
+      type={type === "submit" && !hydrated ? "button" : type}
+      disabled={disabled || loading}
       focusableWhenDisabled={loading}
       aria-busy={loading || undefined}
       className={buttonClasses(variant, size)}
