@@ -18,14 +18,14 @@ import { openUserData } from "../src/user-data";
 // Issue #132, "How to verify": invented fixtures with `&amp;apos;`, `&amp;amp;` and a single
 // `&apos;` are read as the bank meant them, through the MCP door, the app and its job queue; a
 // re-import of a file imported before the fix adds nothing, once the migration
-// (packages/db/src/migrations/20261123223101_decode_label_entities) has decoded the lines 0.2.0
+// (packages/db/src/migrations/20261123231732_decode_label_entities) has decoded the lines 0.2.0
 // read and computed their keys again. The migration is run here again, as the tables' owner, on
 // lines put back as 0.2.0 wrote them: it is written to be safe to run again. Each test has a user
 // of its own, whose accounts no other test meets.
 
 const MIGRATION = fileURLToPath(
   new URL(
-    "../../../packages/db/src/migrations/20261123223101_decode_label_entities/migration.sql",
+    "../../../packages/db/src/migrations/20261123231732_decode_label_entities/migration.sql",
     import.meta.url,
   ),
 );

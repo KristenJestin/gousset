@@ -1,5 +1,5 @@
 {
-  "20261123223101_decode_label_entities": [
+  "20261123231732_decode_label_entities": [
     {
       "why": "#132: a label 0.2.0 decoded once is decoded until no entity is left; its bank key stays",
       "table": "statement_line",
