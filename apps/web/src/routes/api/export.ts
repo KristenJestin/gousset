@@ -1,9 +1,9 @@
-import { AuthErrorCode, isHeldForPasswordChange } from "@gousset/auth";
 import { DataExport } from "@gousset/core";
 import { createFileRoute } from "@tanstack/react-router";
 import { Effect } from "effect";
 
-import { auth, runCore } from "../../services";
+import { usableSession } from "../../lib/session.server";
+import { runCore } from "../../services";
 
 const refused = (code: string, status: number) =>
   new Response(JSON.stringify({ refused: code }), {
@@ -20,15 +20,11 @@ export const Route = createFileRoute("/api/export")({
   server: {
     handlers: {
       GET: async ({ request }) => {
-        const session = await auth.api.getSession({ headers: request.headers });
+        const { session, refusal } = await usableSession(request.headers);
 
-        if (!session) {
-          return refused("SIGN_IN_REQUIRED", 401);
-        }
-
-        // A temporary password reaches no data: the administrator chose it (#70).
-        if (isHeldForPasswordChange(session)) {
-          return refused(AuthErrorCode.passwordChangeRequired, 403);
+        // A temporary password exports nothing: someone else chose it (#70, #79).
+        if (session === undefined) {
+          return refused(refusal, refusal === "SIGN_IN_REQUIRED" ? 401 : 403);
         }
 
         const archive = await runCore(
