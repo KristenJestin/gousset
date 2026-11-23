@@ -74,6 +74,12 @@ controls):
   the ledger balance (`LEDGERBAL`), never the available one. CAMT.053: `CLBD`. MT940: `:62F:`, never a
   page's `:62M:`. QIF: see below.
 
+A balance is given as the file writes it, zero included: a reader cannot tell an empty account from
+a bank that writes 0.00 for one that is not (some OFX exports do). The import decides, with the
+account: in every format, a balance of exactly zero while the account's balance at the end of that
+day is not is treated as not given, and the import's summary says so (`docs/data-model.md`,
+"account_balance").
+
 `readOfx` adds `amountSigns` (`OfxAmountSigns`): how the file's amounts were signed. `readQif` adds
 `dateOrder` (`QifDateOrder`): how the file's dates were read. `readCsv` adds nothing: its profile
 said how to read everything.

@@ -65,6 +65,7 @@ function summary(changes: Partial<ImportSummary> = {}): ImportSummary {
     linesAdded: 6,
     linesDuplicate: 0,
     linesHeld: 0,
+    balanceIgnored: false,
     errorCode: null,
     jobId: "job-1",
     createdAt: "2026-11-20T10:00:00.000Z",
@@ -269,6 +270,19 @@ describe("imports upload", () => {
     expect(state.uploads[0]?.accountId).toBeNull();
   });
 
+  test("says when the file's balance looked empty and was ignored", async () => {
+    const ignored = await imports(fake({ started: summary({ balanceIgnored: true }) }), upload());
+
+    expect(ignored.isError).toBe(false);
+    expect(ignored.text).toContain(
+      "The file's balance looks empty and was ignored: it says 0, while the account's lines make it something else that day. The account is not checked against it.",
+    );
+
+    const kept = await imports(fake(), upload());
+
+    expect(kept.text).not.toContain("looks empty");
+  });
+
   test("says first that the same file was already imported, and that nothing is added twice", async () => {
     const state = fake({
       started: summary({ id: idOf(2), linesAdded: 0, linesDuplicate: 6 }),
@@ -432,6 +446,14 @@ describe("imports status", () => {
     expect(text).toContain("october.xml (camt053): running: step save (3 of 3).");
     expect(text).toContain("Account: Current account. Period: 2026-10-01 to 2026-10-31.");
     expect(text).toContain("6 lines read: 0 added");
+    expect(text).not.toContain("looks empty");
+  });
+
+  test("says when the file's balance looked empty and was ignored", async () => {
+    const state = fake({ imports: [summary({ balanceIgnored: true })] });
+    const { text } = await imports(state, { action: "status", import: idOf(1) });
+
+    expect(text).toContain("The file's balance looks empty and was ignored");
   });
 
   test("refuses an import the user does not have, pointing to list", async () => {

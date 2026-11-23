@@ -8,9 +8,23 @@ import {
 import { UserData } from "@gousset/db/user-data";
 import type { QueryFailed, UserTransaction } from "@gousset/db/user-data";
 import { CsvProfile, detectCsvProfile } from "@gousset/import";
-import { and, count, eq, gte, inArray, isNotNull, isNull, lte, ne, or } from "drizzle-orm";
+import {
+  and,
+  asc,
+  count,
+  eq,
+  gte,
+  inArray,
+  isNotNull,
+  isNull,
+  lte,
+  ne,
+  or,
+  sql,
+} from "drizzle-orm";
 import { Effect, Schema } from "effect";
 
+import { balanceAt, looksEmpty } from "../balances";
 import { ImportFailed } from "./errors";
 import { dedupKeys, NEAR_DAYS, nearDuplicates } from "./keys";
 import type { ExistingLine, ImportFormat, ReadLine } from "./keys";
@@ -107,6 +121,54 @@ async function recognise(
   }
 
   return undefined;
+}
+
+/**
+ * The account's balance at the end of `day`, as the account page's check computes it
+ * (`balanceAt`): what a statement balance of that day is compared with. The account is the
+ * import's, which the lock on the import keeps.
+ */
+async function balanceOn(
+  transaction: UserTransaction,
+  accountId: string,
+  day: string,
+): Promise<number> {
+  const [found] = await transaction
+    .select({ mode: account.mode, openingBalanceMinor: account.openingBalanceMinor })
+    .from(account)
+    .where(eq(account.id, accountId));
+
+  const [counted] = await transaction
+    .select({
+      minor: sql<number>`coalesce(sum(${statementLine.amountMinor}), 0)::bigint`.mapWith(Number),
+    })
+    .from(statementLine)
+    .where(
+      and(
+        eq(statementLine.accountId, accountId),
+        eq(statementLine.state, "counted"),
+        lte(statementLine.bookedOn, day),
+      ),
+    );
+
+  const noted = await transaction
+    .select({ day: accountBalance.day, minor: accountBalance.balanceMinor })
+    .from(accountBalance)
+    .where(
+      and(
+        eq(accountBalance.accountId, accountId),
+        eq(accountBalance.source, "noted"),
+        lte(accountBalance.day, day),
+      ),
+    )
+    .orderBy(asc(accountBalance.day), asc(accountBalance.id));
+
+  return balanceAt(
+    found ?? { mode: "lines", openingBalanceMinor: 0 },
+    counted?.minor ?? 0,
+    noted,
+    day,
+  );
 }
 
 type Loaded = {
@@ -416,20 +478,30 @@ export function runImport(
       // The balances are written again whole, so that a second attempt does not double them.
       await transaction.delete(accountBalance).where(eq(accountBalance.importId, importId));
 
-      const balances = [statement.openingBalance, statement.balance].flatMap((balance) =>
-        balance === null
-          ? []
-          : [
-              {
-                userId: owner,
-                accountId: target.id,
-                day: balance.on,
-                balanceMinor: balance.amountMinor,
-                source: "statement" as const,
-                importId,
-              },
-            ],
-      );
+      // A balance of zero that the account's balance on its day contradicts looks empty (some
+      // banks write 0.00 for an account that is not): it is not given, and the summary says so.
+      // The lines are saved by now, so the account's balance counts this file's own.
+      const balances: Array<typeof accountBalance.$inferInsert> = [];
+      let balanceIgnored = false;
+
+      for (const balance of [statement.openingBalance, statement.balance]) {
+        if (balance === null) {
+          continue;
+        }
+
+        if (looksEmpty(balance.amountMinor, await balanceOn(transaction, target.id, balance.on))) {
+          balanceIgnored = true;
+        } else {
+          balances.push({
+            userId: owner,
+            accountId: target.id,
+            day: balance.on,
+            balanceMinor: balance.amountMinor,
+            source: "statement",
+            importId,
+          });
+        }
+      }
 
       if (balances.length > 0) {
         await transaction.insert(accountBalance).values(balances);
@@ -453,6 +525,7 @@ export function runImport(
           linesAdded: added,
           linesHeld: held,
           linesDuplicate: Math.max(statement.lines.length - added - held, 0),
+          balanceIgnored,
           finishedAt: new Date(),
         })
         .where(eq(statementImport.id, importId));

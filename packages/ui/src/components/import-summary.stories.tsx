@@ -76,14 +76,16 @@ function Counting() {
 /**
  * An import's summary before moving on to the review (wireframe, screen 6, block 4): the lines
  * read, those added, those the app already had (duplicates skipped), and those held as near
- * duplicates for the review, which stand out while there are some. The page gives every label
+ * duplicates for the review, which stand out while there are some; under them, a note when the
+ * import has something to say beyond its counts. The page gives every label, the note
  * and its actions ("Undo", "Continue to the review"); the component writes the counts in the
  * page's language, in tabular figures.
  *
  * Accessibility: a labelled region and a list of terms; each count is heard whole, never a digit
  * on its way. It is no live region: the import's `JobProgress` announces the end.
  *
- * Motion: it unfolds when it first appears (revealed from its top and faded in, 250 ms, ease-out); each count
+ * Motion: it unfolds when it first appears (revealed from its top and faded in, 250 ms, ease-out),
+ * its note with it; each count
  * rolls from its previous value to the new one, as `Amount`'s digits do (200 ms). Under reduced
  * motion it appears and the numbers jump.
  *
@@ -120,6 +122,14 @@ export const AllKnown: Story = {
     added: { label: "added", count: 0 },
     known: { label: "already known", count: 82 },
     review: { label: "to review", count: 0 },
+  },
+};
+
+/** The file stated a balance the import ignored: a note says so under the figures. */
+export const WithNote: Story = {
+  args: {
+    review: { label: "to review", count: 0 },
+    note: "This file's balance looks empty and was ignored: it says 0, while the account's lines make it something else that day.",
   },
 };
 
