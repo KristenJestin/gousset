@@ -5,6 +5,7 @@ import {
   ImportProfiles,
   Imports,
   memoryAccountStore,
+  memoryCategoryStore,
   memoryLineStore,
 } from "@gousset/core";
 import type { ExportContents } from "@gousset/core";
@@ -52,6 +53,7 @@ async function connect(contents: Effect.Effect<ExportContents> = Effect.succeed(
               FixtureLedger,
               memoryAccountStore(),
               memoryLineStore(),
+              memoryCategoryStore(),
               Layer.mock(Imports, {}),
               Layer.mock(ImportProfiles, {}),
               exportLayer,

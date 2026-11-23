@@ -4,6 +4,7 @@ import {
   ImportProfiles,
   Imports,
   memoryAccountStore,
+  memoryCategoryStore,
   memoryId,
   memoryLineStore,
 } from "@gousset/core";
@@ -120,6 +121,7 @@ function onToday(rows: MemoryRows): Runner<GoussetServices> {
     memoryAccountStore(new Map([[reader.userId, rows]])),
     // accounts never reaches the imports, the export nor the line search.
     memoryLineStore(),
+    memoryCategoryStore(),
     Layer.mock(Imports, {}),
     Layer.mock(ImportProfiles, {}),
     Layer.mock(DataExport, {}),
@@ -524,6 +526,7 @@ describe("the accounts tool", () => {
       "accounts",
       "data",
       "lines",
+      "categories",
     ]);
     expect(tool?.title).toBe("Accounts");
     expect(tool?.annotations).toEqual({

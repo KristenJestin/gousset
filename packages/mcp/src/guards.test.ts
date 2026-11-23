@@ -4,6 +4,7 @@ import {
   ImportProfiles,
   Imports,
   memoryAccountStore,
+  memoryCategoryStore,
   memoryLineStore,
 } from "@gousset/core";
 import { Effect, Layer } from "effect";
@@ -34,6 +35,7 @@ async function listing() {
               FixtureLedger,
               memoryAccountStore(),
               memoryLineStore(),
+              memoryCategoryStore(),
               Layer.mock(Imports, {}),
               Layer.mock(ImportProfiles, {}),
               Layer.mock(DataExport, {}),
