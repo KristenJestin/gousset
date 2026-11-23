@@ -414,7 +414,7 @@
   "categoryRefusalItself": "Une catégorie ne va pas sous elle-même, et ne se fusionne pas avec elle-même.",
   "categoryRefusalArchived": "Cette catégorie est archivée : restaurez-la d'abord.",
   "categoryRefusalParentArchived": "Sa catégorie parente est archivée : restaurez-la d'abord.",
-  "categoryRefusalFallback": "« Autre » garde les lignes pas encore classées : elle ne peut être ni archivée ni fusionnée dans une autre.",
+  "categoryRefusalFallback": "« {name} » garde les lignes pas encore classées : elle ne peut être ni archivée ni fusionnée dans une autre. Sous une catégorie parente, placez-la d'abord au premier niveau avant d'archiver ou de fusionner cette catégorie parente.",
   "categoryRefusalName": "Un nom a de 1 à 100 caractères, sans « > ».",
   "categoryRefusalTooMany": "Vous avez 300 catégories, archivées comprises : fusionnez-en d'abord.",
   "categoryRefusalBenchmark": "Un repère est un montant à partir de 0.",

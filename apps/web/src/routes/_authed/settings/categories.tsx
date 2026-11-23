@@ -109,7 +109,7 @@ function CategoriesContent() {
     const answer = await change(call);
 
     if (!answer.ok) {
-      notify.failed({ description: categoryRefusalMessage(answer.code) });
+      notify.failed({ description: categoryRefusalMessage(answer.code, answer.fallback) });
     }
   }
 
@@ -347,7 +347,9 @@ function ActionDialog({
             const answer = await change(() => archiveCategory({ data: { categoryId } }));
 
             if (!answer.ok) {
-              notify.failed({ description: categoryRefusalMessage(answer.code) });
+              notify.failed({
+                description: categoryRefusalMessage(answer.code, answer.fallback),
+              });
             }
           }}
         />

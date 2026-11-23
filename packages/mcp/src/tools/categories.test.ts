@@ -501,6 +501,59 @@ describe("categories merge and archive", () => {
     expect(text).toContain("cannot be archived");
     await expectValidExample(text);
   });
+
+  test("names the user's fallback as they called it, never a literal Other", async () => {
+    const fresh = freshRows();
+
+    fresh.categories = fresh.categories.map((each) =>
+      each.id === other.id ? { ...each, name: "Unsorted" } : each,
+    );
+
+    const rows = new Map([[writer.userId, fresh]]);
+    const { text, isError } = await categories({ action: "archive", category: "Unsorted" }, rows);
+
+    expect(isError).toBe(true);
+    expect(text).toContain('"Unsorted" is the user\'s expense fallback');
+    expect(text).not.toContain("Other");
+  });
+
+  test("refuses merging a parent whose child, the fallback, would be merged away", async () => {
+    const fresh = freshRows();
+
+    fresh.categories = fresh.categories.map((each) =>
+      each.id === other.id ? { ...each, parentId: housing.id, position: 2 } : each,
+    );
+    fresh.categories.push(memoryCategory("expense", "Other", { parentId: groceries.id, position: 2 }));
+
+    const rows = new Map([[writer.userId, fresh]]);
+
+    const { text, isError } = await categories(
+      { action: "merge", category: "Housing", into: "Groceries" },
+      rows,
+    );
+
+    expect(isError).toBe(true);
+    expect(text).toContain('"Other" is the user\'s expense fallback');
+    expect(named(rows, "Housing")).toBeDefined();
+    expect(example(text)?.args).toEqual({
+      action: "edit",
+      category: "Housing > Other",
+      kind: "expense",
+      top_level: true,
+    });
+
+    const moved = await categories(example(text)?.args ?? {}, rows);
+
+    expect(moved.isError, moved.text).toBe(false);
+
+    const merged = await categories(
+      { action: "merge", category: "Housing", into: "Groceries" },
+      rows,
+    );
+
+    expect(merged.isError, merged.text).toBe(false);
+    expect(rowsOf(rows).categories.find((each) => each.id === other.id)?.fallback).toBe(true);
+  });
 });
 
 describe("the categories tool", () => {

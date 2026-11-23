@@ -206,6 +206,45 @@ export function namedCategory(
   );
 }
 
+/**
+ * A fallback archived or merged away, itself or with its parent: named as the user called it, with
+ * the call that moves it to the top level when it is a child.
+ */
+function fallbackRefusal(owner: string, name: string, kind: EntryKind | undefined) {
+  return Effect.gen(function* () {
+    const tree = yield* listCategories(owner, { archived: true });
+    const kinds: ReadonlyArray<EntryKind> = kind === undefined ? ["expense", "income"] : [kind];
+
+    const found = kinds.flatMap((each) =>
+      tree[each].flatMap((top) =>
+        [top, ...top.children].flatMap((node) =>
+          node.fallback && node.name === name ? [{ node, parent: top === node ? null : top }] : [],
+        ),
+      ),
+    );
+
+    const [first] = found;
+    const of = first === undefined ? "" : ` ${first.node.kind}`;
+
+    const where =
+      first === undefined || first.parent === null
+        ? ""
+        : ` It is under "${first.parent.name}": move it to the top level first, then archive or merge that parent.`;
+
+    return yield* refusal(
+      `"${name}" is the user's${of} fallback, where unclassified lines go: it cannot be archived nor merged away, nor go with a parent archived or merged into a category that has a child of its name.${where} Merge other categories into it instead.`,
+      first === undefined || first.parent === null
+        ? LIST
+        : call({
+            action: "edit",
+            category: `${first.parent.name} > ${first.node.name}`,
+            kind: first.node.kind,
+            top_level: true,
+          }),
+    );
+  }).pipe(Effect.catchTag("QueryFailed", Effect.die));
+}
+
 /** A category's path as a person writes it, read from the user's categories, archived ones too. */
 function pathOf(owner: string, category: CategoryRecord) {
   return listCategories(owner, { archived: true }).pipe(
@@ -228,11 +267,13 @@ type Named = {
 /** A refusal of the core's rules, in words, with a call that does what is allowed. */
 function reasonRefusal(
   owner: string,
-  reason: CategoryRefused["reason"],
+  refused: CategoryRefused,
   input: CategoriesInput,
   named: Named,
   target: CategoryRecord | undefined,
 ) {
+  const { reason } = refused;
+
   switch (reason) {
     case "third_level": {
       return Effect.gen(function* () {
@@ -285,10 +326,7 @@ function reasonRefusal(
     }
 
     case "fallback": {
-      return refusal(
-        'Each kind has one fallback ("Other" by default), where unclassified lines go: it cannot be archived, merged away, nor archived with its parent. Merge other categories into it instead, or move it to the top level before archiving its parent.',
-        LIST,
-      );
+      return fallbackRefusal(owner, refused.fallback ?? "", target?.kind);
     }
 
     case "name": {
@@ -340,7 +378,7 @@ function changeRefusals(
 ) {
   return {
     CategoryRefused: (refused: CategoryRefused) =>
-      reasonRefusal(owner, refused.reason, input, named, target()),
+      reasonRefusal(owner, refused, input, named, target()),
     // Found by name a moment before: changed in between, as good as unknown.
     CategoryNotFound: () =>
       refusal("A category this call names is gone: list the categories again.", LIST),

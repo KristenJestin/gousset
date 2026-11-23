@@ -414,7 +414,7 @@
   "categoryRefusalItself": "A category cannot go under itself, nor be merged into itself.",
   "categoryRefusalArchived": "This category is archived: restore it first.",
   "categoryRefusalParentArchived": "Its parent is archived: restore the parent first.",
-  "categoryRefusalFallback": "“Other” holds the lines not classified yet: it cannot be archived nor merged into another.",
+  "categoryRefusalFallback": "“{name}” holds the lines not classified yet: it cannot be archived nor merged into another. Under a parent, move it to the top level before archiving or merging that parent.",
   "categoryRefusalName": "A name has 1 to 100 characters, without “>”.",
   "categoryRefusalTooMany": "You have 300 categories, archived ones included: merge some first.",
   "categoryRefusalBenchmark": "A benchmark is an amount from 0.",

@@ -16,8 +16,10 @@ import type { ReactNode } from "react";
 import { categoryRefusalMessage } from "@/i18n/messages";
 import { whileBusy } from "@/lib/while-busy";
 
-/** What a change of the categories answers: done, or refused with a code. */
-export type CategoryAnswer = { ok: true } | { ok: false; code: string };
+/** What a change of the categories answers: done, or refused with a code (and the fallback). */
+export type CategoryAnswer =
+  | { ok: true }
+  | { ok: false; code: string; fallback?: string | null };
 
 /** The value of the "Under" select that stands for the top level. */
 const TOP = "top";
@@ -61,7 +63,7 @@ function CategoryDialog({
     }
 
     if (!answer.ok) {
-      setError(categoryRefusalMessage(answer.code));
+      setError(categoryRefusalMessage(answer.code, answer.fallback));
 
       return;
     }

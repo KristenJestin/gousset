@@ -37,7 +37,9 @@ export type CategoryRefusalCode =
   | "CATEGORY_ICON"
   | "CATEGORY_POSITION";
 
-const refused = (code: CategoryRefusalCode) => Effect.succeed({ ok: false as const, code });
+/** A refusal's code, with the fallback it names when it is about one, as the user called it. */
+const refused = (code: CategoryRefusalCode, fallback: string | null = null) =>
+  Effect.succeed({ ok: false as const, code, fallback });
 
 const REASON_CODES = {
   third_level: "CATEGORY_THIRD_LEVEL",
@@ -57,7 +59,8 @@ const REASON_CODES = {
 const REFUSALS = {
   CategoryNotFound: () => refused("CATEGORY_NOT_FOUND"),
   CategoryNameTaken: () => refused("CATEGORY_NAME_TAKEN"),
-  CategoryRefused: (refusal: CategoryRefused) => refused(REASON_CODES[refusal.reason]),
+  CategoryRefused: (refusal: CategoryRefused) =>
+    refused(REASON_CODES[refusal.reason], refusal.fallback ?? null),
 };
 
 /** A category's id, as the database makes them. */
