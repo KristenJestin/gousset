@@ -80,7 +80,7 @@ test("reset by the administrator, the old password refused, the temporary one le
 
   const person = await addUser(app.baseURL, user, {
     name: "Jude Example",
-    email: "jude@example.com",
+    email: "jude.reset@example.com",
     password: "jude-password-e2e",
   });
 
@@ -174,7 +174,7 @@ test("reset by the administrator, the old password refused, the temporary one le
 test("the reset dialog does not move under reduced motion", async ({ userPage, app, user }) => {
   const person = await addUser(app.baseURL, user, {
     name: "Ode Example",
-    email: "ode@example.com",
+    email: "ode.reset@example.com",
     password: "ode-password-e2e",
   });
 
@@ -215,7 +215,7 @@ test("a non-administrator cannot reset a password", async ({
 
   const person = await addUser(app.baseURL, user, {
     name: "Nico Example",
-    email: "nico@example.com",
+    email: "nico.reset@example.com",
     password: "nico-password-e2e",
   });
 
@@ -352,7 +352,7 @@ test("a temporary password opens nothing but its change, on the server too", asy
 
   const person = await addUser(app.baseURL, user, {
     name: "Ivy Example",
-    email: "ivy@example.com",
+    email: "ivy.reset@example.com",
     password: "ivy-password-e2e",
   });
 
@@ -474,7 +474,11 @@ test("a temporary password authorizes no MCP client, and a held user's tokens re
   expect(mcpClientId).toBe(TEST_CLIENT_ID);
 
   // A user the administrator just created, still on the temporary password.
-  const person = { name: "Pia Example", email: "pia@example.com", password: "pia-temporary-e2e" };
+  const person = {
+    name: "Pia Example",
+    email: "pia.reset@example.com",
+    password: "pia-temporary-e2e",
+  };
 
   await createUser(app.baseURL, user, person);
 
@@ -510,7 +514,7 @@ test("a temporary password authorizes no MCP client, and a held user's tokens re
   // A user whose tokens are live: while the flag is on, the MCP door lets none of them in.
   const member = await addUser(app.baseURL, user, {
     name: "Rui Example",
-    email: "rui@example.com",
+    email: "rui.reset@example.com",
     password: "rui-password-e2e",
   });
 
