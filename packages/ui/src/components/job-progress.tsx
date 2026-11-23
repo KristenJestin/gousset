@@ -1,6 +1,7 @@
 import { motion } from "motion/react";
 
 import { useAnimatedPercent } from "../hooks/use-animated-percent";
+import { usePageLanguage } from "../hooks/use-page-language";
 import { useUiMessages } from "../hooks/use-ui-messages";
 import { jobPercent, stepStates } from "../lib/job-progress";
 import type { JobPhase, StepState } from "../lib/job-progress";
@@ -41,6 +42,23 @@ export type JobProgressProps = {
   /** The page's language (`<html lang>`) unless given: it writes the counts. */
   locale?: string;
 };
+
+/** One number formatter per language, built once: building one is slow. */
+const formatters = new Map<string, Intl.NumberFormat>();
+
+function numberFormat(locale: string): Intl.NumberFormat {
+  const known = formatters.get(locale);
+
+  if (known !== undefined) {
+    return known;
+  }
+
+  const made = new Intl.NumberFormat(locale);
+
+  formatters.set(locale, made);
+
+  return made;
+}
 
 function statusOf(messages: UiMessages["jobs"], props: JobProgressProps): string {
   const index = props.step === null ? -1 : props.steps.findIndex(({ id }) => id === props.step);
@@ -105,7 +123,8 @@ export function JobProgress(props: JobProgressProps) {
   const states = stepStates(position);
   const width = useAnimatedPercent(percent);
   const status = statusOf(messages, props);
-  const number = new Intl.NumberFormat(locale);
+  const pageLanguage = usePageLanguage();
+  const number = numberFormat(locale ?? pageLanguage);
 
   return (
     <div data-slot="job-progress" data-phase={phase} className="flex flex-col gap-3">
