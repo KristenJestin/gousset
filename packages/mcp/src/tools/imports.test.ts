@@ -161,6 +161,7 @@ function importsOf(state: Fake) {
     resume: (_owner, importId) => find(importId),
     accounts: () => Effect.succeed(state.accounts),
     csvQuestions: (_owner, importId) => Effect.fail(new ImportNotFound({ importId })),
+    csvPreview: (_owner, importId) => Effect.fail(new ImportNotFound({ importId })),
   });
 }
 

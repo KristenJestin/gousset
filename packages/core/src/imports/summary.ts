@@ -129,3 +129,51 @@ export type ProfilesForImport = {
    */
   readonly fitting: ReadonlyArray<ProfileFit>;
 };
+
+/** A line of a test read, as the import would save it: its day, its label, its amount. */
+export type CsvTestLine = {
+  /** Its place among the lines read, counted from 1. */
+  readonly position: number;
+  readonly bookedOn: string;
+  readonly label: string;
+  /** In the minor units of the preview's `currency`. */
+  readonly amountMinor: number;
+};
+
+/**
+ * Why a test read refused the file, as the reader says it: its error's tag, the file's line and
+ * column where there is one, the field at fault and the text written there.
+ */
+export type CsvReadRefusal = {
+  readonly error:
+    | "NotAStatement"
+    | "MalformedFile"
+    | "MissingField"
+    | "InvalidField"
+    | "UnsupportedContent"
+    | "InvalidOption";
+  readonly line: number | null;
+  readonly column: number | null;
+  readonly field: string | null;
+  readonly text: string | null;
+};
+
+/** The most lines of a test read the preview shows. */
+export const TEST_READ_SHOWN = 10;
+
+/**
+ * A CSV import's file read with a profile on the import screen, before it is imported: its first
+ * rows as the profile splits them, the header it would be recognised by, and a test read of its top.
+ */
+export type CsvPreview = {
+  /** The header and the first rows, each value as written; none when the file cannot be split. */
+  readonly rows: ReadonlyArray<ReadonlyArray<string>>;
+  /** The header row as a profile keeps it (`normalizeHeader`); `null` when the profile reads none. */
+  readonly header: string | null;
+  /** The account's currency the amounts are read in; `null` before an account is chosen (`CLF`). */
+  readonly currency: string | null;
+  /** The first lines read (`TEST_READ_SHOWN` at most), or why the file is refused. */
+  readonly read:
+    | { readonly lines: ReadonlyArray<CsvTestLine> }
+    | { readonly refused: CsvReadRefusal };
+};
