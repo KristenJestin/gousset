@@ -31,8 +31,9 @@ screenshots are kept in `test-results/`, with each worker's app log (`app-<proje
 ## How a run is isolated
 
 Global setup draws a run id and builds a template database (`gousset_e2e_<run>_template`): the
-migrations of `packages/db`, as an installation applies them, then the shared made-up data of
-`packages/fixture`. Each worker clones
+migrations of `packages/db`, as an installation applies them. It holds no user, so no user's rows:
+a spec that needs them seeds the worker's users from `packages/fixture` (`openUserData`). Each
+worker clones
 it (`gousset_e2e_<run>_worker_<n>`, `CREATE DATABASE … TEMPLATE`) and starts its own app on a
 free port against its clone, so tests run in parallel and never see each other's rows. The run
 id keeps two runs on one Postgres (two worktrees on `pnpm db:start`) apart. Databases are
@@ -58,17 +59,18 @@ browser's day (`tests/server-clock.spec.ts`).
 
 Import `test` and `expect` from `src/test.ts`, never from `@playwright/test`.
 
-| Helper                             | What                                                                                                  |
-| ---------------------------------- | ----------------------------------------------------------------------------------------------------- |
-| `user`, `userPage`                 | A user signed up through the app once per worker; the test's page signed in as them (`src/auth.ts`).  |
-| `secondUser`, `secondUserPage`     | Another user, in a browser context of its own, to prove one never sees the other's data.              |
-| `statements`                       | The made-up example statement written in OFX, QIF, CAMT.053, MT940 and CSV, by format.                |
-| `visit(page, path)`                | Opens a screen and checks it with axe. Each page is also checked on the screen it ends on.            |
-| `expectAccessible(page)`           | axe (WCAG 2.2 A and AA) on the screen as it is, after a client-side change.                           |
-| `fixDay(page, "2026-10-15")`       | Fixes the browser's clock to noon UTC that day, and the server's day for this page's context (below). |
-| `slowServerFunctions(page, ms)`    | Holds the browser's server function calls, for loading and skeleton scenarios.                        |
-| `connectMcp({ baseURL, page, … })` | The official MCP client through the real OAuth flow. Not run yet: `/mcp` comes with #39.              |
-| `app.restart()`                    | Stops the worker's app as `docker stop` does (SIGTERM) and starts it again on its port and database.  |
+| Helper                             | What                                                                                                                                                                     |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `user`, `userPage`                 | A user signed up through the app once per worker; the test's page signed in as them (`src/auth.ts`).                                                                     |
+| `secondUser`, `secondUserPage`     | Another user, in a browser context of its own, to prove one never sees the other's data.                                                                                 |
+| `statements`                       | The made-up example statement written in OFX, QIF, CAMT.053, MT940 and CSV, by format.                                                                                   |
+| `visit(page, path)`                | Opens a screen and checks it with axe. Each page is also checked on the screen it ends on.                                                                               |
+| `expectAccessible(page)`           | axe (WCAG 2.2 A and AA) on the screen as it is, after a client-side change.                                                                                              |
+| `fixDay(page, "2026-10-15")`       | Fixes the browser's clock to noon UTC that day, and the server's day for this page's context (below).                                                                    |
+| `slowServerFunctions(page, ms)`    | Holds the browser's server function calls, for loading and skeleton scenarios.                                                                                           |
+| `connectMcp({ baseURL, page, … })` | The official MCP client through the real OAuth flow. Not run yet: `/mcp` comes with #39.                                                                                 |
+| `openUserData(app.database)`       | A worker's database through `UserData`, as a user's transaction sees it; `seed` writes the made-up data, `attempt` tries a write and rolls it back (`src/user-data.ts`). |
+| `app.restart()`                    | Stops the worker's app as `docker stop` does (SIGTERM) and starts it again on its port and database.                                                                     |
 
 ## Background jobs
 
