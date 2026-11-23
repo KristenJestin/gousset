@@ -281,6 +281,8 @@ export const accountBalance = pgTable.withRLS(
     importId: uuid("import_id"),
   },
   (table) => [
+    // What a line made from a noted balance points to (v0.3, #31).
+    unique("account_balance_user_id_id_key").on(table.userId, table.id),
     foreignKey({
       name: "account_balance_account_fk",
       columns: [table.userId, table.accountId],
@@ -341,11 +343,7 @@ export const statementLine = pgTable.withRLS(
     // The user said this line is no transfer (unpaired it): the automatic pairing leaves it alone
     // until the user pairs it by hand (#26).
     transferRefused: boolean("transfer_refused").default(false).notNull(),
-    // A line made from a noted balance (#31): the balance it was made from, which it goes with. Its
-    // key (`(user_id, balance_id) → account_balance (user_id, id) on delete cascade`, with the
-    // unique `(user_id, id)` of `account_balance` it needs) and the check that a line of
-    // `source = balance` has one and no other line does are in the custom migration
-    // `*_balance_lines_keys`.
+    // A line made from a noted balance (#31): the balance it was made from, which it goes with.
     balanceId: uuid("balance_id"),
   },
   (table) => [
@@ -362,8 +360,17 @@ export const statementLine = pgTable.withRLS(
       columns: [table.userId, table.importId],
       foreignColumns: [statementImport.userId, statementImport.id],
     }).onDelete("cascade"),
-    // One line per noted balance.
-    uniqueIndex("statement_line_balance_id_key").on(table.balanceId),
+    // One line per noted balance, deleted with it.
+    unique("statement_line_balance_id_key").on(table.balanceId),
+    foreignKey({
+      name: "statement_line_balance_fk",
+      columns: [table.userId, table.balanceId],
+      foreignColumns: [accountBalance.userId, accountBalance.id],
+    }).onDelete("cascade"),
+    check(
+      "statement_line_balance_has_balance",
+      sql`(${table.source} = 'balance') = (${table.balanceId} is not null)`,
+    ),
     // Lines are ordered by booking date, then by id.
     index("statement_line_account_id_booked_on_id_idx").on(
       table.accountId,
