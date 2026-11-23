@@ -40,6 +40,25 @@ function Choosing({ limit }: { limit?: number }) {
   );
 }
 
+/** A row opens into its detail panel, and the panel closes back into its row. */
+function Opening() {
+  const [open, setOpen] = useState<string | null>(null);
+
+  return (
+    <div className="max-w-xl">
+      <Breakdown
+        rows={october}
+        limit={5}
+        onSelect={setOpen}
+        selectedId={open}
+        onClose={() => setOpen(null)}
+        benchmarkLabel="average"
+        detail={<p className="text-sm text-muted-foreground">What it cost, day by day.</p>}
+      />
+    </div>
+  );
+}
+
 /** Switches between this month and the one before: the bars grow, the amounts roll. */
 function SwitchingMonths() {
   const [current, setCurrent] = useState(true);
@@ -61,7 +80,8 @@ function SwitchingMonths() {
  * icon, its name, a bar and its amount in whole units. Every bar is on one scale, the largest
  * amount or benchmark of the list. The dark mark is the row's benchmark (its 6-month average);
  * once the month passes it, a ⚠ (labelled for screen readers) sits after the name. `limit` cuts
- * the list with "+ N more" (a button with `onMore`); with `onSelect`, each row is a button.
+ * the list with "+ N more", or with `onMore` a button "Show the other N" (never "more" in a
+ * button's name: the frame's menu is "More"); with `onSelect`, each row is a button.
  * Without rows, a sentence (the page's own with `emptyText`).
  *
  * Loading: `BreakdownSkeleton`, as many rows as the block shows, same heights.
@@ -83,7 +103,7 @@ export default meta;
 
 type Story = StoryObj<typeof meta>;
 
-/** Five rows and "+ 3 more", each row clickable. */
+/** Five rows and "Show the other 3", each row clickable. */
 export const Default: Story = { render: () => <Choosing limit={5} /> };
 
 /** Every row, nothing to click. */
@@ -108,6 +128,9 @@ export const Empty: Story = { args: { rows: [] } };
 export const EmptyWithText: Story = {
   args: { rows: [], emptyText: "No subject this month. Tag a line to follow a project." },
 };
+
+/** A click opens the row into its detail: the row grows into the panel, the detail fades in. */
+export const OpeningADetail: Story = { render: () => <Opening /> };
 
 /** The month changes: the bars grow to their new lengths. */
 export const ChangingMonth: Story = { render: () => <SwitchingMonths /> };

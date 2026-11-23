@@ -234,7 +234,7 @@ test.describe("MonthBar", () => {
     await page.goto(story("month-bar", "default"));
     await expect(spokenAmount(page, "€3,120")).toBeAttached();
 
-    const parts = page.getByRole("group", { name: "The month's money, by part" });
+    const parts = page.getByRole("group", { name: "What came in, by part" });
 
     await expect(parts.getByRole("button")).toHaveCount(3);
     await expect(parts.getByRole("button", { name: "€2,030 spent" })).toBeVisible();
@@ -311,14 +311,14 @@ test.describe("MonthBar", () => {
 });
 
 test.describe("Breakdown", () => {
-  test("shows its rows, cut with + N more, each a button", async ({ page }) => {
+  test("shows its rows, cut with a button for the others, each a button", async ({ page }) => {
     await page.goto(story("breakdown", "default"));
 
     const rows = page.locator('[data-slot="breakdown"] > li');
 
     await expect(rows).toHaveCount(6);
     await expect(page.getByRole("button", { name: /^Housing/ })).toBeVisible();
-    await page.getByRole("button", { name: "+ 3 more" }).click();
+    await page.getByRole("button", { name: "Show the other 3" }).click();
     await expect(rows).toHaveCount(8);
   });
 

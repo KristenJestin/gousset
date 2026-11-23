@@ -55,6 +55,15 @@ export type Expense = {
   refundLineIds: ReadonlyArray<string>;
   /** Positive, in minor units: what the expense cost once refunded. */
   netMinor: number;
+  /** What the money was spent for (docs/vision.md, "Subjects"); most expenses have none. */
+  subjects: ReadonlyArray<string>;
+};
+
+/** An account's statement for the month, as imported: it covers the month up to `coveredTo`. */
+export type ImportedStatement = {
+  accountId: string;
+  /** `YYYY-MM-DD`: the last day the imported statement covers. */
+  coveredTo: string;
 };
 
 /** A position of an investment account at the end of the month. */
@@ -76,6 +85,8 @@ export type MadeUpMonth = {
   lines: ReadonlyArray<Line>;
   expenses: ReadonlyArray<Expense>;
   investments: ReadonlyArray<Investment>;
+  /** One per account, in the accounts' order. */
+  statements: ReadonlyArray<ImportedStatement>;
 };
 
 export const madeUpAccounts: ReadonlyArray<Account> = [
@@ -97,6 +108,15 @@ const MONTH = /^(\d{4})-(0[1-9]|1[0-2])$/;
 const FIRST_INVESTED_MONTH = { year: 2025, month: 1 };
 
 const MONTHLY_CONTRIBUTION_MINOR = 35_000;
+
+/** The subscription's price goes up in October 2026, so that the review has a change to flag. */
+const SUBSCRIPTION_RISE = "2026-10";
+
+/** What a merchant's expenses are spent for; the same every month. */
+const SUBJECTS_OF_MERCHANT: ReadonlyMap<string, ReadonlyArray<string>> = new Map([
+  ["Fuelstop", ["Van"]],
+  ["Glycine Homes", ["Home"]],
+]);
 
 /** `2026-10` as its year and month, or an error that says the expected form. */
 export function monthParts(month: string) {
@@ -262,7 +282,14 @@ export function madeUpMonth(month: string, seed: number = FIXTURE_SEED): MadeUpM
     );
   }
 
-  spend("current", day(15), "DIRECT DEBIT STREAMLY SUBSCRIPTION", "Streamly", "Subscriptions", 949);
+  spend(
+    "current",
+    day(15),
+    "DIRECT DEBIT STREAMLY SUBSCRIPTION",
+    "Streamly",
+    "Subscriptions",
+    month < SUBSCRIPTION_RISE ? 899 : 949,
+  );
 
   const pixelplay = spend("current", anyDay(), "PAYLINK *PIXELPLAY", "Pixelplay", "Leisure", 1499);
   const gymDay = random.between(1, lastDay - 1);
@@ -370,6 +397,7 @@ function assemble(
       paymentLineIds: [lineId(index)],
       refundLineIds: refunds.map(lineId),
       netMinor: -draft.amountMinor - refunded,
+      subjects: SUBJECTS_OF_MERCHANT.get(draft.merchant) ?? [],
     });
   }
 
@@ -379,7 +407,30 @@ function assemble(
     lines,
     expenses,
     investments: [investmentAt(year, monthNumber)],
+    statements: statementsOf(month, year, monthNumber, lines),
   };
+}
+
+/**
+ * Every statement covers the whole month, but the benefit account's: its statement was downloaded
+ * the day of its last line, so the review has an account not imported to the month's end.
+ */
+function statementsOf(
+  month: string,
+  year: number,
+  monthNumber: number,
+  lines: ReadonlyArray<Line>,
+): Array<ImportedStatement> {
+  const monthEnd = `${month}-${String(daysIn(year, monthNumber)).padStart(2, "0")}`;
+
+  return madeUpAccounts.map((account) => {
+    const last = lines.findLast((line) => line.accountId === account.id)?.bookedOn;
+
+    return {
+      accountId: account.id,
+      coveredTo: account.kind === "benefit" && last !== undefined ? last : monthEnd,
+    };
+  });
 }
 
 /** The PEA's one position at the end of the month: a contribution a month, growing slowly. */

@@ -1,3 +1,4 @@
+import { appConnection } from "@gousset/db/app-role";
 import { Config, Effect, Exit, Layer, ManagedRuntime, Option } from "effect";
 
 import { ENV } from "../env.server";
@@ -15,7 +16,11 @@ const queue = Layer.unwrap(
     const testing = Option.isSome(yield* e2eJobs);
     const jobs = [register(importJob)];
 
-    return JobQueue.layer(ENV.DATABASE_URL, testing ? [...jobs, register(testJob)] : jobs);
+    // As the app's role, which owns pg-boss's schema (#66), never as the tables' owner.
+    return JobQueue.layer(
+      appConnection(ENV.DATABASE_URL),
+      testing ? [...jobs, register(testJob)] : jobs,
+    );
   }).pipe(Effect.orDie),
 );
 

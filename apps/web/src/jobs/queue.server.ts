@@ -1,3 +1,4 @@
+import type { appConnection } from "@gousset/db/app-role";
 import { annotate, withSpan } from "@gousset/telemetry";
 import { Context, Effect, Layer, Option, PubSub, Schedule, Schema } from "effect";
 import { PgBoss } from "pg-boss";
@@ -22,7 +23,10 @@ export class JobQueueUnavailable extends Schema.TaggedError<JobQueueUnavailable>
   {},
 ) {}
 
-/** The schema pg-boss keeps its tables in, apart from Gousset's own. */
+/**
+ * The schema pg-boss keeps its tables in, apart from Gousset's own. A migration makes it, owned by
+ * the app's role (packages/db, #66), which may create no schema of its own.
+ */
 const BOSS_SCHEMA = "pgboss";
 
 /**
@@ -167,7 +171,10 @@ export class JobQueue extends Context.Service<
    * The queue for `definitions`, started when the layer is built (pg-boss installs or migrates its
    * schema, then each job's worker starts), stopped when it is released.
    */
-  static readonly layer = (connectionString: string, jobs: ReadonlyArray<RegisteredJob>) =>
+  static readonly layer = (
+    connection: ReturnType<typeof appConnection>,
+    jobs: ReadonlyArray<RegisteredJob>,
+  ) =>
     Layer.effect(
       JobQueue,
       Effect.gen(function* () {
@@ -184,8 +191,12 @@ export class JobQueue extends Context.Service<
         const startBoss = Effect.tryPromise({
           try: async () => {
             const created = new PgBoss({
-              connectionString,
+              // pg-boss hands these to its `pg` pool as they are.
+              ...connection,
               schema: BOSS_SCHEMA,
+              // Made by the migrations: `create schema if not exists` asks for a right the app's
+              // role does not have, even when the schema is there.
+              createSchema: false,
               application_name: "gousset-jobs",
               // A worker gone silent (a crash) is found within two passes: its attempt is retried.
               superviseIntervalSeconds: HEARTBEAT_SECONDS,

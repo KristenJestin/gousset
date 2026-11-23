@@ -3,6 +3,7 @@ import { randomBytes } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 
+import { appLoginStatement } from "@gousset/db/app-role";
 import pg from "pg";
 
 import { harness } from "./config";
@@ -135,14 +136,17 @@ async function migrate(database: string): Promise<void> {
 }
 
 /**
- * Builds the template: the migrations of `packages/db`, as an installation applies them, then the
- * shared made-up data of `packages/fixture`.
+ * Builds the template: the migrations of `packages/db`, as an installation applies them, then lets
+ * the app's role log in, as the image's `migrate` does (packages/db/src/migrate.ts): each worker's
+ * app is given the harness's URL and logs in as that role. The role belongs to the whole server,
+ * so its password is set holding the template lock, one run at a time.
  */
 export async function prepareTemplate(): Promise<void> {
   const template = templateDatabase();
 
   await recreateDatabase(template);
   await migrate(template);
+  await administer([appLoginStatement(harness.databaseUrl)], true);
 
   // No made-up data here: a user's rows need their user, and the template has no user yet (each
   // worker signs its own up). A spec that needs rows seeds its users from `packages/fixture`

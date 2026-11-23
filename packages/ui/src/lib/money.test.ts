@@ -268,6 +268,27 @@ describe("the bars", () => {
     expect(layout.receivedMark).toBe(80);
     expect(layout.parts[2]?.width).toBe(0);
     expect(layout.parts[0]?.width).toBe(92);
+    expect(layout.restricted).toBeNull();
+  });
+
+  it("hatches the restricted money at the end of the part left, never wider than it", () => {
+    const figures = {
+      received: eur(200_000),
+      spent: eur(100_000),
+      saved: eur(50_000),
+      left: eur(50_000),
+    };
+
+    expect(monthBarLayout({ ...figures, restricted: eur(20_000) }).restricted).toEqual({
+      x: 90,
+      width: 10,
+    });
+    expect(monthBarLayout({ ...figures, restricted: eur(90_000) }).restricted).toEqual({
+      x: 75,
+      width: 25,
+    });
+    expect(monthBarLayout({ ...figures, restricted: eur(0) }).restricted).toBeNull();
+    expect(monthBarLayout(figures).restricted).toBeNull();
   });
 
   it("keeps every part within the bar, whatever the figures", () => {

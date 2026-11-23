@@ -86,6 +86,8 @@ function uiMessages(locale: Locale) {
         saved: m.uiMoneySaved({}, options),
         left: m.uiMoneyLeft({}, options),
       },
+      /** Under the part left when some of it sits on benefit accounts. */
+      leftRestricted: (amount: string) => m.uiMoneyLeftRestricted({ amount }, options),
       /** In place of "left" when more went out than came in. */
       overspent: m.uiMoneyOverspent({}, options),
       /** The month bar's parts, as a group. */
@@ -99,7 +101,13 @@ function uiMessages(locale: Locale) {
       overBenchmark: m.uiOverBenchmark({}, options),
       benchmark: (amount: string) => m.uiBenchmark({ amount }, options),
       moreRows: (count: number) => m.uiMoreRows({ count }, options),
+      /** The button that shows the rows a list leaves out: never "more", the frame's own menu. */
+      showOtherRows: (count: number) => m.uiShowOtherRows({ count }, options),
       empty: m.uiMoneyEmpty({}, options),
+      /** A movement into an investment account, then what it bought: "buy World index ETF". */
+      bought: (name: string) => m.uiMoneyBought({ name }, options),
+      /** What an investment's gain is measured against: its net contributions. */
+      putIn: m.uiMoneyPutIn({}, options),
     },
     jobs: {
       /** A background job's state, beside its title. */
