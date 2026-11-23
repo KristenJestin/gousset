@@ -5,7 +5,7 @@ import type { AccountLineRow } from "@gousset/ui/components/account-lines";
 import { Block, ScreenBlock } from "@gousset/ui/components/app-shell";
 import { Button } from "@gousset/ui/components/button";
 import { CategoryPicker } from "@gousset/ui/components/category-picker";
-import { Dialog, DialogClose } from "@gousset/ui/components/dialog";
+import { Dialog } from "@gousset/ui/components/dialog";
 import { EmptyState } from "@gousset/ui/components/empty-state";
 import { FormMessage } from "@gousset/ui/components/form-message";
 import { List, ListItem } from "@gousset/ui/components/list";
@@ -18,7 +18,7 @@ import { notify } from "@gousset/ui/lib/notify";
 import { useDebouncer } from "@tanstack/react-pacer";
 import { useQuery, useQueryClient, useSuspenseQuery } from "@tanstack/react-query";
 import { createFileRoute, notFound } from "@tanstack/react-router";
-import { useId, useState } from "react";
+import { useState } from "react";
 import type { ReactNode } from "react";
 
 import { AppLink } from "@/components/app-link";
@@ -254,7 +254,10 @@ type Refusal = { field: string | undefined; form: string | undefined };
 
 const NO_REFUSAL: Refusal = { field: undefined, form: undefined };
 
-/** A dialog whose form is its body and whose submit button is its main action. */
+/**
+ * A dialog whose form is its body and whose submit button is its main action (docs/design.md,
+ * "Actions and forms"): it stays open while the form is sent.
+ */
 function FormDialog({
   title,
   description,
@@ -274,37 +277,29 @@ function FormDialog({
   onSubmit: () => void;
   children: ReactNode;
 }) {
-  const formId = useId();
-
   return (
     <Dialog
       title={title}
       description={description}
       open={open}
-      onOpenChange={onOpenChange}
+      onOpenChange={(next) => {
+        if (!next && busy) {
+          return;
+        }
+
+        onOpenChange(next);
+      }}
+      onSubmit={(event) => {
+        event.preventDefault();
+        onSubmit();
+      }}
       actions={
-        <>
-          <DialogClose>
-            <Button type="button" variant="secondary">
-              {m.uiCancel()}
-            </Button>
-          </DialogClose>
-          <Button type="submit" form={formId} loading={busy}>
-            {submitLabel}
-          </Button>
-        </>
+        <Button type="submit" loading={busy}>
+          {submitLabel}
+        </Button>
       }
     >
-      <form
-        id={formId}
-        onSubmit={(event) => {
-          event.preventDefault();
-          onSubmit();
-        }}
-        className="flex flex-col gap-4"
-      >
-        {children}
-      </form>
+      {children}
     </Dialog>
   );
 }

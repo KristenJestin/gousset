@@ -3,14 +3,14 @@ import { m } from "@gousset/i18n/messages";
 import { Button } from "@gousset/ui/components/button";
 import { CategoryPicker } from "@gousset/ui/components/category-picker";
 import type { CategoryChoice } from "@gousset/ui/components/category-picker";
-import { Dialog, DialogClose } from "@gousset/ui/components/dialog";
+import { Dialog } from "@gousset/ui/components/dialog";
 import { FormMessage } from "@gousset/ui/components/form-message";
 import { MoneyField } from "@gousset/ui/components/money-field";
 import { SegmentedChoice } from "@gousset/ui/components/segmented-choice";
 import { Select } from "@gousset/ui/components/select";
 import type { ChoiceItem } from "@gousset/ui/components/select";
 import { TextField } from "@gousset/ui/components/text-field";
-import { useId, useState } from "react";
+import { useState } from "react";
 import type { ReactNode } from "react";
 
 import { categoryRefusalMessage } from "@/i18n/messages";
@@ -28,10 +28,16 @@ type Opened = {
   onOpenChange: (open: boolean) => void;
 };
 
+/** The refusals about the name typed, shown under its field; the others under the form. */
+const NAME_REFUSALS: ReadonlySet<string> = new Set(["CATEGORY_NAME", "CATEGORY_NAME_TAKEN"]);
+
+type Refusal = { code: string; message: string };
+
 /**
- * One form in a dialog (docs/design.md: every form asks in a dialog): its fields, the refusal in
- * words under them, Cancel and the submit button, busy while the server answers. It closes once
- * the change is done.
+ * One form in a dialog (docs/design.md, "Actions and forms"): its fields, Cancel and the submit
+ * button, busy while the server answers; the dialog stays open while the form is sent. A refusal
+ * about the name shows under its field, any other under the form. It closes once the change is
+ * done.
  */
 function CategoryDialog({
   open,
@@ -47,10 +53,10 @@ function CategoryDialog({
   submitLabel: string;
   /** Runs on submit; `undefined` when the form's own check stopped it. */
   onSubmit: () => Promise<CategoryAnswer | undefined>;
-  children: ReactNode;
+  /** The fields, given the refusal to show under the name field, if any. */
+  children: (nameError: string | undefined) => ReactNode;
 }) {
-  const formId = useId();
-  const [error, setError] = useState<string>();
+  const [refusal, setRefusal] = useState<Refusal>();
   const [busy, setBusy] = useState(false);
 
   async function submit() {
@@ -61,55 +67,63 @@ function CategoryDialog({
     }
 
     if (!answer.ok) {
-      setError(categoryRefusalMessage(answer.code, answer.fallback));
+      setRefusal({
+        code: answer.code,
+        message: categoryRefusalMessage(answer.code, answer.fallback),
+      });
 
       return;
     }
 
-    setError(undefined);
+    setRefusal(undefined);
     onOpenChange(false);
   }
+
+  const onName = refusal !== undefined && NAME_REFUSALS.has(refusal.code);
 
   return (
     <Dialog
       title={title}
       description={description}
       open={open}
-      onOpenChange={onOpenChange}
+      onOpenChange={(next) => {
+        if (!next && busy) {
+          return;
+        }
+
+        onOpenChange(next);
+      }}
+      onSubmit={(event) => {
+        event.preventDefault();
+        void submit();
+      }}
       actions={
-        <>
-          <DialogClose>
-            <Button type="button" variant="secondary">
-              {m.uiCancel()}
-            </Button>
-          </DialogClose>
-          <Button type="submit" form={formId} loading={busy}>
-            {submitLabel}
-          </Button>
-        </>
+        <Button type="submit" loading={busy}>
+          {submitLabel}
+        </Button>
       }
     >
-      <form
-        id={formId}
-        onSubmit={(event) => {
-          event.preventDefault();
-          void submit();
-        }}
-        className="flex flex-col gap-4"
-      >
-        {children}
-        <FormMessage message={error} />
-      </form>
+      {children(onName ? refusal.message : undefined)}
+      <FormMessage message={onName ? undefined : refusal?.message} />
     </Dialog>
   );
 }
 
-function NameField({ value, onChange }: { value: string; onChange: (name: string) => void }) {
+function NameField({
+  value,
+  onChange,
+  error,
+}: {
+  value: string;
+  onChange: (name: string) => void;
+  error: string | undefined;
+}) {
   return (
     <TextField
       label={m.fieldName()}
       value={value}
       onChange={(event) => onChange(event.target.value)}
+      error={error}
       autoComplete="off"
       required
     />
@@ -162,27 +176,31 @@ export function CreateCategoryDialog({
       submitLabel={m.categoriesCreateSubmit()}
       onSubmit={() => onCreate({ kind, name, parentId: parent === TOP ? null : parent })}
     >
-      <Select
-        label={m.fieldKind()}
-        items={kindItems}
-        value={kind}
-        onValueChange={(value) => {
-          if (value !== null && isKind(value) && value !== kind) {
-            setKind(value);
-            // A parent of the other kind cannot be kept.
-            setParent(TOP);
-          }
-        }}
-        required
-      />
-      <NameField value={name} onChange={setName} />
-      <Select
-        label={m.categoriesFieldParent()}
-        items={parentItems(parentsOfKind(kind))}
-        value={parent}
-        onValueChange={(value) => setParent(value ?? TOP)}
-        required
-      />
+      {(nameError) => (
+        <>
+          <Select
+            label={m.fieldKind()}
+            items={kindItems}
+            value={kind}
+            onValueChange={(value) => {
+              if (value !== null && isKind(value) && value !== kind) {
+                setKind(value);
+                // A parent of the other kind cannot be kept.
+                setParent(TOP);
+              }
+            }}
+            required
+          />
+          <NameField value={name} onChange={setName} error={nameError} />
+          <Select
+            label={m.categoriesFieldParent()}
+            items={parentItems(parentsOfKind(kind))}
+            value={parent}
+            onValueChange={(value) => setParent(value ?? TOP)}
+            required
+          />
+        </>
+      )}
     </CategoryDialog>
   );
 }
@@ -202,7 +220,7 @@ export function RenameCategoryDialog({
       submitLabel={m.categoriesRenameSubmit()}
       onSubmit={() => onRename(name)}
     >
-      <NameField value={name} onChange={setName} />
+      {(nameError) => <NameField value={name} onChange={setName} error={nameError} />}
     </CategoryDialog>
   );
 }
@@ -230,13 +248,15 @@ export function MoveCategoryDialog({
       submitLabel={m.categoriesMoveSubmit()}
       onSubmit={() => onMove(parent === TOP ? null : parent)}
     >
-      <Select
-        label={m.categoriesFieldParent()}
-        items={parentItems(parents)}
-        value={parent}
-        onValueChange={(value) => setParent(value ?? TOP)}
-        required
-      />
+      {() => (
+        <Select
+          label={m.categoriesFieldParent()}
+          items={parentItems(parents)}
+          value={parent}
+          onValueChange={(value) => setParent(value ?? TOP)}
+          required
+        />
+      )}
     </CategoryDialog>
   );
 }
@@ -262,14 +282,16 @@ export function MergeCategoryDialog({
       submitLabel={m.categoriesMergeSubmit()}
       onSubmit={async () => (into === null ? undefined : onMerge(into))}
     >
-      <CategoryPicker
-        label={m.categoriesMergeInto()}
-        placeholder={m.categoriesSearch()}
-        categories={targets}
-        value={into}
-        onValueChange={setInto}
-        required
-      />
+      {() => (
+        <CategoryPicker
+          label={m.categoriesMergeInto()}
+          placeholder={m.categoriesSearch()}
+          categories={targets}
+          value={into}
+          onValueChange={setInto}
+          required
+        />
+      )}
     </CategoryDialog>
   );
 }
@@ -320,29 +342,33 @@ export function BenchmarkDialog({
       submitLabel={m.categoriesBenchmarkSubmit()}
       onSubmit={save}
     >
-      <SegmentedChoice
-        label={m.categoriesBenchmark()}
-        value={mode}
-        choices={[
-          { value: "automatic", label: m.categoriesBenchmarkAutomatic() },
-          { value: "fixed", label: m.categoriesBenchmarkFixed() },
-          { value: "none", label: m.categoriesBenchmarkNone() },
-        ]}
-        onChange={setMode}
-      />
-      {mode === "fixed" ? (
-        <MoneyField
-          label={m.categoriesBenchmarkAmount()}
-          currency={currency}
-          defaultValue={minor}
-          error={invalid ? m.categoriesBenchmarkAmountInvalid() : undefined}
-          onValueChange={(value) => {
-            setInvalid(false);
-            setMinor(value);
-          }}
-          required
-        />
-      ) : null}
+      {() => (
+        <>
+          <SegmentedChoice
+            label={m.categoriesBenchmark()}
+            value={mode}
+            choices={[
+              { value: "automatic", label: m.categoriesBenchmarkAutomatic() },
+              { value: "fixed", label: m.categoriesBenchmarkFixed() },
+              { value: "none", label: m.categoriesBenchmarkNone() },
+            ]}
+            onChange={setMode}
+          />
+          {mode === "fixed" ? (
+            <MoneyField
+              label={m.categoriesBenchmarkAmount()}
+              currency={currency}
+              defaultValue={minor}
+              error={invalid ? m.categoriesBenchmarkAmountInvalid() : undefined}
+              onValueChange={(value) => {
+                setInvalid(false);
+                setMinor(value);
+              }}
+              required
+            />
+          ) : null}
+        </>
+      )}
     </CategoryDialog>
   );
 }
