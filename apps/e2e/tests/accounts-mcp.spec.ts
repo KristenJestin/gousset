@@ -264,9 +264,10 @@ test("an MCP client creates an account, imports a file into it and reads its bal
   const shown = await callAccounts(session.client, { action: "show", name: "everyday account" });
 
   expect(shown.isError, shown.text).toBe(false);
-  // 1,234.56 EUR opening, then the six lines: +2,450.00 −4.20 −850.00 −62.37 −12.99 +35.00.
+  // 1,234.56 EUR opening, then the six lines: +2,450.00 −4.20 −850.00 −62.37 −12.99 +35.00. An
+  // import's period ends on its last line's day (2026-10-21), its closing balance on the statement's.
   expect(shown.text).toMatch(
-    /Balance at the end of \d{4}-\d\d-\d\d: 2,790\.00 EUR; statements until 2026-10-31\./,
+    /Balance at the end of \d{4}-\d\d-\d\d: 2,790\.00 EUR; statements until 2026-10-21\./,
   );
   expect(shown.text).toContain(
     "Check: on 2026-10-31 the statement and Gousset agree, both 2,790.00 EUR.",
@@ -276,6 +277,6 @@ test("an MCP client creates an account, imports a file into it and reads its bal
   const listed = await callAccounts(session.client, { action: "list" });
 
   expect(listed.text).toContain(
-    "- Everyday account (Example Bank), current account: 2,790.00 EUR; statements until 2026-10-31.",
+    "- Everyday account (Example Bank), current account: 2,790.00 EUR; statements until 2026-10-21.",
   );
 });
