@@ -197,11 +197,22 @@ test("a created user must change their password", async ({ userPage, browser, ap
     await page.goto("/");
     await expect(page).toHaveURL(/\/change-password$/);
 
+    // Every address the page goes through, the history's own included.
+    const visited: Array<string> = [];
+
+    page.on("framenavigated", (frame) => {
+      if (frame === page.mainFrame()) {
+        visited.push(new URL(frame.url()).pathname);
+      }
+    });
+
     await page.getByLabel("Current password").fill("robin-temporary-e2e");
     await page.getByLabel("New password").fill("robin-own-password-e2e");
     await page.getByRole("button", { name: "Change the password" }).click();
 
     await expect(page.getByRole("heading", { level: 1, name: "Monthly review" })).toBeVisible();
+    // Straight to the app: never through the settings, where /change-password sends anyone else.
+    expect(visited).not.toContain("/settings/account");
     // Not an administrator: no users section in the settings.
     const menu = await openAccountMenu(page, "Robin Example");
 

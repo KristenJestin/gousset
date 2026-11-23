@@ -2,7 +2,7 @@ import { m } from "@gousset/i18n/messages";
 import { Button } from "@gousset/ui/components/button";
 import { Card } from "@gousset/ui/components/card";
 import { Actions, Form, Screen } from "@gousset/ui/components/screen";
-import { createFileRoute, redirect, useNavigate, useRouter } from "@tanstack/react-router";
+import { createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
 
 import { ChangePasswordFields, useChangePassword } from "@/components/change-password";
 
@@ -22,12 +22,13 @@ export const Route = createFileRoute("/_authed/change-password")({
 
 function ChangePassword() {
   const navigate = useNavigate();
-  const router = useRouter();
 
-  const { refusal, busy, submit, clearRefusal } = useChangePassword(async () => {
-    await router.invalidate();
-    await navigate({ to: "/" });
-  });
+  // The root reads the viewer again on the way: the app opens. No invalidation first, which would
+  // run this page's own guard, now false, and step through the settings. A one-time step: Back
+  // does not return to it.
+  const { refusal, busy, submit, clearRefusal } = useChangePassword(() =>
+    navigate({ to: "/", replace: true }),
+  );
 
   return (
     <Screen>
