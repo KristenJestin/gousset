@@ -5,17 +5,22 @@
   "type": "module",
   "exports": {
     ".": "./src/index.ts",
-    "./values": "./src/values.ts"
+    "./values": "./src/values.ts",
+    "./read": "./src/imports/read.ts"
   },
   "scripts": {
     "check-types": "tsc --noEmit"
   },
   "dependencies": {
+    "@gousset/db": "workspace:*",
     "@gousset/fixture": "workspace:*",
+    "@gousset/import": "workspace:*",
+    "drizzle-orm": "catalog:",
     "effect": "catalog:"
   },
   "devDependencies": {
     "@gousset/config": "workspace:*",
+    "fast-check": "catalog:",
     "typescript": "catalog:"
   }
 }
