@@ -1,9 +1,9 @@
 import type { LineToReview, LinesToReview } from "@gousset/core";
+import { m } from "@gousset/i18n/messages";
 import { notify } from "@gousset/ui/lib/notify";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 import { approveLine } from "@/functions/month";
-import { useMessages } from "@/i18n/use-messages";
 
 import { invalidateTouched } from "./invalidate";
 import { monthKeys } from "./month";
@@ -19,7 +19,6 @@ type Taken = { line: LineToReview | undefined; index: number };
  */
 export function useApproveLine(month: string) {
   const queryClient = useQueryClient();
-  const messages = useMessages();
   const key = monthKeys.toReview(month);
   const mutationKey = ["approve-line", month];
 
@@ -59,13 +58,13 @@ export function useApproveLine(month: string) {
       }
 
       if (result.code === "LINE_ALREADY_REVIEWED") {
-        notify.failed({ description: messages.review.alreadyReviewed });
+        notify.failed({ description: m.reviewAlreadyReviewed() });
 
         return;
       }
 
       putBack(taken);
-      notify.failed({ description: messages.review.approveFailed });
+      notify.failed({ description: m.reviewApproveFailed() });
     },
 
     // The server could not be reached, or failed: worth another try.
@@ -75,7 +74,7 @@ export function useApproveLine(month: string) {
       }
 
       notify.failed({
-        description: messages.review.approveFailed,
+        description: m.reviewApproveFailed(),
         retry: () => approval.mutate(lineId),
       });
     },

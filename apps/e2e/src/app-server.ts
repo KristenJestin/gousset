@@ -35,6 +35,11 @@ export type WorkerEnvironment = {
   slot: number;
   database: string;
   baseURL: string;
+  /**
+   * Stops the app as `docker stop` would (SIGTERM, then SIGKILL after 10 s) and starts it again on
+   * the same port and database, resolving once it serves: what a restart of an installation does.
+   */
+  restart: () => Promise<void>;
   stop: () => Promise<void>;
 };
 
@@ -73,6 +78,8 @@ function appEnvironment(port: number, database: string, extra: AppEnvironment) {
     GOUSSET_E2E_CLOCK: "on",
     // `/mcp` serves its test-only write action, `e2e_probe` (packages/mcp, tools/e2e-probe.ts).
     GOUSSET_E2E_PROBE: "on",
+    // The test job and its page, `/e2e/jobs` (apps/web/src/jobs/test-job.ts).
+    GOUSSET_E2E_JOBS: "on",
   };
 }
 
@@ -203,29 +210,46 @@ export async function startWorkerEnvironment(
 
   const port = await freePort();
   const baseURL = `http://${APP_HOST}:${port}`;
-  const container = `gousset-e2e-${port}`;
 
   mkdirSync(dirname(logFile), { recursive: true });
 
   // Appended: a worker that replaces a failed one on the same slot keeps the failed one's log.
   const log = createWriteStream(logFile, { flags: "a" });
-  const app = follow(launch(port, database, container, extra));
+  let launches = 0;
 
-  app.server.stdout?.pipe(log);
-  app.server.stderr?.pipe(log);
+  // A container's name of its own at each launch: a stopped one may not be removed yet.
+  const start = () => {
+    launches += 1;
+
+    const container = `gousset-e2e-${port}-${launches}`;
+    const launched = follow(launch(port, database, container, extra));
+
+    launched.server.stdout?.pipe(log, { end: false });
+    launched.server.stderr?.pipe(log, { end: false });
+
+    return { launched, container };
+  };
+
+  let app = start();
 
   const stop = async () => {
-    await stopProcess(app, container);
+    await stopProcess(app.launched, app.container);
     log.end();
     await dropDatabase(database);
   };
 
+  const restart = async () => {
+    await stopProcess(app.launched, app.container);
+    app = start();
+    await waitUntilServing(baseURL, app.launched, logFile);
+  };
+
   try {
-    await waitUntilServing(baseURL, app, logFile);
+    await waitUntilServing(baseURL, app.launched, logFile);
   } catch (error) {
     await stop();
     throw error;
   }
 
-  return { slot, database, baseURL, stop };
+  return { slot, database, baseURL, restart, stop };
 }
