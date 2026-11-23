@@ -122,7 +122,7 @@ There are some, but no extra service: the job queue lives in Postgres with **pg-
 
 What does **not** run in the background: the month's totals, benchmarks, balances and expiries. They are computed on read, in SQL. One person's volumes (a few thousand lines a year) do not justify a cache, and a recomputed total is never wrong.
 
-The interface follows a job's progress live (a server stream or short polling): that is what moves the import's steps forward and rolls the counter of updated lines.
+The interface follows a job's progress live, as Server-Sent Events (`/api/jobs/<id>/events`): that is what moves the import's steps forward and rolls the counter of updated lines. One-way like progress itself, plain HTTP through any reverse proxy, and the browser reconnects by itself, which carries a page across a restart of the app. A job is defined once with its input's schema, its steps, its retries and its timeout; each attempt starts again from its first step, so a job never doubles what an earlier attempt did.
 
 ## Packages
 
