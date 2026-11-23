@@ -6,6 +6,7 @@ import { Effect, Schema } from "effect";
 
 import { runCore } from "@/services";
 
+import { ProfileChoiceInput } from "./import-profiles";
 import { signedIn } from "./month";
 
 // The import screen's calls (#20), on `@gousset/core`'s `Imports`, as the MCP door's `imports`
@@ -53,7 +54,10 @@ export const getCsvQuestions = createServerFn({ method: "GET" })
     ),
   );
 
-/** Runs a waiting or failed import again with the user's answers: its account, how to read it. */
+/**
+ * Runs a waiting or failed import again with the user's answers: its account, how to read it (a
+ * definition made on the screen, or a profile chosen by id or key).
+ */
 export const resumeImport = createServerFn({ method: "POST" })
   .middleware([signedIn])
   .validator(
@@ -62,6 +66,7 @@ export const resumeImport = createServerFn({ method: "POST" })
         importId: Schema.String,
         accountId: Schema.NullOr(Schema.String),
         csvProfile: Schema.NullOr(CsvProfile),
+        profile: Schema.optional(Schema.NullOr(ProfileChoiceInput)),
       }),
     ),
   )
@@ -71,6 +76,7 @@ export const resumeImport = createServerFn({ method: "POST" })
         imports.resume(context.owner, data.importId, {
           accountId: data.accountId,
           csvProfile: data.csvProfile,
+          profile: data.profile ?? null,
         }),
       ).pipe(
         Effect.map((resumed): { resumed: ImportSummary } | Refused => ({ resumed })),
@@ -78,6 +84,8 @@ export const resumeImport = createServerFn({ method: "POST" })
           ImportNotFound: () => Effect.succeed({ refused: "IMPORT_NOT_FOUND" }),
           ImportBusy: () => Effect.succeed({ refused: "IMPORT_BUSY" }),
           AccountNotFound: () => Effect.succeed({ refused: "ACCOUNT_NOT_FOUND" }),
+          ProfileNotFound: () => Effect.succeed({ refused: "PROFILE_NOT_FOUND" }),
+          ProfileUnreadable: () => Effect.succeed({ refused: "PROFILE_UNREADABLE" }),
           ImportUnavailable: () => Effect.succeed({ refused: "IMPORT_UNAVAILABLE" }),
         }),
       ),

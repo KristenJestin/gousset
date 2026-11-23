@@ -1,4 +1,4 @@
-import { FixtureLedger, Imports, memoryAccountStore } from "@gousset/core";
+import { FixtureLedger, ImportProfiles, Imports, memoryAccountStore } from "@gousset/core";
 import { Effect, Layer } from "effect";
 import { describe, expect, test } from "vite-plus/test";
 
@@ -23,7 +23,12 @@ async function listing() {
         Effect.runPromiseExit(
           Effect.provide(
             effect,
-            Layer.mergeAll(FixtureLedger, memoryAccountStore(), Layer.mock(Imports, {})),
+            Layer.mergeAll(
+              FixtureLedger,
+              memoryAccountStore(),
+              Layer.mock(Imports, {}),
+              Layer.mock(ImportProfiles, {}),
+            ),
           ),
         ),
     },

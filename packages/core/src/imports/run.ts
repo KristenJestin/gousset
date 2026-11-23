@@ -16,6 +16,7 @@ import { dedupKeys, NEAR_DAYS, nearDuplicates } from "./keys";
 import type { ExistingLine, ImportFormat, ReadLine } from "./keys";
 import { StatementReader } from "./read";
 import type { ReadStatement } from "./read";
+import { matchProfile, profileCandidates } from "./profiles";
 import { isId } from "./rows";
 import type { ImportStep } from "./summary";
 
@@ -217,6 +218,21 @@ export function runImport(
     }
 
     let csvProfile = input.csvProfile;
+
+    // A CSV file with no profile given is read with the user's profile that recognises its header,
+    // else a shipped one, else as detection proposes; the import records which (none for
+    // detection). A profile given was recorded when the user chose it.
+    if (loaded.format === "csv" && csvProfile === null) {
+      const candidates = yield* inTransaction(profileCandidates);
+      const matched = yield* matchProfile(loaded.bytes, candidates);
+
+      yield* setStatus({
+        profileId: matched?.profileId ?? null,
+        shippedProfile: matched?.shippedProfile ?? null,
+      });
+
+      csvProfile = matched?.profile ?? null;
+    }
 
     if (loaded.format === "csv" && csvProfile === null) {
       // Detection reads the top of the file only (a mebibyte at most): it stays in this thread.
