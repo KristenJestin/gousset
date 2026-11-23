@@ -4,7 +4,8 @@ import { createFileRoute } from "@tanstack/react-router";
 import { Effect, Option, Schema } from "effect";
 
 import type { UploadAnswer } from "../../lib/upload";
-import { auth, runCore } from "../../services";
+import { usableSession } from "../../lib/session.server";
+import { runCore } from "../../services";
 
 const NO_STORE = { "Cache-Control": "no-store" };
 
@@ -69,8 +70,8 @@ async function boundedBody(request: Request): Promise<Uint8Array | undefined> {
 /**
  * Uploads one statement file for the signed-in user and starts its import: the body is the file's
  * bytes, `name` its name, and `account` and `format` what the user chose, when they did. Answers
- * the import's id and job, or a refusal's code (`FILE_TOO_LARGE`, `EMPTY_FILE`, `UNKNOWN_FORMAT`,
- * `ACCOUNT_NOT_FOUND`, `IMPORT_UNAVAILABLE`).
+ * the import's id and job, or a refusal's code (`SIGN_IN_REQUIRED`, `PASSWORD_CHANGE_REQUIRED`,
+ * `FILE_TOO_LARGE`, `EMPTY_FILE`, `UNKNOWN_FORMAT`, `ACCOUNT_NOT_FOUND`, `IMPORT_UNAVAILABLE`).
  */
 export const Route = createFileRoute("/api/imports")({
   server: {
@@ -83,10 +84,11 @@ export const Route = createFileRoute("/api/imports")({
           return refused("UPLOAD_FAILED", 415);
         }
 
-        const session = await auth.api.getSession({ headers: request.headers });
+        const { session, refusal } = await usableSession(request.headers);
 
-        if (!session) {
-          return refused("SIGN_IN_REQUIRED", 401);
+        // A temporary password imports nothing: someone else chose it (#70, #79).
+        if (session === undefined) {
+          return refused(refusal, refusal === "SIGN_IN_REQUIRED" ? 401 : 403);
         }
 
         const content = await boundedBody(request);

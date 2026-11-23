@@ -1,4 +1,3 @@
-import { AuthErrorCode, isHeldForPasswordChange } from "@gousset/auth";
 import {
   approveLine as approveCoreLine,
   currentMonth,
@@ -17,19 +16,16 @@ import { getRequestHeaders } from "@tanstack/react-start/server";
 import { Effect, Schema } from "effect";
 
 import { devLatency } from "@/lib/dev-latency";
-import { auth, runCore } from "@/services";
+import { usableSession } from "@/lib/session.server";
+import { runCore } from "@/services";
 
 /** Only a signed-in user reads data, and only their own: the session says whose. */
 export const signedIn = createMiddleware({ type: "function" }).server(async ({ next }) => {
-  const session = await auth.api.getSession({ headers: getRequestHeaders() });
+  const { session, refusal } = await usableSession(getRequestHeaders());
 
-  if (!session) {
-    throw new Error("Sign in to read your data.");
-  }
-
-  // A temporary password reaches no data: the administrator chose it (#70).
-  if (isHeldForPasswordChange(session)) {
-    throw new Error(AuthErrorCode.passwordChangeRequired);
+  // A temporary password reaches no data: someone else chose it (#70, #79).
+  if (session === undefined) {
+    throw new Error(refusal === "SIGN_IN_REQUIRED" ? "Sign in to read your data." : refusal);
   }
 
   return next({ context: { owner: session.user.id } });
