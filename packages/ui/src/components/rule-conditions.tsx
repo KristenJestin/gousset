@@ -65,6 +65,11 @@ type Slots = { one: Slot; pair: readonly [Slot, Slot] };
 
 const NONE: Slots = { one: null, pair: [null, null] };
 
+/** What qnot lets the user do: a flat list of conditions, up to the limit, on values alone. */
+function settingsOf(readOnly: boolean, maxRules: number) {
+  return { readOnly, maxRules, maxDepth: 0, allowRefs: false, allowFunctions: false };
+}
+
 function slotsOf(node: RuleNode<RuleFields>): Slots {
   switch (node.field) {
     case "amount":
@@ -134,18 +139,21 @@ export function RuleConditionsEditor({
   error,
   disabled = false,
 }: RuleConditionsEditorProps) {
+  // qnot applies `settings` again whenever it is another object, and tells every listener, so
+  // `onChange` too: a new object at each render made each change render again, without end. They
+  // are kept, and replaced only when what they say changes.
+  const [settings, setSettings] = useState(() => settingsOf(disabled, maxConditions));
+
+  if (settings.readOnly !== disabled || settings.maxRules !== maxConditions) {
+    setSettings(settingsOf(disabled, maxConditions));
+  }
+
   const store = useQueryStore({
     fields: ruleFields(accounts.map((each) => each.id)),
     initial: initial ?? FIRST_CONDITION,
     onChange,
     history: false,
-    settings: {
-      readOnly: disabled,
-      maxRules: maxConditions,
-      maxDepth: 0,
-      allowRefs: false,
-      allowFunctions: false,
-    },
+    settings,
   });
 
   return (

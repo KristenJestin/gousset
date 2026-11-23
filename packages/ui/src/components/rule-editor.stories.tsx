@@ -176,7 +176,15 @@ export const TurnedOff: Story = { args: { enabled: false } };
 
 /** Its category archived since: shown and named, never offered for another rule. */
 export const ArchivedCategory: Story = {
-  args: { category: { ...GROCERIES, name: "Food › Old groceries", archived: true } },
+  // A category of its own: an archived one is never among those offered, as the page gives them.
+  args: {
+    category: {
+      id: "old-groceries",
+      name: "Food › Old groceries",
+      kind: "expense",
+      archived: true,
+    },
+  },
 };
 
 /** The server refused one condition. */
