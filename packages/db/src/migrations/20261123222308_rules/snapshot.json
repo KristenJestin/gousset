@@ -1,0 +1,593 @@
+{
+  "type": "diff",
+  "version": "10",
+  "dialect": "postgres",
+  "id": "30fe1a65-efac-426c-bbd9-18a7f704a13d",
+  "prevIds": [
+    "da4f8b87-f8f0-43b2-bda3-68e57ba3d716"
+  ],
+  "footprints": [
+    {
+      "statementType": "create_enum",
+      "statementTarget": [
+        "enum",
+        "public",
+        "rule_origin"
+      ],
+      "writes": [
+        "s|enum|public.rule_origin",
+        "n|enum|public.rule_origin",
+        "e|enum|public.rule_origin",
+        "n|type|public.rule_origin"
+      ],
+      "reads": [
+        "n|sch|public"
+      ]
+    },
+    {
+      "statementType": "create_table",
+      "statementTarget": [
+        "table",
+        "public",
+        "rule"
+      ],
+      "writes": [
+        "s|tbl|public.rule",
+        "n|tbl|public.rule",
+        "e|tbl|public.rule",
+        "n|rel|public.rule",
+        "n|type|public.rule",
+        "n|rel|public.rule_pkey",
+        "n|rel|public.rule_user_id_id_key"
+      ],
+      "reads": [
+        "n|sch|public",
+        "n|enum|public.rule_origin"
+      ]
+    },
+    {
+      "statementType": "add_column",
+      "statementTarget": [
+        "column",
+        "public",
+        "entry",
+        "merchant_id"
+      ],
+      "writes": [
+        "s|col|public.entry.merchant_id",
+        "n|col|public.entry.merchant_id",
+        "e|col|public.entry.merchant_id"
+      ],
+      "reads": [
+        "n|tbl|public.entry",
+        "n|sch|public"
+      ]
+    },
+    {
+      "statementType": "add_column",
+      "statementTarget": [
+        "column",
+        "public",
+        "entry",
+        "rule_id"
+      ],
+      "writes": [
+        "s|col|public.entry.rule_id",
+        "n|col|public.entry.rule_id",
+        "e|col|public.entry.rule_id"
+      ],
+      "reads": [
+        "n|tbl|public.entry",
+        "n|sch|public"
+      ]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": [
+        "index",
+        "public",
+        "entry",
+        "entry_merchant_id_idx"
+      ],
+      "writes": [
+        "s|idx|public.entry_merchant_id_idx",
+        "n|idx|public.entry_merchant_id_idx",
+        "e|idx|public.entry_merchant_id_idx",
+        "n|rel|public.entry_merchant_id_idx"
+      ],
+      "reads": [
+        "n|tbl|public.entry",
+        "n|sch|public",
+        "n|col|public.entry.merchant_id"
+      ]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": [
+        "index",
+        "public",
+        "entry",
+        "entry_rule_id_idx"
+      ],
+      "writes": [
+        "s|idx|public.entry_rule_id_idx",
+        "n|idx|public.entry_rule_id_idx",
+        "e|idx|public.entry_rule_id_idx",
+        "n|rel|public.entry_rule_id_idx"
+      ],
+      "reads": [
+        "n|tbl|public.entry",
+        "n|sch|public",
+        "n|col|public.entry.rule_id"
+      ]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": [
+        "index",
+        "public",
+        "rule",
+        "rule_set_merchant_id_idx"
+      ],
+      "writes": [
+        "s|idx|public.rule_set_merchant_id_idx",
+        "n|idx|public.rule_set_merchant_id_idx",
+        "e|idx|public.rule_set_merchant_id_idx",
+        "n|rel|public.rule_set_merchant_id_idx"
+      ],
+      "reads": [
+        "n|tbl|public.rule",
+        "n|sch|public",
+        "n|col|public.rule.set_merchant_id"
+      ]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": [
+        "index",
+        "public",
+        "rule",
+        "rule_set_category_id_idx"
+      ],
+      "writes": [
+        "s|idx|public.rule_set_category_id_idx",
+        "n|idx|public.rule_set_category_id_idx",
+        "e|idx|public.rule_set_category_id_idx",
+        "n|rel|public.rule_set_category_id_idx"
+      ],
+      "reads": [
+        "n|tbl|public.rule",
+        "n|sch|public",
+        "n|col|public.rule.set_category_id"
+      ]
+    },
+    {
+      "statementType": "create_fk",
+      "statementTarget": [
+        "table",
+        "public",
+        "rule"
+      ],
+      "writes": [
+        "s|fk|public.rule.rule_user_id_auth_user_id_fkey",
+        "n|fk|public.rule.rule_user_id_auth_user_id_fkey",
+        "e|fk|public.rule.rule_user_id_auth_user_id_fkey",
+        "n|con|public.rule.rule_user_id_auth_user_id_fkey"
+      ],
+      "reads": [
+        "n|tbl|public.rule",
+        "n|sch|public",
+        "n|tbl|public.auth_user",
+        "n|sch|public",
+        "n|col|public.rule.user_id",
+        "n|col|public.auth_user.id",
+        "e|uniqueness|public.auth_user.id"
+      ]
+    },
+    {
+      "statementType": "create_policy",
+      "statementTarget": [
+        "table",
+        "public",
+        "rule"
+      ],
+      "writes": [
+        "s|pol|public.rule.rule_own_rows_only",
+        "n|pol|public.rule.rule_own_rows_only",
+        "e|pol|public.rule.rule_own_rows_only"
+      ],
+      "reads": [
+        "n|tbl|public.rule",
+        "n|sch|public",
+        "e|rls|public.rule"
+      ]
+    }
+  ],
+  "deltas": [
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "name": "rule",
+        "isRlsEnabled": true,
+        "entityType": "tables"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "name": "rule_origin",
+        "values": [
+          "correction",
+          "user"
+        ],
+        "entityType": "enums"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "entry",
+        "name": "merchant_id",
+        "type": "uuid",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "entry",
+        "name": "rule_id",
+        "type": "uuid",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "rule",
+        "name": "id",
+        "type": "uuid",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "uuidv7()",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "rule",
+        "name": "user_id",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "rule",
+        "name": "position",
+        "type": "integer",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "0",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "rule",
+        "name": "enabled",
+        "type": "boolean",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "true",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "rule",
+        "name": "conditions",
+        "type": "jsonb",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "rule",
+        "name": "set_merchant_id",
+        "type": "uuid",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "rule",
+        "name": "set_category_id",
+        "type": "uuid",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "rule",
+        "name": "applied_count",
+        "type": "integer",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "0",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "rule",
+        "name": "created_from",
+        "type": "rule_origin",
+        "typeSchema": "public",
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "rule",
+        "name": "created_at",
+        "type": "timestamp with time zone",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "now()",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "rule",
+        "name": "updated_at",
+        "type": "timestamp with time zone",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "now()",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "entry",
+        "name": "entry_merchant_id_idx",
+        "nameExplicit": true,
+        "columns": [
+          {
+            "value": "merchant_id",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          }
+        ],
+        "isUnique": false,
+        "where": null,
+        "with": "",
+        "method": "btree",
+        "entityType": "indexes"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "entry",
+        "name": "entry_rule_id_idx",
+        "nameExplicit": true,
+        "columns": [
+          {
+            "value": "rule_id",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          }
+        ],
+        "isUnique": false,
+        "where": null,
+        "with": "",
+        "method": "btree",
+        "entityType": "indexes"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "rule",
+        "name": "rule_set_merchant_id_idx",
+        "nameExplicit": true,
+        "columns": [
+          {
+            "value": "set_merchant_id",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          }
+        ],
+        "isUnique": false,
+        "where": null,
+        "with": "",
+        "method": "btree",
+        "entityType": "indexes"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "rule",
+        "name": "rule_set_category_id_idx",
+        "nameExplicit": true,
+        "columns": [
+          {
+            "value": "set_category_id",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          }
+        ],
+        "isUnique": false,
+        "where": null,
+        "with": "",
+        "method": "btree",
+        "entityType": "indexes"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "rule",
+        "name": "rule_user_id_auth_user_id_fkey",
+        "nameExplicit": false,
+        "columns": [
+          "user_id"
+        ],
+        "schemaTo": "public",
+        "tableTo": "auth_user",
+        "columnsTo": [
+          "id"
+        ],
+        "onUpdate": "NO ACTION",
+        "onDelete": "CASCADE",
+        "entityType": "fks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "rule",
+        "name": "rule_pkey",
+        "columns": [
+          "id"
+        ],
+        "nameExplicit": false,
+        "entityType": "pks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "rule",
+        "name": "rule_user_id_id_key",
+        "nameExplicit": true,
+        "columns": [
+          "user_id",
+          "id"
+        ],
+        "nullsNotDistinct": false,
+        "entityType": "uniques"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "rule",
+        "name": "rule_own_rows_only",
+        "as": "PERMISSIVE",
+        "for": "ALL",
+        "roles": [
+          "public"
+        ],
+        "using": "\"user_id\" = current_setting('gousset.user_id', true)",
+        "withCheck": "\"user_id\" = current_setting('gousset.user_id', true)",
+        "entityType": "policies"
+      }
+    }
+  ]
+}
