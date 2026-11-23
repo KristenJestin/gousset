@@ -18,6 +18,8 @@ import {
   accountBalance,
   importFile,
   importProfile,
+  merchant,
+  merchantAlias,
   statementImport,
   statementLine,
 } from "./ledger";
@@ -44,6 +46,8 @@ export const tables = {
   statementImport,
   importFile,
   importProfile,
+  merchant,
+  merchantAlias,
 };
 
 export { authRelations };
