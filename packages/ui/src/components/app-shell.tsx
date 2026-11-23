@@ -82,13 +82,11 @@ export function NavLink({ icon, label, ...props }: NavLinkProps) {
   return (
     <a
       {...props}
-      className="relative flex h-9 items-center gap-3 rounded-md px-2.5 text-sm text-muted-foreground transition-colors hover:text-foreground aria-[current=page]:font-medium aria-[current=page]:text-foreground"
+      className="relative isolate flex h-9 items-center gap-3 rounded-md px-2.5 text-sm text-muted-foreground transition-colors hover:text-foreground aria-[current=page]:font-medium aria-[current=page]:text-foreground"
     >
       {current ? <CurrentMark layoutId="nav-current" place="nav" /> : null}
-      <span className="relative flex">
-        <Icon name={icon} size="lg" />
-      </span>
-      <span className="relative sr-only lg:not-sr-only">{label}</span>
+      <Icon name={icon} size="lg" />
+      <span className="sr-only lg:not-sr-only">{label}</span>
     </a>
   );
 }
@@ -99,6 +97,10 @@ const subscribeToNothing = () => () => undefined;
  * The current item's mark, which slides to the item reached (Motion's shared layout). On the
  * server and while hydrating it is a plain element: Motion writes a `style` attribute, which the
  * Content Security Policy refuses in the server's markup.
+ *
+ * It is drawn under its link's content whatever that content's position: the link isolates its
+ * layers, and the mark sits below them. A positioned mark is otherwise painted over the content
+ * that is not positioned, as the wide sidebar's label is (`lg:not-sr-only` makes it static).
  */
 function CurrentMark({ layoutId, place }: { layoutId: string; place: "nav" | "tab" }) {
   const inBrowser = useSyncExternalStore(
@@ -109,8 +111,8 @@ function CurrentMark({ layoutId, place }: { layoutId: string; place: "nav" | "ta
 
   const className =
     place === "nav"
-      ? "absolute inset-0 rounded-md bg-muted"
-      : "absolute inset-x-4 top-0 h-0.5 rounded-full bg-primary";
+      ? "absolute inset-0 -z-10 rounded-md bg-muted"
+      : "absolute inset-x-4 top-0 -z-10 h-0.5 rounded-full bg-primary";
 
   if (!inBrowser) {
     return <span data-slot="current-mark" className={className} />;
@@ -163,7 +165,7 @@ export function TabLink({ icon, label, ...props }: NavLinkProps) {
   return (
     <a
       {...props}
-      className="relative flex flex-1 flex-col items-center justify-center gap-1 text-xs text-muted-foreground aria-[current=page]:font-medium aria-[current=page]:text-foreground"
+      className="relative isolate flex flex-1 flex-col items-center justify-center gap-1 text-xs text-muted-foreground aria-[current=page]:font-medium aria-[current=page]:text-foreground"
     >
       {current ? <CurrentMark layoutId="tab-current" place="tab" /> : null}
       <Icon name={icon} size="lg" />
