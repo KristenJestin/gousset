@@ -1,7 +1,17 @@
 import fc from "fast-check";
 import { describe, expect, test } from "vite-plus/test";
 
-import { cardDebits, clearPairs, isCandidate, replacedCounterparts } from "./pairing";
+import type { AccountKind } from "../account-values";
+import { POOL_DAYS } from "./pair-lines";
+import {
+  LONGEST_TRANSFER_DAYS,
+  TRANSFER_DAYS,
+  cardDebits,
+  clearPairs,
+  isCandidate,
+  replacedCounterparts,
+  shiftDay,
+} from "./pairing";
 import type { CardLedger, PairableLine } from "./pairing";
 
 // Every amount and account here is invented.
@@ -120,6 +130,9 @@ describe("clear pairs", () => {
   });
 });
 
+const daysBetween = (a: string, b: string) =>
+  Math.round((Date.parse(b) - Date.parse(a)) / 86_400_000);
+
 /** A line on a savings account of its own. */
 const savings = (id: string, bookedOn: string, amountMinor: number) =>
   line(id, `savings-${id}`, bookedOn, amountMinor, { accountKind: "savings" });
@@ -165,6 +178,83 @@ describe("a savings account dates by the fortnight", () => {
 
     expect(isCandidate(withdrawn, line("in", "current", "2026-10-30", 30_000))).toBe(true);
     expect(isCandidate(withdrawn, line("in", "current", "2026-11-06", 30_000))).toBe(false);
+  });
+
+  const KINDS: ReadonlyArray<AccountKind> = [
+    "current",
+    "savings",
+    "card",
+    "investment",
+    "loan",
+    "benefit",
+  ];
+
+  /** Any day of ten years, and a gap of up to six weeks after it. */
+  const day = fc.integer({ min: 0, max: 3652 }).map((days) => shiftDay("2024-01-01", days));
+  const gap = fc.integer({ min: 0, max: 42 });
+  const kind = fc.constantFrom(...KINDS);
+
+  test("whatever the days and kinds, the window is the same both ways, never under 4 days nor over 20", () => {
+    fc.assert(
+      fc.property(day, gap, kind, kind, (early, after, outKind, inKind) => {
+        const out = line("out", "a", early, -100, { accountKind: outKind });
+        const into = line("in", "b", shiftDay(early, after), 100, { accountKind: inKind });
+        const paired = isCandidate(out, into);
+
+        expect(isCandidate(into, out)).toBe(paired);
+
+        if (after <= TRANSFER_DAYS) {
+          expect(paired).toBe(true);
+        }
+
+        if (after > LONGEST_TRANSFER_DAYS) {
+          expect(paired).toBe(false);
+        }
+
+        if (outKind !== "savings" && inKind !== "savings") {
+          expect(paired).toBe(after <= TRANSFER_DAYS);
+        }
+      }),
+    );
+  });
+
+  test("whatever the day, a savings line up to 4 days after the next fortnight's start pairs, not later", () => {
+    fc.assert(
+      fc.property(day, fc.integer({ min: 0, max: TRANSFER_DAYS }), (early, late) => {
+        // The 16th, or the 1st of the next month: 31 days after a month's 1st is in the next one.
+        const boundary =
+          Number(early.slice(8, 10)) < 16
+            ? `${early.slice(0, 8)}16`
+            : `${shiftDay(`${early.slice(0, 8)}01`, 31).slice(0, 8)}01`;
+
+        const out = line("out", "current", early, -100);
+
+        expect(isCandidate(out, savings("in", shiftDay(boundary, late), 100))).toBe(true);
+        expect(isCandidate(out, savings("in", shiftDay(boundary, TRANSFER_DAYS + 1), 100))).toBe(
+          false,
+        );
+      }),
+    );
+  });
+
+  // The import reads the lines `POOL_DAYS` around its own (pair-lines.ts): that must reach every
+  // other candidate of a fresh line's candidate, or an ambiguous line would be paired by itself.
+  test("the import's pool reaches every other candidate of a fresh line's candidate", () => {
+    const near = fc.integer({ min: 0, max: LONGEST_TRANSFER_DAYS });
+
+    fc.assert(
+      fc.property(day, near, near, (first, toMiddle, toLast) => {
+        const firstOut = line("first", "current", first, -100);
+        const middle = savings("middle", shiftDay(first, toMiddle), 100);
+        const lastOut = line("last", "other-current", shiftDay(middle.bookedOn, toLast), -100);
+
+        if (isCandidate(firstOut, middle) && isCandidate(middle, lastOut)) {
+          // Value dates may be further apart: the pool keeps 14 days of them on top.
+          expect(daysBetween(first, lastOut.bookedOn)).toBeLessThanOrEqual(POOL_DAYS - 14);
+        }
+      }),
+      { numRuns: 1000 },
+    );
   });
 
   test("value dates count by the fortnight too", () => {
