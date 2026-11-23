@@ -315,7 +315,7 @@ describe("lines search", () => {
 
     expect(isError).toBe(false);
     expect(text).toContain(
-      "1 line(s) match: every line to review (near duplicates held, transfers whose other side the user chooses, and lines not classified yet).",
+      "1 line(s) match: every line to review (near duplicates held, transfers whose other side the user chooses, and counted lines still classified by default: not classified yet).",
     );
     expect(text).toContain(
       `- 2026-11-04, Current account (Riverside Bank): -23.80 EUR, "CB CORNER CAFE", to review; line: ${heldCafe.id}`,
@@ -728,6 +728,26 @@ describe("the lines tool", () => {
       "categories",
     ]);
     expect(tool?.title).toBe("Lines");
+
+    // classify and to_review, as they are: what a caller needs to call them right.
+    const description = tool?.description ?? "";
+
+    for (const said of [
+      '"transfer", "expense" or "income"',
+      'its one child; "Parent > Child" names a child',
+      "Without `category`, the kind's fallback",
+      "every counted line still classified by default",
+      "held, discarded or of no amount",
+      "unpair it first",
+      "split across several",
+      "an archived category",
+      "an unknown or ambiguous category name",
+      '{"action":"classify","line":"<a handle search gave>","kind":"expense","category":"Groceries > Bakery"}',
+    ]) {
+      expect(description, said).toContain(said);
+    }
+
+    expect(description).not.toContain("(Other)");
     expect(tool?.annotations).toEqual({
       readOnlyHint: false,
       destructiveHint: true,

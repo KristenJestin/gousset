@@ -73,7 +73,7 @@ const LinesInput = Schema.Struct({
   to_review: Schema.optional(
     Schema.Boolean.annotate({
       description:
-        "search: true for the lines to review only: near duplicates held, lines whose transfer's other side the user chooses among several, and lines not classified yet.",
+        "search: true for the lines to review only: near duplicates held, lines whose transfer's other side the user chooses among several, and every counted line still classified by default (not classified yet).",
     }),
   ),
   limit: Schema.optional(
@@ -101,28 +101,30 @@ const LinesInput = Schema.Struct({
   kind: Schema.optional(
     Schema.Literals(["transfer", "expense", "income"]).annotate({
       description:
-        "classify: what the line is: transfer (one side of money moved between two of the user's accounts); expense or income, in category, or its kind's fallback (Other) when none is named.",
+        "classify: what the line is: transfer (one side of money moved between two of the user's accounts), expense (money out) or income (money in), in category, or in that kind's fallback when category is left out. Left out with a category: the line's own kind.",
     }),
   ),
   category: Schema.optional(
     Schema.String.annotate({
       description:
-        'classify: the category, by its name or "Parent > Child", as categories list writes it (any case).',
+        'classify, with kind expense or income: the category as categories list writes it (any case): a name alone is the top-level category of that name, else its one child; "Parent > Child" names a child. Left out: the kind\'s fallback.',
     }),
   ),
 });
 
 type LinesInput = typeof LinesInput.Type;
 
-const DESCRIPTION = `Every line of the user's accounts, as the bank wrote it: search across accounts, then read one. \`search\` finds lines by a piece of their label, memo or counterparty (\`text\`, any case), one account (\`account\`), a period (\`from\`, \`to\`, YYYY-MM-DD, both included), an amount range (\`amount_min\`, \`amount_max\`), or the lines to review (\`to_review\`: near duplicates and unsure transfers, listed only then); newest first, with how many match in all and each line's handle. \`show\` gives one line by that handle: its account, days, amount (and the amount in another currency), label, memo, counterparty, category, expiry, the line a held one looks like, its transfer, and the import it came from or how it was made.
+const DESCRIPTION = `Every line of the user's accounts, as the bank wrote it: search across accounts, read one, say what it is. \`search\` finds lines by a piece of their label, memo or counterparty (\`text\`, any case), one account (\`account\`), a period (\`from\`, \`to\`, YYYY-MM-DD, both included), an amount range (\`amount_min\`, \`amount_max\`), or the lines to review (\`to_review: true\`, listed only then: near duplicates held, transfers whose other side the user chooses, and every counted line still classified by default, that is not classified yet); newest first, with how many match in all, each line's category and its handle. \`show\` gives one line by that handle: its account, days, amount (and the amount in another currency), label, memo, counterparty, category, expiry, the line a held one looks like, its transfer, and the import it came from or how it was made.
 
-Use it for "when did I pay this shop?", "what was this 42.90?", "which import brought this line?". Use \`accounts\` instead for balances and one account's latest lines, \`month\` for where the money went. search and show only read.
+Use it for "when did I pay this shop?", "what was this 42.90?", "which import brought this line?", "put this line in Groceries". Use \`accounts\` instead for balances and one account's latest lines, \`month\` for where the money went, \`categories\` to list or change the categories themselves. search and show only read.
 
-Writes: \`pair\` pairs \`line\` and \`other\` as one transfer, never spending; \`line\` alone: its only candidate; neither: every clear pair. \`classify\` \`kind\` "transfer" is the same; \`unpair\` undoes it. Refused: lines of one account or direction, a paired line, several candidates.
+Writes, with the write scope: \`classify\` says what \`line\` is, by \`kind\`: "transfer", "expense" or "income". With "expense" or "income", the line goes in \`category\`, named as \`categories\` list writes it (any case): a name alone is the top-level category of that name, else its one child; "Parent > Child" names a child. Without \`category\`, the kind's fallback. \`kind\` may be left out with a category: the line's own. Kept as the user's choice: no rule changes it unasked. Refused, with what to do: a line held, discarded or of no amount (no expense nor income), a side of a transfer (unpair it first), a line split across several expenses, a kind or category of the other kind than the line's (money out is an expense, money in an income), an archived category, an unknown or ambiguous category name (with the names to choose from), a category with "transfer".
+
+\`pair\` pairs \`line\` and \`other\` as one transfer, never spending; \`line\` alone: its only candidate; neither: every clear pair. \`classify\` \`kind\` "transfer" is the same; \`unpair\` undoes it. Refused: lines of one account or direction, a paired line, several candidates.
 
 \`account\` is the name as \`accounts\` lists it (any case); add \`institution\` when two accounts share it. An unknown or ambiguous name is refused with the names to choose from. Amounts are decimal strings in each account's own currency, without sign or currency, compared with the line's absolute amount: a -42.90 EUR payment matches "amount_min":"40". A period that ends before it starts, an amount that is no decimal, or an \`after\` no result gave is refused. \`limit\` is 1 to ${MAX_LINES} lines, ${DEFAULT_LINES} by default; when more remain, the result writes the exact next call with \`after\`: copy it.
 
-Examples: {"action":"search","text":"corner cafe","account":"Current account","institution":"Riverside Bank","from":"2026-10-01"} · {"action":"search","amount_min":"40","amount_max":"45.50"} · {"action":"show","line":"<a handle search gave>"}`;
+Examples: {"action":"search","text":"corner cafe","account":"Current account","institution":"Riverside Bank","from":"2026-10-01"} · {"action":"search","amount_min":"40","amount_max":"45.50"} · {"action":"show","line":"<a handle search gave>"} · {"action":"classify","line":"<a handle search gave>","kind":"expense","category":"Groceries > Bakery"}`;
 
 const call = (input: typeof LinesInput.Encoded) => `lines ${JSON.stringify(input)}`;
 
@@ -172,7 +174,7 @@ function filtersText(input: LinesInput, account: string | undefined): string {
 
   const kind =
     input.to_review === true
-      ? "to review (near duplicates held, transfers whose other side the user chooses, and lines not classified yet)"
+      ? "to review (near duplicates held, transfers whose other side the user chooses, and counted lines still classified by default: not classified yet)"
       : "counted (add to_review: true for the lines to review)";
 
   return filters.length === 0 ? `every line ${kind}` : `lines ${kind}, ${filters.join(", ")}`;
