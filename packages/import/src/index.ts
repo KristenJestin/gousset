@@ -8,6 +8,16 @@ export { readQif } from "./qif";
 
 export type { QifDateOrder, QifOptions, QifStatement } from "./qif";
 
+export { normalizeHeader, readCsv, readCsvHeader } from "./csv";
+
+export type { CsvOptions } from "./csv";
+
+export { detectCsvProfile } from "./csv-detect";
+
+export type { CsvProposal, CsvUnsure } from "./csv-detect";
+
+export { CsvProfile } from "./csv-profile";
+
 export type { DateOrder } from "./dates";
 
 export type { Balance, Statement, StatementLine } from "./statement";

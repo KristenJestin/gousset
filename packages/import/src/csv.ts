@@ -1,0 +1,296 @@
+import { Effect } from "effect";
+
+import { invalidField, readAmount } from "./amount";
+import type { AmountSyntax, FieldText } from "./amount";
+import { dateExample, dayReader, lastColumn } from "./csv-profile";
+import type { CsvProfile, DayReader } from "./csv-profile";
+import { decodeCsv, parseRows, skipLines } from "./csv-parse";
+import type { CsvCell, CsvRow } from "./csv-parse";
+import { InvalidOption, MalformedFile, MissingField, UnsupportedContent } from "./errors";
+import type { InvalidField, ReadError } from "./errors";
+import type { Statement, StatementLine } from "./statement";
+import { cleanValue, excerpt, quote } from "./text";
+
+// CSV: a table whose columns each bank chooses, read through an import profile (`CsvProfile`)
+// that says which column holds which field, and how dates and amounts are written.
+
+export type CsvOptions = {
+  /**
+   * The ISO 4217 code of the account the file goes into (`EUR`, `eur` taken as `EUR`): a CSV file
+   * names none, or one per line, checked against it. Anything else is refused with `InvalidOption`.
+   */
+  currency: string;
+};
+
+/** The cell of a row at `column`; a row shorter than that has it empty, on the row's last line. */
+function cellAt(row: CsvRow, column: number): CsvCell {
+  return row.cells[column - 1] ?? { text: "", line: row.cells.at(-1)?.line ?? row.line, column };
+}
+
+function fieldText(field: string, cell: CsvCell): FieldText {
+  return { field, text: cleanValue(cell.text), line: cell.line, column: cell.column };
+}
+
+/** A cell's text as a line gives it; `null` when the profile names no column or it is empty. */
+function optionalText(row: CsvRow, column: number | null): string | null {
+  const text = column === null ? "" : cleanValue(cellAt(row, column).text);
+
+  return text === "" ? null : text;
+}
+
+function readDay(
+  row: CsvRow,
+  field: string,
+  column: number,
+  read: DayReader,
+  format: string,
+): Effect.Effect<string | null, InvalidField> {
+  const written = fieldText(field, cellAt(row, column));
+
+  if (written.text === "") {
+    return Effect.succeed(null);
+  }
+
+  const day = read(written.text);
+
+  if (day === undefined) {
+    return Effect.fail(
+      invalidField(written, `a date written ${format}, such as ${dateExample(format)}`),
+    );
+  }
+
+  return Effect.succeed(day);
+}
+
+type Reading = {
+  profile: CsvProfile;
+  currency: string;
+  syntax: AmountSyntax;
+  read: DayReader;
+};
+
+/** A debit and its sign as the file writes it, for the check that every debit is signed alike. */
+type Debit = { line: number; column: number; negative: boolean };
+
+type Read = { line: StatementLine; debit: Debit | null };
+
+/** The amount of a line: from its one column, or from its debit or its credit. */
+const readLineAmount = (row: CsvRow, reading: Reading) =>
+  Effect.gen(function* () {
+    const { amount } = reading.profile.columns;
+
+    if (amount.kind === "signed") {
+      const written = fieldText("amount", cellAt(row, amount.column));
+
+      if (written.text === "") {
+        return yield* new MissingField({
+          line: written.line,
+          column: amount.column,
+          field: "amount",
+        });
+      }
+
+      return {
+        amountMinor: yield* readAmount(written, reading.currency, reading.syntax),
+        debit: null,
+      };
+    }
+
+    const debitText = fieldText("debit", cellAt(row, amount.debit));
+    const creditText = fieldText("credit", cellAt(row, amount.credit));
+
+    if (debitText.text === "" && creditText.text === "") {
+      return yield* new MissingField({
+        line: debitText.line,
+        column: amount.debit,
+        field: "debit",
+      });
+    }
+
+    const debit =
+      debitText.text === "" ? 0 : yield* readAmount(debitText, reading.currency, reading.syntax);
+
+    const credit =
+      creditText.text === "" ? 0 : yield* readAmount(creditText, reading.currency, reading.syntax);
+
+    if (credit < 0) {
+      return yield* invalidField(creditText, "a credit without a minus sign: money that came in");
+    }
+
+    if (debit !== 0 && credit !== 0) {
+      return yield* new UnsupportedContent({
+        line: creditText.line,
+        column: amount.credit,
+        problem: `A debit (column ${String(amount.debit)}) and a credit (column ${String(amount.credit)}) on one line: a line fills one of them.`,
+      });
+    }
+
+    return {
+      amountMinor: debit === 0 ? credit : -Math.abs(debit),
+      debit:
+        debit === 0 ? null : { line: debitText.line, column: amount.debit, negative: debit < 0 },
+    };
+  });
+
+const readLine = (row: CsvRow, reading: Reading): Effect.Effect<Read, ReadError> =>
+  Effect.gen(function* () {
+    const { profile, read } = reading;
+    const { columns } = profile;
+    const bookedOn = yield* readDay(row, "bookedOn", columns.bookedOn, read, profile.dateFormat);
+
+    if (bookedOn === null) {
+      return yield* new MissingField({
+        line: cellAt(row, columns.bookedOn).line,
+        column: columns.bookedOn,
+        field: "bookedOn",
+      });
+    }
+
+    const valueOn =
+      columns.valueOn === null
+        ? null
+        : yield* readDay(row, "valueOn", columns.valueOn, read, profile.dateFormat);
+
+    const { amountMinor, debit } = yield* readLineAmount(row, reading);
+    const lineCurrency = optionalText(row, columns.currency);
+
+    if (columns.currency !== null && lineCurrency !== null) {
+      if (lineCurrency.toUpperCase() !== reading.currency) {
+        return yield* new UnsupportedContent({
+          line: cellAt(row, columns.currency).line,
+          column: columns.currency,
+          problem: `A line in ${quote(lineCurrency)}, in a file read for an account in ${reading.currency}.`,
+        });
+      }
+    }
+
+    return {
+      line: {
+        bookedOn,
+        valueOn,
+        amountMinor,
+        label: optionalText(row, columns.label) ?? "",
+        memo: optionalText(row, columns.memo),
+        bankId: optionalText(row, columns.bankId),
+      },
+      debit,
+    };
+  });
+
+/**
+ * A debit column whose amounts are all positive or all negative tells which way the money went;
+ * one holding both does not, since either sign may then be a refund.
+ */
+function checkDebitSigns(read: ReadonlyArray<Read>): Effect.Effect<void, UnsupportedContent> {
+  const debits = read.flatMap((entry) => (entry.debit === null ? [] : [entry.debit]));
+  const [first] = debits;
+  const other = debits.find((debit) => debit.negative !== first?.negative);
+
+  if (first === undefined || other === undefined) {
+    return Effect.void;
+  }
+
+  return Effect.fail(
+    new UnsupportedContent({
+      line: other.line,
+      column: other.column,
+      problem: `A debit signed otherwise than the one at line ${String(first.line)}: which way the money went cannot be told.`,
+    }),
+  );
+}
+
+/** The rows of the file past the lines the profile skips, blank ones left out. */
+const readRows = (bytes: Uint8Array, profile: CsvProfile) =>
+  Effect.gen(function* () {
+    const text = yield* decodeCsv(bytes, profile.encoding);
+    const { rest, line } = skipLines(text, profile.skipRows);
+    const rows = yield* parseRows(rest, profile.separator, line);
+
+    return { rows, line };
+  });
+
+/** A header row as a profile keeps it to recognise its files: lower case, trimmed, by `;`. */
+export function normalizeHeader(cells: ReadonlyArray<string>): string {
+  return cells.map((cell) => cleanValue(cell).toLowerCase()).join(";");
+}
+
+/**
+ * The header row of a file read with a profile, normalised (`normalizeHeader`): what the import
+ * compares with each of the user's profiles to choose the one that reads it. `null` when the
+ * profile reads no header or the file holds no row.
+ */
+export const readCsvHeader = (
+  bytes: Uint8Array,
+  profile: CsvProfile,
+): Effect.Effect<string | null, ReadError> =>
+  Effect.gen(function* () {
+    const { rows } = yield* readRows(bytes, profile);
+    const [header] = rows;
+
+    if (!profile.headerRow || header === undefined) {
+      return null;
+    }
+
+    return normalizeHeader(header.cells.map((cell) => cell.text));
+  });
+
+/**
+ * Reads a CSV file with an import profile: one account's lines, in `options.currency`, in the
+ * file's order; a CSV file gives no balance.
+ *
+ * Every error names the line, and the column where one is at fault: a value that cannot be read as
+ * the profile says (`InvalidField`, `field` being the profile's: `bookedOn`, `amount`, `debit`), a
+ * line without its date or amount (`MissingField`), a header with fewer columns than the profile
+ * reads (`MalformedFile`: the file is another bank's, or its separator differs).
+ */
+export const readCsv = (
+  bytes: Uint8Array,
+  profile: CsvProfile,
+  options: CsvOptions,
+): Effect.Effect<Statement, ReadError> =>
+  Effect.gen(function* () {
+    const currency = options.currency.toUpperCase();
+
+    if (!/^[A-Z]{3}$/.test(currency)) {
+      return yield* new InvalidOption({
+        option: "currency",
+        text: excerpt(options.currency),
+        expected: "a currency's ISO 4217 code, such as EUR",
+      });
+    }
+
+    const { rows, line } = yield* readRows(bytes, profile);
+    const [header, ...data] = rows;
+
+    if (profile.headerRow) {
+      if (header === undefined) {
+        return yield* new MalformedFile({
+          line,
+          problem: "No header row: the file holds nothing past the lines the profile skips.",
+        });
+      }
+
+      const needed = lastColumn(profile);
+
+      if (header.cells.length < needed) {
+        return yield* new MalformedFile({
+          line: header.line,
+          problem: `Column ${String(needed)} is past the header's last (column ${String(header.cells.length)}): the file may be another bank's, or its separator another.`,
+        });
+      }
+    }
+
+    const reading: Reading = {
+      profile,
+      currency,
+      syntax: profile.decimalMark === "." ? "decimal-point" : "decimal-comma",
+      read: dayReader(profile.dateFormat),
+    };
+
+    const lines = profile.headerRow || header === undefined ? data : [header, ...data];
+    const read = yield* Effect.forEach(lines, (row) => readLine(row, reading));
+
+    yield* checkDebitSigns(read);
+
+    return { currency, lines: read.map((entry) => entry.line), balance: null };
+  });

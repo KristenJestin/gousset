@@ -61,7 +61,7 @@ export type QifDate =
  * Two digits of a year. Quicken writes `'` before the years from 2000 (`1/ 5'26`); with any other
  * separator, `00` to `69` are read as 2000 to 2069 and `70` to `99` as 1970 to 1999.
  */
-function fullYear(twoDigitYear: number, apostrophe: boolean): number {
+export function fullYear(twoDigitYear: number, apostrophe: boolean): number {
   return apostrophe || twoDigitYear < 70 ? 2000 + twoDigitYear : 1900 + twoDigitYear;
 }
 
