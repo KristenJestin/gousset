@@ -162,8 +162,9 @@ test("a created user must change their password", async ({ userPage, browser, ap
 
   // The confirmation's live region is there, empty, before the confirmation comes, so that a
   // screen reader announces it.
-  // In the creation form itself: the toaster and the users list keep live regions of their own.
-  const status = userPage.getByRole("main").locator("form").locator('[role="status"]');
+  // In the page itself, for a creation and a reset alike: the toaster keeps live regions of its
+  // own beside it.
+  const status = userPage.getByRole("main").locator('[role="status"]');
 
   await expect(status).toHaveCount(1);
   await expect(status).toBeEmpty();
@@ -266,7 +267,7 @@ test("the users page is a section of the settings, reached from the user's menu 
   await visit(secondUserPage, "/settings");
   await expect(
     secondUserPage.getByRole("navigation", { name: "Settings" }).getByRole("link"),
-  ).toHaveText(["General", "Categories", "Rules"]);
+  ).toHaveText(["General", "Categories", "Rules", "Data"]);
 });
 
 test("a new password equal to the current one is refused", async ({ page, app, user }) => {
