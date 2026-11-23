@@ -1,9 +1,9 @@
 import { m } from "@gousset/i18n/messages";
 import { Block } from "@gousset/ui/components/app-shell";
 import { Button } from "@gousset/ui/components/button";
+import { Dialog } from "@gousset/ui/components/dialog";
 import { FormMessage } from "@gousset/ui/components/form-message";
 import { List, ListItem } from "@gousset/ui/components/list";
-import { Actions, Form } from "@gousset/ui/components/screen";
 import { StatusMessage } from "@gousset/ui/components/status-message";
 import { TextField } from "@gousset/ui/components/text-field";
 import { createFileRoute, redirect, useRouter } from "@tanstack/react-router";
@@ -18,7 +18,8 @@ import { whileBusy } from "@/lib/while-busy";
 
 /**
  * The administrator's section of the settings (docs/wireframes, `rules`: the settings' menu lists
- * the users): who has an account, and creating the others, each in a block.
+ * the users): who has an account and, beside the list's title, the button that opens creating
+ * another in a dialog (docs/design.md, "Actions and forms").
  */
 export const Route = createFileRoute("/_authed/settings/users")({
   beforeLoad: ({ context }) => {
@@ -32,10 +33,44 @@ export const Route = createFileRoute("/_authed/settings/users")({
 });
 
 function Users() {
-  const router = useRouter();
   const users = Route.useLoaderData();
-  const [refusal, setRefusal] = useState<Refusal>();
   const [created, setCreated] = useState<string>();
+
+  return (
+    <Block
+      title={m.usersTitle()}
+      description={m.usersDescription()}
+      actions={<CreateUser announce={setCreated} />}
+    >
+      <List label={m.usersTitle()}>
+        {users.map((user) => (
+          <ListItem
+            key={user.id}
+            title={user.name}
+            description={user.email}
+            tags={[
+              ...(user.isAdmin ? [m.usersAdministrator()] : []),
+              ...(user.mustChangePassword ? [m.usersMustChangePassword()] : []),
+            ]}
+          />
+        ))}
+      </List>
+      {/* In the page, not the dialog: it is said once the dialog has closed. */}
+      <StatusMessage message={created} />
+    </Block>
+  );
+}
+
+/**
+ * The "Create a user" button and its dialog. A refusal keeps the dialog open, said under the field
+ * at fault; once the user is created the dialog closes (focus back on the button), the page says
+ * who can now sign in and the list is read again. While a request runs the dialog stays open: its
+ * answer always lands on the form that sent it.
+ */
+function CreateUser({ announce }: { announce: (message: string | undefined) => void }) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const [refusal, setRefusal] = useState<Refusal>();
   const [busy, setBusy] = useState(false);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -55,65 +90,64 @@ function Users() {
     );
 
     if (!result.created) {
-      setCreated(undefined);
       setRefusal(refusalOf(result.code));
       emptyPasswords(formElement, ["password"]);
 
       return;
     }
 
+    // Closed before the list is read again: the filled form cannot be sent a second time.
     setRefusal(undefined);
-    setCreated(m.usersCreated({ name: result.name }));
-    formElement.reset();
+    setOpen(false);
+    announce(m.usersCreated({ name: result.name }));
     await router.invalidate();
   }
 
   return (
-    <>
-      <Block title={m.usersTitle()} description={m.usersDescription()}>
-        <List label={m.usersTitle()}>
-          {users.map((user) => (
-            <ListItem
-              key={user.id}
-              title={user.name}
-              description={user.email}
-              tags={[
-                ...(user.isAdmin ? [m.usersAdministrator()] : []),
-                ...(user.mustChangePassword ? [m.usersMustChangePassword()] : []),
-              ]}
-            />
-          ))}
-        </List>
-      </Block>
-      <Block title={m.usersCreateTitle()} description={m.usersCreateDescription()}>
-        <Form onSubmit={(event) => void submit(event)} onInput={() => setRefusal(undefined)}>
-          <TextField label={m.fieldName()} name="name" autoComplete="off" required />
-          <TextField
-            label={m.fieldEmail()}
-            name="email"
-            type="email"
-            autoComplete="off"
-            required
-            error={refusalMessage(refusal, "email")}
-          />
-          <TextField
-            label={m.fieldTemporaryPassword()}
-            name="password"
-            type="text"
-            autoComplete="off"
-            required
-            description={passwordRules()}
-            error={refusalMessage(refusal, "password")}
-          />
-          <FormMessage message={refusalMessage(refusal, undefined)} />
-          <StatusMessage message={created} />
-          <Actions>
-            <Button type="submit" loading={busy}>
-              {m.usersCreate()}
-            </Button>
-          </Actions>
-        </Form>
-      </Block>
-    </>
+    <Dialog
+      trigger={<Button icon="add">{m.usersCreateTitle()}</Button>}
+      open={open}
+      onOpenChange={(next) => {
+        if (!next && busy) {
+          return;
+        }
+
+        setOpen(next);
+        setRefusal(undefined);
+
+        if (next) {
+          announce(undefined);
+        }
+      }}
+      title={m.usersCreateTitle()}
+      description={m.usersCreateDescription()}
+      onSubmit={(event) => void submit(event)}
+      onInput={() => setRefusal(undefined)}
+      actions={
+        <Button type="submit" loading={busy}>
+          {m.usersCreate()}
+        </Button>
+      }
+    >
+      <TextField label={m.fieldName()} name="name" autoComplete="off" required />
+      <TextField
+        label={m.fieldEmail()}
+        name="email"
+        type="email"
+        autoComplete="off"
+        required
+        error={refusalMessage(refusal, "email")}
+      />
+      <TextField
+        label={m.fieldTemporaryPassword()}
+        name="password"
+        type="text"
+        autoComplete="off"
+        required
+        description={passwordRules()}
+        error={refusalMessage(refusal, "password")}
+      />
+      <FormMessage message={refusalMessage(refusal, undefined)} />
+    </Dialog>
   );
 }

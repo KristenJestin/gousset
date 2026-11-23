@@ -29,7 +29,9 @@ export const popupClasses = cn(
 
 /**
  * A dialog: centred, 16 px from the screen's edges at most, fading and growing in 200 ms,
- * ease-out, and leaving the same way.
+ * ease-out, and leaving the same way. On a phone (below Tailwind's `md`, where the app's tab bar
+ * shows) a sheet: along the bottom edge, its whole width, its top corners rounded, sliding up
+ * from that edge in 200 ms and back down; its edge then shows only on the side facing the page.
  */
 export const dialogClasses = cn(
   "fixed inset-4 m-auto flex h-fit max-h-full w-auto max-w-md flex-col overflow-y-auto",
@@ -38,6 +40,10 @@ export const dialogClasses = cn(
   "transition duration-200 ease-out",
   "data-starting-style:scale-95 data-starting-style:opacity-0",
   "data-ending-style:scale-95 data-ending-style:opacity-0",
+  "max-md:inset-x-0 max-md:top-auto max-md:bottom-0 max-md:mx-0 max-md:mb-0",
+  "max-md:max-h-11/12 max-md:max-w-none max-md:rounded-b-none max-md:border-x-0 max-md:border-b-0",
+  "max-md:data-starting-style:translate-y-full max-md:data-starting-style:scale-100",
+  "max-md:data-ending-style:translate-y-full max-md:data-ending-style:scale-100",
 );
 
 /** The page behind a dialog or a sheet, veiled in the background's colour, fading in 200 ms. */

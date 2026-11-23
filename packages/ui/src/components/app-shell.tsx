@@ -296,23 +296,33 @@ export function SectionLink({ label, ...props }: AnchorProps & { label: string }
   );
 }
 
-/** A block of a screen under its own heading: a group of settings, say. */
+/**
+ * A block of a screen under its own heading: a group of settings, say. What it lets the user do
+ * sits beside its title (`actions`): a button opening a `Dialog`, never a form inside the block
+ * (docs/design.md, "Actions and forms").
+ */
 export function Block({
   title,
   description,
+  actions,
   children,
 }: {
   title: string;
   description?: string;
+  /** Beside the title: the block's actions, `Button`s ("Create a user"). */
+  actions?: ReactNode;
   children: ReactNode;
 }) {
   return (
     <section className="flex flex-col gap-4 rounded-lg border bg-card p-5 text-card-foreground">
-      <header className="flex flex-col gap-1">
-        <h2 className="text-base font-semibold">{title}</h2>
-        {description === undefined ? null : (
-          <p className="text-sm text-muted-foreground">{description}</p>
-        )}
+      <header className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex flex-col gap-1">
+          <h2 className="text-base font-semibold">{title}</h2>
+          {description === undefined ? null : (
+            <p className="text-sm text-muted-foreground">{description}</p>
+          )}
+        </div>
+        {actions === undefined ? null : <div className="flex items-center gap-2">{actions}</div>}
       </header>
       {children}
     </section>
