@@ -18,6 +18,7 @@
     "@gousset/db": "workspace:*",
     "@gousset/fixture": "workspace:*",
     "@gousset/import": "workspace:*",
+    "@qnot/core": "0.1.0",
     "drizzle-orm": "catalog:",
     "effect": "catalog:",
     "fflate": "0.8.3"
