@@ -1,7 +1,7 @@
 import { Effect, Layer } from "effect";
 
 import { AccountStore } from "./account-store";
-import type { AccountFacts, AccountRecord, StoredLine } from "./account-store";
+import type { AccountFacts, AccountRecord, StatementBalanceAt, StoredLine } from "./account-store";
 import type { DayBalance } from "./balances";
 import { AccountNotFound, BalanceAlreadyNoted } from "./errors";
 
@@ -97,13 +97,22 @@ export function memoryAccountStore(rows: ReadonlyMap<string, MemoryRows> = new M
         (balance) => balance.accountId === account.id && balance.day <= day,
       );
 
-      const statements = balances.filter((balance) => balance.source === "statement");
+      // Of two statement balances on a day, the one given last (array order) wins.
+      const statementMinorByDay = new Map<string, number>();
 
-      // Of two statement balances on a day, the one given last.
-      const statement = statements.reduce<MemoryBalance | undefined>(
-        (latest, balance) => (latest === undefined || balance.day >= latest.day ? balance : latest),
-        undefined,
-      );
+      for (const balance of balances) {
+        if (balance.source === "statement") {
+          statementMinorByDay.set(balance.day, balance.minor);
+        }
+      }
+
+      const statements: ReadonlyArray<StatementBalanceAt> = [...statementMinorByDay.entries()]
+        .sort(([dayA], [dayB]) => dayA.localeCompare(dayB))
+        .map(([statementDay, minor]) => ({
+          day: statementDay,
+          minor,
+          countedMinor: sum(lines.filter((line) => line.bookedOn <= statementDay)),
+        }));
 
       const importedTo = own.imports
         .filter((done) => done.accountId === account.id && done.status === "done")
@@ -122,9 +131,7 @@ export function memoryAccountStore(rows: ReadonlyMap<string, MemoryRows> = new M
           .filter((balance) => balance.source === "noted")
           .sort((a, b) => a.day.localeCompare(b.day))
           .map((balance) => ({ day: balance.day, minor: balance.minor })),
-        statement: statement === undefined ? null : { day: statement.day, minor: statement.minor },
-        countedAtStatementMinor:
-          statement === undefined ? 0 : sum(lines.filter((line) => line.bookedOn <= statement.day)),
+        statements,
         importedTo,
       };
     };
@@ -136,9 +143,9 @@ export function memoryAccountStore(rows: ReadonlyMap<string, MemoryRows> = new M
       facts: (owner, day) =>
         Effect.sync(() => of(owner).accounts.map((account) => factsOf(owner, account, day))),
 
-      lines: (owner, accountId, { before, limit }) =>
+      lines: (owner, accountId, { before, limit, day }) =>
         Effect.sync(() => {
-          const lines = counted(owner, accountId);
+          const lines = counted(owner, accountId).filter((line) => line.bookedOn <= day);
 
           const end =
             before === undefined ? lines.length : lines.findIndex((line) => line.id === before);

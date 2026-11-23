@@ -27,6 +27,12 @@ export type AccountChange = Partial<Omit<AccountRecord, "id">>;
 /** A new account: every setting but its id, made by the database. */
 export type NewAccount = Omit<AccountRecord, "id">;
 
+/** A statement balance paired with the sum of counted lines booked on or before its own day. */
+export type StatementBalanceAt = DayBalance & {
+  /** The sum of the counted lines booked on or before this balance's own day. */
+  readonly countedMinor: number;
+};
+
 /** What the balances of one account are computed from, as of a day (`facts`). */
 export type AccountFacts = {
   readonly account: AccountRecord;
@@ -34,10 +40,13 @@ export type AccountFacts = {
   readonly countedMinor: number;
   /** The noted balances on or before the day, oldest first. */
   readonly noted: ReadonlyArray<DayBalance>;
-  /** The latest statement balance on or before the day: of two on that day, the latest import's. */
-  readonly statement: DayBalance | null;
-  /** The sum of the counted lines booked on or before the statement balance's day. */
-  readonly countedAtStatementMinor: number;
+  /**
+   * Every statement balance on or before the day, oldest first (of two on one day, the latest
+   * import's), each with the counted lines summed up to its own day: the account page's check
+   * (docs/data-model.md, "account_balance") compares the latest against the app's balance, and
+   * shows the earlier ones that disagree too.
+   */
+  readonly statements: ReadonlyArray<StatementBalanceAt>;
   /** The latest `period_to` of the account's done imports. */
   readonly importedTo: string | null;
 };
@@ -102,13 +111,15 @@ export class AccountStore extends Context.Service<
       day: string,
     ) => Effect.Effect<ReadonlyArray<AccountFacts>, QueryFailed>;
     /**
-     * Up to `limit` counted lines of an account, newest first, older than the line `before` when
-     * given (a line of another account, or none, gives an empty page).
+     * Up to `limit` counted lines of an account booked on or before `day`, newest first, older
+     * than the line `before` when given (a line of another account, or none, gives an empty page).
+     * `day` is today's: a line booked after it is never shown, for the same reason it is never
+     * counted in the balance (`facts`).
      */
     readonly lines: (
       owner: string,
       accountId: string,
-      page: { readonly before: string | undefined; readonly limit: number },
+      page: { readonly before: string | undefined; readonly limit: number; readonly day: string },
     ) => Effect.Effect<LinePage, QueryFailed>;
     /** The counted lines of an account from `from` to `to`, both included, summed by day. */
     readonly moves: (

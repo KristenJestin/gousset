@@ -196,10 +196,16 @@ export type BalanceCheck = {
 };
 
 /**
- * The check of the account page (docs/data-model.md, "account_balance"): the latest statement
- * balance against the balance the app computes at the end of that same day. Null without a
+ * A statement balance against the balance the app computes at the end of that same day
+ * (docs/data-model.md, "account_balance"): the account page's check runs it on the latest
+ * statement balance, and on each earlier one too, to show a past mismatch. Null without a
  * statement balance.
  */
+export function balanceCheck(
+  statement: DayBalance,
+  appMinorOn: (day: string) => number,
+): BalanceCheck;
+export function balanceCheck(statement: null, appMinorOn: (day: string) => number): null;
 export function balanceCheck(
   statement: DayBalance | null,
   appMinorOn: (day: string) => number,

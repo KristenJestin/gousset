@@ -96,14 +96,20 @@ export type AccountLine = {
   readonly balanceAfter: Money | null;
 };
 
-/** The account's balance against its latest statement balance, at the end of that day. */
-export type StatementCheck = {
+/** The account's balance against one statement balance, at the end of its day. */
+export type StatementCheckEntry = {
   readonly day: string;
   readonly statement: Money;
   readonly app: Money;
   /** What the app counts beyond the statement: negative when it counts less. */
   readonly difference: Money;
+};
+
+/** The account's balance against its latest statement balance, at the end of that day. */
+export type StatementCheck = StatementCheckEntry & {
   readonly agrees: boolean;
+  /** Earlier statement balances that disagree with the app's balance at the end of their day. */
+  readonly earlierMismatches: ReadonlyArray<StatementCheckEntry>;
 };
 
 /** An account's page. */
@@ -153,7 +159,9 @@ function statementsUntil(facts: AccountFacts): StatementsUntil | null {
     return { day: facts.importedTo, from: "import" };
   }
 
-  return facts.statement === null ? null : { day: facts.statement.day, from: "statement_balance" };
+  const latest = facts.statements.at(-1);
+
+  return latest === undefined ? null : { day: latest.day, from: "statement_balance" };
 }
 
 function summaryOf(facts: AccountFacts, day: string): AccountSummary {
@@ -190,22 +198,37 @@ export const listAccounts = (owner: string) =>
     return { day, groups, closed };
   });
 
+function entryOf(
+  account: AccountRecord,
+  noted: ReadonlyArray<DayBalance>,
+  entry: { readonly day: string; readonly minor: number; readonly countedMinor: number },
+): StatementCheckEntry & { readonly agrees: boolean } {
+  const check = balanceCheck(entry, () => balanceAt(account, entry.countedMinor, noted, entry.day));
+
+  return {
+    day: check.day,
+    statement: money(check.statementMinor, account.currency),
+    app: money(check.appMinor, account.currency),
+    difference: money(check.differenceMinor, account.currency),
+    agrees: check.agrees,
+  };
+}
+
 function checkOf(facts: AccountFacts): StatementCheck | null {
-  const { account } = facts;
+  const { account, statements, noted } = facts;
+  const latest = statements.at(-1);
 
-  const check = balanceCheck(facts.statement, (day) =>
-    balanceAt(account, facts.countedAtStatementMinor, facts.noted, day),
-  );
+  if (latest === undefined) {
+    return null;
+  }
 
-  return check === null
-    ? null
-    : {
-        day: check.day,
-        statement: money(check.statementMinor, account.currency),
-        app: money(check.appMinor, account.currency),
-        difference: money(check.differenceMinor, account.currency),
-        agrees: check.agrees,
-      };
+  const earlierMismatches = statements
+    .slice(0, -1)
+    .map((entry) => entryOf(account, noted, entry))
+    .filter((entry) => !entry.agrees)
+    .map(({ day, statement, app, difference }) => ({ day, statement, app, difference }));
+
+  return { ...entryOf(account, noted, latest), earlierMismatches };
 }
 
 function chartRange(day: string, view: AccountView) {
@@ -237,7 +260,7 @@ export const showAccount = (owner: string, accountId: string, view: AccountView 
 
     const range = yield* Effect.fromResult(chartRange(day, view));
     const limit = Math.min(Math.max(Math.trunc(view.limit ?? DEFAULT_LINES), 1), MAX_LINES);
-    const page = yield* store.lines(owner, accountId, { before: view.before, limit });
+    const page = yield* store.lines(owner, accountId, { before: view.before, limit, day });
     const moves = yield* store.moves(owner, accountId, range);
     const monthFrom = `${day.slice(0, 7)}-01`;
     const monthInOut = yield* store.inOut(owner, accountId, { from: monthFrom, to: day });

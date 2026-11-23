@@ -49,6 +49,7 @@ export type {
   AccountSummary,
   AccountView,
   StatementCheck,
+  StatementCheckEntry,
   StatementsUntil,
 } from "./accounts";
 

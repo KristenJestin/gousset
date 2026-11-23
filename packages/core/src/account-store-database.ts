@@ -11,6 +11,7 @@ import type {
   AccountRecord,
   EditFacts,
   NewAccount,
+  StatementBalanceAt,
 } from "./account-store";
 import type { DayBalance } from "./balances";
 import { AccountNotFound, BalanceAlreadyNoted } from "./errors";
@@ -81,34 +82,41 @@ async function readFacts(transaction: UserTransaction, day: string) {
     .where(eq(statementImport.status, "done"))
     .groupBy(statementImport.accountId);
 
-  const latest = transaction
-    .select({
-      accountId: accountBalance.accountId,
-      day: sql<string>`max(${accountBalance.day})`.as("latest_day"),
-    })
+  // Every distinct day an account has a statement balance, on or before `day`: the account page's
+  // check compares the latest against the app's balance, and the earlier ones too, each at the end
+  // of its own day.
+  const statementDays = transaction
+    .select({ accountId: accountBalance.accountId, day: accountBalance.day })
     .from(accountBalance)
     .where(and(eq(accountBalance.source, "statement"), lte(accountBalance.day, day)))
-    .groupBy(accountBalance.accountId)
-    .as("latest_statement");
+    .groupBy(accountBalance.accountId, accountBalance.day)
+    .as("statement_days");
 
-  const atStatement = await transaction
-    .select({ accountId: statementLine.accountId, minor: summed() })
+  const countedAtEachStatement = await transaction
+    .select({ accountId: statementLine.accountId, day: statementDays.day, minor: summed() })
     .from(statementLine)
-    .innerJoin(latest, eq(latest.accountId, statementLine.accountId))
-    .where(and(eq(statementLine.state, "counted"), sql`${statementLine.bookedOn} <= ${latest.day}`))
-    .groupBy(statementLine.accountId);
+    .innerJoin(statementDays, eq(statementDays.accountId, statementLine.accountId))
+    .where(
+      and(
+        eq(statementLine.state, "counted"),
+        sql`${statementLine.bookedOn} <= ${statementDays.day}`,
+      ),
+    )
+    .groupBy(statementLine.accountId, statementDays.day);
 
   const countedOf = new Map(countedSums.map((row) => [row.accountId, row.minor]));
-  const atStatementOf = new Map(atStatement.map((row) => [row.accountId, row.minor]));
   const importedOf = new Map(imported.map((row) => [row.accountId, row.to]));
   const notedOf = new Map<string, Array<DayBalance>>();
-  const statementOf = new Map<string, DayBalance>();
+  // Per account, per day: of two statement balances on one day, the latest import's (`balances` is
+  // ordered oldest first, by day then by id, so the last write for a day wins).
+  const statementMinorOf = new Map<string, Map<string, number>>();
 
-  // Oldest first, by day then by id: the last statement balance of an account is its latest
-  // day's, and of two on that day the latest import's.
   for (const balance of balances) {
     if (balance.source === "statement") {
-      statementOf.set(balance.accountId, { day: balance.day, minor: balance.minor });
+      const byDay = statementMinorOf.get(balance.accountId) ?? new Map<string, number>();
+
+      byDay.set(balance.day, balance.minor);
+      statementMinorOf.set(balance.accountId, byDay);
     } else {
       const noted = notedOf.get(balance.accountId) ?? [];
 
@@ -117,12 +125,38 @@ async function readFacts(transaction: UserTransaction, day: string) {
     }
   }
 
+  const countedAtOf = new Map<string, Map<string, number>>();
+
+  for (const row of countedAtEachStatement) {
+    const byDay = countedAtOf.get(row.accountId) ?? new Map<string, number>();
+
+    byDay.set(row.day, row.minor);
+    countedAtOf.set(row.accountId, byDay);
+  }
+
+  const statementsOf = (accountId: string): ReadonlyArray<StatementBalanceAt> => {
+    const byDay = statementMinorOf.get(accountId);
+
+    if (byDay === undefined) {
+      return [];
+    }
+
+    const countedByDay = countedAtOf.get(accountId);
+
+    return [...byDay.entries()]
+      .sort(([dayA], [dayB]) => dayA.localeCompare(dayB))
+      .map(([statementDay, minor]) => ({
+        day: statementDay,
+        minor,
+        countedMinor: countedByDay?.get(statementDay) ?? 0,
+      }));
+  };
+
   return accounts.map((row): AccountFacts => ({
     account: record(row),
     countedMinor: countedOf.get(row.id) ?? 0,
     noted: notedOf.get(row.id) ?? [],
-    statement: statementOf.get(row.id) ?? null,
-    countedAtStatementMinor: atStatementOf.get(row.id) ?? 0,
+    statements: statementsOf(row.id),
     importedTo: importedOf.get(row.id) ?? null,
   }));
 }
@@ -163,7 +197,7 @@ export const DatabaseAccountStore = Layer.effect(
       facts: (owner, day) =>
         userData.transaction(owner, (transaction) => readFacts(transaction, day)),
 
-      lines: (owner, accountId, { before, limit }) =>
+      lines: (owner, accountId, { before, limit, day }) =>
         userData.transaction(owner, async (transaction) => {
           if (!isId(accountId) || (before !== undefined && !isId(before))) {
             return { lines: [], olderMinor: 0, more: false };
@@ -186,7 +220,7 @@ export const DatabaseAccountStore = Layer.effect(
               counterpartyName: statementLine.counterpartyName,
             })
             .from(statementLine)
-            .where(and(counted(accountId), older))
+            .where(and(counted(accountId), lte(statementLine.bookedOn, day), older))
             .orderBy(desc(statementLine.bookedOn), desc(statementLine.id))
             .limit(limit + 1);
 

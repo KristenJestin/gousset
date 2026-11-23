@@ -212,6 +212,23 @@ describe("showAccount", () => {
     expect(detail.olderBefore).toBeNull();
   });
 
+  test("never lists a line booked after today: the newest shown agrees with the balance", async () => {
+    const future = line(current.id, "2026-11-30", 777, "AFTER TODAY");
+
+    const detail = await inOrder(
+      { accounts: [current], lines: [...lines, future] },
+      showAccount(ADA, current.id),
+    );
+
+    expect(detail.lines.map((each) => each.bookedOn)).toEqual([
+      "2026-11-02",
+      "2026-11-02",
+      "2026-10-20",
+      "2026-10-05",
+    ]);
+    expect(detail.lines[0]?.balanceAfter).toEqual(detail.balance);
+  });
+
   test("reads older lines from where a page stopped", async () => {
     const first = await show(14_000, { limit: 2 });
 
@@ -233,6 +250,7 @@ describe("showAccount", () => {
       app: { minor: 14_000, currency: "EUR" },
       difference: { minor: 0, currency: "EUR" },
       agrees: true,
+      earlierMismatches: [],
     });
   });
 
@@ -247,6 +265,31 @@ describe("showAccount", () => {
     const detail = await inOrder({ accounts: [current], lines }, showAccount(ADA, current.id));
 
     expect(detail.check).toBeNull();
+  });
+
+  test("surfaces an earlier statement balance that disagrees, even once the latest agrees", async () => {
+    const rowsWithEarlierMismatch: MemoryRows = {
+      accounts: [current],
+      lines,
+      balances: [
+        // The app counts 9000 at the end of 2026-10-05 (opening 10,000 minus the 1000 line): the
+        // bank said 8800, a difference the latest (agreeing) statement does not show.
+        { accountId: current.id, day: "2026-10-05", minor: 8800, source: "statement" },
+        { accountId: current.id, day: "2026-10-31", minor: 14_000, source: "statement" },
+      ],
+    };
+
+    const { check } = await inOrder(rowsWithEarlierMismatch, showAccount(ADA, current.id));
+
+    expect(check?.agrees).toBe(true);
+    expect(check?.earlierMismatches).toEqual([
+      {
+        day: "2026-10-05",
+        statement: { minor: 8800, currency: "EUR" },
+        app: { minor: 9000, currency: "EUR" },
+        difference: { minor: 200, currency: "EUR" },
+      },
+    ]);
   });
 
   test("gives the current month's counted money in and out, from the 1st to today", async () => {
