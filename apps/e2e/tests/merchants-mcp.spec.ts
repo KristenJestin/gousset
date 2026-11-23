@@ -16,7 +16,7 @@ import { openUserData } from "../src/user-data";
 const allowReadAndWrite = (page: Page) =>
   page.getByRole("button", { name: "Allow read and write" }).click();
 
-type Arguments = { readonly [key: string]: string };
+type Arguments = { readonly [key: string]: string | boolean };
 
 /** The text of a tool's answer, and whether it is an error. */
 async function callText(client: Client, name: string, args: Arguments) {
@@ -264,7 +264,7 @@ test("the same shop under several labels becomes one merchant, which an MCP clie
   const cleared = await merchants({
     action: "edit",
     merchant: "Verdant Pantry Market",
-    category: "none",
+    clear_category: true,
   });
 
   expect(cleared.text).toBe("Verdant Pantry Market has no default category any more.");

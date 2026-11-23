@@ -1,4 +1,5 @@
 import {
+  CategoryStore,
   DataExport,
   FixtureLedger,
   ImportProfiles,
@@ -46,6 +47,8 @@ type Store = {
   lines: Map<string, ReadonlyArray<MerchantLine>>;
   /** Ada's categories, and her merchants' default categories, by owner. */
   categories?: Map<string, MemoryCategoryRows>;
+  /** Runs just before a default category is written: what another call does meanwhile. */
+  beforeDefault?: () => void;
 };
 
 let made = 0;
@@ -279,12 +282,39 @@ function merchantsOf(state: Store) {
   });
 }
 
+/** The categories over the store, with what happens meanwhile before a default is written. */
+function categoriesOf(state: Store) {
+  const memory = memoryCategoryStore(state.categories);
+  const meanwhile = state.beforeDefault;
+
+  if (meanwhile === undefined) {
+    return memory;
+  }
+
+  return Layer.effect(
+    CategoryStore,
+    Effect.gen(function* () {
+      const store = yield* CategoryStore;
+
+      return {
+        ...store,
+        setMerchantDefault: (owner, merchantId, decide) =>
+          Effect.suspend(() => {
+            meanwhile();
+
+            return store.setMerchantDefault(owner, merchantId, decide);
+          }),
+      };
+    }),
+  ).pipe(Layer.provide(memory));
+}
+
 function runnerOf(state: Store): Runner<GoussetServices> {
   const layer = Layer.mergeAll(
     FixtureLedger,
     memoryAccountStore(),
     memoryLineStore(),
-    memoryCategoryStore(state.categories),
+    categoriesOf(state),
     // merchants never reaches the imports nor the export.
     Layer.mock(Imports, {}),
     Layer.mock(ImportProfiles, {}),
@@ -714,7 +744,7 @@ describe("merchants edit with category", () => {
     expect(shown.text).toContain("Default category: Groceries > Bakery (expense).");
   });
 
-  test("an income category, and none to clear it", async () => {
+  test("an income category, and clear_category to clear it", async () => {
     const state = store();
 
     const set = await merchants(state, {
@@ -728,7 +758,7 @@ describe("merchants edit with category", () => {
     const { text, isError } = await merchants(state, {
       action: "edit",
       merchant: "Corner Cafe",
-      category: "None",
+      clear_category: true,
     });
 
     expect(isError, text).toBe(false);
@@ -737,6 +767,74 @@ describe("merchants edit with category", () => {
     const shown = await merchants(state, { action: "show", merchant: "Corner Cafe" });
 
     expect(shown.text).toContain("No default category: edit with category sets one.");
+  });
+
+  test("category is always a name: a category named None is chosen, and none clears nothing", async () => {
+    const state = store();
+
+    await merchants(state, { action: "edit", merchant: "Corner Cafe", category: "Transport" });
+
+    const missing = await merchants(state, {
+      action: "edit",
+      merchant: "Corner Cafe",
+      category: "none",
+    });
+
+    expect(missing.isError).toBe(true);
+    expect(missing.text).toContain('No category of the user\'s is named "none".');
+
+    const kept = await merchants(state, { action: "show", merchant: "Corner Cafe" });
+
+    expect(kept.text).toContain("Default category: Transport (expense).");
+
+    const rows = state.categories?.get(writer.userId);
+
+    rows?.categories.push(memoryCategory("expense", "None", { position: 4 }));
+
+    const { text, isError } = await merchants(state, {
+      action: "edit",
+      merchant: "Corner Cafe",
+      category: "None",
+    });
+
+    expect(isError, text).toBe(false);
+    expect(text).toContain("Corner Cafe's default category is now None (expense)");
+  });
+
+  test("a blank category is refused with a call that only reads", async () => {
+    const { text, isError } = await merchants(store(), {
+      action: "edit",
+      merchant: "Fuelstop",
+      category: " ",
+    });
+
+    expect(isError).toBe(true);
+    expect(text).toContain("clear_category");
+    expect(text).toContain('A valid call: categories {"action":"list"}');
+  });
+
+  test("a category merged away meanwhile: a call that only reads, never one that clears", async () => {
+    const state = store();
+
+    state.beforeDefault = () => {
+      const rows = state.categories?.get(writer.userId);
+
+      if (rows !== undefined) {
+        rows.categories = rows.categories.filter((each) => each.name !== "Transport");
+      }
+    };
+
+    const { text, isError } = await merchants(state, {
+      action: "edit",
+      merchant: "Fuelstop",
+      category: "Transport",
+    });
+
+    expect(isError).toBe(true);
+    expect(text).toContain('The category "Transport" is gone');
+    expect(text).toContain('A valid call: categories {"action":"list"}');
+    expect(text).not.toContain("clear_category");
+    expect(text.length).toBeLessThan(ERROR_LIMIT);
   });
 
   test("an unknown category: the user's categories, and a call that answers", async () => {
@@ -812,6 +910,19 @@ describe("merchants edit with category", () => {
     expect(text).toContain(
       "Default category: Family (expense), archived: it can no longer be chosen; edit with category sets another.",
     );
+  });
+
+  test("clear_category goes alone, and never with category", async () => {
+    const { text, isError } = await merchants(store(), {
+      action: "edit",
+      merchant: "Fuelstop",
+      category: "Transport",
+      clear_category: true,
+    });
+
+    expect(isError).toBe(true);
+    expect(text).toContain("one thing at a time");
+    await expectValidExample(text);
   });
 
   test("category goes alone", async () => {

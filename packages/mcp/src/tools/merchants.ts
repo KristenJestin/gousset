@@ -72,7 +72,12 @@ const MerchantsInput = Schema.Struct({
   category: Schema.optional(
     Schema.String.annotate({
       description:
-        'edit: the merchant\'s default category, by its name or "Parent > Child" as categories list writes it (any case); "none" clears it.',
+        'edit: the merchant\'s default category, by its name or "Parent > Child" as categories list writes it (any case). Always a name: clear_category clears it.',
+    }),
+  ),
+  clear_category: Schema.optional(
+    Schema.Boolean.annotate({
+      description: "edit: true clears the merchant's default category; alone, without category.",
     }),
   ),
   kind: Schema.optional(
@@ -96,12 +101,12 @@ Use it for "who is this shop?" or to tidy merchants up. Use \`lines\` instead fo
 Writes (need a connection allowed to read and write):
 - \`edit\` with \`name\`: renames; refused when another merchant has the name (merge instead).
 - \`edit\` with \`alias\` and \`to\`: moves one of the merchant's cleaned labels, and its lines, to the merchant named \`to\`, made when none has it: how a merchant is split.
-- \`edit\` with \`category\`: sets the merchant's default category, the one its entries go in by default, expense or income, named as \`categories\` lists it ("Parent > Child" for a child; add \`kind\` when an expense and an income category share the name); "none" clears it. Its entries not classified yet (classified by default) of that kind move to it, and still count as to review; cleared, they go back to the fallback; the user's own choices stay. An archived or unknown category is refused. Merging categories moves it; archiving keeps it, shown archived, and it then classifies nothing new.
+- \`edit\` with \`category\`: sets the merchant's default category, the one its entries go in by default, expense or income, named as \`categories\` lists it ("Parent > Child" for a child; add \`kind\` when an expense and an income category share the name). \`clear_category: true\`, alone, clears it. Its entries not classified yet (classified by default) of that kind move to it, and still count as to review; cleared, they go back to the fallback; the user's own choices stay. An archived or unknown category is refused. Merging categories moves it; archiving keeps it, shown archived, and it then classifies nothing new.
 - \`merge\`: moves every cleaned label of \`merchant\` to \`into\`, then deletes \`merchant\`; \`into\` keeps its default category, or takes \`merchant\`'s when it has none.
 
 Names are any case. An unknown name is refused with close names; a blank name or one over ${MAX_MERCHANT_NAME} characters, a merge into itself, or a cleaned label the merchant lacks is refused with a valid call. \`limit\` is 1 to ${MAX_MERCHANTS}, ${DEFAULT_MERCHANTS} by default; when more remain, the result writes the next call with \`after\`: copy it.
 
-Examples: {"action":"search","text":"greenmarket"} · {"action":"edit","merchant":"Greenmarket","name":"Green Market"} · {"action":"edit","merchant":"Greenmarket","alias":"GREENMARKET FUEL","to":"Greenmarket Fuel"} · {"action":"edit","merchant":"Greenmarket","category":"Groceries > Supermarket"} · {"action":"merge","merchant":"Green Mkt","into":"Greenmarket"}`;
+Examples: {"action":"search","text":"greenmarket"} · {"action":"edit","merchant":"Greenmarket","name":"Green Market"} · {"action":"edit","merchant":"Greenmarket","alias":"GREENMARKET FUEL","to":"Greenmarket Fuel"} · {"action":"edit","merchant":"Greenmarket","category":"Groceries > Supermarket"} · {"action":"edit","merchant":"Greenmarket","clear_category":true} · {"action":"merge","merchant":"Green Mkt","into":"Greenmarket"}`;
 
 const call = (input: Encoded) => `merchants ${JSON.stringify(input)}`;
 
@@ -364,8 +369,32 @@ function moveAlias(owner: string, merchant: string, alias: string, to: string) {
   );
 }
 
-/** "none", in any case: the default category cleared. */
-const NONE = "none";
+/** A refusal whose valid call reads the user's categories: it changes nothing. */
+const refuseWithCategories = (message: string) =>
+  Effect.fail(
+    new ToolRefusal({ message, example: `categories ${JSON.stringify({ action: "list" })}` }),
+  );
+
+function clearDefault(owner: string, merchant: string) {
+  return Effect.gen(function* () {
+    const found = yield* merchantNamed(owner, merchant);
+
+    yield* setMerchantDefaultCategory(owner, found.id, null);
+
+    return `${found.name} has no default category any more.`;
+  }).pipe(
+    Effect.catchTags({
+      // A category's refusals: clearing names none, so neither is ever met.
+      CategoryNotFound: Effect.die,
+      CategoryRefused: Effect.die,
+      MerchantNotFound: () =>
+        refuse(`The merchant "${clip(merchant)}" is gone: it was just merged or split away.`, {
+          action: "list",
+        }),
+      QueryFailed: Effect.die,
+    }),
+  );
+}
 
 function setDefault(
   owner: string,
@@ -375,12 +404,6 @@ function setDefault(
 ) {
   return Effect.gen(function* () {
     const found = yield* merchantNamed(owner, merchant);
-
-    if (category.trim().toLowerCase() === NONE) {
-      yield* setMerchantDefaultCategory(owner, found.id, null);
-
-      return `${found.name} has no default category any more.`;
-    }
 
     const chosen = yield* namedCategory(owner, category, kind, (name, of) =>
       call({ action: "edit", merchant, category: name, kind: of }),
@@ -402,11 +425,9 @@ function setDefault(
           }),
         ),
       CategoryNotFound: () =>
-        refuse(`The category "${clip(category)}" is gone: it was just merged away.`, {
-          action: "edit",
-          merchant,
-          category: NONE,
-        }),
+        refuseWithCategories(
+          `The category "${clip(category)}" is gone: it was just merged away or deleted. Find the name it goes by now with the call below, then call edit again with it.`,
+        ),
       MerchantNotFound: () =>
         refuse(`The merchant "${clip(merchant)}" is gone: it was just merged or split away.`, {
           action: "list",
@@ -418,6 +439,7 @@ function setDefault(
 
 function edit(owner: string, input: MerchantsInput) {
   const { merchant, name, alias, to, category } = input;
+  const clearing = input.clear_category === true;
 
   if (merchant === undefined || blank(merchant)) {
     return refuse(
@@ -426,20 +448,24 @@ function edit(owner: string, input: MerchantsInput) {
     );
   }
 
-  const asked = [name, alias ?? to, category].filter((each) => each !== undefined).length;
+  const asked =
+    [name, alias ?? to, category].filter((each) => each !== undefined).length + (clearing ? 1 : 0);
 
   if (asked > 1) {
     return refuse(
-      "edit does one thing at a time: either name (a rename), alias and to (a move), or category (its default category). Make one call for each.",
+      "edit does one thing at a time: either name (a rename), alias and to (a move), category (its default category) or clear_category. Make one call for each.",
       { action: "edit", merchant, name: name ?? merchant },
     );
   }
 
+  if (clearing) {
+    return clearDefault(owner, merchant);
+  }
+
   if (category !== undefined) {
     return blank(category)
-      ? refuse(
-          'category cannot be blank: name a category as categories list writes it, or "none" to clear it.',
-          { action: "edit", merchant, category: NONE },
+      ? refuseWithCategories(
+          "category cannot be blank: name a category as categories list writes it. To clear the default category, give clear_category: true instead.",
         )
       : setDefault(owner, merchant, category, input.kind);
   }
@@ -467,7 +493,7 @@ function edit(owner: string, input: MerchantsInput) {
   }
 
   return refuse(
-    "edit needs either name, to rename the merchant, alias and to, to move one of its cleaned labels (show lists them) to another merchant, or category, to set its default category.",
+    "edit needs either name, to rename the merchant, alias and to, to move one of its cleaned labels (show lists them) to another merchant, category, to set its default category, or clear_category: true, to clear it.",
     { action: "show", merchant },
   );
 }
