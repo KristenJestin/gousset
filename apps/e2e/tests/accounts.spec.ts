@@ -1,14 +1,16 @@
-import { account, statementLine } from "@gousset/db/schema/ledger";
-import { and, eq } from "drizzle-orm";
+import { account, accountBalance, statementImport, statementLine } from "@gousset/db/schema/ledger";
 
 import { expect, expectAccessible, fixDay, test, visit } from "../src/test";
 import { openUserData } from "../src/user-data";
 
 // Issue #15's pages: the accounts overview and an account's own page, and the MCP tool's e2e
-// scenario lives in accounts-mcp.spec.ts. Every test shares the worker's seeded user
-// (packages/fixture): "Current account" (Riverside Bank), "Livret A" (Riverside Bank), "MealCard"
-// (MealCard, a benefit account) and "Northbank PEA". Accounts this file creates are named "E2E …"
-// so they never collide with the fixture's own.
+// scenario lives in accounts-mcp.spec.ts. `playwright.config.ts`'s `fullyParallel` runs this
+// file's tests in any order, on either of the worker's app instances, sharing one seeded user with
+// every other spec file of the worker (notably accounts-mcp.spec.ts, which reads the seeded
+// "Current account" and expects its check to still agree on 2026-10-31): each test here makes
+// every account (and, for the disagreeing check, every row) it needs, named uniquely so two tests
+// never collide, and never changes a seeded row. The two tests that read the seed's own accounts
+// (the agreeing check, the currency lock's alternative) only read them.
 
 let data: ReturnType<typeof openUserData>;
 let owner = "";
@@ -40,9 +42,26 @@ for (const { choice, group } of KINDS) {
   test(`creating a "${choice}" account shows it in "${group}", with the group's total`, async ({
     userPage: page,
   }) => {
-    await visit(page, "/accounts");
-
     const name = `E2E ${choice}`;
+
+    // A card needs one of the user's open current accounts: made here, not by another test, so
+    // the test still passes whatever order the file's tests run in.
+    const settlesIntoName = `E2E ${choice} Settlement Current`;
+
+    if (choice === "Card") {
+      const [settlement] = await data.asUser(owner, (each) =>
+        each
+          .insert(account)
+          .values({ userId: owner, name: settlesIntoName, kind: "current", currency: "EUR" })
+          .returning({ id: account.id }),
+      );
+
+      if (settlement === undefined) {
+        throw new Error("The insert returned no row.");
+      }
+    }
+
+    await visit(page, "/accounts");
 
     await page.getByRole("button", { name: "Add an account", exact: true }).click();
 
@@ -59,9 +78,8 @@ for (const { choice, group } of KINDS) {
     await page.getByRole("option", { name: choice, exact: true }).click();
 
     if (choice === "Card") {
-      // "Current account" was created first: it is the open current account this card settles into.
       await dialog.getByRole("combobox", { name: "Settles into" }).click();
-      await page.getByRole("option", { name: "E2E Current account", exact: true }).click();
+      await page.getByRole("option", { name: settlesIntoName, exact: true }).click();
     }
 
     await dialog.getByRole("button", { name: "Add the account" }).click();
@@ -75,69 +93,109 @@ for (const { choice, group } of KINDS) {
   });
 }
 
-test("editing an account changes its settings, and refuses a new currency once it has a line", async ({
-  userPage: page,
-}) => {
+test("editing an account changes its settings", async ({ userPage: page }) => {
   await visit(page, "/accounts");
-  await page.getByRole("link", { name: /E2E Savings/ }).click();
+  await page.getByRole("button", { name: "Add an account", exact: true }).click();
 
+  const createDialog = page.getByRole("dialog", { name: "Add an account" });
+
+  await createDialog.getByRole("textbox", { name: "Name" }).fill("E2E Edit Target");
+  await createDialog.getByRole("button", { name: "Add the account" }).click();
+  await expect(createDialog).toBeHidden();
+
+  await page.getByRole("link", { name: /E2E Edit Target/ }).click();
   await page.getByRole("button", { name: "Edit" }).click();
 
   const editDialog = page.getByRole("dialog", { name: "Edit the account" });
 
-  await editDialog.getByRole("textbox", { name: "Name" }).fill("E2E Savings (renamed)");
+  await editDialog.getByRole("textbox", { name: "Name" }).fill("E2E Edit Target (renamed)");
   await editDialog.getByRole("button", { name: "Save" }).click();
   await expect(editDialog).toBeHidden();
   await expect(
-    page.getByRole("heading", { level: 1, name: "E2E Savings (renamed)" }),
+    page.getByRole("heading", { level: 1, name: "E2E Edit Target (renamed)" }),
   ).toBeVisible();
+});
 
-  // The seeded "Current account" has lines (the seed's statements): its currency is locked. Its
-  // name alone (not "E2E Current account", created above with no lines) finds it.
-  await visit(page, "/accounts");
-  await page.getByRole("link", { name: /^Current account/ }).click();
+test("editing an account refuses a new currency once it has a line", async ({ userPage: page }) => {
+  const [created] = await data.asUser(owner, (each) =>
+    each
+      .insert(account)
+      .values({ userId: owner, name: "E2E Currency Lock", kind: "current", currency: "EUR" })
+      .returning({ id: account.id }),
+  );
+
+  if (created === undefined) {
+    throw new Error("The insert returned no row.");
+  }
+
+  await data.asUser(owner, (each) =>
+    each.insert(statementLine).values({
+      userId: owner,
+      accountId: created.id,
+      source: "manual",
+      bookedOn: "2026-10-05",
+      amountMinor: -500,
+      label: "E2E CURRENCY LOCK LINE",
+    }),
+  );
+
+  await visit(page, `/accounts/${created.id}`);
   await page.getByRole("button", { name: "Edit" }).click();
 
-  const currencyDialog = page.getByRole("dialog", { name: "Edit the account" });
+  const dialog = page.getByRole("dialog", { name: "Edit the account" });
 
-  await currencyDialog.getByRole("textbox", { name: "Currency" }).fill("USD");
-  await currencyDialog.getByRole("button", { name: "Save" }).click();
+  await dialog.getByRole("textbox", { name: "Currency" }).fill("USD");
+  await dialog.getByRole("button", { name: "Save" }).click();
 
-  await expect(currencyDialog).toContainText(
+  await expect(dialog).toContainText(
     "The currency cannot change once the account has a line or a balance.",
   );
-  await expect(currencyDialog).toBeVisible();
+  await expect(dialog).toBeVisible();
 });
 
 test("closing an account leaves it apart, shown with the closed accounts; reopening brings it back", async ({
   userPage: page,
 }) => {
   await visit(page, "/accounts");
-  await page.getByRole("link", { name: /E2E Loan/ }).click();
+  await page.getByRole("button", { name: "Add an account", exact: true }).click();
 
+  const createDialog = page.getByRole("dialog", { name: "Add an account" });
+
+  await createDialog.getByRole("textbox", { name: "Name" }).fill("E2E Close Target");
+  await createDialog.getByRole("combobox", { name: "Kind" }).click();
+  await page.getByRole("option", { name: "Loan", exact: true }).click();
+  await createDialog.getByRole("button", { name: "Add the account" }).click();
+  await expect(createDialog).toBeHidden();
+
+  await page.getByRole("link", { name: /E2E Close Target/ }).click();
   await page.getByRole("button", { name: "Close" }).click();
 
-  const closeDialog = page.getByRole("dialog", { name: "Close E2E Loan?" });
+  const closeDialog = page.getByRole("dialog", { name: "Close E2E Close Target?" });
 
   await closeDialog.getByRole("button", { name: "Close the account" }).click();
   await expect(closeDialog).toBeHidden();
   await expect(page.getByRole("button", { name: "Reopen" })).toBeVisible();
 
   await page.getByRole("link", { name: "Accounts" }).click();
-  await expect(page.getByRole("region", { name: "Loans" })).toHaveCount(0);
+
+  // Another test of this file may have its own loan open at the same time: only this account's own
+  // row leaves the group, not the whole region.
+  await expect(
+    page.getByRole("region", { name: "Loans" }).getByRole("link", { name: /E2E Close Target/ }),
+  ).toHaveCount(0);
 
   const closed = page.locator('[data-slot="closed-accounts"]');
 
   await closed.getByRole("button", { name: /closed account/ }).click();
-  await expect(closed.getByRole("link", { name: /E2E Loan/ })).toBeVisible();
+  await expect(closed.getByRole("link", { name: /E2E Close Target/ })).toBeVisible();
 
-  await closed.getByRole("link", { name: /E2E Loan/ }).click();
+  await closed.getByRole("link", { name: /E2E Close Target/ }).click();
   await page.getByRole("button", { name: "Reopen" }).click();
   await expect(page.getByRole("button", { name: "Close" })).toBeVisible();
 
   await page.getByRole("link", { name: "Accounts" }).click();
   await expect(
-    page.getByRole("region", { name: "Loans" }).getByRole("link", { name: /E2E Loan/ }),
+    page.getByRole("region", { name: "Loans" }).getByRole("link", { name: /E2E Close Target/ }),
   ).toBeVisible();
 });
 
@@ -146,7 +204,9 @@ test("an account's page shows its lines, its balance day by day and an agreeing 
 }) => {
   await fixDay(page, "2026-10-31");
   await visit(page, "/accounts");
-  await page.getByRole("link", { name: /Livret A/ }).click();
+  // Anchored: a "Livret A" choice created by the kinds loop above would otherwise also match, as
+  // "E2E Livret A".
+  await page.getByRole("link", { name: /^Livret A/ }).click();
 
   await expect(page.getByRole("heading", { level: 1, name: "Livret A" })).toBeVisible();
   await expect(page.getByText("Balance checked")).toBeVisible();
@@ -160,32 +220,68 @@ test("an account's page shows its lines, its balance day by day and an agreeing 
 test("an account's page shows the difference when its balance disagrees with the statement", async ({
   userPage: page,
 }) => {
-  const [current] = await data.asUser(owner, (each) =>
-    each.select({ id: account.id }).from(account).where(eq(account.name, "Current account")),
-  );
+  const day = "2026-10-31";
+  const lineAmountMinor = 100_000;
+  const statementBalanceMinor = 99_000;
 
-  if (current === undefined) {
-    throw new Error("The seed wrote no Current account.");
-  }
+  const created = await data.asUser(owner, async (each) => {
+    const [inserted] = await each
+      .insert(account)
+      .values({ userId: owner, name: "E2E Disagreeing Account", kind: "current", currency: "EUR" })
+      .returning({ id: account.id });
 
-  // The seed's rent line, fixed whatever its run: deleting it unbalances the statement on purpose.
-  await data.asUser(owner, (each) =>
-    each
-      .delete(statementLine)
-      .where(
-        and(
-          eq(statementLine.accountId, current.id),
-          eq(statementLine.label, "DIRECT DEBIT GLYCINE HOMES RENT"),
-          eq(statementLine.bookedOn, "2026-10-05"),
-        ),
-      ),
-  );
+    if (inserted === undefined) {
+      throw new Error("The insert returned no row.");
+    }
 
-  await fixDay(page, "2026-10-31");
-  await visit(page, `/accounts/${current.id}`);
+    const [done] = await each
+      .insert(statementImport)
+      .values({
+        userId: owner,
+        accountId: inserted.id,
+        fileName: "e2e-disagreeing-account.csv",
+        fileSha256: "e2e-disagreeing-account-sha256",
+        format: "csv",
+        status: "done",
+        periodFrom: "2026-10-01",
+        periodTo: day,
+      })
+      .returning({ id: statementImport.id });
+
+    if (done === undefined) {
+      throw new Error("The insert returned no row.");
+    }
+
+    await each.insert(statementLine).values({
+      userId: owner,
+      accountId: inserted.id,
+      importId: done.id,
+      source: "import",
+      bookedOn: "2026-10-05",
+      amountMinor: lineAmountMinor,
+      label: "E2E DISAGREEING SALARY",
+      bankId: "e2e-disagreeing-account-bank-id",
+      dedupKey: "e2e-disagreeing-account-dedup-key",
+    });
+
+    await each.insert(accountBalance).values({
+      userId: owner,
+      accountId: inserted.id,
+      day,
+      balanceMinor: statementBalanceMinor,
+      source: "statement",
+      importId: done.id,
+    });
+
+    return inserted;
+  });
+
+  await fixDay(page, day);
+  await visit(page, `/accounts/${created.id}`);
 
   await expect(page.getByText("Balance does not match")).toBeVisible();
-  await expect(page.getByText(/a difference of \+€690\.00/)).toBeVisible();
+  // app (100,000) − statement (99,000) = +10.00: the app counts more.
+  await expect(page.getByText(/a difference of \+€10\.00/)).toBeVisible();
 });
 
 test("noting a balance on a balance-mode account shows it as the account's balance", async ({
