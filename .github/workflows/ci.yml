@@ -85,6 +85,7 @@ jobs:
           EVENT: ${{ github.event_name }}
           REF: ${{ github.ref }}
           BASE_REF: ${{ github.base_ref }}
+          HEAD_REF: ${{ github.head_ref }}
           SAME_REPOSITORY: ${{ github.event.pull_request.head.repo.full_name == github.repository }}
           PULL_REQUEST: ${{ github.event.pull_request.number }}
           GH_TOKEN: ${{ github.token }}
@@ -100,10 +101,16 @@ jobs:
             # The release pull request: the release requires its run with every browser and width.
             pull_request) if [ "$BASE_REF" = main ]; then full=true; fi ;;
           esac
-          # `Update-Snapshots: missing`, a line of the body alone, on a pull request of this
-          # repository: ui draws the missing references in every browser (AGENTS.md, "Testing").
+          # `Update-Snapshots: missing`, a line of the body alone, on a pull request of a working
+          # branch of this repository (never dev, main, next/x.y nor the release's): ui draws the
+          # missing references in every browser (AGENTS.md, "Testing").
           draw=false
+          case "$HEAD_REF" in
+            dev | main | next/*) working=false ;;
+            *) working=true ;;
+          esac
           if [ "$EVENT" = pull_request ] && [ "$SAME_REPOSITORY" = true ] &&
+            [ "$working" = true ] && [ "$BASE_REF" != main ] &&
             grep -qxF 'Update-Snapshots: missing' <<< "$(tail -n +2 <<< "$message")"; then
             draw=true
           fi
@@ -302,6 +309,10 @@ jobs:
           TOKEN: ${{ github.token }}
           REPOSITORY: ${{ github.repository }}
         run: |
+          case "$BRANCH" in
+            "" | dev | main | next/* | refs/* | -* | */ | *..* | *[!A-Za-z0-9._/-]*)
+              echo "::error::references are committed to a working branch only, never '$BRANCH'"; exit 1 ;;
+          esac
           now="$(git ls-remote --heads "https://github.com/${REPOSITORY}.git" "refs/heads/${BRANCH}" | cut -f1)"
           if [ "$now" != "$SHA" ]; then
             echo "::error::'$BRANCH' moved since the references were drawn; push again with the trailer"
@@ -426,8 +437,7 @@ jobs:
 
   # The image of the commit (docs/releases.md, "The image"), built once and handed to `upgrade`
   # and `beta` as the `image` artifact. The branch's code runs here, with a token that can only
-  # read. Docker's layers are kept in the Actions cache, by branch: a pull request's never reach
-  # dev's.
+  # read. A pull request's and next/x.y's layers are kept in the Actions cache; a beta's are not.
   image:
     needs: plan
     if: needs.plan.outputs.image == 'true'
@@ -435,6 +445,7 @@ jobs:
     outputs:
       publish: ${{ steps.version.outputs.publish }}
       version: ${{ steps.version.outputs.version }}
+      digest: ${{ steps.save.outputs.digest }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -473,19 +484,25 @@ jobs:
             ${{ steps.version.outputs.publish == 'true' && format('{0}:{1}', env.IMAGE, steps.version.outputs.version) || '' }}
           build-args: ${{ steps.version.outputs.publish == 'true' && format('VERSION={0}', steps.version.outputs.version) || '' }}
           labels: org.opencontainers.image.revision=${{ github.sha }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          # The layers of a pull request or of next/x.y come from the Actions cache; the beta's are
+          # built anew, so that no cached layer reaches a published image.
+          cache-from: ${{ steps.version.outputs.publish != 'true' && 'type=gha' || '' }}
+          cache-to: ${{ steps.version.outputs.publish != 'true' && 'type=gha,mode=max' || '' }}
 
       - name: It installs, migrates and answers, as docker-compose.yml runs it
         run: tools/check-image.sh ci
 
+      # Its digest goes to `beta` through the job's outputs: an artifact of the run can be replaced
+      # by another of its jobs, an output cannot.
       - name: Save the image
+        id: save
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
           tags=("$IMAGE:ci")
           if [ -n "$VERSION" ]; then tags+=("$IMAGE:$VERSION"); fi
           docker save --output "$RUNNER_TEMP/image.tar" "${tags[@]}"
+          echo "digest=$(sha256sum "$RUNNER_TEMP/image.tar" | cut -d ' ' -f 1)" >> "$GITHUB_OUTPUT"
 
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
@@ -535,14 +552,21 @@ jobs:
       GH_REPO: ${{ github.repository }}
       SHA: ${{ github.sha }}
       VERSION: ${{ needs.image.outputs.version }}
+      DIGEST: ${{ needs.image.outputs.digest }}
     steps:
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
           name: image
           path: ${{ runner.temp }}/image
 
-      - name: Load the image
-        run: docker load --input "$RUNNER_TEMP/image/image.tar"
+      - name: Load the image `image` saved, and no other
+        run: |
+          actual=$(sha256sum "$RUNNER_TEMP/image/image.tar" | cut -d ' ' -f 1)
+          if [ -z "$DIGEST" ] || [ "$actual" != "$DIGEST" ]; then
+            echo "::error::The image artifact is not the one the image job saved (${actual}, not ${DIGEST:-none}): nothing was published."
+            exit 1
+          fi
+          docker load --input "$RUNNER_TEMP/image/image.tar"
 
       - uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
         with:

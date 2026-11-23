@@ -295,9 +295,11 @@ v0.1 carries `Release-As: 0.1.0`.
 
 The `ci` workflow (`ci.yml`) publishes the beta of each push to `dev`, in two of its jobs, without
 waiting for its browser checks. `image` checks out the pushed commit, computes its beta version,
-builds the image (Docker's layers kept in the Actions cache), runs `tools/check-image.sh` on it
-and saves it as the run's `image` artifact, the one `upgrade` tests too: the image of a commit is
-built once. Once `verify` passed as well, `beta` signs in to the registry and pushes it as
+builds the image (anew: no layer of the Actions cache, which pull requests' builds use, reaches a
+beta), runs `tools/check-image.sh` on it and saves it as the run's `image` artifact, the one
+`upgrade` tests too: the image of a commit is built once. Once `verify` passed as well, `beta`
+checks the artifact is the one `image` saved (its SHA-256, passed as a job output, which no other
+job can replace), signs in to the registry and pushes it as
 `sha-<commit>` and `X.Y.Z-beta.N`; if `verify` failed, nothing is published. `image` runs the
 branch's code (the version, the build, the check) with a token that can only read; `beta` holds
 the token that writes images, checks nothing out and runs no code of the branch: it loads the saved
