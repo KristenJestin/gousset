@@ -113,7 +113,7 @@ better-auth's `auth_user` is the user; its tables keep their `auth_` prefix (its
 
 **Kind and envelope are two columns.** The kind says how an account behaves; the envelope says which tax rules it is under. A PEA and a securities account both hold positions; a Livret A is a savings account; a life insurance contract holds funds. So "securities account", "PEA" and "life insurance", which #15 offers as choices, are `investment` with no envelope, `pea` and `life_insurance`; a Livret A is `savings` with `livret_a`. The logic of positions is written once, and an envelope's rules apply to whichever account carries it. The envelope's figures (a contribution cap, a key date) come in v0.6, as columns of the account ([v0.6](#v06-investments)): the vision keeps them per account.
 
-**The accounts page's groups follow the kind**, in code, not in a column: available (`current`, `savings`, `card`), restricted (`benefit`), invested (`investment`), owed (`loan`). A column would have to be kept in step with the kind for no gain.
+**The accounts page's groups follow the kind**, in code, not in a column: available (`current`, `card`), restricted (`benefit`), invested, shown as "Savings and investments" (`savings`, `investment`), owed (`loan`). A column would have to be kept in step with the kind for no gain.
 
 - **A card account is a deferred-debit card**: its purchases are lines of its own, and once a month the current account pays its balance, which v0.3 pairs as a transfer (#26); a card statement that does not show that payment gets its side as a line made by the app ([v0.3](#v03-classify)). A card debited at once is no account: its payments are lines of the current account.
 - **A benefit account** (meal vouchers, works council subsidies, gift cards) is money with restricted use. Its credits are positive lines, each with its expiry date (`statement_line.expires_on`). What is left on each credit, and what expires when, is computed on read in the account's `credit_order` (#16), never stored: every outgoing line (a payment, a transfer out) uses up the credits in that order, so a corrected or deleted line never leaves a stored remainder wrong. An issuer whose order is neither gets a value of its own when one is met. Expiry dates never move money by themselves: what expires unused leaves the balance when a line says so, from the issuer's statement or entered by hand.
@@ -135,7 +135,7 @@ better-auth's `auth_user` is the user; its tables keep their `auth_` prefix (its
 - Indexes: `(account_id, day)`, the account page's check; `(import_id)`, for undo.
 - Unique `(account_id, day) where source = 'noted'`: one noted balance a day. Balance mode makes one line per noted balance from the one before it ([Balance mode](#balance-mode)); two on a day would make that order ambiguous. Statement balances may repeat a day (two overlapping files each give theirs), and each goes with its import.
 
-The account page's check (#15) compares the balance the app computes at the end of a day (`opening_balance_minor` plus every counted line booked up to that day) with each statement balance, and shows the difference. In balance mode, the noted balances are what the account is kept by.
+The account page's check (#15) compares the balance the app computes at the end of a day (`opening_balance_minor` plus every counted line booked up to that day) with the latest statement balance on or before today, and shows the difference; any earlier statement balance that disagrees with the app's balance at the end of its own day is shown too, so a past mismatch is never hidden. In balance mode, the noted balances are what the account is kept by.
 
 ## Statement lines
 
@@ -246,6 +246,7 @@ So a near duplicate is always a line read in another way than the one it looks l
 - Keys: unique `(user_id, id)`. A user has a handful of profiles: no other index.
 - **`definition` is decoded by an Effect `Schema` in `packages/import`**, the only place that knows its shape; the database stores it whole. Its `version` lets that schema read an older shape. The same JSON is the file a user exports to share a profile, and imports.
 - **Profiles shipped with Gousset live in code** (`packages/import`), in the same shape, named by a key: a fix to one arrives with an update, with no migration of anyone's data. A user who wants to change one copies it into their own.
+- **Which profile reads a CSV** (#19): with none chosen, the import takes the user's statement profile whose `header` is the file's header row as that profile reads it (the most recently saved first), then a shipped one whose header is, then detection; it records which in `import.profile_id` or `import.shipped_profile`, neither for detection or a definition given by hand. A profile chosen on resuming the import is recorded the same way.
 - **No default profile on the account**: a CSV with no account in it goes, as a proposal, to the account last imported with the same profile, read from the imports.
 
 ## Diagram: v0.2

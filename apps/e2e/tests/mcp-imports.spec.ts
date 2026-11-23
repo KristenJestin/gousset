@@ -1,7 +1,7 @@
 import type { Client } from "@modelcontextprotocol/client";
 import type { Page } from "@playwright/test";
-import { account } from "@gousset/db/schema/ledger";
-import { exampleStatement, writeStatement } from "@gousset/fixture";
+import { account, importProfile } from "@gousset/db/schema/ledger";
+import { encodeWindows1252, exampleStatement, writeStatement } from "@gousset/fixture";
 
 import { addUser } from "../src/auth";
 import { connectMcp, expect, test } from "../src/test";
@@ -108,4 +108,153 @@ test("imports a statement through the MCP client, then lists and undoes it", asy
   expect(undone.isError, undone.text).toBe(false);
   expect(undone.text).toContain(`Undid the import of ${statement.fileName} (${ACCOUNT_NAME}`);
   expect(undone.text).toContain("6 lines removed.");
+});
+
+/** The id of the import an upload's answer names. */
+const importIdOf = (text: string) => /Import id: ([\da-f-]{36})/.exec(text)?.[1] ?? "";
+
+/** An invented export in the French style shipped with Gousset; its days leave detection unsure. */
+const frenchExport = encodeWindows1252(
+  [
+    "Relevé de compte",
+    "Compte courant",
+    "Période du 01/12/2026 au 12/12/2026",
+    "Date;Date de valeur;Libellé;Débit;Crédit",
+    '01/12/2026;01/12/2026;"CB MARCHÉ DES HALLES";18,40;',
+    '03/12/2026;03/12/2026;"VIR SEPA DOMINIQUE EXEMPLE";;75,00',
+    "",
+  ].join("\r\n"),
+);
+
+/** An invented export no shipped profile knows, which the user's own profile reads. */
+const ownExport = [
+  "Day|Money|What",
+  "2026-12-04|-12.50|EXAMPLE BAKERY",
+  "2026-12-06|-30.00|EXAMPLE BOOKSHOP",
+  "",
+].join("\n");
+
+test("reads CSV files with the user's profile and a shipped one, and says which profiles read them", async ({
+  app,
+  user,
+  page,
+  baseURL,
+  mcpClientId,
+}, testInfo) => {
+  test.setTimeout(90_000);
+
+  const reader = await addUser(app.baseURL, user, {
+    name: "Alex Example",
+    email: `alex.profiles.worker${app.slot}.${testInfo.repeatEachIndex}@example.com`,
+    password: `e2e-alex-password-${app.slot}`,
+  });
+
+  const data = openUserData(app.database);
+
+  try {
+    const owner = await data.ownerOf(reader.email);
+
+    await data.asUser(owner, async (transaction) => {
+      await transaction
+        .insert(account)
+        .values({ userId: owner, name: ACCOUNT_NAME, kind: "current", currency: "EUR" });
+
+      await transaction.insert(importProfile).values([
+        {
+          userId: owner,
+          name: "Pipe export",
+          institution: "Example Credit Union",
+          header: "day;money;what",
+          definition: {
+            version: 1,
+            separator: "|",
+            encoding: "utf8",
+            skipRows: 0,
+            headerRow: true,
+            dateFormat: "YYYY-MM-DD",
+            decimalMark: ".",
+            columns: {
+              bookedOn: 1,
+              valueOn: null,
+              amount: { kind: "signed", column: 2 },
+              label: 3,
+              memo: null,
+              bankId: null,
+              currency: null,
+            },
+          },
+        },
+        // A row whose definition no longer reads: listed as such, never a failure.
+        { userId: owner, name: "Broken export", definition: { version: 1 } },
+      ]);
+    });
+  } finally {
+    await data.close();
+  }
+
+  await page.context().addCookies([...reader.cookies]);
+
+  const session = await connectMcp({
+    baseURL: baseURL ?? "",
+    page,
+    consent: allowReadAndWrite,
+    scope: "read write",
+    clientId: mcpClientId,
+  });
+
+  const listed = await callText(session.client, "imports", { action: "profiles" });
+
+  expect(listed.isError, listed.text).toBe(false);
+  expect(listed.text).toContain(
+    "- Pipe export (Example Credit Union), the user's: separated by pipes",
+  );
+  expect(listed.text).toContain(
+    "- Broken export, the user's: its definition can no longer be read",
+  );
+  expect(listed.text).toContain(
+    "- French style: debit and credit columns, shipped with Gousset: separated by semicolons, encoded windows-1252",
+  );
+
+  const french = await callText(session.client, "imports", {
+    action: "upload",
+    file_name: "releve-decembre.csv",
+    content_base64: Buffer.from(frenchExport).toString("base64"),
+    account: ACCOUNT_NAME,
+  });
+
+  expect(french.isError, french.text).toBe(false);
+  expect(french.text).toContain("2 lines read: 2 added");
+
+  const frenchProfiles = await callText(session.client, "imports", {
+    action: "profiles",
+    import: importIdOf(french.text),
+  });
+
+  expect(frenchProfiles.isError, frenchProfiles.text).toBe(false);
+  expect(frenchProfiles.text).toContain(
+    "- French style: debit and credit columns, shipped with Gousset: its header row is the file's.",
+  );
+  expect(frenchProfiles.text).toContain(
+    "This import read its file with French style: debit and credit columns.",
+  );
+
+  const own = await callText(session.client, "imports", {
+    action: "upload",
+    file_name: "own-export.csv",
+    content: ownExport,
+    account: ACCOUNT_NAME,
+  });
+
+  expect(own.isError, own.text).toBe(false);
+  expect(own.text).toContain("2 lines read: 2 added");
+
+  const ownProfiles = await callText(session.client, "imports", {
+    action: "profiles",
+    import: importIdOf(own.text),
+  });
+
+  expect(ownProfiles.text).toContain(
+    "- Pipe export (Example Credit Union), the user's: its header row is the file's.",
+  );
+  expect(ownProfiles.text).toContain("This import read its file with Pipe export.");
 });

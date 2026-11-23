@@ -1,4 +1,4 @@
-import { FixtureLedger, Imports } from "@gousset/core";
+import { FixtureLedger, ImportProfiles, Imports, memoryAccountStore } from "@gousset/core";
 import { goussetServer } from "@gousset/mcp/gousset";
 import { callText, connectInProcess } from "@gousset/mcp/test-client";
 import { Effect, Layer, Tracer } from "effect";
@@ -39,7 +39,15 @@ describe("a call to the MCP door", () => {
           // The call reads the month only: no import is reached.
           run: (effect) =>
             Effect.runPromiseExit(
-              Effect.provide(effect, Layer.merge(FixtureLedger, Layer.mock(Imports, {}))),
+              Effect.provide(
+                effect,
+                Layer.mergeAll(
+                  FixtureLedger,
+                  memoryAccountStore(),
+                  Layer.mock(Imports, {}),
+                  Layer.mock(ImportProfiles, {}),
+                ),
+              ),
             ),
           observe,
         },

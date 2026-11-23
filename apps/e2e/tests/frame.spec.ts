@@ -385,7 +385,7 @@ test("moving between screens fades the screen, the current item slides, empty st
   userPage,
 }) => {
   test.skip(onPhone(userPage), "The sidebar is the desktop's.");
-  await visit(userPage, "/accounts");
+  await visit(userPage, "/investments");
 
   // The empty state fades in through CSS, 200 ms.
   const block = userPage.locator('[data-slot="screen-block"]');
@@ -409,9 +409,9 @@ test("moving between screens fades the screen, the current item slides, empty st
   // Cut under reduced motion: the screen shows at once, the mark is at once on its item.
   await userPage.emulateMedia({ reducedMotion: "reduce" });
 
-  const cut = await moveTo(userPage, "Accounts");
+  const cut = await moveTo(userPage, "Investments");
 
-  await expect(userPage.getByRole("link", { name: "Accounts" })).toHaveAttribute(
+  await expect(userPage.getByRole("link", { name: "Investments" })).toHaveAttribute(
     "aria-current",
     "page",
   );
