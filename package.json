@@ -21,6 +21,7 @@
     "db:studio": "vp run --filter @gousset/db db:studio",
     "db:generate": "vp run --filter @gousset/db db:generate",
     "db:migrate": "vp run --filter @gousset/db db:migrate",
+    "db:seed": "vp run --filter @gousset/db db:seed",
     "db:start": "docker compose -f docker-compose.dev.yml up -d postgres",
     "db:watch": "docker compose -f docker-compose.dev.yml up postgres",
     "db:stop": "docker compose -f docker-compose.dev.yml stop postgres",
