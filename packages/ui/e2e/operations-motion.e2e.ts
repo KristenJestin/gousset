@@ -5,10 +5,10 @@ const story = (component: string, name: string) =>
   `/iframe.html?id=operations-${component}--${name}&viewMode=story`;
 
 /**
- * What to read at each frame, on the elements `selector` matches whose text holds `text`: the
- * first one's computed opacity or transform ("none" when there is none).
+ * What to read at each frame, on the elements `selector` matches whose text holds `text`: how many
+ * there are, or the first one's computed opacity or transform ("none" when there is none).
  */
-type Reading = { selector: string; text: string; read: "opacity" | "transform" };
+type Reading = { selector: string; text: string; read: "count" | "opacity" | "transform" };
 
 /** One frame: its time from the start, in ms, and each reading's value, in order. */
 type Frame = { at: number; values: Array<string> };
@@ -30,9 +30,15 @@ async function sampleFrames(
       // Runs in the page: everything it needs is in its arguments.
       const readAll = () =>
         wanted.map(({ selector, text, read }) => {
-          const first = [...document.querySelectorAll(selector)].find((element) =>
+          const found = [...document.querySelectorAll(selector)].filter((element) =>
             (element.textContent ?? "").includes(text),
           );
+
+          const [first] = found;
+
+          if (read === "count") {
+            return String(found.length);
+          }
 
           if (first === undefined) {
             return "none";
@@ -201,13 +207,20 @@ test.describe("Line detail", () => {
   const panel = { selector: '[data-slot="line-detail"]', text: "CB GREENMARKET 2110" };
 
   const opening = (page: Page) =>
-    sampleFrames(page, [{ ...panel, read: "transform" }], {
-      trigger: page
-        .locator(ROW)
-        .filter({ hasText: "CB GREENMARKET 2110" })
-        .first()
-        .getByRole("button"),
-    });
+    sampleFrames(
+      page,
+      [
+        { ...panel, read: "transform" },
+        { ...panel, read: "count" },
+      ],
+      {
+        trigger: page
+          .locator(ROW)
+          .filter({ hasText: "CB GREENMARKET 2110" })
+          .first()
+          .getByRole("button"),
+      },
+    );
 
   test("the row grows into its detail in 300 ms", async ({ page }) => {
     await page.goto(story("operationslayout", "desktop"));
@@ -229,8 +242,14 @@ test.describe("Line detail", () => {
     await expect(page.locator(ROW).first()).toBeVisible();
 
     const frames = await opening(page);
+    // The detail mounts on the click, which comes after the press by as long as the browser takes
+    // to send it, and its first frame waits for the commit that measures every row: counted from
+    // the press, that frame can come past any fixed time. So the one frame Motion draws at the row's
+    // place (see `cutAtOnce`) is allowed in the first frame that shows the detail, and none after.
+    const shown = frames.findIndex(({ values }) => values[1] === "1");
 
-    expect(cutAtOnce(timesWhen(frames, 0, moves))).toBe(true);
+    expect(shown).toBeGreaterThanOrEqual(0);
+    expect(timesWhen(frames.slice(shown + 1), 0, moves)).toEqual([]);
   });
 
   test("Escape closes it and gives the focus back to its row", async ({ page }) => {

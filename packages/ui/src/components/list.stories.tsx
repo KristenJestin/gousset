@@ -80,6 +80,7 @@ export const Failed: Story = {
   ),
 };
 
+/** Where a row's tags and action leave its name no room, they go under it. */
 export const Phone: Story = {
   globals: { viewport: { value: "mobile1", isRotated: false } },
   render: (args) => (
@@ -90,6 +91,11 @@ export const Phone: Story = {
           title="Grace Example"
           description="grace@example.com"
           tags={["Temporary password"]}
+          action={
+            <Button variant="secondary" size="sm" aria-label="Reset the password of Grace Example">
+              Reset the password
+            </Button>
+          }
         />
       </List>
     </Card>

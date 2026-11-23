@@ -3,7 +3,8 @@ import { expect, test } from "@playwright/test";
 
 /**
  * One representative story per component, in light and in dark, screenshotted headless on the
- * desktop Chromium (the issue's "How to verify"). Each component's other stories, its phone
+ * desktop Chromium (the issue's "How to verify"), and the month bar's `Phone` story at a phone's
+ * width, whose legend must hold on one line (#83). Each component's other stories, its phone
  * layout included (its `Phone` story), are covered by its behaviour tests; screenshotting every
  * story in every browser would put over a thousand images in Git. Reduced motion: each story is
  * caught in its final state, never on its way.
@@ -14,6 +15,12 @@ type Shot = {
   id: string;
   /** What to do before the screenshot, for a popup that opens from its trigger. */
   open?: "click" | "focus";
+  /** The trigger's name, when it is not the story's first button. */
+  trigger?: string;
+  /** The screenshot's name, when a story is shot twice. */
+  name?: string;
+  /** A phone's width, for a story whose layout is the phone's (its `Phone` story). */
+  width?: number;
 };
 
 const SHOTS: ReadonlyArray<Shot> = [
@@ -24,6 +31,8 @@ const SHOTS: ReadonlyArray<Shot> = [
   { id: "actions-textlink--in-text" },
   { id: "forms-textfield--error" },
   { id: "forms-select--chosen" },
+  // The list over a block: a floating surface stands out from the card (#104).
+  { id: "forms-select--in-a-card", open: "click" },
   { id: "forms-combobox--chosen" },
   { id: "forms-namefield--typed" },
   { id: "forms-checkbox--checked" },
@@ -63,6 +72,9 @@ const SHOTS: ReadonlyArray<Shot> = [
   { id: "money-delta--spending-up" },
   { id: "money-month-bar--default" },
   { id: "money-month-bar--overspent" },
+  { id: "money-month-bar--narrow-part" },
+  // The legend on one line at the narrowest phone (#83), Storybook's `mobile1`.
+  { id: "money-month-bar--phone", width: 320 },
   { id: "money-breakdown--default" },
   { id: "money-breakdown--loading" },
   { id: "money-amount--counting" },
@@ -76,6 +88,13 @@ const SHOTS: ReadonlyArray<Shot> = [
   { id: "charts-bar-chart--default" },
   { id: "brand-brand--with-wordmark" },
   { id: "layout-app-shell--desktop" },
+  // The user's menu opened over the sidebar: a floating surface stands out from it (#104).
+  {
+    id: "layout-app-shell--desktop",
+    open: "click",
+    trigger: "Ada Example",
+    name: "layout-app-shell--desktop-user-menu",
+  },
   { id: "layout-user-menu--default", open: "click" },
   { id: "inputs-segmented-choice--default" },
   { id: "forms-moneyfield--default" },
@@ -100,8 +119,11 @@ const SHOTS: ReadonlyArray<Shot> = [
   { id: "operations-lineexpense--linked" },
 ];
 
-async function openPopup(page: Page, open: Shot["open"]) {
-  const trigger = page.locator("#storybook-root button").first();
+async function openPopup(page: Page, open: Shot["open"], name: Shot["trigger"]) {
+  const trigger =
+    name === undefined
+      ? page.locator("#storybook-root button").first()
+      : page.getByRole("button", { name, exact: true });
 
   if (open === "click") {
     await trigger.click();
@@ -116,10 +138,17 @@ test.beforeEach(async ({ page }) => {
 
 for (const scheme of ["light", "dark"] as const) {
   for (const shot of SHOTS) {
-    test(`${shot.id}, ${scheme}`, async ({ page }, testInfo) => {
+    const name = shot.name ?? shot.id;
+
+    test(`${name}, ${scheme}`, async ({ page }, testInfo) => {
       test.skip(testInfo.project.name !== "chromium", "Screenshotted on the desktop Chromium");
 
       await page.emulateMedia({ colorScheme: scheme, reducedMotion: "reduce" });
+
+      if (shot.width !== undefined) {
+        await page.setViewportSize({ width: shot.width, height: 568 });
+      }
+
       await page.goto(`/iframe.html?id=${shot.id}&viewMode=story`);
       await page.locator("#storybook-root > *").first().waitFor();
       await page.evaluate(async () => {
@@ -127,19 +156,19 @@ for (const scheme of ["light", "dark"] as const) {
       });
 
       if (shot.open !== undefined) {
-        await openPopup(page, shot.open);
+        await openPopup(page, shot.open, shot.trigger);
         // The visible popup: a trigger's own tooltip sits closed and hidden in the page too.
         await expect(
           page
             .locator(
-              '[role="dialog"], [role="menu"], [role="tooltip"], [data-slot$="-content"][data-open]',
+              '[role="dialog"], [role="menu"], [role="tooltip"], [role="listbox"], [data-slot$="-content"][data-open]',
             )
             .filter({ visible: true })
             .first(),
         ).toBeVisible();
       }
 
-      await expect(page).toHaveScreenshot(`${shot.id}-${scheme}.png`);
+      await expect(page).toHaveScreenshot(`${name}-${scheme}.png`);
     });
   }
 }

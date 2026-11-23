@@ -10,7 +10,7 @@ import { TEST_CLIENT_ID, TEST_REDIRECT_URL } from "../src/oauth-client";
 import { expect, fixDay, test, visit } from "../src/test";
 
 // The scenario of issue #70, "How to verify", and its refusal: the administrator gives a user a
-// new temporary password from the users page; the user must change it at the next sign-in, and
+// new temporary password from Settings, Users; the user must change it at the next sign-in, and
 // everything the old password allowed ends, MCP clients included.
 
 // A client asking only to read gets a single "Allow" on the consent page.
@@ -74,9 +74,9 @@ async function agentGetsIn(baseURL: string, accessToken: string): Promise<boolea
   }
 }
 
-/** The users page's dialog that gives `person` a new temporary password. */
+/** The dialog of Settings, Users that gives `person` a new temporary password. */
 async function openReset(page: Page, person: { name: string; email: string }) {
-  await visit(page, "/users");
+  await visit(page, "/settings/users");
 
   await page
     .getByRole("listitem")
@@ -126,7 +126,7 @@ test("reset by the administrator, the old password refused, the temporary one le
   await dialog.getByRole("button", { name: "Reset the password", exact: true }).click();
   await expect(dialog).toBeHidden();
 
-  // In the users block, beside the creation form's own live region.
+  // Said in the users block, once the dialog has closed.
   await expect(
     userPage
       .getByRole("main")
@@ -235,7 +235,7 @@ test("a non-administrator cannot reset a password", async ({
   user,
 }) => {
   // The page is the administrator's alone.
-  await secondUserPage.goto("/users");
+  await secondUserPage.goto("/settings/users");
   await expect(secondUserPage).toHaveURL(/\/$/);
 
   const person = await addUser(app.baseURL, user, {
