@@ -43,6 +43,12 @@ const isId = (id: string) => UUID.test(id);
 const summed = () =>
   sql<number>`coalesce(sum(${statementLine.amountMinor}), 0)::bigint`.mapWith(Number);
 
+const summedPositive = () =>
+  sql<number>`coalesce(sum(greatest(${statementLine.amountMinor}, 0)), 0)::bigint`.mapWith(Number);
+
+const summedNegative = () =>
+  sql<number>`coalesce(sum(greatest(-${statementLine.amountMinor}, 0)), 0)::bigint`.mapWith(Number);
+
 const counted = (accountId: string) =>
   and(eq(statementLine.accountId, accountId), eq(statementLine.state, "counted"));
 
@@ -228,6 +234,25 @@ export const DatabaseAccountStore = Layer.effect(
             .orderBy(asc(statementLine.bookedOn));
 
           return { beforeMinor: before?.minor ?? 0, moves };
+        }),
+
+      inOut: (owner, accountId, { from, to }) =>
+        userData.transaction(owner, async (transaction) => {
+          if (!isId(accountId)) {
+            return { inMinor: 0, outMinor: 0 };
+          }
+
+          const [row] = await transaction
+            .select({ inMinor: summedPositive(), outMinor: summedNegative() })
+            .from(statementLine)
+            .where(
+              and(
+                counted(accountId),
+                sql`${statementLine.bookedOn} between ${from}::date and ${to}::date`,
+              ),
+            );
+
+          return { inMinor: row?.inMinor ?? 0, outMinor: row?.outMinor ?? 0 };
         }),
 
       create: <E>(

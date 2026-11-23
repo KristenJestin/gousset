@@ -117,6 +117,10 @@ export type AccountDetail = {
   };
   readonly day: string;
   readonly balance: Money;
+  /** The current month's counted money in, from the 1st to `day`. */
+  readonly monthIn: Money;
+  /** The current month's counted money out, from the 1st to `day`, as a positive amount. */
+  readonly monthOut: Money;
   /** Counted lines, newest first. */
   readonly lines: ReadonlyArray<AccountLine>;
   /** Older lines remain: read them with `before` set to this line's id. */
@@ -235,6 +239,8 @@ export const showAccount = (owner: string, accountId: string, view: AccountView 
     const limit = Math.min(Math.max(Math.trunc(view.limit ?? DEFAULT_LINES), 1), MAX_LINES);
     const page = yield* store.lines(owner, accountId, { before: view.before, limit });
     const moves = yield* store.moves(owner, accountId, range);
+    const monthFrom = `${day.slice(0, 7)}-01`;
+    const monthInOut = yield* store.inOut(owner, accountId, { from: monthFrom, to: day });
     const { account } = found;
     const byLines = account.mode === "lines";
     const after = balancesAfter(page.lines, account.openingBalanceMinor + page.olderMinor);
@@ -254,6 +260,8 @@ export const showAccount = (owner: string, accountId: string, view: AccountView 
       },
       day,
       balance: money(balanceAt(account, found.countedMinor, found.noted, day), account.currency),
+      monthIn: money(monthInOut.inMinor, account.currency),
+      monthOut: money(monthInOut.outMinor, account.currency),
       lines: page.lines.map((line, index) => ({
         id: line.id,
         bookedOn: line.bookedOn,

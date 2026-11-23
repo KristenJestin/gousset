@@ -170,6 +170,26 @@ export function memoryAccountStore(rows: ReadonlyMap<string, MemoryRows> = new M
           };
         }),
 
+      inOut: (owner, accountId, { from, to }) =>
+        Effect.sync(() => {
+          const lines = counted(owner, accountId).filter(
+            (line) => line.bookedOn >= from && line.bookedOn <= to,
+          );
+
+          let inMinor = 0;
+          let outMinor = 0;
+
+          for (const line of lines) {
+            if (line.amountMinor >= 0) {
+              inMinor += line.amountMinor;
+            } else {
+              outMinor -= line.amountMinor;
+            }
+          }
+
+          return { inMinor, outMinor };
+        }),
+
       create: (owner, decide) =>
         Effect.gen(function* () {
           const own = of(owner);

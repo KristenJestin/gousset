@@ -70,6 +70,14 @@ export type DayMoves = {
   readonly moves: ReadonlyArray<DayBalance>;
 };
 
+/** The counted lines of an account over a range, split by sign. */
+export type InOut = {
+  /** The sum of the positive counted lines of the range. */
+  readonly inMinor: number;
+  /** The sum of the negative counted lines of the range, as a positive amount. */
+  readonly outMinor: number;
+};
+
 /** What an edit is decided from, read in the same transaction as the write. */
 export type EditFacts = {
   readonly account: AccountRecord;
@@ -108,6 +116,12 @@ export class AccountStore extends Context.Service<
       accountId: string,
       range: { readonly from: string; readonly to: string },
     ) => Effect.Effect<DayMoves, QueryFailed>;
+    /** The counted lines of an account from `from` to `to`, both included, in and out apart. */
+    readonly inOut: (
+      owner: string,
+      accountId: string,
+      range: { readonly from: string; readonly to: string },
+    ) => Effect.Effect<InOut, QueryFailed>;
     /** Creates the account `decide` makes from the user's accounts, in one transaction. */
     readonly create: <E>(
       owner: string,

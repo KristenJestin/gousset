@@ -249,6 +249,29 @@ describe("showAccount", () => {
     expect(detail.check).toBeNull();
   });
 
+  test("gives the current month's counted money in and out, from the 1st to today", async () => {
+    const spending = accountOf("Spending", "current");
+
+    const detail = await inOrder(
+      {
+        accounts: [spending],
+        lines: [
+          // Last month: out of the range.
+          line(spending.id, "2026-10-31", 9999),
+          line(spending.id, "2026-11-01", 2000, "SALARY"),
+          line(spending.id, "2026-11-10", -700),
+          line(spending.id, "2026-11-23", -300),
+          // After today: out of the range.
+          line(spending.id, "2026-11-24", -1),
+        ],
+      },
+      showAccount(ADA, spending.id),
+    );
+
+    expect(detail.monthIn).toEqual({ minor: 2000, currency: "EUR" });
+    expect(detail.monthOut).toEqual({ minor: 1000, currency: "EUR" });
+  });
+
   test("gives the balance at the end of every day of the last 90 by default", async () => {
     const { daily } = await show(14_000);
 

@@ -278,29 +278,14 @@ function Figures({ accountId }: { accountId: string }) {
   const detail = useAccountDetail(accountId);
   const { account } = detail;
   const locale = usePageLanguage();
-  const month = detail.day.slice(0, 7);
-  let inMinor = 0;
-  let outMinor = 0;
-
-  for (const line of detail.lines) {
-    if (!line.bookedOn.startsWith(month)) {
-      continue;
-    }
-
-    if (line.amount.minor >= 0) {
-      inMinor += line.amount.minor;
-    } else {
-      outMinor += -line.amount.minor;
-    }
-  }
 
   return (
     <AccountFigures
       balanceDay={shortDay(detail.day, locale)}
       balance={detail.balance}
       period={monthLabel(detail.day, locale)}
-      in={{ minor: inMinor, currency: account.currency }}
-      out={{ minor: outMinor, currency: account.currency }}
+      in={detail.monthIn}
+      out={detail.monthOut}
       institution={account.institution ?? undefined}
       groupLabel={accountGroupLabel(account.group)}
     />

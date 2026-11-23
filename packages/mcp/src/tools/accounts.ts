@@ -194,6 +194,7 @@ function showText(detail: AccountDetail): string {
     [
       `${named(account)}, ${CHOICE_NAMES[account.choice]} in ${account.currency}, ${kept}.${closed}`,
       `Balance at the end of ${detail.day}: ${amount(detail.balance)}; ${statementsText(account.statementsUntil)}.`,
+      `Money in this month so far: ${amount(detail.monthIn)}; out: ${amount(detail.monthOut)}.`,
       ...settles,
     ].join("\n"),
     checkText(detail),
