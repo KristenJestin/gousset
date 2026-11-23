@@ -51,18 +51,23 @@ function holdsText(node: ESTree.Node): boolean {
 
       return (raw.startsWith('"') || raw.startsWith("'")) && LETTER.test(raw);
     }
+
     case "TemplateLiteral": {
       return node.quasis.some((quasi) => LETTER.test(quasi.value.raw));
     }
+
     case "ConditionalExpression": {
       return holdsText(node.consequent) || holdsText(node.alternate);
     }
+
     case "LogicalExpression": {
       return holdsText(node.left) || holdsText(node.right);
     }
+
     case "BinaryExpression": {
       return node.operator === "+" && (holdsText(node.left) || holdsText(node.right));
     }
+
     default: {
       return false;
     }
