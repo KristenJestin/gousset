@@ -73,6 +73,16 @@ const Session = Schema.Struct({
   rows: Schema.Array(Schema.Struct({ role: Schema.String, owner: Schema.String })),
 });
 
+const UserRole = Schema.Struct({
+  rows: Schema.Array(
+    Schema.Struct({
+      superuser: Schema.Boolean,
+      bypassesRowSecurity: Schema.Boolean,
+      logsIn: Schema.Boolean,
+    }),
+  ),
+});
+
 const Isolation = Schema.Struct({
   rows: Schema.Array(
     Schema.Struct({
@@ -132,12 +142,19 @@ export function openUserData(database: string) {
       return found.id;
     },
 
-    /** The made-up data of two months, and a CSV profile, as `owner`'s rows. */
+    /**
+     * The made-up data of two months, and a CSV profile, as `owner`'s rows. A user who already has
+     * accounts is left as they are, profile included.
+     */
     seed: (owner: string): Promise<SeedSummary> =>
       Effect.runPromise(
         seedMadeUpData(owner, ["2026-09", "2026-10"], "2026-10-31").pipe(
-          Effect.tap(() =>
+          Effect.tap((summary) =>
             Effect.gen(function* () {
+              if (summary.accounts === 0) {
+                return;
+              }
+
               const userData = yield* UserData;
 
               yield* userData.transaction(owner, (each) =>
@@ -174,6 +191,15 @@ export function openUserData(database: string) {
         order by 1`);
 
       return decodeKeys(result).rows.map((row) => row.key);
+    },
+
+    /** What `gousset_user` may do beyond its grants: nothing, or row-level security means nothing. */
+    async userRole() {
+      const result = await db.execute(sql`
+        select rolsuper as "superuser", rolbypassrls as "bypassesRowSecurity", rolcanlogin as "logsIn"
+        from pg_roles where rolname = 'gousset_user'`);
+
+      return Schema.decodeUnknownSync(UserRole)(result).rows;
     },
 
     /** Whether a table has row-level security on, the owner's policy, and `gousset_user`'s grants. */

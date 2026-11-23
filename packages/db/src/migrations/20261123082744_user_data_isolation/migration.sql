@@ -13,6 +13,17 @@ EXCEPTION
   WHEN duplicate_object OR unique_violation THEN NULL;
 END
 $$;--> statement-breakpoint
+-- A role of that name made beforehand by someone else is used only if row-level security binds it.
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM pg_roles
+    WHERE rolname = 'gousset_user' AND (rolsuper OR rolbypassrls OR rolcanlogin)
+  ) THEN
+    RAISE EXCEPTION 'The role gousset_user exists and is a superuser, bypasses row-level security or logs in: Gousset cannot keep its users apart with it. Make it NOSUPERUSER NOBYPASSRLS NOLOGIN, then migrate again.';
+  END IF;
+END
+$$;--> statement-breakpoint
 -- The role the migrations run as is the one the app logs in with: it may switch to gousset_user.
 GRANT gousset_user TO CURRENT_USER;--> statement-breakpoint
 GRANT USAGE ON SCHEMA public TO gousset_user;--> statement-breakpoint

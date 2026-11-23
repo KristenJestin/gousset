@@ -37,6 +37,11 @@ test.afterAll(async () => {
 test("every table holding a user's rows is kept apart by row-level security", async () => {
   expect(await data.tablesWithOwner()).toEqual(USER_TABLES.map((table) => table.name).toSorted());
 
+  // The role a user's transaction acts as is restricted by row-level security, and logs in never.
+  expect(await data.userRole()).toEqual([
+    { superuser: false, bypassesRowSecurity: false, logsIn: false },
+  ]);
+
   for (const table of USER_TABLES) {
     expect(await data.isolationOf(table.name), table.name).toEqual([
       { rowSecurity: true, ownerPolicy: true, granted: true },
