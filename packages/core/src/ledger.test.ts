@@ -26,11 +26,15 @@ const read = (month: string) =>
 describe("monthAsOf", () => {
   // The made-up refund always comes after the payment it cancels part of.
   const made = madeUpMonth("2026-10");
+  const { investments: september } = madeUpMonth("2026-09");
   const refunded = made.expenses.find((expense) => expense.refundLineIds.length > 0);
   const paidOn = refunded?.bookedOn ?? "";
 
   test("does not count a refund booked after the day", () => {
-    const expense = monthAsOf(made, paidOn).expenses.find((kept) => kept.id === refunded?.id);
+    const expense = monthAsOf(made, paidOn, september).expenses.find(
+      (kept) => kept.id === refunded?.id,
+    );
+
     const payment = made.lines.find((line) => line.id === refunded?.paymentLineIds[0]);
 
     expect(expense?.refundLineIds).toEqual([]);
@@ -38,7 +42,7 @@ describe("monthAsOf", () => {
   });
 
   test("names only lines it keeps", () => {
-    const asOf = monthAsOf(made, paidOn);
+    const asOf = monthAsOf(made, paidOn, september);
     const kept = new Set(asOf.lines.map((line) => line.id));
 
     for (const expense of asOf.expenses) {
@@ -49,7 +53,9 @@ describe("monthAsOf", () => {
   });
 
   test("counts the refund once it is booked", () => {
-    const expense = monthAsOf(made, "2026-10-31").expenses.find((kept) => kept.id === refunded?.id);
+    const expense = monthAsOf(made, "2026-10-31", september).expenses.find(
+      (kept) => kept.id === refunded?.id,
+    );
 
     expect(expense).toEqual(refunded);
   });

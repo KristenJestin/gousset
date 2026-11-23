@@ -20,7 +20,7 @@ Node.js 24 and pnpm 12.
 ```sh
 pnpm install
 pnpm db:start   # Postgres 18 in Docker
-pnpm db:migrate # its schema, as an installation gets it
+pnpm db:migrate # its schema and the app's role, as an installation gets them
 pnpm dev        # http://localhost:3001; sign up
 pnpm db:seed    # the made-up accounts and lines for every user who has none
 ```

@@ -9,6 +9,10 @@
 # Postgres takes its password when its volume is first made, and only then: to change it later,
 # change it in the database too (docs/releases.md, "Changing the database password").
 #
+# The roles: POSTGRES_USER owns the tables and runs `migrate`; the migrations make `gousset_app`,
+# which the app logs in as, with a password `migrate` derives from this one (docs/data-model.md,
+# "Ownership and isolation"). Both services are given the owner's URL: nothing else to make.
+#
 # Variables, from the shell or a .env file beside this one:
 #   GOUSSET_VERSION              the image's tag: latest (the last release), beta, or a version
 #   BETTER_AUTH_URL              the address the app is reached at (http://localhost:3001)
@@ -45,7 +49,8 @@ services:
   migrate:
     <<: *gousset
     command: migrate
-    # The password apart: the image puts it into the URL percent-encoded, whatever it holds.
+    # The password apart: the image puts it into the URL percent-encoded, whatever it holds. The
+    # app turns the owner's URL into gousset_app's and never logs in as the owner.
     environment: &database
       DATABASE_URL: postgresql://gousset@postgres:5432/gousset
       DATABASE_PASSWORD_FILE: /run/secrets/postgres_password

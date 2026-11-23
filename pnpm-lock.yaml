@@ -404,6 +404,9 @@ importers:
       '@tanstack/react-router-devtools':
         specifier: ^1.167.4
         version: 1.167.4(@tanstack/react-router@1.170.46(react-dom@19.3.1(react@19.3.1))(react@19.3.1))(@tanstack/router-core@1.171.39)(csstype@3.2.4)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+      '@tanstack/redact':
+        specifier: ^0.3.1
+        version: 0.3.1(@voidzero-dev/vite-plus-core@8.3.8000(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(typescript@7.0.2)(yaml@2.9.1))
       '@types/react':
         specifier: 'catalog:'
         version: 19.3.0
@@ -516,6 +519,9 @@ importers:
       pg:
         specifier: ^8.23.1
         version: 8.23.1
+      pg-connection-string:
+        specifier: ^2.14.1
+        version: 2.14.1
     devDependencies:
       '@gousset/config':
         specifier: workspace:*
@@ -526,6 +532,9 @@ importers:
       drizzle-kit:
         specifier: 1.0.0-rc.6
         version: 1.0.0-rc.6(drizzle-orm@1.0.0-rc.6(@opentelemetry/api@1.9.1)(@types/pg@8.23.1)(effect@4.1.5)(pg@8.23.1)(valibot@1.5.0(typescript@7.0.2))(zod@4.6.7))
+      fast-check:
+        specifier: 'catalog:'
+        version: 4.10.3
       rolldown:
         specifier: 1.3.3
         version: 1.3.3
@@ -3299,6 +3308,23 @@ packages:
     peerDependencies:
       react: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
       react-dom: ^16.8.0 || ^17.0.0 || ^18.0.0 || ^19.0.0
+
+  '@tanstack/redact@0.3.1':
+    resolution: {integrity: sha512-8A4SWi2RluvHj5j3/mifSPkUrhvmBLvvVXzM2DU7eTafvcWRXFLA/8cMe7ivZAbL7W1FMKZjitnIoP0sYIAWJA==}
+    peerDependencies:
+      '@cloudflare/vite-plugin': 1.65.0
+      next: ~15.5.0 || ~16.0.0 || ~16.1.0 || ~16.2.0 || ~16.3.0 || ~16.4.0
+      vinext: ~1.3.0
+      vite: '>=5'
+    peerDependenciesMeta:
+      '@cloudflare/vite-plugin':
+        optional: true
+      next:
+        optional: true
+      vinext:
+        optional: true
+      vite:
+        optional: true
 
   '@tanstack/router-core@1.171.39':
     resolution: {integrity: sha512-qUhoJ0meuSUqGYQbHbcJYdASr06YtK+bulbj6vtrhKYFkLgkSsZ6tXmMyym7sFxiSJSPYgasgozrL01LyyR/6A==}
@@ -8562,6 +8588,14 @@ snapshots:
       react: 19.3.1
       react-dom: 19.3.1(react@19.3.1)
       use-sync-external-store: 1.7.0(react@19.3.1)
+
+  '@tanstack/redact@0.3.1(@voidzero-dev/vite-plus-core@8.3.8000(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(typescript@7.0.2)(yaml@2.9.1))':
+    dependencies:
+      '@jridgewell/remapping': 2.3.5
+      acorn: 8.19.0
+      magic-string: 0.30.21
+    optionalDependencies:
+      vite: '@voidzero-dev/vite-plus-core@8.3.8000(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(typescript@7.0.2)(yaml@2.9.1)'
 
   '@tanstack/router-core@1.171.39':
     dependencies:

@@ -1,21 +1,19 @@
 import type { SpendingGroup } from "@gousset/core/values";
 import { queryOptions } from "@tanstack/react-query";
 
-import { getCurrentMonth, getLinesToReview, getMonthSummary, getSpending } from "@/functions/month";
+import {
+  getCurrentMonth,
+  getFlags,
+  getImportState,
+  getInvestments,
+  getLinesToReview,
+  getMonthSummary,
+  getMovements,
+  getSpending,
+  getSpendingDays,
+} from "@/functions/month";
 
-/**
- * The month domain's query keys, from one factory (docs/architecture.md, "Data loading and
- * skeletons"). Every key of a month starts with `monthKeys.of(month)`, so that one call reaches
- * all of a month's queries, and `monthKeys.all` every month's.
- */
-export const monthKeys = {
-  all: ["month"] as const,
-  current: () => [...monthKeys.all, "current"] as const,
-  of: (month: string) => [...monthKeys.all, month] as const,
-  summary: (month: string) => [...monthKeys.of(month), "summary"] as const,
-  spending: (month: string, by: SpendingGroup) => [...monthKeys.of(month), "spending", by] as const,
-  toReview: (month: string) => [...monthKeys.of(month), "to-review"] as const,
-};
+import { monthKeys } from "./month-keys";
 
 /** The query of each block of a month, for loaders (`ensureQueryData`) and components alike. */
 export const monthQueries = {
@@ -35,6 +33,31 @@ export const monthQueries = {
     queryOptions({
       queryKey: monthKeys.spending(month, by),
       queryFn: () => getSpending({ data: { month, by } }),
+    }),
+  spendingDays: (month: string, by: SpendingGroup, name: string) =>
+    queryOptions({
+      queryKey: monthKeys.spendingDays(month, by, name),
+      queryFn: () => getSpendingDays({ data: { month, by, name } }),
+    }),
+  movements: (month: string) =>
+    queryOptions({
+      queryKey: monthKeys.movements(month),
+      queryFn: () => getMovements({ data: { month } }),
+    }),
+  investments: (month: string) =>
+    queryOptions({
+      queryKey: monthKeys.investments(month),
+      queryFn: () => getInvestments({ data: { month } }),
+    }),
+  imports: (month: string) =>
+    queryOptions({
+      queryKey: monthKeys.imports(month),
+      queryFn: () => getImportState({ data: { month } }),
+    }),
+  flags: (month: string) =>
+    queryOptions({
+      queryKey: monthKeys.flags(month),
+      queryFn: () => getFlags({ data: { month } }),
     }),
   toReview: (month: string) =>
     queryOptions({

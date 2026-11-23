@@ -43,7 +43,8 @@ function PickerWithChart(props: ColorSchemePickerProps) {
 }
 
 /**
- * The colour scheme: the system's by default, light or dark by choice, kept in this browser.
+ * The colour scheme: the system's by default, light or dark by choice, kept in this browser and,
+ * signed in, on the account (`onChange`; `ThemeProvider`'s `accountScheme` brings it back).
  * One choice drives ui-sdk's parts (through `color-scheme`) and Bklit's charts (through the same
  * variables and `.dark`) together, without a reload.
  *

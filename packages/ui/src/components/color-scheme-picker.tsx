@@ -13,14 +13,21 @@ export type ColorSchemePickerProps = {
   choices: { readonly [Choice in ColorSchemeValue]: string };
   /** Shows the choice without letting it change, like while a setting saves. */
   disabled?: boolean;
+  /** Called once the choice changed, already applied: to keep it beyond this browser. */
+  onChange?: (choice: ColorSchemeValue) => void;
 };
 
 /**
  * Chooses the colour scheme: follow the system, or force light or dark. The choice applies at
- * once, everywhere, without a reload, and is kept for the next visit. Needs `ThemeProvider`
- * above it.
+ * once, everywhere, without a reload, and is kept for the next visit: in this browser, and
+ * wherever `onChange` keeps it. Needs `ThemeProvider` above it.
  */
-export function ColorSchemePicker({ label, choices, disabled = false }: ColorSchemePickerProps) {
+export function ColorSchemePicker({
+  label,
+  choices,
+  disabled = false,
+  onChange,
+}: ColorSchemePickerProps) {
   const { value } = usePreference(colorScheme);
 
   return (
@@ -30,8 +37,11 @@ export function ColorSchemePicker({ label, choices, disabled = false }: ColorSch
       value={value}
       disabled={disabled}
       onValueChange={(next, details) => {
-        if (next !== null) {
-          colorScheme.set(next, { reason: details.reason, event: details.event });
+        if (
+          next !== null &&
+          colorScheme.set(next, { reason: details.reason, event: details.event })
+        ) {
+          onChange?.(next);
         }
       }}
     >

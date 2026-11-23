@@ -37,7 +37,11 @@ const ENTRANCES_DONE = `Promise.all(
     .map((animation) => animation.finished.catch(() => undefined)),
 ).then(() => undefined)`;
 
-/** Runs axe on the screen once its entrance animations ended; any violation fails the test, listed by rule. */
+/**
+ * Runs axe on the screen once its entrance animations ended; any violation fails the test, listed
+ * by rule, then each element it found with what axe says of it: a CI log is enough to find and
+ * fix it.
+ */
 export async function expectAccessible(page: Page): Promise<void> {
   await page.evaluate(ENTRANCES_DONE);
 
@@ -49,10 +53,13 @@ export async function expectAccessible(page: Page): Promise<void> {
 
   const results = await builder.analyze();
 
-  const violations = results.violations.map(
-    (violation) =>
-      `${violation.id} (${violation.impact ?? "?"}): ${violation.help}, ${violation.nodes.length} element(s)`,
-  );
+  const violations = results.violations.flatMap((violation) => [
+    `${violation.id} (${violation.impact ?? "?"}): ${violation.help}, ${violation.nodes.length} element(s)`,
+    ...violation.nodes.map(
+      (node) =>
+        `  ${node.target.join(" ")}: ${(node.failureSummary ?? "").replaceAll(/\s+/g, " ").trim()}`,
+    ),
+  ]);
 
   expect(violations, `axe found violations on ${page.url()}`).toEqual([]);
 }

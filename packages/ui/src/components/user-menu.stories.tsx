@@ -32,7 +32,8 @@ function Account() {
 /**
  * The user's menu at the sidebar's foot, opened from their name: the language and the colour
  * scheme (each a ticked choice, `menuitemradio`), then the account's actions. The scheme applies
- * at once and is kept in this browser. Motion: as `Menu`, 150 ms; cut under reduced motion.
+ * at once and is kept in this browser; the app keeps it on the account too
+ * (`onColorSchemeChange`). Motion: as `Menu`, 150 ms; cut under reduced motion.
  *
  * Don't: put the screens in it (they are the sidebar's), or settings that need more than a tick.
  */
