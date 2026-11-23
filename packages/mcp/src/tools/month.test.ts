@@ -7,6 +7,7 @@ import {
   investments,
   linesToReview,
   memoryAccountStore,
+  memoryLineStore,
   monthOverview,
   movements,
   spending,
@@ -36,7 +37,13 @@ function onDay(day: string, ledger: Layer.Layer<Ledger> = FixtureLedger): Runner
       }).pipe(
         // month never reaches the imports.
         Effect.provide(
-          Layer.mergeAll(ledger, memoryAccountStore(), Layer.mock(Imports, {}), TestClock.layer()),
+          Layer.mergeAll(
+            ledger,
+            memoryAccountStore(),
+            memoryLineStore(),
+            Layer.mock(Imports, {}),
+            TestClock.layer(),
+          ),
         ),
       ),
     );

@@ -8,6 +8,7 @@ import {
   Imports,
   UnknownFormat,
   memoryAccountStore,
+  memoryLineStore,
 } from "@gousset/core";
 import type { ImportAccount, ImportSummary, Started, Undone, Upload } from "@gousset/core";
 import { Effect, Fiber, Layer, Schema } from "effect";
@@ -139,7 +140,10 @@ function importsOf(state: Fake) {
 function runnerOf(state: Fake): Runner<GoussetServices> {
   return (effect) =>
     Effect.runPromiseExit(
-      Effect.provide(effect, Layer.mergeAll(FixtureLedger, memoryAccountStore(), importsOf(state))),
+      Effect.provide(
+        effect,
+        Layer.mergeAll(FixtureLedger, memoryAccountStore(), memoryLineStore(), importsOf(state)),
+      ),
     );
 }
 
@@ -157,7 +161,13 @@ function runnerWithTime(state: Fake): Runner<GoussetServices> {
         return yield* Fiber.join(fiber);
       }).pipe(
         Effect.provide(
-          Layer.mergeAll(FixtureLedger, memoryAccountStore(), importsOf(state), TestClock.layer()),
+          Layer.mergeAll(
+            FixtureLedger,
+            memoryAccountStore(),
+            memoryLineStore(),
+            importsOf(state),
+            TestClock.layer(),
+          ),
         ),
       ),
     );
