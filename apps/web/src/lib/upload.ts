@@ -41,6 +41,14 @@ export async function uploadStatement(file: File, accountId: string | null): Pro
       body: file,
     });
 
+    // A refusal comes with its code in JSON (413, 422, 503); any other failure (a proxy's page,
+    // a crash) says nothing the screen can read.
+    const refusal = response.status === 413 || response.status === 422 || response.status === 503;
+
+    if (!response.ok && !refusal) {
+      return { refused: "UPLOAD_FAILED" };
+    }
+
     return Option.getOrElse(decodeAnswer(await response.text()), () => ({
       refused: "UPLOAD_FAILED",
     }));
