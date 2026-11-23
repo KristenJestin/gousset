@@ -253,8 +253,9 @@ export class ImportProfiles extends Context.Service<
       choice: ProfileChoice,
     ) => Effect.Effect<ProfileCandidate, ProfileNotFound | ProfileUnreadable | Failure>;
     /**
-     * Which profiles read a CSV import's file: those whose header is the file's, and those with no
-     * header whose test read of the file's top passes; and the profile the import used.
+     * Which profiles read a CSV import's file: those whose header is the file's, then those with no
+     * header whose test read of the file's top passes, each in the order an upload tries them
+     * (`ProfilesForImport`); and the profile the import used.
      */
     readonly forImport: (
       owner: string,
@@ -502,12 +503,7 @@ export const importProfilesLayer = Layer.effect(
               return undefined;
             }
 
-            const stored = await transaction
-              .select(storedColumns)
-              .from(importProfile)
-              .where(eq(importProfile.kind, "statement"))
-              .orderBy(asc(importProfile.name), asc(importProfile.id))
-              .limit(MAX_PROFILES);
+            const stored = await statementProfiles(transaction);
 
             return { row, stored: stored.map(storedEntry) };
           });
@@ -518,8 +514,8 @@ export const importProfilesLayer = Layer.effect(
 
           const { row, stored } = found;
 
-          // At most fifty of the user's and the shipped ones, on a file decoded once, each reading
-          // its top only.
+          // In the order an upload tries them (`profileCandidates`): at most fifty of the user's and
+          // the shipped ones, on a file decoded once, each reading its top only.
           const entries: ReadonlyArray<ImportProfileEntry> = [...stored, ...SHIPPED_ENTRIES];
           const file = csvFile(row.content);
 
@@ -537,7 +533,11 @@ export const importProfilesLayer = Layer.effect(
             fileName: row.fileName,
             status: row.status,
             used,
-            fitting,
+            // A header match before a test read, as an upload reads a file by its header only.
+            fitting: [
+              ...fitting.filter((fit) => fit.by === "header"),
+              ...fitting.filter((fit) => fit.by === "test-read"),
+            ],
           };
         }),
     };

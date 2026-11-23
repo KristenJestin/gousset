@@ -121,6 +121,10 @@ export type ProfilesForImport = {
    * detection read it, a definition was given by hand, or the profile was deleted since.
    */
   readonly used: ImportProfileEntry | null;
-  /** The user's first, then the shipped ones; a profile whose header matches before a test read. */
+  /**
+   * Those whose header is the file's, then those whose test read passes; within each, in the order
+   * an upload tries them: the user's, the most recently updated first, then the shipped ones. The
+   * first matched by its header is the one an upload of this file would read it with.
+   */
   readonly fitting: ReadonlyArray<ProfileFit>;
 };

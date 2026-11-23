@@ -2,6 +2,7 @@ import { ProfileTooLong, TooManyProfiles } from "@gousset/core";
 import type { ImportProfileEntry } from "@gousset/core";
 import { importProfile } from "@gousset/db/schema/ledger";
 import { encodeWindows1252 } from "@gousset/fixture";
+import { eq } from "drizzle-orm";
 import { Effect } from "effect";
 
 import { addUser } from "../src/auth";
@@ -350,6 +351,48 @@ test("a profile is listed, renamed, exported, imported back and deleted", async 
   );
 
   expect(gone._tag).toBe("ProfileNotFound");
+});
+
+test("the profiles that read an import come in the order the job tries them, the first the one it used", async ({
+  app,
+  user,
+}) => {
+  const own = await ownerOfItsOwn(app.baseURL, user, app.slot, "Erin");
+  const accountId = await imports.createAccount(own, "Ordered account");
+
+  const save = async (name: string, header: string | null) =>
+    saved(
+      await imports.withProfiles((profiles) =>
+        profiles.save(own, { name, institution: null, definition: pipeProfile, header }),
+      ),
+    );
+
+  const older = await save("Alpha older", "day;money;what");
+  await save("Middle without header", null);
+  const newer = await save("Zulu newer", "day;money;what");
+
+  // The older one was saved a year before: the most recently updated is tried first.
+  await data.asUser(own, (transaction) =>
+    transaction
+      .update(importProfile)
+      .set({ updatedAt: new Date("2025-12-01T00:00:00Z") })
+      .where(eq(importProfile.id, older.id)),
+  );
+
+  const done = await imports.importFile(own, accountId, pipeExport("ordered.csv", "2026-12-07"));
+
+  expect(await imports.profileOf(own, done.id)).toEqual({
+    profileId: newer.id,
+    shippedProfile: null,
+  });
+
+  const fit = await imports.withProfiles((profiles) => profiles.forImport(own, done.id));
+
+  expect(fit.fitting.map(({ profile, by }) => `${profile.name} ${by}`)).toEqual([
+    "Zulu newer header",
+    "Alpha older header",
+    "Middle without header test-read",
+  ]);
 });
 
 test("a user keeps fifty profiles at most: one more is refused, saved or imported", async ({
