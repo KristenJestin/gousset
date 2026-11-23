@@ -1,16 +1,10 @@
 import { Effect } from "effect";
 
-import { readAmount } from "./amount";
+import { invalidField, readAmount } from "./amount";
 import type { FieldText } from "./amount";
 import { ofxDay } from "./dates";
-import {
-  InvalidField,
-  MalformedFile,
-  MissingField,
-  NotAStatement,
-  UnsupportedContent,
-} from "./errors";
-import type { ReadError } from "./errors";
+import { MalformedFile, MissingField, NotAStatement, UnsupportedContent } from "./errors";
+import type { InvalidField, ReadError } from "./errors";
 import type { Balance, Statement, StatementLine } from "./statement";
 import { cleanValue, decodeText, quote } from "./text";
 
@@ -274,7 +268,7 @@ function readDay(date: FieldText): Effect.Effect<string, InvalidField> {
   const day = ofxDay(date.text);
 
   if (day === undefined) {
-    return Effect.fail(new InvalidField({ ...date, expected: DATE_EXAMPLE }));
+    return Effect.fail(invalidField(date, DATE_EXAMPLE));
   }
 
   return Effect.succeed(day);
@@ -298,7 +292,66 @@ const OUT_TYPES = new Set([
 
 const IN_TYPES = new Set(["CREDIT", "DEP", "DIRECTDEP", "INT", "DIV"]);
 
+/**
+ * How a file signs its amounts. `as-written`: from the account holder's side, as OFX defines them.
+ * `by-type`: each line's type says which way the money went (`DEBIT` out, `CREDIT` in...), its
+ * written sign aside, as some banks write every amount without one.
+ */
+export type AmountSigns = "as-written" | "by-type";
+
+export type OfxOptions = {
+  /** How the amounts are signed, when the caller knows; otherwise the file decides (`OfxAmountSigns`). */
+  amountSigns?: AmountSigns;
+};
+
+/**
+ * How the file's amounts were signed. `file`: one reading alone fits: an amount is negative, or no
+ * line typed to take money out holds a positive one (`as-written`), or a line's type says neither
+ * way (`POS`, `ATM`, `XFER`, `OTHER`), which only `as-written` reads. `option`: the caller's.
+ * `default`: every amount is positive or zero, a line typed to take money out holds a positive
+ * one, and every type says which way: the amounts may lack their sign, or those lines may be
+ * refunds. `by-type` was taken, as such a file is likelier unsigned; the import should ask the user.
+ */
+export type OfxAmountSigns = { signs: AmountSigns; decidedBy: "file" | "option" | "default" };
+
+export type OfxStatement = Statement & { amountSigns: OfxAmountSigns };
+
 type Transaction = { element: OfxElement; type: FieldText | undefined; line: StatementLine };
+
+/** Which way a line's type says the money went; `undefined` when it says neither. */
+function direction(transaction: Transaction): "out" | "in" | undefined {
+  const type = transaction.type?.text.toUpperCase() ?? "";
+
+  if (OUT_TYPES.has(type)) {
+    return "out";
+  }
+
+  return IN_TYPES.has(type) ? "in" : undefined;
+}
+
+function decideSigns(
+  transactions: ReadonlyArray<Transaction>,
+  wanted: AmountSigns | undefined,
+): OfxAmountSigns {
+  if (wanted !== undefined) {
+    return { signs: wanted, decidedBy: "option" };
+  }
+
+  // A `DEBIT` of zero says nothing either way, and does not count.
+  const mayBeUnsigned =
+    transactions.every((transaction) => transaction.line.amountMinor >= 0) &&
+    transactions.some(
+      (transaction) => direction(transaction) === "out" && transaction.line.amountMinor > 0,
+    );
+
+  if (!mayBeUnsigned) {
+    return { signs: "as-written", decidedBy: "file" };
+  }
+
+  return transactions.every((transaction) => direction(transaction) !== undefined)
+    ? { signs: "by-type", decidedBy: "default" }
+    : { signs: "as-written", decidedBy: "file" };
+}
 
 const readTransaction = (element: OfxElement, currency: string) =>
   Effect.gen(function* () {
@@ -333,27 +386,33 @@ const readTransaction = (element: OfxElement, currency: string) =>
   });
 
 /**
- * A line of a file whose amounts carry no sign, signed by its type. A type that does not say which
- * way the money went (`POS`, `ATM`, `XFER`, `OTHER`) is refused rather than guessed.
+ * A line signed by its type, its written sign aside. A type that does not say which way the money
+ * went (`POS`, `ATM`, `XFER`, `OTHER`) is refused rather than guessed.
  */
 function signByType(transaction: Transaction): Effect.Effect<StatementLine, UnsupportedContent> {
-  const type = transaction.type?.text.toUpperCase() ?? "";
   const { line } = transaction;
+  const amount = Math.abs(line.amountMinor);
 
-  if (OUT_TYPES.has(type)) {
-    return Effect.succeed({ ...line, amountMinor: negate(line.amountMinor) });
+  switch (direction(transaction)) {
+    case "out": {
+      return Effect.succeed({ ...line, amountMinor: negate(amount) });
+    }
+
+    case "in": {
+      return Effect.succeed({ ...line, amountMinor: amount });
+    }
+
+    case undefined: {
+      const type = transaction.type?.text.toUpperCase() ?? "";
+
+      return Effect.fail(
+        new UnsupportedContent({
+          line: transaction.type?.line ?? transaction.element.line,
+          problem: `The amounts are signed by their type, and the type ${quote(type)} does not say whether the money went out or came in.`,
+        }),
+      );
+    }
   }
-
-  if (IN_TYPES.has(type)) {
-    return Effect.succeed(line);
-  }
-
-  return Effect.fail(
-    new UnsupportedContent({
-      line: transaction.type?.line ?? transaction.element.line,
-      problem: `The file's amounts carry no sign, and the type ${quote(type)} does not say whether the money went out or came in.`,
-    }),
-  );
 }
 
 const readBalance = (statement: OfxElement, currency: string) =>
@@ -376,13 +435,19 @@ const readBalance = (statement: OfxElement, currency: string) =>
  * Reads an OFX file (1.x SGML or 2.x XML) or a QFX file: one bank account's statement
  * (`STMTRS`) or one card's (`CCSTMTRS`).
  *
- * Amounts are signed from the account holder's side, as OFX defines them. A file whose amounts
- * all lack a sign while a line typed `DEBIT` takes money in has written them unsigned: each line is
- * then signed by its type. A `DEBIT` of zero says nothing either way, and does not count. The balance is the ledger balance (`LEDGERBAL`), as the bank wrote it.
+ * Amounts are signed from the account holder's side, as OFX defines them, unless the file may have
+ * written them without their sign: every amount positive or zero while a line typed to take money
+ * out (`DEBIT`, `CHECK`, `FEE`...) holds a positive one. Each line is then signed by its type, and
+ * `amountSigns` says how that was decided (`OfxAmountSigns`); `options.amountSigns` decides
+ * instead. The balance is the ledger balance (`LEDGERBAL`), as the bank wrote it.
  */
-export const readOfx = (bytes: Uint8Array): Effect.Effect<Statement, ReadError> =>
+export const readOfx = (
+  bytes: Uint8Array,
+  options: OfxOptions = {},
+): Effect.Effect<OfxStatement, ReadError> =>
   Effect.gen(function* () {
-    const root = yield* readElements(decodeText(bytes).replaceAll(/\r\n?/g, "\n"));
+    const text = yield* decodeText(bytes);
+    const root = yield* readElements(text.replaceAll(/\r\n?/g, "\n"));
     const [statement, another] = findAll(root, ["STMTRS", "CCSTMTRS"]);
 
     if (statement === undefined) {
@@ -409,10 +474,7 @@ export const readOfx = (bytes: Uint8Array): Effect.Effect<Statement, ReadError> 
     const currency = currencyField.text.toUpperCase();
 
     if (!/^[A-Z]{3}$/.test(currency)) {
-      return yield* new InvalidField({
-        ...currencyField,
-        expected: "a currency's ISO 4217 code, such as EUR",
-      });
+      return yield* invalidField(currencyField, "a currency's ISO 4217 code, such as EUR");
     }
 
     const list = child(statement, "BANKTRANLIST");
@@ -422,16 +484,12 @@ export const readOfx = (bytes: Uint8Array): Effect.Effect<Statement, ReadError> 
       readTransaction(element, currency),
     );
 
-    const unsigned =
-      transactions.every((transaction) => transaction.line.amountMinor >= 0) &&
-      transactions.some(
-        (transaction) =>
-          transaction.type?.text.toUpperCase() === "DEBIT" && transaction.line.amountMinor > 0,
-      );
+    const amountSigns = decideSigns(transactions, options.amountSigns);
 
-    const lines = unsigned
-      ? yield* Effect.forEach(transactions, signByType)
-      : transactions.map((transaction) => transaction.line);
+    const lines =
+      amountSigns.signs === "by-type"
+        ? yield* Effect.forEach(transactions, signByType)
+        : transactions.map((transaction) => transaction.line);
 
-    return { currency, lines, balance: yield* readBalance(statement, currency) };
+    return { currency, lines, balance: yield* readBalance(statement, currency), amountSigns };
   });

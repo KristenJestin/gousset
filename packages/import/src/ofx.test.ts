@@ -17,16 +17,20 @@ import {
   UnsupportedContent,
 } from "./errors";
 import { readOfx } from "./ofx";
-import type { Statement } from "./statement";
+import type { OfxAmountSigns, OfxOptions, OfxStatement } from "./ofx";
 import { madeUpStatements } from "./testing";
 
-const read = (bytes: Uint8Array) => Effect.runSync(readOfx(bytes));
+const read = (bytes: Uint8Array, options?: OfxOptions) => Effect.runSync(readOfx(bytes, options));
+
+const encode = (text: string) => new TextEncoder().encode(text);
+
+const AS_WRITTEN: OfxAmountSigns = { signs: "as-written", decidedBy: "file" };
 
 const refusal = (text: string) =>
   Effect.runSync(Effect.flip(readOfx(new TextEncoder().encode(text))));
 
 /** What `writeOfx` writes: `NAME` the label cut to 32 characters, `MEMO` the whole label. */
-function writtenByWriteOfx(statement: MadeUpStatement): Statement {
+function writtenByWriteOfx(statement: MadeUpStatement): OfxStatement {
   return {
     currency: statement.account.currency,
     lines: statement.lines.map((line) => ({
@@ -38,6 +42,7 @@ function writtenByWriteOfx(statement: MadeUpStatement): Statement {
       bankId: line.reference,
     })),
     balance: { amountMinor: closingBalanceMinor(statement), on: statement.to },
+    amountSigns: AS_WRITTEN,
   };
 }
 
@@ -90,6 +95,7 @@ describe("reading OFX and QFX files", () => {
         },
       ],
       balance: { amountMinor: 123_456, on: "2026-11-04" },
+      amountSigns: AS_WRITTEN,
     });
   });
 
@@ -131,6 +137,7 @@ describe("reading OFX and QFX files", () => {
         },
       ],
       balance: null,
+      amountSigns: AS_WRITTEN,
     });
   });
 
@@ -145,6 +152,21 @@ describe("reading OFX and QFX files", () => {
         bare("2026-11-30", -300, "FRAIS DE TENUE DE COMPTE", "EX2026113002"),
       ],
       balance: { amountMinor: 432_109, on: "2026-11-30" },
+      amountSigns: { signs: "by-type", decidedBy: "default" },
+    });
+  });
+
+  test("reads ofx-unsigned-no-debit.ofx (unsigned, no DEBIT: cheques and fees go out)", () => {
+    expect(read(statementSamples.ofxUnsignedNoDebit.bytes)).toEqual({
+      currency: "EUR",
+      lines: [
+        bare("2026-11-02", 180_000, "VIR SEPA ACME SALAIRE", "EX2026110201"),
+        bare("2026-11-09", -4500, "CHEQUE 0000042", "EX2026110901"),
+        bare("2026-11-30", 125, "INTERETS", "EX2026113001"),
+        bare("2026-11-30", -800, "COTISATION CARTE", "EX2026113002"),
+      ],
+      balance: { amountMinor: 250_000, on: "2026-11-30" },
+      amountSigns: { signs: "by-type", decidedBy: "default" },
     });
   });
 
@@ -178,6 +200,7 @@ describe("reading OFX and QFX files", () => {
         },
       ],
       balance: { amountMinor: -31_240, on: "2026-10-31" },
+      amountSigns: AS_WRITTEN,
     });
   });
 
@@ -290,19 +313,19 @@ describe("refusing an OFX file", () => {
     );
   });
 
-  test("refuses an unsigned amount whose type does not say which way the money went", () => {
-    const error = refusal(
+  test("refuses to sign by its type a line whose type does not say which way the money went", () => {
+    const bytes = encode(
       ofx(
         ["<STMTTRN>", "<TRNTYPE>DEBIT", "<DTPOSTED>20261002", "<TRNAMT>10.00", "</STMTTRN>"],
         ["<STMTTRN>", "<TRNTYPE>POS", "<DTPOSTED>20261003", "<TRNAMT>4.20", "</STMTTRN>"],
       ),
     );
 
-    expect(error).toEqual(
+    expect(Effect.runSync(Effect.flip(readOfx(bytes, { amountSigns: "by-type" })))).toEqual(
       new UnsupportedContent({
         line: 15,
         problem:
-          'The file\'s amounts carry no sign, and the type "POS" does not say whether the money went out or came in.',
+          'The amounts are signed by their type, and the type "POS" does not say whether the money went out or came in.',
       }),
     );
   });
@@ -377,7 +400,7 @@ describe("refusing an OFX file", () => {
       new InvalidField({
         line: 11,
         field: "TRNAMT",
-        text: digits,
+        text: `${"9".repeat(40)}…`,
         expected: "an amount small enough to be held exactly",
       }),
     );
@@ -448,5 +471,72 @@ describe("reading what an OFX file may hold besides plain text", () => {
     );
 
     expect(statement.lines.map((entry) => entry.amountMinor)).toEqual([20_000, 0]);
+    expect(statement.amountSigns).toEqual(AS_WRITTEN);
+  });
+});
+
+/** A transaction of a type, a day of October 2026 and an amount as written. */
+function transaction(type: string, day: string, amount: string): Array<string> {
+  return [
+    "<STMTTRN>",
+    `<TRNTYPE>${type}`,
+    `<DTPOSTED>202610${day}`,
+    `<TRNAMT>${amount}`,
+    "</STMTTRN>",
+  ];
+}
+
+const amountsOf = (statement: OfxStatement) => statement.lines.map((entry) => entry.amountMinor);
+
+describe("deciding how an OFX file signs its amounts", () => {
+  test("reads the amounts as written once one of them is negative", () => {
+    const statement = read(
+      encode(ofx(transaction("DEBIT", "02", "-10.00"), transaction("DEBIT", "03", "4.20"))),
+    );
+
+    expect(amountsOf(statement)).toEqual([-1000, 420]);
+    expect(statement.amountSigns).toEqual(AS_WRITTEN);
+  });
+
+  test("reads a refund typed DEBIT as written when a POS line rules out unsigned amounts", () => {
+    const statement = read(
+      encode(
+        ofx(
+          transaction("XFER", "02", "200.00"),
+          transaction("DEBIT", "03", "10.00"),
+          transaction("POS", "04", "4.20"),
+        ),
+      ),
+    );
+
+    expect(amountsOf(statement)).toEqual([20_000, 1000, 420]);
+    expect(statement.amountSigns).toEqual(AS_WRITTEN);
+  });
+
+  test("signs every positive file by type by default, and says the import should ask", () => {
+    const bytes = encode(
+      ofx(transaction("CREDIT", "02", "100.00"), transaction("FEE", "03", "2.00")),
+    );
+
+    expect(read(bytes)).toMatchObject({
+      lines: [{ amountMinor: 10_000 }, { amountMinor: -200 }],
+      amountSigns: { signs: "by-type", decidedBy: "default" },
+    });
+
+    expect(read(bytes, { amountSigns: "as-written" })).toMatchObject({
+      lines: [{ amountMinor: 10_000 }, { amountMinor: 200 }],
+      amountSigns: { signs: "as-written", decidedBy: "option" },
+    });
+  });
+
+  test("signs every line by its type when the caller says so, whatever its written sign", () => {
+    const bytes = encode(
+      ofx(transaction("DEBIT", "02", "-10.00"), transaction("CREDIT", "03", "-5.00")),
+    );
+
+    const statement = read(bytes, { amountSigns: "by-type" });
+
+    expect(amountsOf(statement)).toEqual([-1000, 500]);
+    expect(statement.amountSigns).toEqual({ signs: "by-type", decidedBy: "option" });
   });
 });

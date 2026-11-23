@@ -1,19 +1,13 @@
 import { Effect } from "effect";
 
-import { readAmount } from "./amount";
+import { invalidField, readAmount } from "./amount";
 import type { FieldText } from "./amount";
 import { qifDay, readQifDate } from "./dates";
 import type { DateOrder, QifDate } from "./dates";
-import {
-  InvalidField,
-  InvalidOption,
-  MissingField,
-  NotAStatement,
-  UnsupportedContent,
-} from "./errors";
-import type { ReadError } from "./errors";
+import { InvalidOption, MissingField, NotAStatement, UnsupportedContent } from "./errors";
+import type { InvalidField, ReadError } from "./errors";
 import type { Statement, StatementLine } from "./statement";
-import { cleanValue, decodeText, quote, splitLines } from "./text";
+import { cleanValue, decodeText, excerpt, quote, splitLines } from "./text";
 
 // QIF: header lines (`!Type:Bank`), then records of one field per line, a letter then its value
 // (`D` the date, `T` the amount, `P` the payee...), each record ended by `^`.
@@ -188,9 +182,7 @@ function book(entry: Entry, order: DateOrder): Effect.Effect<StatementLine, Inva
   const bookedOn = qifDay(entry.date, order);
 
   if (bookedOn === undefined) {
-    return Effect.fail(
-      new InvalidField({ ...entry.written, expected: `${DATE_EXAMPLE}, read ${order}` }),
-    );
+    return Effect.fail(invalidField(entry.written, `${DATE_EXAMPLE}, read ${order}`));
   }
 
   return Effect.succeed({
@@ -211,7 +203,7 @@ function book(entry: Entry, order: DateOrder): Effect.Effect<StatementLine, Inva
  * are read past, the record's total being the line. The day and the month of a date are told
  * apart by the whole file (`QifDateOrder`). A QIF file gives no balance, except Quicken's opening
  * balance record: it is then no line, and the balance is that opening balance plus every line,
- * as of the last line's day.
+ * as of the last line's day. A balance too large to be held exactly is refused, as an amount is.
  */
 export const readQif = (
   bytes: Uint8Array,
@@ -223,12 +215,12 @@ export const readQif = (
     if (!/^[A-Z]{3}$/.test(currency)) {
       return yield* new InvalidOption({
         option: "currency",
-        text: options.currency,
+        text: excerpt(options.currency),
         expected: "a currency's ISO 4217 code, such as EUR",
       });
     }
 
-    const records = yield* readRecords(decodeText(bytes));
+    const records = yield* readRecords(yield* decodeText(bytes));
 
     const entries = yield* Effect.forEach(records, (record) =>
       Effect.gen(function* () {
@@ -236,7 +228,7 @@ export const readQif = (
         const date = readQifDate(written.text);
 
         if (date === undefined) {
-          return yield* new InvalidField({ ...written, expected: DATE_EXAMPLE });
+          return yield* invalidField(written, DATE_EXAMPLE);
         }
 
         const amount = field(record, "T") ?? field(record, "U");
@@ -268,8 +260,18 @@ export const readQif = (
     let amountMinor = first.amountMinor;
     let on = first.bookedOn;
 
-    for (const line of lines) {
+    for (const [index, line] of lines.entries()) {
       amountMinor += line.amountMinor;
+
+      // Each amount is a safe integer: a sum past the largest is no longer one, exact or not.
+      if (!Number.isSafeInteger(amountMinor)) {
+        return yield* new UnsupportedContent({
+          line: entries[index + 1]?.record.line ?? firstRecord.line,
+          problem:
+            "The balance, the opening balance plus every line up to this one, is too large to be held exactly.",
+        });
+      }
+
       on = line.bookedOn > on ? line.bookedOn : on;
     }
 

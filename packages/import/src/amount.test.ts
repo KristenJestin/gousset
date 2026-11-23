@@ -2,7 +2,7 @@ import { Effect } from "effect";
 import fc from "fast-check";
 import { describe, expect, test } from "vite-plus/test";
 
-import { readAmount } from "./amount";
+import { minorDigits, readAmount } from "./amount";
 import type { AmountSyntax } from "./amount";
 import { InvalidField } from "./errors";
 
@@ -100,8 +100,24 @@ describe("reading an amount", () => {
       new InvalidField({ ...at("1,234"), expected: ambiguous }),
     );
 
-    expect(read("1,234", "KWD", "qif")).toBe(1234);
     expect(read("1,234,567", "EUR", "qif")).toBe(123_456_700);
+  });
+
+  test("reads a lone mark before three digits as decimals in a currency of three minor units", () => {
+    // Every amount under a thousand is written so in KWD (`12.500`); a thousand written `1,250`,
+    // with neither group nor decimals, is read as 1.250 (README, "QIF amounts").
+    expect(read("12.500", "KWD", "qif")).toBe(12_500);
+    expect(read("1,250", "KWD", "qif")).toBe(1250);
+    expect(read("1,250.000", "KWD", "qif")).toBe(1_250_000);
+  });
+
+  test("takes each currency's minor units from ISO 4217", () => {
+    // Intl's figures come from CLDR, which differs for some: IQD 0 there, ALL 0, CLF absent.
+    const expected = { EUR: 2, USD: 2, JPY: 0, ISK: 0, KWD: 3, IQD: 3, ALL: 2, CLF: 4 };
+
+    for (const [currency, digits] of Object.entries(expected)) {
+      expect([currency, minorDigits(currency)]).toEqual([currency, digits]);
+    }
   });
 
   test("refuses what is not an amount", () => {
@@ -112,6 +128,17 @@ describe("reading an amount", () => {
     for (const text of ["", "+", "1,234.56", "1 234,56", "12.3.4", "0x10"]) {
       expect(refusal(text, "EUR", "ofx")).toBeInstanceOf(InvalidField);
     }
+  });
+
+  test("keeps no more than 40 characters of the field in the error", () => {
+    const digits = "9".repeat(1000);
+
+    expect(refusal(digits, "EUR", "ofx")).toEqual(
+      new InvalidField({
+        ...at(`${"9".repeat(40)}…`),
+        expected: "an amount small enough to be held exactly",
+      }),
+    );
   });
 
   test("refuses an amount too large to be held exactly", () => {

@@ -2,6 +2,8 @@
 // README.md for what each format gives and the decisions behind it.
 export { readOfx } from "./ofx";
 
+export type { AmountSigns, OfxAmountSigns, OfxOptions, OfxStatement } from "./ofx";
+
 export { readQif } from "./qif";
 
 export type { QifDateOrder, QifOptions, QifStatement } from "./qif";

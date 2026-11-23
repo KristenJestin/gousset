@@ -1,4 +1,4 @@
-import { exampleStatement, statementSamples, writeQif } from "@gousset/fixture";
+import { encodeWindows1252, exampleStatement, statementSamples, writeQif } from "@gousset/fixture";
 import type { Statement as MadeUpStatement } from "@gousset/fixture";
 import { Effect } from "effect";
 import fc from "fast-check";
@@ -209,9 +209,41 @@ describe("refusing a QIF file", () => {
 
     expect(read(bytes, { currency: "eur" }).currency).toBe("EUR");
   });
+
+  test("refuses a balance too large to be held exactly, naming the line that makes it so", () => {
+    const text = [
+      "!Type:Bank",
+      "D09/30/2026",
+      "T90071992547409.91",
+      "POpening Balance",
+      "L[Checking]",
+      "^",
+      "D10/01/2026",
+      "T0.01",
+      "PInterest",
+      "^",
+    ].join("\n");
+
+    expect(refusal(text)).toEqual(
+      new UnsupportedContent({
+        line: 7,
+        problem:
+          "The balance, the opening balance plus every line up to this one, is too large to be held exactly.",
+      }),
+    );
+  });
 });
 
 describe("reading what a QIF file may hold besides plain text", () => {
+  test("reads a Windows-1252 file that starts with a UTF-8 byte order mark", () => {
+    const text = encodeWindows1252("!Type:Bank\nD03/10/2026\nT-4,20\nPCAFÉ EXEMPLE\n^\n");
+    const bytes = Uint8Array.from([0xef, 0xbb, 0xbf, ...text]);
+
+    expect(read(bytes, { currency: "EUR" }).lines).toEqual([
+      line("2026-10-03", -420, "CAFÉ EXEMPLE"),
+    ]);
+  });
+
   test("drops control and direction characters from what it returns", () => {
     const bytes = new TextEncoder().encode(
       "!Type:Bank\nD03/10/2026\nT-4.20\nPCB\u0000 ACME‮ 01/10\nMONE\tTWO\nNEX\u000001\n^\n",

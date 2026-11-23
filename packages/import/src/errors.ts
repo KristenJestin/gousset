@@ -1,7 +1,10 @@
 import { Schema } from "effect";
 
 // Every error names the file's line (counted from 1) and what is wrong there, in fields the import
-// screen can translate; `problem` and `expected` are English sentences for logs and agents.
+// screen can translate; `problem` and `expected` are English sentences for the user and agents.
+// They, and `text`, carry the file's content (amounts, labels, currency symbols): they never go in
+// a log, a trace or a metric, which record an error by its tag alone, with `line`, `field`,
+// `format` or `option` at most (docs/architecture.md, "Telemetry").
 
 /** The bytes are not a statement of the format asked for: no `<OFX>` element, no QIF header. */
 export class NotAStatement extends Schema.TaggedError<NotAStatement>()("NotAStatement", {

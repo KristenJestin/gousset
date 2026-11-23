@@ -1,5 +1,6 @@
-// What a reader gives back: the statement as the file states it, nothing cleaned and nothing
-// guessed. The import (deduplication, merchants, rules) works from this and nothing else.
+// What a reader gives back: the statement as the file states it, nothing guessed; its text values
+// are only tidied (trimmed, control characters dropped, README). The import (deduplication,
+// merchants, rules) works from this and nothing else.
 
 /** One line of a statement, as the file gives it. */
 export type StatementLine = {
