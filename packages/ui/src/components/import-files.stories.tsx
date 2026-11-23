@@ -159,7 +159,7 @@ function OpeningARow() {
  * A table on a wide screen, counts right-aligned in tabular figures; on a phone each file is a
  * stack of lines, each naming its column.
  *
- * Motion: a row's content unfolds when it appears (height and opacity, 250 ms, ease-out); under
+ * Motion: a row's content unfolds when it appears (revealed from its top and faded in, 250 ms, ease-out); under
  * reduced motion it simply appears.
  *
  * Don't: put it in a block inside the import's block, write a count as text ("58 lines"), or put

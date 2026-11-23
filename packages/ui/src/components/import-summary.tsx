@@ -59,7 +59,7 @@ function Figure({
  * Screen readers hear each count whole, never a digit on its way. It is no live region: the
  * import's `JobProgress` already announces its end.
  *
- * Motion: it unfolds when it first appears (height and opacity, 250 ms, ease-out), and each
+ * Motion: it unfolds when it first appears (revealed from its top and faded in, 250 ms, ease-out), and each
  * count rolls from its previous value to the new one as `Amount`'s digits do (200 ms). Cut under
  * reduced motion: it appears, the numbers jump.
  */

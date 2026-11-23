@@ -83,7 +83,7 @@ function Counting() {
  * Accessibility: a labelled region and a list of terms; each count is heard whole, never a digit
  * on its way. It is no live region: the import's `JobProgress` announces the end.
  *
- * Motion: it unfolds when it first appears (height and opacity, 250 ms, ease-out); each count
+ * Motion: it unfolds when it first appears (revealed from its top and faded in, 250 ms, ease-out); each count
  * rolls from its previous value to the new one, as `Amount`'s digits do (200 ms). Under reduced
  * motion it appears and the numbers jump.
  *

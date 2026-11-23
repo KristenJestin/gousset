@@ -4,12 +4,12 @@ import { expect, test } from "@playwright/test";
 const story = (component: string, name: string) =>
   `/iframe.html?id=import-${component}--${name}&viewMode=story`;
 
-/** What to read at each frame: an element's height, or whether a digit column shows two digits. */
-type Reading = { selector: string; read: "height" | "rolling" };
+/** What to read at each frame: an element's clip, or whether a digit column shows two digits. */
+type Reading = { selector: string; read: "clip" | "rolling" };
 
 /**
  * Presses the button named `trigger` and, from that press, samples at every frame for half a
- * second what `reading` names: the height of the first element `selector` matches ("none" while
+ * second what `reading` names: the clip of the first element `selector` matches ("none" while
  * there is none), or whether any element it matches has more than one child. Returns the values.
  */
 async function sampleWhile(page: Page, trigger: string, reading: Reading) {
@@ -23,7 +23,7 @@ async function sampleWhile(page: Page, trigger: string, reading: Reading) {
 
       const element = document.querySelector(selector);
 
-      return element === null ? "none" : String(element.getBoundingClientRect().height);
+      return element === null ? "none" : getComputedStyle(element).clipPath;
     };
 
     return new Promise<Array<string>>((resolve) => {
@@ -56,9 +56,12 @@ async function sampleWhile(page: Page, trigger: string, reading: Reading) {
   return samples;
 }
 
-/** The distinct heights an element took while it appeared (its absence left out). */
-async function heightsWhileAppearing(page: Page, trigger: string, selector: string) {
-  const samples = await sampleWhile(page, trigger, { selector, read: "height" });
+/**
+ * The distinct clips an element took while it appeared (its absence left out): `Unfold` reveals
+ * its content by its clip, never by its height.
+ */
+async function clipsWhileAppearing(page: Page, trigger: string, selector: string) {
+  const samples = await sampleWhile(page, trigger, { selector, read: "clip" });
 
   return new Set(samples.filter((sample) => sample !== "none")).size;
 }
@@ -243,9 +246,9 @@ test.describe("ImportFiles", () => {
 
   test("a row's content unfolds when it appears", async ({ page }) => {
     await page.goto(story("import-files", "opening-row"));
-    // Nothing, then the heights on the way, then the full height.
+    // Nothing, then the clips on the way, then the whole content.
     expect(
-      await heightsWhileAppearing(
+      await clipsWhileAppearing(
         page,
         "Import the first file",
         '[data-slot="import-file-content"] [data-slot="unfold"]',
@@ -260,7 +263,7 @@ test.describe("ImportFiles", () => {
     await page.emulateMedia({ reducedMotion: "reduce" });
     await page.goto(story("import-files", "opening-row"));
     expect(
-      await heightsWhileAppearing(
+      await clipsWhileAppearing(
         page,
         "Import the first file",
         '[data-slot="import-file-content"] [data-slot="unfold"]',
@@ -334,7 +337,7 @@ test.describe("ImportSummary", () => {
   test("it unfolds when it first appears", async ({ page }) => {
     await page.goto(story("import-summary", "unfolding"));
     expect(
-      await heightsWhileAppearing(page, "Finish the import", '[data-slot="unfold"]'),
+      await clipsWhileAppearing(page, "Finish the import", '[data-slot="unfold"]'),
     ).toBeGreaterThan(3);
     await expect(page.getByRole("region", { name: "Import summary" })).toBeVisible();
   });
@@ -343,7 +346,7 @@ test.describe("ImportSummary", () => {
     await page.emulateMedia({ reducedMotion: "reduce" });
     await page.goto(story("import-summary", "unfolding"));
     expect(
-      await heightsWhileAppearing(page, "Finish the import", '[data-slot="unfold"]'),
+      await clipsWhileAppearing(page, "Finish the import", '[data-slot="unfold"]'),
     ).toBeLessThanOrEqual(2);
   });
 

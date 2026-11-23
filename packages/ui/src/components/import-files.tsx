@@ -210,7 +210,7 @@ function FileRow({
  * A table on a wide screen (`role="table"`, its headers, counts right-aligned in tabular
  * figures); on a phone, each file is a stack of lines, each naming its column.
  *
- * Motion: a row's content unfolds when it appears (height and opacity, 250 ms, ease-out); cut
+ * Motion: a row's content unfolds when it appears (revealed from its top and faded in, 250 ms, ease-out); cut
  * under reduced motion, where it simply appears.
  */
 export function ImportFiles({ label, columns, rows, locale }: ImportFilesProps) {
