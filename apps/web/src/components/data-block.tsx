@@ -1,6 +1,7 @@
 import { Block, FadeIn } from "@gousset/ui/components/data-block";
 import type { BlockProps } from "@gousset/ui/components/data-block";
 import { ErrorState } from "@gousset/ui/components/error-state";
+import { FoldedSkeleton } from "@gousset/ui/components/folded";
 import { useQueryErrorResetBoundary } from "@tanstack/react-query";
 import { Component, Suspense } from "react";
 import type { ReactNode } from "react";
@@ -41,8 +42,9 @@ class BlockBoundary extends Component<BoundaryProps, BoundaryState> {
 /**
  * One block of a page that loads on its own (docs/architecture.md, "Data loading and skeletons"):
  * its content reads its query with `useSuspenseQuery`; while it waits, the block shows `skeleton`,
- * shaped exactly like its content; if it fails, the block alone says so and offers to try again,
- * until it shows something else (`resetKey`). The rest of its props are `Block`'s.
+ * shaped exactly like its content (on a phone, a block folded there shows its folded line's); if it
+ * fails, the block alone says so and offers to try again, until it shows something else
+ * (`resetKey`). The rest of its props are `Block`'s.
  */
 export function DataBlock({
   skeleton,
@@ -52,6 +54,13 @@ export function DataBlock({
 }: Omit<BlockProps, "children"> & { skeleton: ReactNode; resetKey: string; children: ReactNode }) {
   const { reset } = useQueryErrorResetBoundary();
 
+  const fallback =
+    block.foldOnPhone === true ? (
+      <FoldedSkeleton title={block.title}>{skeleton}</FoldedSkeleton>
+    ) : (
+      skeleton
+    );
+
   return (
     <Block {...block}>
       <BlockBoundary
@@ -59,7 +68,7 @@ export function DataBlock({
         resetKey={resetKey}
         fallback={(retry) => <ErrorState onRetry={retry} />}
       >
-        <Suspense fallback={skeleton}>
+        <Suspense fallback={fallback}>
           <FadeIn>{children}</FadeIn>
         </Suspense>
       </BlockBoundary>

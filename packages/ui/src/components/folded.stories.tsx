@@ -1,8 +1,8 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 
 import { Block } from "./data-block";
-import { FlagList } from "./flag-list";
-import { Folded } from "./folded";
+import { FlagList, FlagListSkeleton } from "./flag-list";
+import { Folded, FoldedSkeleton } from "./folded";
 
 const FLAGS = (
   <FlagList
@@ -47,3 +47,25 @@ export const Default: Story = {};
 
 /** On a phone: one line, which opens the content in a sheet. */
 export const Phone: Story = { globals: { viewport: { value: "mobile1", isRotated: false } } };
+
+/**
+ * While its data loads (`FoldedSkeleton`): on a wide screen, the content's own skeleton; the
+ * block keeps its height when the data arrives.
+ */
+export const Loading: Story = {
+  render: (args) => (
+    <div className="max-w-md">
+      <Block title={args.title} foldOnPhone>
+        <FoldedSkeleton title={args.title}>
+          <FlagListSkeleton />
+        </FoldedSkeleton>
+      </Block>
+    </div>
+  ),
+};
+
+/** While its data loads on a phone: the folded line, its title written, its summary grey. */
+export const LoadingOnPhone: Story = {
+  ...Loading,
+  globals: { viewport: { value: "mobile1", isRotated: false } },
+};

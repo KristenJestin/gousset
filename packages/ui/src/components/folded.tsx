@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 
 import { Icon } from "./icon";
 import { Sheet } from "./sheet";
+import { Skeleton, SkeletonFrame } from "./skeleton";
 
 export type FoldedProps = {
   /** The block's title, on the folded line and at the top of the sheet. */
@@ -41,6 +42,30 @@ export function Folded({ title, summary, children }: FoldedProps) {
       <Sheet title={title} open={open} onOpenChange={setOpen}>
         {children}
       </Sheet>
+    </>
+  );
+}
+
+/**
+ * `Folded` on its way: from a tablet up, `children`, the content's own skeleton; on a phone, the
+ * folded line, its title written and its summary grey, 48 px like the line, so that nothing moves
+ * when the data arrives.
+ */
+export function FoldedSkeleton({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <>
+      <div className="max-md:hidden">{children}</div>
+      <div className="md:hidden">
+        <SkeletonFrame>
+          <div aria-hidden="true" className="flex h-12 w-full items-center gap-2 px-4">
+            <span className="min-w-0 flex-1 truncate text-sm font-semibold">{title}</span>
+            <Skeleton className="h-4 w-8" />
+            <span className="flex shrink-0 text-muted-foreground">
+              <Icon name="next" size="sm" />
+            </span>
+          </div>
+        </SkeletonFrame>
+      </div>
     </>
   );
 }
