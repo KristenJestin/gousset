@@ -68,7 +68,8 @@ test("a job that fails is retried, then shown failed", async ({ userPage: page }
   await expect(status(page)).toHaveText("Failed after 3 attempts", {
     timeout: FAILING_TIMEOUT_MS,
   });
-  await expect(page.getByRole("alert")).toContainText(
+  // The progress block's own alert: ui-sdk's announcer is another, empty, on every page.
+  await expect(page.locator('[data-slot="job-progress"]').getByRole("alert")).toContainText(
     "The test job failed on purpose, as asked. Start it again with fewer failing attempts.",
   );
   await expect(page.getByRole("button", { name: "Try again" })).toBeVisible();
