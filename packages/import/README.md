@@ -161,7 +161,9 @@ An ISO style (`YYYY-MM-DD`) is not shipped: its dates are never ambiguous, and d
 for, which the import screen shows over the preview, from the top of the file (200 rows, within
 2,000 lines and a mebibyte): UTF-8 when the bytes are, Windows-1252 otherwise; the separator most rows agree on (the widest table on a tie); the lines before the
 first row of that table, through the last that holds something (more than 100 and the file is
-`NotAStatement`); a header when no value of the first row is a date; the columns whose every
+`NotAStatement`, as it is when `readCsvHeader` would not find the proposed header again with the
+profile proposed: under more blank lines or text than its search reads, a saved profile would
+never recognise its own files); a header when no value of the first row is a date; the columns whose every
 value is a date, an amount (with a decimal mark or a sign somewhere: digits alone may be a
 reference) or a currency code (only under a header saying `Devise` or `Currency`: three capital
 letters may be a type, `VIR`, `CHQ`). A column whose header says Debit or Credit is an amount

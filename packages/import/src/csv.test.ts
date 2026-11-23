@@ -754,7 +754,7 @@ describe("proposing a profile from a CSV file", () => {
     const table = "Date;Libellé;Montant\n13/11/2026;A;-12,00\n";
 
     // Blank lines are read past without being skipped: the reader leaves them out.
-    expect(detectText(`${"\n".repeat(1990)}${table}`).profile.skipRows).toBe(0);
+    expect(detectText(`${"\n".repeat(90)}${table}`).profile.skipRows).toBe(0);
 
     expect(
       Effect.runSync(Effect.flip(detectCsvProfile(utf8.encode(`${";\n".repeat(2000)}${table}`)))),
@@ -772,6 +772,39 @@ describe("proposing a profile from a CSV file", () => {
         Effect.flip(detectCsvProfile(utf8.encode(`${linesAbove(101).join("\n")}\n${table}`))),
       ),
     ).toEqual(new NotAStatement({ format: "csv" }));
+  });
+});
+
+// A profile saved from detection's proposal recognises its files by their header: whatever header
+// detection proposes, `readCsvHeader` finds again with the profile proposed (#19).
+describe("a proposed header is one the profile finds again", () => {
+  const table = "Date;Libellé;Montant\n13/11/2026;EXAMPLE GROCER;-12,00\n";
+
+  test("under a few blank lines, as the profile reads it", () => {
+    const bytes = utf8.encode(`${"\n".repeat(50)}${table}`);
+    const { profile, header } = detect(bytes);
+
+    expect(header).toBe("date;libellé;montant");
+    expect(headerOf(bytes, profile)).toBe(header);
+  });
+
+  test("no table under more blank lines than the header search reads", () => {
+    expect(
+      Effect.runSync(Effect.flip(detectCsvProfile(utf8.encode(`${"\n".repeat(150)}${table}`)))),
+    ).toEqual(new NotAStatement({ format: "csv" }));
+  });
+
+  test("no table under more text than the header search reads", () => {
+    const above = Array.from({ length: 20 }, () => "x".repeat(4000)).join("\n");
+    const lines = Array.from({ length: 30 }, () => "13/11/2026;EXAMPLE GROCER;-12,00");
+    const long = `${above}\nDate;Libellé;Montant\n${lines.join("\n")}\n`;
+
+    // Its table alone is read, the same rows a few lines down.
+    expect(detectText(`x\n${long.slice(long.indexOf("Date"))}`).profile.skipRows).toBe(1);
+
+    expect(Effect.runSync(Effect.flip(detectCsvProfile(utf8.encode(long))))).toEqual(
+      new NotAStatement({ format: "csv" }),
+    );
   });
 });
 
