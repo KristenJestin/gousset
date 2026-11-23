@@ -207,7 +207,14 @@ export function AccountForm({
     <Sheet
       title={title}
       open={open}
-      onOpenChange={onOpenChange}
+      onOpenChange={(next) => {
+        // While the form is sent it stays open: its answer lands on the form that sent it.
+        if (!next && busy) {
+          return;
+        }
+
+        onOpenChange(next);
+      }}
       onSubmit={(event) => {
         event.preventDefault();
         void submit();

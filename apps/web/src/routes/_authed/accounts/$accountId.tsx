@@ -178,6 +178,7 @@ function AccountPage() {
               loading={closeBusy}
               onClick={() => {
                 setClosedOn(detail.day);
+                setCloseError(undefined);
                 setCloseOpen(true);
               }}
             >
@@ -312,7 +313,14 @@ function CloseDialog({
       title={m.accountCloseTitle({ name })}
       description={m.accountCloseDescription()}
       open={open}
-      onOpenChange={onOpenChange}
+      onOpenChange={(next) => {
+        // While the form is sent it stays open: its answer lands on the form that sent it.
+        if (!next && busy) {
+          return;
+        }
+
+        onOpenChange(next);
+      }}
       onSubmit={(event) => {
         event.preventDefault();
         onConfirm();
@@ -507,7 +515,13 @@ function ExpiryDialog({
       title={m.accountCreditExpiryTitle({ label })}
       description={m.accountCreditExpiryDescription()}
       open={open}
-      onOpenChange={onOpenChange}
+      onOpenChange={(next) => {
+        if (!next && busy) {
+          return;
+        }
+
+        onOpenChange(next);
+      }}
       onSubmit={(event) => {
         event.preventDefault();
         void save();
@@ -668,7 +682,13 @@ function NoteBalanceDialog({
       title={m.accountBlockNoteBalance()}
       description={m.accountNoteBalanceDescription()}
       open={open}
-      onOpenChange={onOpenChange}
+      onOpenChange={(next) => {
+        if (!next && busy) {
+          return;
+        }
+
+        onOpenChange(next);
+      }}
       onSubmit={(event) => {
         event.preventDefault();
         void submit();
