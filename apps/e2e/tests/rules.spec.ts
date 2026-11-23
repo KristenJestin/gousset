@@ -186,8 +186,10 @@ test("a correction proposes a rule, which classifies the line's look-alikes when
 
   const proposal = page.getByRole("dialog", { name: "Make it a rule?" });
 
+  // The label's merchant, as merchantKey cleans it: the payment word and the date dropped, and
+  // "E2E" too, a word of letters and digits being read as a reference. The look-alikes hold it.
   await expect(proposal.getByRole("textbox", { name: "Label contains" })).toHaveValue(
-    "E2E BRAMBLE CAFE",
+    "BRAMBLE CAFE",
   );
 
   const apply = proposal.getByRole("checkbox", {
@@ -205,7 +207,7 @@ test("a correction proposes a rule, which classifies the line's look-alikes when
 
   // The rule is on the rules' screen, born from the correction.
   await visit(page, "/settings/rules");
-  await ruleNamed(page, "label contains “E2E BRAMBLE CAFE”").click();
+  await ruleNamed(page, "label contains “BRAMBLE CAFE”").click();
   await expect(page.getByRole("dialog", { name: "Rule 1" })).toContainText(
     "while correcting a line",
   );
