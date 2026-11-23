@@ -1,5 +1,6 @@
 import { account, accountBalance, statementImport, statementLine } from "@gousset/db/schema/ledger";
 
+import { onPhone } from "../src/frame";
 import { expect, expectAccessible, fixDay, test, visit } from "../src/test";
 import { openUserData } from "../src/user-data";
 
@@ -93,6 +94,30 @@ for (const { choice, group } of KINDS) {
     await expect(region.locator("header")).toContainText("€");
   });
 }
+
+test("the account form, a long one, opens in a side sheet, along the bottom on a phone", async ({
+  userPage: page,
+}) => {
+  await visit(page, "/accounts");
+
+  const trigger = page.getByRole("button", { name: "Add an account", exact: true });
+
+  await trigger.click();
+
+  // docs/design.md, "Actions and forms": a long form is a side `Sheet`, never a form in the page.
+  const sheet = page.getByRole("dialog", { name: "Add an account" });
+
+  await expect(sheet).toHaveAttribute("data-side", onPhone(page) ? "bottom" : "right");
+  // Its actions: Cancel, then the submit button, last; Cancel sends nothing.
+  await expect(sheet.getByRole("button", { name: /^(Cancel|Add the account)$/ })).toHaveText([
+    "Cancel",
+    "Add the account",
+  ]);
+  await sheet.getByRole("button", { name: "Cancel" }).focus();
+  await page.keyboard.press("Enter");
+  await expect(sheet).toBeHidden();
+  await expect(trigger).toBeFocused();
+});
 
 test("editing an account changes its settings", async ({ userPage: page }) => {
   await visit(page, "/accounts");

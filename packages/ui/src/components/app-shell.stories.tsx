@@ -13,10 +13,14 @@ import {
   TabButton,
   TabLink,
 } from "./app-shell";
+import { Button } from "./button";
+import { Dialog } from "./dialog";
 import { EmptyState } from "./empty-state";
 import type { IconName } from "./icon";
+import { List, ListItem } from "./list";
 import { MenuItem } from "./menu";
 import { MonthSwitcher } from "./month-switcher";
+import { TextField } from "./text-field";
 import { UserMenu } from "./user-menu";
 
 const SCREENS: ReadonlyArray<{ id: string; icon: IconName; label: string }> = [
@@ -162,6 +166,68 @@ export const Sections: Story = {
       >
         <Block title="Language" description="The language of the interface on this device.">
           <p className="text-sm">English</p>
+        </Block>
+      </SectionLayout>
+    </Page>
+  ),
+};
+
+/** Creating a user: a button beside the list's title, opening the form in a dialog. */
+function CreateUser() {
+  return (
+    <Dialog
+      trigger={<Button icon="add">Create a user</Button>}
+      title="Create a user"
+      description="They will choose their own password at their first sign-in."
+      onSubmit={(event) => event.preventDefault()}
+      actions={<Button type="submit">Create the user</Button>}
+    >
+      <TextField label="Name" name="name" autoComplete="off" />
+      <TextField label="E-mail" name="email" type="email" autoComplete="off" />
+      <TextField
+        label="Temporary password"
+        name="password"
+        type="text"
+        autoComplete="off"
+        description="8 to 128 characters."
+      />
+    </Dialog>
+  );
+}
+
+/**
+ * The administrator's section of the settings, as the app composes it: who has an account, and
+ * beside the list's title the button that opens creating a user in a dialog (a sheet on a phone).
+ * No card alone on the page, no way back of its own: the frame is the way.
+ */
+export const UsersSection: Story = {
+  render: () => (
+    <Page title="Settings">
+      <SectionLayout
+        label="Settings"
+        navigation={
+          <>
+            <SectionLink href="#general" label="General" />
+            <SectionLink href="#users" label="Users" aria-current="page" />
+            <SectionLink href="#categories" label="Categories" />
+            <SectionLink href="#rules" label="Rules" />
+          </>
+        }
+      >
+        <Block
+          title="Users"
+          description="Everyone with an account on this installation."
+          actions={<CreateUser />}
+        >
+          <List label="Users">
+            <ListItem title="Ada Example" description="ada@example.com" tags={["Administrator"]} />
+            <ListItem
+              title="Grace Example"
+              description="grace@example.com"
+              tags={["Temporary password"]}
+            />
+            <ListItem title="Alan Example" description="alan@example.com" />
+          </List>
         </Block>
       </SectionLayout>
     </Page>
