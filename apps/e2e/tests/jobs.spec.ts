@@ -119,6 +119,28 @@ test("a job's end reads again the month it touched", async ({ userPage: page }) 
   await expect.poll(() => reads.length).toBeGreaterThan(0);
 });
 
+test("a job that cannot be followed says so, and is not asked for again", async ({
+  userPage: page,
+}) => {
+  const asked: Array<string> = [];
+
+  page.on("request", (request) => {
+    if (request.url().includes("/api/jobs/")) {
+      asked.push(request.url());
+    }
+  });
+
+  await visit(page, `${PAGE}?job=00000000-0000-4000-8000-000000000000`);
+
+  await expect(page.getByText("This job cannot be followed")).toBeVisible({ timeout: 10_000 });
+
+  // The stream, then the request that read why it was refused: nothing more.
+  const settled = asked.length;
+
+  await page.waitForTimeout(3000);
+  expect(asked.length).toBe(settled);
+});
+
 test("nobody else follows a user's job", async ({ userPage: page, secondUserPage, baseURL }) => {
   await visit(page, PAGE);
 
@@ -136,6 +158,11 @@ test("nobody else follows a user's job", async ({ userPage: page, secondUserPage
   const anonymous = await fetch(new URL(events, baseURL));
 
   expect(anonymous.status).toBe(401);
+
+  // An id that is no job at all is not found either, not a queue that does not answer.
+  const unknown = await page.request.get("/api/jobs/not-a-job/events");
+
+  expect(unknown.status()).toBe(404);
 
   // Its owner reads its end, as a Server-Sent Event.
   const own = await page.request.get(events);

@@ -4,6 +4,8 @@ import { pacerDevtoolsPlugin } from "@tanstack/react-pacer-devtools";
 import { ReactQueryDevtoolsPanel } from "@tanstack/react-query-devtools";
 import { TanStackRouterDevtoolsPanel } from "@tanstack/react-router-devtools";
 
+import { m } from "@gousset/i18n/messages";
+
 import { JobsPanel } from "./components/jobs-panel";
 
 /**
@@ -20,7 +22,7 @@ export default function Devtools() {
         { name: "TanStack Router", render: <TanStackRouterDevtoolsPanel /> },
         pacerDevtoolsPlugin(),
         hotkeysDevtoolsPlugin(),
-        { name: "Gousset jobs", render: <JobsPanel /> },
+        { name: m.jobsPanelTitle(), render: <JobsPanel /> },
       ]}
     />
   );

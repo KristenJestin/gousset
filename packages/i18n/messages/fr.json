@@ -207,5 +207,12 @@
   "jobsPanelTitle": "Tâches",
   "jobsPanelDescription": "Vos dernières tâches et où en est chacune. En développement seulement.",
   "jobsPanelEmpty": "Aucune tâche pour l'instant.",
-  "jobsPanelAttempt": "Tentative {attempt} sur {attempts}"
+  "jobsPanelAttempt": "Tentative {attempt} sur {attempts}",
+  "jobGoneTitle": "Impossible de suivre cette tâche",
+  "jobGoneDescription": "Elle n'est pas à vous, elle a été retirée quelque temps après sa fin, ou votre session a pris fin. Reconnectez-vous, ou relancez-la depuis sa page.",
+  "jobPhaseWaiting": "En attente",
+  "jobPhaseRunning": "En cours",
+  "jobPhaseRetrying": "Nouvel essai",
+  "jobPhaseCompleted": "Terminée",
+  "jobPhaseFailed": "Échouée"
 }

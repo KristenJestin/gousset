@@ -1,6 +1,6 @@
 import { skipToken, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Option, Schema } from "effect";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 
 import { JobView, isOver } from "@/jobs/view";
 
@@ -25,12 +25,32 @@ const RECONNECT_MS = { first: 1000, last: 30_000 };
 const eventsOf = (id: string) => `/api/jobs/${encodeURIComponent(id)}/events`;
 
 /**
+ * Whether the server refuses a job's stream for good: not signed in (401), or no job of the
+ * user's has this id (404). EventSource never says why it was refused; one plain request does,
+ * and is cut as soon as its status is known.
+ */
+async function refusedForGood(id: string): Promise<boolean> {
+  const probe = new AbortController();
+
+  try {
+    const response = await fetch(eventsOf(id), { signal: probe.signal });
+
+    return response.status === 401 || response.status === 404;
+  } catch {
+    return false;
+  } finally {
+    probe.abort();
+  }
+}
+
+/**
  * Subscribes to a job's Server-Sent Events: each view it decodes goes to `onView`, until the job
  * is over. The browser connects again by itself when the stream drops (an app restart); a stream
- * the server refused (the app still starting) is asked for again, waiting longer each time.
- * Returns what ends the subscription: its connection and any reconnection planned.
+ * the server refused for a while (the app still starting) is asked for again, waiting longer each
+ * time; one refused for good ends the subscription with `onGone`. Returns what ends the
+ * subscription: its connection and any reconnection planned.
  */
-function followJob(id: string, onView: (view: JobView) => void): () => void {
+function followJob(id: string, onView: (view: JobView) => void, onGone: () => void): () => void {
   let source: EventSource | undefined;
   let retry: ReturnType<typeof setTimeout> | undefined;
   let delay = RECONNECT_MS.first;
@@ -62,8 +82,21 @@ function followJob(id: string, onView: (view: JobView) => void): () => void {
         return;
       }
 
-      retry = setTimeout(connect, delay);
-      delay = Math.min(delay * 2, RECONNECT_MS.last);
+      void refusedForGood(id).then((gone) => {
+        if (finished) {
+          return;
+        }
+
+        if (gone) {
+          finished = true;
+          onGone();
+
+          return;
+        }
+
+        retry = setTimeout(connect, delay);
+        delay = Math.min(delay * 2, RECONNECT_MS.last);
+      });
     });
   };
 
@@ -76,13 +109,21 @@ function followJob(id: string, onView: (view: JobView) => void): () => void {
   };
 }
 
+/** A job as its page follows it: its view once one came, and whether it cannot be followed. */
+export type FollowedJob = {
+  readonly view: JobView | undefined;
+  /** The server refused it for good: the session ended, or no job of the user's has this id. */
+  readonly gone: boolean;
+};
+
 /**
  * Follows a job live: where it stands now, then each change, until it is over, kept in the Query
  * cache under `jobKeys.of(id)`. Its end invalidates the queries of what it touched, once, so that
  * what is on screen is read again.
  */
-export function useJob(id: string | undefined): JobView | undefined {
+export function useJob(id: string | undefined): FollowedJob {
   const queryClient = useQueryClient();
+  const [goneId, setGoneId] = useState<string>();
 
   const { data } = useQuery<JobView>({
     queryKey: jobKeys.of(id ?? ""),
@@ -97,15 +138,22 @@ export function useJob(id: string | undefined): JobView | undefined {
 
     let invalidated = false;
 
-    return followJob(id, (view) => {
-      queryClient.setQueryData(jobKeys.of(id), view);
+    return followJob(
+      id,
+      (view) => {
+        queryClient.setQueryData(jobKeys.of(id), view);
 
-      if (view.touched !== null && !invalidated) {
-        invalidated = true;
-        void invalidateTouched(queryClient, view.touched);
-      }
-    });
+        if (view.touched !== null && !invalidated) {
+          invalidated = true;
+          void invalidateTouched(queryClient, view.touched);
+        }
+      },
+      () => setGoneId(id),
+    );
   }, [id, queryClient]);
 
-  return id === undefined ? undefined : data;
+  return {
+    view: id === undefined ? undefined : data,
+    gone: id !== undefined && goneId === id,
+  };
 }

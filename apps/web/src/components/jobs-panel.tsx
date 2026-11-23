@@ -11,11 +11,34 @@ import { jobKeys } from "@/queries/jobs";
 /** How often the panel reads the jobs again. */
 const REFRESH_MS = 1000;
 
-/** A job's step and counts, as ids and numbers: the panel is for whoever writes the jobs. */
-function whereItIs(view: JobView): string {
-  const counts = view.done === null ? "" : ` ${view.done}/${view.total ?? "?"}`;
+/**
+ * A job's step, by its id in the job's definition, and its counts: the panel is for whoever writes
+ * the jobs. Nothing before the first step.
+ */
+function whereItIs(view: JobView): string | undefined {
+  if (view.step === null) {
+    return undefined;
+  }
 
-  return `${view.step ?? "-"}${counts}`;
+  return view.done === null || view.total === null
+    ? view.step
+    : `${view.step} ${String(view.done)}/${String(view.total)}`;
+}
+
+/** A job's phase, in the page's language. */
+function phaseOf(view: JobView): string {
+  switch (view.phase) {
+    case "waiting":
+      return m.jobPhaseWaiting();
+    case "running":
+      return m.jobPhaseRunning();
+    case "retrying":
+      return m.jobPhaseRetrying();
+    case "completed":
+      return m.jobPhaseCompleted();
+    case "failed":
+      return m.jobPhaseFailed();
+  }
 }
 
 /**
@@ -42,7 +65,7 @@ export function JobsPanel() {
               title={`${view.job} ${view.id}`}
               description={whereItIs(view)}
               tags={[
-                view.phase,
+                phaseOf(view),
                 m.jobsPanelAttempt({ attempt: view.attempt, attempts: view.attempts }),
               ]}
             />

@@ -207,5 +207,12 @@
   "jobsPanelTitle": "Jobs",
   "jobsPanelDescription": "Your last jobs and where each stands. Development only.",
   "jobsPanelEmpty": "No job yet.",
-  "jobsPanelAttempt": "Attempt {attempt} of {attempts}"
+  "jobsPanelAttempt": "Attempt {attempt} of {attempts}",
+  "jobGoneTitle": "This job cannot be followed",
+  "jobGoneDescription": "It is not one of yours, it was removed some time after it ended, or your session has ended. Sign in again, or start it again from its page.",
+  "jobPhaseWaiting": "Waiting",
+  "jobPhaseRunning": "Running",
+  "jobPhaseRetrying": "Retrying",
+  "jobPhaseCompleted": "Done",
+  "jobPhaseFailed": "Failed"
 }

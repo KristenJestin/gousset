@@ -2,6 +2,7 @@ import { m } from "@gousset/i18n/messages";
 import { Amount } from "@gousset/ui/components/amount";
 import { Button } from "@gousset/ui/components/button";
 import { Card } from "@gousset/ui/components/card";
+import { EmptyState } from "@gousset/ui/components/empty-state";
 import { JobProgress } from "@gousset/ui/components/job-progress";
 import { Actions, Form, Screen } from "@gousset/ui/components/screen";
 import { TextField } from "@gousset/ui/components/text-field";
@@ -52,7 +53,7 @@ function TouchedMonth() {
   return (
     <Card title={m.jobTestMonth()}>
       {data === undefined ? null : (
-        <p className="flex items-center gap-2 text-sm">
+        <p>
           {m.jobTestReceived()} <Amount value={data.received} />
         </p>
       )}
@@ -63,7 +64,7 @@ function TouchedMonth() {
 function TestJobs() {
   const { job } = Route.useSearch();
   const navigate = Route.useNavigate();
-  const view = useJob(job);
+  const { view, gone } = useJob(job);
   const [busy, setBusy] = useState(false);
   const [last, setLast] = useState<TestRun>();
 
@@ -126,6 +127,15 @@ function TestJobs() {
           </Actions>
         </Form>
       </Card>
+      {gone ? (
+        <Card title={m.jobTestJob()}>
+          <EmptyState
+            icon="warning"
+            title={m.jobGoneTitle()}
+            description={m.jobGoneDescription()}
+          />
+        </Card>
+      ) : null}
       {view === undefined ? null : (
         <Card title={m.jobTestJob()}>
           <JobProgress
