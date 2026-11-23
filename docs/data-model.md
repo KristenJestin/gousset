@@ -144,6 +144,8 @@ better-auth's `auth_user` is the user; its tables keep their `auth_` prefix (its
 
 The account page's check (#15) compares the balance the app computes at the end of a day (`opening_balance_minor` plus every counted line booked up to that day) with the latest statement balance on or before today, and shows the difference; any earlier statement balance that disagrees with the app's balance at the end of its own day is shown too, so a past mismatch is never hidden. In balance mode, the noted balances are what the account is kept by.
 
+**A statement balance of zero that the account contradicts is not given** (#130). Some banks' files write 0.00 although the account is not empty (an OFX `LEDGERBAL`, say). When a file's balance, opening or closing, in any format that gives one, is exactly zero while the app's balance at the end of its day is not (as the check computes it, once the file's own lines are saved), the import records no statement balance for it and the account is not checked against it; the import's `balance_ignored` says so, and its summary, on the screen and through the MCP door, with it. A true zero, which the account's lines agree with, is kept. The check reads past such a balance too (`looksEmpty`), so that one an import kept before this rule shows no false gap: no row is changed or dropped, and that import's `balance_ignored` stays false.
+
 ## Statement lines
 
 **`statement_line`**: one line of an account, as the bank wrote it. A line is never classified here: what it is (a payment of an expense, an income, a side of a transfer) is recorded by v0.3's tables, which point to it. Keeping the bank's line apart from what happened is what lets an expense be paid on two accounts, a line be split, and a classification be undone without touching the statement ([`vision.md`](vision.md#an-expense-is-not-a-bank-line)).
@@ -199,6 +201,7 @@ The account page's check (#15) compares the balance the app computes at the end 
 | `status` | `import_status` | | `'queued'` | `queued`, `reading`, `waiting` (for an account or a profile), `saving`, `done`, `failed`, `undone` |
 | `period_from`, `period_to` | `date` | null | | the days the file covers, as it says or from its lines |
 | `lines_read`, `lines_added`, `lines_duplicate`, `lines_held` | `integer` | | `0` | the summary's counts |
+| `balance_ignored` | `boolean` | | `false` | the file stated a balance of zero that the account's lines contradict on its day: it looked empty and was not recorded (#130, [`account_balance`](#accounts)) |
 | `error_code` | `text` | null | | why it failed, as a code; never the file's content |
 | `job_id` | `uuid` | null | | the pg-boss job that runs it, so that the import screen follows it again after a reload (#20). No foreign key: pg-boss's tables are its own schema, and it purges old jobs |
 | `created_at` | `timestamptz` | | `now()` | |

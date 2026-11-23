@@ -9,6 +9,7 @@ import {
   dailyBalances,
   daysFrom,
   groupAccounts,
+  looksEmpty,
   totalsByCurrency,
 } from "./balances";
 
@@ -262,5 +263,36 @@ describe("balanceCheck", () => {
     expect(days).toEqual(["2026-10-31"]);
     expect(check?.differenceMinor).toBe(-750);
     expect(check?.agrees).toBe(false);
+  });
+});
+
+describe("looksEmpty", () => {
+  test("a balance of zero the app's balance contradicts looks empty", () => {
+    expect(looksEmpty(0, 182_450)).toBe(true);
+    expect(looksEmpty(0, -3210)).toBe(true);
+  });
+
+  test("a balance of zero the app's balance agrees with is kept", () => {
+    expect(looksEmpty(0, 0)).toBe(false);
+  });
+
+  test("a balance other than zero is kept, whatever the app counts", () => {
+    fc.assert(
+      fc.property(
+        anyMinor.filter((minor) => minor !== 0),
+        anyMinor,
+        (statementMinor, appMinor) => {
+          expect(looksEmpty(statementMinor, appMinor)).toBe(false);
+        },
+      ),
+    );
+  });
+
+  test("a balance of zero looks empty exactly when the app counts something else", () => {
+    fc.assert(
+      fc.property(anyMinor, (appMinor) => {
+        expect(looksEmpty(0, appMinor)).toBe(appMinor !== 0);
+      }),
+    );
   });
 });

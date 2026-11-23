@@ -185,6 +185,16 @@ export function groupAccounts<Account extends Groupable>(
   };
 }
 
+/**
+ * Whether a statement balance looks empty: some banks write 0.00 although the account is not
+ * empty. A balance of exactly zero while the app's balance at the end of that same day is not zero
+ * is taken as not given (docs/data-model.md, "account_balance"); any other balance is kept, a
+ * true zero included.
+ */
+export function looksEmpty(statementMinor: number, appMinor: number): boolean {
+  return statementMinor === 0 && appMinor !== 0;
+}
+
 /** The account's balance against its statement's, at the end of the statement's day. */
 export type BalanceCheck = {
   readonly day: string;

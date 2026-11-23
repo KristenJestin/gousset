@@ -245,6 +245,7 @@
   "importLinesAdded": "Added",
   "importLinesKnown": "Already known",
   "importLinesReview": "To review",
+  "importBalanceIgnored": "This file's balance looks empty and was ignored: it says 0, while the account's lines make it something else that day.",
   "importUndo": "Undo this import",
   "importContinue": "Continue to the review",
   "importUndoneTitle": "Import undone",
