@@ -8,7 +8,7 @@ import {
   memoryLineStore,
 } from "@gousset/core";
 import type { AccountRecord, MemoryLine, MemoryRows } from "@gousset/core";
-import { Effect, Layer, ManagedRuntime } from "effect";
+import { Effect, Layer, ManagedRuntime, Schema } from "effect";
 import { TestClock } from "effect/testing";
 import { afterEach, describe, expect, test } from "vite-plus/test";
 
@@ -123,7 +123,7 @@ async function connect(rows: MemoryRows = ROWS, caller: Caller = writer) {
 function expectRefusal(answer: { text: string; isError: boolean }, saying: string) {
   expect(answer.isError, answer.text).toBe(true);
   expect(answer.text).toContain(saying);
-  expect(answer.text).toMatch(/A valid call: accounts \{"action":"[a-z_]+".*\}$/);
+  expect(answer.text).toMatch(/A valid call: (accounts|lines) \{"action":"[a-z_]+".*\}$/);
   expect(answer.text.length).toBeLessThan(2000);
 }
 
@@ -366,6 +366,79 @@ describe("accounts edit", () => {
     expect(edited.text).toContain("Deferred card (Riverside Bank), current account in EUR");
     expect(edited.text).not.toContain("Debited each month from");
   });
+
+  test("refuses a new currency that would read the opening balance in other digits, until it is given", async () => {
+    const pot = account("Pot", { kind: "savings", openingBalanceMinor: 12_345 });
+    const call = await connect({ accounts: [pot] });
+
+    expectRefusal(
+      await call({ action: "edit", name: "Pot", currency: "JPY" }),
+      "give opening_balance in JPY with the new currency",
+    );
+
+    const edited = await call({
+      action: "edit",
+      name: "Pot",
+      currency: "JPY",
+      opening_balance: "12,345",
+    });
+
+    expect(edited.isError, edited.text).toBe(false);
+    expect(edited.text).toContain("Opening balance: 12,345 JPY.");
+  });
+
+  test("edits an account whose stored currency is off the list, which only a given currency is held to", async () => {
+    const call = await connect({ accounts: [account("Indexed", { currency: "CLF" })] });
+    const edited = await call({ action: "edit", name: "Indexed", new_name: "Indexed savings" });
+
+    expect(edited.isError, edited.text).toBe(false);
+    expect(edited.text).toContain("Indexed savings (Riverside Bank), current account in CLF");
+  });
+
+  test("refuses a card's current account on edit as on create", async () => {
+    const card = account("Deferred card", { kind: "card", settlesIntoAccountId: current.id });
+    const call = await connect({ accounts: [current, savings, card] });
+
+    expectRefusal(
+      await call({ action: "edit", name: "Current account", kind: "card" }),
+      "A card needs settles_into",
+    );
+    expectRefusal(
+      await call({ action: "edit", name: "Savings", settles_into: "Current account" }),
+      "Only a card is debited from a current account",
+    );
+    expectRefusal(
+      await call({ action: "edit", name: "Deferred card", settles_into: "Savings" }),
+      "must be one of the user's open current accounts",
+    );
+  });
+
+  test("refuses an empty new name", async () => {
+    const call = await connect();
+
+    expectRefusal(
+      await call({ action: "edit", name: "Savings", new_name: "  " }),
+      "These settings are not valid: An account needs a name.",
+    );
+  });
+
+  test("refuses a name two accounts share, until the institution tells them apart", async () => {
+    const call = await connect({
+      accounts: [account("Livret A"), account("Livret A", { institution: "Northbank" })],
+    });
+
+    const refused = await call({ action: "close", name: "Livret A" });
+
+    expectRefusal(refused, "Livret A (Riverside Bank), Livret A (Northbank). Add institution");
+    expect(refused.text).toContain(
+      'A valid call: accounts {"action":"close","name":"Livret A","institution":"Riverside Bank"}',
+    );
+
+    const closed = await call({ action: "close", name: "Livret A", institution: "northbank" });
+
+    expect(closed.isError, closed.text).toBe(false);
+    expect(closed.text).toContain("Closed Livret A (Northbank)");
+  });
 });
 
 describe("accounts close and reopen", () => {
@@ -457,6 +530,15 @@ describe("accounts note_balance", () => {
     expectRefusal(await call(once), "already has a balance noted on 2026-10-31");
     expectRefusal(await call({ action: "note_balance", name: "Mortgage" }), "note_balance needs");
   });
+
+  test("refuses a balance that is no amount in the account's currency", async () => {
+    const call = await connect();
+
+    expectRefusal(
+      await call({ action: "note_balance", name: "Mortgage", balance: "about 10k" }),
+      'balance must be an amount such as -1234.56 or -1,234.56, a decimal in EUR with a point for decimals; "about 10k" is not.',
+    );
+  });
 });
 
 describe("accounts set_expiry", () => {
@@ -494,10 +576,50 @@ describe("accounts set_expiry", () => {
       "No line of the user's has this handle",
     );
     expectRefusal(
-      await call({ action: "set_expiry", line: credit.id }),
-      "set_expiry needs line and expires_on",
+      await call({ action: "set_expiry", line: "not-a-handle", expires_on: "2027-01-31" }),
+      "No line of the user's has this handle",
+    );
+    expectRefusal(
+      await call({ action: "set_expiry", line: credit.id, expires_on: "next year" }),
+      'expires_on is a day, YYYY-MM-DD, or "" to take the expiry away',
     );
   });
+
+  test("points an unknown line to the search that gives the handles", async () => {
+    const call = await connect();
+
+    for (const line of [memoryId(), "not-a-handle", spent.id]) {
+      const refused = await call({ action: "set_expiry", line, expires_on: "2027-01-31" });
+
+      expect(refused.text).toMatch(/A valid call: lines \{"action":"search"\}$/);
+    }
+  });
+
+  test("asks for the line and the day, with a call that works", async () => {
+    const call = await connect();
+
+    const neither = await call({ action: "set_expiry" });
+
+    expectRefusal(neither, "set_expiry needs line and expires_on");
+    expect(neither.text).toMatch(/A valid call: lines \{"action":"search"\}$/);
+
+    const noDay = await call({ action: "set_expiry", line: credit.id });
+
+    expectRefusal(noDay, "set_expiry needs line and expires_on");
+
+    const written = /A valid call: accounts (\{.*\})$/.exec(noDay.text)?.[1] ?? "{}";
+    const suggested = Schema.decodeUnknownSync(Suggested)(JSON.parse(written));
+
+    expect(suggested.line).toBe(credit.id);
+    expect((await call(suggested)).isError).toBe(false);
+  });
+});
+
+/** A set_expiry call a refusal suggests, read back. */
+const Suggested = Schema.Struct({
+  action: Schema.String,
+  line: Schema.String,
+  expires_on: Schema.String,
 });
 
 describe("the write scope", () => {

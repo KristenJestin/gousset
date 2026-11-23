@@ -146,8 +146,10 @@ export const Currency = Schema.String.check(
 );
 
 /**
- * An account's currency: one of the ISO 4217 codes an account is opened in (`CURRENCY_CODES`), the
- * list the web form picks from, so that the MCP door refuses what the form never offers.
+ * A currency someone picks for an account: one of the ISO 4217 codes an account is opened in
+ * (`CURRENCY_CODES`), the list the web form offers, so that the MCP door refuses what the form
+ * never offers. Only a currency being chosen is held to it: `AccountInput` takes any code, so that an
+ * account stored with a code off the list can still be renamed.
  */
 export const AccountCurrency = Currency.check(
   Schema.makeFilter((currency: string) => isKnownCurrency(currency), {
@@ -172,7 +174,7 @@ export const AccountInput = Schema.Struct({
   name: Schema.Trim.check(Schema.isNonEmpty({ message: "An account needs a name." })),
   choice: AccountChoice,
   institution: Schema.optional(Schema.Trim),
-  currency: AccountCurrency,
+  currency: Currency,
   mode: AccountMode,
   openingBalanceMinor: MinorAmount,
   openedOn: Schema.optional(Day),

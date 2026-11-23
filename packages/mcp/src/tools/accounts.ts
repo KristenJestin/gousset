@@ -556,6 +556,9 @@ const minorOf = (field: string, written: string, currency: string, example: Enco
     ),
   );
 
+/** An amount a currency can hold, for the example of a refusal: JPY has no decimals. */
+const sampleAmount = (currency: string) => (minorDigits(currency) === 0 ? "-1,234" : "-1,234.56");
+
 const decodeSettings = Schema.decodeUnknownExit(AccountInput);
 
 /** An account's settings, checked as the web form's are (core's `AccountInput`). */
@@ -705,7 +708,7 @@ const create = (owner: string, input: AccountsInput) =>
         : yield* minorOf("opening_balance", input.opening_balance, currency, {
             ...retry,
             currency,
-            opening_balance: "-1,234.56",
+            opening_balance: sampleAmount(currency),
           });
 
     const settings = yield* settingsOf(
@@ -775,12 +778,25 @@ const edit = (owner: string, input: AccountsInput) =>
     const choice = input.kind ?? choiceOf(found.kind, found.envelope);
     const currency = input.currency ?? found.currency;
 
+    // The stored opening balance is minor units: in a currency with other digits it would read
+    // as another amount (12,345 for 123.45 EUR in JPY), so the edit must say it anew.
+    if (
+      input.opening_balance === undefined &&
+      found.openingBalanceMinor !== 0 &&
+      minorDigits(currency) !== minorDigits(found.currency)
+    ) {
+      return yield* refuse(
+        `The opening balance of ${named(found)} is ${amount({ minor: found.openingBalanceMinor, currency: found.currency })}, and ${currency} has other decimals: give opening_balance in ${currency} with the new currency.`,
+        { ...retry, opening_balance: sampleAmount(currency) },
+      );
+    }
+
     const openingBalanceMinor =
       input.opening_balance === undefined
         ? found.openingBalanceMinor
         : yield* minorOf("opening_balance", input.opening_balance, currency, {
             ...retry,
-            opening_balance: "-1,234.56",
+            opening_balance: sampleAmount(currency),
           });
 
     // A card keeps its current account unless the edit names another; any other kind has none.
@@ -908,7 +924,11 @@ const note = (owner: string, input: AccountsInput) =>
 
     const day = input.day ?? (yield* today);
     const retry: Encoded = { ...input, ...namedBy(found), day };
-    const minor = yield* minorOf("balance", balance, found.currency, retry);
+
+    const minor = yield* minorOf("balance", balance, found.currency, {
+      ...retry,
+      balance: sampleAmount(found.currency),
+    });
 
     yield* noteBalance(owner, found.id, day, minor).pipe(
       Effect.catchTags({
@@ -937,14 +957,14 @@ const note = (owner: string, input: AccountsInput) =>
 const isLineId = Schema.is(LineId);
 const decodeDay = Schema.decodeUnknownExit(Day);
 
-const EXPIRY_EXAMPLE: Encoded = {
-  action: "set_expiry",
-  line: "<a handle lines search gave>",
-  expires_on: "2027-01-31",
-};
+/** Where a credit's handle comes from: the lines tool's search, which gives each line's. */
+const SEARCH_LINES = 'lines {"action":"search"}';
+
+const refuseToSearch = (message: string) =>
+  Effect.fail(new ToolRefusal({ message, example: SEARCH_LINES }));
 
 const LINE_UNKNOWN =
-  "No line of the user's has this handle. Find the credit with the lines tool, whose search gives each line's handle, and copy it.";
+  "No line of the user's has this handle. Find the credit with the lines tool, whose search gives each line's handle (add account to keep to the benefit account), and copy it.";
 
 /** The day a credit expires on, or null for none (`""`). */
 function expiryOf(written: string, example: Encoded): Effect.Effect<string | null, ToolRefusal> {
@@ -1000,26 +1020,31 @@ const setExpiry = (owner: string, input: AccountsInput) =>
   Effect.gen(function* () {
     const { line, expires_on: written } = input;
 
-    if (line === undefined || written === undefined) {
-      return yield* refuse(
-        'set_expiry needs line and expires_on: the credit\'s handle, as lines search gives it, and a day, or "" to take the expiry away.',
-        EXPIRY_EXAMPLE,
-      );
-    }
+    const needs =
+      'set_expiry needs line and expires_on: the credit\'s handle, as lines search gives it, and a day, or "" to take the expiry away.';
 
-    const expiresOn = yield* expiryOf(written, { ...EXPIRY_EXAMPLE, line });
+    if (line === undefined) {
+      return yield* refuseToSearch(needs);
+    }
 
     if (!isLineId(line)) {
-      return yield* refuse(LINE_UNKNOWN, { action: "list" });
+      return yield* refuseToSearch(LINE_UNKNOWN);
     }
+
+    const example: Encoded = { action: "set_expiry", line, expires_on: "2027-01-31" };
+
+    if (written === undefined) {
+      return yield* refuse(needs, example);
+    }
+
+    const expiresOn = yield* expiryOf(written, example);
 
     const set = yield* setCreditExpiry(owner, line, expiresOn).pipe(
       Effect.catchTags({
-        LineNotFound: () => refuse(LINE_UNKNOWN, { action: "list" }),
+        LineNotFound: () => refuseToSearch(LINE_UNKNOWN),
         NotACredit: () =>
-          refuse(
-            "This line is no credit of a benefit account: only money that came into a benefit account, a counted line above zero, expires.",
-            { action: "list" },
+          refuseToSearch(
+            "This line is no credit of a benefit account: only money that came into a benefit account, a counted line above zero, expires. Find the credit with the lines tool's search.",
           ),
         ExpiryBeforeCredit: (early) =>
           refuse(
