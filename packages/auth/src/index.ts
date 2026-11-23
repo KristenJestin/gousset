@@ -171,6 +171,10 @@ export function createAuth(env: AuthConfig, database: Database) {
         // Whether the shortcuts made of one character fire: the user turns them off in the
         // settings, through the app's own server function (apps/web, functions/shortcuts.ts).
         singleKeyShortcuts: { type: "boolean", required: false, defaultValue: true, input: false },
+        // The user's currency (ISO 4217): the one fixed benchmarks are written in, and a new
+        // account's by default. The settings change it through the app's own server function
+        // (apps/web, functions/currency.ts).
+        currency: { type: "string", required: false, defaultValue: "EUR", input: false },
       },
     },
     session: {
