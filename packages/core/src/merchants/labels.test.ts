@@ -1,7 +1,7 @@
 import fc from "fast-check";
 import { describe, expect, test } from "vite-plus/test";
 
-import { assignMerchants, merchantKey, merchantName, nameKey } from "./labels";
+import { MAX_KEY_LENGTH, assignMerchants, merchantKey, merchantName, nameKey } from "./labels";
 import type { KnownKey } from "./labels";
 
 // Every label, shop, town and person here is invented.
@@ -180,6 +180,21 @@ describe("merchant key of a label", () => {
     expect(merchantKey("RETRAIT DAB 21/10", "Riverton Savings")).toBeNull();
   });
 
+  test("a free text stops at the longest key, on a word, and its name is no longer", () => {
+    const label = `VIREMENT ${"GREENMARKET RIVERTON PICNIC BASKETS AND ".repeat(5)}`;
+    const key = merchantKey(label, null) ?? "";
+
+    expect(key.length).toBeGreaterThan(MAX_KEY_LENGTH - 20);
+    expect(key.length).toBeLessThanOrEqual(MAX_KEY_LENGTH);
+    expect(key.startsWith("GREENMARKET RIVERTON PICNIC")).toBe(true);
+    expect(merchantName(key)).toHaveLength(key.length);
+    expect(merchantKey(key, null)).toBe(key);
+  });
+
+  test("one word longer than a key is cut to it", () => {
+    expect(merchantKey(`CB ${"Q".repeat(3000)}`, null)).toBe("Q".repeat(MAX_KEY_LENGTH));
+  });
+
   const tokens = fc.constantFrom(
     "CB",
     "CARTE",
@@ -225,6 +240,8 @@ describe("merchant key of a label", () => {
     fc.string({ unit: "binary" }),
     fc.array(tokens, { maxLength: 10 }).map((words) => words.join(" ")),
     fc.array(tokens, { maxLength: 10 }).map((words) => words.join("")),
+    // Long enough to reach the longest key.
+    fc.array(tokens, { minLength: 20, maxLength: 80 }).map((words) => words.join(" ")),
   );
 
   test("never throws, and gives only upper-case words with single spaces", () => {
@@ -234,6 +251,7 @@ describe("merchant key of a label", () => {
 
         if (key !== null) {
           expect(key).toMatch(/^[A-Z0-9&']+(?: [A-Z0-9&']+)*$/);
+          expect(key.length).toBeLessThanOrEqual(MAX_KEY_LENGTH);
         }
       }),
       { numRuns: 2000 },

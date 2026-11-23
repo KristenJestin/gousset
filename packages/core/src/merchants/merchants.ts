@@ -15,7 +15,7 @@ import {
   MerchantNameUnknown,
   MerchantNotFound,
 } from "./errors";
-import { assignMerchants, merchantKey, nameKey } from "./labels";
+import { MAX_KEY_LENGTH, assignMerchants, merchantKey, nameKey } from "./labels";
 import type { KnownKey } from "./labels";
 
 // The merchants (#24): who was paid, recognised from the lines' raw labels (`./labels`), each
@@ -23,8 +23,11 @@ import type { KnownKey } from "./labels";
 // to one of the merchant's aliases; the line itself is never changed (docs/data-model.md, v0.3).
 // Once entries exist (#23), an entry carries its merchant, and a merge moves the entries too.
 
-/** The longest name a merchant may have, once trimmed. */
-export const MAX_MERCHANT_NAME = 100;
+/**
+ * The longest name a merchant may have, once trimmed: the longest a key may be, so that a merchant
+ * recognised from a long label can be renamed as it is, and named as a move's target.
+ */
+export const MAX_MERCHANT_NAME = MAX_KEY_LENGTH;
 
 /** How many merchants a page lists when none is asked for, and the most. */
 export const DEFAULT_MERCHANTS_LISTED = 100;
@@ -245,25 +248,31 @@ export async function recogniseIn(
     }
   }
 
-  const made =
-    names.size === 0
-      ? []
-      : await transaction
-          .insert(merchant)
-          .values([...names].map((name) => ({ userId: owner, name })))
-          .onConflictDoNothing({ target: [merchant.userId, merchant.name] })
-          .returning({ id: merchant.id });
+  const newNames = [...names];
+  const idOfName = new Map<string, string>();
+  let made = 0;
 
-  // A name another transaction made meanwhile is found again, and its merchant used.
-  const named =
-    names.size === 0
-      ? []
-      : await transaction
-          .select({ id: merchant.id, name: merchant.name })
-          .from(merchant)
-          .where(inArray(merchant.name, [...names]));
+  for (let start = 0; start < newNames.length; start += CHUNK) {
+    const chunk = newNames.slice(start, start + CHUNK);
 
-  const idOfName = new Map(named.map((row) => [row.name, row.id]));
+    const inserted = await transaction
+      .insert(merchant)
+      .values(chunk.map((name) => ({ userId: owner, name })))
+      .onConflictDoNothing({ target: [merchant.userId, merchant.name] })
+      .returning({ id: merchant.id });
+
+    made += inserted.length;
+
+    // A name another transaction made meanwhile is found again, and its merchant used.
+    const named = await transaction
+      .select({ id: merchant.id, name: merchant.name })
+      .from(merchant)
+      .where(inArray(merchant.name, chunk));
+
+    for (const row of named) {
+      idOfName.set(row.name, row.id);
+    }
+  }
 
   const rows = assigned.flatMap((assignment) => {
     const merchantId =
@@ -284,7 +293,7 @@ export async function recogniseIn(
     added += inserted.length;
   }
 
-  return { merchants: made.length, aliases: added };
+  return { merchants: made, aliases: added };
 }
 
 async function summaryById(

@@ -297,6 +297,13 @@ function prefixLength(tokens: ReadonlyArray<Token>, start: number): number {
   return phrase?.length ?? 0;
 }
 
+/**
+ * The longest a key may be: a new merchant's name is its key, capitalised, and a merchant's name
+ * is at most as long (`MAX_MERCHANT_NAME`); the unique indexes on names and aliases stay far from
+ * Postgres's limit on an index entry, whatever a label holds.
+ */
+export const MAX_KEY_LENGTH = 100;
+
 function keyOf(text: string): MerchantKey | null {
   const tokens = tokensOf(text);
 
@@ -328,15 +335,26 @@ function keyOf(text: string): MerchantKey | null {
     start += skipped;
   }
 
-  // The name runs to the next break: what follows a date or a number is the place.
+  // The name runs to the next break: what follows a date or a number is the place. It stops at
+  // `MAX_KEY_LENGTH` characters too: a free text runs on, and a key becomes a merchant's name.
   const name: Array<string> = [];
+  let length = -1;
 
   for (const token of tokens.slice(start)) {
     if (token.isBreak) {
       break;
     }
 
+    if (length + 1 + token.text.length > MAX_KEY_LENGTH) {
+      if (name.length === 0) {
+        name.push(token.text.slice(0, MAX_KEY_LENGTH));
+      }
+
+      break;
+    }
+
     name.push(token.text);
+    length += 1 + token.text.length;
   }
 
   while (name.length > 1 && TRAILING.has(name.at(-1) ?? "")) {

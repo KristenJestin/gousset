@@ -49,7 +49,10 @@ A key is upper-case ASCII words separated by one space, made only of `A`–`Z`, 
    `VOM 21.10.2026`, `ON 21-10-2026`). So when the date comes first, the name is after it:
    `CARTE 21/10/26 GREENMARKET` → `GREENMARKET`.
 9. **The name runs to the next break.** What follows a date, a store number or a card number is the
-   place, and is dropped: `CB GREENMARKET 2110 RIVERTON` → `GREENMARKET`.
+   place, and is dropped: `CB GREENMARKET 2110 RIVERTON` → `GREENMARKET`. It stops at
+   `MAX_KEY_LENGTH` (100) characters too, on a whole word (a single longer word is cut): a key
+   becomes a new merchant's name, which is at most as long, and a label of any length never
+   makes a key too long for the unique indexes on names and cleaned labels.
 10. **What ends a name is trimmed**, one word at a time, while more than one word is left: a
     country (`FR`, `GB`, `GBR`, `DE`, `US`…), a US state (`CA`, `NY`, `TX`…), a legal form (`SA`,
     `SAS`, `SARL`, `GMBH`, `& CO KG`, `LTD`, `LIMITED`, `INC`, `LLC`, `BV`, `SRL`, `& CIE`…), the
