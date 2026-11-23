@@ -477,6 +477,9 @@ importers:
       '@gousset/config':
         specifier: workspace:*
         version: link:../config
+      rolldown:
+        specifier: 1.3.3
+        version: 1.3.3
       typescript:
         specifier: 'catalog:'
         version: 7.0.2

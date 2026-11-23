@@ -18,6 +18,7 @@
   "changePasswordDescription": "Les autres appareils connectés à votre compte seront déconnectés.",
   "changePasswordSubmit": "Changer le mot de passe",
   "changePasswordResetOn": "L'administrateur a réinitialisé votre mot de passe le {date}.",
+  "changePasswordRecoveredOn": "Votre mot de passe a été réinitialisé depuis le serveur le {date}.",
   "usersTitle": "Utilisateurs",
   "usersDescription": "Tous ceux qui ont un compte sur cette installation.",
   "usersAdministrator": "Administrateur",
