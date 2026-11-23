@@ -52,13 +52,19 @@ export const jobEvents = (id: string, owner: string) =>
       return "busy" as const;
     }
 
-    const first = yield* queue.view(id, owner);
+    // Counted before the first read waits, so that streams asked for at once cannot all pass the
+    // check; given back when there is no stream to open after all.
+    openStreams.set(owner, (openStreams.get(owner) ?? 0) + 1);
+
+    const first = yield* queue
+      .view(id, owner)
+      .pipe(Effect.tapError(() => Effect.sync(() => release(owner))));
 
     if (first === null) {
+      release(owner);
+
       return null;
     }
-
-    openStreams.set(owner, (openStreams.get(owner) ?? 0) + 1);
 
     // A row that cannot be read for a moment, or that retention removed, keeps the last view sent.
     let last = first;
