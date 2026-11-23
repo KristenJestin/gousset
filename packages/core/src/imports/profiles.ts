@@ -4,12 +4,13 @@ import type { QueryFailed, UserTransaction } from "@gousset/db/user-data";
 import {
   CsvProfile,
   SHIPPED_PROFILES,
+  csvFile,
   matchCsvHeader,
   readCsvHeader,
   shippedProfile,
   testReadCsv,
 } from "@gousset/import";
-import type { ShippedProfile } from "@gousset/import";
+import type { CsvFile, ShippedProfile } from "@gousset/import";
 import { and, asc, desc, eq } from "drizzle-orm";
 import { Cause, Context, Effect, Exit, Layer, Option, Schema } from "effect";
 
@@ -124,11 +125,14 @@ export async function profileCandidates(
   return [...stored, ...shipped];
 }
 
-/** The first candidate whose header the file has (`matchCsvHeader`), or `undefined`. */
+/**
+ * The first candidate whose header the file has (`matchCsvHeader`), or `undefined`. The file is
+ * decoded once, and each candidate reads its top only.
+ */
 export const matchProfile = (
   bytes: Uint8Array,
   candidates: ReadonlyArray<ProfileCandidate>,
-): Effect.Effect<ProfileCandidate | undefined> => matchCsvHeader(bytes, candidates);
+): Effect.Effect<ProfileCandidate | undefined> => matchCsvHeader(csvFile(bytes), candidates);
 
 /** A name as kept: trimmed; a blank one is refused. */
 function nameOf(name: string): Effect.Effect<string, ProfileNameMissing> {
@@ -460,9 +464,9 @@ export const importProfilesLayer = Layer.effect(
 
           const { row, stored } = found;
           const entries: ReadonlyArray<ImportProfileEntry> = [...stored, ...SHIPPED_ENTRIES];
-
+          const file = csvFile(row.content);
           const fitting = yield* Effect.forEach(entries, (entry) =>
-            fits(row.content, entry, row.currency),
+            fits(file, entry, row.currency),
           );
 
           const used =
@@ -485,7 +489,7 @@ export const importProfilesLayer = Layer.effect(
 
 /** How a profile reads a file: by its header, by a test read when it keeps none, or not at all. */
 const fits = (
-  bytes: Uint8Array,
+  file: CsvFile,
   entry: ImportProfileEntry,
   currency: string | null,
 ): Effect.Effect<ProfileFit | undefined> => {
@@ -496,7 +500,7 @@ const fits = (
   }
 
   if (entry.header !== null) {
-    return readCsvHeader(bytes, definition).pipe(
+    return readCsvHeader(file, definition).pipe(
       Effect.match({
         onFailure: () => undefined,
         onSuccess: (header) =>
@@ -505,7 +509,7 @@ const fits = (
     );
   }
 
-  return testReadCsv(bytes, definition, currency).pipe(
+  return testReadCsv(file, definition, currency).pipe(
     Effect.match({
       onFailure: () => undefined,
       onSuccess: () => ({ profile: entry, by: "test-read" }),

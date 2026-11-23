@@ -9,7 +9,7 @@ import { Effect, Schema } from "effect";
 import fc from "fast-check";
 import { describe, expect, test } from "vite-plus/test";
 
-import { readCsv, readCsvHeader } from "./csv";
+import { csvFile, readCsv, readCsvHeader } from "./csv";
 import { detectCsvProfile } from "./csv-detect";
 import { CsvProfile, dayReader } from "./csv-profile";
 import {
@@ -129,6 +129,13 @@ const refusal = (text: string, profile: CsvProfile = semicolon) =>
 const detect = (bytes: Uint8Array) => Effect.runSync(detectCsvProfile(bytes));
 
 const detectText = (text: string) => detect(utf8.encode(text));
+
+const headerOf = (bytes: Uint8Array, profile: CsvProfile) =>
+  Effect.runSync(readCsvHeader(csvFile(bytes), profile));
+
+/** Rows of other widths than a three-column table's: the table is still the one most rows agree on. */
+const linesAbove = (count: number) =>
+  Array.from({ length: count }, (_, n) => ["a", "a;b", "a;b;c;d", "a;b;c;d;e"][n % 4]);
 
 function line(bookedOn: string, amountMinor: number, label: string) {
   return {
@@ -310,11 +317,11 @@ describe("reading CSV files with a profile", () => {
   });
 
   test("gives the normalised header a profile keeps to recognise its files", () => {
-    expect(Effect.runSync(readCsvHeader(csvSamples.csvDebitCredit.bytes, debitCredit))).toBe(
+    expect(headerOf(csvSamples.csvDebitCredit.bytes, debitCredit)).toBe(
       "date;date de valeur;libellé;débit;crédit",
     );
 
-    expect(Effect.runSync(readCsvHeader(csvSamples.csvTabNoHeader.bytes, tabNoHeader))).toBeNull();
+    expect(headerOf(csvSamples.csvTabNoHeader.bytes, tabNoHeader)).toBeNull();
   });
 });
 
@@ -336,9 +343,14 @@ describe("an import profile as a file", () => {
       { ...semicolon, dateFormat: "DD/MM-YYYY" },
       { ...semicolon, separator: "#" },
       { ...semicolon, version: 2 },
+      { ...semicolon, skipRows: 101 },
     ]) {
       expect(() => decode(JSON.stringify(wrong))).toThrow();
     }
+  });
+
+  test("skips 100 lines at most above the table", () => {
+    expect(decode(JSON.stringify({ ...debitCredit, skipRows: 100 })).skipRows).toBe(100);
   });
 });
 
@@ -740,10 +752,24 @@ describe("proposing a profile from a CSV file", () => {
   test("reads the first 2,000 lines at most", () => {
     const table = "Date;Libellé;Montant\n13/11/2026;A;-12,00\n";
 
-    expect(detectText(`${"\n".repeat(1990)}${table}`).profile.skipRows).toBe(1990);
+    // Blank lines are read past without being skipped: the reader leaves them out.
+    expect(detectText(`${"\n".repeat(1990)}${table}`).profile.skipRows).toBe(0);
 
     expect(
       Effect.runSync(Effect.flip(detectCsvProfile(utf8.encode(`${";\n".repeat(2000)}${table}`)))),
+    ).toEqual(new NotAStatement({ format: "csv" }));
+  });
+
+  test("proposes no table under more than 100 lines it would skip", () => {
+    const lines = Array.from({ length: 60 }, () => "13/11/2026;A;-12,00");
+    const table = ["Date;Libellé;Montant", ...lines].join("\n");
+
+    expect(detectText(`${linesAbove(100).join("\n")}\n\n\n${table}\n`).profile.skipRows).toBe(100);
+
+    expect(
+      Effect.runSync(
+        Effect.flip(detectCsvProfile(utf8.encode(`${linesAbove(101).join("\n")}\n${table}`))),
+      ),
     ).toEqual(new NotAStatement({ format: "csv" }));
   });
 });

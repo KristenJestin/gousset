@@ -2,7 +2,7 @@ import { csvSamples, encodeWindows1252 } from "@gousset/fixture";
 import { Effect, Exit, Schema } from "effect";
 import { describe, expect, test } from "vite-plus/test";
 
-import { matchCsvHeader, readCsv, testReadCsv } from "./csv";
+import { csvFile, matchCsvHeader, readCsv, readCsvHeader, testReadCsv } from "./csv";
 import { detectCsvProfile } from "./csv-detect";
 import { CsvProfile } from "./csv-profile";
 import { SHIPPED_PROFILES, shippedProfile } from "./csv-shipped";
@@ -27,12 +27,13 @@ function shipped(key: string) {
 const read = (bytes: Uint8Array, profile: CsvProfile, currency = "EUR") =>
   Effect.runSync(readCsv(bytes, profile, { currency })).lines;
 
-const matched = (bytes: Uint8Array) => Effect.runSync(matchCsvHeader(bytes, SHIPPED_PROFILES))?.key;
+const matched = (bytes: Uint8Array) =>
+  Effect.runSync(matchCsvHeader(csvFile(bytes), SHIPPED_PROFILES))?.key;
 
 const unsure = (bytes: Uint8Array) => Effect.runSync(detectCsvProfile(bytes)).unsure;
 
 const passes = (bytes: Uint8Array, profile: CsvProfile, currency: string | null) =>
-  Exit.isSuccess(Effect.runSyncExit(testReadCsv(bytes, profile, currency)));
+  Exit.isSuccess(Effect.runSyncExit(testReadCsv(csvFile(bytes), profile, currency)));
 
 function line(bookedOn: string, valueOn: string | null, amountMinor: number, label: string) {
   return { bookedOn, valueOn, amountMinor, label, memo: null, bankId: null, counterparty: null };
@@ -179,7 +180,7 @@ describe("matching a file's header", () => {
     const sameHeader = { key: "mine", header: french.header, profile: french.profile };
     const bytes = csvSamples.csvDebitCredit.bytes;
 
-    expect(Effect.runSync(matchCsvHeader(bytes, [sameHeader, french]))?.key).toBe("mine");
+    expect(Effect.runSync(matchCsvHeader(csvFile(bytes), [sameHeader, french]))?.key).toBe("mine");
   });
 
   test("skips a candidate with no header, or whose profile cannot read the file", () => {
@@ -188,7 +189,36 @@ describe("matching a file's header", () => {
     const notUtf8 = { key: "utf8", header: french.header, profile: utf8Profile };
     const bytes = csvSamples.csvDebitCredit.bytes;
 
-    expect(Effect.runSync(matchCsvHeader(bytes, [noHeader, notUtf8]))).toBeUndefined();
+    expect(Effect.runSync(matchCsvHeader(csvFile(bytes), [noHeader, notUtf8]))).toBeUndefined();
+  });
+
+  test("looks for the header within 100 lines and 64 KiB past the lines skipped, no further", () => {
+    const header = (text: string, profile: CsvProfile = french.profile) =>
+      Effect.runSync(readCsvHeader(csvFile(encodeWindows1252(text)), profile));
+
+    const table = "Date;Date de valeur;Libellé;Débit;Crédit\r\n01/12/2026;01/12/2026;A;1,00;\r\n";
+    const above = "Relevé\r\nCompte\r\nPériode\r\n";
+
+    expect(header(`${above}${"\r\n".repeat(99)}${table}`)).toBe(french.header);
+    expect(header(`${above}${"\r\n".repeat(100)}${table}`)).toBeNull();
+
+    // A line skipped is read within the same bound: one of megabytes is not scanned to its end.
+    const longLine = `${"x".repeat(64 * 1024)}\r\nCompte\r\nPériode\r\n`;
+
+    expect(header(`${longLine}${table}`)).toBeNull();
+  });
+
+  test("decodes the file once per encoding, however many candidates read it", () => {
+    const bytes = csvSamples.csvDebitCredit.bytes.slice();
+    const file = csvFile(bytes);
+
+    expect(Effect.runSync(readCsvHeader(file, french.profile))).toBe(french.header);
+
+    // Bytes changed after a first read are not decoded again: the text read first is kept.
+    bytes.fill(0x20);
+
+    expect(Effect.runSync(matchCsvHeader(file, [french]))?.key).toBe("fr-debit-credit");
+    expect(Effect.runSync(readCsvHeader(csvFile(bytes), french.profile))).toBeNull();
   });
 });
 
