@@ -140,8 +140,9 @@ test.describe("Amount", () => {
   test("rolls its digits to the next value", async ({ page }) => {
     await page.goto(story("amount", "changing-month"));
     await expect(spokenAmount(page, "€2,030")).toBeAttached();
-    // The roll lasts 200 ms: most of its dozen frames draw two digits in a column.
-    expect(await rollingFrames(page)).toBeGreaterThan(4);
+    // The roll lasts 200 ms, about 150 of them with both digits drawn: some nine frames at 60 fps.
+    // More than 2 leaves room for a slow runner, and is still far from reduced motion's 0.
+    expect(await rollingFrames(page)).toBeGreaterThan(2);
     await expect(spokenAmount(page, "€1,934")).toBeAttached();
     await expect(page.locator('[data-slot="amount-digit"]').first().locator("> *")).toHaveCount(1);
   });
