@@ -154,6 +154,9 @@ test("the proposal shows for a line classified by default and for a held repeat"
 
   if (onPhone(page)) {
     await page.keyboard.press("Escape");
+    // Closed, its line gone from the address, before the next row opens its own.
+    await expect(detail(page, GROCER.label)).toBeHidden();
+    await expect(page).not.toHaveURL(/[?&]line=/);
   }
 
   await row(page, GYM_AGAIN.label).getByRole("button").click();
