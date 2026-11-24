@@ -123,7 +123,7 @@ better-auth's `auth_user` is the user; its tables keep their `auth_` prefix (its
   - an expiry date never skips a credit: an expired credit with money left is still used in its turn, and is shown as expired and still counted, never silently as available money, until a line takes it out;
   - an account kept by its balance follows no credit: its whole balance shows as restricted.
 
-  The account page and `accounts` `show` give the credits with money left, in that order, and what expires when (the amounts left, summed by expiry day). The expiry date and the order of use are set on the account's page (the credit, the account's settings); the MCP door reads them only.
+  The account page and `accounts` `show` give the credits with money left, in that order, and what expires when (the amounts left, summed by expiry day). The expiry date and the order of use are set on the account's page (the credit, the account's settings), or through the MCP door (`accounts` `set_expiry` on the credit, `credit_order` on `create` and `edit`).
 - **A loan account** holds what is owed: its balance is negative, noted each month (balance mode) or made of its repayments. A subject with a value points to its loan (v0.5).
 
 **`account_balance`**: a balance given for a day, by a statement or by the user.

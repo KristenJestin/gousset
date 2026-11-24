@@ -14,6 +14,7 @@
     "check-types": "tsc --noEmit"
   },
   "dependencies": {
+    "@gousset/currency": "workspace:*",
     "@gousset/db": "workspace:*",
     "@gousset/fixture": "workspace:*",
     "@gousset/import": "workspace:*",
