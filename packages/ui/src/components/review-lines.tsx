@@ -1,5 +1,6 @@
 import { AnimatePresence, domMax, LazyMotion, m } from "motion/react";
 import { useState } from "react";
+import type { ReactNode } from "react";
 
 import { useUiMessages } from "../hooks/use-ui-messages";
 import type { Money } from "../lib/money";
@@ -21,15 +22,20 @@ export type ReviewLine = {
 
 export type ReviewLinesProps = {
   lines: ReadonlyArray<ReviewLine>;
-  /** The action's word on each row: "Approve". */
-  approveText: string;
+  /** The action's word on each row: "Approve". Without the three, the lines are read only. */
+  approveText?: string;
   /** The action's name for screen readers, for one line: "Approve PAYLINK *PIXELPLAY". */
-  approveLabel: (line: ReviewLine) => string;
-  onApprove: (id: string) => void;
+  approveLabel?: (line: ReviewLine) => string;
+  onApprove?: (id: string) => void;
   /** Show this many lines, then "+ N more". All of them when left out. */
   limit?: number;
   /** Show the rest: "+ N more" becomes a button, "Show the other N". */
   onMore?: () => void;
+  /**
+   * A last row under the lines, at the height of "+ N more": a link to all of them, where they are
+   * reviewed (the app's router link).
+   */
+  footer?: ReactNode;
   /** What the list is, for screen readers. */
   label: string;
   /** The page's language (`<html lang>`) unless given. */
@@ -59,7 +65,8 @@ function More({ count, onMore }: { count: number; onMore: (() => void) | undefin
 /**
  * The lines the rules were not sure of (docs/wireframes, screen 1, block 5): each with its raw
  * label, what the rules made of it (merchant, category, account), its amount and the action that
- * approves it. Cut after `limit` lines with "+ N more".
+ * approves it; without the action, read only. Cut after `limit` lines with "+ N more"; `footer`
+ * ends the list (a link to where the lines are reviewed).
  *
  * Motion: an approved line fades out (200 ms, ease-out) and the lines under it slide up into its
  * place (a layout move, by transform: nothing is laid out again at each frame); a line put back
@@ -72,6 +79,7 @@ export function ReviewLines({
   onApprove,
   limit,
   onMore,
+  footer,
   label,
   locale,
 }: ReviewLinesProps) {
@@ -118,29 +126,47 @@ export function ReviewLines({
                   </span>
                 </div>
                 <Amount value={line.amount} size="sm" roll={false} locale={locale} />
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  aria-label={approveLabel(line)}
-                  onClick={() => onApprove(line.id)}
-                >
-                  {approveText}
-                </Button>
+                {onApprove === undefined ||
+                approveText === undefined ||
+                approveLabel === undefined ? null : (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    aria-label={approveLabel(line)}
+                    onClick={() => onApprove(line.id)}
+                  >
+                    {approveText}
+                  </Button>
+                )}
               </div>
             </m.li>
           ))}
         </AnimatePresence>
         {hidden > 0 ? <More count={hidden} onMore={onMore} /> : null}
+        {footer === undefined ? null : (
+          <li data-slot="review-lines-footer" className="flex h-10 items-center text-sm">
+            {footer}
+          </li>
+        )}
       </ul>
     </LazyMotion>
   );
 }
 
 /**
- * `ReviewLines` on its way: as many lines as it will show and, with `more`, the last line. Each
- * line is drawn as a loaded one is, its border under its 64 px, so that the heights match.
+ * `ReviewLines` on its way: as many lines as it will show, their action's place unless
+ * `readOnly`, and with `more` the last line ("+ N more" or the footer). Each line is drawn as a
+ * loaded one is, its border under its 64 px, so that the heights match.
  */
-export function ReviewLinesSkeleton({ rows = 3, more = false }: { rows?: number; more?: boolean }) {
+export function ReviewLinesSkeleton({
+  rows = 3,
+  more = false,
+  readOnly = false,
+}: {
+  rows?: number;
+  more?: boolean;
+  readOnly?: boolean;
+}) {
   return (
     <SkeletonFrame>
       <ul className="flex flex-col">
@@ -152,7 +178,7 @@ export function ReviewLinesSkeleton({ rows = 3, more = false }: { rows?: number;
                 <Skeleton className="h-4 w-28" />
               </span>
               <AmountSkeleton size="sm" />
-              <Skeleton className="h-8 w-20" />
+              {readOnly ? null : <Skeleton className="h-8 w-20" />}
             </div>
           </li>
         ))}

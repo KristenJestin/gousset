@@ -34,6 +34,9 @@ const COUNTS = reviewKeys.startingPoints();
 const MERCHANTS = merchantKeys.list("");
 const MERCHANT = merchantKeys.detail("0b6e3f9a-4c2d-4e8b-9f1a-7d5c3b2e1a90");
 
+/** A query of a month's, as a job's end reads it. */
+const touched = (month: string) => [...monthKeys.of(month), "e2e-touched"];
+
 describe("invalidateTouched", () => {
   test("reads the operations, the accounts and the review's counts again, after an import or its undo", async () => {
     const touchedOnes: ReadonlyArray<Touched> = [{ months: ["2026-10"] }, { everyMonth: true }];
@@ -81,15 +84,21 @@ describe("invalidateTouched", () => {
     expect(isInvalidated(client, categoryKeys.list())).toBe(true);
   });
 
-  test("reads again the months a job touched, and only those", async () => {
-    const october = [...monthKeys.of("2026-10"), "e2e-touched"];
-    const november = [...monthKeys.of("2026-11"), "e2e-touched"];
-    const client = clientWith([october, november]);
+  test("reads again the months a job touched and the six after them, which hold them as their previous month and average, and only those", async () => {
+    const september = touched("2026-09");
+    const october = touched("2026-10");
+    const november = monthKeys.review("2026-11");
+    const april = monthKeys.spendingDays("2027-04", "category", null);
+    const may = monthKeys.review("2027-05");
+    const client = clientWith([september, october, november, april, may]);
 
     await invalidateTouched(client, { months: ["2026-10"] });
 
     expect(isInvalidated(client, october)).toBe(true);
-    expect(isInvalidated(client, november)).toBe(false);
+    expect(isInvalidated(client, november)).toBe(true);
+    expect(isInvalidated(client, april)).toBe(true);
+    expect(isInvalidated(client, september)).toBe(false);
+    expect(isInvalidated(client, may)).toBe(false);
   });
 });
 

@@ -1,10 +1,11 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { useState } from "react";
 
+import { useHydrated } from "../hooks/use-hydrated";
 import { InFrench } from "../stories/in-french";
 import { CATEGORIES, MERCHANTS, PREVIOUS_CATEGORIES } from "../stories/made-up";
 import type { MadeUpCategory } from "../stories/made-up";
-import { Breakdown, BreakdownSkeleton } from "./breakdown";
+import { Breakdown, BreakdownFigures, BreakdownSkeleton } from "./breakdown";
 import type { BreakdownRow } from "./breakdown";
 import { Button } from "./button";
 
@@ -54,6 +55,53 @@ function Opening() {
         onClose={() => setOpen(null)}
         benchmarkLabel="average"
         detail={<p className="text-sm text-muted-foreground">What it cost, day by day.</p>}
+      />
+    </div>
+  );
+}
+
+/**
+ * A row's detail with its figures: against its average and the month before. Open once the page
+ * has hydrated: a panel opens on a click in the app, never in the server's markup.
+ */
+function OpenWithFigures() {
+  const hydrated = useHydrated();
+  const [chosen, setChosen] = useState<string | null>("groceries");
+  const open = hydrated ? chosen : null;
+  const row = october.find((each) => each.id === open);
+
+  return (
+    <div className="max-w-xl">
+      <Breakdown
+        rows={october}
+        limit={5}
+        onSelect={setChosen}
+        selectedId={open}
+        onClose={() => setChosen(null)}
+        detail={
+          row === undefined ? null : (
+            <BreakdownFigures
+              value={row.amount}
+              label={`${row.name} against`}
+              comparisons={[
+                {
+                  id: "average",
+                  label: "Average",
+                  reference: { minor: 39_500, currency: "EUR" },
+                  referenceLabel: "your average",
+                },
+                {
+                  id: "previous",
+                  label: "September",
+                  reference: { minor: 45_210, currency: "EUR" },
+                  referenceLabel: "September",
+                },
+              ]}
+            >
+              <p className="text-sm text-muted-foreground">What it cost, day by day.</p>
+            </BreakdownFigures>
+          )
+        }
       />
     </div>
   );
@@ -173,6 +221,12 @@ export const EmptyWithText: Story = {
 
 /** A click opens the row into its detail: the row grows into the panel, the detail fades in. */
 export const OpeningADetail: Story = { render: () => <Opening /> };
+
+/**
+ * An open row's figures (`BreakdownFigures`): each reference it is held against, its amount and
+ * the change, aligned; the chart under them.
+ */
+export const DetailFigures: Story = { render: () => <OpenWithFigures /> };
 
 /** The month changes: the bars grow to their new lengths. */
 export const ChangingMonth: Story = { render: () => <SwitchingMonths /> };
