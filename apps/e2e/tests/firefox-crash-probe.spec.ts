@@ -1,35 +1,71 @@
-import { execFileSync } from "node:child_process";
-import { readFileSync, readdirSync } from "node:fs";
-import { freemem, totalmem } from "node:os";
-
-import type { Browser, BrowserContext, BrowserType, Page } from "@playwright/test";
+import AxeBuilder from "@axe-core/playwright";
+import type { Browser, BrowserType, Page } from "@playwright/test";
 import { createRule } from "@gousset/core";
-import { category, statementLine } from "@gousset/db/schema/ledger";
+import { category } from "@gousset/db/schema/ledger";
 import { exampleStatement } from "@gousset/fixture";
-import { and, asc, eq, isNull } from "drizzle-orm";
+import { and, eq, isNull } from "drizzle-orm";
 import { Effect, Schema } from "effect";
 
 import type { TestUser } from "../src/auth";
 import { importsOn, statementFile } from "../src/imports";
-import {
-  addUser,
-  expect,
-  expectAccessible,
-  fixDay,
-  personOfItsOwn,
-  test,
-  visit,
-} from "../src/test";
+import { addUser, expect, fixDay, personOfItsOwn, test } from "../src/test";
 import { openUserData } from "../src/user-data";
 
-// A probe, not a scenario, removed before the pull request is ready: Firefox's content process
-// crashes ("Page crashed") in the axe scan that ends rules.spec's correction scenario, a rule's
-// sheet open. Each variant brings a page of its own browser to a state, then runs that scan ten
-// times, saying after each run the page's activity (DOM mutations, React commits, elements), the
-// content processes' memory, and on a crash the browser's last output and the kernel's log.
+// A probe, not a scenario, removed before the pull request is ready. The first probe showed that
+// on a phone's width, Firefox's content process dies ("Page crashed") at the first axe scan of a
+// rule's sheet, every time, the page idle; on a desktop's width it lives. This one names what kills
+// it: whether an earlier scan (the list's, as `visit` runs it) is needed, which rule alone kills
+// it, which rule alone run on the list before opening the sheet poisons the next scan, and which
+// element of the sheet, scanned alone with every rule, does.
 
 const TODAY = "2026-11-15";
-const RUNS = 10;
+
+/** As src/accessibility.ts has them. */
+const WCAG_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"];
+
+const FIREFOX_CRASHING_RULES = [
+  "label",
+  "button-name",
+  "label-content-name-mismatch",
+  "aria-conditional-attr",
+  "aria-prohibited-attr",
+  "nested-interactive",
+];
+
+const ENTRANCES_DONE = `Promise.all(
+  document
+    .getAnimations()
+    .filter((animation) => Number.isFinite(animation.effect?.getComputedTiming().endTime))
+    .map((animation) => animation.finished.catch(() => undefined)),
+).then(() => undefined)`;
+
+/** Each element of the open sheet worth scanning alone: a path to it, and what it is. */
+const SHEET_ELEMENTS = `(() => {
+  const sheet = document.querySelector('[data-slot="drawer-content"]');
+  if (!sheet) return [];
+  const pathOf = (el) => {
+    const steps = [];
+    for (let at = el; at && at !== document.body; at = at.parentElement) {
+      const index = Array.prototype.indexOf.call(at.parentElement.children, at) + 1;
+      steps.unshift(at.tagName.toLowerCase() + ":nth-child(" + index + ")");
+    }
+    return "body > " + steps.join(" > ");
+  };
+  const worth = (el) => el.hasAttribute("data-slot") || el.hasAttribute("role") ||
+    ["input", "button", "label", "form", "textarea", "select", "fieldset", "legend"].includes(el.tagName.toLowerCase());
+  return [sheet, ...sheet.querySelectorAll("*")].filter(worth).slice(0, 90).map((el) => ({
+    selector: pathOf(el),
+    what: el.tagName.toLowerCase() +
+      (el.getAttribute("data-slot") ? "[" + el.getAttribute("data-slot") + "]" : "") +
+      (el.getAttribute("role") ? "(" + el.getAttribute("role") + ")" : "") +
+      (el.getAttribute("type") ? "{" + el.getAttribute("type") + "}" : "") +
+      " " + (el.getAttribute("aria-label") || el.textContent || "").trim().slice(0, 30),
+  }));
+})()`;
+
+const SheetElements = Schema.Array(Schema.Struct({ selector: Schema.String, what: Schema.String }));
+
+const PHONE = { width: 390, height: 844 };
 
 let data: ReturnType<typeof openUserData>;
 let imports: ReturnType<typeof importsOn>;
@@ -43,169 +79,34 @@ test.afterAll(async () => {
   await data.close();
 });
 
-/** Counts React's commits and the DOM's mutations, by kind and by target, from the first script. */
-const INSTRUMENT = `(() => {
-  const probe = { commits: 0, records: 0, kinds: {}, targets: {} };
-  window.__probe = probe;
-  window.__REACT_DEVTOOLS_GLOBAL_HOOK__ = {
-    supportsFiber: true,
-    renderers: new Map(),
-    isDisabled: false,
-    inject() { return 1; },
-    onCommitFiberRoot() { probe.commits += 1; },
-    onCommitFiberUnmount() {},
-    onPostCommitFiberRoot() {},
-    onScheduleFiberRoot() {},
-    setStrictMode() {},
-    checkDCE() {},
-  };
-  const describe = (node) => {
-    const el = node.nodeType === 1 ? node : node.parentElement;
-    if (!el) return "?";
-    const own = el.getAttribute("data-slot");
-    const around = el.parentElement ? el.parentElement.closest("[data-slot]") : null;
-    return el.tagName.toLowerCase() + (own ? "[" + own + "]" : "") +
-      (around ? " in " + around.getAttribute("data-slot") : "");
-  };
-  new MutationObserver((records) => {
-    for (const record of records) {
-      probe.records += 1;
-      const kind = record.type + (record.attributeName ? ":" + record.attributeName : "");
-      probe.kinds[kind] = (probe.kinds[kind] || 0) + 1;
-      const target = describe(record.target);
-      probe.targets[target] = (probe.targets[target] || 0) + 1;
-    }
-  }).observe(document, { subtree: true, childList: true, attributes: true, characterData: true });
-})();`;
-
-const TAKE = `(() => {
-  const probe = window.__probe;
-  const top = (counts) => Object.entries(counts).sort((a, b) => b[1] - a[1]).slice(0, 6)
-    .map(([key, count]) => key + "=" + count).join(", ");
-  const elements = document.getElementsByTagName("*").length;
-  if (!probe) return { commits: -1, records: -1, kinds: "", targets: "", elements };
-  const out = { commits: probe.commits, records: probe.records, kinds: top(probe.kinds),
-    targets: top(probe.targets), elements };
-  probe.commits = 0; probe.records = 0; probe.kinds = {}; probe.targets = {};
-  return out;
-})()`;
-
-const Activity = Schema.Struct({
-  commits: Schema.Number,
-  records: Schema.Number,
-  kinds: Schema.String,
-  targets: Schema.String,
-  elements: Schema.Number,
-});
-
-async function activity(page: Page): Promise<string> {
-  const read = Schema.decodeUnknownSync(Activity)(await page.evaluate(TAKE));
-
-  return `commits=${read.commits} mutations=${read.records} elements=${read.elements} kinds[${read.kinds}] targets[${read.targets}]`;
-}
-
-/** The RSS of every Firefox process on the machine, the largest first, and the free memory. */
-function memory(): string {
-  const processes: Array<{ name: string; rss: number }> = [];
-
-  for (const pid of readdirSync("/proc").filter((entry) => /^\d+$/.test(entry))) {
-    try {
-      const status = readFileSync(`/proc/${pid}/status`, "utf8");
-      const name = /^Name:\s+(.*)$/m.exec(status)?.[1] ?? "";
-
-      if (/Web Co|firefox|Isolated|RDD|Socket|Utility|WebExt|Privileged/i.test(name)) {
-        processes.push({ name, rss: Number(/^VmRSS:\s+(\d+)/m.exec(status)?.[1] ?? 0) });
-      }
-    } catch {
-      // A process that ended while read.
-    }
-  }
-
-  processes.sort((a, b) => b.rss - a.rss);
-
-  const top = processes
-    .slice(0, 4)
-    .map((each) => `${each.name}:${Math.round(each.rss / 1024)}M`)
-    .join(" ");
-
-  return `free=${Math.round(freemem() / 1_048_576)}M/${Math.round(totalmem() / 1_048_576)}M firefox[${top}]`;
-}
-
-/** The kernel's lines about a process killed or faulting, which say how the content process died. */
-function kernelLog(): string {
-  try {
-    const text = execFileSync("dmesg", ["-T"], { encoding: "utf8", timeout: 10_000 });
-
-    return text
-      .split("\n")
-      .filter((line) =>
-        /segfault|general protection|trap|oom|out of memory|killed process|web co|isolated|firefox/i.test(
-          line,
-        ),
-      )
-      .slice(-8)
-      .join("\n");
-  } catch (error) {
-    return `(dmesg failed: ${error instanceof Error ? error.message.split("\n")[0] : "?"})`;
-  }
-}
-
-/** A Firefox of the test's own, its output kept so that a crash can be read. */
-async function loggedFirefox(
-  playwright: { firefox: BrowserType },
-  lines: Array<string>,
-): Promise<Browser> {
-  return playwright.firefox.launch({
-    logger: {
-      isEnabled: (name: string) => name === "browser",
-      log: (_name: string, _severity: string, message: string | Error) => {
-        lines.push(`${message}`);
-
-        if (lines.length > 400) {
-          lines.splice(0, lines.length - 400);
-        }
-      },
-    },
-  });
-}
-
-/** A user of the probe's own, and its owner id. */
-async function personFor(app: { baseURL: string }, admin: TestUser, local: string) {
+/** A user of the probe's own, with one line and a rule made beside the page. */
+async function personWithRule(
+  app: { baseURL: string },
+  admin: TestUser,
+  local: string,
+  word: string,
+): Promise<TestUser> {
   const person = await addUser(app.baseURL, admin, personOfItsOwn(local));
-
-  return { person, owner: await data.ownerOf(person.email) };
-}
-
-async function expenseLines(owner: string, labels: ReadonlyArray<string>): Promise<Array<string>> {
-  const accountId = await imports.createAccount(owner, `Account of ${labels[0] ?? "lines"}`);
+  const owner = await data.ownerOf(person.email);
+  const accountId = await imports.createAccount(owner, `Account of ${word}`);
 
   await imports.importFile(
     owner,
     accountId,
     statementFile("ofx", {
       ...exampleStatement,
-      lines: labels.map((label, index) => ({
-        bookedOn: `2026-10-${String(index + 1).padStart(2, "0")}`,
-        amountMinor: -1250 - index * 100,
-        label,
-        reference: `E2E-PROBE-${index}`,
-      })),
+      lines: [
+        {
+          bookedOn: "2026-10-01",
+          amountMinor: -1250,
+          label: `CB E2E ${word} CAFE 01/10`,
+          reference: "E2E-PROBE-0",
+        },
+      ],
     }),
   );
 
-  const lines = await data.asUser(owner, (transaction) =>
-    transaction
-      .select({ id: statementLine.id, label: statementLine.label })
-      .from(statementLine)
-      .where(eq(statementLine.accountId, accountId))
-      .orderBy(asc(statementLine.bookedOn)),
-  );
-
-  return labels.map((label) => lines.find((line) => line.label === label)?.id ?? "");
-}
-
-async function leisureOf(owner: string): Promise<string> {
-  const [found] = await data.asUser(owner, (transaction) =>
+  const [leisure] = await data.asUser(owner, (transaction) =>
     transaction
       .select({ id: category.id })
       .from(category)
@@ -214,70 +115,6 @@ async function leisureOf(owner: string): Promise<string> {
       ),
   );
 
-  return found?.id ?? "";
-}
-
-async function contextFor(
-  browser: Browser,
-  baseURL: string,
-  viewport: { width: number; height: number },
-  videos: string,
-  instrumented: boolean,
-): Promise<BrowserContext> {
-  const context = await browser.newContext({
-    baseURL,
-    viewport,
-    locale: "en-US",
-    timezoneId: "Europe/Paris",
-    recordVideo: { dir: videos },
-  });
-
-  if (instrumented) {
-    await context.addInitScript(INSTRUMENT);
-  }
-
-  return context;
-}
-
-/** rules.spec's correction scenario, to its end: the rule's sheet open on the rules' screen. */
-async function correctionScenario(page: Page, person: TestUser, owner: string, word: string) {
-  const [first] = await expenseLines(owner, [
-    `CB E2E ${word} CAFE 01/10`,
-    `CB E2E ${word} CAFE 08/10`,
-    `CB E2E ${word} CAFE 15/10`,
-  ]);
-
-  await page.context().addCookies([...person.cookies]);
-  await fixDay(page, TODAY);
-  await visit(page, `/operations?line=${first}`);
-
-  const picker = page
-    .locator('[data-slot="line-category"]')
-    .getByRole("combobox", { name: "Category" });
-
-  await expect(picker).toHaveValue("Other");
-  await picker.fill("");
-  await picker.pressSequentially("Leisure");
-  await page.getByRole("option", { name: "Leisure", exact: true }).click();
-
-  const proposal = page.getByRole("dialog", { name: "Make it a rule?" });
-
-  await proposal.getByRole("button", { name: "Create the rule" }).click();
-  await expect(proposal).toBeHidden();
-  await expect(
-    page.getByRole("region", { name: "Notifications" }).getByText("2 lines changed"),
-  ).toBeVisible();
-
-  await visit(page, "/settings/rules");
-  await page.getByRole("button", { name: `label contains “${word} CAFE”`, exact: true }).click();
-  await expect(page.getByRole("dialog", { name: "Rule 1" })).toContainText(
-    "while correcting a line",
-  );
-}
-
-/** A rule made beside the page (#134's probe), its sheet open: no correction, no job. */
-async function ruleMadeBeside(page: Page, person: TestUser, owner: string, word: string) {
-  await expenseLines(owner, [`CB E2E ${word} CAFE 01/10`]);
   await Effect.runPromise(
     createRule(owner, {
       conditions: {
@@ -286,117 +123,256 @@ async function ruleMadeBeside(page: Page, person: TestUser, owner: string, word:
         children: [{ kind: "rule", field: "label", operator: "contains", value: `${word} CAFE` }],
       },
       merchantId: null,
-      categoryId: await leisureOf(owner),
+      categoryId: leisure?.id ?? "",
       createdFrom: "correction",
     }).pipe(Effect.provide(data.layer)),
   );
-  await page.context().addCookies([...person.cookies]);
+
+  return person;
+}
+
+type Before = "none" | "all" | { rule: string };
+
+/**
+ * A page of its own, on the rules' list, scanned first as `before` says (as `visit` does, or with
+ * one rule, or not at all), then the rule's sheet opened and its entrance ended.
+ */
+async function sheetOpen(
+  browser: Browser,
+  baseURL: string,
+  person: TestUser,
+  word: string,
+  before: Before,
+): Promise<Page> {
+  const context = await browser.newContext({
+    baseURL,
+    viewport: PHONE,
+    locale: "en-US",
+    timezoneId: "Europe/Paris",
+  });
+
+  await context.addCookies([...person.cookies]);
+
+  const page = await context.newPage();
+
+  page.setDefaultTimeout(15_000);
   await fixDay(page, TODAY);
-  await visit(page, "/settings/rules");
+  await page.goto("/settings/rules");
+  await page.waitForLoadState("load");
+  await page.evaluate(ENTRANCES_DONE);
+
+  if (before === "all") {
+    await everyRule(page).analyze();
+  } else if (before !== "none") {
+    await new AxeBuilder({ page }).withRules([before.rule]).analyze();
+  }
+
   await page.getByRole("button", { name: `label contains “${word} CAFE”`, exact: true }).click();
   await expect(page.getByRole("dialog", { name: "Rule 1" })).toContainText(
     "while correcting a line",
   );
+  await page.evaluate(ENTRANCES_DONE);
+
+  return page;
 }
 
-type Variant = {
-  name: string;
-  instrumented: boolean;
-  reach: (page: Page, person: TestUser, owner: string, word: string) => Promise<void>;
-  /** After reaching the state, before the scans. */
-  then?: (page: Page) => Promise<void>;
-};
+/** The scan `expectAccessible` runs in Firefox. */
+function everyRule(page: Page): AxeBuilder {
+  return new AxeBuilder({ page }).withTags(WCAG_TAGS).disableRules(FIREFOX_CRASHING_RULES);
+}
 
-/** Each variant's merchant word. */
-const WORDS = ["ALDER", "BIRCH", "CEDAR", "DAPHNE"];
+function isCrash(error: Error): boolean {
+  return /crash|closed|Target/i.test(error.message);
+}
 
-const VARIANTS: ReadonlyArray<Variant> = [
-  { name: "scenario-instrumented", instrumented: true, reach: correctionScenario },
-  { name: "scenario-bare", instrumented: false, reach: correctionScenario },
-  {
-    name: "scenario-sheet-closed",
-    instrumented: true,
-    reach: correctionScenario,
-    then: async (page) => {
-      await page.keyboard.press("Escape");
-      await expect(page.getByRole("dialog", { name: "Rule 1" })).toBeHidden();
-    },
-  },
-  { name: "beside-instrumented", instrumented: true, reach: ruleMadeBeside },
-];
+/** Firefox, launched again when a crash took it down. */
+class Firefox {
+  private browser: Browser | undefined;
 
-for (const [index, variant] of VARIANTS.entries()) {
-  test(`probe: ${variant.name}`, async ({ app, user, playwright }, testInfo) => {
-    test.skip(!testInfo.project.name.startsWith("firefox"), "Firefox only.");
-    test.setTimeout(900_000);
+  constructor(private readonly type: BrowserType) {}
 
-    const tag = `PROBE ${testInfo.project.name} ${variant.name}`;
-    const lines: Array<string> = [];
+  async get(): Promise<Browser> {
+    if (this.browser === undefined || !this.browser.isConnected()) {
+      this.browser = await this.type.launch();
+    }
+
+    return this.browser;
+  }
+
+  async close(): Promise<void> {
+    await this.browser?.close().catch(() => undefined);
+    this.browser = undefined;
+  }
+}
+
+/** Every rule of the WCAG tags, crashing ones included, as axe lists them on a blank page. */
+async function wcagRules(firefox: Firefox): Promise<Array<string>> {
+  const context = await (await firefox.get()).newContext();
+  const page = await context.newPage();
+
+  await page.setContent('<html lang="en"><head><title>x</title></head><main>x</main></html>');
+
+  const results = await new AxeBuilder({ page }).withTags(WCAG_TAGS).analyze();
+
+  await context.close();
+
+  return [...results.passes, ...results.violations, ...results.incomplete, ...results.inapplicable]
+    .map((result) => result.id)
+    .toSorted();
+}
+
+/** One attempt in a page of its own: whether it lived. A crash relaunches the browser. */
+async function attempt(
+  firefox: Firefox,
+  open: (browser: Browser) => Promise<Page>,
+  scan: (page: Page) => AxeBuilder,
+): Promise<string> {
+  let step = "open";
+
+  try {
+    const page = await open(await firefox.get());
+
+    step = "scan";
+    await scan(page).analyze();
+    step = "after";
+    await page.evaluate("document.title");
+    await page.context().close();
+
+    return "alive";
+  } catch (error) {
+    if (!(error instanceof Error) || !isCrash(error)) {
+      throw error;
+    }
+
+    await firefox.close();
+
+    return `CRASHED in ${step}`;
+  }
+}
+
+function probe(
+  name: string,
+  body: (
+    firefox: Firefox,
+    open: (browser: Browser, before: Before) => Promise<Page>,
+    report: Array<string>,
+  ) => Promise<void>,
+  index: number,
+) {
+  test(`probe: ${name}`, async ({ app, user, playwright }, testInfo) => {
+    test.skip(testInfo.project.name !== "firefox-phone", "Firefox on a phone only.");
+    test.setTimeout(1_200_000);
+
+    const word = ["ALDER", "BIRCH", "CEDAR", "DAPHNE", "ELDER"][index] ?? "FIR";
+    const person = await personWithRule(app, user, `probe-${index}`, word);
+    const firefox = new Firefox(playwright.firefox);
     const report: Array<string> = [];
-    const browser = await loggedFirefox(playwright, lines);
-    const viewport = testInfo.project.use.viewport ?? { width: 1440, height: 900 };
-    // Letters only: merchantKey drops a word of letters and digits as a reference.
-    const word = `${WORDS[index] ?? "ELM"}${testInfo.project.name.endsWith("phone") ? "PHONE" : "DESK"}`;
-    let phase = "start";
-    let failed = false;
 
     try {
-      const { person, owner } = await personFor(app, user, `probe-${index}`);
-
-      const context = await contextFor(
-        browser,
-        app.baseURL,
-        viewport,
-        testInfo.outputPath("videos"),
-        variant.instrumented,
+      await body(
+        firefox,
+        (browser, before) => sheetOpen(browser, app.baseURL, person, word, before),
+        report,
       );
-
-      const page = await context.newPage();
-
-      page.setDefaultTimeout(15_000);
-      page.on("crash", () => {
-        report.push(`crash event in ${phase}, ${memory()}`);
-      });
-
-      phase = "reach";
-      await variant.reach(page, person, owner, word);
-      phase = "then";
-      await variant.then?.(page);
-
-      if (variant.instrumented) {
-        phase = "idle";
-        await activity(page);
-        await page.waitForTimeout(5000);
-        report.push(`idle 5 s: ${await activity(page)} ${memory()}`);
-      }
-
-      for (let run = 1; run <= RUNS; run++) {
-        const started = Date.now();
-
-        phase = `run ${run}`;
-        await expectAccessible(page);
-        await page.evaluate("document.title");
-
-        const measured = variant.instrumented ? await activity(page) : "";
-
-        report.push(`run ${run}: alive ${Date.now() - started} ms ${measured} ${memory()}`);
-      }
-
-      await context.close().catch(() => undefined);
     } catch (error) {
-      const message = error instanceof Error ? (error.message.split("\n")[0] ?? "") : "?";
-
-      failed = true;
-      report.push(
-        `FAILED in ${phase}: ${message} ${memory()}`,
-        `browser output (last 60 lines):\n${lines.slice(-60).join("\n")}`,
-        `kernel:\n${kernelLog()}`,
-      );
+      report.push(`FAILED: ${error instanceof Error ? (error.message.split("\n")[0] ?? "") : "?"}`);
     } finally {
-      await browser.close().catch(() => undefined);
+      await firefox.close();
     }
 
     // The answer is in the failure: a probe's report is read in CI's log, which prints errors.
-    throw new Error(`${tag} ${failed ? "CRASHED" : "ALIVE"}\n${report.join("\n")}`);
+    throw new Error(`PROBE ${name}\n${report.join("\n")}`);
   });
 }
+
+probe(
+  "an earlier scan",
+  async (firefox, open, report) => {
+    for (let round = 1; round <= 3; round++) {
+      const none = await attempt(firefox, (browser) => open(browser, "none"), everyRule);
+      const all = await attempt(firefox, (browser) => open(browser, "all"), everyRule);
+
+      report.push(`round ${round}: no earlier scan ${none}; after the list's scan ${all}`);
+    }
+  },
+  0,
+);
+
+probe(
+  "each rule alone on the sheet, after the list's scan",
+  async (firefox, open, report) => {
+    const crashed: Array<string> = [];
+    const rules = await wcagRules(firefox);
+
+    for (const rule of rules) {
+      const result = await attempt(
+        firefox,
+        (browser) => open(browser, "all"),
+        (page) => new AxeBuilder({ page }).withRules([rule]),
+      );
+
+      if (result !== "alive") {
+        crashed.push(`${rule} (${result})`);
+      }
+    }
+
+    report.push(`${rules.length} rules, crashed alone: ${crashed.join(" ") || "none"}`);
+  },
+  1,
+);
+
+probe(
+  "each rule alone on the list, then every rule on the sheet",
+  async (firefox, open, report) => {
+    const crashed: Array<string> = [];
+    const rules = await wcagRules(firefox);
+
+    for (const rule of rules) {
+      const result = await attempt(firefox, (browser) => open(browser, { rule }), everyRule);
+
+      if (result !== "alive") {
+        crashed.push(`${rule} (${result})`);
+      }
+    }
+
+    report.push(`${rules.length} rules, crashed after: ${crashed.join(" ") || "none"}`);
+
+    const none = await attempt(firefox, (browser) => open(browser, "none"), everyRule);
+
+    report.push(`no earlier scan: ${none}`);
+  },
+  2,
+);
+
+probe(
+  "each element of the sheet, every rule",
+  async (firefox, open, report) => {
+    const first = await open(await firefox.get(), "all");
+    const elements = Schema.decodeUnknownSync(SheetElements)(await first.evaluate(SHEET_ELEMENTS));
+
+    await first.context().close();
+
+    const crashed: Array<string> = [];
+
+    for (const element of elements) {
+      const result = await attempt(
+        firefox,
+        (browser) => open(browser, "all"),
+        (page) => everyRule(page).include(element.selector),
+      );
+
+      if (result !== "alive") {
+        crashed.push(`${element.what} (${result}) @ ${element.selector}`);
+      }
+    }
+
+    const outside = await attempt(
+      firefox,
+      (browser) => open(browser, "all"),
+      (page) => everyRule(page).exclude('[data-slot="drawer-content"]'),
+    );
+
+    report.push(`${elements.length} elements; outside the sheet: ${outside}; crashed:`, ...crashed);
+  },
+  3,
+);
