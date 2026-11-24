@@ -1,6 +1,6 @@
 import type { Page } from "@playwright/test";
 
-import { block, monthSwitcher, seedReviewMonths } from "../src/review";
+import { block, monthBarKey, monthSwitcher, seedReviewMonths } from "../src/review";
 import { addUser, animationsDone, expect, fixDay, personOfItsOwn, test, visit } from "../src/test";
 import { openUserData } from "../src/user-data";
 
@@ -52,12 +52,12 @@ test("changing month: bars and amounts move from one value to the next, numbers 
 
   await monthSwitcher(page).getByRole("button", { name: "Previous month" }).click();
   await expect(monthSwitcher(page)).toContainText("September 2026");
-  await expect(block(page, "The month").locator('[data-role="spent"]')).toContainText("€120");
+  await expect(monthBarKey(page, "spent")).toContainText("€120");
   await beat(page);
 
   await monthSwitcher(page).getByRole("button", { name: "Next month" }).click();
   await expect(monthSwitcher(page)).toContainText("October 2026");
-  await expect(block(page, "The month").locator('[data-role="spent"]')).toContainText("€155");
+  await expect(monthBarKey(page, "spent")).toContainText("€155");
   await beat(page);
   await animationsDone(page);
 });

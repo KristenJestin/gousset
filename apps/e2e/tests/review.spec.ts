@@ -2,7 +2,14 @@ import type { Page } from "@playwright/test";
 
 import type { TestUser } from "../src/auth";
 import { onPhone } from "../src/frame";
-import { block, closeBlock, monthSwitcher, openBlock, seedReviewMonths } from "../src/review";
+import {
+  block,
+  closeBlock,
+  monthBarKey,
+  monthSwitcher,
+  openBlock,
+  seedReviewMonths,
+} from "../src/review";
 import {
   addUser,
   animationsDone,
@@ -178,9 +185,10 @@ test("the month bar reads received, spent, set aside and left", async ({ page, a
   await expect(month).toContainText("received");
   // Where it came from: its categories.
   await expect(month).toContainText("Salary");
-  await expect(month.locator('[data-role="spent"]')).toContainText("€155");
-  await expect(month.locator('[data-role="saved"]')).toContainText("€500");
-  await expect(month.locator('[data-role="left"]')).toContainText("€1,345");
+  await expect(monthBarKey(page, "spent")).toContainText("€155");
+  await expect(monthBarKey(page, "saved")).toContainText("€500");
+  await expect(monthBarKey(page, "saved")).toContainText("set aside");
+  await expect(monthBarKey(page, "left")).toContainText("€1,345");
 
   // Spent against the average (September alone, €120) and against September.
   const deltas = month.locator('[data-slot="delta"]');
@@ -361,7 +369,7 @@ test("changing month keeps the page and moves the figures", async ({ page, app, 
   await slowServerFunctions(page, SLOW_MONTH_MS);
   await visit(page, OCTOBER);
 
-  const spent = block(page, "The month").locator('[data-role="spent"]');
+  const spent = monthBarKey(page, "spent");
 
   await expect(spent).toContainText("€155");
 
@@ -390,7 +398,7 @@ test("under reduced motion, changing month changes the figures without rolling t
   await visit(page, OCTOBER);
 
   expect(await rollsTo(page, "September 2026")).toEqual([]);
-  await expect(block(page, "The month").locator('[data-role="spent"]')).toContainText("€120");
+  await expect(monthBarKey(page, "spent")).toContainText("€120");
   await animationsDone(page);
 });
 

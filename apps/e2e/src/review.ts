@@ -20,9 +20,24 @@ import type { openUserData } from "./user-data";
 /** A block of the monthly review, by its title. */
 export const block = (page: Page, title: string) => page.getByRole("region", { name: title });
 
-/** The month switcher beside the review's title. */
+/**
+ * The month switcher beside the review's title, in the page's header: in today's month, the
+ * recurring payments' calendar has a switcher of its own, also named "Month".
+ */
 export const monthSwitcher = (page: Page) =>
-  page.getByRole("group", { name: "Month", exact: true });
+  page
+    .locator("header")
+    .filter({ has: page.getByRole("heading", { level: 1 }) })
+    .getByRole("group", { name: "Month", exact: true });
+
+/**
+ * A key of the month bar's legend, by its role (spent, saved, left): its amount and its name. The
+ * bar's drawn parts carry the same `data-role`, and hold no text.
+ */
+export const monthBarKey = (page: Page, role: "spent" | "saved" | "left") =>
+  block(page, "The month")
+    .getByRole("group", { name: "What came in, by part" })
+    .locator(`[data-role="${role}"]`);
 
 /**
  * A secondary block's content: in its block on a wide screen; on a phone the block is one line,
