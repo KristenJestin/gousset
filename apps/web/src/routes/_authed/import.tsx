@@ -8,6 +8,7 @@ import { FileDrop } from "@gousset/ui/components/file-drop";
 import { FormMessage } from "@gousset/ui/components/form-message";
 import { ImportFiles } from "@gousset/ui/components/import-files";
 import type { ImportFileRow } from "@gousset/ui/components/import-files";
+import type { StatusTone } from "@gousset/ui/components/status-chip";
 import { StatusMessage } from "@gousset/ui/components/status-message";
 import { noop, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useAsyncQueuer } from "@tanstack/react-pacer";
@@ -69,6 +70,24 @@ function period(summary: ImportSummary, days: Intl.DateTimeFormat): string | nul
   return m.importPeriod({ from: day(periodFrom), to: day(periodTo) });
 }
 
+/** What an import's state asks of the user: its chip's colour. */
+function toneOf(summary: ImportSummary): StatusTone {
+  switch (summary.status) {
+    case "queued":
+    case "reading":
+    case "saving":
+      return "busy";
+    case "waiting":
+      return "action";
+    case "done":
+      return "done";
+    case "failed":
+      return "error";
+    case "undone":
+      return "undone";
+  }
+}
+
 function rowOf(summary: ImportSummary, days: Intl.DateTimeFormat): ImportFileRow {
   const done = summary.status === "done" || summary.status === "undone";
 
@@ -81,7 +100,7 @@ function rowOf(summary: ImportSummary, days: Intl.DateTimeFormat): ImportFileRow
     added: done ? summary.linesAdded : null,
     known: done ? summary.linesDuplicate : null,
     state: stateName(summary),
-    attention: summary.status === "waiting" || summary.status === "failed",
+    tone: toneOf(summary),
     content: <ImportContent summary={summary} />,
   };
 }
@@ -133,7 +152,7 @@ function Import() {
   const imports = data?.imports ?? [];
 
   const rows: ReadonlyArray<ImportFileRow> = [
-    ...uploading.map((item) => ({
+    ...uploading.map((item): ImportFileRow => ({
       id: item.key,
       file: item.file.name,
       format: null,
@@ -142,6 +161,7 @@ function Import() {
       added: null,
       known: null,
       state: m.importStateUploading(),
+      tone: "busy",
     })),
     ...imports.map((summary) => rowOf(summary, days)),
   ];
@@ -173,9 +193,6 @@ function Import() {
             locale={getLocale()}
             columns={{
               file: m.importColumnFile(),
-              format: m.importColumnFormat(),
-              account: m.importColumnAccount(),
-              period: m.importColumnPeriod(),
               added: m.importColumnAdded(),
               known: m.importColumnKnown(),
               state: m.importColumnState(),

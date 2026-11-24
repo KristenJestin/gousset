@@ -186,7 +186,7 @@ test.describe("FileDrop", () => {
 });
 
 test.describe("ImportFiles", () => {
-  test("one row per file under the column headers", async ({ page }, testInfo) => {
+  test("one row per file under four column headers", async ({ page }, testInfo) => {
     test.skip(testInfo.project.name === "phone", "A phone stacks each file: no header row");
     await page.goto(story("import-files", "checking"));
 
@@ -194,26 +194,94 @@ test.describe("ImportFiles", () => {
 
     await expect(table.getByRole("columnheader")).toHaveText([
       "File",
-      "Format recognised",
-      "Account",
-      "Period",
       "New",
       "Already known",
       "State",
     ]);
-    await expect(table.locator('[data-slot="import-file"]')).toHaveCount(4);
-    await expect(table.getByRole("combobox", { name: "Account" })).toHaveCount(4);
+    await expect(table.locator('[data-slot="import-file"]')).toHaveCount(6);
   });
 
-  test("on a phone each line of a file names its column", async ({ page }, testInfo) => {
-    test.skip(testInfo.project.name !== "phone", "The stacked layout is the phone's");
+  test("the file's name comes first, its facts set back under it", async ({ page }) => {
+    await page.goto(story("import-files", "imported"));
+
+    const file = page.locator('[data-slot="import-file"]').first().locator('[data-column="file"]');
+    const name = file.locator('[data-slot="import-file-name"]');
+    const facts = file.locator('[data-slot="import-file-facts"]');
+
+    await expect(facts).toHaveText("OFX · Current account · 1 Jan. 2016 – 31 Oct. 2026");
+    await expect(name).toHaveCSS("font-weight", "500");
+    await expect(facts).toHaveCSS("font-size", "12px");
+    expect(await name.evaluate((element) => getComputedStyle(element).color)).not.toBe(
+      await facts.evaluate((element) => getComputedStyle(element).color),
+    );
+  });
+
+  test("a long name keeps its end whole and gives way at its start", async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name === "phone", "A phone shows the name on two lines");
+    await page.goto(story("import-files", "imported"));
+
+    const name = page.locator('[data-slot="import-file-name"]').first();
+    const full = "northbank_current-account_statement_full-history_2016-01-01_to_2026-10-31.ofx";
+
+    await expect(name).toHaveAttribute("title", full);
+    await expect(name).toHaveText(full);
+
+    const end = name.locator("span").last();
+
+    await expect(end).toHaveText("2016-01-01_to_2026-10-31.ofx");
+    // One line, the end inside the cell: nothing of it is cut.
+    expect((await name.boundingBox())?.height).toBeLessThanOrEqual(20);
+    expect(await end.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+  });
+
+  test("each state is a chip: coloured only where something waits or failed", async ({ page }) => {
     await page.goto(story("import-files", "checking"));
+
+    const chips = page.locator('[data-slot="import-file"] [data-slot="status-chip"]');
+
+    await expect(chips).toHaveText([
+      "Account to choose",
+      "Reading",
+      "Failed",
+      "Imported",
+      "Imported",
+      "Undone",
+    ]);
+    await expect(chips.nth(0)).toHaveAttribute("data-tone", "action");
+    await expect(chips.nth(2)).toHaveAttribute("data-tone", "error");
+    await expect(chips.nth(3)).toHaveAttribute("data-tone", "done");
+
+    // Every chip holds on one line.
+    for (const chip of await chips.all()) {
+      expect((await chip.boundingBox())?.height).toBeLessThanOrEqual(24);
+    }
+  });
+
+  test("no state wraps in French either", async ({ page }) => {
+    await page.goto(story("import-files", "french"));
+
+    const chip = page.locator('[data-slot="status-chip"]', { hasText: "Colonnes à confirmer" });
+
+    expect((await chip.boundingBox())?.height).toBeLessThanOrEqual(24);
+  });
+
+  test("on a phone each file is a stack: name, facts, then its state and counts", async ({
+    page,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== "phone", "The stacked layout is the phone's");
+    await page.goto(story("import-files", "imported"));
     await expect(page.getByRole("columnheader").first()).toBeHidden();
 
     const first = page.locator('[data-slot="import-file"]').first();
+    const name = await first.locator('[data-column="file"]').boundingBox();
+    const chip = await first.locator('[data-column="state"]').boundingBox();
+    const added = await first.locator('[data-column="added"]').boundingBox();
 
-    await expect(first.locator('[data-column="format"]')).toHaveText(/Format recognised\s*OFX/);
-    await expect(first.locator('[data-column="added"]')).toHaveText(/New\s*58/);
+    await expect(first.locator('[data-column="added"]')).toHaveText(/New\s*4,790/);
+    expect(chip?.y).toBeGreaterThan((name?.y ?? 0) + (name?.height ?? 0) - 1);
+    // The counts on the chip's line, after it.
+    expect(Math.abs((added?.y ?? 0) - (chip?.y ?? 0))).toBeLessThan(8);
+    expect(added?.x).toBeGreaterThan(chip?.x ?? 0);
   });
 
   test("counts are tabular and right-aligned", async ({ page }) => {
@@ -231,29 +299,56 @@ test.describe("ImportFiles", () => {
     ).toContainText("13,870");
   });
 
-  test("a value not known yet shows a dash, heard as not known yet", async ({ page }) => {
+  test("a count not made yet shows a dash, heard as not known yet", async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name === "phone", "A phone leaves out counts not made yet");
     await page.goto(story("import-files", "just-dropped"));
 
     const first = page.locator('[data-slot="import-file"]').first();
 
-    for (const column of ["format", "account", "period", "added", "known"]) {
+    await expect(first.locator('[data-slot="import-file-facts"]')).toHaveCount(0);
+
+    for (const column of ["added", "known"]) {
       await expect(first.locator(`[data-column="${column}"]`)).toContainText("—");
       await expect(first.locator(`[data-column="${column}"] .sr-only`)).toHaveText("Not known yet");
     }
   });
 
-  test("a file that waits for the user has its state marked, its question under it", async ({
+  test("the account question sits on one line under its file, with no gap", async ({
     page,
-  }) => {
-    await page.goto(story("import-files", "checking"));
+  }, testInfo) => {
+    test.skip(testInfo.project.name === "phone", "A phone stacks the question");
+    await page.goto(story("import-files", "waiting-for-account"));
 
-    const csv = page.locator('[data-slot="import-file"][data-attention]');
+    const prompt = page.locator('[data-slot="import-prompt"]');
 
-    await expect(csv).toHaveCount(1);
-    await expect(csv.locator('[data-column="state"]')).toContainText("to map");
-    await expect(page.locator('[data-slot="import-file-content"]')).toContainText(
-      "what does each column hold?",
-    );
+    const select = prompt.getByRole("combobox", {
+      name: "Account of mealcard-transactions-export-2026-10-31T18-42-07.csv",
+    });
+
+    const button = prompt.getByRole("button", { name: "Import into this account" });
+
+    const box = await prompt.boundingBox();
+    const selectBox = await select.boundingBox();
+    const buttonBox = await button.boundingBox();
+
+    // The sentence, the select and the button share one line: the inset is one control high.
+    expect(box?.height).toBeLessThanOrEqual(52);
+    expect(Math.abs((selectBox?.y ?? 0) - (buttonBox?.y ?? 0))).toBeLessThan(2);
+    expect(buttonBox?.x).toBeGreaterThan(selectBox?.x ?? 0);
+  });
+
+  test("on a phone the account question stacks, its button full width", async ({
+    page,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== "phone", "The stacked question is the phone's");
+    await page.goto(story("import-files", "waiting-for-account"));
+
+    const prompt = page.locator('[data-slot="import-prompt"]');
+    const select = await prompt.getByRole("combobox").boundingBox();
+    const button = await prompt.getByRole("button").boundingBox();
+
+    expect(button?.y).toBeGreaterThan(select?.y ?? 0);
+    expect(Math.abs((button?.width ?? 0) - (select?.width ?? 0))).toBeLessThan(2);
   });
 
   test("a row's content unfolds when it appears", async ({ page }) => {
@@ -267,7 +362,9 @@ test.describe("ImportFiles", () => {
       ),
     ).toBeGreaterThan(3);
     await expect(
-      page.getByRole("progressbar", { name: "Importing statement_october.ofx" }),
+      page.getByRole("progressbar", {
+        name: "Importing northbank-pea-operations-2025-annual.csv",
+      }),
     ).toBeVisible();
   });
 
@@ -310,7 +407,40 @@ test.describe("ImportSummary", () => {
       await expect(term.locator('[data-slot="rolling-count"] > .sr-only')).toHaveText(count);
     }
 
-    await expect(summary.getByRole("button", { name: "Continue to the review" })).toBeVisible();
+    await expect(summary.getByRole("link", { name: "Continue to the review" })).toBeVisible();
+  });
+
+  test("the way forward comes last, undo set apart and quiet", async ({ page }, testInfo) => {
+    await page.goto(story("import-summary", "default"));
+
+    const summary = page.getByRole("region", { name: "Import summary" });
+    const undo = summary.getByRole("button", { name: "Undo this import" });
+    const next = summary.getByRole("link", { name: "Continue to the review" });
+    const undoBox = await undo.boundingBox();
+    const nextBox = await next.boundingBox();
+
+    if (testInfo.project.name === "phone") {
+      // Stacked under the figures, full width, the way forward on top.
+      expect(nextBox?.y).toBeLessThan(undoBox?.y ?? 0);
+      expect(Math.abs((nextBox?.width ?? 0) - (undoBox?.width ?? 0))).toBeLessThan(2);
+    } else {
+      // One line at the right edge, the way forward last, a wider gap between them.
+      expect(Math.abs((nextBox?.y ?? 0) - (undoBox?.y ?? 0))).toBeLessThan(2);
+      expect(nextBox?.x).toBeGreaterThanOrEqual((undoBox?.x ?? 0) + (undoBox?.width ?? 0) + 16);
+    }
+
+    // Undo draws no surface; it turns red only on hover, in 150 ms.
+    await expect(undo).toHaveCSS("background-color", "rgba(0, 0, 0, 0)");
+    await expect(undo).toHaveCSS("transition-duration", "0.15s");
+  });
+
+  test("undo's colours change at once under reduced motion", async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.goto(story("import-summary", "default"));
+    await expect(page.getByRole("button", { name: "Undo this import" })).toHaveCSS(
+      "transition-duration",
+      "0s",
+    );
   });
 
   test("says the page's note under its figures, and none without one", async ({ page }) => {

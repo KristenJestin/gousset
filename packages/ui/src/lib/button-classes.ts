@@ -1,6 +1,6 @@
 import { cn } from "./utils";
 
-export type ButtonVariant = "primary" | "secondary" | "ghost" | "destructive";
+export type ButtonVariant = "primary" | "secondary" | "ghost" | "quiet" | "destructive";
 
 export type ButtonSize = "md" | "sm";
 
@@ -25,6 +25,10 @@ export function buttonClasses(variant: ButtonVariant, size: ButtonSize) {
       "border border-input bg-card text-foreground hover:bg-muted data-disabled:hover:bg-card",
     variant === "ghost" &&
       "bg-transparent text-foreground hover:bg-muted data-disabled:hover:bg-transparent",
+    // A way back beside the way forward (undo an import): no surface, its text set back; it
+    // turns red only on hover, never the same weight as the primary.
+    variant === "quiet" &&
+      "bg-transparent text-soft-foreground hover:bg-destructive/10 hover:text-destructive data-disabled:hover:bg-transparent data-disabled:hover:text-soft-foreground",
     variant === "destructive" &&
       "bg-destructive text-primary-foreground hover:bg-destructive/90 data-disabled:hover:bg-destructive",
   );
