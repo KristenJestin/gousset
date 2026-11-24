@@ -125,7 +125,9 @@ export function RulesList({
               data-enabled={row.enabled}
               data-open={row.id === openId ? "" : undefined}
               className={cn(
-                "flex min-h-14 items-center gap-3 py-2 fill-mode-both duration-200 ease-out animate-in fade-in",
+                // Backwards only: a row waits unseen through its stagger delay, and its entrance
+                // ends once drawn, rather than holding its last frame for good.
+                "flex min-h-14 items-center gap-3 py-2 fill-mode-backwards duration-200 ease-out animate-in fade-in",
                 row.moved?.direction === "up" && "slide-in-from-bottom-4",
                 row.moved?.direction === "down" && "slide-in-from-top-4",
                 row.moved === undefined && cn("slide-in-from-bottom-1", staggerDelay(index)),
