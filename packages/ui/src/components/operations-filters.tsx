@@ -1,5 +1,5 @@
 import { Input } from "@ui-sdk/react/input";
-import { useId, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 
 import { usePageLanguage } from "../hooks/use-page-language";
 import { useUiMessages } from "../hooks/use-ui-messages";
@@ -158,19 +158,17 @@ export function OperationsFilters({
             />
           </div>
         </div>
-        <div className="shrink-0 @5xl:hidden">
-          <FiltersSheet
-            values={values}
-            onChange={onChange}
-            accountItems={accountItems}
-            accountValue={accountValue}
-            chooseAccount={chooseAccount}
-            minError={minError}
-            maxError={maxError}
-            count={count}
-            locale={locale}
-          />
-        </div>
+        <FiltersSheet
+          values={values}
+          onChange={onChange}
+          accountItems={accountItems}
+          accountValue={accountValue}
+          chooseAccount={chooseAccount}
+          minError={minError}
+          maxError={maxError}
+          count={count}
+          locale={locale}
+        />
       </div>
       {errors.length === 0 ? null : (
         <p id={errorId} className="text-xs font-medium text-destructive">
@@ -286,101 +284,124 @@ function FiltersSheet({
   const words = useUiMessages().operations;
   const pageLocale = usePageLanguage();
   const [open, setOpen] = useState(false);
+  const place = useRef<HTMLDivElement>(null);
   const folded = foldedFiltersCount(values);
+
+  // The sheet is drawn outside the bar, where its container query does not reach: once the bar
+  // widens to its row (a tablet turned), the button's place is hidden and the open sheet closes.
+  useEffect(() => {
+    const element = place.current;
+
+    if (element === null) {
+      return;
+    }
+
+    const watched = new ResizeObserver(() => {
+      if (element.offsetWidth === 0) {
+        setOpen(false);
+      }
+    });
+
+    watched.observe(element);
+
+    return () => watched.disconnect();
+  }, []);
   const set = (change: Partial<OperationsFilterValues>) => onChange({ ...values, ...change });
 
   return (
-    <Sheet
-      title={words.filters}
-      open={open}
-      onOpenChange={setOpen}
-      trigger={
-        <Button
-          variant="secondary"
-          size="sm"
-          icon="filters"
-          // One name, whatever the badge's layout: "Filters (2)".
-          aria-label={folded === 0 ? words.filters : `${words.filters} (${String(folded)})`}
-        >
-          <span className="inline-flex items-center gap-1.5">
-            {words.filters}
-            {folded === 0 ? null : (
-              <span
-                aria-hidden="true"
-                className="flex h-4.5 min-w-4.5 items-center justify-center rounded-full bg-primary px-1 font-semibold text-primary-foreground tabular-nums"
-              >
-                {folded}
-              </span>
-            )}
-          </span>
-        </Button>
-      }
-      actions={
-        <>
-          {hasOperationsFilters(values) ? (
-            <Button variant="ghost" onClick={() => onChange(NO_OPERATIONS_FILTERS)}>
-              {words.clear}
-            </Button>
-          ) : null}
-          <Button onClick={() => setOpen(false)}>
-            {count === undefined
-              ? words.showTheLines
-              : words.showLines(count, formatCount(count, locale ?? pageLocale))}
+    <div ref={place} className="shrink-0 @5xl:hidden">
+      <Sheet
+        title={words.filters}
+        open={open}
+        onOpenChange={setOpen}
+        trigger={
+          <Button
+            variant="secondary"
+            size="sm"
+            icon="filters"
+            // One name, whatever the badge's layout: "Filters (2)".
+            aria-label={folded === 0 ? words.filters : `${words.filters} (${String(folded)})`}
+          >
+            <span className="inline-flex items-center gap-1.5">
+              {words.filters}
+              {folded === 0 ? null : (
+                <span
+                  aria-hidden="true"
+                  className="flex h-4.5 min-w-4.5 items-center justify-center rounded-full bg-primary px-1 font-semibold text-primary-foreground tabular-nums"
+                >
+                  {folded}
+                </span>
+              )}
+            </span>
           </Button>
-        </>
-      }
-    >
-      {/* Room for the fields' focus rings inside the scrolling body. */}
-      <div className="flex flex-col gap-4 p-1">
-        <Select
-          label={words.account}
-          items={accountItems}
-          value={accountValue}
-          onValueChange={chooseAccount}
-        />
-        <div className="grid grid-cols-2 gap-3">
-          <DatePicker
-            label={words.from}
-            value={values.from}
-            max={values.to ?? undefined}
-            onValueChange={(from) => set({ from })}
+        }
+        actions={
+          <>
+            {hasOperationsFilters(values) ? (
+              <Button variant="ghost" onClick={() => onChange(NO_OPERATIONS_FILTERS)}>
+                {words.clear}
+              </Button>
+            ) : null}
+            <Button onClick={() => setOpen(false)}>
+              {count === undefined
+                ? words.showTheLines
+                : words.showLines(count, formatCount(count, locale ?? pageLocale))}
+            </Button>
+          </>
+        }
+      >
+        {/* Room for the fields' focus rings inside the scrolling body. */}
+        <div className="flex flex-col gap-4 p-1">
+          <Select
+            label={words.account}
+            items={accountItems}
+            value={accountValue}
+            onValueChange={chooseAccount}
           />
-          <DatePicker
-            label={words.to}
-            value={values.to}
-            min={values.from ?? undefined}
-            onValueChange={(to) => set({ to })}
+          <div className="grid grid-cols-2 gap-3">
+            <DatePicker
+              label={words.from}
+              value={values.from}
+              max={values.to ?? undefined}
+              onValueChange={(from) => set({ from })}
+            />
+            <DatePicker
+              label={words.to}
+              value={values.to}
+              min={values.from ?? undefined}
+              onValueChange={(to) => set({ to })}
+            />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <TextField
+              label={words.min}
+              inputMode="decimal"
+              autoComplete="off"
+              maxLength={MAX_FILTER_TEXT}
+              placeholder={words.minPlaceholder}
+              value={values.min}
+              error={minError}
+              onChange={(event) => set({ min: event.target.value })}
+            />
+            <TextField
+              label={words.max}
+              inputMode="decimal"
+              autoComplete="off"
+              maxLength={MAX_FILTER_TEXT}
+              placeholder={words.maxPlaceholder}
+              value={values.max}
+              error={maxError}
+              onChange={(event) => set({ max: event.target.value })}
+            />
+          </div>
+          <Checkbox
+            label={words.onlyToReview}
+            checked={values.toReview}
+            onCheckedChange={(toReview) => set({ toReview })}
           />
         </div>
-        <div className="grid grid-cols-2 gap-3">
-          <TextField
-            label={words.min}
-            inputMode="decimal"
-            autoComplete="off"
-            maxLength={MAX_FILTER_TEXT}
-            placeholder={words.minPlaceholder}
-            value={values.min}
-            error={minError}
-            onChange={(event) => set({ min: event.target.value })}
-          />
-          <TextField
-            label={words.max}
-            inputMode="decimal"
-            autoComplete="off"
-            maxLength={MAX_FILTER_TEXT}
-            placeholder={words.maxPlaceholder}
-            value={values.max}
-            error={maxError}
-            onChange={(event) => set({ max: event.target.value })}
-          />
-        </div>
-        <Checkbox
-          label={words.onlyToReview}
-          checked={values.toReview}
-          onCheckedChange={(toReview) => set({ toReview })}
-        />
-      </div>
-    </Sheet>
+      </Sheet>
+    </div>
   );
 }
 
