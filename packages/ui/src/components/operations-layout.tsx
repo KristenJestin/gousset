@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { isValidElement, useEffect, useState } from "react";
 import type { ReactNode } from "react";
 
 import { useHydrated } from "../hooks/use-hydrated";
@@ -6,7 +6,7 @@ import { useLargeScreen } from "../hooks/use-large-screen";
 import { usePageLanguage } from "../hooks/use-page-language";
 import { useUiMessages } from "../hooks/use-ui-messages";
 import { formatCount } from "../lib/count";
-import { DetailClosing } from "../lib/detail-closing";
+import { DetailCameWithPage, DetailClosing } from "../lib/detail-closing";
 import { cn } from "../lib/utils";
 import { Skeleton } from "./skeleton";
 
@@ -34,6 +34,9 @@ const CLOSING_MS = 300;
 const REDUCED_MOTION = "(prefers-reduced-motion: reduce)";
 
 const shows = (detail: ReactNode) => detail !== undefined && detail !== null;
+
+/** A detail's key (the page keys it by its line's id), `null` for none. */
+const keyOf = (detail: ReactNode) => (isValidElement(detail) ? detail.key : null);
 
 /**
  * The detail's column beside the list: it widens from nothing to 376 px (a 16 px gap and the
@@ -116,13 +119,22 @@ export function OperationsLayout({
 
   const closing = !shows(detail) && shows(kept);
 
+  // The line whose detail came with the page (its address), until it is closed: its sheet shows
+  // at once rather than rise on its own, whenever the page learns the screen is narrow.
+  const [withPage, setWithPage] = useState(() => keyOf(detail));
+  const cameWithPage = withPage !== null && keyOf(kept) === withPage;
+
   useEffect(() => {
     if (!closing) {
       return;
     }
 
     const wait = window.matchMedia(REDUCED_MOTION).matches ? 0 : CLOSING_MS;
-    const timer = window.setTimeout(() => setKept(undefined), wait);
+
+    const timer = window.setTimeout(() => {
+      setKept(undefined);
+      setWithPage(null);
+    }, wait);
 
     return () => window.clearTimeout(timer);
   }, [closing]);
@@ -154,9 +166,11 @@ export function OperationsLayout({
             {/* On every screen, so that the detail keeps its place in the tree when the page
                 learns the screen's width: below `lg` the column stands back for the detail's
                 sheet, and the server's still sheet stays still. */}
-            <DetailColumn closing={closing} beside={large}>
-              {kept}
-            </DetailColumn>
+            <DetailCameWithPage value={cameWithPage}>
+              <DetailColumn closing={closing} beside={large}>
+                {kept}
+              </DetailColumn>
+            </DetailCameWithPage>
           </DetailClosing>
         ) : null}
       </div>

@@ -5,7 +5,7 @@ import { useHydrated } from "../hooks/use-hydrated";
 import { useLargeScreen } from "../hooks/use-large-screen";
 import { usePageLanguage } from "../hooks/use-page-language";
 import { useUiMessages } from "../hooks/use-ui-messages";
-import { DetailClosing } from "../lib/detail-closing";
+import { DetailCameWithPage, DetailClosing } from "../lib/detail-closing";
 import type { Money } from "../lib/money";
 import { cn } from "../lib/utils";
 import { Amount, AmountSkeleton } from "./amount";
@@ -102,6 +102,7 @@ export function LineDetail({
   const panel = useRef<HTMLElement>(null);
   const large = useLargeScreen();
   const closing = use(DetailClosing);
+  const cameWithPage = use(DetailCameWithPage);
   // Opened by the user once the page runs: it moves. Drawn by the server: it stays still.
   const hydrated = useHydrated();
   const [moves] = useState(hydrated);
@@ -178,8 +179,8 @@ export function LineDetail({
         }}
         title={label}
         description={amountShown}
-        // Drawn by the server (opened from the address): there at once, never rising on its own.
-        appear={moves}
+        // Opened from the address: there at once, never rising on its own.
+        appear={moves && !cameWithPage}
       >
         <div data-slot="line-detail" className="flex flex-col gap-4">
           {content}

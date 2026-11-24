@@ -6,3 +6,10 @@ import { createContext } from "react";
  * its sheet go back down) before it is taken away.
  */
 export const DetailClosing = createContext(false);
+
+/**
+ * Whether the open line's detail came with the page (a line opened from its address) rather than
+ * from a press once the page was there: `OperationsLayout` says so, and `LineDetail`'s sheet then
+ * shows in its place at once instead of rising on its own.
+ */
+export const DetailCameWithPage = createContext(false);

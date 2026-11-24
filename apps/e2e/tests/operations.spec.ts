@@ -628,7 +628,18 @@ test("on a phone, a line opened from its address leaves the rows in sight, then 
   const sheet = page.getByRole("dialog", { name: GREENMARKET });
 
   await expect(sheet).toContainText(FILE_NAME);
-  expect(await sheet.evaluate((node) => node.getAnimations().length)).toBe(0);
+  // Nothing moves it: each animation found is named, so that a failure says what moved.
+  expect(
+    await sheet.evaluate((node) =>
+      node
+        .getAnimations()
+        .map((animation) =>
+          "transitionProperty" in animation
+            ? String(animation.transitionProperty)
+            : animation.constructor.name,
+        ),
+    ),
+  ).toEqual([]);
   await animationsDone(page);
 });
 
