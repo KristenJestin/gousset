@@ -8,6 +8,7 @@ import type {
   LineStore,
   Merchants,
   RuleJobs,
+  Subscriptions,
   Transfers,
 } from "@gousset/core";
 import type { UserData } from "@gousset/db/user-data";
@@ -27,7 +28,8 @@ import { rulesTool } from "./tools/rules";
 /**
  * The services Gousset's tools need (the user's accounts, the imports and their profiles, the
  * export, every line searched across accounts, the transfers between accounts, the merchants, the
- * categories, the rules' database and job, and the expenses made of several lines).
+ * categories, the rules' database and job, the expenses made of several lines, and the charges
+ * subscriptions are detected from).
  */
 export type GoussetServices =
   | AccountStore
@@ -40,7 +42,8 @@ export type GoussetServices =
   | CategoryStore
   | UserData
   | RuleJobs
-  | Expenses;
+  | Expenses
+  | Subscriptions;
 
 /**
  * Gousset's tools, in the order `tools/list` gives them: one family per concept

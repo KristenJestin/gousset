@@ -162,6 +162,22 @@ function uiMessages(locale: Locale) {
       creditsUncovered: (amount: string) => m.uiAccountsCreditsUncovered({ amount }, options),
       creditsEmpty: m.uiAccountsCreditsEmpty({}, options),
     },
+    /** `RecurringCalendar`: what recurs this month, and the marks it draws. */
+    recurring: {
+      views: m.uiRecurringViews({}, options),
+      viewMonth: m.uiRecurringViewMonth({}, options),
+      viewAgenda: m.uiRecurringViewAgenda({}, options),
+      paid: m.uiRecurringPaid({}, options),
+      due: m.uiRecurringDue({}, options),
+      stopped: m.uiRecurringStopped({}, options),
+      expiring: m.uiRecurringExpiring({}, options),
+      priceRise: m.uiRecurringPriceRise({}, options),
+      /** Beside a payment that costs more than before: "Price up from €8.99". */
+      priceRiseFrom: (amount: string) => m.uiRecurringPriceRiseFrom({ amount }, options),
+      today: m.uiRecurringToday({}, options),
+      legend: m.uiRecurringLegend({}, options),
+      empty: m.uiRecurringEmpty({}, options),
+    },
     jobs: {
       /** A background job's state, beside its title. */
       waiting: m.uiJobWaiting({}, options),

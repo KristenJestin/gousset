@@ -1,33 +1,123 @@
-import { Month, currentMonth, monthBenchmarks } from "@gousset/core";
-import type { CategoryInMonth, CategoryStore, MonthBenchmarks } from "@gousset/core";
+import {
+  MIN_CHARGES,
+  Month,
+  currentMonth,
+  monthBenchmarks,
+  monthSubscriptions,
+} from "@gousset/core";
+import type {
+  CategoryInMonth,
+  CategoryStore,
+  MonthBenchmarks,
+  MonthSubscriptionsRead,
+  Subscriptions,
+} from "@gousset/core";
 import { Effect, Schema } from "effect";
 
-import { defineTool } from "../tool";
+import { ToolRefusal, defineTool } from "../tool";
 import { amount } from "./accounts";
 import { benchmarkCurrency } from "./categories";
 
 const MonthInput = Schema.Struct({
-  action: Schema.Literals(["benchmarks", "summary", "review", "days"]).annotate({
+  action: Schema.Literals(["subscriptions", "benchmarks", "summary", "review", "days"]).annotate({
     description:
-      "benchmarks: each expense category's spending in the month against its benchmark, and what drifts above it. summary, review, days: the review's actions to come, which answer that they are not available yet.",
+      "subscriptions: the month's recurring payments, those that stopped and the prices that rose. benchmarks: each expense category's spending in the month against its benchmark, and what drifts above it. summary, review or days: the review's actions to come, each answering that it is not available yet.",
   }),
   month: Schema.optional(
-    Month.annotate({ description: "benchmarks: the month, YYYY-MM; the current one if left out." }),
+    Month.annotate({
+      description: "subscriptions, benchmarks: the month, YYYY-MM; the current month if left out.",
+    }),
   ),
 });
 
 type MonthInput = typeof MonthInput.Type;
 
-const DESCRIPTION = `The monthly review. \`benchmarks\` gives, for a month (the current one by default), every expense category's spending against its benchmark, and lists first the categories that drift above it. Use it for "am I spending more than usual?", "which categories went over?", or what a category's benchmark is worth in a month.
+type Encoded = typeof MonthInput.Encoded;
 
-Each category: what its expenses cost in the month, each at its net cost (payments less refunds; a split line counts its share in each category; transfers are no spending), a top-level category with its children's; then its benchmark: the monthly average of the six months before (automatic), an amount the user set (set), or none. An automatic benchmark counts only the full months from the user's first entry on, so a new user's is the average of fewer months; there is none yet for a category with nothing spent, net, in those months. A category drifts when it cost more than its benchmark, by any amount; one without a benchmark never drifts. Amounts are in the user's currency; spending on accounts of another currency is shown apart, never converted nor compared. Archived categories show only when they had spending that month. To change a benchmark, use categories edit.
+const DESCRIPTION = `The monthly review. Two actions answer now, \`subscriptions\` and \`benchmarks\`; the others (summary, review, days) are not available yet: they come in a later version of Gousset, each answers so, with no figure, and no figure of a month is ever invented meanwhile.
 
-summary, review and days are not available yet: they come with the rest of the review, and answer so, with no figure. Until then, read balances with accounts and lines with lines.
+\`subscriptions\`, with \`month\` (YYYY-MM, the current one if left out; a month to come is refused): the payments that recur (merchant, weekly, monthly or yearly, usual price, last paid day and amount, next expected day), those that stopped (the expected day that did not come) and the prices that rose (from, to). Detected on read from the user's own expenses of the three years up to the month's end (today, in the current month): one merchant paid at a steady rhythm and price, at least ${MIN_CHARGES.weekly} times weekly, ${MIN_CHARGES.monthly} monthly or ${MIN_CHARGES.yearly} yearly; a bill that varies is none. A merchant the user says is no subscription is never proposed: merchants edit with subscription false; true proposes it again.
 
-Read only. Examples: {"action":"benchmarks"} · {"action":"benchmarks","month":"2026-10"}`;
+\`benchmarks\`, with \`month\` (the current one if left out): every expense category's spending against its benchmark, the categories that drift above it first. Use it for "am I spending more than usual?" or "which categories went over?". Each category: what its expenses cost in the month, each at its net cost (payments less refunds; a split line counts its share in each category; transfers are no spending), a top-level category with its children's; then its benchmark: the monthly average of the six months before (automatic), an amount the user set (set), or none. An automatic benchmark counts only the full months from the user's first entry on, so a new user's is the average of fewer months; there is none yet for a category with nothing spent, net, in those months. A category drifts when it cost more than its benchmark, by any amount; one without a benchmark never drifts. Amounts are in the user's currency; spending on accounts of another currency is shown apart, never converted nor compared. Archived categories show only when they had spending that month. To change a benchmark, use categories edit.
 
-/** What the review's other actions answer until the review reads the user's own lines (#32). */
-export const NOT_YET = `The rest of the monthly review is not available yet: it comes in a later version of Gousset, and no figure of a month is invented meanwhile. Each category's spending against its benchmark is: call month {"action":"benchmarks"}. The user's own accounts and lines are available too: call accounts {"action":"list"} for the balances, or lines {"action":"search","account":"Current account"} for the lines (name one of the user's accounts as accounts lists it).`;
+For the user's own money otherwise, use the other tools: accounts (the balances, account by account, and one account's last lines) and lines (every line, searched by text, account, period or amount). Use them for "how much do I have?" or "what did I pay at the bakery last month?": a month's total is the lines of that period, read with lines.
+
+Read only. Examples: {"action":"subscriptions"} · {"action":"benchmarks","month":"2026-10"}`;
+
+/** What summary, review and days answer until the review reads the user's own lines (#32). */
+export const NOT_YET = `The rest of the monthly review is not available yet: it comes in a later version of Gousset, and no figure of a month is invented meanwhile. The user's own accounts and lines are available now: call accounts {"action":"list"} for the balances, or lines {"action":"search","account":"Current account"} for the lines (name one of the user's accounts as accounts lists it). The month's subscriptions are: month {"action":"subscriptions"}. Each category's spending against its benchmark is: month {"action":"benchmarks"}.`;
+
+const CADENCES = { weekly: "weekly", monthly: "monthly", yearly: "yearly" } as const;
+
+const money = (minor: number, currency: string) => amount({ minor, currency });
+
+/** The month's subscriptions as text: names, not ids, and how to dismiss one. */
+function subscriptionsText(read: MonthSubscriptionsRead): string {
+  const header = `Subscriptions of ${read.month}, detected from the user's expenses up to ${read.asOf}.`;
+
+  const recurring =
+    read.recurring.length === 0
+      ? ["No recurring payment detected."]
+      : [
+          `Recurring payments (${read.recurring.length}; merchant: rhythm, usual price; last paid; next expected):`,
+          ...read.recurring.map(
+            (each) =>
+              `- ${each.merchant}: ${CADENCES[each.cadence]}, usually ${money(each.usualMinor, each.currency)}; last paid ${each.lastOn}, ${money(each.lastMinor, each.currency)}; next expected ${each.nextOn}.`,
+          ),
+        ];
+
+  const stopped =
+    read.stopped.length === 0
+      ? []
+      : [
+          `Stopped (${read.stopped.length}; the expected payment did not come):`,
+          ...read.stopped.map(
+            (each) =>
+              `- ${each.merchant}: ${CADENCES[each.cadence]}, expected ${each.stoppedOn ?? each.nextOn}, did not come; last paid ${each.lastOn}, ${money(each.lastMinor, each.currency)}.`,
+          ),
+        ];
+
+  const rises =
+    read.rises.length === 0
+      ? []
+      : [
+          `Price rises (${read.rises.length}):`,
+          ...read.rises.flatMap((each) =>
+            each.priceRise === null
+              ? []
+              : [
+                  `- ${each.merchant}: from ${money(each.priceRise.fromMinor, each.currency)} to ${money(each.priceRise.toMinor, each.currency)}.`,
+                ],
+          ),
+        ];
+
+  const [first] = [...read.recurring, ...read.stopped];
+
+  const dismiss = `A merchant whose payments are no subscription is never proposed again with merchants ${JSON.stringify({ action: "edit", merchant: first?.merchant ?? "Streamly", subscription: false })}; subscription true proposes it again.`;
+
+  return [header, recurring.join("\n"), stopped.join("\n"), rises.join("\n"), dismiss]
+    .filter((part) => part !== "")
+    .join("\n\n");
+}
+
+function subscriptions(owner: string, input: MonthInput) {
+  return Effect.gen(function* () {
+    const month = input.month ?? (yield* currentMonth);
+
+    return subscriptionsText(yield* monthSubscriptions(owner, month));
+  }).pipe(
+    Effect.catchTags({
+      FutureMonthRefused: (refused) =>
+        Effect.fail(
+          new ToolRefusal({
+            message: `${refused.month} is a month to come: subscriptions are detected from what was paid up to today. Ask for ${refused.current} or a month before it.`,
+            example: `month ${JSON.stringify({ action: "subscriptions", month: refused.current } satisfies Encoded)}`,
+          }),
+        ),
+      QueryFailed: Effect.die,
+    }),
+  );
+}
 
 function benchmarkText(row: CategoryInMonth): string {
   switch (row.benchmark.mode) {
@@ -107,17 +197,27 @@ const benchmarks = (input: MonthInput, owner: string, currency: string) =>
     return benchmarksText(yield* monthBenchmarks(owner, month, currency));
   }).pipe(Effect.catchTag("QueryFailed", Effect.die));
 
-/** The month family (docs/mcp.md, "Tools"): benchmarks now, the rest of the review with #32. */
-export const monthTool = defineTool<MonthInput, typeof MonthInput.Encoded, CategoryStore>({
+/** The month family (docs/mcp.md, "Tools"): subscriptions and benchmarks now; the rest to come. */
+export const monthTool = defineTool<MonthInput, Encoded, Subscriptions | CategoryStore>({
   name: "month",
-  title: "Monthly review",
+  title: "Monthly review (subscriptions and benchmarks; the rest not available yet)",
   description: DESCRIPTION,
   idempotent: true,
   input: MonthInput,
-  example: { action: "benchmarks", month: "2026-10" },
-  access: { benchmarks: "read", summary: "read", review: "read", days: "read" },
+  example: { action: "subscriptions" },
+  access: {
+    subscriptions: "read",
+    benchmarks: "read",
+    summary: "read",
+    review: "read",
+    days: "read",
+  },
   run: (input, caller) => {
     switch (input.action) {
+      case "subscriptions": {
+        return subscriptions(caller.userId, input);
+      }
+
       case "benchmarks": {
         return benchmarks(input, caller.userId, benchmarkCurrency(caller));
       }
