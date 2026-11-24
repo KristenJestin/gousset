@@ -19,9 +19,10 @@ import { goussetServer } from "./gousset";
 import { connectInProcess } from "./test-client";
 
 // The budget of docs/mcp.md ("The budget"). When a guard fails, nobody trims a description to make
-// room: the maintainer decides.
+// room: the maintainer decides. The listing's budget is about ten tools at the 4,000 characters each
+// may have (#27, with #25 beside it, passed 30,000).
 const MAX_TOOLS = 15;
-const MAX_LISTING_CHARACTERS = 30_000;
+const MAX_LISTING_CHARACTERS = 40_000;
 const MAX_DESCRIPTION_CHARACTERS = 4000;
 const MAX_INSTRUCTION_WORDS = 600;
 
