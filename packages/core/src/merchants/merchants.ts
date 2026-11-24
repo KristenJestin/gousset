@@ -110,6 +110,8 @@ export type MerchantDetail = {
   readonly name: string;
   /** A payment intermediary (#30): its lines' labels hide who was paid. */
   readonly intermediary: boolean;
+  /** The user said its payments are no subscription (#34): none is proposed for it. */
+  readonly subscriptionDismissed: boolean;
   /** The category its entries go in by default; null for none. */
   readonly defaultCategory: MerchantDefaultCategory | null;
   /** The cleaned labels that name it, in alphabetical order. */
@@ -199,6 +201,15 @@ export class Merchants extends Context.Service<
       owner: string,
       merchantId: string,
       intermediary: boolean,
+    ) => Effect.Effect<MerchantSummary, MerchantNotFound | Failure>;
+    /**
+     * Says its payments are no subscription (`dismissed`), so that none of them is proposed again,
+     * or takes it back (#34).
+     */
+    readonly markSubscription: (
+      owner: string,
+      merchantId: string,
+      dismissed: boolean,
     ) => Effect.Effect<MerchantSummary, MerchantNotFound | Failure>;
     /** Who a line paid, through which intermediary, and whether the user is asked who (#30). */
     readonly ofLine: (
@@ -468,6 +479,11 @@ async function show(
   const names = new Set(aliases.map((row) => row.alias));
   const defaultCategory = await defaultCategoryOf(transaction, found.id);
 
+  const [marks] = await transaction
+    .select({ subscriptionDismissed: merchant.subscriptionDismissed })
+    .from(merchant)
+    .where(eq(merchant.id, found.id));
+
   const scanned =
     names.size === 0
       ? []
@@ -534,6 +550,7 @@ async function show(
     id: found.id,
     name: found.name,
     intermediary: found.intermediary,
+    subscriptionDismissed: marks?.subscriptionDismissed === true,
     defaultCategory,
     aliases: [...names],
     lines,
@@ -825,6 +842,28 @@ export const merchantsLayer = Layer.effect(
           ),
         ),
 
+      markSubscription: (owner, merchantId, dismissed) =>
+        inTransaction(owner, async (transaction) => {
+          const found = await summaryById(transaction, merchantId);
+
+          if (found === undefined) {
+            return undefined;
+          }
+
+          await transaction
+            .update(merchant)
+            .set({ subscriptionDismissed: dismissed })
+            .where(eq(merchant.id, found.id));
+
+          return found;
+        }).pipe(
+          Effect.flatMap((marked) =>
+            marked === undefined
+              ? Effect.fail(new MerchantNotFound({ merchantId }))
+              : Effect.succeed(marked),
+          ),
+        ),
+
       ofLine: (owner, lineId) =>
         inTransaction(owner, (transaction) => lineMerchantIn(transaction, lineId)).pipe(
           Effect.flatMap((found) =>
@@ -888,6 +927,17 @@ export const markIntermediary = (owner: string, merchantId: string, intermediary
     const merchants = yield* Merchants;
 
     return yield* merchants.markIntermediary(owner, merchantId, intermediary);
+  });
+
+/**
+ * Says the payments of one of the user's merchants are no subscription (`dismissed` true), so that
+ * none is proposed again, or takes it back (#34). A merge keeps the kept merchant's own answer.
+ */
+export const markSubscription = (owner: string, merchantId: string, dismissed: boolean) =>
+  Effect.gen(function* () {
+    const merchants = yield* Merchants;
+
+    return yield* merchants.markSubscription(owner, merchantId, dismissed);
   });
 
 /**

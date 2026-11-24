@@ -19,6 +19,7 @@ export {
   DayRangeRefused,
   ExpiryBeforeCredit,
   FundRefused,
+  FutureMonthRefused,
   LineAlreadyReviewed,
   LineNotClassifiable,
   LineNotFound,
@@ -335,6 +336,7 @@ export {
   lineMerchant,
   listMerchants,
   markIntermediary,
+  markSubscription,
   merchantsLayer,
   recogniseMerchants,
   showMerchant,
@@ -415,3 +417,33 @@ export type {
 } from "./rules/rules";
 
 export type { ExportTable } from "./export/tables";
+
+export {
+  MIN_CHARGES,
+  TOLERANCE_DAYS,
+  calendarDays,
+  detectSubscriptions,
+  subscriptionsOfMonth,
+} from "./subscriptions/detection";
+
+export type {
+  Cadence,
+  CalendarItem,
+  Charge,
+  MonthSubscriptions,
+  Subscription,
+} from "./subscriptions/detection";
+
+export {
+  CHARGE_YEARS,
+  Subscriptions,
+  monthSubscriptions,
+  subscriptionCalendar,
+  subscriptionsLayer,
+} from "./subscriptions/subscriptions";
+
+export type {
+  ExpiringCredit,
+  MonthSubscriptionsRead,
+  SubscriptionCalendar,
+} from "./subscriptions/subscriptions";

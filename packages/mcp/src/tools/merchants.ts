@@ -6,6 +6,7 @@ import {
   assignLineMerchant,
   listMerchants,
   markIntermediary,
+  markSubscription,
   ruleWords,
   setMerchantDefaultCategory,
   showLine,
@@ -102,6 +103,12 @@ const MerchantsInput = Schema.Struct({
   intermediary: Schema.optional(
     Schema.Boolean.annotate({ description: "edit: true marks it a payment intermediary." }),
   ),
+  subscription: Schema.optional(
+    Schema.Boolean.annotate({
+      description:
+        "edit: false, its payments are no subscription and none is proposed again; true proposes them again.",
+    }),
+  ),
 });
 
 type MerchantsInput = typeof MerchantsInput.Type;
@@ -120,11 +127,12 @@ Writes (need a connection allowed to read and write):
 - \`edit\` with \`category\`: sets the merchant's default category, the one its entries go in by default, expense or income, named as \`categories\` lists it ("Parent > Child" for a child; add \`kind\` when an expense and an income category share the name). \`clear_category: true\`, alone, clears it. Its entries not classified yet (classified by default) of that kind move to it, and still count as to review; cleared, they go back to the fallback; the user's own choices stay. An archived or unknown category is refused. Merging categories moves it; archiving keeps it, shown archived, and it then classifies nothing new.
 - \`merge\`: moves every cleaned label of \`merchant\` to \`into\`, then deletes \`merchant\`; \`into\` keeps its default category, or takes \`merchant\`'s when it has none.
 - \`edit\` with \`intermediary\` true/false: marks it a payment intermediary (PayPal…), whose labels hide who was paid, or not.
+- \`edit\` with \`subscription\` false: its payments are no subscription, and \`month\` subscriptions never proposes them again; true proposes them again.
 - \`assign\` with \`line\` (a \`lines\` handle) and \`merchant\`: sets who was paid on an intermediary's line, made when none has the name, as the user's choice, and proposes the \`rules\` call for the next ones. Refused: a label naming no intermediary, a line not one whole expense or income, an intermediary as \`merchant\`.
 
 Names are any case. An unknown name is refused with close names; a blank name or one over ${MAX_MERCHANT_NAME} characters, a merge into itself, or a cleaned label the merchant lacks is refused with a valid call. \`limit\` is 1 to ${MAX_MERCHANTS}, ${DEFAULT_MERCHANTS} by default; when more remain, the result writes the next call with \`after\`: copy it.
 
-Examples: {"action":"search","text":"greenmarket"} · {"action":"edit","merchant":"Greenmarket","name":"Green Market"} · {"action":"edit","merchant":"Greenmarket","alias":"GREENMARKET FUEL","to":"Greenmarket Fuel"} · {"action":"edit","merchant":"Greenmarket","category":"Groceries > Supermarket"} · {"action":"edit","merchant":"Greenmarket","clear_category":true} · {"action":"merge","merchant":"Green Mkt","into":"Greenmarket"}`;
+Examples: {"action":"search","text":"greenmarket"} · {"action":"edit","merchant":"Greenmarket","name":"Green Market"} · {"action":"edit","merchant":"Greenmarket","alias":"GREENMARKET FUEL","to":"Greenmarket Fuel"} · {"action":"edit","merchant":"Greenmarket","category":"Groceries > Supermarket"} · {"action":"edit","merchant":"Greenmarket","clear_category":true} · {"action":"merge","merchant":"Green Mkt","into":"Greenmarket"} · {"action":"edit","merchant":"Streamly","subscription":false}`;
 
 const call = (input: Encoded) => `merchants ${JSON.stringify(input)}`;
 
@@ -236,8 +244,12 @@ function showText(detail: MerchantDetail): string {
     ? ", a payment intermediary: its lines' labels hide who was paid, which assign sets on each line"
     : "";
 
+  const dismissed = detail.subscriptionDismissed
+    ? "\nThe user said its payments are no subscription: month subscriptions never proposes them; edit with subscription true proposes them again."
+    : "";
+
   return [
-    `Merchant: ${detail.name}${intermediary}.\n${defaultText(detail)}`,
+    `Merchant: ${detail.name}${intermediary}.\n${defaultText(detail)}${dismissed}`,
     aliases.join("\n"),
     [...lines, ...more].join("\n"),
   ].join("\n\n");
@@ -485,8 +497,28 @@ function mark(owner: string, merchant: string, intermediary: boolean) {
   );
 }
 
+/** Says a merchant's payments are no subscription, or takes it back (#34). */
+function dismiss(owner: string, merchant: string, subscription: boolean) {
+  return Effect.gen(function* () {
+    const found = yield* merchantNamed(owner, merchant);
+    const changed = yield* markSubscription(owner, found.id, !subscription);
+
+    return subscription
+      ? `${changed.name}'s payments may be proposed as a subscription again: month subscriptions detects them when they recur.`
+      : `${changed.name}'s payments are no subscription: month subscriptions never proposes them again. edit with subscription true takes it back.`;
+  }).pipe(
+    Effect.catchTags({
+      MerchantNotFound: () =>
+        refuse(`The merchant "${clip(merchant)}" is gone: it was just merged or split away.`, {
+          action: "list",
+        }),
+      QueryFailed: Effect.die,
+    }),
+  );
+}
+
 function edit(owner: string, input: MerchantsInput) {
-  const { merchant, name, alias, to, category, intermediary } = input;
+  const { merchant, name, alias, to, category, intermediary, subscription } = input;
   const clearing = input.clear_category === true;
 
   if (merchant === undefined || blank(merchant)) {
@@ -497,8 +529,8 @@ function edit(owner: string, input: MerchantsInput) {
   }
 
   const asked =
-    [name, alias ?? to, category, intermediary].filter((each) => each !== undefined).length +
-    (clearing ? 1 : 0);
+    [name, alias ?? to, category, intermediary, subscription].filter((each) => each !== undefined)
+      .length + (clearing ? 1 : 0);
 
   if (asked > 1) {
     return refuse(
@@ -513,6 +545,10 @@ function edit(owner: string, input: MerchantsInput) {
 
   if (intermediary !== undefined) {
     return mark(owner, merchant, intermediary);
+  }
+
+  if (subscription !== undefined) {
+    return dismiss(owner, merchant, subscription);
   }
 
   if (category !== undefined) {

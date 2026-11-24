@@ -20,7 +20,7 @@ Status: the naming of CSS variables is validated. The rest of the visual directi
 - **Bklit UI** for charts. It is built on shadcn/ui, Tailwind and visx.
 - **Motion for React** for animation.
 - **Tailwind**, **Geist** (typeface) and **Tabler** (icons, see [Icons](#icons)). Geist sets every text of the app, headings included; the logo's wordmark is drawn in Instrument Sans and converted to paths, so the app never loads that font.
-- **kloq** for the few calendar views (recurring payments, see issue #34): installed from its shadcn registry into `packages/ui`, read only, adapted to Gousset's theme.
+- **Calendar views** (recurring payments, issue #34) are Gousset's own, over ui-sdk (`RecurringCalendar` in `packages/ui`), read only. kloq was weighed and not taken: its month and agenda views alone pull in about 11,000 of its 40,600 lines (drag physics, recurrence rules, time zones, ICS), with `@base-ui/react`, which duplicates ui-sdk, lucide, `clsx` and `tailwind-merge`; ours is about 500 lines with no new dependency.
 
 The rest of the stack is in [`architecture.md`](architecture.md).
 

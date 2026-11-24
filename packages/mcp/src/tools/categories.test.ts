@@ -5,6 +5,7 @@ import {
   Imports,
   Merchants,
   RuleJobs,
+  Subscriptions,
   Transfers,
   memoryAccountStore,
   memoryCategory,
@@ -105,6 +106,7 @@ function onToday(rows: Map<string, MemoryCategoryRows>): Runner<GoussetServices>
     Layer.mock(Expenses, {}),
     Layer.mock(UserData, {}),
     Layer.mock(RuleJobs, {}),
+    Layer.mock(Subscriptions, {}),
     Layer.mock(Merchants, {}),
     TestClock.layer(),
   );
