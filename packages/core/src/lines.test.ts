@@ -539,7 +539,10 @@ describe("searchLines: to review", () => {
       role: "refund",
     });
 
-    const page = await search({ accounts: [current], lines: [expense, refund] }, { toReview: true });
+    const page = await search(
+      { accounts: [current], lines: [expense, refund] },
+      { toReview: true },
+    );
 
     expect(page.lines.map((each) => each.id)).toEqual([expense.id]);
     expect(page.total).toBe(1);

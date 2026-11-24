@@ -138,9 +138,9 @@ describe("proposalKey", () => {
   });
 
   test("a transfer and a refund naming the same line have different keys", () => {
-    expect(proposalKey(proposalOf(facts({ candidates: [side("l-a")], amountMinor: 3000 })))).not.toBe(
-      proposalKey(proposalOf(facts({ refunds: [refund("l-a")], amountMinor: 3000 }))),
-    );
+    expect(
+      proposalKey(proposalOf(facts({ candidates: [side("l-a")], amountMinor: 3000 }))),
+    ).not.toBe(proposalKey(proposalOf(facts({ refunds: [refund("l-a")], amountMinor: 3000 }))));
   });
 
   test("a change of proposal changes the key", () => {
