@@ -5,11 +5,13 @@ import {
   ImportProfiles,
   Imports,
   Merchants,
+  RuleJobs,
   Transfers,
   memoryAccountStore,
   memoryCategoryStore,
   memoryLineStore,
 } from "@gousset/core";
+import { UserData } from "@gousset/db/user-data";
 import { goussetServer } from "@gousset/mcp/gousset";
 import { callText, connectInProcess } from "@gousset/mcp/test-client";
 import { Effect, Layer, Tracer } from "effect";
@@ -63,6 +65,8 @@ describe("a call to the MCP door", () => {
                   Layer.mock(Merchants, {}),
                   Layer.mock(Transfers, {}),
                   Layer.mock(Expenses, {}),
+                  Layer.mock(UserData, {}),
+                  Layer.mock(RuleJobs, {}),
                 ),
               ),
             ),

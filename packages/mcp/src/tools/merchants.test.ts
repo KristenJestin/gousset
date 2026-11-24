@@ -13,6 +13,7 @@ import {
   MerchantNameUnknown,
   MerchantNotFound,
   Merchants,
+  RuleJobs,
   Transfers,
   memoryAccountStore,
   memoryCategory,
@@ -25,6 +26,7 @@ import type {
   MerchantLine,
   MerchantSummary,
 } from "@gousset/core";
+import { UserData } from "@gousset/db/user-data";
 import { Effect, Layer, Schema } from "effect";
 import { describe, expect, test } from "vite-plus/test";
 
@@ -322,6 +324,8 @@ function runnerOf(state: Store): Runner<GoussetServices> {
     Layer.mock(DataExport, {}),
     Layer.mock(Transfers, {}),
     Layer.mock(Expenses, {}),
+    Layer.mock(UserData, {}),
+    Layer.mock(RuleJobs, {}),
     merchantsOf(state),
   );
 
@@ -1051,6 +1055,7 @@ describe("the merchants tool", () => {
       "lines",
       "merchants",
       "categories",
+      "rules",
     ]);
     expect(tool?.title).toBe("Merchants");
     expect(tool?.annotations).toEqual({

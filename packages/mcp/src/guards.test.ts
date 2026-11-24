@@ -5,11 +5,13 @@ import {
   ImportProfiles,
   Imports,
   Merchants,
+  RuleJobs,
   Transfers,
   memoryAccountStore,
   memoryCategoryStore,
   memoryLineStore,
 } from "@gousset/core";
+import { UserData } from "@gousset/db/user-data";
 import { Effect, Layer } from "effect";
 import { describe, expect, test } from "vite-plus/test";
 
@@ -29,7 +31,7 @@ async function listing() {
   const client = await connectInProcess(
     goussetServer,
     {
-      // Listing calls no tool: the imports and the export are never reached.
+      // Listing calls no tool: the imports, the export and the rules are never reached.
       run: (effect) =>
         Effect.runPromiseExit(
           Effect.provide(
@@ -45,6 +47,8 @@ async function listing() {
               Layer.mock(Merchants, {}),
               Layer.mock(Transfers, {}),
               Layer.mock(Expenses, {}),
+              Layer.mock(UserData, {}),
+              Layer.mock(RuleJobs, {}),
             ),
           ),
         ),

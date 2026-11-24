@@ -117,6 +117,9 @@ const SHOTS: ReadonlyArray<Shot> = [
   { id: "categories-categorypicker--chosen" },
   { id: "operations-linedetail--with-category" },
   { id: "operations-lineexpense--linked" },
+  { id: "rules-ruleslist--default" },
+  { id: "rules-ruleeditor--default" },
+  { id: "rules-ruleproposal--default" },
 ];
 
 async function openPopup(page: Page, open: Shot["open"], name: Shot["trigger"]) {

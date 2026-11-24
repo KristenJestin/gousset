@@ -5,6 +5,7 @@ import {
   ImportProfiles,
   Imports,
   Merchants,
+  RuleJobs,
   Transfers,
   memoryAccountStore,
   memoryCategory,
@@ -13,6 +14,7 @@ import {
   memoryLineStore,
 } from "@gousset/core";
 import type { CategoryRecord, MemoryCategoryRows, MemoryEntry } from "@gousset/core";
+import { UserData } from "@gousset/db/user-data";
 import { Effect, Layer, Schema } from "effect";
 import { TestClock } from "effect/testing";
 import { describe, expect, test } from "vite-plus/test";
@@ -103,6 +105,8 @@ function onToday(rows: Map<string, MemoryCategoryRows>): Runner<GoussetServices>
     Layer.mock(DataExport, {}),
     Layer.mock(Transfers, {}),
     Layer.mock(Expenses, {}),
+    Layer.mock(UserData, {}),
+    Layer.mock(RuleJobs, {}),
     Layer.mock(Merchants, {}),
     TestClock.layer(),
   );
@@ -585,7 +589,7 @@ describe("the categories tool", () => {
     }
   });
 
-  test("writes, says so, last in the fixed order", async () => {
+  test("writes, says so, after merchants in the fixed order", async () => {
     const client = await connectInProcess(
       goussetServer,
       { run: onToday(new Map()) },
@@ -604,6 +608,7 @@ describe("the categories tool", () => {
       "lines",
       "merchants",
       "categories",
+      "rules",
     ]);
     expect(tool?.title).toBe("Categories");
     expect(tool?.annotations).toEqual({

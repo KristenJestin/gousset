@@ -132,6 +132,9 @@ export const classifiedBy = pgEnum("classified_by", ["default", "rule", "user"])
 
 export const entryPartRole = pgEnum("entry_part_role", ["payment", "refund"]);
 
+/** Where a rule comes from (#25): proposed by a correction of a line, or written from its screen. */
+export const ruleOrigin = pgEnum("rule_origin", ["correction", "user"]);
+
 /** One account the user follows, of every kind. */
 export const account = pgTable.withRLS(
   "account",
@@ -515,6 +518,11 @@ export const entry = pgTable.withRLS(
     classifiedBy: classifiedBy("classified_by").notNull(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
+    // Added with the rules (#25), after the others: the merchant a rule set, and the rule that
+    // classified it. Their keys (`on delete set null (<column>)`, which Drizzle cannot write) are in
+    // the custom migration `*_rules_isolation`.
+    merchantId: uuid("merchant_id"),
+    ruleId: uuid("rule_id"),
   },
   (table) => [
     unique("entry_user_id_id_key").on(table.userId, table.id),
@@ -522,6 +530,9 @@ export const entry = pgTable.withRLS(
     index("entry_user_id_happened_on_idx").on(table.userId, table.happenedOn),
     // The breakdowns and the merges.
     index("entry_category_id_idx").on(table.categoryId),
+    index("entry_merchant_id_idx").on(table.merchantId),
+    // A rule deleted clears its entries' `rule_id`.
+    index("entry_rule_id_idx").on(table.ruleId),
     ownRowsOnly("entry"),
   ],
 );
@@ -552,5 +563,39 @@ export const entryPart = pgTable.withRLS(
     index("entry_part_line_id_idx").on(table.lineId),
     check("entry_part_amount_positive", sql`${table.amountMinor} > 0`),
     ownRowsOnly("entry_part"),
+  ],
+);
+
+/**
+ * A rule (#25): when a line matches its conditions, its entry gets the merchant and the category the
+ * rule sets. The conditions are a query of qnot's shape, decoded by packages/core (`rules`); what it
+ * sets are columns, so that a merge moves them and a deletion clears them. Their keys
+ * (`on delete set null (<column>)`, which Drizzle cannot write) are in the custom migration
+ * `*_rules_isolation`.
+ */
+export const rule = pgTable.withRLS(
+  "rule",
+  {
+    id: id(),
+    userId: owner(),
+    // Rules are tried in (position, id) order, the first that matches wins. Not unique, so a move
+    // writes the moved row only.
+    position: integer("position").default(0).notNull(),
+    enabled: boolean("enabled").default(true).notNull(),
+    conditions: jsonb("conditions").notNull(),
+    setMerchantId: uuid("set_merchant_id"),
+    setCategoryId: uuid("set_category_id"),
+    // How many lines it classified, at import and applied to the past.
+    appliedCount: integer("applied_count").default(0).notNull(),
+    createdFrom: ruleOrigin("created_from").notNull(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    unique("rule_user_id_id_key").on(table.userId, table.id),
+    // A merge of merchants or categories moves them, and a deletion clears them.
+    index("rule_set_merchant_id_idx").on(table.setMerchantId),
+    index("rule_set_category_id_idx").on(table.setCategoryId),
+    ownRowsOnly("rule"),
   ],
 );

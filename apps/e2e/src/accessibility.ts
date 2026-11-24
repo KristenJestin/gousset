@@ -22,8 +22,20 @@ const WCAG_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"];
  * (a `role="switch"` named by its field's `<label>`). After that rule alone runs there, the next
  * call to the page kills its content process; every other WCAG rule alone (but `button-name`,
  * above) leaves it alive, and so does no axe at all.
+ *
+ * `aria-conditional-attr`, `aria-prohibited-attr` and `nested-interactive`: the same crash, on a
+ * rule's side sheet (#25: its conditions' editor, comboboxes and `Switch`). Each of them alone,
+ * run there on a fresh page, kills the content process, as do `label` and
+ * `label-content-name-mismatch`; the other 65 WCAG rules alone leave it alive.
  */
-const FIREFOX_CRASHING_RULES = ["label", "button-name", "label-content-name-mismatch"];
+const FIREFOX_CRASHING_RULES = [
+  "label",
+  "button-name",
+  "label-content-name-mismatch",
+  "aria-conditional-attr",
+  "aria-prohibited-attr",
+  "nested-interactive",
+];
 
 /**
  * Waits for the screen's entrance animations to end: text still fading in is half transparent, and

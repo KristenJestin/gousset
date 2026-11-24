@@ -41,6 +41,7 @@ import { Effect, Match, Schema } from "effect";
 import { ToolRefusal, defineTool } from "../tool";
 import { MOVEMENT, accountToWrite, amount, named } from "./accounts";
 import { namedCategory, pathText } from "./categories";
+import { proposedRule } from "./rules";
 
 /** The lines `search` gives when none are asked for, and the most: 100 fit the result's budget. */
 const DEFAULT_LINES = 50;
@@ -58,7 +59,7 @@ const LinesInput = Schema.Struct({
     "split",
   ]).annotate({
     description:
-      "search: the lines that match, across accounts, newest first. show: one line, all that is known of it. pair: two lines as one transfer (writes). classify: what one line is (writes). unpair: undoes a line's transfer (writes). link: a line becomes a payment or a refund of another line's expense (writes). unlink: a line leaves its expense (writes). split: a line across categories (writes).",
+      "search: the lines that match, across accounts, newest first. show: one line, all that is known of it. pair: two lines as one transfer (writes). classify: what one line is (writes). unpair: undoes a line's transfer (writes). link, unlink: a line joins or leaves another's expense (writes). split: across categories (writes).",
   }),
   text: Schema.optional(
     Schema.String.annotate({
@@ -126,24 +127,24 @@ const LinesInput = Schema.Struct({
   into: Schema.optional(
     Schema.String.annotate({
       description:
-        "link: the handle of a line of the expense that line joins: one of its payments or refunds.",
+        "link: a line of the expense to join.",
     }),
   ),
   shares: Schema.optional(
     Schema.Array(
       Schema.Struct({
         category: Schema.String.annotate({
-          description: "A category of the line's kind, named as for classify.",
+          description: "As for classify.",
         }),
         amount: Schema.String.annotate({
           description:
-            'Its share, a decimal in the account\'s currency, without sign nor currency ("30", "12.50").',
+            'A decimal, as "12.50".',
         }),
       }),
     )
       .check(Schema.isMaxLength(MAX_SHARES))
       .annotate({
-        description: `split: 1 to ${MAX_SHARES} shares, adding up to the line's absolute amount; one share puts the line back in one category. A 75 line: [{"category":"Groceries","amount":"30"},{"category":"Home","amount":"45"}].`,
+        description: `split: 1 to ${MAX_SHARES} shares summing to the line; one puts it back whole. [{"category":"Groceries","amount":"30"},{"category":"Home","amount":"45"}]`,
       }),
   ),
   kind: Schema.optional(
@@ -166,11 +167,11 @@ const DESCRIPTION = `Every line of the user's accounts, as the bank wrote it: se
 
 Use it for "when did I pay this shop?", "what was this 42.90?", "which import brought this line?", "put this line in Groceries". Use \`accounts\` instead for balances and one account's latest lines, \`month\` for where the money went, \`categories\` to list or change the categories themselves. search and show only read.
 
-Writes, with the write scope: \`classify\` says what \`line\` is, by \`kind\`: "transfer", "expense" or "income". With "expense" or "income", the line goes in \`category\`, named as \`categories\` list writes it (any case): a name alone is the top-level category of that name, else its one child; "Parent > Child" names a child. Without \`category\`, the kind's fallback. \`kind\` may be left out with a category: the line's own. Kept as the user's choice: no rule changes it unasked. Refused, with what to do: a line held, discarded or of no amount (no expense nor income), a side of a transfer (unpair it first), a line split across several expenses, a kind or category of the other kind than the line's (money out is an expense, money in an income), an archived category, an unknown or ambiguous category name (with the names to choose from), a category with "transfer".
+Writes, with the write scope: \`classify\` says what \`line\` is, by \`kind\`: "transfer", "expense" or "income". With "expense" or "income", the line goes in \`category\`, named as \`categories\` list writes it (any case): a name alone is the top-level category of that name, else its one child; "Parent > Child" names a child. Without \`category\`, the kind's fallback. \`kind\` may be left out with a category: the line's own. Kept as the user's choice: no rule changes it unasked. The answer proposes the \`rules\` call that classifies lines like it the same way from then on. Refused, with what to do: a line held, discarded or of no amount (no expense nor income), a side of a transfer (unpair it first), a line split across several expenses, a kind or category of the other kind than the line's (money out is an expense, money in an income), an archived category, an unknown or ambiguous category name (with the names to choose from), a category with "transfer".
 
 \`pair\` pairs \`line\` and \`other\` as one transfer, never spending; \`line\` alone: its only candidate; neither: every clear pair. \`classify\` \`kind\` "transfer" is the same; \`unpair\` undoes it. Refused: lines of one account or direction, a paired line, several candidates. With \`account\` in place of \`other\`, an account kept by its balance: Gousset makes its side, which its noted balances' movements then leave out; refused for an account kept by its lines or of another currency.
 
-An expense counts once, at its net cost: payments less refunds. \`link\` adds \`line\` to \`into\`'s expense: a payment when its money goes the same way (75 paid 25 + 50 on two accounts), else a refund (insurance, a cancelled purchase); \`unlink\` undoes it. \`split\` spreads \`line\` across categories (\`shares\`). Refused: transfer sides, held lines, another currency, a refund above the net cost, linking a split line. \`show\` gives the expense and the purchases the line may cancel: link confirms one.
+An expense counts once, at payments less refunds. \`link\` joins \`line\` to \`into\`'s expense, as a payment if its money goes the same way (25 + 50 on two accounts), else a refund; \`unlink\` undoes it; \`split\` spreads it over categories. Refused: transfer sides, held lines, other currencies, a refund over the net cost, linking a split line. \`show\` gives the expense and purchases the line may cancel.
 
 \`account\` is the name as \`accounts\` lists it (any case); add \`institution\` when two accounts share it. An unknown or ambiguous name is refused with the names to choose from. Amounts are decimal strings in each account's own currency, without sign or currency, compared with the line's absolute amount: a -42.90 EUR payment matches "amount_min":"40". A period that ends before it starts, an amount that is no decimal, or an \`after\` no result gave is refused. \`limit\` is 1 to ${MAX_LINES} lines, ${DEFAULT_LINES} by default; when more remain, the result writes the exact next call with \`after\`: copy it.
 
@@ -954,7 +955,15 @@ function classifyAction(owner: string, input: LinesInput, kind: EntryKind | unde
 
     const placed = yield* classifyLine(owner, detail.id, chosen);
 
-    return `The line of ${detail.bookedOn}, ${amount(detail.amount)}, ${labelOf(detail)}, is now in ${pathText(placed)} (${placed.kind}). Kept as the user's choice: no rule changes it unasked.`;
+    // A correction to a category of the user's choosing may become a rule (#25); a fallback, not.
+    const proposal =
+      category === undefined
+        ? undefined
+        : proposedRule(detail.label, detail.counterpartyName, pathText(placed));
+
+    const done = `The line of ${detail.bookedOn}, ${amount(detail.amount)}, ${labelOf(detail)}, is now in ${pathText(placed)} (${placed.kind}). Kept as the user's choice: no rule changes it unasked.`;
+
+    return proposal === undefined ? done : `${done}\n${proposal}`;
   }).pipe(
     Effect.catchTags({
       LineNotFound: () => Effect.fail(UNKNOWN_LINE(handle)),

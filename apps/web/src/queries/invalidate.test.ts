@@ -10,6 +10,7 @@ import { invalidateApproval, invalidateMerchantEntries, invalidateTouched } from
 import { lineKeys } from "./line-keys";
 import { merchantKeys } from "./merchant-keys";
 import { monthKeys } from "./month-keys";
+import { ruleKeys } from "./rule-keys";
 
 const isInvalidated = (client: QueryClient, queryKey: QueryKey) =>
   client.getQueryState(queryKey)?.isInvalidated;
@@ -53,6 +54,28 @@ describe("invalidateTouched", () => {
 
     expect(isInvalidated(client, MERCHANTS)).toBe(true);
     expect(isInvalidated(client, MERCHANT)).toBe(true);
+  });
+
+  test("reads the rules again: an import's rules and a rule applied to the past count their lines", async () => {
+    const touchedOnes: ReadonlyArray<Touched> = [{ months: ["2026-10"] }, { everyMonth: true }];
+    const rule = ruleKeys.detail("3d2b1c4e-5f6a-4b7c-8d9e-0f1a2b3c4d5e");
+
+    for (const touched of touchedOnes) {
+      const client = clientWith([ruleKeys.list(), rule]);
+
+      await invalidateTouched(client, touched);
+
+      expect(isInvalidated(client, ruleKeys.list())).toBe(true);
+      expect(isInvalidated(client, rule)).toBe(true);
+    }
+  });
+
+  test("a rule applied to the past reads the categories' figures again: its lines moved", async () => {
+    const client = clientWith([categoryKeys.list()]);
+
+    await invalidateTouched(client, { everyMonth: true });
+
+    expect(isInvalidated(client, categoryKeys.list())).toBe(true);
   });
 });
 

@@ -6,12 +6,14 @@ import {
   ImportProfiles,
   Imports,
   Merchants,
+  RuleJobs,
   Transfers,
   memoryAccountStore,
   memoryCategoryStore,
   memoryLineStore,
 } from "@gousset/core";
 import type { ExportContents } from "@gousset/core";
+import { UserData } from "@gousset/db/user-data";
 import { Effect, Layer } from "effect";
 import { describe, expect, test } from "vite-plus/test";
 
@@ -63,6 +65,8 @@ async function connect(contents: Effect.Effect<ExportContents> = Effect.succeed(
               Layer.mock(Merchants, {}),
               Layer.mock(Transfers, {}),
               Layer.mock(Expenses, {}),
+              Layer.mock(UserData, {}),
+              Layer.mock(RuleJobs, {}),
             ),
           ),
         ),

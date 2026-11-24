@@ -9,6 +9,7 @@ import { balancesJob } from "./balances-job.server";
 import { importJob } from "./import-job.server";
 import { merchantsJob } from "./merchants-job.server";
 import { JobQueue, register } from "./queue.server";
+import { ruleJob } from "./rule-job.server";
 import { E2E_JOBS_VARIABLE, testJob } from "./test-job";
 
 /** Present only when the harness started the app; any value but `on` fails loudly. */
@@ -18,7 +19,13 @@ export const e2eJobs = Config.option(Config.Literal("on", E2E_JOBS_VARIABLE));
 const queue = Layer.unwrap(
   Effect.gen(function* () {
     const testing = Option.isSome(yield* e2eJobs);
-    const jobs = [register(importJob), register(merchantsJob), register(balancesJob)];
+
+    const jobs = [
+      register(importJob),
+      register(merchantsJob),
+      register(balancesJob),
+      register(ruleJob),
+    ];
 
     // As the app's role, which owns pg-boss's schema (#66), never as the tables' owner.
     return JobQueue.layer(
