@@ -9,7 +9,7 @@ import { seedMadeUpData } from "@gousset/db/seed";
 import type { SeedSummary } from "@gousset/db/seed";
 import { UserData, userDataLayer } from "@gousset/db/user-data";
 import type { QueryFailed, USER_ROLE, UserTransaction } from "@gousset/db/user-data";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Effect, Option, Schema } from "effect";
 
@@ -243,11 +243,10 @@ export function openUserData(database: string) {
 
     /**
      * The made-up data of two months, and a CSV profile, as `owner`'s rows. A user who already has
-     * accounts is left as they are, profile included. A file upload too, far from its expiry, for
-     * a grant of a client of its own, unless the user has one already.
+     * accounts is left as they are, profile included.
      */
-    seed: async (owner: string): Promise<SeedSummary> => {
-      const summary = await Effect.runPromise(
+    seed: (owner: string): Promise<SeedSummary> =>
+      Effect.runPromise(
         seedMadeUpData(owner, ["2026-09", "2026-10"], "2026-10-31").pipe(
           Effect.tap((seeded) =>
             Effect.gen(function* () {
@@ -269,14 +268,21 @@ export function openUserData(database: string) {
           ),
           Effect.provide(layer),
         ),
-      );
+      ),
 
+    /**
+     * A file upload of `owner`'s, far from its expiry, for a grant of a client of its own, unless
+     * they have one already. The grant is listed among the user's connected clients: a spec that
+     * seeds it forgets it when it ends (`forgetFileUploads`), so that other specs of the worker
+     * see the user's clients as they left them.
+     */
+    seedFileUpload: async (owner: string): Promise<void> => {
       const uploads = await Effect.runPromise(
         transaction(owner, (each) => each.select({ id: importUpload.id }).from(importUpload)),
       );
 
       if (uploads.length > 0) {
-        return summary;
+        return;
       }
 
       const now = new Date();
@@ -316,8 +322,15 @@ export function openUserData(database: string) {
           }),
         ),
       );
+    },
 
-      return summary;
+    /** Forgets the grant `seedFileUpload` made for `owner`, and its file uploads with it. */
+    forgetFileUploads: async (owner: string): Promise<void> => {
+      await db
+        .delete(authOauthConsent)
+        .where(
+          and(eq(authOauthConsent.userId, owner), eq(authOauthConsent.clientId, SEED_CLIENT_ID)),
+        );
     },
 
     /**
