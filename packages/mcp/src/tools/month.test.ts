@@ -593,7 +593,13 @@ describe("month", () => {
     const [first] = tools;
 
     expect(first?.name).toBe("month");
-    expect(first?.title).toBe("Monthly review");
+    expect(first?.title).toBe(
+      "Monthly review (summary, spending, days, subscriptions, benchmarks)",
+    );
+    // benchmarks reads a month to come (#33): the description claims the refusal only for the others.
+    expect(first?.description).toContain(
+      "summary, spending, days and subscriptions refuse a month to come",
+    );
     expect(first?.annotations).toEqual({
       readOnlyHint: true,
       destructiveHint: false,

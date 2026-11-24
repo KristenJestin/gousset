@@ -68,11 +68,11 @@ const MERCHANTS_LISTED = 100;
 /** How many movements `summary` lists; the others are read with `lines`. */
 const MOVEMENTS_LISTED = 60;
 
-const DESCRIPTION = `The user's own monthly review, in their currency (others apart, never converted). Read only. month: YYYY-MM, the current one if left out; a month to come is refused.
+const DESCRIPTION = `The user's own monthly review, in their currency (others apart, never converted). Read only. month: YYYY-MM, the current one if left out; summary, spending, days and subscriptions refuse a month to come.
 
-\`summary\`, for "how did my month go?": received, spent against the average and the previous month, set aside (net to savings and investments), left, incomes and transfers, lines to review (review settles them), imports, flags.
+\`summary\`, for "how did my month go?" or "what is left?": received, spent against the average and the previous month, set aside (net transfers onto savings and investments), left (received less spent and set aside) and its part restricted to benefit accounts, incomes and transfers, lines to review (review settles them), imports, flags.
 
-\`spending\`, by category (default) or merchant: each row at net cost against its average and the previous month; categories with children, benchmark and drift; "${NO_MERCHANT}" holds expenses naming several or none.
+\`spending\`, by category (default) or merchant: each row at net cost, on the day it happened, against its average and the previous month; a transfer is never spending. Categories with children, benchmark and drift. A merchant is who was paid, else a payment intermediary (PayPal) when nothing better is known; "${NO_MERCHANT}" holds expenses naming several or none, last.
 
 \`days\`, with by and name (a row as spending names it): its running total by day against the previous month.
 
@@ -80,9 +80,9 @@ const DESCRIPTION = `The user's own monthly review, in their currency (others ap
 
 \`benchmarks\`, with \`month\` (the current one if left out): every expense category's spending against its benchmark, the categories that drift above it first. Use it for "am I spending more than usual?" or "which categories went over?". Each category: what its expenses cost in the month, each at its net cost (payments less refunds; a split line counts its share in each category; transfers are no spending), a top-level category with its children's; then its benchmark: the monthly average of the six months before (automatic), an amount the user set (set), or none. An automatic benchmark counts only the full months from the user's first entry on, so a new user's is the average of fewer months; there is none yet for a category with nothing spent, net, in those months. A category drifts when it cost more than its benchmark, by any amount; one without a benchmark never drifts. Amounts are in the user's currency; spending on accounts of another currency is shown apart, never converted nor compared. Archived categories show only when they had spending that month. To change a benchmark, use categories edit.
 
-Balances or one payment: use accounts or lines.
+For balances or one payment, use accounts or lines: "how much do I have?", "what did I pay at the bakery last month?".
 
-Examples: {"action":"summary"} · {"action":"spending","by":"merchant","month":"2026-10"} · {"action":"days","name":"Groceries > Bakery"}`;
+Examples: {"action":"summary"} · {"action":"spending","by":"merchant","month":"2026-10"} · {"action":"days","name":"Groceries > Bakery"} · {"action":"benchmarks"}`;
 
 const CADENCES = { weekly: "weekly", monthly: "monthly", yearly: "yearly" } as const;
 
@@ -594,7 +594,7 @@ export const monthTool = defineTool<
   Subscriptions | CategoryStore | MonthFacts | LineStore | Transfers | Expenses | Merchants
 >({
   name: "month",
-  title: "Monthly review",
+  title: "Monthly review (summary, spending, days, subscriptions, benchmarks)",
   description: DESCRIPTION,
   idempotent: true,
   input: MonthInput,
