@@ -4,18 +4,12 @@ import { getLocale } from "@gousset/i18n/runtime";
 import type { Locale } from "@gousset/i18n/runtime";
 import { Page } from "@gousset/ui/components/app-shell";
 import { ReviewComing } from "@gousset/ui/components/review-coming";
-import { queryOptions, useSuspenseQuery } from "@tanstack/react-query";
+import { useSuspenseQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 
 import { AppReviewComingLink } from "@/components/app-link";
-import { getStartingPoints } from "@/functions/review";
 import { shortDay } from "@/lib/account-day";
-
-/** The user's own counts on the screens that work today. */
-const startingPoints = queryOptions({
-  queryKey: ["review", "starting-points"],
-  queryFn: () => getStartingPoints(),
-});
+import { reviewQueries } from "@/queries/review";
 
 // The formatters, one per language, built once when the module loads: building one is slow.
 const numbers = {
@@ -35,13 +29,13 @@ const plurals = {
 export const Route = createFileRoute("/_authed/")({
   // The block comes with the page, filled in: no skeleton promises data that is not coming.
   loader: async ({ context: { queryClient } }) => {
-    await queryClient.ensureQueryData(startingPoints);
+    await queryClient.ensureQueryData(reviewQueries.startingPoints());
   },
   component: Review,
 });
 
 function Review() {
-  const { data } = useSuspenseQuery(startingPoints);
+  const { data } = useSuspenseQuery(reviewQueries.startingPoints());
 
   return (
     <Page title={m.reviewTitle()}>

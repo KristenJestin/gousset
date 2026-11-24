@@ -8,6 +8,7 @@ import { accountKeys } from "./account-keys";
 import { invalidateTouched } from "./invalidate";
 import { lineKeys } from "./line-keys";
 import { monthKeys } from "./month-keys";
+import { reviewKeys } from "./review-keys";
 
 const isInvalidated = (client: QueryClient, queryKey: QueryKey) =>
   client.getQueryState(queryKey)?.isInvalidated;
@@ -26,19 +27,21 @@ function clientWith(keys: ReadonlyArray<QueryKey>) {
 const SEARCH = lineKeys.search({ text: "greenmarket" });
 const DETAIL = lineKeys.detail("6f1c2a4e-0d5b-4c3e-9a7f-2b8d1e4c5a60");
 const ACCOUNTS = accountKeys.list();
+const COUNTS = reviewKeys.startingPoints();
 
 describe("invalidateTouched", () => {
-  test("reads the operations and the accounts again, after an import or its undo", async () => {
+  test("reads the operations, the accounts and the review's counts again, after an import or its undo", async () => {
     const touchedOnes: ReadonlyArray<Touched> = [{ months: ["2026-10"] }, { everyMonth: true }];
 
     for (const touched of touchedOnes) {
-      const client = clientWith([SEARCH, DETAIL, ACCOUNTS]);
+      const client = clientWith([SEARCH, DETAIL, ACCOUNTS, COUNTS]);
 
       await invalidateTouched(client, touched);
 
       expect(isInvalidated(client, SEARCH)).toBe(true);
       expect(isInvalidated(client, DETAIL)).toBe(true);
       expect(isInvalidated(client, ACCOUNTS)).toBe(true);
+      expect(isInvalidated(client, COUNTS)).toBe(true);
     }
   });
 
