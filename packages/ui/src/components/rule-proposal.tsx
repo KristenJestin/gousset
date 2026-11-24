@@ -15,12 +15,18 @@ export type RuleProposalAnswer = {
   applyToPast: boolean;
 };
 
-export type RuleProposalProps = {
+/**
+ * What the rule sets, one or the other: the category the line was put in, by its path ("Food ›
+ * Groceries"), or the merchant a line paid through an intermediary was given ("Pixelplay").
+ */
+export type RuleProposalSets =
+  | { category: string; merchant?: undefined }
+  | { merchant: string; category?: undefined };
+
+export type RuleProposalProps = RuleProposalSets & {
   open: boolean;
   /** Closing it (Cancel, Escape, a press outside) changes nothing. */
   onOpenChange: (open: boolean) => void;
-  /** The category the line was put in, by its path ("Food › Groceries"). */
-  category: string;
   /** The words offered at first: the line's cleaned label. */
   words: string;
   /** Each change of the words, for the page to count the lines again. */
@@ -39,7 +45,10 @@ export type RuleProposalProps = {
 /**
  * A correction proposes a rule (#25): once a line's category is changed, "Make it a rule?" offers
  * "label contains" the line's cleaned label words, editable, for the category chosen, and to apply
- * it to the lines already there that it would change. Cancel leaves everything as it was.
+ * it to the lines already there that it would change. Cancel leaves everything as it was. Once
+ * the merchant of a line paid through an intermediary is chosen (#30), it proposes the same for
+ * that merchant (`merchant` in place of `category`): "label contains PAYPAL *PIXELPLAY" gives
+ * Pixelplay.
  *
  * Motion: as `Dialog`, it fades and grows in 200 ms, ease-out, and leaves the same way. Cut under
  * reduced motion.
@@ -48,6 +57,7 @@ export function RuleProposal({
   open,
   onOpenChange,
   category,
+  merchant,
   words: offered,
   onWordsChange,
   reach,
@@ -76,7 +86,11 @@ export function RuleProposal({
   return (
     <Dialog
       title={messages.proposal.title}
-      description={messages.proposal.description(category)}
+      description={
+        merchant === undefined
+          ? messages.proposal.description(category)
+          : messages.proposal.descriptionMerchant(merchant)
+      }
       open={open}
       onOpenChange={onOpenChange}
       onSubmit={(event) => {

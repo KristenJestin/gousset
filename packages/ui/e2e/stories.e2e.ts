@@ -119,6 +119,17 @@ const SHOTS: ReadonlyArray<Shot> = [
   { id: "rules-ruleslist--default" },
   { id: "rules-ruleeditor--default" },
   { id: "rules-ruleproposal--default" },
+  { id: "rules-ruleproposal--merchant" },
+  // An intermediary's line that asks who was paid: its notice stands out in the detail (#30).
+  { id: "operations-linemerchant--asks" },
+  { id: "operations-linemerchant--assigned" },
+  // The dialog the Change button opens, over the page.
+  {
+    id: "operations-linemerchant--choosing",
+    open: "click",
+    trigger: "Change the merchant",
+  },
+  { id: "operations-linedetail--with-merchant" },
 ];
 
 async function openPopup(page: Page, open: Shot["open"], name: Shot["trigger"]) {

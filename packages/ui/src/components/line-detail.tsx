@@ -56,6 +56,8 @@ export type LineDetailProps = {
   origin?: string;
   /** Its category, to see and change: a `CategoryPicker`; left out for a line with none. */
   category?: ReactNode;
+  /** Who the line paid (`LineMerchant`), under its category; left out for a line with none. */
+  merchant?: ReactNode;
   /** The line's transfer or its candidates (`LineTransfer`), after its account and days. */
   transfer?: ReactNode;
   onClose: () => void;
@@ -110,7 +112,8 @@ function BankWords({
  * counterparty, the original amount when it was in another currency, its expiry, "To review:
  * looks like …" on a held line, its transfer (`transfer`, a `LineTransfer`), and the import it
  * came from, "Entered by hand" or where the app made it from (`origin`); first, its category,
- * through the control the page gives (`category`). Every text comes worded from the page. The
+ * through the control the page gives (`category`), and who it paid (`merchant`, a
+ * `LineMerchant`). Every text comes worded from the page. The
  * close button or Escape closes it; the focus goes into it when it opens.
  * `OperationsLayout` sets it beside the list on a wide screen and over it on a phone.
  *
@@ -136,6 +139,7 @@ export function LineDetail({
   importedFrom,
   origin,
   category,
+  merchant,
   transfer,
   onClose,
   locale,
@@ -167,6 +171,7 @@ export function LineDetail({
   const content = (
     <>
       {category === undefined ? null : <div data-slot="line-category">{category}</div>}
+      {merchant}
       {looksLike === undefined ? null : (
         <p className="rounded-md bg-muted px-3 py-2 text-sm text-foreground">
           {words.looksLike(looksLike)}

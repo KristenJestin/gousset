@@ -212,6 +212,25 @@ test.describe("RuleProposal", () => {
     );
   });
 
+  test("after a merchant is chosen, it proposes a rule that sets that merchant", async ({
+    page,
+  }) => {
+    await page.goto(story("ruleproposal", "merchant"));
+
+    const dialog = page.getByRole("dialog", { name: "Make it a rule?" });
+
+    await expect(dialog).toContainText(
+      "Lines whose label contains these words will have Pixelplay as their merchant when they are imported.",
+    );
+    await expect(dialog.getByRole("textbox", { name: "Label contains" })).toHaveValue(
+      "PAYPAL *PIXELPLAY",
+    );
+    await dialog.getByRole("button", { name: "Create the rule" }).click();
+    await expect(page.getByTestId("answer")).toHaveText(
+      'Made: {"words":"PAYPAL *PIXELPLAY","applyToPast":true}',
+    );
+  });
+
   test("Cancel makes nothing", async ({ page }) => {
     await page.goto(story("ruleproposal", "default"));
     await page.getByRole("dialog").getByRole("button", { name: "Cancel" }).click();
