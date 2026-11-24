@@ -146,14 +146,17 @@ test("the operations page proposes a cancellation as a refund, links it once con
   await expect(sheet.locator('[data-slot="split-left"]')).toHaveText("€30.00 left to place");
   await expect(sheet.getByRole("button", { name: "Save the split" })).toBeDisabled();
 
-  // A share added makes the sheet grow, which on a phone slides it to its new height, and its list
-  // of categories with it: the option is clicked once nothing moves, as a person would tap it.
+  // The new share's category is typed and chosen with Enter (the first match is highlighted): a
+  // share added makes the sheet grow and, on a phone, slide to its new height, and on Firefox a
+  // click on the moving list was seen to choose nothing.
   await sheet.getByRole("button", { name: "Add a category" }).click();
-  await animationsDone(page);
-  await sheet.getByRole("combobox", { name: "Category 2" }).pressSequentially("groc");
-  await animationsDone(page);
-  await page.getByRole("option", { name: "Groceries", exact: true }).click();
-  await expect(sheet.getByRole("combobox", { name: "Category 2" })).toHaveValue("Groceries");
+
+  const second = sheet.getByRole("combobox", { name: "Category 2" });
+
+  await second.pressSequentially("Groceries");
+  await expect(page.getByRole("option", { name: "Groceries", exact: true })).toBeVisible();
+  await second.press("Enter");
+  await expect(second).toHaveValue("Groceries");
   await expect(sheet.locator('[data-slot="split-left"]')).toHaveText(
     "The shares make the whole line.",
   );
