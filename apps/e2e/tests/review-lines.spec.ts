@@ -386,6 +386,12 @@ test("with single-key shortcuts off, the review's keys do nothing and its button
     .click();
   await expect(count(page)).toHaveText("4 lines");
 
+  if (onPhone(page)) {
+    // The next line opened in its sheet: closed first, so that Escape below has one dialog.
+    await page.keyboard.press("Escape");
+    await expect(page).not.toHaveURL(/[?&]line=/);
+  }
+
   // Not listed either.
   await page.keyboard.press("ControlOrMeta+/");
 

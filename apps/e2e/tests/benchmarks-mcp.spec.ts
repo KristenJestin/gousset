@@ -69,7 +69,7 @@ test("month benchmarks says each category's benchmark and flags the ones above i
     clientId: mcpClientId,
   });
 
-  expect(client.getInstructions()).toContain("Its benchmarks");
+  expect(client.getInstructions()).toContain("benchmarks (each expense category against its mark");
 
   const first = await benchmarks(client);
 
