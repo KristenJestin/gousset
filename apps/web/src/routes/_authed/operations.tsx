@@ -4,6 +4,7 @@ import type {
   ExpensePart,
   FundedExpense,
   LineAccount,
+  LineCategory,
   LineDetail as Line,
   LineExpenses,
   LineRow,
@@ -34,16 +35,20 @@ import { OperationsLayout } from "@gousset/ui/components/operations-layout";
 import { CategoryPicker } from "@gousset/ui/components/category-picker";
 import { OperationsList, OperationsListSkeleton } from "@gousset/ui/components/operations-list";
 import type { OperationRow } from "@gousset/ui/components/operations-list";
+import { ReviewAnnouncer } from "@gousset/ui/components/review-proposal";
 import { usePageLanguage } from "@gousset/ui/hooks/use-page-language";
 import { formatMoney, minorDigits, toDecimalString } from "@gousset/ui/lib/money";
 import { notify } from "@gousset/ui/lib/notify";
 import { hasOperationsFilters } from "@gousset/ui/lib/operations";
+import { useHotkey } from "@tanstack/react-hotkeys";
 import { useDebouncer } from "@tanstack/react-pacer";
 import { noop, useInfiniteQuery, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import { Schema } from "effect";
 import { useState } from "react";
+import type { ReactNode } from "react";
 
+import { LineReview, proposalText } from "@/components/line-review";
 import { ProposedRule } from "@/components/proposed-rule";
 import type { ProposedRuleSets } from "@/components/proposed-rule";
 import { RuleJobNotice } from "@/components/rule-job";
@@ -63,6 +68,7 @@ import { assignLineMerchant } from "@/functions/merchants";
 import { categoryRefusalMessage, merchantRefusalMessage } from "@/i18n/messages";
 import { dayRange, longDay, shortDay, shortDays } from "@/lib/account-day";
 import { categoryPath, choicesOf } from "@/lib/categories";
+import { aDialogIsOpen } from "@/lib/dialog-open";
 import { loadBlocks } from "@/lib/load-blocks";
 import {
   OperationsSearch,
@@ -76,6 +82,8 @@ import { categoryQueries, invalidateCategories } from "@/queries/categories";
 import { invalidateTouched } from "@/queries/invalidate";
 import { lineQueries } from "@/queries/lines";
 import { merchantQueries } from "@/queries/merchants";
+import { reviewQueries } from "@/queries/review";
+import { appHotkeys } from "@/shortcuts";
 
 /** How long the search's words and the amounts wait for the typing to stop before they apply. */
 const TYPING_WAIT_MS = 300;
@@ -83,6 +91,9 @@ const TYPING_WAIT_MS = 300;
 /**
  * Every line of every account (issue #21), its filters and the open line in the URL
  * (`?q=greenmarket&account=…&from=2026-10-01&line=…`): an address opens the same list and line.
+ * With "To review only" on, it is the review mode (#35): the open line's detail starts with what
+ * Gousset proposes, accepted or corrected by a button or a key (J, K, A, C), and once done the line
+ * folds away and the next one opens.
  */
 export const Route = createFileRoute("/_authed/operations")({
   validateSearch: Schema.toStandardSchemaV1(OperationsSearch),
@@ -103,6 +114,10 @@ export const Route = createFileRoute("/_authed/operations")({
             queryClient.ensureQueryData(lineQueries.merchant(deps.line)).then(noop),
             // The open line's category is chosen among them.
             queryClient.ensureQueryData(categoryQueries.list()).then(noop),
+            // In review mode, what Gousset proposes for it (#35).
+            ...(deps.review === true
+              ? [queryClient.ensureQueryData(reviewQueries.line(deps.line)).then(noop)]
+              : []),
           ]),
     ]);
   },
@@ -234,9 +249,28 @@ function Operations() {
   const nameOf = accountNames(accounts);
   const dayOf = shortDays(locale);
 
-  const rows = pages.flatMap((page) =>
+  const queryClient = useQueryClient();
+  // The review mode (#35): the lines to review, one by one, each with what Gousset proposes.
+  const reviewing = applied.toReview;
+  // The lines reviewed here, out of the rows at once, before the list is read again.
+  const [reviewed, setReviewed] = useState<ReadonlySet<string>>(new Set());
+  // The line reviewed last, which folds away from the list.
+  const [foldingId, setFoldingId] = useState<string>();
+
+  // The rule a correction proposed (#25), kept open while the next line opens.
+  const [ruleProposal, setRuleProposal] = useState<{
+    lineId: string;
+    sets: ProposedRuleSets;
+    turn: number;
+  }>();
+
+  const loaded = pages.flatMap((page) =>
     page.lines.map((line): OperationRow => toRow(line, dayOf, nameOf)),
   );
+
+  const rows = loaded.filter((row) => !reviewed.has(row.id));
+  // The count goes down with each line reviewed, before the server says so.
+  const shownTotal = total === undefined ? undefined : total - (loaded.length - rows.length);
 
   const openId = search.line;
   // Rules a correction proposed and applied to the past: a toast follows each one's job, the line
@@ -248,12 +282,92 @@ function Operations() {
     enabled: openId !== undefined,
   });
 
+  const { data: queuedOpen } = useQuery({
+    ...reviewQueries.line(openId ?? ""),
+    enabled: reviewing && openId !== undefined,
+  });
+
   // The detail opens once its line is read, at its full size: its column widens, never empty.
   const open = openId !== undefined && opened?.ok === true ? opened : undefined;
+
+  // In review mode, the open line's proposal, once read.
+  const queued =
+    reviewing && open !== undefined && queuedOpen?.ok === true ? queuedOpen : undefined;
 
   const openLine = (id: string) => {
     void navigate({ search: (previous) => ({ ...previous, line: id }), resetScroll: false });
   };
+
+  // In review mode a line opens once its detail and its proposal are read: the detail opens whole,
+  // its proposal focused, as the one before it goes.
+  const prefetchLine = (id: string) =>
+    Promise.allSettled([
+      queryClient.ensureQueryData(lineQueries.detail(id)),
+      queryClient.ensureQueryData(lineQueries.merchant(id)),
+      queryClient.ensureQueryData(reviewQueries.line(id)),
+    ]);
+
+  const goTo = async (id: string) => {
+    await prefetchLine(id);
+    openLine(id);
+  };
+
+  /** The line below or above the open one (`by`), or the first when none is open. */
+  const step = (by: 1 | -1) => {
+    const index = rows.findIndex((row) => row.id === openId);
+    const target = index === -1 ? rows[0] : rows[index + by];
+
+    if (target !== undefined) {
+      void goTo(target.id);
+    }
+  };
+
+  /**
+   * A line's review is done: it folds away from the list, the count goes down, and the next line
+   * opens (the one below, or above when it was the last); a correction proposes its rule.
+   */
+  const reviewedLine = async (lineId: string, category: LineCategory | null) => {
+    const index = rows.findIndex((row) => row.id === lineId);
+    const next = (rows[index + 1] ?? rows[index - 1])?.id;
+
+    if (next !== undefined) {
+      await prefetchLine(next);
+    }
+
+    setFoldingId(lineId);
+    setReviewed((before) => new Set([...before, lineId]));
+
+    if (category !== null) {
+      setRuleProposal({
+        lineId,
+        sets: { kind: "category", id: category.id, name: categoryPath(category) },
+        turn: (ruleProposal?.turn ?? 0) + 1,
+      });
+    }
+
+    void navigate({ search: (previous) => ({ ...previous, line: next }), resetScroll: false });
+
+    await Promise.all([
+      invalidateTouched(queryClient, { everyMonth: true }),
+      invalidateCategories(queryClient),
+    ]);
+  };
+
+  // The review's keys: only in review mode, never while a dialog is open; a field that has the
+  // focus keeps its keys (TanStack Hotkeys leaves typing alone). A and C are the open line's own
+  // (`LineReview`); with no line open, they open the first, as J and K do.
+  const onStep = (by: 1 | -1) => () => {
+    if (reviewing && !aDialogIsOpen()) {
+      step(by);
+    }
+  };
+
+  const closed = reviewing && openId === undefined;
+
+  useHotkey(appHotkeys["review.next"], onStep(1), { enabled: reviewing });
+  useHotkey(appHotkeys["review.previous"], onStep(-1), { enabled: reviewing });
+  useHotkey(closed ? appHotkeys["review.accept"] : null, onStep(1));
+  useHotkey(closed ? appHotkeys["review.correct"] : null, onStep(1));
 
   const close = () => {
     void navigate({
@@ -296,7 +410,7 @@ function Operations() {
               accounts={accountChoices(accounts, nameOf)}
               minError={draft.min.trim() === "" ? undefined : amountError}
               maxError={draft.max.trim() === "" ? undefined : amountError}
-              count={total}
+              count={shownTotal}
               locale={locale}
             />
             <FormMessage
@@ -304,25 +418,26 @@ function Operations() {
             />
           </>
         }
-        count={total}
+        count={shownTotal}
         countAction={<ClearFilters values={draft} onChange={change} />}
         list={
           failed ? (
             <ErrorState onRetry={() => void lines.refetch()} />
-          ) : total === undefined ? (
+          ) : shownTotal === undefined ? (
             <OperationsListSkeleton />
           ) : (
             <OperationsList
               rows={rows}
-              total={total}
+              total={shownTotal}
               openId={open?.line.id}
-              onOpen={openLine}
+              onOpen={reviewing ? (id) => void goTo(id) : openLine}
               onEnd={readOn}
               loadingMore={lines.isFetchingNextPage}
               label={m.operationsTitle()}
               emptyText={m.operationsNoMatch()}
               locale={locale}
               withCategory
+              foldingId={foldingId}
             />
           )
         }
@@ -331,6 +446,19 @@ function Operations() {
             <OpenLine
               key={open.line.id}
               line={open.line}
+              review={
+                queued === undefined ? undefined : (
+                  <LineReview
+                    line={open.line}
+                    queued={queued.queued}
+                    seen={queued.key}
+                    label={lineLabel(open.line)}
+                    nameOf={nameOf}
+                    locale={locale}
+                    onReviewed={reviewedLine}
+                  />
+                )
+              }
               transfer={open.transfer}
               expenses={open.expenses}
               balanceAccounts={balanceAccountsFor(open.line, accounts, nameOf)}
@@ -347,6 +475,26 @@ function Operations() {
       {ruleJobs.map((jobId) => (
         <RuleJobNotice key={jobId} jobId={jobId} />
       ))}
+      {ruleProposal === undefined ? null : (
+        <ProposedRule
+          key={ruleProposal.turn}
+          lineId={ruleProposal.lineId}
+          sets={ruleProposal.sets}
+          onApplied={(jobId) => setRuleJobs([...ruleJobs, jobId])}
+        />
+      )}
+      <ReviewAnnouncer
+        message={
+          queued === undefined
+            ? undefined
+            : m.reviewAnnounce({
+                day: shortDay(queued.queued.line.bookedOn, locale),
+                label: lineLabel(queued.queued.line),
+                amount: formatMoney(queued.queued.line.amount, { locale }),
+                proposal: proposalText(queued.queued.proposal, locale, nameOf),
+              })
+        }
+      />
     </Page>
   );
 }
@@ -1163,6 +1311,7 @@ function ExpenseOf({
 
 function OpenLine({
   line,
+  review,
   transfer,
   expenses,
   balanceAccounts,
@@ -1173,6 +1322,8 @@ function OpenLine({
   onRuleJob,
 }: {
   line: Line;
+  /** In review mode (#35), what Gousset proposes for it, at the top of its detail. */
+  review: ReactNode;
   transfer: Transfer;
   expenses: LineExpenses;
   /** The accounts kept by their balance the line may be paired with: none once it is a side. */
@@ -1189,6 +1340,7 @@ function OpenLine({
 
   return (
     <LineDetail
+      review={review}
       category={
         line.category === null ? undefined : (
           <LineCategoryPicker line={line} onRuleJob={onRuleJob} />

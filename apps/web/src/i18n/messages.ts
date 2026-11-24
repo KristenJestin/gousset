@@ -94,6 +94,38 @@ export function categoryRefusalMessage(code: string, fallback?: string | null): 
 }
 
 /**
+ * A refusal of the review of a line (`ReviewRefusalCode`, #35), by its code; `FAILED` when the
+ * server failed. A refusal of the category chosen says what the operations page says of it.
+ */
+export function reviewRefusalMessage(code: string): string {
+  switch (code) {
+    case "LINE_NOT_FOUND":
+      return m.operationsTransferLineGone();
+    case "ALREADY_REVIEWED":
+      return m.reviewRefusalReviewed();
+    case "PROPOSAL_CHANGED":
+      return m.reviewRefusalChanged();
+    case "NOT_HELD":
+      return m.reviewRefusalNotHeld();
+    case "CANNOT_PAIR":
+      return m.reviewRefusalCannotPair();
+    case "CANNOT_LINK":
+      return m.reviewRefusalCannotLink();
+    case "CATEGORY_REQUIRED":
+      return m.reviewRefusalCategoryRequired();
+    case "LINE_NOT_CLASSIFIABLE":
+    case "CATEGORY_NOT_FOUND":
+    case "CATEGORY_KIND_MISMATCH":
+    case "CATEGORY_ARCHIVED":
+      return categoryRefusalMessage(code);
+    case "FAILED":
+      return m.operationsTransferFailed();
+    default:
+      return m.errorUnknown();
+  }
+}
+
+/**
  * A merchant write or read's refusal (`MerchantRefusalCode`), by its code; `name` is the merchant
  * it is about, when the refusal names one (the one that has the name already, the intermediary
  * chosen as who was paid).
