@@ -6,7 +6,7 @@ import { ACCOUNTS, madeUpOperations } from "../stories/made-up";
 import { LineDetail, LineDetailSkeleton } from "./line-detail";
 import { NO_OPERATIONS_FILTERS } from "../lib/operations";
 import type { OperationsFilterValues } from "../lib/operations";
-import { OperationsFilters } from "./operations-filters";
+import { ClearFilters, OperationsFilters } from "./operations-filters";
 import { OperationsLayout } from "./operations-layout";
 import { OperationsList, OperationsListSkeleton } from "./operations-list";
 import type { OperationRow } from "./operations-list";
@@ -40,9 +40,15 @@ function Screen({ start }: { start?: string }) {
   return (
     <OperationsLayout
       filters={
-        <OperationsFilters values={values} onChange={setValues} accounts={ACCOUNT_CHOICES} />
+        <OperationsFilters
+          values={values}
+          onChange={setValues}
+          accounts={ACCOUNT_CHOICES}
+          count={rows.length}
+        />
       }
       count={rows.length}
+      countAction={<ClearFilters values={values} onChange={setValues} />}
       list={
         <OperationsList
           rows={rows}
@@ -77,7 +83,8 @@ function Screen({ start }: { start?: string }) {
 }
 
 /**
- * The operations screen's places (screen 2): the filters, the count of lines that match, the list
+ * The operations screen's places (screen 2): the filters, the count of lines that match (with
+ * "Clear filters" at the end of its line, once one is set), the list
  * in a block filling the screen's height with its own scroller, and the open line's detail in a
  * 340 px column at its right; on a narrower screen the detail covers the list, which keeps its
  * scroll under it. The page composes it, and writes no layout class of its own.

@@ -35,6 +35,13 @@ export type DatePickerProps = FieldProps & {
   required?: boolean;
   /** `sm` in dense rows and toolbars, the height of a small button. */
   size?: "md" | "sm";
+  /** What the empty field says, where a row has no room for a label above it ("From"). */
+  placeholder?: string;
+  /**
+   * Hides the format's example under the field from sight, where it would make a row of fields
+   * uneven; it still describes the field to screen readers.
+   */
+  hideHint?: boolean;
 };
 
 const stepClasses = cn(
@@ -63,6 +70,8 @@ export function DatePicker({
   max,
   required,
   size = "md",
+  placeholder,
+  hideHint = false,
 }: DatePickerProps) {
   const messages = useUiMessages().forms;
   const [anchor, setAnchor] = useState<HTMLDivElement | null>(null);
@@ -91,7 +100,10 @@ export function DatePicker({
           ref={setAnchor}
           className={cn(controlClasses(size), groupFocusRing, "pe-1 has-data-disabled:opacity-50")}
         >
-          <DatePickerInput className="h-full min-w-0 flex-1 bg-transparent tabular-nums outline-none placeholder:text-muted-foreground data-disabled:cursor-not-allowed" />
+          <DatePickerInput
+            placeholder={placeholder}
+            className="h-full min-w-0 flex-1 bg-transparent tabular-nums outline-none placeholder:text-muted-foreground data-disabled:cursor-not-allowed"
+          />
           <DatePickerTrigger
             aria-label={messages.chooseDate}
             className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-sm text-muted-foreground hover:bg-muted data-disabled:cursor-not-allowed"
@@ -99,7 +111,7 @@ export function DatePicker({
             <Icon name="calendar" />
           </DatePickerTrigger>
         </div>
-        <DatePickerHint className="text-xs text-muted-foreground">
+        <DatePickerHint className={cn("text-xs text-muted-foreground", hideHint && "sr-only")}>
           {(state) => messages.dateFormat(state.example)}
         </DatePickerHint>
         <DatePickerContent

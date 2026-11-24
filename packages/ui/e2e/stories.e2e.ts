@@ -135,6 +135,17 @@ const SHOTS: ReadonlyArray<Shot> = [
   { id: "operations-operationslist--default" },
   { id: "operations-linedetail--to-review" },
   { id: "operations-operationsfilters--set" },
+  { id: "operations-operationsfilters--french" },
+  // A phone: the search and the Filters button, then the sheet it opens (#127).
+  { id: "operations-operationsfilters--phone", width: 390 },
+  {
+    id: "operations-operationsfilters--phone",
+    width: 390,
+    open: "click",
+    trigger: "Filters",
+    name: "operations-operationsfilters--phone-sheet",
+  },
+  { id: "operations-operationslist--phone", width: 390 },
   { id: "operations-operationslayout--line-open" },
 ];
 
