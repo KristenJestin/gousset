@@ -134,23 +134,27 @@ test("the account sheet opens on its first field, its focus ring whole, and a pr
 
   await expect(name).toBeFocused();
 
-  // #122: the ring (2 px, 2 px away) lies inside the box the scrolling body clips to. Both move
-  // together while the sheet slides in, so this holds from the first frame.
-  const scroller = sheet.locator('[data-slot="sheet-body"]');
+  // Once the sheet has come to rest at its edge.
+  await expect.poll(async () => sheet.evaluate((node) => node.getAnimations().length)).toBe(0);
 
-  const ring = await name.evaluate((node) => {
+  // #122: the ring (2 px, 2 px away) lies inside the box the scrolling body clips to, both read in
+  // the same frame.
+  const { ring, clip } = await name.evaluate((node) => {
     const style = getComputedStyle(node);
     const reach = Number.parseFloat(style.outlineOffset) + Number.parseFloat(style.outlineWidth);
     const box = node.getBoundingClientRect();
+    const scroller = node.closest('[data-slot="sheet-body"]');
+    const area = scroller?.getBoundingClientRect();
+    const left = (area?.left ?? 0) + (scroller?.clientLeft ?? 0);
 
-    return { reach, left: box.left - reach, top: box.top - reach, right: box.right + reach };
-  });
-
-  const clip = await scroller.evaluate((node) => {
-    const box = node.getBoundingClientRect();
-    const left = box.left + node.clientLeft;
-
-    return { left, top: box.top + node.clientTop, right: left + node.clientWidth };
+    return {
+      ring: { reach, left: box.left - reach, top: box.top - reach, right: box.right + reach },
+      clip: {
+        left,
+        top: (area?.top ?? 0) + (scroller?.clientTop ?? 0),
+        right: left + (scroller?.clientWidth ?? 0),
+      },
+    };
   });
 
   expect(ring.reach).toBe(4);
