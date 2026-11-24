@@ -1,7 +1,7 @@
 import type { Page } from "@playwright/test";
 
 import { onPhone } from "../src/frame";
-import { block, openBlock } from "../src/review";
+import { block, closeBlock, openBlock } from "../src/review";
 import { animationsDone, expect, test, visit } from "../src/test";
 
 // The scenarios of issue #10, the monthly review on made-up data: what the screen shows, block by
@@ -161,23 +161,23 @@ test("the review of a month shows each of its blocks, labelled as made-up", asyn
 
   await expect(movements).toContainText("Acme Consulting");
   await expect(movements).toContainText("buy World index ETF");
-  await page.keyboard.press("Escape");
+  await closeBlock(page);
 
   const investments = await openBlock(page, "Investments");
 
   await expect(investments).toContainText("Northbank PEA");
-  await page.keyboard.press("Escape");
+  await closeBlock(page);
 
   const flagged = await openBlock(page, "Flagged");
 
   await expect(flagged).toContainText("Streamly goes from €8.99 to €9.49");
-  await page.keyboard.press("Escape");
+  await closeBlock(page);
 
   const toReview = await openBlock(page, "To review");
 
   await expect(toReview.getByRole("button", { name: /^Approve / })).toHaveCount(3);
   await expect(toReview).toContainText("Show the other 3");
-  await page.keyboard.press("Escape");
+  await closeBlock(page);
   await animationsDone(page);
 });
 
@@ -265,10 +265,8 @@ test("approving a line folds it away, the counter drops and its category's bar g
 
   await expect(counter).toContainText("6");
 
-  if (onPhone(page)) {
-    // On a phone the sheet covers the categories: read them once it is closed.
-    await page.keyboard.press("Escape");
-  }
+  // On a phone the sheet covers the categories: read them once it is closed.
+  await closeBlock(page);
 
   const spending = block(page, "Where the money goes");
   const more = spending.getByRole("button", { name: /^Show the other \d+$/ });
@@ -288,9 +286,7 @@ test("approving a line folds it away, the counter drops and its category's bar g
   await expect(list.getByRole("button", { name: label })).toHaveCount(0);
   await expect(counter).toContainText("5");
 
-  if (onPhone(page)) {
-    await page.keyboard.press("Escape");
-  }
+  await closeBlock(page);
 
   // Once the server has it, the category counts the line's expense.
   await expect.poll(async () => centsIn((await row.textContent()) ?? "")).toBeGreaterThan(before);

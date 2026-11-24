@@ -2,6 +2,7 @@ import type { Page } from "@playwright/test";
 
 import { startWorkerEnvironment } from "../src/app-server";
 import { hasUser } from "../src/database";
+import { onPhone } from "../src/frame";
 import {
   addUser,
   createUser,
@@ -241,11 +242,12 @@ test("the password is changed from the settings, in a dialog that keeps a refusa
 
   const transition = () => dialog.evaluate((node) => getComputedStyle(node).transitionDuration);
 
-  // It grows in 200 ms (the dialog's motion), at once under reduced motion. Cancel closes it,
+  // It grows in 200 ms (the dialog's motion; on a phone it rises in 300 ms), at once under
+  // reduced motion. Cancel closes it,
   // nothing changed, and focus is back on the button that opened it.
   await trigger.click();
   await expect(dialog).toBeVisible();
-  expect(await transition()).toContain("0.2s");
+  expect(await transition()).toContain(onPhone(page) ? "0.3s" : "0.2s");
   await page.emulateMedia({ reducedMotion: "reduce" });
   expect(await transition()).not.toMatch(/[1-9]/);
   await dialog.getByRole("button", { name: "Cancel" }).click();
