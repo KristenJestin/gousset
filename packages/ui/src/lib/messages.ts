@@ -267,6 +267,20 @@ function uiMessages(locale: Locale) {
       linkSearch: m.uiOperationsLinkSearch({}, options),
       linkNone: m.uiOperationsLinkNone({}, options),
       expenseLine: m.uiOperationsExpenseLine({}, options),
+      /** `LineFunds` and `LineFundedBy`: a works council refund and the expense it funds (#29). */
+      fundsExpense: m.uiOperationsFundsExpense({}, options),
+      fundsNone: m.uiOperationsFundsNone({}, options),
+      fundsKept: m.uiOperationsFundsKept({}, options),
+      fundExpense: m.uiOperationsFundExpense({}, options),
+      fundDescription: m.uiOperationsFundDescription({}, options),
+      fundNoCandidate: m.uiOperationsFundNoCandidate({}, options),
+      fundChoice: m.uiOperationsFundChoice({}, options),
+      fund: m.uiOperationsFund({}, options),
+      unfund: m.uiOperationsUnfund({}, options),
+      fundedBy: m.uiOperationsFundedBy({}, options),
+      fundedInAll: m.uiOperationsFundedInAll({}, options),
+      /** Under an expense's fundings: "It keeps its cost of €120.00." */
+      fundedCost: (amount: string) => m.uiOperationsFundedCost({ amount }, options),
       /** `SplitLine`: a line split across categories. */
       split: m.uiOperationsSplit({}, options),
       splitTitle: m.uiOperationsSplitTitle({}, options),
