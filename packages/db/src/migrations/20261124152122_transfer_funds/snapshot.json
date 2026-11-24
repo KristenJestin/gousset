@@ -1,0 +1,71 @@
+{
+  "type": "diff",
+  "version": "10",
+  "dialect": "postgres",
+  "id": "e57d2dab-61ad-4cbe-8f61-8b2451ee2555",
+  "prevIds": ["80df7a71-9532-4687-a1b9-4970bf93d794"],
+  "footprints": [
+    {
+      "statementType": "add_column",
+      "statementTarget": ["column", "public", "transfer", "funds_entry_id"],
+      "writes": [
+        "s|col|public.transfer.funds_entry_id",
+        "n|col|public.transfer.funds_entry_id",
+        "e|col|public.transfer.funds_entry_id"
+      ],
+      "reads": ["n|tbl|public.transfer", "n|sch|public"]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": ["index", "public", "transfer", "transfer_funds_entry_id_idx"],
+      "writes": [
+        "s|idx|public.transfer_funds_entry_id_idx",
+        "n|idx|public.transfer_funds_entry_id_idx",
+        "e|idx|public.transfer_funds_entry_id_idx",
+        "n|rel|public.transfer_funds_entry_id_idx"
+      ],
+      "reads": ["n|tbl|public.transfer", "n|sch|public", "n|col|public.transfer.funds_entry_id"]
+    }
+  ],
+  "deltas": [
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "transfer",
+        "name": "funds_entry_id",
+        "type": "uuid",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "transfer",
+        "name": "transfer_funds_entry_id_idx",
+        "nameExplicit": true,
+        "columns": [
+          {
+            "value": "funds_entry_id",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          }
+        ],
+        "isUnique": false,
+        "where": null,
+        "with": "",
+        "method": "btree",
+        "entityType": "indexes"
+      }
+    }
+  ]
+}
