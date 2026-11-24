@@ -59,7 +59,19 @@ const SHOTS: ReadonlyArray<Shot> = [
   { id: "feedback-job-progress--running" },
   { id: "import-file-drop--default" },
   { id: "import-import-files--checking" },
+  // The import screen's states (#125), on a desktop and at a phone's width.
+  { id: "import-import-files--waiting-for-account" },
+  { id: "import-import-files--imported" },
+  { id: "import-import-files--failed" },
+  {
+    id: "import-import-files--waiting-for-account",
+    width: 390,
+    name: "import-import-files--waiting-for-account-phone",
+  },
+  { id: "import-import-files--imported", width: 390, name: "import-import-files--imported-phone" },
+  { id: "import-import-files--failed", width: 390, name: "import-import-files--failed-phone" },
   { id: "import-import-summary--default" },
+  { id: "data-statuschip--tones" },
   { id: "import-csv-mapping--default" },
   { id: "import-csv-settings--default" },
   { id: "import-csv-test-read--default" },
@@ -123,6 +135,17 @@ const SHOTS: ReadonlyArray<Shot> = [
   { id: "operations-operationslist--default" },
   { id: "operations-linedetail--to-review" },
   { id: "operations-operationsfilters--set" },
+  { id: "operations-operationsfilters--french" },
+  // A phone: the search and the Filters button, then the sheet it opens (#127).
+  { id: "operations-operationsfilters--phone", width: 390 },
+  {
+    id: "operations-operationsfilters--phone",
+    width: 390,
+    open: "click",
+    trigger: "Filters",
+    name: "operations-operationsfilters--phone-sheet",
+  },
+  { id: "operations-operationslist--phone", width: 390 },
   { id: "operations-operationslayout--line-open" },
   // A line's detail beside the list in French, and a sheet over it on a phone (#128).
   { id: "operations-operationslayout--line-open-french" },

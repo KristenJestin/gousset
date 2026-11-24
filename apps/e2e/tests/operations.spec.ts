@@ -1,4 +1,4 @@
-import type { Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 import { account, statementImport, statementLine } from "@gousset/db/schema/ledger";
 import { sql } from "drizzle-orm";
 import { Schema } from "effect";
@@ -167,6 +167,30 @@ const count = (page: Page) => page.locator('[data-slot="operations-count"]');
 // A line's detail: a panel beside the list on a wide screen, a sheet on a phone.
 const detail = (page: Page, label: string) =>
   page.getByRole(onPhone(page) ? "dialog" : "region", { name: label });
+
+/**
+ * Runs `act` on the filters' fields: on a wide screen, those of the filter row; on a phone, those of
+ * the Filters sheet (#127), opened first and closed after, so that the list is in sight again.
+ */
+async function inFilters(page: Page, act: (fields: Locator) => Promise<void>) {
+  const button = page.getByRole("button", { name: /^Filters/ });
+
+  if (!(await button.isVisible())) {
+    await act(page.getByRole("group", { name: "Filters" }));
+
+    return;
+  }
+
+  await expect(button).toHaveAttribute("data-hydrated", "");
+  await button.click();
+
+  const sheet = page.getByRole("dialog", { name: "Filters" });
+
+  await expect(sheet).toBeVisible();
+  await act(sheet);
+  await sheet.getByRole("button", { name: /^Show / }).click();
+  await expect(sheet).toHaveCount(0);
+}
 
 /** Once hydrated, the list places its rows itself, from script: the browser runs the page. */
 async function hydrated(page: Page) {
@@ -409,13 +433,18 @@ test("the account filter narrows the list to that account's lines", async ({ pag
   await hydrated(page);
 
   // Two accounts share a name: each is named with its institution.
-  await page.getByRole("combobox", { name: "Account" }).click();
-  await page.getByRole("option", { name: "Everyday (Harbor Credit)", exact: true }).click();
+  await inFilters(page, async (fields) => {
+    await fields.getByRole("combobox", { name: "Account" }).click();
+    await page.getByRole("option", { name: "Everyday (Harbor Credit)", exact: true }).click();
+  });
 
   await expect(count(page)).toHaveText("2 lines");
   await expect(rows(page)).toHaveCount(2);
   await expect(row(page, SALARY)).toBeVisible();
   await expect(row(page, HARDWARE)).toBeVisible();
+  // Money in carries its plus, money out its minus: the direction reads without the colour.
+  await expect(row(page, SALARY)).toContainText("+€2,500.00");
+  await expect(row(page, HARDWARE)).toContainText("−€80.00");
   await expect(page).toHaveURL(/[?&]account=[\da-f-]{36}(&|$)/);
   await animationsDone(page);
 });
@@ -432,8 +461,14 @@ test("the period filter narrows the list to its days, and the older month addres
 
   // The review's link names a month: its first to last day.
   await visit(page, "/operations?month=2026-09");
-  await expect(page.getByRole("textbox", { name: "From", exact: true })).toHaveValue("09/01/2026");
-  await expect(page.getByRole("textbox", { name: "To", exact: true })).toHaveValue("09/30/2026");
+  await inFilters(page, async (fields) => {
+    await expect(fields.getByRole("textbox", { name: "From", exact: true })).toHaveValue(
+      "09/01/2026",
+    );
+    await expect(fields.getByRole("textbox", { name: "To", exact: true })).toHaveValue(
+      "09/30/2026",
+    );
+  });
   await expect(count(page)).toHaveText("1 line");
   await expect(row(page, SAVINGS)).toBeVisible();
 
@@ -450,8 +485,10 @@ test("the amount filter narrows the list to amounts between its bounds", async (
 
   // Bounds against the amount whatever its sign: 500.00 only, of 42.50, 12.99, 2,500, 80, 500 and
   // the paged 10.00 to 12.49.
-  await page.getByRole("textbox", { name: "Amount from", exact: true }).fill("100");
-  await page.getByRole("textbox", { name: "Amount up to", exact: true }).fill("600");
+  await inFilters(page, async (fields) => {
+    await fields.getByRole("textbox", { name: "Amount from", exact: true }).fill("100");
+    await fields.getByRole("textbox", { name: "Amount up to", exact: true }).fill("600");
+  });
 
   await expect(count(page)).toHaveText("1 line");
   await expect(row(page, SAVINGS)).toBeVisible();
@@ -459,7 +496,9 @@ test("the amount filter narrows the list to amounts between its bounds", async (
   await expect(page).toHaveURL(/[?&]max=600(&|$)/);
 
   // An amount the server cannot read is said under its field; the list stays as it was.
-  await page.getByRole("textbox", { name: "Amount from", exact: true }).fill("12.5.0");
+  await inFilters(page, async (fields) => {
+    await fields.getByRole("textbox", { name: "Amount from", exact: true }).fill("12.5.0");
+  });
   await expect(page.getByText("Type an amount as 12.50").first()).toBeVisible();
   await expect(count(page)).toHaveText("1 line");
   await animationsDone(page);
@@ -470,7 +509,9 @@ test("the to-review filter shows the lines held for review, marked so", async ({
   await visit(page, "/operations");
   await hydrated(page);
 
-  await page.getByRole("checkbox", { name: "To review only" }).click();
+  await inFilters(page, async (fields) => {
+    await fields.getByRole("checkbox", { name: "To review only" }).click();
+  });
 
   await expect(count(page)).toHaveText("1 line");
   await expect(row(page, HELD)).toContainText("To review");

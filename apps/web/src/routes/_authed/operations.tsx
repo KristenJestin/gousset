@@ -5,7 +5,7 @@ import { EmptyState } from "@gousset/ui/components/empty-state";
 import { ErrorState } from "@gousset/ui/components/error-state";
 import { FormMessage } from "@gousset/ui/components/form-message";
 import { LineDetail } from "@gousset/ui/components/line-detail";
-import { OperationsFilters } from "@gousset/ui/components/operations-filters";
+import { ClearFilters, OperationsFilters } from "@gousset/ui/components/operations-filters";
 import type { OperationsFilterValues } from "@gousset/ui/components/operations-filters";
 import { OperationsLayout } from "@gousset/ui/components/operations-layout";
 import { OperationsList, OperationsListSkeleton } from "@gousset/ui/components/operations-list";
@@ -241,6 +241,8 @@ function Operations() {
               accounts={accountChoices(accounts, nameOf)}
               minError={draft.min.trim() === "" ? undefined : amountError}
               maxError={draft.max.trim() === "" ? undefined : amountError}
+              count={total}
+              locale={locale}
             />
             <FormMessage
               message={refusal === "PERIOD_INVALID" ? m.operationsPeriodRefused() : undefined}
@@ -248,6 +250,7 @@ function Operations() {
           </>
         }
         count={total}
+        countAction={<ClearFilters values={draft} onChange={change} />}
         list={
           failed ? (
             <ErrorState onRetry={() => void lines.refetch()} />

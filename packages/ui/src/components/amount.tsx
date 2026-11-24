@@ -8,7 +8,7 @@ import { Skeleton } from "./skeleton";
 
 export type AmountSize = "sm" | "md" | "lg";
 
-export type AmountTone = "neutral" | "spent" | "saved" | "left" | "income";
+export type AmountTone = "neutral" | "spent" | "saved" | "left" | "income" | "in";
 
 export type AmountProps = {
   /** Integer minor units and a currency: `{ minor: 312000, currency: "EUR" }`. */
@@ -21,7 +21,10 @@ export type AmountProps = {
   whole?: boolean;
   /** `sm` in rows, `md` in text, `lg` for a block's headline figure. */
   size?: AmountSize;
-  /** A money role's colour, only where the design gives the figure that role. */
+  /**
+   * A money role's colour, only where the design gives the figure that role; `in` for money in,
+   * in a list whose amounts are coloured by direction (the operations).
+   */
   tone?: AmountTone;
   /** The digits roll to the next value when it changes. Off for long static lists. */
   roll?: boolean;
@@ -37,6 +40,7 @@ function amountClasses(size: AmountSize, tone: AmountTone) {
     tone === "saved" && "text-money-saved",
     tone === "left" && "text-money-left",
     tone === "income" && "text-money-income",
+    tone === "in" && "text-amount-in",
   );
 }
 

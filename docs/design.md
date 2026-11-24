@@ -2,6 +2,8 @@
 
 Where each element sits is fixed by the validated wireframes ([`wireframes/`](wireframes/index.html), one screen per `?s=<id>`). This file says what they look like.
 
+The 0.2 finishing pass ([`prototypes/0.2/`](prototypes/0.2/index.html)) is validated after them and wins where the two differ. The import screen's file list follows it: four columns instead of the wireframe's seven (screen 6, block 2), the format, the account and the period set back under the file's name, each still named for screen readers, and a dash for a fact not found yet.
+
 Status: the naming of CSS variables is validated. The rest of the visual direction is the starting point: the first screen built in the real stack (the monthly review, on made-up data, with its motion) is checked by the maintainer and then serves as the reference for the other screens.
 
 ## References
@@ -45,6 +47,8 @@ One colour per role, the same across the whole app:
 | income | `--money-income` |
 
 These roles hold for the month bar, the breakdowns and the accounts.
+
+A list of amounts by direction (the operations) colours money in with `--amount-in`, the income hue a shade darker in light so that it keeps 4.5:1 on a hovered or open row, and leaves money out in the text's colour. Its sign is always written (a plus, a true minus), so the direction reads without the colour.
 
 ### Hatching for money apart
 
@@ -162,6 +166,7 @@ The role logic shared by shadcn, ui-sdk and Bklit:
 | Interface | shadcn's names, no prefix (`--background`, `--muted-foreground`…) |
 | Charts | Bklit's `--chart-*`, as they are |
 | Money, Gousset's own | `--money-spent`, `--money-saved`, `--money-left`, `--money-income`, `--money-restricted` |
+| Amounts by direction | `--amount-in` |
 
 ## The first screen built
 
