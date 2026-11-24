@@ -46,6 +46,8 @@ One colour per role, the same across the whole app:
 
 These roles hold for the month bar, the breakdowns and the accounts.
 
+A list of amounts by direction (the operations) colours money in with `--amount-in`, the income hue a shade darker in light so that it keeps 4.5:1 on a hovered or open row, and leaves money out in the text's colour. Its sign is always written (a plus, a true minus), so the direction reads without the colour.
+
 ### Hatching for money apart
 
 Restricted money in benefit accounts, credits that expire and the refunded part of an expense are **hatched**, like Bklit's patterns (`--money-restricted`). They read as "yours, but not the same" without adding a colour.
@@ -162,6 +164,7 @@ The role logic shared by shadcn, ui-sdk and Bklit:
 | Interface | shadcn's names, no prefix (`--background`, `--muted-foreground`…) |
 | Charts | Bklit's `--chart-*`, as they are |
 | Money, Gousset's own | `--money-spent`, `--money-saved`, `--money-left`, `--money-income`, `--money-restricted` |
+| Amounts by direction | `--amount-in` |
 
 ## The first screen built
 

@@ -148,7 +148,8 @@ const COLUMN = {
 /**
  * The operations (docs/wireframes, screen 2, block 2): every statement line, newest first, one row
  * each: its day, its raw label (with a "To review" chip on a held line), its account and its
- * amount. A row opens the line (`onOpen`), by press or keyboard. Virtualised with ui-sdk's
+ * amount, coloured by its direction: money in in `--amount-in` with a plus, money out in the text's
+ * colour with a minus. A row opens the line (`onOpen`), by press or keyboard. Virtualised with ui-sdk's
  * `createVirtualizer`: only the rows in view (and a few around) are in the page, each 48 px, in a
  * scroller of its own that fills its parent's height; `onEnd` asks for the next page.
  *
@@ -439,7 +440,16 @@ function RowButton({
       </span>
       <span className={cn(COLUMN.account, "text-muted-foreground")}>{row.account}</span>
       <span className={COLUMN.amount}>
-        <Amount value={row.amount} size="sm" roll={false} locale={locale} />
+        {/* Money in is green with its plus, money out keeps the text's colour with its minus: the
+            sign is always written, so the direction reads without the colour. */}
+        <Amount
+          value={row.amount}
+          size="sm"
+          roll={false}
+          locale={locale}
+          sign={row.amount.minor > 0 ? "always" : "auto"}
+          tone={row.amount.minor > 0 ? "in" : "neutral"}
+        />
       </span>
     </button>
   );

@@ -97,6 +97,10 @@
   --money-saved: light-dark(oklch(0.52 0.11 235), oklch(0.75 0.1 235));
   --money-left: light-dark(oklch(0.52 0.08 195), oklch(0.77 0.09 195));
   --money-income: light-dark(oklch(0.52 0.12 150), oklch(0.77 0.14 150));
+  /* Amounts by direction (the operations, #127): money in is the income hue, a shade darker in
+     light, so that it keeps 4.5:1 on the muted band of a hovered or open row too; money out stays
+     in the text's colour. */
+  --amount-in: light-dark(oklch(0.5 0.12 150), oklch(0.77 0.14 150));
   /* Money apart (restricted, expiring, refunded) is hatched, not coloured: a neutral stroke. */
   --money-restricted: light-dark(oklch(0.5 0.01 75), oklch(0.7 0.01 80));
 
@@ -177,6 +181,7 @@
   --color-money-saved: var(--money-saved);
   --color-money-left: var(--money-left);
   --color-money-income: var(--money-income);
+  --color-amount-in: var(--amount-in);
   --color-money-restricted: var(--money-restricted);
   --color-chart-1: var(--chart-1);
   --color-chart-2: var(--chart-2);
