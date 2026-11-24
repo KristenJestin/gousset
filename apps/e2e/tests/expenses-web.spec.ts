@@ -1,4 +1,4 @@
-import type { Page } from "@playwright/test";
+import type { Page, Response } from "@playwright/test";
 import { exampleStatement } from "@gousset/fixture";
 import type { Statement, StatementLine } from "@gousset/fixture";
 
@@ -155,11 +155,13 @@ test("the operations page proposes a cancellation as a refund, links it once con
   await animationsDone(page);
   await expectAccessible(page);
 
-  // A sheet still open after the save says why: its text (a refusal under the shares), whether its
-  // button is busy, the calls sent and answered since, and any error the page threw.
+  // A sheet still open after the save says why: its text (a refusal under the shares), its state,
+  // whether its button is busy, the calls sent and answered since (the save's answer whole), what
+  // still animates, and any error the page threw.
   const save = sheet.getByRole("button", { name: "Save the split" });
   const sent: Array<string> = [];
   const answered: Array<string> = [];
+  const posts: Array<Response> = [];
   const thrown: Array<string> = [];
 
   page.on("request", (request) => {
@@ -170,6 +172,10 @@ test("the operations page proposes a cancellation as a refund, links it once con
   page.on("response", (response) => {
     if (response.url().includes("/_serverFn/")) {
       answered.push(String(response.status()));
+
+      if (response.request().method() === "POST") {
+        posts.push(response);
+      }
     }
   });
   page.on("pageerror", (error) => {
@@ -186,6 +192,17 @@ test("the operations page proposes a cancellation as a refund, links it once con
             `busy: ${String(await save.getAttribute("aria-busy"))}`,
             `sent: ${sent.join(",")}`,
             `answered: ${answered.join(",")}`,
+            `saved: ${(await Promise.all(posts.map((post) => post.text()))).join(" | ").slice(0, 600)}`,
+            `state: ${await sheet.evaluate((element) =>
+              [...element.attributes].map((each) => `${each.name}=${each.value}`).join(" "),
+            )}`,
+            `moving: ${await sheet.evaluate(() =>
+              [...document.querySelectorAll("*")]
+                .flatMap((each) =>
+                  each.getAnimations().length > 0 ? [each.outerHTML.slice(0, 160)] : [],
+                )
+                .join(" | "),
+            )}`,
             `thrown: ${thrown.join("; ")}`,
           ].join("\n"),
     )
