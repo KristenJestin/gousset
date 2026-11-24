@@ -1,7 +1,10 @@
+import { MAX_SHARES } from "@gousset/core/values";
 import type {
   AccountList,
+  ExpensePart,
   LineAccount,
   LineDetail as Line,
+  LineExpenses,
   LineRow,
   LineTransfer as Transfer,
   TransferSide,
@@ -12,6 +15,8 @@ import { EmptyState } from "@gousset/ui/components/empty-state";
 import { ErrorState } from "@gousset/ui/components/error-state";
 import { FormMessage } from "@gousset/ui/components/form-message";
 import { LineDetail } from "@gousset/ui/components/line-detail";
+import { LineExpense, LinkLine, SplitLine } from "@gousset/ui/components/line-expense";
+import type { ExpenseLineView } from "@gousset/ui/components/line-expense";
 import {
   LineTransfer,
   LineTransferCandidates,
@@ -25,7 +30,7 @@ import { CategoryPicker } from "@gousset/ui/components/category-picker";
 import { OperationsList, OperationsListSkeleton } from "@gousset/ui/components/operations-list";
 import type { OperationRow } from "@gousset/ui/components/operations-list";
 import { usePageLanguage } from "@gousset/ui/hooks/use-page-language";
-import { formatMoney } from "@gousset/ui/lib/money";
+import { formatMoney, minorDigits, toDecimalString } from "@gousset/ui/lib/money";
 import { notify } from "@gousset/ui/lib/notify";
 import { hasOperationsFilters } from "@gousset/ui/lib/operations";
 import { useDebouncer } from "@tanstack/react-pacer";
@@ -36,8 +41,16 @@ import { useState } from "react";
 
 import { ProposedRule } from "@/components/proposed-rule";
 import { RuleJobNotice } from "@/components/rule-job";
-import { classifyLine, pairLine, pairLineWithAccount, unpairLine } from "@/functions/lines";
-import type { TransferRefusalCode } from "@/functions/lines";
+import {
+  classifyLine,
+  linkLine,
+  pairLine,
+  pairLineWithAccount,
+  splitLine,
+  unlinkLine,
+  unpairLine,
+} from "@/functions/lines";
+import type { ExpenseRefusalCode, TransferRefusalCode } from "@/functions/lines";
 import { categoryRefusalMessage } from "@/i18n/messages";
 import { dayRange, longDay, shortDay, shortDays } from "@/lib/account-day";
 import { categoryPath, choicesOf } from "@/lib/categories";
@@ -305,6 +318,7 @@ function Operations() {
               key={open.line.id}
               line={open.line}
               transfer={open.transfer}
+              expenses={open.expenses}
               balanceAccounts={balanceAccountsFor(open.line, accounts, nameOf)}
               nameOf={nameOf}
               locale={locale}
@@ -698,9 +712,242 @@ function TransferOf({
   );
 }
 
+/** A refusal to link, unlink or split, worded; `FAILED` when the server failed. */
+function expenseRefusal(code: ExpenseRefusalCode | "FAILED"): string {
+  switch (code) {
+    case "LINE_NOT_FOUND": {
+      return m.operationsTransferLineGone();
+    }
+
+    case "LINK_TRANSFER": {
+      return m.operationsLinkRefusedTransfer();
+    }
+
+    case "LINK_SPLIT": {
+      return m.operationsLinkRefusedSplit();
+    }
+
+    case "LINK_LINKED": {
+      return m.operationsLinkRefusedLinked();
+    }
+
+    case "LINK_ALREADY_LINKED": {
+      return m.operationsLinkRefusedAlreadyLinked();
+    }
+
+    case "LINK_EXCEEDS": {
+      return m.operationsLinkRefusedExceeds();
+    }
+
+    case "LINK_CURRENCY": {
+      return m.operationsLinkRefusedCurrency();
+    }
+
+    case "LINK_OTHER": {
+      return m.operationsLinkRefusedOther();
+    }
+
+    case "SPLIT_REFUSED": {
+      return m.operationsSplitRefused();
+    }
+
+    case "NOT_LINKED": {
+      return m.operationsExpenseNotLinked();
+    }
+
+    case "FAILED": {
+      return m.operationsTransferFailed();
+    }
+  }
+}
+
+/**
+ * The open line's expense (#27): the expense of several lines it is part of, with "Separate this
+ * line"; its split; the expenses it may refund, each linked once the user confirms; "Link to an
+ * expense" for a line alone, and "Split" for a line that is no part of an expense of several lines.
+ * Nothing for a line with no entry (held, of no amount, a side of a transfer). Done, the lines, the
+ * months and the categories are read again.
+ */
+function ExpenseOf({
+  line,
+  expenses,
+  nameOf,
+  locale,
+  onOpen,
+}: {
+  line: Line;
+  expenses: LineExpenses;
+  nameOf: (account: LineAccount) => string;
+  locale: string;
+  onOpen: (id: string) => void;
+}) {
+  const queryClient = useQueryClient();
+  const [error, setError] = useState<string>();
+  const [search, setSearch] = useState("");
+  // The link dialog's lines are searched once it opens, not for every line shown.
+  const [linking, setLinking] = useState(false);
+  const kind = line.amount.minor < 0 ? "expense" : "income";
+  const { data: tree } = useQuery(categoryQueries.list());
+
+  const { data: found = [] } = useQuery({
+    ...lineQueries.linkCandidates(line.id, line.bookedOn, search.trim()),
+    enabled: linking,
+  });
+
+  const view = (part: ExpensePart): ExpenseLineView => ({
+    id: part.lineId,
+    day: shortDay(part.bookedOn, locale),
+    label: part.label,
+    account: nameOf(part.account),
+    amount: part.amount,
+  });
+
+  const changed = () =>
+    Promise.all([
+      invalidateTouched(queryClient, { everyMonth: true }),
+      invalidateCategories(queryClient),
+    ]);
+
+  /** Runs a change: true once done, the refusal shown otherwise. */
+  const run = async (
+    change: () => Promise<{ ok: true } | { ok: false; code: ExpenseRefusalCode }>,
+  ) => {
+    try {
+      const answer = await change();
+
+      if (!answer.ok) {
+        setError(expenseRefusal(answer.code));
+
+        return false;
+      }
+
+      setError(undefined);
+      await changed();
+
+      return true;
+    } catch {
+      setError(expenseRefusal("FAILED"));
+
+      return false;
+    }
+  };
+
+  const linkTo = (intoId: string) => run(() => linkLine({ data: { lineId: line.id, intoId } }));
+
+  const [only, ...others] = expenses.expenses;
+
+  // A line of no expense (held, of no amount, a side of a transfer): nothing to show or change.
+  if (only === undefined) {
+    return null;
+  }
+
+  const together = others.length === 0 && only.payments.length + only.refunds.length > 1;
+  const split = others.length > 0;
+  const digits = minorDigits(line.amount.currency);
+  const whole = { minor: Math.abs(line.amount.minor), currency: line.amount.currency };
+
+  const candidates = found.map((row): ExpenseLineView => ({
+    id: row.id,
+    day: shortDay(row.bookedOn, locale),
+    label: row.label,
+    account: nameOf(row.account),
+    amount: row.amount,
+  }));
+
+  return (
+    <LineExpense
+      lineId={line.id}
+      expense={
+        together
+          ? {
+              kind: only.kind,
+              payments: only.payments.map(view),
+              refunds: only.refunds.map(view),
+              net: only.net,
+            }
+          : undefined
+      }
+      shares={
+        split
+          ? expenses.expenses.map((each) => ({
+              id: each.id,
+              category: categoryPath(each.category),
+              amount: each.net,
+            }))
+          : undefined
+      }
+      proposals={expenses.proposals.map((proposal) => ({
+        ...view(proposal.line),
+        category: categoryPath(proposal.category),
+        net: proposal.net,
+      }))}
+      onOpenLine={onOpen}
+      onUnlink={
+        together
+          ? async () => {
+              await run(() => unlinkLine({ data: { lineId: line.id } }));
+            }
+          : undefined
+      }
+      onConfirmRefund={async (intoId) => {
+        await linkTo(intoId);
+      }}
+      actions={
+        <>
+          {/* A line joins an expense from its own: alone, neither linked nor split. */}
+          {together || split ? null : (
+            <LinkLine
+              candidates={candidates}
+              search={search}
+              onSearchChange={setSearch}
+              onOpen={() => setLinking(true)}
+              onLink={linkTo}
+              error={error}
+              locale={locale}
+            />
+          )}
+          {together ? null : (
+            <SplitLine
+              total={whole}
+              categories={tree === undefined ? [] : choicesOf(tree, kind)}
+              initial={
+                split
+                  ? expenses.expenses.map((each) => ({
+                      categoryId: each.category.id,
+                      minor: each.net.minor,
+                    }))
+                  : [{ categoryId: only.category.id, minor: whole.minor }]
+              }
+              max={MAX_SHARES}
+              onSplit={(shares) =>
+                run(() =>
+                  splitLine({
+                    data: {
+                      lineId: line.id,
+                      shares: shares.map((share) => ({
+                        categoryId: share.categoryId,
+                        amount: toDecimalString(share.minor, digits),
+                      })),
+                    },
+                  }),
+                )
+              }
+              error={error}
+              locale={locale}
+            />
+          )}
+        </>
+      }
+      error={error}
+      locale={locale}
+    />
+  );
+}
+
 function OpenLine({
   line,
   transfer,
+  expenses,
   balanceAccounts,
   nameOf,
   locale,
@@ -710,6 +957,7 @@ function OpenLine({
 }: {
   line: Line;
   transfer: Transfer;
+  expenses: LineExpenses;
   /** The accounts kept by their balance the line may be paired with: none once it is a side. */
   balanceAccounts: ReadonlyArray<BalanceAccountView>;
   nameOf: (account: LineAccount) => string;
@@ -765,6 +1013,15 @@ function OpenLine({
           line={line}
           transfer={transfer}
           balanceAccounts={transfer.paired === null ? balanceAccounts : []}
+          nameOf={nameOf}
+          locale={locale}
+          onOpen={onOpen}
+        />
+      }
+      expense={
+        <ExpenseOf
+          line={line}
+          expenses={expenses}
           nameOf={nameOf}
           locale={locale}
           onOpen={onOpen}

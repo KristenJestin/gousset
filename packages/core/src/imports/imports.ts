@@ -24,7 +24,7 @@ import { Context, Effect, Layer, Option } from "effect";
 
 import { remakeBalanceLines } from "../balance-lines";
 import { takeCategoryTurn } from "../category-turn";
-import { dropEntriesWithoutParts, entriesForLines } from "../entries";
+import { entriesForLines, paymentsOfLines, settleEntries } from "../entries";
 import type {
   FileUploadPartRefused,
   ImportUnavailable,
@@ -791,15 +791,19 @@ export const importsLayer = Layer.effect(
             // Its lines' transfers go with them (#26), and the sides the app made for them.
             const unpaired = await unpairForUndo(transaction, own);
 
-            // The lines' parts go with them (`on delete cascade`); an entry left with no part goes
-            // too, and a line counted again, or no side of a transfer any more, gets its entry, in
-            // this same transaction.
+            // The lines' parts go with them (`on delete cascade`); an entry left with no payment
+            // goes too, and one whose refunds now pass its payments loses them, the lines of those
+            // refunds getting their own entry back (#27); and a line
+            // counted again, or no side of a transfer any more, gets its entry, in this same
+            // transaction. An expense whose day came from a payment undone happens on its next.
+            const gone = await paymentsOfLines(transaction, eq(statementLine.importId, importId));
+
             const removed = await transaction
               .delete(statementLine)
               .where(eq(statementLine.importId, importId))
               .returning({ bookedOn: statementLine.bookedOn });
 
-            await dropEntriesWithoutParts(transaction);
+            await settleEntries(transaction, owner, gone);
 
             await entriesForLines(transaction, owner, [
               ...givenBack.map((line) => line.id),

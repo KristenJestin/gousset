@@ -1,6 +1,7 @@
 import {
   DataExport,
   EXPORT_TABLES,
+  Expenses,
   ImportProfiles,
   Imports,
   Merchants,
@@ -61,6 +62,7 @@ async function connect(contents: Effect.Effect<ExportContents> = Effect.succeed(
               exportLayer,
               Layer.mock(Merchants, {}),
               Layer.mock(Transfers, {}),
+              Layer.mock(Expenses, {}),
               Layer.mock(UserData, {}),
               Layer.mock(RuleJobs, {}),
             ),

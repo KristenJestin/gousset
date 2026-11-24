@@ -237,6 +237,48 @@ function uiMessages(locale: Locale) {
       pairDescription: m.uiOperationsPairDescription({}, options),
       otherSide: m.uiOperationsOtherSide({}, options),
       pair: m.uiOperationsPair({}, options),
+      /** `LineExpense`: an expense made of several lines, a split line, a refund proposed. */
+      oneExpense: m.uiOperationsOneExpense({}, options),
+      oneIncome: m.uiOperationsOneIncome({}, options),
+      payments: m.uiOperationsPayments({}, options),
+      refunds: m.uiOperationsRefunds({}, options),
+      netCost: m.uiOperationsNetCost({}, options),
+      netReceived: m.uiOperationsNetReceived({}, options),
+      /** The open line among its expense's parts: "This line: CB GREENMARKET". */
+      thisLine: (label: string) => m.uiOperationsThisLine({ label }, options),
+      separate: m.uiOperationsSeparate({}, options),
+      separateTitle: m.uiOperationsSeparateTitle({}, options),
+      separateDescription: m.uiOperationsSeparateDescription({}, options),
+      separateConfirm: m.uiOperationsSeparateConfirm({}, options),
+      splitAcross: (count: number) => m.uiOperationsSplitAcross({ count }, options),
+      maybeRefund: m.uiOperationsMaybeRefund({}, options),
+      maybeRefundDescription: m.uiOperationsMaybeRefundDescription({}, options),
+      /** Under a proposed expense: "Eating out · costs €56.00". */
+      proposalCosts: (category: string, amount: string) =>
+        m.uiOperationsProposalCosts({ category, amount }, options),
+      linkAsRefund: m.uiOperationsLinkAsRefund({}, options),
+      linkAsRefundTitle: m.uiOperationsLinkAsRefundTitle({}, options),
+      linkAsRefundDescription: (label: string) =>
+        m.uiOperationsLinkAsRefundDescription({ label }, options),
+      link: m.uiOperationsLink({}, options),
+      /** `LinkLine`: a line joins another line's expense. */
+      linkToExpense: m.uiOperationsLinkToExpense({}, options),
+      linkDescription: m.uiOperationsLinkDescription({}, options),
+      linkSearch: m.uiOperationsLinkSearch({}, options),
+      linkNone: m.uiOperationsLinkNone({}, options),
+      expenseLine: m.uiOperationsExpenseLine({}, options),
+      /** `SplitLine`: a line split across categories. */
+      split: m.uiOperationsSplit({}, options),
+      splitTitle: m.uiOperationsSplitTitle({}, options),
+      splitDescription: (amount: string) => m.uiOperationsSplitDescription({ amount }, options),
+      shareCategory: (index: number) => m.uiOperationsShareCategory({ index }, options),
+      shareAmount: (index: number) => m.uiOperationsShareAmount({ index }, options),
+      shareRemove: (index: number) => m.uiOperationsShareRemove({ index }, options),
+      splitAdd: m.uiOperationsSplitAdd({}, options),
+      splitLeft: (amount: string) => m.uiOperationsSplitLeft({ amount }, options),
+      splitOver: (amount: string) => m.uiOperationsSplitOver({ amount }, options),
+      splitBalanced: m.uiOperationsSplitBalanced({}, options),
+      splitSave: m.uiOperationsSplitSave({}, options),
       /** `LineTransferToAccount`: the line's other side is on an account kept by its balance. */
       withBalanceAccount: m.uiOperationsWithBalanceAccount({}, options),
       pairWithAccount: m.uiOperationsPairWithAccount({}, options),

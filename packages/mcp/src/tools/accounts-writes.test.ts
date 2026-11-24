@@ -1,5 +1,6 @@
 import {
   DataExport,
+  Expenses,
   ImportProfiles,
   Imports,
   Merchants,
@@ -97,6 +98,7 @@ async function connect(rows: MemoryRows = ROWS, caller: Caller = writer) {
       Layer.mock(DataExport, {}),
       Layer.mock(Merchants, {}),
       Layer.mock(Transfers, {}),
+      Layer.mock(Expenses, {}),
       Layer.mock(UserData, {}),
       Layer.mock(RuleJobs, {}),
       TestClock.layer(),

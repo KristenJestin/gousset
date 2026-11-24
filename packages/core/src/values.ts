@@ -15,6 +15,9 @@ export const SpendingGroup = Schema.Literals(["category", "merchant", "subject"]
 
 export type SpendingGroup = typeof SpendingGroup.Type;
 
+/** How many categories one line may be split across (#27). */
+export const MAX_SHARES = 20;
+
 /** The month `count` months after `month` (before, when negative), both `YYYY-MM`. */
 export function addMonths(month: string, count: number): string {
   const [year = 0, number = 1] = month.split("-").map(Number);

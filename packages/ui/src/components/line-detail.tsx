@@ -58,6 +58,11 @@ export type LineDetailProps = {
   category?: ReactNode;
   /** The line's transfer or its candidates (`LineTransfer`), after its account and days. */
   transfer?: ReactNode;
+  /**
+   * The line's expense (`LineExpense`): the expense of several lines it is part of, its split, the
+   * refunds proposed, and the actions to link or split it; after its transfer.
+   */
+  expense?: ReactNode;
   onClose: () => void;
   /** The page's language (`<html lang>`) unless given. */
   locale?: string;
@@ -108,10 +113,11 @@ function BankWords({
  * One line's detail (docs/wireframes, screen 2, block 3): its label and amount, its account, the
  * day it was booked and its value date, the bank's raw label (fixed-width) with its memo and
  * counterparty, the original amount when it was in another currency, its expiry, "To review:
- * looks like …" on a held line, its transfer (`transfer`, a `LineTransfer`), and the import it
- * came from, "Entered by hand" or where the app made it from (`origin`); first, its category,
- * through the control the page gives (`category`). Every text comes worded from the page. The
- * close button or Escape closes it; the focus goes into it when it opens.
+ * looks like …" on a held line, its transfer (`transfer`, a `LineTransfer`), its expense
+ * (`expense`, a `LineExpense`), and the import it came from, "Entered by hand" or where the app
+ * made it from (`origin`); first, its category, through the control the page gives (`category`).
+ * Every text comes worded from the page. The close button or Escape closes it; the focus goes into
+ * it when it opens.
  * `OperationsLayout` sets it beside the list on a wide screen and over it on a phone.
  *
  * Motion: it grows out of its row of `OperationsList` (a shared layout on `operationLayoutId`,
@@ -137,6 +143,7 @@ export function LineDetail({
   origin,
   category,
   transfer,
+  expense,
   onClose,
   locale,
 }: LineDetailProps) {
@@ -186,6 +193,7 @@ export function LineDetail({
         )}
       </DetailGroup>
       {transfer}
+      {expense}
       <BankWords rawLabel={rawLabel} memo={memo} counterparty={counterparty} />
       <DetailGroup>
         {importedFrom === undefined ? (

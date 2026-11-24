@@ -1,5 +1,6 @@
 import {
   DataExport,
+  Expenses,
   ImportProfiles,
   Imports,
   Merchants,
@@ -61,6 +62,7 @@ describe("a call to the MCP door", () => {
                   Layer.mock(DataExport, {}),
                   Layer.mock(Merchants, {}),
                   Layer.mock(Transfers, {}),
+                  Layer.mock(Expenses, {}),
                   Layer.mock(UserData, {}),
                   Layer.mock(RuleJobs, {}),
                 ),
