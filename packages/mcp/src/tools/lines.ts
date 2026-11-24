@@ -59,7 +59,7 @@ const LinesInput = Schema.Struct({
     "split",
   ]).annotate({
     description:
-      "search: the lines that match, across accounts, newest first. show: one line, all that is known of it. pair: two lines as one transfer (writes). classify: what one line is (writes). unpair: undoes a line's transfer (writes). link, unlink: a line joins or leaves another's expense (writes). split: across categories (writes).",
+      "search: the lines that match, across accounts, newest first. show: one line, all that is known of it. pair: two lines as one transfer (writes). classify: what one line is (writes). unpair: undoes a line's transfer (writes). link: a line becomes a payment or a refund of another line's expense (writes). unlink: a line leaves its expense (writes). split: a line across categories (writes).",
   }),
   text: Schema.optional(
     Schema.String.annotate({
@@ -127,24 +127,24 @@ const LinesInput = Schema.Struct({
   into: Schema.optional(
     Schema.String.annotate({
       description:
-        "link: a line of the expense to join.",
+        "link: the handle of a line of the expense that line joins: one of its payments or refunds.",
     }),
   ),
   shares: Schema.optional(
     Schema.Array(
       Schema.Struct({
         category: Schema.String.annotate({
-          description: "As for classify.",
+          description: "A category of the line's kind, named as for classify.",
         }),
         amount: Schema.String.annotate({
           description:
-            'A decimal, as "12.50".',
+            'Its share, a decimal in the account\'s currency, without sign nor currency ("30", "12.50").',
         }),
       }),
     )
       .check(Schema.isMaxLength(MAX_SHARES))
       .annotate({
-        description: `split: 1 to ${MAX_SHARES} shares summing to the line; one puts it back whole. [{"category":"Groceries","amount":"30"},{"category":"Home","amount":"45"}]`,
+        description: `split: 1 to ${MAX_SHARES} shares, adding up to the line's absolute amount; one share puts the line back in one category. A 75 line: [{"category":"Groceries","amount":"30"},{"category":"Home","amount":"45"}].`,
       }),
   ),
   kind: Schema.optional(
@@ -171,7 +171,7 @@ Writes, with the write scope: \`classify\` says what \`line\` is, by \`kind\`: "
 
 \`pair\` pairs \`line\` and \`other\` as one transfer, never spending; \`line\` alone: its only candidate; neither: every clear pair. \`classify\` \`kind\` "transfer" is the same; \`unpair\` undoes it. Refused: lines of one account or direction, a paired line, several candidates. With \`account\` in place of \`other\`, an account kept by its balance: Gousset makes its side, which its noted balances' movements then leave out; refused for an account kept by its lines or of another currency.
 
-An expense counts once, at payments less refunds. \`link\` joins \`line\` to \`into\`'s expense, as a payment if its money goes the same way (25 + 50 on two accounts), else a refund; \`unlink\` undoes it; \`split\` spreads it over categories. Refused: transfer sides, held lines, other currencies, a refund over the net cost, linking a split line. \`show\` gives the expense and purchases the line may cancel.
+An expense counts once, at payments less refunds. \`link\` adds \`line\` to \`into\`'s expense: a payment if its money goes the same way (75 paid 25 + 50 on two accounts), else a refund; \`unlink\` undoes it. \`split\` spreads it over categories. Refused: transfer sides, held lines, another currency, a refund above the net cost, linking a split line. \`show\` gives the expense and purchases it may cancel.
 
 \`account\` is the name as \`accounts\` lists it (any case); add \`institution\` when two accounts share it. An unknown or ambiguous name is refused with the names to choose from. Amounts are decimal strings in each account's own currency, without sign or currency, compared with the line's absolute amount: a -42.90 EUR payment matches "amount_min":"40". A period that ends before it starts, an amount that is no decimal, or an \`after\` no result gave is refused. \`limit\` is 1 to ${MAX_LINES} lines, ${DEFAULT_LINES} by default; when more remain, the result writes the exact next call with \`after\`: copy it.
 
