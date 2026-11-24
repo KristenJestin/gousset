@@ -128,36 +128,26 @@ function memory(): string {
     .map((each) => `${each.name}:${Math.round(each.rss / 1024)}M`)
     .join(" ");
 
-  return `free=${Math.round(freemem() / 1048576)}M/${Math.round(totalmem() / 1048576)}M firefox[${top}]`;
+  return `free=${Math.round(freemem() / 1_048_576)}M/${Math.round(totalmem() / 1_048_576)}M firefox[${top}]`;
 }
 
 /** The kernel's lines about a process killed or faulting, which say how the content process died. */
 function kernelLog(): string {
-  for (const command of [
-    ["dmesg", "-T"],
-    ["sudo", "-n", "dmesg", "-T"],
-  ]) {
-    try {
-      const [program = "dmesg", ...args] = command;
-      const text = execFileSync(program, args, { encoding: "utf8", timeout: 10_000 });
+  try {
+    const text = execFileSync("dmesg", ["-T"], { encoding: "utf8", timeout: 10_000 });
 
-      return text
-        .split("\n")
-        .filter((line) =>
-          /segfault|general protection|trap|oom|out of memory|killed process|web co|isolated|firefox/i.test(
-            line,
-          ),
-        )
-        .slice(-20)
-        .join("\n");
-    } catch (error) {
-      console.log(
-        `PROBE ${command.join(" ")} failed: ${error instanceof Error ? error.message.split("\n")[0] : "?"}`,
-      );
-    }
+    return text
+      .split("\n")
+      .filter((line) =>
+        /segfault|general protection|trap|oom|out of memory|killed process|web co|isolated|firefox/i.test(
+          line,
+        ),
+      )
+      .slice(-8)
+      .join("\n");
+  } catch (error) {
+    return `(dmesg failed: ${error instanceof Error ? error.message.split("\n")[0] : "?"})`;
   }
-
-  return "(no kernel log)";
 }
 
 /** A Firefox of the test's own, its output kept so that a crash can be read. */
@@ -317,6 +307,9 @@ type Variant = {
   then?: (page: Page) => Promise<void>;
 };
 
+/** Each variant's merchant word. */
+const WORDS = ["ALDER", "BIRCH", "CEDAR", "DAPHNE"];
+
 const VARIANTS: ReadonlyArray<Variant> = [
   { name: "scenario-instrumented", instrumented: true, reach: correctionScenario },
   { name: "scenario-bare", instrumented: false, reach: correctionScenario },
@@ -339,10 +332,13 @@ for (const [index, variant] of VARIANTS.entries()) {
 
     const tag = `PROBE ${testInfo.project.name} ${variant.name}`;
     const lines: Array<string> = [];
+    const report: Array<string> = [];
     const browser = await loggedFirefox(playwright, lines);
     const viewport = testInfo.project.use.viewport ?? { width: 1440, height: 900 };
-    const word = `PROBE${index}${testInfo.project.name.endsWith("phone") ? "P" : "D"}`;
-    const crashes: Array<string> = [];
+    // Letters only: merchantKey drops a word of letters and digits as a reference.
+    const word = `${WORDS[index] ?? "ELM"}${testInfo.project.name.endsWith("phone") ? "PHONE" : "DESK"}`;
+    let phase = "start";
+    let failed = false;
 
     try {
       const { person, owner } = await personFor(app, user, `probe-${index}`);
@@ -357,50 +353,50 @@ for (const [index, variant] of VARIANTS.entries()) {
 
       const page = await context.newPage();
 
+      page.setDefaultTimeout(15_000);
       page.on("crash", () => {
-        console.log(`${tag}: crash event, ${memory()}`);
+        report.push(`crash event in ${phase}, ${memory()}`);
       });
 
+      phase = "reach";
       await variant.reach(page, person, owner, word);
+      phase = "then";
       await variant.then?.(page);
 
       if (variant.instrumented) {
+        phase = "idle";
         await activity(page);
         await page.waitForTimeout(5000);
-        console.log(`${tag} idle 5 s: ${await activity(page)} ${memory()}`);
+        report.push(`idle 5 s: ${await activity(page)} ${memory()}`);
       }
 
       for (let run = 1; run <= RUNS; run++) {
         const started = Date.now();
 
-        try {
-          await expectAccessible(page);
-          await page.evaluate("document.title");
+        phase = `run ${run}`;
+        await expectAccessible(page);
+        await page.evaluate("document.title");
 
-          const measured = variant.instrumented ? await activity(page) : "";
+        const measured = variant.instrumented ? await activity(page) : "";
 
-          console.log(
-            `${tag} run ${run}: alive ${Date.now() - started} ms ${measured} ${memory()}`,
-          );
-        } catch (error) {
-          const message = error instanceof Error ? (error.message.split("\n")[0] ?? "") : "?";
-
-          crashes.push(`run ${run}: ${message}`);
-          console.log(
-            `${tag} run ${run}: FAILED after ${Date.now() - started} ms: ${message} ${memory()}`,
-          );
-          console.log(`${tag} browser output (last 60 lines):\n${lines.slice(-60).join("\n")}`);
-          console.log(`${tag} kernel:\n${kernelLog()}`);
-
-          break;
-        }
+        report.push(`run ${run}: alive ${Date.now() - started} ms ${measured} ${memory()}`);
       }
 
       await context.close().catch(() => undefined);
+    } catch (error) {
+      const message = error instanceof Error ? (error.message.split("\n")[0] ?? "") : "?";
+
+      failed = true;
+      report.push(
+        `FAILED in ${phase}: ${message} ${memory()}`,
+        `browser output (last 60 lines):\n${lines.slice(-60).join("\n")}`,
+        `kernel:\n${kernelLog()}`,
+      );
     } finally {
       await browser.close().catch(() => undefined);
     }
 
-    expect(crashes, tag).toEqual([]);
+    // The answer is in the failure: a probe's report is read in CI's log, which prints errors.
+    throw new Error(`${tag} ${failed ? "CRASHED" : "ALIVE"}\n${report.join("\n")}`);
   });
 }
