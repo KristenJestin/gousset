@@ -178,8 +178,8 @@ const markReviewed = (owner: string, lineId: string, notATransfer: boolean) =>
   });
 
 /**
- * Throws away a line held as a near duplicate (`state = discarded`): it is kept only so that the
- * next import of the same file does not bring it back. Fails with `LineNotFound`, or `NotHeld` for
+ * Throws away a line held as a near duplicate (`state = discarded`): it counts nowhere, and keeps
+ * its row only so that no later import that reads it again brings it back. Fails with `LineNotFound`, or `NotHeld` for
  * a line that is not held.
  */
 export const discardHeldLine = (owner: string, lineId: string) =>

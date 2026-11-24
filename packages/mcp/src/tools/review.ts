@@ -152,7 +152,7 @@ function acceptedText(queued: QueuedLine): string {
 
   switch (queued.proposal.kind) {
     case "duplicate": {
-      return `${done} is discarded: it does not count, and the next import of its file leaves it out.`;
+      return `${done} is discarded: it counts nowhere, and no later import that reads it again brings it back.`;
     }
 
     case "transfer": {
