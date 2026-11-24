@@ -1,4 +1,3 @@
-import { addMonths } from "@gousset/core/values";
 import type { QueryClient } from "@tanstack/react-query";
 
 import type { Touched } from "@/jobs/view";
@@ -12,56 +11,54 @@ import { reviewKeys } from "./review-keys";
 import { ruleKeys } from "./rule-keys";
 
 /**
- * The months after a month whose figures read it: the next one holds it as its previous month, and
- * each of the six after it in its average (`BENCHMARK_WINDOW` in @gousset/core, which the browser
- * does not load).
- */
-const MONTHS_THAT_READ_A_MONTH = 6;
-
-/** The months touched, and those after them whose figures read them, each once. */
-function monthsToRead(months: ReadonlyArray<string>): ReadonlyArray<string> {
-  return [
-    ...new Set(
-      months.flatMap((month) =>
-        Array.from({ length: MONTHS_THAT_READ_A_MONTH + 1 }, (_, after) => addMonths(month, after)),
-      ),
-    ),
-  ];
-}
-
-/**
  * Invalidates the queries of what a job or an action touched (docs/architecture.md): the
  * interface refetches what is on screen and drops the rest. A job's end carries it (`useJob`).
  * Whatever touched months touched their lines too, which the operations and the accounts show, and
  * the review counts, and the merchants an import recognises from them (#24), and the rules, which
  * count the lines they classified at import and applied to the past (#25). A rule applied to the
- * past (every month) moved lines between categories: their figures too. A month's review holds it
- * against the months before: the six after a touched month are read again with it.
+ * past (every month) moved lines between categories: their figures too. Every month is read again,
+ * not only those touched: a month's figures read the six before it, and its flags the month after;
+ * only the months on screen refetch.
  */
 export async function invalidateTouched(queryClient: QueryClient, touched: Touched): Promise<void> {
-  const linesAndAccounts = [
+  await Promise.all([
     queryClient.invalidateQueries({ queryKey: lineKeys.all }),
     queryClient.invalidateQueries({ queryKey: accountKeys.all }),
     queryClient.invalidateQueries({ queryKey: reviewKeys.all }),
     queryClient.invalidateQueries({ queryKey: merchantKeys.all }),
     queryClient.invalidateQueries({ queryKey: ruleKeys.all }),
-  ];
+    queryClient.invalidateQueries({ queryKey: monthKeys.all }),
+    "everyMonth" in touched
+      ? queryClient.invalidateQueries({ queryKey: categoryKeys.all })
+      : Promise.resolve(),
+  ]);
+}
 
-  if ("everyMonth" in touched) {
-    await Promise.all([
-      queryClient.invalidateQueries({ queryKey: monthKeys.all }),
-      queryClient.invalidateQueries({ queryKey: categoryKeys.all }),
-      ...linesAndAccounts,
-    ]);
-
-    return;
-  }
-
+/**
+ * After a write to an account (create, edit, close, reopen, a noted balance): the list's groups and
+ * totals and the account's page may all have changed, so every accounts query is read again; the
+ * operations name each line's account, so theirs are too, and the review counts the accounts. The
+ * months read the accounts (kind, name, closing, how far imported, expiring credits): all of them.
+ */
+export async function invalidateAccounts(queryClient: QueryClient): Promise<void> {
   await Promise.all([
-    ...monthsToRead(touched.months).map((month) =>
-      queryClient.invalidateQueries({ queryKey: monthKeys.of(month) }),
-    ),
-    ...linesAndAccounts,
+    queryClient.invalidateQueries({ queryKey: accountKeys.all }),
+    queryClient.invalidateQueries({ queryKey: lineKeys.all }),
+    queryClient.invalidateQueries({ queryKey: reviewKeys.all }),
+    queryClient.invalidateQueries({ queryKey: monthKeys.all }),
+  ]);
+}
+
+/**
+ * After a rename: the lists (names, order) and the merchants' pages may all have changed, so every
+ * merchants query is read again, and every month, which names the merchants and their
+ * intermediaries. A merge, a label moved or a default category set move entries too:
+ * `invalidateMerchantEntries`.
+ */
+export async function invalidateMerchants(queryClient: QueryClient): Promise<void> {
+  await Promise.all([
+    queryClient.invalidateQueries({ queryKey: merchantKeys.all }),
+    queryClient.invalidateQueries({ queryKey: monthKeys.all }),
   ]);
 }
 

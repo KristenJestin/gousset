@@ -6,7 +6,12 @@ import type { Touched } from "@/jobs/view";
 
 import { accountKeys } from "./account-keys";
 import { categoryKeys } from "./category-keys";
-import { invalidateMerchantEntries, invalidateTouched } from "./invalidate";
+import {
+  invalidateAccounts,
+  invalidateMerchantEntries,
+  invalidateMerchants,
+  invalidateTouched,
+} from "./invalidate";
 import { lineKeys } from "./line-keys";
 import { merchantKeys } from "./merchant-keys";
 import { monthKeys } from "./month-keys";
@@ -36,6 +41,18 @@ const MERCHANT = merchantKeys.detail("0b6e3f9a-4c2d-4e8b-9f1a-7d5c3b2e1a90");
 
 /** A query of a month's, as a job's end reads it. */
 const touched = (month: string) => [...monthKeys.of(month), "e2e-touched"];
+
+/**
+ * Months on either side of October, far apart: a month's flags read the next month, and its
+ * figures the six before it.
+ */
+const MONTHS = [
+  touched("2026-09"),
+  monthKeys.review("2026-10"),
+  monthKeys.review("2026-11"),
+  monthKeys.spendingDays("2027-04", "category", null),
+  monthKeys.review("2027-05"),
+];
 
 describe("invalidateTouched", () => {
   test("reads the operations, the accounts and the review's counts again, after an import or its undo", async () => {
@@ -84,21 +101,38 @@ describe("invalidateTouched", () => {
     expect(isInvalidated(client, categoryKeys.list())).toBe(true);
   });
 
-  test("reads again the months a job touched and the six after them, which hold them as their previous month and average, and only those", async () => {
-    const september = touched("2026-09");
-    const october = touched("2026-10");
-    const november = monthKeys.review("2026-11");
-    const april = monthKeys.spendingDays("2027-04", "category", null);
-    const may = monthKeys.review("2027-05");
-    const client = clientWith([september, october, november, april, may]);
+  test("reads every month again, before and after the months a job touched: their flags and averages read them", async () => {
+    const client = clientWith(MONTHS);
 
     await invalidateTouched(client, { months: ["2026-10"] });
 
-    expect(isInvalidated(client, october)).toBe(true);
-    expect(isInvalidated(client, november)).toBe(true);
-    expect(isInvalidated(client, april)).toBe(true);
-    expect(isInvalidated(client, september)).toBe(false);
-    expect(isInvalidated(client, may)).toBe(false);
+    for (const queryKey of MONTHS) {
+      expect(isInvalidated(client, queryKey), JSON.stringify(queryKey)).toBe(true);
+    }
+  });
+});
+
+describe("invalidateAccounts", () => {
+  test("reads the accounts, the operations and every month again: the review reads the accounts", async () => {
+    const client = clientWith([ACCOUNTS, SEARCH, COUNTS, ...MONTHS]);
+
+    await invalidateAccounts(client);
+
+    for (const queryKey of [ACCOUNTS, SEARCH, COUNTS, ...MONTHS]) {
+      expect(isInvalidated(client, queryKey), JSON.stringify(queryKey)).toBe(true);
+    }
+  });
+});
+
+describe("invalidateMerchants", () => {
+  test("reads the merchants and every month again: the review names the merchants", async () => {
+    const client = clientWith([MERCHANTS, MERCHANT, ...MONTHS]);
+
+    await invalidateMerchants(client);
+
+    for (const queryKey of [MERCHANTS, MERCHANT, ...MONTHS]) {
+      expect(isInvalidated(client, queryKey), JSON.stringify(queryKey)).toBe(true);
+    }
   });
 });
 
