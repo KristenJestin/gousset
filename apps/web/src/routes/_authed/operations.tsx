@@ -769,11 +769,7 @@ function ExpenseOf({
       invalidateCategories(queryClient),
     ]);
 
-  /**
-   * Runs a change: true once the server made it, the refusal shown otherwise. What it changed is
-   * read again after, not awaited: the dialog or sheet that asked for it closes first, before the
-   * block it sits in becomes another (a line linked shows its expense, one separated its own).
-   */
+  /** Runs a change: true once done, the refusal shown otherwise. */
   const run = async (
     change: () => Promise<{ ok: true } | { ok: false; code: ExpenseRefusalCode }>,
   ) => {
@@ -787,7 +783,7 @@ function ExpenseOf({
       }
 
       setError(undefined);
-      void changed();
+      await changed();
 
       return true;
     } catch {
