@@ -657,7 +657,23 @@ export const previewRule = (
       async (
         transaction,
       ): Promise<Result.Result<RuleReach, RuleConditionsRefused | EffectProblem>> => {
-        const problem = await problemOf(transaction, draft.conditions, draft);
+        const ruleId = draft.ruleId ?? "";
+
+        // A saved rule keeps what it had, as `editRule` lets it: the preview answers as a save would.
+        const [saved] = isId(ruleId)
+          ? await transaction
+              .select({ setMerchantId: rule.setMerchantId, setCategoryId: rule.setCategoryId })
+              .from(rule)
+              .where(eq(rule.id, ruleId))
+          : [];
+
+        const problem = await problemOf(
+          transaction,
+          draft.conditions,
+          draft,
+          saved?.setCategoryId ?? null,
+          saved?.setMerchantId ?? null,
+        );
 
         if (problem !== null) {
           return Result.fail(problem);
