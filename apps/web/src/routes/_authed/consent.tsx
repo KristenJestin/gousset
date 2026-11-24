@@ -1,9 +1,6 @@
 import { MCP_SCOPES, McpScope } from "@gousset/auth/mcp";
 import { m } from "@gousset/i18n/messages";
-import { Button } from "@gousset/ui/components/button";
-import { Card } from "@gousset/ui/components/card";
-import { FormMessage } from "@gousset/ui/components/form-message";
-import { Actions, Screen } from "@gousset/ui/components/screen";
+import { ConsentScreen } from "@gousset/ui/components/consent-screen";
 import { createFileRoute } from "@tanstack/react-router";
 import { Option, Schema } from "effect";
 import { useState } from "react";
@@ -43,21 +40,27 @@ export const Route = createFileRoute("/_authed/consent")({
   component: Consent,
 });
 
+/** The choice pressed, while its answer is sent. */
+type Pressed = "read" | "everything" | "deny";
+
 function Consent() {
   const client = Route.useLoaderData();
+  const { user } = Route.useRouteContext();
   const { scope = "", redirect_uri: redirectUri } = Route.useSearch();
   const back = hostOf(redirectUri);
   const [error, setError] = useState<string>();
-  const [busy, setBusy] = useState(false);
+  const [pressed, setPressed] = useState<Pressed>();
   const requested = scope.split(" ").filter((part) => part !== "");
   const asksWrite = requested.includes(McpScope.write);
 
-  async function answer(accept: boolean, granted: ReadonlyArray<string>) {
-    const { data, error: refusal } = await whileBusy(setBusy, () =>
-      authClient.$fetch("/oauth2/consent", {
-        method: "POST",
-        body: { accept, scope: granted.join(" ") },
-      }),
+  async function answer(choice: Pressed, accept: boolean, granted: ReadonlyArray<string>) {
+    const { data, error: refusal } = await whileBusy(
+      (busy) => setPressed(busy ? choice : undefined),
+      () =>
+        authClient.$fetch("/oauth2/consent", {
+          method: "POST",
+          body: { accept, scope: granted.join(" ") },
+        }),
     );
 
     const next = answerOf(data);
@@ -80,45 +83,62 @@ function Consent() {
         ? m.consentUnknownOrigin({ back })
         : m.consentOrigin({ client: client.host, back });
 
-  const description = [
-    origin,
-    m.consentDescription(),
-    asksWrite ? m.consentWriteDescription() : undefined,
-  ]
-    .filter((part) => part !== undefined)
-    .join(" ");
+  // Where the connected clients are revoked, as the settings name it.
+  const place = [m.settingsTitle(), m.settingsNavGeneral(), m.mcpClientsTitle()].join(" › ");
+
+  // Read only first, the primary and recommended choice: the safer one is the easy one.
+  const allow = asksWrite
+    ? [
+        {
+          label: m.consentAllowRead(),
+          recommended: m.consentRecommended(),
+          loading: pressed === "read",
+          onClick: () => void answer("read", true, readOnly),
+        },
+        {
+          label: m.consentAllowReadWrite(),
+          loading: pressed === "everything",
+          onClick: () => void answer("everything", true, everything),
+        },
+      ]
+    : [
+        {
+          label: m.consentAllow(),
+          loading: pressed === "everything",
+          onClick: () => void answer("everything", true, everything),
+        },
+      ];
 
   return (
-    <Screen>
-      <Card
-        title={m.consentTitle({ client: client?.name ?? m.consentUnknownClient() })}
-        description={description}
-      >
-        <FormMessage message={error} />
-        <Actions>
-          {asksWrite ? (
-            <>
-              <Button loading={busy} onClick={() => void answer(true, readOnly)}>
-                {m.consentAllowRead()}
-              </Button>
-              <Button
-                variant="secondary"
-                loading={busy}
-                onClick={() => void answer(true, everything)}
-              >
-                {m.consentAllowReadWrite()}
-              </Button>
-            </>
-          ) : (
-            <Button loading={busy} onClick={() => void answer(true, everything)}>
-              {m.consentAllow()}
-            </Button>
-          )}
-          <Button variant="secondary" loading={busy} onClick={() => void answer(false, [])}>
-            {m.consentDeny()}
-          </Button>
-        </Actions>
-      </Card>
-    </Screen>
+    <ConsentScreen
+      brandLabel={m.appName()}
+      title={m.consentTitle({ client: client?.name ?? m.consentUnknownClient() })}
+      origin={origin}
+      readsTitle={m.consentReadsTitle()}
+      reads={[
+        { icon: "accounts", label: m.consentReadsAccounts() },
+        { icon: "operations", label: m.consentReadsLines() },
+        { icon: "review", label: m.consentReadsMonths() },
+      ]}
+      write={
+        asksWrite
+          ? {
+              title: m.consentWriteTitle(),
+              summary: m.consentWriteSummary(),
+              detail: m.consentWriteDetail(),
+            }
+          : undefined
+      }
+      revoke={m.consentRevoke({ place })}
+      error={error}
+      busy={pressed !== undefined}
+      allow={allow}
+      deny={{
+        label: m.consentDeny(),
+        loading: pressed === "deny",
+        onClick: () => void answer("deny", false, []),
+      }}
+      signedIn={m.consentSignedInAs({ email: user.email })}
+    />
   );
 }

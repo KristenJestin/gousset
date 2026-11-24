@@ -49,6 +49,7 @@ import {
   IconReceipt,
   IconRefresh,
   IconRepeat,
+  IconRobot,
   IconSchool,
   IconSearch,
   IconSelector,
@@ -118,6 +119,8 @@ export const interfaceIcons = {
   colorScheme: IconSunMoon,
   shortcuts: IconKeyboard,
   signOut: IconLogout,
+  // An MCP client asking for access, on the consent screen.
+  agent: IconRobot,
 } as const;
 
 /**
