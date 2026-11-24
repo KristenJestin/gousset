@@ -2,8 +2,8 @@
   "type": "diff",
   "version": "10",
   "dialect": "postgres",
-  "id": "5c7c9627-8a13-46f3-bb7f-575731e5df49",
-  "prevIds": ["0dd6da5d-3d72-435f-aa58-57ebec10b34d"],
+  "id": "80df7a71-9532-4687-a1b9-4970bf93d794",
+  "prevIds": ["38a64239-1d4c-42aa-8971-e6084856cdcd", "0dd6da5d-3d72-435f-aa58-57ebec10b34d"],
   "footprints": [
     {
       "statementType": "add_column",
