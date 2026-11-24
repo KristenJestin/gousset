@@ -291,6 +291,11 @@ export const MERCHANTS: ExportTable = {
       name: "is_intermediary",
       holds: "true for a payment intermediary (PayPal…): who was paid through it is set by hand",
     },
+    // Added after the others (#34): the database keeps it last.
+    {
+      name: "subscription_dismissed",
+      holds: "true when you said its payments are no subscription: none is proposed for it",
+    },
   ],
 };
 

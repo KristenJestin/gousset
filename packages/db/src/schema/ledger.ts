@@ -483,6 +483,10 @@ export const merchant = pgTable.withRLS(
     // Added with the payment intermediaries (#30): a label naming it hides who was paid, which the
     // user sets on the line's entry (`entry.merchant_id`).
     isIntermediary: boolean("is_intermediary").default(false).notNull(),
+    // Added with the subscriptions (#34): the user said its payments are no subscription, so that
+    // none of its series is proposed again until the user takes it back. Subscriptions themselves
+    // are computed on read, never stored (docs/data-model.md, v0.4).
+    subscriptionDismissed: boolean("subscription_dismissed").default(false).notNull(),
   },
   (table) => [
     unique("merchant_user_id_id_key").on(table.userId, table.id),

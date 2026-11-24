@@ -106,6 +106,11 @@ const SHOTS: ReadonlyArray<Shot> = [
   { id: "money-movement-list--default" },
   { id: "money-investment-list--loss" },
   { id: "money-review-lines--default" },
+  // The recurring payments' calendar (#34): the month and the agenda, on a desktop and a phone.
+  { id: "money-recurringcalendar--default" },
+  { id: "money-recurringcalendar--agenda-view" },
+  { id: "money-recurringcalendar--phone", width: 390 },
+  { id: "money-recurringcalendar--phone-agenda", width: 390 },
   { id: "data-flag-list--default" },
   { id: "layout-folded--default" },
   { id: "layout-review-layout--desktop" },
