@@ -1,6 +1,5 @@
 import {
   DataExport,
-  FixtureLedger,
   ImportProfiles,
   Imports,
   memoryAccountStore,
@@ -82,7 +81,6 @@ afterEach(async () => {
 async function connect(rows: MemoryRows = ROWS, caller: Caller = writer) {
   const runtime = ManagedRuntime.make(
     Layer.mergeAll(
-      FixtureLedger,
       memoryAccountStore(new Map([[caller.userId, rows]])),
       // accounts never reaches the imports, the export nor the line search.
       memoryLineStore(),

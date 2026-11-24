@@ -270,27 +270,15 @@ test("on a phone, a tab bar holds review, operations, accounts and more", async 
   await animationsDone(userPage);
 });
 
-test("the month is kept in the url and moves with the switcher", async ({ userPage }) => {
+test("an older month address still opens its screen", async ({ userPage }) => {
   await fixDay(userPage, "2026-11-15");
-  await visit(userPage, "/");
 
-  const month = userPage.getByRole("group", { name: "Month" });
-
-  // No month in the address: the current one, and nothing after it.
-  await expect(month).toContainText("November 2026");
-  await expect(month.getByRole("button", { name: "Next month" })).toBeDisabled();
-
-  await month.getByRole("button", { name: "Previous month" }).click();
-  await expect(userPage).toHaveURL(/\?month=2026-10$/);
-  await expect(month).toContainText("October 2026");
-  // Another month is still the review: its link stays the current one.
+  // The review has no month until it reads real lines (#126): its older address opens it all the
+  // same, its link the current one.
+  await visit(userPage, "/?month=2026-10");
   await expect(
-    userPage.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Review" }),
-  ).toHaveAttribute("aria-current", "page");
-
-  // The address alone opens the month, the operations' too.
-  await userPage.reload();
-  await expect(userPage.getByRole("group", { name: "Month" })).toContainText("October 2026");
+    userPage.getByRole("heading", { name: "Your monthly review is not ready yet" }),
+  ).toBeVisible();
   await expect(
     userPage.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Review" }),
   ).toHaveAttribute("aria-current", "page");
@@ -303,10 +291,6 @@ test("the month is kept in the url and moves with the switcher", async ({ userPa
   await expect(userPage.getByRole("textbox", { name: "To", exact: true })).toHaveValue(
     "02/28/2025",
   );
-
-  // A month that cannot be read is the current one, not an error.
-  await visit(userPage, "/?month=2026-13");
-  await expect(userPage.getByRole("group", { name: "Month" })).toContainText("November 2026");
 });
 
 test.describe("in French", () => {
@@ -323,8 +307,10 @@ test.describe("in French", () => {
 
     await expect(userPage.locator("html")).toHaveAttribute("lang", "fr");
     await expect(userPage.getByRole("heading", { level: 1, name: "Bilan du mois" })).toBeVisible();
-    // Dates by the user's locale.
-    await expect(userPage.getByRole("group", { name: "Mois" })).toContainText(/novembre 2026/i);
+    // The screen's own words too, not only the frame's (its dates by locale: review.spec.ts).
+    await expect(
+      userPage.getByRole("heading", { name: "Votre bilan du mois n'est pas encore prêt" }),
+    ).toBeVisible();
     // Following the browser saves nothing: the browser's next language still wins.
     expect(await languageCookie(userPage)).toBeUndefined();
 
