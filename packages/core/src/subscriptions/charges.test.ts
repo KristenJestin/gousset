@@ -2,6 +2,7 @@ import { describe, expect, test } from "vite-plus/test";
 
 import { chargesOf } from "./charges";
 import type { ChargeMerchant, ChargePart } from "./charges";
+import { detectSubscriptions } from "./detection";
 
 // Which expenses subscriptions are detected from (#34), on made-up shops: one charge per expense,
 // of one merchant and one currency, a dismissed merchant, an intermediary and a balance's movement
@@ -23,6 +24,7 @@ const ALIASES = new Map([
 function part(entryId: string, label: string, change: Partial<ChargePart> = {}): ChargePart {
   return {
     entryId,
+    lineId: `line-${entryId}`,
     happenedOn: "2026-11-08",
     entryMerchantId: null,
     amountMinor: 949,
@@ -102,5 +104,55 @@ describe("chargesOf", () => {
     );
 
     expect(charges).toEqual([]);
+  });
+
+  test("a line split into shares of one merchant is one charge, a monthly subscription at its total", () => {
+    const parts = ["2026-01-08", "2026-02-08", "2026-03-08"].flatMap((happenedOn, month) => [
+      part(`share-b-${month}`, "CB STREAMLY", {
+        lineId: `line-${month}`,
+        happenedOn,
+        amountMinor: 999,
+      }),
+      part(`share-a-${month}`, "CB STREAMLY", {
+        lineId: `line-${month}`,
+        happenedOn,
+        amountMinor: 2000,
+      }),
+    ]);
+
+    const charges = chargesOf(parts, ALIASES, MERCHANTS);
+
+    expect(charges.map((each) => [each.id, each.day, each.amountMinor])).toEqual([
+      ["share-a-0", "2026-01-08", 2999],
+      ["share-a-1", "2026-02-08", 2999],
+      ["share-a-2", "2026-03-08", 2999],
+    ]);
+
+    const found = detectSubscriptions(charges, "2026-03-10");
+
+    expect(found.map((each) => [each.merchant, each.cadence, each.usualMinor])).toEqual([
+      ["Streamly", "monthly", 2999],
+    ]);
+  });
+
+  test("shares of one line keep the earliest day, and other merchants' shares apart", () => {
+    const charges = chargesOf(
+      [
+        part("late", "CB STREAMLY", { lineId: "line", happenedOn: "2026-11-09", amountMinor: 500 }),
+        part("early", "CB STREAMLY", {
+          lineId: "line",
+          happenedOn: "2026-11-07",
+          amountMinor: 400,
+        }),
+        part("other", "CB STREAMLY", { lineId: "line", entryMerchantId: "pixelplay" }),
+      ],
+      ALIASES,
+      MERCHANTS,
+    );
+
+    expect(charges.map((each) => [each.id, each.merchant, each.day, each.amountMinor])).toEqual([
+      ["early", "Streamly", "2026-11-07", 900],
+      ["other", "Pixelplay", "2026-11-08", 949],
+    ]);
   });
 });

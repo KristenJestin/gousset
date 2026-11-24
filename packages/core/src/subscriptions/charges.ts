@@ -19,6 +19,8 @@ import type { Charge } from "./detection";
 /** One payment of an expense, as the read gives it, before its expense is made one charge. */
 export type ChargePart = {
   readonly entryId: string;
+  /** The statement line it was paid by: shares of one split line pay one bill. */
+  readonly lineId: string;
   readonly happenedOn: string;
   /** The expense's own merchant (a rule's, or the user's behind an intermediary); null for none. */
   readonly entryMerchantId: string | null;
@@ -36,6 +38,64 @@ export type ChargeMerchant = {
   readonly dismissed: boolean;
 };
 
+/** An expense made a charge, with the lines it was paid by. */
+type EntryCharge = { readonly charge: Charge; readonly lines: ReadonlyArray<string> };
+
+/**
+ * The charges of one merchant and currency that share a payment line made one: a line split into
+ * several expenses pays one bill. Their amounts added up, the earliest day, the smallest entry id;
+ * in the order each first comes.
+ */
+function joinedByLine(made: ReadonlyArray<EntryCharge>): ReadonlyArray<Charge> {
+  const parent = made.map((_, index) => index);
+
+  const root = (index: number): number => {
+    let at = index;
+
+    while (parent[at] !== undefined && parent[at] !== at) {
+      at = parent[at] ?? at;
+    }
+
+    return at;
+  };
+
+  const byLine = new Map<string, number>();
+
+  for (const [index, { charge, lines }] of made.entries()) {
+    for (const line of lines) {
+      const key = JSON.stringify([line, charge.merchantId, charge.currency]);
+      const other = byLine.get(key);
+
+      if (other === undefined) {
+        byLine.set(key, index);
+      } else {
+        parent[root(index)] = root(other);
+      }
+    }
+  }
+
+  const joined = new Map<number, Charge>();
+
+  for (const [index, { charge }] of made.entries()) {
+    const at = root(index);
+    const known = joined.get(at);
+
+    joined.set(
+      at,
+      known === undefined
+        ? charge
+        : {
+            ...known,
+            id: charge.id < known.id ? charge.id : known.id,
+            day: charge.day < known.day ? charge.day : known.day,
+            amountMinor: known.amountMinor + charge.amountMinor,
+          },
+    );
+  }
+
+  return [...joined.values()];
+}
+
 /**
  * Each expense made one charge, from its payments (its refunds are left out: a subscription is
  * what is billed):
@@ -47,7 +107,9 @@ export type ChargeMerchant = {
  * - a merchant the user dismissed (`subscription_dismissed`) is left out, every series of it;
  * - an expense paid by a movement of a balance (`source = balance`, #31) is left out: that line is a
  *   difference of balances, not a payment the bank billed;
- * - so is one paid in several currencies.
+ * - so is one paid in several currencies;
+ * - the charges of one merchant and currency that share a payment line are one (`joinedByLine`): a
+ *   split line is one bill, not one per share.
  */
 export function chargesOf(
   parts: ReadonlyArray<ChargePart>,
@@ -66,7 +128,7 @@ export function chargesOf(
     }
   }
 
-  return [...byEntry].flatMap(([entryId, payments]): ReadonlyArray<Charge> => {
+  const made = [...byEntry].flatMap(([entryId, payments]): ReadonlyArray<EntryCharge> => {
     const [first] = payments;
 
     if (first === undefined || payments.some((part) => part.source === "balance")) {
@@ -108,16 +170,21 @@ export function chargesOf(
     return amountMinor > 0
       ? [
           {
-            id: entryId,
-            merchantId,
-            merchant: chosen.name,
-            day: first.happenedOn,
-            amountMinor,
-            currency,
+            charge: {
+              id: entryId,
+              merchantId,
+              merchant: chosen.name,
+              day: first.happenedOn,
+              amountMinor,
+              currency,
+            },
+            lines: payments.map((part) => part.lineId),
           },
         ]
       : [];
   });
+
+  return joinedByLine(made);
 }
 
 /**
@@ -131,6 +198,7 @@ export async function chargesIn(
   const parts = await transaction
     .select({
       entryId: entry.id,
+      lineId: entryPart.lineId,
       happenedOn: entry.happenedOn,
       entryMerchantId: entry.merchantId,
       amountMinor: entryPart.amountMinor,

@@ -28,6 +28,21 @@ export const MIN_CHARGES = {
 /** The most subscriptions one merchant may bill in one currency. */
 export const SUBSCRIPTIONS_PER_MERCHANT = 3;
 
+/**
+ * The most other charges of the merchant, in the series' currency, that may fall between two
+ * consecutive charges of a yearly series. A bill paid every month has eleven, and two of its
+ * charges a year apart may well be one price: that is no yearly plan. The cost, accepted: a yearly
+ * plan at a shop the user often buys from is missed.
+ */
+export const YEARLY_CHARGES_BETWEEN = 2;
+
+/**
+ * How far from the previous price, in percent of it, the newest charge of a series alone at its
+ * price may be and still be its new price. Beyond, above or below, it is a one-off purchase near
+ * the day the series was due: it is left out, and the series ends before it.
+ */
+export const NEW_PRICE_LIMIT_PERCENT = 50;
+
 /** One expense paid to a merchant: an entry, its day, what its payments total. */
 export type Charge = {
   readonly id: string;
@@ -51,7 +66,8 @@ export type Subscription = {
   readonly usualMinor: number;
   readonly lastOn: string;
   readonly lastMinor: number;
-  /** The last charge's day plus one step of the cadence. */
+  /** The last charge's day plus one step of the cadence; for a monthly series, its billing day in
+   * the month after the last charge's (`billingDay`). */
   readonly nextOn: string;
   /** Set when the last charge rose above the usual price, and alone at its price. */
   readonly priceRise: { readonly fromMinor: number; readonly toMinor: number } | null;
@@ -110,6 +126,96 @@ function dayNumber(day: string): number {
   return Math.round(Date.parse(`${day}T00:00:00Z`) / DAY_MS);
 }
 
+/** The last day of `month` (`YYYY-MM`). */
+function monthEnd(month: string): string {
+  return addDays(`${addMonths(month, 1)}-01`, -1);
+}
+
+/**
+ * The days one step of `cadence` after `day` may stand for, as day numbers: `nextDay`, and, when
+ * `day` is the last of its month, up to the last day of the month it leads to, since a month's
+ * last day may be a later day clamped (a 28th of February billed on the 31st leads to the 31st of
+ * March, not the 28th).
+ */
+function nextDays(day: string, cadence: Cadence): readonly [number, number] {
+  const next = nextDay(day, cadence);
+
+  if (cadence === "weekly" || day !== monthEnd(day.slice(0, 7))) {
+    return [dayNumber(next), dayNumber(next)];
+  }
+
+  return [dayNumber(next), dayNumber(monthEnd(next.slice(0, 7)))];
+}
+
+/** How many days `at` falls outside the days `range` spans; 0 within. */
+function driftFrom(range: readonly [number, number], at: number): number {
+  const [low, high] = range;
+
+  return Math.max(low - at, at - high, 0);
+}
+
+/** The day a monthly series billed on `billing` (1 to 31) is due in `month`, clamped to its last. */
+function dueIn(month: string, billing: number): string {
+  const last = monthEnd(month);
+
+  return Number(last.slice(8)) <= billing ? last : `${month}-${String(billing).padStart(2, "0")}`;
+}
+
+/** The month whose due day, billed on `billing`, is closest to `day`: its own, or one beside it;
+ * with the distance in days. */
+function dueMonthOf(
+  day: string,
+  billing: number,
+): { readonly month: string; readonly days: number } {
+  const own = day.slice(0, 7);
+  let best = { month: own, days: Number.POSITIVE_INFINITY };
+
+  for (const month of [own, addMonths(own, -1), addMonths(own, 1)]) {
+    const days = Math.abs(dayNumber(day) - dayNumber(dueIn(month, billing)));
+
+    if (days < best.days) {
+      best = { month, days };
+    }
+  }
+
+  return best;
+}
+
+/**
+ * The day of the month a monthly series is billed on: of the days 1 to 31, the one whose due days
+ * (each clamped to its month's last) its latest three charges fall closest to, in all; ties go to
+ * the day closest to the newest charge's, then the later. A series billed on the 31st keeps the
+ * 31st after February's 28th, and one charge late by a day across a month's end keeps its month.
+ */
+function billingDay(charges: ReadonlyArray<Charge>): number {
+  const latest = charges.slice(-MIN_CHARGES.monthly);
+  const newest = Number(latest.at(-1)?.day.slice(8) ?? "1");
+  let best = newest;
+  let bestDays = Number.POSITIVE_INFINITY;
+
+  for (let billing = 1; billing <= 31; billing += 1) {
+    const days = latest.reduce((sum, charge) => sum + dueMonthOf(charge.day, billing).days, 0);
+
+    if (
+      days < bestDays ||
+      (days === bestDays && Math.abs(billing - newest) <= Math.abs(best - newest))
+    ) {
+      best = billing;
+      bestDays = days;
+    }
+  }
+
+  return best;
+}
+
+/** The day a series is due after `day`: one step of `cadence`; for a monthly series, its billing
+ * day in the month after the one `day` is due in. */
+function dueAfter(day: string, cadence: Cadence, billing: number): string {
+  return cadence === "monthly"
+    ? dueIn(addMonths(dueMonthOf(day, billing).month, 1), billing)
+    : nextDay(day, cadence);
+}
+
 /** The same price: within 2 % of the earlier amount, in integers (|a − b| ≤ earlier / 50). */
 function sameAmount(earlierMinor: number, laterMinor: number): boolean {
   return Math.abs(laterMinor - earlierMinor) * 50 <= earlierMinor;
@@ -119,7 +225,7 @@ function sameAmount(earlierMinor: number, laterMinor: number): boolean {
 type Slot = {
   readonly charge: Charge;
   readonly at: number;
-  readonly next: { readonly [Each in Cadence]: number };
+  readonly next: { readonly [Each in Cadence]: readonly [number, number] };
 };
 
 /** Consecutive charges of a series at one price; `amountMinor` is its newest charge's. */
@@ -179,7 +285,7 @@ function previousOf(
       break;
     }
 
-    const drift = Math.abs(current.at - slot.next[cadence]);
+    const drift = driftFrom(slot.next[cadence], current.at);
 
     if (used[index] === true || drift > tolerance) {
       continue;
@@ -251,6 +357,19 @@ function seriesEndingAt(
     return null;
   }
 
+  const [newest, previous] = plateaus;
+
+  // A newest price far from the previous one is a one-off: the series ending before it is tried.
+  if (
+    newest !== undefined &&
+    previous !== undefined &&
+    newest.count < 2 &&
+    Math.abs(newest.amountMinor - previous.amountMinor) * 100 >
+      previous.amountMinor * NEW_PRICE_LIMIT_PERCENT
+  ) {
+    return null;
+  }
+
   return { cadence, indexes, plateaus };
 }
 
@@ -258,9 +377,12 @@ function seriesEndingAt(
  * Whether another charge of the group, of the same price as one of its neighbours in the series,
  * falls between two consecutive charges of it. A baguette bought at one price several times a week
  * always has one a week or a month before: such a series is refused, though it also misses two
- * subscriptions at one price billed by one merchant on different days.
+ * subscriptions at one price billed by one merchant on different days. A yearly series is also
+ * refused with more than `YEARLY_CHARGES_BETWEEN` charges of the group between two of its own.
  */
-function crowded(slots: ReadonlyArray<Slot>, indexes: ReadonlyArray<number>): boolean {
+function crowded(slots: ReadonlyArray<Slot>, found: Found): boolean {
+  const { cadence, indexes } = found;
+
   for (let step = 1; step < indexes.length; step += 1) {
     const newer = slots[indexes[step - 1] ?? -1];
     const older = slots[indexes[step] ?? -1];
@@ -269,7 +391,13 @@ function crowded(slots: ReadonlyArray<Slot>, indexes: ReadonlyArray<number>): bo
       continue;
     }
 
-    for (let index = firstFrom(slots, older.at + 1); index < slots.length; index += 1) {
+    const from = firstFrom(slots, older.at + 1);
+
+    if (cadence === "yearly" && firstFrom(slots, newer.at) - from > YEARLY_CHARGES_BETWEEN) {
+      return true;
+    }
+
+    for (let index = from; index < slots.length; index += 1) {
       const between = slots[index];
 
       if (between === undefined || between.at >= newer.at) {
@@ -305,12 +433,12 @@ function beside(slots: ReadonlyArray<Slot>, used: ReadonlyArray<boolean>, found:
   }
 
   const tolerance = TOLERANCE_DAYS[found.cadence];
-  const due = before.next[found.cadence];
+  const [dueFrom, dueTo] = before.next[found.cadence];
 
-  for (let index = firstFrom(slots, due - tolerance); index < slots.length; index += 1) {
+  for (let index = firstFrom(slots, dueFrom - tolerance); index < slots.length; index += 1) {
     const slot = slots[index];
 
-    if (slot === undefined || slot.at > due + tolerance) {
+    if (slot === undefined || slot.at > dueTo + tolerance) {
       break;
     }
 
@@ -338,7 +466,7 @@ function firstSeries(slots: ReadonlyArray<Slot>, used: ReadonlyArray<boolean>): 
     for (const cadence of CADENCES) {
       const found = seriesEndingAt(slots, used, end, cadence);
 
-      if (found !== null && !crowded(slots, found.indexes) && !beside(slots, used, found)) {
+      if (found !== null && !crowded(slots, found) && !beside(slots, used, found)) {
         return found;
       }
     }
@@ -368,7 +496,8 @@ function subscriptionOf(
 
   // A price charged once is not yet the usual one; it is a rise when above the one before.
   const alone = newest.count < 2 && previous !== undefined;
-  const nextOn = nextDay(last.day, found.cadence);
+
+  const nextOn = dueAfter(last.day, found.cadence, billingDay(charges));
 
   return {
     merchantId: last.merchantId,
@@ -396,9 +525,9 @@ function subscriptionsOfGroup(charges: ReadonlyArray<Charge>, asOf: string): Arr
       charge,
       at: dayNumber(charge.day),
       next: {
-        weekly: dayNumber(nextDay(charge.day, "weekly")),
-        monthly: dayNumber(nextDay(charge.day, "monthly")),
-        yearly: dayNumber(nextDay(charge.day, "yearly")),
+        weekly: nextDays(charge.day, "weekly"),
+        monthly: nextDays(charge.day, "monthly"),
+        yearly: nextDays(charge.day, "yearly"),
       },
     }));
 
@@ -444,14 +573,20 @@ function bySubscription(a: Subscription, b: Subscription): number {
  * - Charges are grouped by merchant and currency.
  * - A series steps from each charge to the next by a week (±1 day), the same day of the next month
  *   (clamped to its last day, ±3 days) or of the next year (±7 days), measured from the previous
- *   charge; it has 4 weekly, 3 monthly or 2 yearly charges at least, never two on one day.
+ *   charge, whose month's last day stands for any later day too (a 28th of February leads to the
+ *   28th to the 31st of March); it has 4 weekly, 3 monthly or 2 yearly charges at least, never two
+ *   on one day. A monthly series is due next on its billing day (`billingDay`).
+ * - A yearly series has at most `YEARLY_CHARGES_BETWEEN` other charges of the group between two of
+ *   its own, so that a bill paid every month is not yearly.
  * - Its amounts form plateaus of one price (within 2 % of the earlier amount, against the
  *   plateau's newest one so that a price cannot drift by small steps); every plateau but the
  *   newest has two charges at least, so that a bill that varies is never a subscription.
  * - Each charge, newest first, is tried as a series' end, each cadence shortest first; the series
  *   is built backwards, taking at each step the charge closest in amount. It is refused when a
  *   charge of the same price falls between two of its charges (a price often paid), or when its
- *   newest charge is alone at its price beside one that keeps the series' price (a one-off).
+ *   newest charge is alone at its price beside one that keeps the series' price (a one-off). A
+ *   newest charge alone at its price more than `NEW_PRICE_LIMIT_PERCENT` above or below the
+ *   previous price is a one-off too: the series ends before it.
  * - Once a series is found, its charges are set aside and the rest searched again, three
  *   subscriptions at most per merchant and currency.
  *
@@ -516,7 +651,7 @@ export function subscriptionsOfMonth(
 /**
  * The items of a calendar of subscriptions from `from` to `to`, both included: each charge paid on
  * those days, the one that rose marked so; the charges still due after `today`, from the next day
- * on, at the usual price, for those that go on; the day a stopped one was due. By day, then name.
+ * on (a monthly series on its billing day), at the newest charge's price, for those that go on; the day a stopped one was due. By day, then name.
  */
 export function calendarDays(
   subscriptions: ReadonlyArray<Subscription>,
@@ -565,12 +700,12 @@ export function calendarDays(
       continue;
     }
 
-    const dueMinor = priceRise === null ? subscription.usualMinor : priceRise.toMinor;
+    const billing = billingDay(charges);
 
-    for (let day = subscription.nextOn; day <= to; day = nextDay(day, cadence)) {
+    for (let day = subscription.nextOn; day <= to; day = dueAfter(day, cadence, billing)) {
       if (day > today && day >= from) {
-        // After a rise, the next charges are the new price: what the user will be charged.
-        items.push(item(`${series}:due:${day}`, day, "due", dueMinor));
+        // After a new price, risen or dropped, the next charges are it: what the user will be charged.
+        items.push(item(`${series}:due:${day}`, day, "due", subscription.lastMinor));
       }
     }
   }

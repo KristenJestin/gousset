@@ -4,7 +4,9 @@ import { addDays } from "../balances";
 import { addMonths } from "../values";
 import {
   MIN_CHARGES,
+  NEW_PRICE_LIMIT_PERCENT,
   TOLERANCE_DAYS,
+  YEARLY_CHARGES_BETWEEN,
   calendarDays,
   detectSubscriptions,
   nextDay,
@@ -98,6 +100,16 @@ describe("detectSubscriptions", () => {
     expect(found?.nextOn).toBe("2026-04-30");
   });
 
+  test("a March charge a day late after the 28th of February keeps a series billed on the 31st", () => {
+    const charges = series(["2025-12-31", "2026-01-31", "2026-02-28", "2026-04-01"], 1499);
+    const found = detectSubscriptions(charges, "2026-04-02");
+
+    expect(found).toHaveLength(1);
+    expect(found[0]?.charges).toEqual(charges);
+    expect(found[0]?.nextOn).toBe("2026-04-30");
+    expect(found[0]?.stoppedOn).toBeNull();
+  });
+
   test("a weekly series of four is found, a day late tolerated; three are not", () => {
     const charges = series(["2026-03-02", "2026-03-09", "2026-03-17", "2026-03-24"], 450, "Fitbox");
     const [found, ...others] = detectSubscriptions(charges, "2026-03-25");
@@ -122,6 +134,30 @@ describe("detectSubscriptions", () => {
     ];
 
     expect(detectSubscriptions(differing, "2026-04-01")).toEqual([]);
+  });
+
+  test("a monthly bill that varies is not yearly, though two of its charges a year apart are one price", () => {
+    const amounts = [6200, 5400, 7100, 4800, 6600, 5000, 4500, 4300, 4700, 5600, 6900, 7600, 6250];
+
+    const charges = amounts.map((amountMinor, index) =>
+      charge(`${addMonths("2025-01", index)}-12`, amountMinor, "Northwind Energy"),
+    );
+
+    expect(detectSubscriptions(charges, "2026-01-20")).toEqual([]);
+  });
+
+  test("a yearly pair is found with two other charges of the merchant between, not with three", () => {
+    const pair = series(["2025-03-10", "2026-03-12"], 4900, "Cloudbox");
+    const two = [charge("2025-06-02", 1500, "Cloudbox"), charge("2025-11-20", 2300, "Cloudbox")];
+
+    expect(
+      detectSubscriptions([...pair, ...two], "2026-03-20").map((each) => each.cadence),
+    ).toEqual(["yearly"]);
+    expect(YEARLY_CHARGES_BETWEEN).toBe(2);
+
+    const three = [...two, charge("2026-01-15", 800, "Cloudbox")];
+
+    expect(detectSubscriptions([...pair, ...three], "2026-03-20")).toEqual([]);
   });
 
   test("monthly charges are monthly, though they also look yearly twelve apart", () => {
@@ -182,6 +218,48 @@ describe("detectSubscriptions", () => {
     expect(found?.priceRise).toBeNull();
     expect(found?.usualMinor).toBe(1299);
     expect(found?.lastMinor).toBe(999);
+  });
+
+  test("a one-off purchase near the day a series is due is no price rise", () => {
+    const monthly = series(["2026-01-05", "2026-02-05", "2026-03-05", "2026-04-05"], 699);
+
+    const [found, ...others] = detectSubscriptions(
+      [...monthly, charge("2026-05-03", 4500)],
+      "2026-05-03",
+    );
+
+    expect(others).toEqual([]);
+    expect(found?.charges).toEqual(monthly);
+    expect(found?.priceRise).toBeNull();
+    expect(found?.nextOn).toBe("2026-05-05");
+    expect(NEW_PRICE_LIMIT_PERCENT).toBe(50);
+  });
+
+  test("a newest charge less than half the price is no new price", () => {
+    const monthly = series(["2026-01-05", "2026-02-05", "2026-03-05"], 1299);
+
+    const [found, ...others] = detectSubscriptions(
+      [...monthly, charge("2026-04-05", 499)],
+      "2026-04-05",
+    );
+
+    expect(others).toEqual([]);
+    expect(found?.charges).toEqual(monthly);
+    expect(found?.lastMinor).toBe(1299);
+  });
+
+  test("a new price up to 50 % from the previous one is taken: a rise of 20 % or 50 % is flagged", () => {
+    const monthly = series(["2026-01-05", "2026-02-05", "2026-03-05"], 1000);
+
+    for (const toMinor of [1200, 1500]) {
+      const [found] = detectSubscriptions(
+        [...monthly, charge("2026-04-05", toMinor)],
+        "2026-04-10",
+      );
+
+      expect(found?.charges).toHaveLength(4);
+      expect(found?.priceRise).toEqual({ fromMinor: 1000, toMinor });
+    }
   });
 
   test("a one-off purchase after the series does not hide it", () => {
@@ -367,6 +445,38 @@ describe("calendarDays", () => {
     expect(items[0]?.merchantId).toBe("merchant-streamly");
     expect(items[0]?.amount.currency).toBe("EUR");
     expect(new Set(items.map((item) => item.id)).size).toBe(items.length);
+  });
+
+  test("after a lower newest price, what is due is that price", () => {
+    const lower = detectSubscriptions(
+      [
+        ...series(["2026-01-05", "2026-02-05", "2026-03-05"], 1299, "Wavely Mobile"),
+        charge("2026-04-05", 999, "Wavely Mobile"),
+      ],
+      "2026-04-10",
+    );
+
+    const items = calendarDays(lower, "2026-05-01", "2026-06-30", "2026-04-10");
+
+    expect(items.map((item) => [item.day, item.kind, item.amount.minor])).toEqual([
+      ["2026-05-05", "due", 999],
+      ["2026-06-05", "due", 999],
+    ]);
+  });
+
+  test("the dues after a charge on the 31st fall on the last day of each month", () => {
+    const billed = detectSubscriptions(
+      series(["2025-11-30", "2025-12-31", "2026-01-31"], 1499, "Cloudbox"),
+      "2026-01-31",
+    );
+
+    const items = calendarDays(billed, "2026-02-01", "2026-04-30", "2026-01-31");
+
+    expect(items.map((item) => [item.day, item.kind])).toEqual([
+      ["2026-02-28", "due"],
+      ["2026-03-31", "due"],
+      ["2026-04-30", "due"],
+    ]);
   });
 
   test("nothing is due on today or before it", () => {
