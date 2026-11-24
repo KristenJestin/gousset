@@ -10,7 +10,9 @@ test("axe fails a screen that breaks accessibility", async ({ page }) => {
 
 // Firefox build 1572 crashed a page once axe and a role query by name had both read an element's
 // `ariaLabelledByElements` (src/accessibility.ts, ELEMENT_REFLECTIONS). The button and the region
-// are named only by `aria-labelledby`: axe must still find their names, from the attribute.
+// are named only by `aria-labelledby`: axe must still find their names, from the attribute. No
+// `dispatchEvent` on a role locator: in that build Playwright's own call reads the property in the
+// page and crashes it, axe or not.
 test("axe and role queries by name share a page whose names come from aria-labelledby", async ({
   page,
 }) => {
@@ -26,7 +28,7 @@ test("axe and role queries by name share a page whose names come from aria-label
   await expect(page.getByRole("button", { name: "Close" })).toBeVisible();
   await expectAccessible(page);
   await page.getByLabel("Password").fill("made-up");
-  await page.getByRole("button", { name: "Close" }).dispatchEvent("click");
+  await page.getByRole("button", { name: "Close" }).click();
   await expectAccessible(page);
   await expect(page.getByRole("region", { name: "Sign in" })).toBeVisible();
 });
