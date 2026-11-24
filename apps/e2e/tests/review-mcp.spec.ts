@@ -69,9 +69,12 @@ function rowsOf(text: string): ReadonlyArray<Row> {
 /** The line or category a proposal's handle names after its kind (`transfer:<line>`). */
 const namedBy = (proposal: string) => proposal.slice(proposal.indexOf(":") + 1);
 
-/** The row whose label is `label`. */
+/**
+ * The row whose own label is `label`: written before its proposal (`, "<label>": <proposal>`), never
+ * the label a proposal quotes (the line a held one repeats, the expense a refund cancels).
+ */
 function rowOf(rows: ReadonlyArray<Row>, label: string): Row {
-  const found = rows.find((each) => each.row.includes(`"${label}"`));
+  const found = rows.find((each) => each.row.includes(`, "${label}": `));
 
   if (found === undefined) {
     throw new Error(`No line "${label}" to review.`);
@@ -287,6 +290,249 @@ test("an MCP client lists the lines to review with their proposals, accepts and 
 
     expect(missing.isError).toBe(true);
     expect(missing.text).toContain("correct needs category for this line");
+  } finally {
+    await data.close();
+  }
+});
+
+const BOOKS = {
+  bookedOn: "2026-10-05",
+  amountMinor: -3400,
+  label: "CB WILLOW BOOKS 0510 RIVERTON",
+};
+
+const BOOKS_BACK = {
+  bookedOn: "2026-10-07",
+  amountMinor: 3400,
+  label: "AVOIR WILLOW BOOKS RIVERTON",
+};
+
+test("an MCP client accepts a refund, and the line leaves the lines to review", async ({
+  app,
+  user,
+  page,
+  baseURL,
+  mcpClientId,
+}, testInfo) => {
+  test.setTimeout(90_000);
+
+  const reviewer = await addUser(app.baseURL, user, {
+    name: "Rae Example",
+    email: `rae.refund.worker${app.slot}.${testInfo.repeatEachIndex}@example.com`,
+    password: `e2e-rae-password-${app.slot}`,
+  });
+
+  const data = openUserData(app.database);
+  const imports = importsOn(data);
+
+  try {
+    const owner = await data.ownerOf(reviewer.email);
+    const accountId = await imports.createAccount(owner, "Refund current");
+
+    // The purchase and its credit note alone: the only expense the line coming back may cancel.
+    const done = await imports.importFile(
+      owner,
+      accountId,
+      statementFile("ofx", statementOf("review-refund", [BOOKS, BOOKS_BACK]), "review-refund.ofx"),
+    );
+
+    expect(done.status).toBe("done");
+
+    await page.context().addCookies([...reviewer.cookies]);
+
+    const session = await connectMcp({
+      baseURL: baseURL ?? "",
+      page,
+      consent: allowReadAndWrite,
+      scope: "read write",
+      clientId: mcpClientId,
+    });
+
+    const review = (args: Arguments) => callText(session.client, "review", args);
+    const listed = await review({ action: "list" });
+
+    expect(listed.isError, listed.text).toBe(false);
+
+    // The credit note's row names the purchase in its proposal: it is the newer, listed first.
+    const back = rowOf(rowsOf(listed.text), BOOKS_BACK.label);
+
+    expect(back.row).toContain("link it as a refund of the expense in Other costing 34.00 EUR");
+    expect(back.row).toContain(`"${BOOKS.label}"`);
+    expect(back.proposal).toMatch(/^refund:/);
+
+    const linked = await review({ action: "accept", line: back.line, proposal: back.proposal });
+
+    expect(linked.isError, linked.text).toBe(false);
+    expect(linked.text).toContain("is linked as a refund of that expense");
+
+    // Linked, it follows its expense: it is no longer to review, with a category or otherwise.
+    const after = rowsOf((await review({ action: "list" })).text);
+
+    expect(after.map((each) => each.line)).not.toContain(back.line);
+
+    const shown = await callText(session.client, "lines", { action: "show", line: back.line });
+
+    expect(shown.text).toContain("This line is one of its refunds.");
+  } finally {
+    await data.close();
+  }
+});
+
+test("an MCP client corrects a transfer's line and held lines, and is refused an archived category", async ({
+  app,
+  user,
+  page,
+  baseURL,
+  mcpClientId,
+}, testInfo) => {
+  // Four imports run here, then the calls.
+  test.setTimeout(120_000);
+
+  const reviewer = await addUser(app.baseURL, user, {
+    name: "Rae Example",
+    email: `rae.correct.worker${app.slot}.${testInfo.repeatEachIndex}@example.com`,
+    password: `e2e-rae-password-${app.slot}`,
+  });
+
+  const data = openUserData(app.database);
+  const imports = importsOn(data);
+
+  try {
+    const owner = await data.ownerOf(reviewer.email);
+
+    const newAccount = async (name: string, kind: "current" | "savings") => {
+      const [created] = await data.asUser(owner, (transaction) =>
+        transaction
+          .insert(account)
+          .values({ userId: owner, name, kind, currency: "EUR" })
+          .returning({ id: account.id }),
+      );
+
+      if (created === undefined) {
+        throw new Error("The account was not created.");
+      }
+
+      return created.id;
+    };
+
+    const importInto = async (
+      accountId: string,
+      name: string,
+      format: "ofx" | "csv",
+      lines: ReadonlyArray<Omit<StatementLine, "reference">>,
+    ) => {
+      const done = await imports.importFile(
+        owner,
+        accountId,
+        statementFile(format, statementOf(name, lines), `${name}.${format}`),
+      );
+
+      expect(done.status, name).toBe("done");
+
+      return done;
+    };
+
+    const lineOf = async (lineId: string) => {
+      const [found] = await data.asUser(owner, (transaction) =>
+        transaction
+          .select({
+            state: statementLine.state,
+            reviewState: statementLine.reviewState,
+            transferRefused: statementLine.transferRefused,
+          })
+          .from(statementLine)
+          .where(eq(statementLine.id, lineId)),
+      );
+
+      return found;
+    };
+
+    const current = await newAccount("Correct current", "current");
+    const savingsOne = await newAccount("Correct savings one", "savings");
+    const savingsTwo = await newAccount("Correct savings two", "savings");
+
+    // Two lines may be the other side of the transfer out: the user chooses.
+    await importInto(savingsOne, "correct-one", "ofx", [
+      { bookedOn: "2026-10-16", amountMinor: 7000, label: "SEPA TRF RECEIVED ONE" },
+    ]);
+
+    await importInto(savingsTwo, "correct-two", "ofx", [
+      { bookedOn: "2026-10-14", amountMinor: 7000, label: "SEPA TRF RECEIVED TWO" },
+    ]);
+
+    await importInto(current, "correct-current", "ofx", [TO_SAVINGS, STREAMING, GYM]);
+
+    const again = await importInto(current, "correct-again", "csv", [STREAMING_AGAIN, GYM_AGAIN]);
+
+    expect(again).toMatchObject({ linesAdded: 0, linesHeld: 2 });
+
+    await page.context().addCookies([...reviewer.cookies]);
+
+    const session = await connectMcp({
+      baseURL: baseURL ?? "",
+      page,
+      consent: allowReadAndWrite,
+      scope: "read write",
+      clientId: mcpClientId,
+    });
+
+    const review = (args: Arguments) => callText(session.client, "review", args);
+    const categories = (args: Arguments) => callText(session.client, "categories", args);
+    const rows = rowsOf((await review({ action: "list" })).text);
+    const transfer = rowOf(rows, TO_SAVINGS.label);
+    const heldStreaming = rowOf(rows, STREAMING_AGAIN.label);
+    const heldGym = rowOf(rows, GYM_AGAIN.label);
+
+    expect(transfer.proposal).toMatch(/^transfer:/);
+
+    // Corrected: the transfer's line is no transfer, in the category named, and out of the queue.
+    const notTransfer = await review({
+      action: "correct",
+      line: transfer.line,
+      category: "Groceries",
+    });
+
+    expect(notTransfer.isError, notTransfer.text).toBe(false);
+    expect(notTransfer.text).toContain("is now in Groceries, as the user's choice");
+    expect(notTransfer.text).toContain("It is no transfer: the automatic pairing leaves it alone.");
+
+    expect(await lineOf(transfer.line)).toMatchObject({
+      reviewState: "done",
+      transferRefused: true,
+    });
+
+    // Corrected with a category: the held line is kept, counted, in it, and out of the queue.
+    const kept = await review({
+      action: "correct",
+      line: heldStreaming.line,
+      category: "Groceries",
+    });
+
+    expect(kept.isError, kept.text).toBe(false);
+    expect(kept.text).toContain("is now in Groceries, as the user's choice");
+    expect(await lineOf(heldStreaming.line)).toMatchObject({
+      state: "counted",
+      reviewState: "done",
+    });
+
+    // An archived category is refused before anything is written: the line is still held.
+    const hobby = `Old Hobby ${app.slot}`;
+
+    expect((await categories({ action: "create", name: hobby })).isError).toBe(false);
+    expect((await categories({ action: "archive", category: hobby })).isError).toBe(false);
+
+    const refused = await review({ action: "correct", line: heldGym.line, category: hobby });
+
+    expect(refused.isError).toBe(true);
+    expect(refused.text).toContain("That category is archived");
+    expect((await lineOf(heldGym.line))?.state).toBe("held");
+
+    const after = rowsOf((await review({ action: "list" })).text);
+    const lines = after.map((each) => each.line);
+
+    expect(lines).not.toContain(transfer.line);
+    expect(lines).not.toContain(heldStreaming.line);
+    expect(rowOf(after, GYM_AGAIN.label).row).toContain("discard it, it repeats the line of");
   } finally {
     await data.close();
   }
