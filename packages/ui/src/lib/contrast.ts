@@ -39,6 +39,9 @@ export const TEXT_PAIRS = [
   ["--money-left", "--card"],
   ["--money-income", "--background"],
   ["--money-income", "--card"],
+  // An operation's amount, on its row and on the band of a hovered or open row.
+  ["--amount-in", "--card"],
+  ["--amount-in", "--muted"],
   ["--money-restricted", "--background"],
   ["--money-restricted", "--card"],
   ["--chart-label", "--chart-background"],
@@ -66,6 +69,7 @@ export const MONEY_COLORS = [
   "--money-saved",
   "--money-left",
   "--money-income",
+  "--amount-in",
 ] as const;
 
 const DECLARATION = /^\s*(--[a-z0-9-]+):\s*([^;]+);/gm;

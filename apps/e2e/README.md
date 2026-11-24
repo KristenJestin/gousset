@@ -36,7 +36,10 @@ migrations of `packages/db`, as an installation applies them. It holds no user, 
 a spec that needs them seeds the worker's users from `packages/fixture` (`openUserData`). Each
 worker clones
 it (`gousset_e2e_<run>_worker_<n>`, `CREATE DATABASE … TEMPLATE`) and starts its own app on a
-free port against its clone, so tests run in parallel and never see each other's rows. The run
+free port against its clone, so tests run in parallel and never see each other's rows. Apps start
+one at a time (an advisory lock held from the port's choice until the app answers), so that two
+workers starting at once are never given the same port, where one would sign up on the other's
+database. The run
 id keeps two runs on one Postgres (two worktrees on `pnpm db:start`) apart. Databases are
 dropped when their worker and the run end; a run killed before its teardown leaves its
 `gousset_e2e_<run>_*` databases behind, safe to drop by hand.
