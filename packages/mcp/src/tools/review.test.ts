@@ -7,6 +7,7 @@ import {
   RuleJobs,
   Transfers,
   memoryAccountStore,
+  memoryCategory,
   memoryCategoryStore,
   memoryId,
   memoryLineStore,
@@ -14,6 +15,7 @@ import {
 import type {
   AccountRecord,
   LineCategory,
+  MemoryCategoryRows,
   MemoryLineDetail,
   MemoryLineRows,
   RefundProposal,
@@ -197,13 +199,19 @@ const MERCHANTS = Layer.mock(Merchants, {
     }),
 });
 
-function onToday(rows: MemoryLineRows): Runner<GoussetServices> {
+function onToday(
+  rows: MemoryLineRows,
+  categories: MemoryCategoryRows | undefined,
+): Runner<GoussetServices> {
   const byOwner = new Map([[reader.userId, rows]]);
 
+  // `UserData` is a mock with nothing: a write that reaches the database dies, and the call fails.
   const layer = Layer.mergeAll(
     memoryAccountStore(byOwner),
     memoryLineStore(byOwner),
-    memoryCategoryStore(),
+    memoryCategoryStore(
+      categories === undefined ? new Map() : new Map([[reader.userId, categories]]),
+    ),
     Layer.mock(Imports, {}),
     Layer.mock(ImportProfiles, {}),
     Layer.mock(DataExport, {}),
@@ -229,10 +237,11 @@ async function review(
   args: { [key: string]: string | number },
   caller = reader,
   rows: MemoryLineRows = ROWS,
+  categories?: MemoryCategoryRows,
 ) {
   const client = await connectInProcess(
     goussetServer,
-    { run: onToday(rows) },
+    { run: onToday(rows, categories) },
     caller,
     "2025-11-25",
   );
@@ -382,6 +391,23 @@ describe("review writes", () => {
 
     expect(isError).toBe(true);
     expect(text).toContain("correct needs category for this line");
+  });
+
+  test("correct refuses an archived category for a held line before keeping it: it stays held", async () => {
+    const archived = memoryCategory("expense", "Old Shops", {
+      archivedAt: "2026-10-01T00:00:00.000Z",
+    });
+
+    const { text, isError } = await review(
+      { action: "correct", line: heldCafe.id, category: "Old Shops" },
+      writer,
+      ROWS,
+      { categories: [archived], entries: [], lines: [] },
+    );
+
+    // Kept first, the line would have reached the database, which this test has not: the call dies.
+    expect(isError, text).toBe(true);
+    expect(text).toContain("That category is archived");
   });
 
   test("an unknown handle is refused with a call that answers", async () => {

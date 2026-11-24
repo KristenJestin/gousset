@@ -5,10 +5,19 @@ import { Effect } from "effect";
 
 import { remakeBalanceLines } from "./balance-lines";
 import { classifyLine } from "./categories";
-import type { LineCategory } from "./category-store";
+import { CategoryStore } from "./category-store";
+import type { EntryKind, LineCategory } from "./category-store";
 import { takeCategoryTurn } from "./category-turn";
 import { entriesForLines } from "./entries";
-import { CategoryRequired, LineAlreadyReviewed, NotHeld, ProposalChanged } from "./errors";
+import {
+  CategoryKindMismatch,
+  CategoryNotFound,
+  CategoryRefused,
+  CategoryRequired,
+  LineAlreadyReviewed,
+  NotHeld,
+  ProposalChanged,
+} from "./errors";
 import { lineExpensesOf, linkLine } from "./expenses/expenses";
 import { LineStore } from "./line-store";
 import type { FoundLine } from "./line-store";
@@ -281,12 +290,37 @@ export const acceptProposal = (owner: string, lineId: string, seen: string) =>
   });
 
 /**
+ * Fails as `classifyLine` would put a line of `amountMinor` in `categoryId`: no such category, not
+ * of the line's kind (by its sign), or archived. Read before a held line is kept, so that a category
+ * refused leaves it held, still to discard; a category archived between the two is still refused
+ * by `classifyLine`, the line then kept and to review.
+ */
+const choosable = (owner: string, lineId: string, amountMinor: number, categoryId: string) =>
+  Effect.gen(function* () {
+    const store = yield* CategoryStore;
+    const category = (yield* store.list(owner)).find((each) => each.id === categoryId);
+    const lineKind: EntryKind = amountMinor < 0 ? "expense" : "income";
+
+    if (category === undefined) {
+      return yield* new CategoryNotFound({ categoryId });
+    }
+
+    if (category.kind !== lineKind) {
+      return yield* new CategoryKindMismatch({ lineId, lineKind, categoryKind: category.kind });
+    }
+
+    if (category.archivedAt !== null) {
+      return yield* new CategoryRefused({ reason: "archived" });
+    }
+  });
+
+/**
  * Says what a line to review is instead of its proposal, as the user's choice: a held line is kept
  * (counted, then put in `categoryId` when given: without one it stays to review, its category now
  * Gousset's guess); a transfer's line is no transfer (`transfer_refused`, which the automatic pairing
  * leaves alone) and goes in `categoryId`; any other goes in `categoryId`. The line's review is then
  * done. Fails with `CategoryRequired` without a category but for a held line, `LineNotFound`,
- * `LineAlreadyReviewed`, and what `classifyLine` refuses.
+ * `LineAlreadyReviewed`, and what `classifyLine` refuses: for a held line, before it is kept.
  */
 export const correctLine = (owner: string, lineId: string, correction: Correction) =>
   Effect.gen(function* () {
@@ -299,6 +333,10 @@ export const correctLine = (owner: string, lineId: string, correction: Correctio
     }
 
     if (proposal.kind === "duplicate") {
+      if (categoryId !== undefined) {
+        yield* choosable(owner, lineId, queued.line.amount.minor, categoryId);
+      }
+
       yield* keepHeldLine(owner, lineId);
     }
 
