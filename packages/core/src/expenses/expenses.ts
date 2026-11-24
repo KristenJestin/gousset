@@ -731,19 +731,21 @@ async function transferFunding(
     return null;
   }
 
+  // A funding made stays shown, and can be undone, whatever its accounts' kinds became since: an
+  // account's kind may be edited once it has lines.
+  if (found.fundsEntryId !== null) {
+    const [funded] = (await readExpenses(transaction, [found.fundsEntryId])).flatMap(fundedOf);
+
+    return { funds: funded ?? null, candidates: [] };
+  }
+
   const read = fundingTransferOf(found);
 
   if (!fundsFromBenefit(read)) {
     return null;
   }
 
-  if (found.fundsEntryId === null) {
-    return { funds: null, candidates: await candidatesToFund(transaction, read) };
-  }
-
-  const [funded] = (await readExpenses(transaction, [found.fundsEntryId])).flatMap(fundedOf);
-
-  return { funds: funded ?? null, candidates: [] };
+  return { funds: null, candidates: await candidatesToFund(transaction, read) };
 }
 
 /** What `line` is to the expenses, read in `transaction`. */
