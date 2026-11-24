@@ -308,6 +308,28 @@ function AgendaAmount({ item, locale }: { item: RecurringItem; locale: string })
   return <Amount value={item.amount} size="sm" locale={locale} roll={false} />;
 }
 
+/** One formatter per language, made once: an agenda's day headings all share it. */
+const agendaDayFormats = new Map<string, Intl.DateTimeFormat>();
+
+function agendaDayFormat(locale: string): Intl.DateTimeFormat {
+  const known = agendaDayFormats.get(locale);
+
+  if (known !== undefined) {
+    return known;
+  }
+
+  const made = new Intl.DateTimeFormat(locale, {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+    timeZone: "UTC",
+  });
+
+  agendaDayFormats.set(locale, made);
+
+  return made;
+}
+
 function Agenda({
   month,
   todayDay,
@@ -320,13 +342,7 @@ function Agenda({
   const messages = useUiMessages().recurring;
   const locale = usePageLanguage();
 
-  const dayFormat = new Intl.DateTimeFormat(locale, {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-    timeZone: "UTC",
-  });
-
+  const dayFormat = agendaDayFormat(locale);
   const days = [...byDay.entries()].toSorted(([a], [b]) => a - b);
 
   return (
