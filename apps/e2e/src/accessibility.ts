@@ -60,9 +60,10 @@ export async function expectAccessible(page: Page): Promise<void> {
 
   const firefox = page.context().browser()?.browserType().name() === "firefox";
 
+  // Every browser scans with the axe this harness pins, so that they run the same version.
   const results = await new AxeBuilder({
     page,
-    axeSource: firefox ? AXE_READING_ATTRIBUTES : undefined,
+    axeSource: firefox ? AXE_READING_ATTRIBUTES : axe.source,
   })
     .withTags(WCAG_TAGS)
     .analyze();
