@@ -81,6 +81,7 @@ const byDefault = exists(
 function conditions(accounts: ReadonlyArray<AccountColumns>, query: LineQuery) {
   const ofState = eq(statementLine.state, query.state);
   const ids = query.alsoLineIds.filter(isId);
+  const only = query.onlyLineIds?.filter(isId);
 
   return and(
     query.state === "held"
@@ -97,6 +98,11 @@ function conditions(accounts: ReadonlyArray<AccountColumns>, query: LineQuery) {
     query.accountId === null ? undefined : eq(statementLine.accountId, query.accountId),
     query.text === null ? undefined : sql`${searched} ilike ${substring(query.text)}`,
     query.amount === null ? undefined : amountCondition(accounts, query.amount),
+    only === undefined
+      ? undefined
+      : only.length === 0
+        ? sql`false`
+        : inArray(statementLine.id, only),
   );
 }
 

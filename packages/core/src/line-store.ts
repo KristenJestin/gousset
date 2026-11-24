@@ -32,6 +32,8 @@ export type LineQuery = {
   readonly state: "counted" | "held";
   /** With `held`: these counted lines match too (a transfer's side to choose, #26). */
   readonly alsoLineIds: ReadonlyArray<string>;
+  /** These lines only, when given: whether one line is among those a search gives (#35). */
+  readonly onlyLineIds?: ReadonlyArray<string>;
   /** Lines strictly older than this one in the order (booked on, then id). */
   readonly after: { readonly bookedOn: string; readonly id: string } | null;
   /** How many lines to give at most. */

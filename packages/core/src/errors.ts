@@ -144,6 +144,27 @@ export class LineAlreadyReviewed extends Schema.TaggedError<LineAlreadyReviewed>
   { lineId: Schema.String },
 ) {}
 
+/**
+ * A line to review's proposal is no longer the one the user saw (#35): its transfer's candidates,
+ * its refund proposals or its category changed meanwhile. Nothing was done; read it again.
+ */
+export class ProposalChanged extends Schema.TaggedError<ProposalChanged>()("ProposalChanged", {
+  lineId: Schema.String,
+}) {}
+
+/**
+ * A correction of a line to review needs the category it goes in (#35): every line to review but
+ * a held one, which is kept as it is without one.
+ */
+export class CategoryRequired extends Schema.TaggedError<CategoryRequired>()("CategoryRequired", {
+  lineId: Schema.String,
+}) {}
+
+/** The line is not held as a near duplicate: there is nothing to keep or discard (#35). */
+export class NotHeld extends Schema.TaggedError<NotHeld>()("NotHeld", {
+  lineId: Schema.String,
+}) {}
+
 /** No account of the user's has this id. */
 export class AccountNotFound extends Schema.TaggedError<AccountNotFound>()("AccountNotFound", {
   accountId: Schema.String,

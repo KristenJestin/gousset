@@ -62,6 +62,7 @@ function matches(line: MemoryLineDetail, currency: string, query: LineQuery): bo
         state === "counted" &&
         (query.alsoLineIds.includes(line.id) || line.classifiedBy === "default"))) &&
     line.bookedOn <= query.to &&
+    (query.onlyLineIds === undefined || query.onlyLineIds.includes(line.id)) &&
     (query.from === null || line.bookedOn >= query.from) &&
     (query.accountId === null || line.accountId === query.accountId) &&
     (query.text === null || searchedOf(line).includes(query.text.toLowerCase())) &&
