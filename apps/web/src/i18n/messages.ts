@@ -44,6 +44,10 @@ export function accountRefusalMessage(code: string): string {
       return m.accountRefusalNotACredit();
     case "EXPIRY_BEFORE_CREDIT":
       return m.accountRefusalExpiryBeforeCredit();
+    case "BALANCE_CATEGORY_UNKNOWN":
+      return m.accountRefusalBalanceCategoryUnknown();
+    case "BALANCE_CATEGORY_ARCHIVED":
+      return m.accountRefusalBalanceCategoryArchived();
     default:
       return m.errorUnknown();
   }

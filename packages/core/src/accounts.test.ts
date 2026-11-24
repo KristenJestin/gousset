@@ -52,6 +52,7 @@ function accountOf(
     closedOn: null,
     settlesIntoAccountId: null,
     creditOrder: "oldest_first",
+    balanceCategoryId: null,
     ...change,
   };
 }
@@ -595,6 +596,36 @@ describe("benefit accounts", () => {
     expect(outcome.issuer.creditOrder).toBe("expiring_first");
     expect(outcome.kept.creditOrder).toBe("expiring_first");
     expect(outcome.changed.creditOrder).toBe("oldest_first");
+  });
+
+  test("an edit that leaves out the category keeps it, and null clears it", async () => {
+    const card = accountOf("Gift card", "benefit", {
+      mode: "balance",
+      balanceCategoryId: "00000000-0000-7000-8000-00000000c001",
+    });
+
+    const outcome = await inOrder(
+      { accounts: [card] },
+      Effect.gen(function* () {
+        const kept = yield* editAccount(
+          ADA,
+          card.id,
+          input("benefit", { name: "Renamed", mode: "balance" }),
+        );
+
+        const cleared = yield* editAccount(
+          ADA,
+          card.id,
+          input("benefit", { mode: "balance", balanceCategoryId: null }),
+        );
+
+        return { kept, cleared };
+      }),
+    );
+
+    expect(outcome.kept.name).toBe("Renamed");
+    expect(outcome.kept.balanceCategoryId).toBe("00000000-0000-7000-8000-00000000c001");
+    expect(outcome.cleared.balanceCategoryId).toBeNull();
   });
 
   test("moving money from the current account to a benefit account moves it from available to restricted", async () => {

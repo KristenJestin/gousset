@@ -1,4 +1,4 @@
-import { accountNamed, listAccounts, showAccount } from "@gousset/core";
+import { accountNamed, listAccounts, noteBalance, searchLines, showAccount } from "@gousset/core";
 import type {
   AccountCredit,
   AccountCredits,
@@ -7,15 +7,20 @@ import type {
   AccountList,
   AccountStore,
   AccountSummary,
+  BalanceCategory,
+  LineRow,
+  LineStore,
   Money,
   StatementCheck,
   StatementsUntil,
 } from "@gousset/core";
+import { Day } from "@gousset/core/account-values";
 import type { AccountChoice, AccountGroup } from "@gousset/core/account-values";
 import { minorDigits } from "@gousset/import";
-import { Effect, Schema } from "effect";
+import { Effect, Option, Schema } from "effect";
 
 import { ToolRefusal, defineTool } from "../tool";
+import { pathText } from "./categories";
 
 /** The lines `show` gives when none are asked for, and the most it gives. */
 const DEFAULT_LINES = 20;
@@ -25,16 +30,30 @@ const MAX_LINES = 100;
 const MAX_CREDITS = 30;
 
 const AccountsInput = Schema.Struct({
-  action: Schema.Literals(["list", "show"]).annotate({
+  action: Schema.Literals(["list", "show", "note_balance"]).annotate({
     description:
-      "list: every account by group, with totals per currency. show: one account, its lines and its check against the statement.",
+      "list: every account by group, with totals per currency. show: one account, its lines and its check against the statement. note_balance: the balance of an account kept by its balance at the end of a day (writes).",
   }),
   name: Schema.optional(
-    Schema.String.annotate({ description: "show: the account's name, as list writes it." }),
+    Schema.String.annotate({
+      description: "show, note_balance: the account's name, as list writes it.",
+    }),
   ),
   institution: Schema.optional(
     Schema.String.annotate({
-      description: "show: the account's bank or issuer, when two accounts share the name.",
+      description:
+        "show, note_balance: the account's bank or issuer, when two accounts share the name.",
+    }),
+  ),
+  day: Schema.optional(
+    Schema.String.annotate({
+      description: "note_balance: the day whose end the balance is noted at, YYYY-MM-DD.",
+    }),
+  ),
+  balance: Schema.optional(
+    Schema.String.annotate({
+      description:
+        'note_balance: the balance at the end of day, a decimal in the account\'s currency, a minus for money owed ("80.00", "-1250.50").',
     }),
   ),
   lines: Schema.optional(
@@ -50,13 +69,15 @@ const AccountsInput = Schema.Struct({
   ),
 });
 
-const DESCRIPTION = `The user's accounts and their balances. \`list\` gives every open account by group: available (current accounts, deferred debit cards), restricted (benefit accounts: meal vouchers, gift cards), savings and investments, owed (loans), each with its balance today and how far its statements go, and each group's totals per currency (never converted); then the closed accounts, apart and out of the totals. \`show\` gives one account: its balance today, its last lines newest first with the balance after each, and the check of its balance against its latest statement balance, with the difference when they disagree. On a benefit account kept by its lines, \`show\` adds its credits: the order they are used in, what is left on each, and what expires when.
+const DESCRIPTION = `The user's accounts and their balances; notes the balance of one kept by it (a write). \`list\` gives every open account by group: available (current accounts, deferred debit cards), restricted (benefit accounts: meal vouchers, gift cards), savings and investments, owed (loans), each with its balance today and how far its statements go, and each group's totals per currency (never converted); then the closed accounts, apart and out of the totals. \`show\` gives one account: its balance today, its last lines newest first with the balance after each, and the check of its balance against its latest statement balance, with the difference when they disagree. On a benefit account kept by its lines, \`show\` adds its credits: the order they are used in, what is left on each, and what expires when; on one kept by its balance, where its movements go.
 
 Use \`list\` for "how much do I have, and where?", \`show\` for one account's latest lines, "does my balance match my bank's?" or "what expires when on my meal vouchers?". Both only read.
 
-\`show\` names the account by \`name\`, as \`list\` writes it (case does not matter); when two accounts share a name, add \`institution\`, the bank written after the name in \`list\`. An unknown or ambiguous name is refused with the names to choose from. \`lines\` says how many of the last lines to give (1 to ${MAX_LINES}, ${DEFAULT_LINES} by default); when more remain, the result gives the exact call to read on with \`before\`.
+\`note_balance\` notes the balance at the end of \`day\` of an account kept by its balance (\`list\`: "kept by a noted balance"), \`balance\` a decimal in its currency, negative if owed. It makes that day's movement line, one expense or income in the account's category: the balance less the one before, less the account's other lines between them (transfers). Refused: an account kept by its lines, two balances a day, an unreadable day or amount.
 
-Examples: {"action":"list"} · {"action":"show","name":"Livret A","institution":"Riverside Bank"}`;
+\`show\` and \`note_balance\` name the account by \`name\`, as \`list\` writes it (any case); when two accounts share a name, add \`institution\`, the bank \`list\` writes after it. An unknown or ambiguous name is refused with the names to choose from. \`lines\` says how many of the last lines to give (1 to ${MAX_LINES}, ${DEFAULT_LINES} by default); when more remain, the result gives the exact call to read on with \`before\`.
+
+Examples: {"action":"list"} · {"action":"show","name":"Livret A","institution":"Riverside Bank"} · {"action":"note_balance","name":"Gift card","day":"2026-10-31","balance":"80.00"}`;
 
 /** `1,234.56 EUR`, with the currency's own minor units (`1,235 JPY`, `1.235 KWD`). */
 export function amount(money: Money): string {
@@ -199,12 +220,37 @@ function checkText(detail: AccountDetail): string {
   ].join("\n");
 }
 
+/** What a movement line is named: it has no label of its own (#31). */
+export const MOVEMENT = "movement of the noted balance";
+
+const OTHER_KIND = { expense: "income", income: "expense" } as const;
+
+/** Where the movements of an account kept by its balance go, as its page says. */
+function movementsText(category: BalanceCategory | null): string {
+  const made =
+    "Each noted balance makes one line, its movement: the noted balance less the one before and less the account's other lines booked between them.";
+
+  if (category === null) {
+    return `${made} No category is chosen for them: each goes to its kind's fallback.`;
+  }
+
+  if (category.archived) {
+    return `${made} Their category, ${category.name} (${category.kind}), is archived: a new one goes to its kind's fallback.`;
+  }
+
+  const other = OTHER_KIND[category.kind];
+
+  return `${made} One that is an ${category.kind} goes to ${category.name}; one that is an ${other} goes to the ${other} fallback.`;
+}
+
 /** One account's page, in Gousset's words: balance, check, then the last lines. */
 function showText(detail: AccountDetail, linesCount: number): string {
   const { account } = detail;
 
   const kept =
     account.mode === "balance" ? "kept by a balance noted each month" : "kept by its lines";
+
+  const movements = account.mode === "balance" ? [movementsText(account.balanceCategory)] : [];
 
   const closed = account.closedOn === null ? "" : ` Closed on ${account.closedOn}.`;
 
@@ -225,7 +271,13 @@ function showText(detail: AccountDetail, linesCount: number): string {
             const expiry =
               line.expiresOn === null ? "" : `, ${expiryText(line.expiresOn, detail.day)}`;
 
-            return `- ${line.bookedOn}: ${amount(line.amount)}${after}, ${line.label === "" ? "(no label)" : line.label}${expiry}`;
+            const label = line.fromBalance
+              ? MOVEMENT
+              : line.label === ""
+                ? "(no label)"
+                : line.label;
+
+            return `- ${line.bookedOn}: ${amount(line.amount)}${after}, ${label}${expiry}`;
           }),
         ];
 
@@ -248,6 +300,7 @@ function showText(detail: AccountDetail, linesCount: number): string {
       `Balance at the end of ${detail.day}: ${amount(detail.balance)}; ${statementsText(account.statementsUntil)}.`,
       `Money in this month so far: ${amount(detail.monthIn)}; out: ${amount(detail.monthOut)}.`,
       ...settles,
+      ...movements,
     ].join("\n"),
     checkText(detail),
     ...(credits === null ? [] : [credits]),
@@ -347,19 +400,205 @@ function creditsText(detail: AccountDetail): string | null {
 
 const call = (input: typeof AccountsInput.Encoded) => `accounts ${JSON.stringify(input)}`;
 
-/** The accounts family (docs/mcp.md, "Tools"): read only. */
+const LIST = call({ action: "list" });
+
+/**
+ * The account a write names, or the refusal to give: the user's accounts to choose from, or, when
+ * two share the name, `again`, the same call naming the first of them.
+ */
+export function accountToWrite(
+  owner: string,
+  name: string,
+  institution: string | undefined,
+  again: (account: { readonly name: string; readonly institution: string | null }) => string,
+) {
+  return accountNamed(owner, name, institution).pipe(
+    Effect.catchTags({
+      AccountNameUnknown: (unknown) =>
+        Effect.fail(
+          new ToolRefusal({
+            message:
+              unknown.accounts.length === 0
+                ? "The user has no account in Gousset yet."
+                : `No account of the user's is named "${unknown.name}"${institution === undefined ? "" : ` at "${institution}"`}. Their accounts: ${unknown.accounts.map(named).join(", ")}. Name one of these, as accounts list writes it, which also says which are kept by a noted balance.`,
+            example: LIST,
+          }),
+        ),
+      AccountNameAmbiguous: (ambiguous) => {
+        const [first] = ambiguous.matches;
+        const institutions = new Set(ambiguous.matches.map((match) => match.institution));
+
+        const apart =
+          institutions.size === ambiguous.matches.length
+            ? "Add institution to tell them apart."
+            : "Some share their institution too, so a name cannot tell them apart: ask the user to rename one in Gousset.";
+
+        return Effect.fail(
+          new ToolRefusal({
+            message: `Several accounts of the user's are named "${ambiguous.name}": ${ambiguous.matches.map(named).join(", ")}. ${apart}`,
+            example: again(first ?? { name: ambiguous.name, institution: null }),
+          }),
+        );
+      },
+    }),
+  );
+}
+
+/** A decimal in major units, its sign kept; 11 digits of units at most. */
+const BALANCE = /^([+-]?)(\d{1,11})(?:[.,](\d+))?$/;
+
+/** A balance as a caller writes it, in minor units of `currency`; undefined when it is no decimal. */
+function balanceMinorOf(written: string, currency: string): number | undefined {
+  const match = BALANCE.exec(written.trim());
+  const digits = minorDigits(currency);
+  const fraction = match?.[3] ?? "";
+
+  if (match === null || fraction.length > digits) {
+    return undefined;
+  }
+
+  const magnitude = Number(`${match[2] ?? "0"}${fraction.padEnd(digits, "0")}`);
+
+  // `0 - 0` is 0, where `-0` would be written "-0.00".
+  return match[1] === "-" ? 0 - magnitude : magnitude;
+}
+
+/** The lines of one account and one day a search reads to find its movement among them. */
+const DAY_LINES = 100;
+
+/** The movement line a noted balance made, in Gousset's words; `search` reads it otherwise. */
+function movementText(movement: LineRow | undefined, search: string): string {
+  if (movement === undefined) {
+    return `Gousset makes its movement, a line of that day: read it with ${search}`;
+  }
+
+  if (movement.amount.minor === 0) {
+    return "No movement: the noted balance is the one before plus the account's other lines booked between them.";
+  }
+
+  const category =
+    movement.category === null
+      ? ""
+      : `, an ${movement.category.kind} in ${pathText(movement.category)}`;
+
+  return `Its movement, the line Gousset made of it: ${amount(movement.amount)}${category}. It is the noted balance less the one before (or the opening balance) and less the account's other lines booked between them, such as transfers.`;
+}
+
+/** `note_balance`: notes the balance, then reads the movement line Gousset made of it. */
+function noteRun(input: typeof AccountsInput.Type, owner: string) {
+  const { name, institution, day, balance } = input;
+
+  if (name === undefined || day === undefined || balance === undefined) {
+    return Effect.fail(
+      new ToolRefusal({
+        message:
+          "note_balance needs the account's name, as list writes it, the day (YYYY-MM-DD) and the balance at the end of that day, a decimal in the account's currency.",
+        example: call({
+          action: "note_balance",
+          name: name ?? "Gift card",
+          institution,
+          day: day ?? "2026-10-31",
+          balance: balance ?? "80.00",
+        }),
+      }),
+    );
+  }
+
+  if (Option.isNone(Schema.decodeUnknownOption(Day)(day))) {
+    return Effect.fail(
+      new ToolRefusal({
+        message: `day is the day whose end the balance is noted at, a day of the calendar written YYYY-MM-DD: "${day.slice(0, 40)}" is none.`,
+        example: call({ action: "note_balance", name, institution, day: "2026-10-31", balance }),
+      }),
+    );
+  }
+
+  return Effect.gen(function* () {
+    const found = yield* accountToWrite(owner, name, institution, (each) =>
+      call({
+        action: "note_balance",
+        name: each.name,
+        institution: each.institution ?? undefined,
+        day,
+        balance,
+      }),
+    );
+
+    const minor = balanceMinorOf(balance, found.currency);
+
+    if (minor === undefined) {
+      const digits = minorDigits(found.currency);
+      const written = digits === 0 ? "80" : `80.${"0".repeat(digits)}`;
+
+      return yield* new ToolRefusal({
+        message: `balance is the balance at the end of the day, a decimal in ${found.currency} with at most ${digits} decimals, a minus for money owed, without currency nor thousands separator ("${written}", "-${written}"): "${balance.slice(0, 40)}" is none.`,
+        example: call({ action: "note_balance", name, institution, day, balance: written }),
+      });
+    }
+
+    const noted = yield* noteBalance(owner, found.id, day, minor);
+
+    const page = yield* searchLines(owner, {
+      accountId: found.id,
+      from: noted.day,
+      to: noted.day,
+      limit: DAY_LINES,
+    });
+
+    const search = `lines ${JSON.stringify({ action: "search", account: found.name, institution: found.institution ?? undefined, from: noted.day, to: noted.day })}`;
+
+    return [
+      `Noted: ${named(found)} held ${amount({ minor: noted.minor, currency: found.currency })} at the end of ${noted.day}.`,
+      movementText(
+        page.lines.find((line) => line.fromBalance),
+        search,
+      ),
+    ].join("\n");
+  }).pipe(
+    Effect.catchTags({
+      AccountKeptByLines: () =>
+        Effect.fail(
+          new ToolRefusal({
+            message: `"${name}" is kept by its lines: its balance is counted from them and checked against its statements, never noted. Only an account kept by its balance takes a noted balance: list says which.`,
+            example: LIST,
+          }),
+        ),
+      BalanceAlreadyNoted: (taken) =>
+        Effect.fail(
+          new ToolRefusal({
+            message: `A balance of "${name}" is already noted for ${taken.day}: one a day. Note another day's balance, or show the account to read its movements.`,
+            example: call({ action: "show", name, institution }),
+          }),
+        ),
+      // Found by name a moment before: deleted in between, as good as unknown.
+      AccountNotFound: () =>
+        Effect.fail(
+          new ToolRefusal({
+            message: `The account "${name}" is gone. List the accounts again.`,
+            example: LIST,
+          }),
+        ),
+      // The search is of one valid day; a database failure is Gousset's.
+      LineSearchRefused: Effect.die,
+      QueryFailed: Effect.die,
+    }),
+  );
+}
+
+/** The accounts family (docs/mcp.md, "Tools"): read; a balance noted with the write scope (#31). */
 export const accountsTool = defineTool<
   typeof AccountsInput.Type,
   typeof AccountsInput.Encoded,
-  AccountStore
+  AccountStore | LineStore
 >({
   name: "accounts",
   title: "Accounts",
   description: DESCRIPTION,
+  // Noting a day's balance again is refused: one a day.
   idempotent: true,
   input: AccountsInput,
   example: { action: "show", name: "Livret A", institution: "Riverside Bank" },
-  access: { list: "read", show: "read" },
+  access: { list: "read", show: "read", note_balance: "write" },
   run: (input, caller) => {
     switch (input.action) {
       case "list": {
@@ -449,6 +688,10 @@ export const accountsTool = defineTool<
             QueryFailed: Effect.die,
           }),
         );
+      }
+
+      case "note_balance": {
+        return noteRun(input, caller.userId);
       }
     }
   },

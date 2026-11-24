@@ -144,6 +144,8 @@ function uiMessages(locale: Locale) {
       settingsNotSet: m.uiAccountsSettingsNotSet({}, options),
       /** A benefit account's setting: the order its credits are used in. */
       settingsCreditOrder: m.uiAccountsSettingsCreditOrder({}, options),
+      /** An account kept by its balance: the category its movements go to. */
+      settingsBalanceCategory: m.uiAccountsSettingsBalanceCategory({}, options),
       /** `BenefitCredits`: a benefit account's credits and when they expire. */
       creditsTitle: m.uiAccountsCreditsTitle({}, options),
       creditsExpiring: m.uiAccountsCreditsExpiring({}, options),
@@ -277,6 +279,11 @@ function uiMessages(locale: Locale) {
       splitOver: (amount: string) => m.uiOperationsSplitOver({ amount }, options),
       splitBalanced: m.uiOperationsSplitBalanced({}, options),
       splitSave: m.uiOperationsSplitSave({}, options),
+      /** `LineTransferToAccount`: the line's other side is on an account kept by its balance. */
+      withBalanceAccount: m.uiOperationsWithBalanceAccount({}, options),
+      pairWithAccount: m.uiOperationsPairWithAccount({}, options),
+      pairWithAccountDescription: m.uiOperationsPairWithAccountDescription({}, options),
+      balanceAccount: m.uiOperationsBalanceAccount({}, options),
     },
     categories: {
       columns: {

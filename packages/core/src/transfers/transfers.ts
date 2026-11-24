@@ -5,8 +5,10 @@ import type { QueryFailed, UserTransaction } from "@gousset/db/user-data";
 import { and, eq, gte, inArray, lte, or } from "drizzle-orm";
 import { Context, Effect, Layer } from "effect";
 
+import { remakeBalanceLines } from "../balance-lines";
+import { takeCategoryTurn } from "../category-turn";
 import { dropEntriesOfTransferSides, entriesForLines } from "../entries";
-import { LineNotFound, NotATransfer, TransferRefused } from "../errors";
+import { AccountNotFound, LineNotFound, NotATransfer, TransferRefused } from "../errors";
 import type { AccountKind } from "../account-values";
 import { isId } from "../imports/rows";
 import type { LineAccount } from "../lines";
@@ -84,6 +86,18 @@ export class Transfers extends Context.Service<
       lineId: string,
       otherId: string | null,
     ) => Effect.Effect<LineTransfer, LineNotFound | TransferRefused | Failure>;
+    /**
+     * Pairs a line with an account kept by its balance (#31), the user's own pairing: no file shows
+     * that account's side, so the app makes it (`source = counterpart`), booked the same day, of the
+     * opposite amount, and the account's movements are made again around it. Refused
+     * (`TransferRefused`) as `pair` refuses a line, for an account kept by its lines, of another
+     * currency, or the line's own; `AccountNotFound` for none of the user's.
+     */
+    readonly pairWithAccount: (
+      owner: string,
+      lineId: string,
+      accountId: string,
+    ) => Effect.Effect<LineTransfer, LineNotFound | AccountNotFound | TransferRefused | Failure>;
     /**
      * Undoes the transfer the line is a side of: both lines are no transfer any more, and a side the
      * app had made, this line or the other, is deleted; each line left gets its entry back, in its
@@ -372,12 +386,125 @@ async function pairInTransaction(
   return { done: await lineTransfer(transaction, line, day) };
 }
 
+/** Why a line cannot be paired with an account kept by its balance, or undefined when it can. */
+function accountRefusalOf(
+  line: ReadLine,
+  target: { readonly id: string; readonly mode: "lines" | "balance"; readonly currency: string },
+): TransferRefused["reason"] | undefined {
+  if (line.source === "balance") {
+    return "made_from_balance";
+  }
+
+  if (line.state !== "counted") {
+    return "not_counted";
+  }
+
+  if (line.amountMinor === 0) {
+    return "zero_amount";
+  }
+
+  if (line.accountId === target.id) {
+    return "same_account";
+  }
+
+  if (target.mode !== "balance") {
+    return "account_kept_by_lines";
+  }
+
+  return line.currency === target.currency ? undefined : "other_currency";
+}
+
+async function pairWithAccountInTransaction(
+  transaction: UserTransaction,
+  owner: string,
+  lineId: string,
+  accountId: string,
+  day: string,
+): Promise<Outcome<LineTransfer> | { readonly noAccount: string }> {
+  // The account's movements are made again below (`../balance-lines`).
+  await takeCategoryTurn(transaction, owner);
+
+  const [line] = await readLines(transaction, [lineId], day);
+
+  if (line === undefined) {
+    return { missing: lineId };
+  }
+
+  const [target] = isId(accountId)
+    ? await transaction
+        .select({ id: account.id, mode: account.mode, currency: account.currency })
+        .from(account)
+        .where(eq(account.id, accountId))
+    : [];
+
+  if (target === undefined) {
+    return { noAccount: accountId };
+  }
+
+  const refused = accountRefusalOf(line, target);
+
+  if (refused !== undefined) {
+    return { refused, lineId };
+  }
+
+  if ((await transferOfLine(transaction, line.id)) !== undefined) {
+    return { refused: "already_paired", lineId };
+  }
+
+  const [made] = await transaction
+    .insert(statementLine)
+    .values({
+      userId: owner,
+      accountId: target.id,
+      source: "counterpart",
+      bookedOn: line.bookedOn,
+      valueOn: line.valueOn,
+      amountMinor: -line.amountMinor,
+      label: line.label,
+    })
+    .returning({ id: statementLine.id });
+
+  if (made === undefined) {
+    throw new Error("The insert returned no row.");
+  }
+
+  const [outId, inId] = line.amountMinor < 0 ? [line.id, made.id] : [made.id, line.id];
+
+  const written = await transaction
+    .insert(transfer)
+    .values({ userId: owner, outLineId: outId, inLineId: inId, pairedBy: "user" })
+    .onConflictDoNothing()
+    .returning({ id: transfer.id });
+
+  // Another call paired the line meanwhile: the side made for it stands for nothing.
+  if (written.length === 0) {
+    await transaction.delete(statementLine).where(eq(statementLine.id, made.id));
+
+    return { refused: "already_paired", lineId };
+  }
+
+  // The user said what the line is: the monthly review no longer lists it.
+  await transaction
+    .update(statementLine)
+    .set({ reviewState: "done", transferRefused: false })
+    .where(inArray(statementLine.id, [line.id, made.id]));
+
+  // A transfer is never an expense nor an income (#23); the account's movements count it (#31).
+  await dropEntriesOfTransferSides(transaction, owner);
+  await remakeBalanceLines(transaction, owner);
+
+  return { done: await lineTransfer(transaction, line, day) };
+}
+
 async function unpairInTransaction(
   transaction: UserTransaction,
   owner: string,
   lineId: string,
   day: string,
 ): Promise<Outcome<Unpaired> | { readonly notPaired: string }> {
+  // A side the app made on an account kept by its balance goes below: its movements are made again.
+  await takeCategoryTurn(transaction, owner);
+
   const [line] = await readLines(transaction, [lineId], day);
 
   if (line === undefined) {
@@ -413,6 +540,11 @@ async function unpairInTransaction(
   // Each line left is an expense or an income again: its entry, in its kind's fallback (#23).
   await entriesForLines(transaction, owner, [line.id, otherId]);
 
+  // A side the app made on an account kept by its balance no longer counts in its movements (#31).
+  if (deleted.length > 0) {
+    await remakeBalanceLines(transaction, owner);
+  }
+
   return other === undefined
     ? { notPaired: lineId }
     : { done: { other: sideOf(other), madeSideDeleted: deleted.length > 0 } };
@@ -432,6 +564,14 @@ export const pairLines = (owner: string, lineId: string, otherId: string | null)
     const transfers = yield* Transfers;
 
     return yield* transfers.pair(owner, lineId, otherId);
+  });
+
+/** Pairs a line with an account kept by its balance, whose side the app makes. */
+export const pairLineWithAccount = (owner: string, lineId: string, accountId: string) =>
+  Effect.gen(function* () {
+    const transfers = yield* Transfers;
+
+    return yield* transfers.pairWithAccount(owner, lineId, accountId);
   });
 
 /** Undoes the transfer a line is a side of (`Transfers.unpair`). */
@@ -489,6 +629,29 @@ export const transfersLayer = Layer.effect(
           return outcome.done;
         }),
 
+      pairWithAccount: (owner, lineId, accountId) =>
+        Effect.gen(function* () {
+          const day = yield* today;
+
+          const outcome = yield* userData.transaction(owner, (transaction) =>
+            pairWithAccountInTransaction(transaction, owner, lineId, accountId, day),
+          );
+
+          if ("missing" in outcome) {
+            return yield* new LineNotFound({ lineId: outcome.missing });
+          }
+
+          if ("noAccount" in outcome) {
+            return yield* new AccountNotFound({ accountId: outcome.noAccount });
+          }
+
+          if ("refused" in outcome) {
+            return yield* new TransferRefused({ reason: outcome.refused, lineId: outcome.lineId });
+          }
+
+          return outcome.done;
+        }),
+
       unpair: (owner, lineId) =>
         Effect.gen(function* () {
           const day = yield* today;
@@ -510,7 +673,12 @@ export const transfersLayer = Layer.effect(
 
       pairAll: (owner) =>
         userData.transaction(owner, async (transaction) => {
+          // A card's side made or replaced may be on an account kept by its balance (#31).
+          await takeCategoryTurn(transaction, owner);
+
           const written = await pairTransfers(transaction, owner, { kind: "all" });
+
+          await remakeBalanceLines(transaction, owner);
 
           return {
             ...written,

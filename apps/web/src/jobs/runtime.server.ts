@@ -5,6 +5,7 @@ import { Config, Effect, Exit, Layer, ManagedRuntime, Option } from "effect";
 import { db } from "../database.server";
 import { ENV } from "../env.server";
 import { telemetry } from "../telemetry.server";
+import { balancesJob } from "./balances-job.server";
 import { importJob } from "./import-job.server";
 import { merchantsJob } from "./merchants-job.server";
 import { JobQueue, register } from "./queue.server";
@@ -17,7 +18,7 @@ export const e2eJobs = Config.option(Config.Literal("on", E2E_JOBS_VARIABLE));
 const queue = Layer.unwrap(
   Effect.gen(function* () {
     const testing = Option.isSome(yield* e2eJobs);
-    const jobs = [register(importJob), register(merchantsJob)];
+    const jobs = [register(importJob), register(merchantsJob), register(balancesJob)];
 
     // As the app's role, which owns pg-boss's schema (#66), never as the tables' owner.
     return JobQueue.layer(
@@ -34,10 +35,11 @@ const queue = Layer.unwrap(
 export const jobs = ManagedRuntime.make(queue);
 
 /**
- * Every user's merchants recognised once at boot (#24): the lines kept before merchants existed get
- * theirs after the update, without waiting for an import. The app's role reads the users, never
- * their lines: each user's job reads their own through `UserData`, and finds nothing to do once
- * every line has its merchant.
+ * Every user's merchants recognised once at boot (#24), and the movement lines of their accounts
+ * kept by their balance made (#31): what was kept before merchants and movement lines existed gets
+ * them after the update, without waiting for an import or a balance noted. The app's role reads the
+ * users, never their lines: each user's jobs read their own through `UserData`, and find nothing to
+ * do once every line has its merchant and every noted balance its line.
  */
 const recogniseEveryone = Effect.gen(function* () {
   const queued = yield* JobQueue;
@@ -45,6 +47,7 @@ const recogniseEveryone = Effect.gen(function* () {
 
   for (const user of users) {
     yield* queued.send(merchantsJob, user.id, {});
+    yield* queued.send(balancesJob, user.id, {});
   }
 });
 

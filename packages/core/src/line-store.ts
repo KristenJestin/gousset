@@ -26,7 +26,8 @@ export type LineQuery = {
   readonly amount: ((currency: string) => AmountBounds | null) | null;
   /**
    * `held` lines (to review), or `counted` only; never `discarded`. With `held`, the counted lines
-   * whose entry is still where the import put it (`classified_by = default`, #23) match too.
+   * whose entry is still where the import put it (`classified_by = default`, #23) match too, but a
+   * noted balance's movement in its account's own category (#31): the user chose it there.
    */
   readonly state: "counted" | "held";
   /** With `held`: these counted lines match too (a transfer's side to choose, #26). */
@@ -55,6 +56,8 @@ export type FoundLine = {
   };
   /** The category of its one entry; null for a line with none (held, of no amount) or split. */
   readonly category: LineCategory | null;
+  /** The movement a noted balance makes (#31): it has no label, the interface names it. */
+  readonly fromBalance: boolean;
 };
 
 /** A line with all that its detail shows. */
