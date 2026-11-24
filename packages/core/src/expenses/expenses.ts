@@ -203,7 +203,7 @@ async function readLine(
  * unlink holding the expense would wait for a link holding that line, which waits for the expense,
  * and Postgres would end one of them as a deadlock.
  */
-export async function lockLines(
+async function lockLines(
   transaction: UserTransaction,
   lineIds: ReadonlyArray<string>,
 ): Promise<void> {

@@ -1,5 +1,7 @@
 import {
+  DatabaseAccountStore,
   DatabaseCategoryStore,
+  editAccount,
   Today,
   classifyLine,
   createCategory,
@@ -8,7 +10,7 @@ import {
   matchTopUps,
   unlinkLine,
 } from "@gousset/core";
-import type { CategoryStore, Expenses } from "@gousset/core";
+import type { AccountStore, CategoryStore, Expenses } from "@gousset/core";
 import type { UserData } from "@gousset/db/user-data";
 import { account, entry, entryPart, statementLine } from "@gousset/db/schema/ledger";
 import { exampleStatement } from "@gousset/fixture";
@@ -52,13 +54,13 @@ test.afterAll(async () => {
 /** Every line of these tests is booked before this day, which the logic reads as today. */
 const TODAY = "2026-11-30";
 
-type Services = Expenses | CategoryStore | UserData;
+type Services = Expenses | CategoryStore | AccountStore | UserData;
 
 const run = <A, E>(effect: Effect.Effect<A, E, Services>) =>
   Effect.runPromise(
     effect.pipe(
       Effect.provide(
-        Layer.mergeAll(expensesLayer, DatabaseCategoryStore, data.layer).pipe(
+        Layer.mergeAll(expensesLayer, DatabaseCategoryStore, DatabaseAccountStore, data.layer).pipe(
           Layer.provide(data.layer),
         ),
       ),
@@ -263,6 +265,48 @@ test("two candidate top-ups go to the review, never guessed", async () => {
   ).toBe(3);
 });
 
+test("a card line the user classified still counts as a candidate, so nothing is guessed", async () => {
+  const card = await newAccount({
+    name: "Crumbly card",
+    kind: "benefit",
+    institution: "Crumbly",
+    topUpCapMinor: 2500,
+  });
+
+  // Two days at the cap: Monday's purchase classified by the user, then Tuesday's.
+  await importInto(card, "crumbly-card", [
+    { bookedOn: "2026-10-01", amountMinor: 20_000, label: "CRUMBLY CREDIT" },
+    { bookedOn: "2026-10-12", amountMinor: -2500, label: "CB GREENMARKET RIVERTON" },
+    { bookedOn: "2026-10-13", amountMinor: -2500, label: "CB LANTERN STORES RIVERTON" },
+  ]);
+
+  const lines = await data.asUser(owner, (transaction) =>
+    transaction
+      .select({ id: statementLine.id })
+      .from(statementLine)
+      .where(eq(statementLine.accountId, card))
+      .orderBy(asc(statementLine.bookedOn)),
+  );
+
+  const monday = lines[1]?.id ?? "";
+  const tuesday = lines[2]?.id ?? "";
+  const kept = (await run(createCategory(owner, { kind: "expense", name: "Crumbly kept" }))).id;
+
+  await run(classifyLine(owner, monday, { categoryId: kept }));
+
+  const current = await newAccount({ name: "Crumbly current", kind: "current" });
+
+  // Within 3 days of both: either purchase's rest, so neither.
+  await importInto(current, "crumbly-current", [
+    { bookedOn: "2026-10-14", amountMinor: -1500, label: "CB CRUMBLY*TOPUP" },
+  ]);
+
+  const rest = await lineOf(current, -1500);
+
+  expect(await oneExpense(tuesday, rest)).toBe(false);
+  expect(await oneExpense(monday, rest)).toBe(false);
+});
+
 test("a line the user classified is never matched", async () => {
   const current = await newAccount({ name: "Snackwell current", kind: "current" });
   const kept = (await run(createCategory(owner, { kind: "expense", name: "Snackwell kept" }))).id;
@@ -308,7 +352,7 @@ test("unlinking a top-up restores two separate entries, which no run links again
 test("without the card's lines, the top-up goes to the card's category", async () => {
   const meals = (await run(createCategory(owner, { kind: "expense", name: "Tablewise meals" }))).id;
 
-  await newAccount({
+  const tablewise = await newAccount({
     name: "Tablewise card",
     kind: "benefit",
     institution: "Tablewise",
@@ -323,9 +367,26 @@ test("without the card's lines, the top-up goes to the card's category", async (
     { bookedOn: "2026-10-10", amountMinor: -846, label: "CB GREENMARKET RIVERTON" },
   ]);
 
-  const [topUp] = await entriesOf([await lineOf(current, -845)]);
+  const topUpLine = await lineOf(current, -845);
+  const [topUp] = await entriesOf([topUpLine]);
   const [other] = await entriesOf([await lineOf(current, -846)]);
 
   expect(topUp?.categoryId).toBe(meals);
   expect(other?.categoryId).not.toBe(meals);
+
+  // Kept by its lines from now on: its top-ups leave its category, back to the fallback.
+  await run(
+    editAccount(owner, tablewise, {
+      name: "Tablewise card",
+      choice: "benefit",
+      institution: "Tablewise",
+      currency: "EUR",
+      mode: "lines",
+      openingBalanceMinor: 0,
+    }),
+  );
+
+  const [back] = await entriesOf([topUpLine]);
+
+  expect(back?.categoryId).toBe(other?.categoryId);
 });

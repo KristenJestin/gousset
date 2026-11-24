@@ -50,9 +50,17 @@ export async function topUpsToBalanceCategories(
   const kept = (card: (typeof cards)[number]) =>
     card.mode === "balance" && card.categoryKind === "expense" && card.archivedAt === null;
 
-  if (!cards.some(kept)) {
+  // A card with a category may have top-ups in it to move there, or back out once it no longer
+  // qualifies; with none, there is nothing to do.
+  if (!cards.some((card) => card.categoryId !== null)) {
     return 0;
   }
+
+  const [fallback] = await transaction
+    .select({ id: category.id })
+    .from(category)
+    .where(and(eq(category.isFallback, true), eq(category.kind, "expense")))
+    .limit(1);
 
   const rows = await transaction
     .select({
@@ -88,7 +96,13 @@ export async function topUpsToBalanceCategories(
     );
 
     const [only, ...others] = named;
-    const target = only === undefined || others.length > 0 || !kept(only) ? null : only.categoryId;
+    const sent = only === undefined || others.length > 0 || !kept(only) ? null : only.categoryId;
+
+    // A top-up a card no longer sends to its category (kept by its lines now, its category
+    // archived, a second card of the same issuer) goes back to its kind's fallback: the
+    // merchants' defaults, run before, already moved one whose merchant has one.
+    const stale = named.some((card) => card.categoryId === row.categoryId);
+    const target = sent ?? (stale ? (fallback?.id ?? null) : null);
 
     if (target !== null && target !== row.categoryId) {
       byTarget.set(target, [...(byTarget.get(target) ?? []), row.id]);

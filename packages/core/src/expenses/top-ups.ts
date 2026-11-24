@@ -7,7 +7,7 @@ import { Effect, Result } from "effect";
 import { MAX_TOP_UP_DAYS } from "../account-values";
 import { takeCategoryTurn } from "../category-turn";
 import { shiftDay } from "../transfers/pairing";
-import { linkIn, lockLines } from "./expenses";
+import { linkIn } from "./expenses";
 import { drainingLines, issuerKey, namesIssuer, topUpPairs } from "./top-up-match";
 import type { TopUpBankLine, TopUpCardLine } from "./top-up-match";
 
@@ -28,17 +28,28 @@ const ANY_DAY = "9999-12-31";
 /** A line that is an expense of its own, and how its one entry was classified. */
 type Alone = { readonly classifiedBy: "default" | "rule" };
 
+/** What the lines are to the expenses, as the matching weighs them. */
+type LinesRead = {
+  /** The lines with a part in an expense: what a top-up may be, and each a candidate. */
+  readonly paying: ReadonlySet<string>;
+  /**
+   * The lines that may be matched: one entry, of that line alone, an expense not classified by
+   * the user, and no refusal of the user's.
+   */
+  readonly alone: ReadonlyMap<string, Alone>;
+};
+
 /**
- * The lines among `lineIds` that are an expense of their own: one entry, of that line alone, an
- * expense not classified by the user, and no refusal of the user's. A side of a transfer has no
- * entry, a split line several, a linked line an entry of several parts: none of them is here.
+ * What the lines among `lineIds` are. A side of a transfer has no entry: it is no top-up, nor a
+ * candidate. A line the user classified, split, linked or took out is still a candidate, so that
+ * it keeps two other lines from being guessed into one expense, but is never matched itself.
  */
-async function linesAlone(
+async function readLines(
   transaction: UserTransaction,
   lineIds: ReadonlyArray<string>,
-): Promise<ReadonlyMap<string, Alone>> {
+): Promise<LinesRead> {
   if (lineIds.length === 0) {
-    return new Map();
+    return { paying: new Set(), alone: new Map() };
   }
 
   const rows = await transaction
@@ -60,7 +71,7 @@ async function linesAlone(
     count.set(row.lineId, (count.get(row.lineId) ?? 0) + 1);
   }
 
-  return new Map(
+  const alone = new Map(
     rows.flatMap((row): ReadonlyArray<readonly [string, Alone]> => {
       const classifiedBy = row.classifiedBy;
 
@@ -73,6 +84,32 @@ async function linesAlone(
         : [[row.lineId, { classifiedBy }]];
     }),
   );
+
+  return { paying: new Set(count.keys()), alone };
+}
+
+/**
+ * Locks the lines among `lineIds` that no other transaction holds, in one order, and gives them. A
+ * line another change holds (a link the user makes during an import) is left for the next run:
+ * the import has written entries before it gets here, and waiting on a line whose holder waits on
+ * those entries would deadlock (`lockLines` takes lines first, then entries).
+ */
+async function lockFree(
+  transaction: UserTransaction,
+  lineIds: ReadonlyArray<string>,
+): Promise<ReadonlySet<string>> {
+  if (lineIds.length === 0) {
+    return new Set();
+  }
+
+  const rows = await transaction
+    .select({ id: statementLine.id })
+    .from(statementLine)
+    .where(inArray(statementLine.id, [...lineIds]))
+    .orderBy(asc(statementLine.id))
+    .for("no key update", { skipLocked: true });
+
+  return new Set(rows.map((row) => row.id));
 }
 
 /**
@@ -171,7 +208,6 @@ export async function matchTopUpsIn(transaction: UserTransaction, owner: string)
         ne(account.kind, "benefit"),
         eq(statementLine.state, "counted"),
         ne(statementLine.source, "balance"),
-        eq(statementLine.linkRefused, false),
         lt(statementLine.amountMinor, 0),
         gte(statementLine.bookedOn, first),
         lte(statementLine.bookedOn, shiftDay(last, MAX_TOP_UP_DAYS)),
@@ -193,17 +229,23 @@ export async function matchTopUpsIn(transaction: UserTransaction, owner: string)
     return 0;
   }
 
-  // Every line that may be matched is locked first, in one order, then read again: what the user
+  // Every line that may be matched is locked first, in one order, then read: what the user
   // classified or linked meanwhile is left alone.
   const ids = [...candidates.map((card) => card.id), ...banks.map((line) => line.id)];
+  const locked = await lockFree(transaction, ids);
+  const { paying, alone } = await readLines(transaction, ids);
 
-  await lockLines(transaction, ids);
-
-  const alone = await linesAlone(transaction, ids);
-
+  // Candidates are weighed among every line that pays an expense, the user's too; only a pair of
+  // two lines that may both be matched is made.
   const pairs = topUpPairs(
-    candidates.filter((card) => alone.has(card.id)),
-    banks.filter((line) => alone.has(line.id)),
+    candidates.filter((card) => paying.has(card.id)),
+    banks.filter((line) => paying.has(line.id)),
+  ).filter(
+    (pair) =>
+      alone.has(pair.cardLineId) &&
+      alone.has(pair.bankLineId) &&
+      locked.has(pair.cardLineId) &&
+      locked.has(pair.bankLineId),
   );
 
   let made = 0;

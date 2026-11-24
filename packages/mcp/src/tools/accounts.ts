@@ -140,7 +140,7 @@ const AccountsInput = Schema.Struct({
   ),
   top_up_days: Schema.optional(
     Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: MAX_TOP_UP_DAYS })).annotate({
-      description: `create, edit, a benefit account: the days, 0 to ${MAX_TOP_UP_DAYS}, its issuer takes to charge a purchase's rest to a bank card, matched into one expense; ${DEFAULT_TOP_UP_DAYS} by default.`,
+      description: `create, edit, a benefit account: the days, 0 to ${MAX_TOP_UP_DAYS}, its issuer takes to charge a purchase's rest to a bank card: a bank line naming the issuer that soon after a card line that used up the card or its cap joins that purchase as one expense, the lines already there too; ${DEFAULT_TOP_UP_DAYS} by default.`,
     }),
   ),
   top_up_cap: Schema.optional(
@@ -978,6 +978,18 @@ const edit = (owner: string, input: AccountsInput) =>
       return yield* refuse(
         `The opening balance of ${named(found)} is ${amount({ minor: found.openingBalanceMinor, currency: found.currency })}, and ${currency} has other decimals: give opening_balance in ${currency} with the new currency.`,
         { ...retry, opening_balance: sampleAmount(currency) },
+      );
+    }
+
+    // The daily cap is minor units too (#28): the same holds for it.
+    if (
+      input.top_up_cap === undefined &&
+      found.topUpCapMinor !== null &&
+      minorDigits(currency) !== minorDigits(found.currency)
+    ) {
+      return yield* refuse(
+        `The daily cap of ${named(found)} is ${amount({ minor: found.topUpCapMinor, currency: found.currency })}, and ${currency} has other decimals: give top_up_cap in ${currency} with the new currency, or "" for none.`,
+        { ...retry, top_up_cap: minorDigits(currency) === 0 ? "2,500" : "25.00" },
       );
     }
 

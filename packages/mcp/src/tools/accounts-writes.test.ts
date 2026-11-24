@@ -361,6 +361,17 @@ describe("accounts edit", () => {
     expect(cleared.text).toContain("within 1 day joins the purchase; no daily cap known.");
   });
 
+  test("asks for the daily cap again when a new currency has other decimals", async () => {
+    const call = await connect();
+
+    await call({ action: "edit", name: "MealCard", top_up_cap: "25.00" });
+
+    expectRefusal(
+      await call({ action: "edit", name: "MealCard", currency: "JPY" }),
+      "give top_up_cap in JPY with the new currency",
+    );
+  });
+
   test("refuses a daily cap of nothing, or no amount", async () => {
     const call = await connect();
 

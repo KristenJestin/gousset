@@ -27,8 +27,8 @@ import { remakeBalanceLines } from "./balance-lines";
 import type { DayBalance } from "./balances";
 import { takeCategoryTurn } from "./category-turn";
 import { AccountNotFound, BalanceAlreadyNoted, LineNotFound } from "./errors";
-import { topUpsToBalanceCategories } from "./expenses/top-up-categories";
 import { matchTopUpsIn } from "./expenses/top-ups";
+import { classifyByMerchants } from "./merchants/default-classification";
 
 // The accounts in the database, through `UserData` only (docs/data-model.md, "Ownership and
 // isolation"): each call is one transaction of the user's, which row-level security keeps to their
@@ -407,7 +407,7 @@ export const DatabaseAccountStore = Layer.effect(
               throw new Error("The insert returned no row.");
             }
 
-            await topUpsToBalanceCategories(transaction, { every: true });
+            await classifyByMerchants(transaction, { every: true });
 
             return Result.succeed(record(created));
           })
@@ -457,8 +457,9 @@ export const DatabaseAccountStore = Layer.effect(
               await remakeBalanceLines(transaction, owner);
 
               // A benefit card's issuer, days, cap and category shape what its top-ups are (#28).
+              // The defaults first, then the top-ups sent to a card's category or back from it.
+              await classifyByMerchants(transaction, { every: true });
               await matchTopUpsIn(transaction, owner);
-              await topUpsToBalanceCategories(transaction, { every: true });
 
               return Result.succeed(record(changed));
             },

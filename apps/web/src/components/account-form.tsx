@@ -274,7 +274,9 @@ export function AccountForm({
   }
 
   async function submit() {
-    const capInvalid = choice === "benefit" && topUpCapMinor !== null && topUpCapMinor <= 0;
+    // Only while the field is shown: a cap typed then hidden by another kind or mode blocks nothing.
+    const capInvalid =
+      choice === "benefit" && mode === "lines" && topUpCapMinor !== null && topUpCapMinor <= 0;
 
     if (openingBalanceInvalid || capInvalid) {
       return;
@@ -293,7 +295,11 @@ export function AccountForm({
         creditOrder: choice === "benefit" ? creditOrder : null,
         balanceCategoryId: mode === "balance" ? balanceCategoryId : null,
         topUpDays,
-        topUpCapMinor,
+        // A cap hidden by the mode, or left invalid there, is not sent: the account keeps its own.
+        topUpCapMinor:
+          mode === "lines" && (topUpCapMinor === null || topUpCapMinor > 0)
+            ? topUpCapMinor
+            : initial.topUpCapMinor,
       }),
     );
 
