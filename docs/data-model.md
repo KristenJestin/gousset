@@ -382,7 +382,7 @@ An entry's parts are all in one currency, refused otherwise by `packages/core`, 
 
 **On `statement_line`**: `review_state review_state` default `to_review` (`to_review`, `done`): what the monthly review lists, set to `done` by the import when a rule classified the line surely, or by the user. Every v0.2 line starts `to_review`, which is what it is. `transfer_refused boolean` default `false`: the user said the line is no transfer (#26), so that nothing pairs it again without them. A line is classified when its parts add up to it, when it is the side of a transfer, or (v0.6) when it is the cash of an investment operation; that is read, not stored. And `balance_id uuid` null, unique, `(user_id, balance_id) → account_balance (user_id, id) on delete cascade`, for a line of `source = balance`: it goes with its noted balance. v0.3 adds `account_balance`'s unique `(user_id, id)` for it.
 
-**On `account`**: `balance_category_id uuid` null (`on delete set null (balance_category_id)`), the category a balance-mode account's movement goes to (#31).
+**On `account`**: `balance_category_id uuid` null (`on delete set null (balance_category_id)`), the category a balance-mode account's movement goes to (#31), set on the account's settings or through the MCP door (`accounts` `category` on `create` and `edit`; left out, an edit keeps it).
 
 #### Balance mode
 

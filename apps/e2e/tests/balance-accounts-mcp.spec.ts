@@ -4,7 +4,6 @@ import {
   DatabaseCategoryStore,
   createAccount,
   createCategory,
-  editAccount,
 } from "@gousset/core";
 import type { AccountStore, CategoryStore } from "@gousset/core";
 import type { AccountInput } from "@gousset/core/account-values";
@@ -16,8 +15,9 @@ import { addUser } from "../src/auth";
 import { connectMcp, expect, test } from "../src/test";
 import { openUserData } from "../src/user-data";
 
-// Issue #31's MCP scenarios: an account kept by its balance, its balance noted through
-// `accounts note_balance` and a line paired with it through `lines pair` with `account`, through
+// Issue #31's MCP scenarios: an account kept by its balance, its category set through `accounts
+// edit`, its balance noted through `accounts note_balance` and a line paired with it through
+// `lines pair` with `account`, through
 // the official MCP client and the real OAuth flow, on accounts of a user of this file's own. Each
 // test makes accounts and a category with names of their own. Every amount and name is invented.
 
@@ -92,9 +92,6 @@ test("a balance going from 120 to 80 with a transfer of 50 in gives an expense o
   const card = await newAccount(unique("Meal card"), "benefit", "balance");
   const cardName = card.settings.name;
 
-  // Its category, as the account's settings set it: no tool edits them.
-  await run(editAccount(owner, card.id, { ...card.settings, balanceCategoryId: category.id }));
-
   await data.asUser(owner, (transaction) =>
     transaction.insert(statementLine).values({
       userId: owner,
@@ -115,6 +112,26 @@ test("a balance going from 120 to 80 with a transfer of 50 in gives an expense o
     scope: "read write",
     clientId: mcpClientId,
   });
+
+  // Its category, by name, as the account's settings set it.
+  const categorised = await callTool(client, "accounts", {
+    action: "edit",
+    name: cardName,
+    category: category.name,
+  });
+
+  expect(categorised.isError, categorised.text).toBe(false);
+  expect(categorised.text).toContain(`One that is an expense goes to ${category.name};`);
+
+  // An edit that leaves the category out keeps it.
+  const reordered = await callTool(client, "accounts", {
+    action: "edit",
+    name: cardName,
+    credit_order: "expiring_first",
+  });
+
+  expect(reordered.isError, reordered.text).toBe(false);
+  expect(reordered.text).toContain(`One that is an expense goes to ${category.name};`);
 
   // The first balance: from the opening balance of nothing, 120 came in.
   const september = await callTool(client, "accounts", {
