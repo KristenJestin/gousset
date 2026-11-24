@@ -58,34 +58,40 @@ async function leavingSeconds(
  * Where a focused field's ring reaches (its outline, outside its box by its offset and its width)
  * and the box its scrolling container clips to (its padding box), in the page's pixels.
  */
-async function ringAndClip(field: Locator, scroller: Locator) {
-  const ring = await field.evaluate((node) => {
+async function ringAndClip(field: Locator, scroller: string) {
+  // Both read in the same frame: a sheet still moving moves them together.
+  return field.evaluate((node, selector) => {
     const style = getComputedStyle(node);
     const reach = Number.parseFloat(style.outlineOffset) + Number.parseFloat(style.outlineWidth);
     const box = node.getBoundingClientRect();
+    const container = node.closest(selector);
+    const area = container?.getBoundingClientRect();
+    const left = (area?.left ?? 0) + (container?.clientLeft ?? 0);
+    const top = (area?.top ?? 0) + (container?.clientTop ?? 0);
 
     return {
-      reach,
-      left: box.left - reach,
-      top: box.top - reach,
-      right: box.right + reach,
-      bottom: box.bottom + reach,
+      ring: {
+        reach,
+        left: box.left - reach,
+        top: box.top - reach,
+        right: box.right + reach,
+        bottom: box.bottom + reach,
+      },
+      clip: {
+        left,
+        top,
+        right: left + (container?.clientWidth ?? 0),
+        bottom: top + (container?.clientHeight ?? 0),
+      },
     };
-  });
-
-  const clip = await scroller.evaluate((node) => {
-    const box = node.getBoundingClientRect();
-    const left = box.left + node.clientLeft;
-    const top = box.top + node.clientTop;
-
-    return { left, top, right: left + node.clientWidth, bottom: top + node.clientHeight };
-  });
-
-  return { ring, clip };
+  }, scroller);
 }
 
-/** The ring, 2 px wide and 2 px away, lies whole inside what clips it (half a pixel of rounding). */
-async function expectRingInside(field: Locator, scroller: Locator) {
+/**
+ * The ring, 2 px wide and 2 px away, lies whole inside what clips it, the field's nearest
+ * `scroller` (half a pixel of rounding).
+ */
+async function expectRingInside(field: Locator, scroller: string) {
   const { ring, clip } = await ringAndClip(field, scroller);
 
   expect(ring.reach).toBe(4);
@@ -95,9 +101,20 @@ async function expectRingInside(field: Locator, scroller: Locator) {
   expect(ring.bottom).toBeLessThanOrEqual(clip.bottom + 0.5);
 }
 
-/** Once nothing moves on the page any more: every transition and animation has ended. */
+/**
+ * Once nothing moves on the page any more: no popup on its first frame (before its transition
+ * starts), and every transition and animation ended.
+ */
 async function atRest(page: Page) {
-  await expect.poll(async () => page.evaluate(() => document.getAnimations().length)).toBe(0);
+  await expect
+    .poll(async () =>
+      page.evaluate(
+        () =>
+          document.querySelectorAll("[data-starting-style]").length +
+          document.getAnimations().length,
+      ),
+    )
+    .toBe(0);
 }
 
 test.describe("IconButton", () => {
@@ -469,7 +486,7 @@ test.describe("Dialog", () => {
     await page.keyboard.press("Tab");
     await page.keyboard.press("Tab");
     await expect(balance).toBeFocused();
-    await expectRingInside(balance, page.locator('[data-slot="dialog-content"]'));
+    await expectRingInside(balance, '[data-slot="dialog-content"]');
   });
 
   test("a form dialog stays open on a refusal, and closes once accepted, focus back on its button", async ({
@@ -815,7 +832,7 @@ test.describe("Sheet", () => {
 
     await expect(name).toBeFocused();
     await atRest(page);
-    await expectRingInside(name, sheet.locator('[data-slot="sheet-body"]'));
+    await expectRingInside(name, '[data-slot="sheet-body"]');
 
     // Every field of the body, each in its turn.
     for (const label of ["Institution", "Currency", "Opening balance"]) {
@@ -824,7 +841,7 @@ test.describe("Sheet", () => {
       const field = sheet.getByLabel(label);
 
       await expect(field).toBeFocused();
-      await expectRingInside(field, sheet.locator('[data-slot="sheet-body"]'));
+      await expectRingInside(field, '[data-slot="sheet-body"]');
     }
   });
 });
