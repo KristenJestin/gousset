@@ -1,6 +1,5 @@
 import {
   DataExport,
-  FixtureLedger,
   ImportProfiles,
   Imports,
   memoryAccountStore,
@@ -113,7 +112,6 @@ function onToday(rows: MemoryLineRows): Runner<GoussetServices> {
   const byOwner = new Map([[reader.userId, rows]]);
 
   const layer = Layer.mergeAll(
-    FixtureLedger,
     memoryAccountStore(byOwner),
     memoryLineStore(byOwner),
     // lines never reaches the imports.

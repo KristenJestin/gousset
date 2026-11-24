@@ -1,6 +1,5 @@
 import {
   DataExport,
-  FixtureLedger,
   ImportProfiles,
   Imports,
   memoryAccountStore,
@@ -31,7 +30,6 @@ async function listing() {
           Effect.provide(
             effect,
             Layer.mergeAll(
-              FixtureLedger,
               memoryAccountStore(),
               memoryLineStore(),
               Layer.mock(Imports, {}),
