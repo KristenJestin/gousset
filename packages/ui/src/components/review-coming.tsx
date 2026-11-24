@@ -1,3 +1,4 @@
+import { useId } from "react";
 import type { AnchorHTMLAttributes, ReactNode, Ref } from "react";
 
 import { cn } from "../lib/utils";
@@ -47,9 +48,11 @@ export function ReviewComing({
   linksTitle,
   children,
 }: ReviewComingProps) {
+  const titleId = useId();
+
   return (
     <section
-      aria-labelledby="review-coming-title"
+      aria-labelledby={titleId}
       data-slot="review-coming"
       className="flex flex-col rounded-lg border bg-card text-card-foreground"
     >
@@ -58,7 +61,7 @@ export function ReviewComing({
           <Icon name="review" size="lg" />
         </span>
         <div className="flex flex-col gap-1">
-          <h2 id="review-coming-title" className="text-base font-semibold">
+          <h2 id={titleId} className="text-base font-semibold">
             {title}
           </h2>
           <p className="max-w-xl text-sm text-muted-foreground">{description}</p>
