@@ -285,6 +285,7 @@ function FiltersSheet({
   const pageLocale = usePageLanguage();
   const [open, setOpen] = useState(false);
   const place = useRef<HTMLDivElement>(null);
+  const countId = useId();
   const folded = foldedFiltersCount(values);
 
   // The sheet is drawn outside the bar, where its container query does not reach: once the bar
@@ -306,6 +307,7 @@ function FiltersSheet({
 
     return () => watched.disconnect();
   }, []);
+
   const set = (change: Partial<OperationsFilterValues>) => onChange({ ...values, ...change });
 
   return (
@@ -319,13 +321,14 @@ function FiltersSheet({
             variant="secondary"
             size="sm"
             icon="filters"
-            // One name, whatever the badge's layout: "Filters (2)".
-            aria-label={folded === 0 ? words.filters : `${words.filters} (${String(folded)})`}
+            // Named by its words alone ("Filters"), the badge's number heard as its description.
+            aria-describedby={folded === 0 ? undefined : countId}
           >
             <span className="inline-flex items-center gap-1.5">
               {words.filters}
               {folded === 0 ? null : (
                 <span
+                  id={countId}
                   aria-hidden="true"
                   className="flex h-4.5 min-w-4.5 items-center justify-center rounded-full bg-primary px-1 font-semibold text-primary-foreground tabular-nums"
                 >

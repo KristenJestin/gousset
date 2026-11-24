@@ -126,7 +126,7 @@ const SHOTS: ReadonlyArray<Shot> = [
     id: "operations-operationsfilters--phone",
     width: 390,
     open: "click",
-    trigger: "Filters (4)",
+    trigger: "Filters",
     name: "operations-operationsfilters--phone-sheet",
   },
   { id: "operations-operationslist--phone", width: 390 },
