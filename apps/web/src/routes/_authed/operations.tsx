@@ -238,22 +238,31 @@ function useShownLines(applied: OperationsFilterValues) {
   };
 }
 
-function Operations() {
-  const search = Route.useSearch();
-  const navigate = Route.useNavigate();
-  const locale = usePageLanguage();
-  const applied = filtersOf(search);
-  const { draft, change } = useFilterBar(applied);
-  const { lines, pages, refusal, failed, total, none } = useShownLines(applied);
-  const { data: accounts } = useQuery(accountQueries.list());
-  const nameOf = accountNames(accounts);
-  const dayOf = shortDays(locale);
+type ReviewModeInput = {
+  applied: OperationsFilterValues;
+  /** The rows of the pages read, in order. */
+  loaded: ReadonlyArray<OperationRow>;
+  /** How many lines match, as the server says; `undefined` until a first list comes. */
+  total: number | undefined;
+  openId: string | undefined;
+  openLine: (id: string) => void;
+};
 
+/**
+ * The review mode (#35), with "To review only" on: the lines to review, one by one, each with what
+ * Gousset proposes, stepped through by J and K. A line reviewed folds away and the next one opens;
+ * it is out of the rows and the count at once, until the list read again no longer holds it. Another
+ * search, or the review mode left, hides none.
+ */
+function useReviewMode({ applied, loaded, total, openId, openLine }: ReviewModeInput) {
+  const navigate = Route.useNavigate();
   const queryClient = useQueryClient();
-  // The review mode (#35): the lines to review, one by one, each with what Gousset proposes.
   const reviewing = applied.toReview;
+  const appliedKey = filtersKey(applied);
   // The lines reviewed here, out of the rows at once, before the list is read again.
   const [reviewed, setReviewed] = useState<ReadonlySet<string>>(new Set());
+  // The search they were reviewed in.
+  const [reviewedIn, setReviewedIn] = useState(appliedKey);
   // The line reviewed last, which folds away from the list.
   const [foldingId, setFoldingId] = useState<string>();
 
@@ -264,39 +273,26 @@ function Operations() {
     turn: number;
   }>();
 
-  const loaded = pages.flatMap((page) =>
-    page.lines.map((line): OperationRow => toRow(line, dayOf, nameOf)),
-  );
+  const loadedIds = new Set(loaded.map((row) => row.id));
+  const stillLoaded = [...reviewed].filter((id) => loadedIds.has(id));
 
-  const rows = loaded.filter((row) => !reviewed.has(row.id));
+  // Another search, or the review mode left or entered: no line of the last one stays hidden. Else
+  // a line the list, read again, no longer holds needs hiding no more.
+  if (reviewedIn !== appliedKey) {
+    setReviewedIn(appliedKey);
+    setReviewed(new Set());
+  } else if (stillLoaded.length !== reviewed.size) {
+    setReviewed(new Set(stillLoaded));
+  }
+
+  const rows = reviewing ? loaded.filter((row) => !reviewed.has(row.id)) : loaded;
   // The count goes down with each line reviewed, before the server says so.
   const shownTotal = total === undefined ? undefined : total - (loaded.length - rows.length);
-
-  const openId = search.line;
-  // Rules a correction proposed and applied to the past: a toast follows each one's job, the line
-  // closed or not.
-  const [ruleJobs, setRuleJobs] = useState<ReadonlyArray<string>>([]);
-
-  const { data: opened } = useQuery({
-    ...lineQueries.detail(openId ?? ""),
-    enabled: openId !== undefined,
-  });
 
   const { data: queuedOpen } = useQuery({
     ...reviewQueries.line(openId ?? ""),
     enabled: reviewing && openId !== undefined,
   });
-
-  // The detail opens once its line is read, at its full size: its column widens, never empty.
-  const open = openId !== undefined && opened?.ok === true ? opened : undefined;
-
-  // In review mode, the open line's proposal, once read.
-  const queued =
-    reviewing && open !== undefined && queuedOpen?.ok === true ? queuedOpen : undefined;
-
-  const openLine = (id: string) => {
-    void navigate({ search: (previous) => ({ ...previous, line: id }), resetScroll: false });
-  };
 
   // In review mode a line opens once its detail and its proposal are read: the detail opens whole,
   // its proposal focused, as the one before it goes.
@@ -368,6 +364,49 @@ function Operations() {
   useHotkey(appHotkeys["review.previous"], onStep(-1), { enabled: reviewing });
   useHotkey(closed ? appHotkeys["review.accept"] : null, onStep(1));
   useHotkey(closed ? appHotkeys["review.correct"] : null, onStep(1));
+
+  return { reviewing, rows, shownTotal, foldingId, ruleProposal, queuedOpen, goTo, reviewedLine };
+}
+
+function Operations() {
+  const search = Route.useSearch();
+  const navigate = Route.useNavigate();
+  const locale = usePageLanguage();
+  const applied = filtersOf(search);
+  const { draft, change } = useFilterBar(applied);
+  const { lines, pages, refusal, failed, total, none } = useShownLines(applied);
+  const { data: accounts } = useQuery(accountQueries.list());
+  const nameOf = accountNames(accounts);
+  const dayOf = shortDays(locale);
+
+  const loaded = pages.flatMap((page) =>
+    page.lines.map((line): OperationRow => toRow(line, dayOf, nameOf)),
+  );
+
+  const openId = search.line;
+
+  const openLine = (id: string) => {
+    void navigate({ search: (previous) => ({ ...previous, line: id }), resetScroll: false });
+  };
+
+  const { reviewing, rows, shownTotal, foldingId, ruleProposal, queuedOpen, goTo, reviewedLine } =
+    useReviewMode({ applied, loaded, total, openId, openLine });
+
+  // Rules a correction proposed and applied to the past: a toast follows each one's job, the line
+  // closed or not.
+  const [ruleJobs, setRuleJobs] = useState<ReadonlyArray<string>>([]);
+
+  const { data: opened } = useQuery({
+    ...lineQueries.detail(openId ?? ""),
+    enabled: openId !== undefined,
+  });
+
+  // The detail opens once its line is read, at its full size: its column widens, never empty.
+  const open = openId !== undefined && opened?.ok === true ? opened : undefined;
+
+  // In review mode, the open line's proposal, once read.
+  const queued =
+    reviewing && open !== undefined && queuedOpen?.ok === true ? queuedOpen : undefined;
 
   const close = () => {
     void navigate({
