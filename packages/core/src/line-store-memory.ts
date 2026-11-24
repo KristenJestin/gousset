@@ -23,6 +23,8 @@ export type MemoryLineDetail = MemoryLine & {
   readonly category?: LineCategory;
   /** Who put its entry in its category; `default`, the import, waits for the user. */
   readonly classifiedBy?: "default" | "rule" | "user";
+  /** Its part in its entry: `refund` when linked to an expense, whose entry it then follows. */
+  readonly role?: "payment" | "refund";
 };
 
 /** An import of the memory store, as a line's detail names it. */
@@ -60,7 +62,8 @@ function matches(line: MemoryLineDetail, currency: string, query: LineQuery): bo
     (state === query.state ||
       (query.state === "held" &&
         state === "counted" &&
-        (query.alsoLineIds.includes(line.id) || line.classifiedBy === "default"))) &&
+        (query.alsoLineIds.includes(line.id) ||
+          (line.classifiedBy === "default" && (line.role ?? "payment") === "payment")))) &&
     line.bookedOn <= query.to &&
     (query.onlyLineIds === undefined || query.onlyLineIds.includes(line.id)) &&
     (query.from === null || line.bookedOn >= query.from) &&

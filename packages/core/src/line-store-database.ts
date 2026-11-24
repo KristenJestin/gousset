@@ -71,11 +71,13 @@ function amountCondition(
 }
 
 /**
- * A line whose entry is still where the import put it, in its kind's fallback: to classify. A noted
- * balance's movement in its account's own category is not (#31): the user chose that category.
+ * A line whose entry is still where the import put it, in its kind's fallback: to classify, by its
+ * payment part. A refund part follows its expense's entry, reviewed through the expense's own line
+ * (#35). A noted balance's movement in its account's own category is not (#31): the user chose that
+ * category.
  */
 const byDefault = exists(
-  sql`(select 1 from ${entryPart} inner join ${entry} on ${entry.id} = ${entryPart.entryId} where ${entryPart.lineId} = ${statementLine.id} and ${entry.classifiedBy} = 'default' and not (${statementLine.source} = 'balance' and coalesce(${entry.categoryId} = (select ${account.balanceCategoryId} from ${account} where ${account.id} = ${statementLine.accountId}), false)))`,
+  sql`(select 1 from ${entryPart} inner join ${entry} on ${entry.id} = ${entryPart.entryId} where ${entryPart.lineId} = ${statementLine.id} and ${entryPart.role} = 'payment' and ${entry.classifiedBy} = 'default' and not (${statementLine.source} = 'balance' and coalesce(${entry.categoryId} = (select ${account.balanceCategoryId} from ${account} where ${account.id} = ${statementLine.accountId}), false)))`,
 );
 
 function conditions(accounts: ReadonlyArray<AccountColumns>, query: LineQuery) {
