@@ -55,7 +55,7 @@ const SHARED = {
   CategoryRefused: () => refused("CATEGORY_ARCHIVED"),
 };
 
-/** A proposal's key as the page was shown it: blank for one that names nothing. */
+/** A proposal's key as the page was shown it (`proposalKey`: `transfer:<line>`, `category`…). */
 const Seen = Schema.String.check(Schema.isMaxLength(64));
 
 /**
@@ -98,6 +98,7 @@ export const acceptLine = createServerFn({ method: "POST" })
           ProposalChanged: () => refused("PROPOSAL_CHANGED"),
           TransferRefused: () => refused("CANNOT_PAIR"),
           LinkRefused: () => refused("CANNOT_LINK"),
+          CategoryRequired: () => refused("CATEGORY_REQUIRED"),
         }),
       ),
     ),

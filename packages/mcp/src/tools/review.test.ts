@@ -260,21 +260,21 @@ describe("review list", () => {
       'discard it, it repeats the line of 2026-11-03, -23.80 EUR, "CB CORNER CAFE"',
     );
 
-    expect(rowOf(text, heldCafe.id)).toContain(`proposal: ${cafe.id}`);
+    expect(rowOf(text, heldCafe.id)).toContain(`proposal: duplicate:${cafe.id}`);
 
     expect(rowOf(text, toSavings.id)).toContain(
       'pair it as a transfer with the line of 2026-11-10, Livret A (Riverside Bank): 50.00 EUR, "VIR RECU" (1 other candidate: lines show)',
     );
 
-    expect(rowOf(text, toSavings.id)).toContain(`proposal: ${intoLivret.id}`);
+    expect(rowOf(text, toSavings.id)).toContain(`proposal: transfer:${intoLivret.id}`);
 
     expect(rowOf(text, returned.id)).toContain(
       "link it as a refund of the expense in Groceries costing 30.00 EUR",
     );
 
-    expect(rowOf(text, returned.id)).toContain(`proposal: ${shop.id}`);
+    expect(rowOf(text, returned.id)).toContain(`proposal: refund:${shop.id}`);
     expect(rowOf(text, market.id)).toContain("keep it in Groceries (merchant: City Market)");
-    expect(rowOf(text, market.id)).toContain(`proposal: ${groceries.id}`);
+    expect(rowOf(text, market.id)).toContain(`proposal: category:${groceries.id}`);
   });
 
   test("leaves out a line a rule classified: a rule is the user's decision", async () => {
@@ -315,7 +315,7 @@ describe("review writes", () => {
     const { text, isError } = await review({
       action: "accept",
       line: market.id,
-      proposal: groceries.id,
+      proposal: `category:${groceries.id}`,
     });
 
     expect(isError).toBe(true);
@@ -324,7 +324,7 @@ describe("review writes", () => {
 
   test("accept refuses a proposal that is not the one listed, and does nothing", async () => {
     const { text, isError } = await review(
-      { action: "accept", line: toSavings.id, proposal: intoNorth.id },
+      { action: "accept", line: toSavings.id, proposal: `transfer:${intoNorth.id}` },
       writer,
     );
 
@@ -334,9 +334,42 @@ describe("review writes", () => {
     expect(text).toContain('review {"action":"list"}');
   });
 
+  test("accept refuses a proposal of another kind naming the same line", async () => {
+    const { text, isError } = await review(
+      { action: "accept", line: toSavings.id, proposal: `refund:${intoLivret.id}` },
+      writer,
+    );
+
+    expect(isError).toBe(true);
+    expect(text).toContain("proposal changed since it was listed");
+  });
+
+  test("accept refuses to keep a line in no category, and says to correct it", async () => {
+    const bare = line(current.id, "2026-11-20", -700, "CB KIOSK", { classifiedBy: "default" });
+
+    const listed = await review({ action: "list" }, reader, {
+      accounts: [current],
+      lines: [bare],
+    });
+
+    expect(rowOf(listed.text, bare.id)).toContain("classify it; line:");
+    expect(rowOf(listed.text, bare.id)).toContain("proposal: category");
+
+    const { text, isError } = await review(
+      { action: "accept", line: bare.id, proposal: "category" },
+      writer,
+      { accounts: [current], lines: [bare] },
+    );
+
+    expect(isError).toBe(true);
+    expect(text.length).toBeLessThan(ERROR_LIMIT);
+    expect(text).toContain("no category to keep");
+    expect(text).toContain(`review {"action":"correct","line":"${bare.id}","category":`);
+  });
+
   test("accept refuses a line no longer to review", async () => {
     const { text, isError } = await review(
-      { action: "accept", line: byRule.id, proposal: groceries.id },
+      { action: "accept", line: byRule.id, proposal: `category:${groceries.id}` },
       writer,
     );
 

@@ -75,15 +75,11 @@ export function proposalOf(facts: ProposalFacts): ReviewProposal {
   return { kind: "category", category: facts.category, merchant: facts.merchant };
 }
 
-/**
- * What a proposal does, as one key: the line a duplicate repeats, the transfer's candidate, the
- * line that paid the expense refunded, the category kept. Accepting a line gives the key of the
- * proposal the user saw, so that a proposal changed meanwhile is never accepted in its place.
- */
-export function proposalKey(proposal: ReviewProposal): string {
+/** What a proposal names: the line or the category its key carries after its kind. */
+function namedBy(proposal: ReviewProposal): string | null {
   switch (proposal.kind) {
     case "duplicate": {
-      return proposal.of?.id ?? "";
+      return proposal.of?.id ?? null;
     }
 
     case "transfer": {
@@ -95,7 +91,20 @@ export function proposalKey(proposal: ReviewProposal): string {
     }
 
     case "category": {
-      return proposal.category?.id ?? "";
+      return proposal.category?.id ?? null;
     }
   }
+}
+
+/**
+ * What a proposal does, as one key, its kind then what it names (`transfer:<line>`): the line a
+ * duplicate repeats, the transfer's candidate, the line that paid the expense refunded, the category
+ * kept; the kind alone when it names nothing. Accepting a line gives the key of the proposal the user
+ * saw, so that a proposal changed meanwhile, even to another kind naming the same line, is never
+ * accepted in its place.
+ */
+export function proposalKey(proposal: ReviewProposal): string {
+  const named = namedBy(proposal);
+
+  return named === null ? proposal.kind : `${proposal.kind}:${named}`;
 }

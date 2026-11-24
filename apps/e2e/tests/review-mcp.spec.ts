@@ -66,6 +66,9 @@ function rowsOf(text: string): ReadonlyArray<Row> {
   });
 }
 
+/** The line or category a proposal's handle names after its kind (`transfer:<line>`). */
+const namedBy = (proposal: string) => proposal.slice(proposal.indexOf(":") + 1);
+
 /** The row whose label is `label`. */
 function rowOf(rows: ReadonlyArray<Row>, label: string): Row {
   const found = rows.find((each) => each.row.includes(`"${label}"`));
@@ -184,7 +187,7 @@ test("an MCP client lists the lines to review with their proposals, accepts and 
       `discard it, it repeats the line of ${STREAMING.bookedOn}, -18.99 EUR, "${STREAMING.label}"`,
     );
 
-    expect(heldStreaming.proposal).toBe(streaming.line);
+    expect(heldStreaming.proposal).toBe(`duplicate:${streaming.line}`);
     expect(transfer.row).toContain("pair it as a transfer with the line of 2026-10-1");
     expect(transfer.row).toContain("(1 other candidate: lines show)");
     expect(streaming.row).toContain("keep it in Other");
@@ -221,7 +224,8 @@ test("an MCP client lists the lines to review with their proposals, accepts and 
 
     const shown = await callText(session.client, "lines", { action: "show", line: transfer.line });
 
-    expect(shown.text).toContain(`line: ${transfer.proposal}`);
+    expect(transfer.proposal).toMatch(/^transfer:/);
+    expect(shown.text).toContain(`line: ${namedBy(transfer.proposal)}`);
     expect(shown.text).toContain("paired by the user");
 
     // Accepted: the line keeps its category, as the user's choice.
@@ -261,7 +265,7 @@ test("an MCP client lists the lines to review with their proposals, accepts and 
 
     expect(lines).not.toContain(heldStreaming.line);
     expect(lines).not.toContain(transfer.line);
-    expect(lines).not.toContain(transfer.proposal);
+    expect(lines).not.toContain(namedBy(transfer.proposal));
     expect(lines).not.toContain(streaming.line);
     expect(lines).not.toContain(grocer.line);
     expect(rowOf(after, GYM_AGAIN.label).row).toContain("keep it in Other");

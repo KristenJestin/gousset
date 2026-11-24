@@ -153,8 +153,9 @@ export class ProposalChanged extends Schema.TaggedError<ProposalChanged>()("Prop
 }) {}
 
 /**
- * A correction of a line to review needs the category it goes in (#35): every line to review but
- * a held one, which is kept as it is without one.
+ * A line to review needs the category it goes in (#35): a correction, for every line to review but
+ * a held one, which is kept as it is without one; and accepting a line in no category, which has
+ * none to keep: it is corrected instead.
  */
 export class CategoryRequired extends Schema.TaggedError<CategoryRequired>()("CategoryRequired", {
   lineId: Schema.String,

@@ -120,16 +120,27 @@ describe("proposalOf", () => {
 describe("proposalKey", () => {
   test("names what accepting does: the line repeated, the candidate, the expense, the category", () => {
     expect(proposalKey(proposalOf(facts({ held: true, duplicateOf: original })))).toBe(
-      "l-original",
+      "duplicate:l-original",
     );
 
-    expect(proposalKey(proposalOf(facts({ candidates: [side("l-a"), side("l-b")] })))).toBe("l-a");
+    expect(proposalKey(proposalOf(facts({ held: true })))).toBe("duplicate");
+
+    expect(proposalKey(proposalOf(facts({ candidates: [side("l-a"), side("l-b")] })))).toBe(
+      "transfer:l-a",
+    );
 
     expect(proposalKey(proposalOf(facts({ refunds: [refund("l-c")], amountMinor: 3000 })))).toBe(
-      "l-c",
+      "refund:l-c",
     );
 
-    expect(proposalKey(proposalOf(facts()))).toBe("c-groceries");
+    expect(proposalKey(proposalOf(facts()))).toBe("category:c-groceries");
+    expect(proposalKey(proposalOf(facts({ category: null })))).toBe("category");
+  });
+
+  test("a transfer and a refund naming the same line have different keys", () => {
+    expect(proposalKey(proposalOf(facts({ candidates: [side("l-a")], amountMinor: 3000 })))).not.toBe(
+      proposalKey(proposalOf(facts({ refunds: [refund("l-a")], amountMinor: 3000 }))),
+    );
   });
 
   test("a change of proposal changes the key", () => {

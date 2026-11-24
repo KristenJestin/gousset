@@ -117,7 +117,7 @@ const lineText = ({ line }: QueuedLine) =>
   `${line.bookedOn}, ${named(line.account)}: ${amount(line.amount)}, ${labelOf(line)}`;
 
 const queuedText = (queued: QueuedLine) =>
-  `- ${lineText(queued)}: ${proposalText(queued.proposal)}; line: ${queued.line.id}; proposal: ${proposalKey(queued.proposal) || "-"}`;
+  `- ${lineText(queued)}: ${proposalText(queued.proposal)}; line: ${queued.line.id}; proposal: ${proposalKey(queued.proposal)}`;
 
 function listText(page: ReviewQueuePage, input: ReviewInput): string {
   const header = `${page.total} line(s) to review.`;
@@ -225,6 +225,11 @@ const acceptRefusals = (line: string) => ({
     refused(
       "The line cannot be linked to that expense any more: show it to see its proposals now, and link one with lines.",
       `lines ${JSON.stringify({ action: "show", line })}`,
+    ),
+  CategoryRequired: () =>
+    refused(
+      "This line is in no category: there is no category to keep. Say which it goes in with correct, the category named as lines classify takes it.",
+      call({ action: "correct", line, category: "Groceries > Bakery" }),
     ),
 });
 

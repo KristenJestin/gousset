@@ -235,8 +235,10 @@ export const keepHeldLine = (owner: string, lineId: string) =>
  * linked as a refund of the expense proposed; a line kept in its category as the user's choice
  * (`classified_by = user`). The line leaves the queue, `review_state = done`. `seen` is the key of
  * the proposal the user saw (`proposalKey`): a proposal changed since fails with `ProposalChanged`,
- * and nothing is done. Fails with `LineNotFound`, `LineAlreadyReviewed`, and what each function it
- * calls refuses (`TransferRefused`, `LinkRefused`, `LineNotClassifiable`, `CategoryRefused`…).
+ * and nothing is done; a category proposal naming no category has none to keep, and fails with
+ * `CategoryRequired`: the line is corrected instead. Fails with `LineNotFound`,
+ * `LineAlreadyReviewed`, and what each function it calls refuses (`TransferRefused`, `LinkRefused`,
+ * `LineNotClassifiable`, `CategoryRefused`…).
  */
 export const acceptProposal = (owner: string, lineId: string, seen: string) =>
   Effect.gen(function* () {
@@ -266,7 +268,7 @@ export const acceptProposal = (owner: string, lineId: string, seen: string) =>
 
       case "category": {
         if (proposal.category === null) {
-          return yield* new ProposalChanged({ lineId });
+          return yield* new CategoryRequired({ lineId });
         }
 
         yield* classifyLine(owner, lineId, { categoryId: proposal.category.id });
