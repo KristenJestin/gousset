@@ -307,8 +307,10 @@ test.describe("in French", () => {
 
     await expect(userPage.locator("html")).toHaveAttribute("lang", "fr");
     await expect(userPage.getByRole("heading", { level: 1, name: "Bilan du mois" })).toBeVisible();
-    // Dates by the user's locale.
-    await expect(userPage.getByRole("group", { name: "Mois" })).toContainText(/novembre 2026/i);
+    // The screen's own words too, not only the frame's (its dates by locale: review.spec.ts).
+    await expect(
+      userPage.getByRole("heading", { name: "Votre bilan du mois n'est pas encore prêt" }),
+    ).toBeVisible();
     // Following the browser saves nothing: the browser's next language still wins.
     expect(await languageCookie(userPage)).toBeUndefined();
 

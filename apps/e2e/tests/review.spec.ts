@@ -128,7 +128,8 @@ test("a user with imported lines sees the same empty state, with their own count
   await expect(links.nth(0)).toContainText("Accounts");
   await expect(links.nth(0)).toContainText("1 account");
   await expect(links.nth(1)).toContainText("Import");
-  await expect(links.nth(1)).toContainText(/Last on \d{1,2} \w+/);
+  // The harness's browser speaks en-US: "Nov 24". The day is the import's own, a real one.
+  await expect(links.nth(1)).toContainText(/Last on [A-Z][a-z]{2} \d{1,2}\b/);
   await expect(links.nth(2)).toContainText("Operations");
   await expect(links.nth(2)).toContainText(
     imported.held === 0
