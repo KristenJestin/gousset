@@ -1,8 +1,9 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { Button } from "./button";
 import { AlertDialog, Dialog, DialogClose } from "./dialog";
+import { Sheet } from "./sheet";
 import { TextField } from "./text-field";
 
 function wait(milliseconds: number) {
@@ -99,6 +100,62 @@ function Controlled() {
   );
 }
 
+const FIRST_LINE = "CB GREENMARKET";
+const NEXT_LINE = "CB STREAMLY";
+
+/**
+ * A dialog the page opens over a line's sheet, as the app's `?` opens the list of shortcuts: a key
+ * of the page's own, heard wherever the focus is. The sheet's "Next line" puts the next line's
+ * sheet in its place while it is open, as the review does.
+ */
+function OverSheet() {
+  const [line, setLine] = useState<string | null>(null);
+  const [help, setHelp] = useState(false);
+
+  useEffect(() => {
+    const listen = (event: KeyboardEvent) => {
+      if (event.key === "?") {
+        setHelp(true);
+      }
+    };
+
+    document.addEventListener("keydown", listen);
+
+    return () => document.removeEventListener("keydown", listen);
+  }, []);
+
+  return (
+    <div className="flex flex-col items-start gap-3">
+      <Button variant="secondary" onClick={() => setLine(FIRST_LINE)}>
+        Open a line
+      </Button>
+      {line === null ? null : (
+        <Sheet
+          key={line}
+          open
+          onOpenChange={(next) => {
+            if (!next) {
+              setLine(null);
+            }
+          }}
+          title={line}
+          description="Press ? for the keyboard shortcuts."
+        >
+          <Button
+            variant="secondary"
+            onClick={() => setLine(line === FIRST_LINE ? NEXT_LINE : FIRST_LINE)}
+          >
+            Next line
+          </Button>
+        </Sheet>
+      )}
+      <Dialog open={help} onOpenChange={setHelp} title="Keyboard shortcuts">
+        <p>? shows this list.</p>
+      </Dialog>
+    </div>
+  );
+}
+
 function DeleteRule() {
   const [deleted, setDeleted] = useState(false);
 
@@ -163,6 +220,12 @@ export const WithFormOnPhone: Story = {
   render: () => <NoteBalance />,
   globals: { viewport: { value: "mobile1", isRotated: false } },
 };
+
+/**
+ * Over a sheet, opened by a key of the page: the topmost, so Escape closes it alone, and focus goes
+ * into it and back to the sheet.
+ */
+export const OverASheet: Story = { render: () => <OverSheet /> };
 
 /** A confirmation: Cancel, and Delete, which stays busy while it runs. */
 export const Confirmation: Story = { render: () => <DeleteRule /> };

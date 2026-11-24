@@ -584,6 +584,50 @@ test.describe("Dialog", () => {
     await expect(dialog).toBeHidden();
     await expect(page.getByText("Deleted")).toBeVisible();
   });
+
+  // Issue #164: a dialog the page opens over a sheet is the topmost; Escape closes it alone, and
+  // focus goes into it and back. Also once the sheet was put in another's place while open.
+  for (const swapped of [false, true]) {
+    test(`over a sheet${swapped ? " put in another's place" : ""}, Escape closes it alone, then the sheet`, async ({
+      page,
+    }) => {
+      await page.goto(story("overlays-dialog", "over-a-sheet"));
+
+      const trigger = page.getByRole("button", { name: "Open a line" });
+
+      await trigger.click();
+
+      let sheet = page.getByRole("dialog", { name: "CB GREENMARKET" });
+
+      await expect(sheet).toBeFocused();
+
+      if (swapped) {
+        await sheet.getByRole("button", { name: "Next line" }).click();
+        sheet = page.getByRole("dialog", { name: "CB STREAMLY" });
+        await expect(sheet).toBeVisible();
+        await expect.soft(sheet).toBeFocused();
+      }
+
+      const dialog = page.getByRole("dialog", { name: "Keyboard shortcuts" });
+
+      await page.keyboard.press("?");
+      await expect(dialog).toBeVisible();
+      await expect(dialog).toBeFocused();
+
+      await page.keyboard.press("Escape");
+      // Both said, whichever fails: which one Escape closed.
+      await expect.soft(dialog).toBeHidden();
+      await expect(sheet).toBeVisible();
+      await expect(sheet).toBeFocused();
+
+      await page.keyboard.press("Escape");
+      await expect(sheet).toBeHidden();
+
+      if (!swapped) {
+        await expect(trigger).toBeFocused();
+      }
+    });
+  }
 });
 
 test.describe("Sheet", () => {
