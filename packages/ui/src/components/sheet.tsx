@@ -46,8 +46,8 @@ function useWideScreen() {
 export type SheetProps = {
   /** Names the sheet, at its top. */
   title: string;
-  /** A sentence under the title saying what the sheet is for. */
-  description?: string;
+  /** A sentence under the title saying what the sheet is for, or what it is about (an amount). */
+  description?: ReactNode;
   /** The body; it scrolls when long. */
   children?: ReactNode;
   /** `Button`s at the bottom, the main one last. */
@@ -185,7 +185,7 @@ function SheetHeader({
   sending,
 }: {
   title: string;
-  description?: string;
+  description?: ReactNode;
   sending: boolean;
 }) {
   const messages = useUiMessages();

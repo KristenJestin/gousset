@@ -6,9 +6,9 @@ import { LineDetail, LineDetailSkeleton } from "./line-detail";
 
 const eur = (minor: number) => ({ minor, currency: "EUR" });
 
-/** The column the page gives the detail: 340 px beside the list. */
+/** The column the page gives the detail: 360 px beside the list. */
 function Column({ children }: { children: ReactNode }) {
-  return <div className="flex h-150 w-85 max-w-full">{children}</div>;
+  return <div className="flex h-150 w-90 max-w-full">{children}</div>;
 }
 
 /**
@@ -20,18 +20,21 @@ function Column({ children }: { children: ReactNode }) {
  *
  * Loading: `LineDetailSkeleton`, its title, amount and rows at the same heights.
  *
- * Motion: opened from `OperationsList`, it grows out of its row (a shared layout, 300 ms,
- * ease-out), its content fading in after 100 ms, and folds back into the row on close (see
- * `OperationsLayout`). Drawn by the server, it stays still. Cut under reduced motion.
+ * From Tailwind's `lg` on it is a panel for the column `OperationsLayout` gives it beside the
+ * list; below, a sheet over the list, from the bottom on a phone.
  *
- * Don't: show it without its row's id (the shared layout pairs them), or edit the line in it:
+ * Motion: its content fades in and slides 8 px from the right (180 ms, after 120 ms) once its
+ * column has widened, and fades out (120 ms) before the column closes (see `OperationsLayout`);
+ * nothing in it scales. The sheet rises from its edge in 300 ms and goes back down in 200 ms.
+ * Drawn by the server, it stays still. Cut under reduced motion.
+ *
+ * Don't: put it over the list on a wide screen (it hides the amounts), or edit the line in it:
  * v0.2's lines are read only.
  */
 const meta = {
   title: "Operations/LineDetail",
   component: LineDetail,
   args: {
-    id: "line-0",
     label: "CB GREENMARKET 2110 RIVERTON",
     amount: eur(-5200),
     account: "Current account",
@@ -115,12 +118,8 @@ export const French: Story = {
   ),
 };
 
-/** On a phone it takes the screen's width, over the list. */
+/** On a phone it is a sheet rising from the bottom edge, its label and amount at its top. */
 export const Phone: Story = {
   globals: { viewport: { value: "mobile1", isRotated: false } },
-  render: (args) => (
-    <div className="flex h-150">
-      <LineDetail {...args} />
-    </div>
-  ),
+  render: (args) => <LineDetail {...args} />,
 };

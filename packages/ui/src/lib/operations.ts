@@ -1,14 +1,5 @@
-// What the operations screen's components share with the page: the shared layout's names, and
-// the filters' values with their empty state.
-
-/**
- * The shared layout's name of a line: its row's anchor in `OperationsList` and its open
- * `LineDetail` carry the same, so that the detail grows out of the row and folds back into it
- * (docs/design.md, "Motion").
- */
-export function operationLayoutId(id: string) {
-  return `operation-line-${id}`;
-}
+// What the operations screen's components share with the page: the filters' values with their
+// empty state.
 
 /**
  * The most characters the search's words, and each amount bound, take: the server reads no more,

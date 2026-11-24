@@ -4,6 +4,7 @@ import { sql } from "drizzle-orm";
 import { Schema } from "effect";
 
 import type { TestUser } from "../src/auth";
+import { onPhone } from "../src/frame";
 import {
   addUser,
   animationsDone,
@@ -162,7 +163,10 @@ const list = (page: Page) => page.getByRole("list", { name: "Operations" });
 const rows = (page: Page) => list(page).getByRole("listitem");
 const row = (page: Page, label: string) => rows(page).filter({ hasText: label });
 const count = (page: Page) => page.locator('[data-slot="operations-count"]');
-const detail = (page: Page, label: string) => page.getByRole("region", { name: label });
+
+// A line's detail: a panel beside the list on a wide screen, a sheet on a phone.
+const detail = (page: Page, label: string) =>
+  page.getByRole(onPhone(page) ? "dialog" : "region", { name: label });
 
 /** Once hydrated, the list places its rows itself, from script: the browser runs the page. */
 async function hydrated(page: Page) {
@@ -600,10 +604,69 @@ async function sampleBoxes(page: Page, selector: string, text = "") {
   };
 }
 
+/**
+ * Samples, each animation frame until `window.__e2eStop`, the detail beside the list: its
+ * column's width, its content's opacity, and whether the panel or its content carries a scale.
+ * Install before the press that opens it.
+ */
+async function sampleColumn(page: Page) {
+  await page.evaluate(`(() => {
+    window.__e2eColumn = [];
+    window.__e2eStop = false;
+
+    const scaled = (element) => {
+      if (element === null) {
+        return false;
+      }
+
+      const style = getComputedStyle(element);
+      const matrix = new DOMMatrixReadOnly(style.transform === "none" ? undefined : style.transform);
+
+      return Math.abs(matrix.a - 1) > 0.001 || Math.abs(matrix.d - 1) > 0.001 ||
+        (style.scale !== "none" && style.scale !== "1");
+    };
+
+    const sample = () => {
+      const column = document.querySelector('[data-slot="operations-detail"]');
+      const content = document.querySelector('[data-slot="line-detail-content"]');
+
+      if (column !== null && content !== null) {
+        window.__e2eColumn.push({
+          width: Math.round(column.getBoundingClientRect().width),
+          opacity: Number(getComputedStyle(content).opacity),
+          scaled: scaled(document.querySelector('[data-slot="line-detail"]')) || scaled(content),
+        });
+      }
+
+      if (!window.__e2eStop) {
+        requestAnimationFrame(sample);
+      }
+    };
+
+    requestAnimationFrame(sample);
+  })()`);
+
+  const Frames = Schema.Array(
+    Schema.Struct({ width: Schema.Number, opacity: Schema.Number, scaled: Schema.Boolean }),
+  );
+
+  return {
+    read: async () => Schema.decodeUnknownSync(Frames)(await page.evaluate("window.__e2eColumn")),
+    stop: () => page.evaluate("window.__e2eStop = true"),
+  };
+}
+
+/** The detail's column at its full width: a 16 px gap and the 360 px panel. */
+const COLUMN_WIDTH = 376;
+
 for (const reduced of [false, true]) {
   const how = reduced ? "under reduced motion, nothing moves" : "it moves";
 
-  test(`motion: the detail opens from its row; ${how}`, async ({ page }) => {
+  test(`motion: the detail opens beside the list, its width moving, never a scale; ${how}`, async ({
+    page,
+  }) => {
+    test.skip(onPhone(page), "On a phone the detail is a sheet (the next test)");
+
     if (reduced) {
       await page.emulateMedia({ reducedMotion: "reduce" });
     }
@@ -613,44 +676,73 @@ for (const reduced of [false, true]) {
     await hydrated(page);
     await expect(page.locator("html")).toHaveAttribute("data-motion", reduced ? "reduced" : "full");
 
-    const boxes = await sampleBoxes(page, '[data-slot="line-detail"]');
+    const frames = await sampleColumn(page);
 
     await row(page, GREENMARKET).getByRole("button").click();
-
-    const panel = detail(page, GREENMARKET);
-
-    await expect(panel).toBeVisible();
-
-    // Its own height, as laid out (`offsetHeight` leaves the motion's transform out); settled
-    // once the frames draw it so.
-    const final = await panel.evaluate<number, undefined, HTMLElement>(
-      (element) => element.offsetHeight,
-    );
-
+    await expect(detail(page, GREENMARKET)).toBeVisible();
     await expect
-      .poll(async () => Math.abs(((await boxes.read()).at(-1)?.height ?? 0) - final))
-      .toBeLessThanOrEqual(1);
-    await boxes.stop();
+      .poll(async () => {
+        const last = (await frames.read()).at(-1);
 
-    const heights = (await boxes.read()).map((box) => box.height);
-    const smallest = Math.min(...heights);
+        return last?.width === COLUMN_WIDTH && last.opacity === 1;
+      })
+      .toBe(true);
+    await frames.stop();
 
-    expect(final).toBeGreaterThan(48);
+    const seen = await frames.read();
+
+    expect(seen.filter((frame) => frame.scaled)).toEqual([]);
 
     if (reduced) {
-      // In place at once, at its own size. Motion still measures the change and may draw the panel
-      // where its row was for the frame of the change, then puts it in place with no tween: at most
-      // that one frame, the first, may be smaller.
-      const smaller = heights.flatMap((height, index) => (height < final - 1 ? [index] : []));
-
-      expect(smaller.length).toBeLessThanOrEqual(1);
-      expect(smaller.every((index) => index === 0)).toBe(true);
+      // There at once, whole.
+      expect(seen.filter((frame) => frame.width !== COLUMN_WIDTH || frame.opacity !== 1)).toEqual(
+        [],
+      );
     } else {
-      // It grew out of its 48 px row: some frame drew it far smaller than it ends.
-      expect(smallest).toBeLessThan(final / 2);
+      // The column widened from far narrower, and the content faded in.
+      expect(Math.min(...seen.map((frame) => frame.width))).toBeLessThan(COLUMN_WIDTH / 2);
+      expect(seen.some((frame) => frame.opacity > 0 && frame.opacity < 1)).toBe(true);
     }
 
     await animationsDone(page);
+  });
+
+  test(`motion: on a phone, the detail is a sheet rising from the bottom; ${how}`, async ({
+    page,
+  }) => {
+    test.skip(!onPhone(page), "On a wide screen the detail opens beside the list");
+
+    if (reduced) {
+      await page.emulateMedia({ reducedMotion: "reduce" });
+    }
+
+    await signedInAs(page, oriane);
+    await visit(page, "/operations");
+    await hydrated(page);
+    await expect(page.locator("html")).toHaveAttribute("data-motion", reduced ? "reduced" : "full");
+
+    const boxes = await sampleBoxes(page, '[role="dialog"]');
+
+    await row(page, GREENMARKET).getByRole("button").click();
+
+    const sheet = detail(page, GREENMARKET);
+
+    await expect(sheet).toBeVisible();
+    await animationsDone(page);
+
+    const rest = (await boxes.read()).at(-1)?.top ?? 0;
+
+    await boxes.stop();
+
+    const below = (await boxes.read()).filter((box) => box.top > rest + 1);
+
+    if (reduced) {
+      // In its place at once.
+      expect(below).toEqual([]);
+    } else {
+      // Drawn on its way up from the bottom edge.
+      expect(below.length).toBeGreaterThan(1);
+    }
   });
 
   test(`motion: the rows slide to their new places on a new search; ${how}`, async ({ page }) => {

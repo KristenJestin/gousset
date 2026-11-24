@@ -101,7 +101,7 @@ Motion where it explains what changes, never as decoration:
 
 - **Changing month**: bars and amounts move from one value to the next (the digits roll) instead of reloading the page.
 - **Approving a line to review**: the line folds away, the "to review" counter goes down, and the bar of the category concerned grows.
-- **Opening a detail**: the clicked line becomes the detail panel (a shared layout animation), and folds back into its place on close.
+- **Opening a detail**: the clicked line is marked and the detail opens beside the list, never over it: its column widens (a width, never a scale, so no text is squashed) as the list makes room, and its content fades in once there is room; closing, the content fades out first, then the column closes. On a phone the detail is a sheet rising from the bottom edge.
 - **Hovering a chart**: a crosshair follows the pointer and the displayed value slides.
 - **Import**: the steps advance with the real progress; nothing spins in a void.
 - Short durations (150 to 300 ms), easing out at the end.

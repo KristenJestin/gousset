@@ -120,6 +120,9 @@ const SHOTS: ReadonlyArray<Shot> = [
   { id: "operations-linedetail--to-review" },
   { id: "operations-operationsfilters--set" },
   { id: "operations-operationslayout--line-open" },
+  // A line's detail beside the list in French, and a sheet over it on a phone (#128).
+  { id: "operations-operationslayout--line-open-french" },
+  { id: "operations-operationslayout--phone", width: 390 },
 ];
 
 async function openPopup(page: Page, open: Shot["open"], name: Shot["trigger"]) {
