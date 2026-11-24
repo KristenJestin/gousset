@@ -699,7 +699,7 @@
   "uiOperationsThisLine": "This line: {label}",
   "uiOperationsSeparate": "Separate this line",
   "uiOperationsSeparateTitle": "Separate this line?",
-  "uiOperationsSeparateDescription": "It leaves this expense and counts on its own again, in Other until you choose its category.",
+  "uiOperationsSeparateDescription": "It leaves this expense and counts on its own again, in its default category until you choose another.",
   "uiOperationsSeparateConfirm": "Separate",
   "uiOperationsSplitAcross": "Split across {count} categories",
   "uiOperationsMaybeRefund": "Maybe a refund",

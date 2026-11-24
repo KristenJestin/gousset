@@ -699,7 +699,7 @@
   "uiOperationsThisLine": "Cette ligne : {label}",
   "uiOperationsSeparate": "Séparer cette ligne",
   "uiOperationsSeparateTitle": "Séparer cette ligne ?",
-  "uiOperationsSeparateDescription": "Elle quitte cette dépense et compte de nouveau seule, dans Autre jusqu'à ce que vous choisissiez sa catégorie.",
+  "uiOperationsSeparateDescription": "Elle quitte cette dépense et compte de nouveau seule, dans sa catégorie par défaut jusqu'à ce que vous en choisissiez une autre.",
   "uiOperationsSeparateConfirm": "Séparer",
   "uiOperationsSplitAcross": "Répartie sur {count} catégories",
   "uiOperationsMaybeRefund": "Peut-être un remboursement",
