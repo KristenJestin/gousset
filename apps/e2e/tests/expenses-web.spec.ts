@@ -146,8 +146,12 @@ test("the operations page proposes a cancellation as a refund, links it once con
   await expect(sheet.locator('[data-slot="split-left"]')).toHaveText("€30.00 left to place");
   await expect(sheet.getByRole("button", { name: "Save the split" })).toBeDisabled();
 
+  // A share added makes the sheet grow, which on a phone slides it to its new height, and its list
+  // of categories with it: the option is clicked once nothing moves, as a person would tap it.
   await sheet.getByRole("button", { name: "Add a category" }).click();
+  await animationsDone(page);
   await sheet.getByRole("combobox", { name: "Category 2" }).pressSequentially("groc");
+  await animationsDone(page);
   await page.getByRole("option", { name: "Groceries", exact: true }).click();
   await expect(sheet.getByRole("combobox", { name: "Category 2" })).toHaveValue("Groceries");
   await expect(sheet.locator('[data-slot="split-left"]')).toHaveText(
