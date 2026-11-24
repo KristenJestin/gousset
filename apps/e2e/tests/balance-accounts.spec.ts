@@ -5,7 +5,7 @@ import { eq } from "drizzle-orm";
 import type { WorkerEnvironment } from "../src/app-server";
 import { addUser } from "../src/auth";
 import type { TestUser } from "../src/auth";
-import { onPhone } from "../src/frame";
+import { lineDetail, onPhone } from "../src/frame";
 import { animationsDone, expect, fixDay, test, visit } from "../src/test";
 import { openUserData } from "../src/user-data";
 
@@ -146,7 +146,7 @@ async function openTopUp(page: Page) {
   await hydrated(page);
   await rows(page).filter({ hasText: TOP_UP }).getByRole("button").click();
 
-  const detail = page.getByRole("region", { name: TOP_UP });
+  const detail = lineDetail(page, TOP_UP);
 
   await expect(detail).toBeVisible();
 
@@ -217,7 +217,7 @@ test("a balance going from 120 to 80 with a transfer of 50 in gives an expense o
   // Its detail names it too, made from a noted balance.
   await expense.getByRole("button").click();
 
-  const movement = page.getByRole("region", { name: "Balance movement" });
+  const movement = lineDetail(page, "Balance movement");
 
   await expect(movement).toContainText("Made from a noted balance");
   // The test ends on what it checks, not on every animation of the page: the line detail's own

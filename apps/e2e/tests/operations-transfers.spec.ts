@@ -1,6 +1,7 @@
 import type { Page } from "@playwright/test";
 
 import { addUser } from "../src/auth";
+import { lineDetail } from "../src/frame";
 import { animationsDone, expect, expectAccessible, fixDay, test, visit } from "../src/test";
 import { openUserData } from "../src/user-data";
 
@@ -26,7 +27,7 @@ const rows = (page: Page) => page.getByRole("list", { name: "Operations" }).getB
 
 /** The open detail of a line of `LABEL` that says `text`: both sides carry the same label. */
 const detailSaying = (page: Page, text: string) =>
-  page.getByRole("region", { name: LABEL }).filter({ hasText: text });
+  lineDetail(page, LABEL).filter({ hasText: text });
 
 /** Once hydrated, the list places its rows itself, from script: the browser runs the page. */
 async function hydrated(page: Page) {
