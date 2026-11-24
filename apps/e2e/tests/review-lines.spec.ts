@@ -361,19 +361,6 @@ async function setSingleKeyShortcuts(page: Page, on: boolean) {
   await expect(setting).toBeChecked({ checked: on });
 }
 
-/** TEMPORARY (#164): the focused element, the open dialogs and ui-sdk's layer stack, as text. */
-async function overlayState(page: Page): Promise<string> {
-  return String(
-    await page.evaluate(`(() => {
-      const name = (el) => !el ? "none" : [el.tagName, el.getAttribute("role"), el.getAttribute("aria-label") ?? el.getAttribute("aria-labelledby") ?? "", el.getAttribute("data-slot") ?? "", el.closest("[role=dialog]")?.textContent?.slice(0, 30) ?? "", el.closest("[inert]") ? "INERT" : ""].join("|");
-      const realm = globalThis[Symbol.for("ui-sdk.layers@2")];
-      const stack = (realm?.stack ?? []).map((layer) => [layer.order, layer.active?.(), layer.exiting?.(), layer.el?.isConnected, layer.el?.textContent?.slice(0, 30)].join("/"));
-      const dialogs = [...document.querySelectorAll("[role=dialog]")].map((el) => [el.textContent?.slice(0, 30), el.hasAttribute("data-open"), el.closest("[inert]") ? "INERT" : "", el.isConnected].join("/"));
-      return JSON.stringify({ focus: name(document.activeElement), stack, dialogs, url: location.search });
-    })()`),
-  );
-}
-
 test("with single-key shortcuts off, the review's keys do nothing and its buttons still work", async ({
   page,
   app,
@@ -399,23 +386,16 @@ test("with single-key shortcuts off, the review's keys do nothing and its button
     .click();
   await expect(count(page)).toHaveText("4 lines");
 
-  // Not listed either.
+  // Not listed either. Asked for as the next line opens (#164): the list stays over its sheet, and
+  // Escape closes the list alone.
   await page.keyboard.press("ControlOrMeta+/");
 
   const shortcuts = page.getByRole("dialog", { name: "Keyboard shortcuts" });
 
   await expect(shortcuts.getByRole("term")).toHaveText(["Show keyboard shortcuts", "Search"]);
-
-  // TEMPORARY (#164): what holds the focus and ui-sdk's layers, before and after Escape.
-  const before = await overlayState(page);
-
   await page.keyboard.press("Escape");
-  await page.waitForTimeout(500);
-
-  const after = await overlayState(page);
-
-  await expect.soft(shortcuts, `before: ${before}\nafter: ${after}`).toBeHidden();
   await expect(shortcuts).toBeHidden();
+  await expect(page).toHaveURL(/[?&]line=/);
 });
 
 const Heights = Schema.Array(Schema.Number);
