@@ -17,8 +17,8 @@ import type { CategoryNode, CategoryStore, Expenses, Share } from "@gousset/core
 import { account, entry, entryPart, statementLine } from "@gousset/db/schema/ledger";
 import { exampleStatement } from "@gousset/fixture";
 import type { Statement, StatementLine } from "@gousset/fixture";
-import { asc, eq, inArray } from "drizzle-orm";
-import { Effect, Layer } from "effect";
+import { asc, eq, inArray, sql } from "drizzle-orm";
+import { Effect, Layer, Schema } from "effect";
 
 import { addUser } from "../src/auth";
 import { importsOn, statementFile } from "../src/imports";
@@ -58,16 +58,21 @@ const TODAY = "2026-11-30";
 
 type Services = Expenses | CategoryStore;
 
-/** Runs the expenses' and the categories' logic on the worker's database, with `TODAY` as today. */
-const run = <A, E>(effect: Effect.Effect<A, E, Services>) =>
-  Effect.runPromise(
-    effect.pipe(
-      Effect.provide(
-        Layer.mergeAll(expensesLayer, DatabaseCategoryStore).pipe(Layer.provide(data.layer)),
+/** Runs the expenses' and the categories' logic on a handle of the worker's database, `TODAY` today. */
+const runOn =
+  (handle: ReturnType<typeof openUserData>) =>
+  <A, E>(effect: Effect.Effect<A, E, Services>) =>
+    Effect.runPromise(
+      effect.pipe(
+        Effect.provide(
+          Layer.mergeAll(expensesLayer, DatabaseCategoryStore).pipe(Layer.provide(handle.layer)),
+        ),
+        Effect.provideService(Today, { day: Effect.succeed(TODAY) }),
       ),
-      Effect.provideService(Today, { day: Effect.succeed(TODAY) }),
-    ),
-  );
+    );
+
+/** Runs the expenses' and the categories' logic on the worker's database, with `TODAY` as today. */
+const run = <A, E>(effect: Effect.Effect<A, E, Services>) => runOn(data)(effect);
 
 /** The refusal an effect fails with. */
 const refusalOf = <A, E>(effect: Effect.Effect<A, E, Services>) => run(Effect.flip(effect));
@@ -446,6 +451,86 @@ test("a line taken out of its expense is its own again", async () => {
   );
 
   expect(await refusalOf(unlinkLine(owner, first))).toEqual(new NotLinked({ lineId: first }));
+});
+
+const Waiting = Schema.Struct({ rows: Schema.Array(Schema.Struct({ waiting: Schema.Number })) });
+
+/** How many locks of this worker's database's sessions wait for another's. */
+async function waitingLocks(): Promise<number> {
+  const result = await data.asUser(owner, (transaction) =>
+    transaction.execute(
+      sql`select count(*)::int as waiting from pg_locks l
+          join pg_stat_activity a on a.pid = l.pid
+          where not l.granted and a.datname = current_database()`,
+    ),
+  );
+
+  return Schema.decodeUnknownSync(Waiting)(result).rows[0]?.waiting ?? 0;
+}
+
+test("an unlink and a link meeting on one expense both go through, neither ended as a deadlock", async ({
+  app,
+}) => {
+  const current = await newAccount("Locks current");
+
+  await importInto(current, "locks-current", [
+    { bookedOn: "2026-10-22", amountMinor: -4000, label: "CB QUARRY TOOLS 2210 RIVERTON" },
+    {
+      bookedOn: "2026-10-24",
+      amountMinor: 1500,
+      label: "VIR SEPA RECU /DE RIO EXAMPLE /MOTIF TOOLS",
+    },
+    { bookedOn: "2026-10-25", amountMinor: -600, label: "CB QUARRY TOOLS 2510 RIVERTON" },
+  ]);
+
+  const paid = await lineOf(current, -4000);
+  const back = await lineOf(current, 1500);
+  const more = await lineOf(current, -600);
+  const expense = (await run(linkLine(owner, back, paid))).expense.id;
+
+  // Three connections of their own: one holds the expense, so that the unlink, then the link, wait
+  // for it in that order. The unlink takes away the expense's only payment, which frees its refund:
+  // a new part for that line, whose foreign key takes `key share` on it, while the link holds it.
+  const holder = openUserData(app.database);
+  const first = openUserData(app.database);
+  const second = openUserData(app.database);
+  const { promise: released, resolve: release } = Promise.withResolvers<void>();
+
+  const held = holder.asUser(owner, async (transaction) => {
+    await transaction
+      .select({ id: entry.id })
+      .from(entry)
+      .where(eq(entry.id, expense))
+      .for("update");
+    await released;
+  });
+
+  try {
+    const unlinked = runOn(first)(unlinkLine(owner, paid));
+
+    await expect.poll(waitingLocks).toBeGreaterThanOrEqual(1);
+
+    const linked = runOn(second)(linkLine(owner, more, back));
+
+    await expect.poll(waitingLocks).toBeGreaterThanOrEqual(2);
+    release();
+
+    const [left, joined] = await Promise.allSettled([unlinked, linked]);
+
+    expect([left.status, joined.status]).toEqual(["fulfilled", "fulfilled"]);
+
+    // The refund, alone again, is an income of its own, which the purchase after it now refunds.
+    expect(await partsOf([back, more])).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ lineId: back, role: "payment", kind: "income" }),
+        expect.objectContaining({ lineId: more, role: "refund", kind: "income" }),
+      ]),
+    );
+  } finally {
+    release();
+    await held;
+    await Promise.all([holder.close(), first.close(), second.close()]);
+  }
 });
 
 test("undoing the import of an expense's payment gives its refund back its own entry", async () => {

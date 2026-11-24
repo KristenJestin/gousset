@@ -197,7 +197,11 @@ async function readLine(
 
 /**
  * Locks the user's lines among `lineIds`, in one order, so that two changes of the same lines take
- * turns and each decides on what the other left.
+ * turns and each decides on what the other left. Every change here locks its lines first, then its
+ * entries. `no key update` rather than `update`: a line's id never changes, and a part written for a
+ * line (a refund an unlink frees) takes the foreign key's `key share` on it. With `update`, an
+ * unlink holding the expense would wait for a link holding that line, which waits for the expense,
+ * and Postgres would end one of them as a deadlock.
  */
 async function lockLines(
   transaction: UserTransaction,
@@ -211,7 +215,7 @@ async function lockLines(
       .from(statementLine)
       .where(inArray(statementLine.id, ids))
       .orderBy(asc(statementLine.id))
-      .for("update");
+      .for("no key update");
   }
 }
 
