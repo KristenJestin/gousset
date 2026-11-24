@@ -607,6 +607,7 @@ describe("the categories tool", () => {
       "merchants",
       "categories",
       "rules",
+      "review",
     ]);
     expect(tool?.title).toBe("Categories");
     expect(tool?.annotations).toEqual({
