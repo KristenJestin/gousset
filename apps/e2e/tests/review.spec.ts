@@ -278,6 +278,17 @@ test("a row's detail compares with the previous month", async ({ page, app, user
   await page.keyboard.press("Escape");
   await expect(panel).toHaveCount(0);
   await expect(spendingRow(page, "Groceries")).toBeFocused();
+
+  // The panel shrinks back into its row through Motion's layout animation, a transform it drives
+  // itself, which `document.getAnimations()` does not list: until it ends, the growing row covers
+  // the rows under it, and the closing accessibility check would read them as hidden.
+  await expect
+    .poll(() =>
+      spendingRow(page, "Groceries").evaluate((row) =>
+        row.parentElement === null ? "none" : getComputedStyle(row.parentElement).transform,
+      ),
+    )
+    .toBe("none");
   await animationsDone(page);
 });
 
