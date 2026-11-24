@@ -25,6 +25,7 @@ import {
   IMPORT_PROFILES,
   MERCHANTS,
   MERCHANT_ALIASES,
+  RULES,
   STATEMENT_LINES,
   TRANSFERS,
 } from "./tables";
@@ -250,6 +251,26 @@ function madeUpExport(): ExportData {
     }),
   ];
 
+  const rules = [
+    row(RULES, {
+      id: nextId(),
+      user_id: OWNER,
+      position: 1,
+      enabled: true,
+      conditions: {
+        kind: "group",
+        combinator: "and",
+        children: [{ kind: "rule", field: "label", operator: "contains", value: "GREENMARKET" }],
+      },
+      set_merchant_id: merchantId,
+      set_category_id: null,
+      applied_count: 12,
+      created_from: "correction",
+      created_at: "2026-10-02T10:00:00+00:00",
+      updated_at: "2026-10-02T10:00:00+00:00",
+    }),
+  ];
+
   const byTable = new Map<ExportTable, ReadonlyArray<ExportRow>>([
     [ACCOUNTS, accounts],
     [ACCOUNT_BALANCES, balances],
@@ -262,6 +283,7 @@ function madeUpExport(): ExportData {
     [TRANSFERS, transfers],
     [MERCHANTS, merchants],
     [MERCHANT_ALIASES, aliases],
+    [RULES, rules],
   ]);
 
   return {

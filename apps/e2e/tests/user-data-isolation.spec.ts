@@ -2,6 +2,7 @@ import {
   account,
   merchant,
   merchantAlias,
+  rule,
   statementImport,
   statementLine,
 } from "@gousset/db/schema/ledger";
@@ -265,6 +266,22 @@ test("a user never attaches a row to another user's row", async () => {
         userId: alex,
         merchantId: samsMerchant?.id ?? "",
         alias: "NOT THEIR SHOP",
+      }),
+    ),
+  ).toBe("23503");
+
+  // A rule of one's own that sets the other user's merchant (#25).
+  expect(
+    await data.refusal(alex, (transaction) =>
+      transaction.insert(rule).values({
+        userId: alex,
+        conditions: {
+          kind: "group",
+          combinator: "and",
+          children: [{ kind: "rule", field: "label", operator: "contains", value: "THEIRS" }],
+        },
+        setMerchantId: samsMerchant?.id ?? "",
+        createdFrom: "user",
       }),
     ),
   ).toBe("23503");

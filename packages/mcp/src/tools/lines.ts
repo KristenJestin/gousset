@@ -29,6 +29,7 @@ import { Effect, Schema } from "effect";
 import { ToolRefusal, defineTool } from "../tool";
 import { MOVEMENT, accountToWrite, amount, named } from "./accounts";
 import { namedCategory, pathText } from "./categories";
+import { proposedRule } from "./rules";
 
 /** The lines `search` gives when none are asked for, and the most: 100 fit the result's budget. */
 const DEFAULT_LINES = 50;
@@ -121,7 +122,7 @@ const DESCRIPTION = `Every line of the user's accounts, as the bank wrote it: se
 
 Use it for "when did I pay this shop?", "what was this 42.90?", "which import brought this line?", "put this line in Groceries". Use \`accounts\` instead for balances and one account's latest lines, \`month\` for where the money went, \`categories\` to list or change the categories themselves. search and show only read.
 
-Writes, with the write scope: \`classify\` says what \`line\` is, by \`kind\`: "transfer", "expense" or "income". With "expense" or "income", the line goes in \`category\`, named as \`categories\` list writes it (any case): a name alone is the top-level category of that name, else its one child; "Parent > Child" names a child. Without \`category\`, the kind's fallback. \`kind\` may be left out with a category: the line's own. Kept as the user's choice: no rule changes it unasked. Refused, with what to do: a line held, discarded or of no amount (no expense nor income), a side of a transfer (unpair it first), a line split across several expenses, a kind or category of the other kind than the line's (money out is an expense, money in an income), an archived category, an unknown or ambiguous category name (with the names to choose from), a category with "transfer".
+Writes, with the write scope: \`classify\` says what \`line\` is, by \`kind\`: "transfer", "expense" or "income". With "expense" or "income", the line goes in \`category\`, named as \`categories\` list writes it (any case): a name alone is the top-level category of that name, else its one child; "Parent > Child" names a child. Without \`category\`, the kind's fallback. \`kind\` may be left out with a category: the line's own. Kept as the user's choice: no rule changes it unasked. The answer proposes the \`rules\` call that classifies lines like it the same way from then on. Refused, with what to do: a line held, discarded or of no amount (no expense nor income), a side of a transfer (unpair it first), a line split across several expenses, a kind or category of the other kind than the line's (money out is an expense, money in an income), an archived category, an unknown or ambiguous category name (with the names to choose from), a category with "transfer".
 
 \`pair\` pairs \`line\` and \`other\` as one transfer, never spending; \`line\` alone: its only candidate; neither: every clear pair. \`classify\` \`kind\` "transfer" is the same; \`unpair\` undoes it. Refused: lines of one account or direction, a paired line, several candidates. With \`account\` in place of \`other\`, an account kept by its balance: Gousset makes its side, which its noted balances' movements then leave out; refused for an account kept by its lines or of another currency.
 
@@ -642,7 +643,15 @@ function classifyAction(owner: string, input: LinesInput, kind: EntryKind | unde
 
     const placed = yield* classifyLine(owner, detail.id, chosen);
 
-    return `The line of ${detail.bookedOn}, ${amount(detail.amount)}, ${labelOf(detail)}, is now in ${pathText(placed)} (${placed.kind}). Kept as the user's choice: no rule changes it unasked.`;
+    // A correction to a category of the user's choosing may become a rule (#25); a fallback, not.
+    const proposal =
+      category === undefined
+        ? undefined
+        : proposedRule(detail.label, detail.counterpartyName, pathText(placed));
+
+    const done = `The line of ${detail.bookedOn}, ${amount(detail.amount)}, ${labelOf(detail)}, is now in ${pathText(placed)} (${placed.kind}). Kept as the user's choice: no rule changes it unasked.`;
+
+    return proposal === undefined ? done : `${done}\n${proposal}`;
   }).pipe(
     Effect.catchTags({
       LineNotFound: () => Effect.fail(UNKNOWN_LINE(handle)),

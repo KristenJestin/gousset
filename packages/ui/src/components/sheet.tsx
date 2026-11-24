@@ -58,6 +58,8 @@ export type SheetProps = {
   trigger?: ReactElement;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
+  /** Its width on a wide screen: `md` 384 px, `lg` 512 px for a form of rows (a rule). */
+  size?: "md" | "lg";
 };
 
 /**
@@ -79,6 +81,7 @@ export function Sheet({
   trigger,
   open,
   onOpenChange,
+  size = "md",
 }: SheetProps) {
   const wide = useWideScreen();
 
@@ -121,8 +124,9 @@ export function Sheet({
           floatingSurfaceClasses,
           // The edge shows on the side that faces the page, not along the screen's own edges.
           wide
-            ? "h-full w-96 max-w-full rounded-l-lg border-y-0 border-r-0"
+            ? "h-full max-w-full rounded-l-lg border-y-0 border-r-0"
             : "max-h-full w-full rounded-t-lg border-x-0 border-b-0",
+          wide && (size === "lg" ? "w-lg" : "w-96"),
         )}
       >
         <SheetHeader title={title} description={description} />

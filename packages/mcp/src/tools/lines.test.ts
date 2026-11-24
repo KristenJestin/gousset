@@ -4,6 +4,7 @@ import {
   ImportProfiles,
   Imports,
   Merchants,
+  RuleJobs,
   TransferRefused,
   Transfers,
   memoryAccountStore,
@@ -20,6 +21,7 @@ import type {
   MemoryLineDetail,
   MemoryLineRows,
 } from "@gousset/core";
+import { UserData } from "@gousset/db/user-data";
 import { Effect, Layer, Schema } from "effect";
 import { TestClock } from "effect/testing";
 import { describe, expect, test } from "vite-plus/test";
@@ -191,6 +193,8 @@ function onToday(
     Layer.mock(ImportProfiles, {}),
     Layer.mock(DataExport, {}),
     Layer.mock(Merchants, {}),
+    Layer.mock(UserData, {}),
+    Layer.mock(RuleJobs, {}),
     transfers,
     TestClock.layer(),
   );
@@ -551,12 +555,15 @@ const entryOf = (rows: MemoryCategoryRows | undefined, of: MemoryLineDetail) =>
   rows?.entries.find((each) => each.parts.some((part) => part.lineId === of.id));
 
 describe("lines classify", () => {
-  test("puts a line in a category named by its path, as the user's choice", async () => {
+  test("puts a line in a category named by its path, as the user's choice, and proposes a rule", async () => {
     const { text, isError, categories } = await classify(fuel.id, "transport > fuel");
 
     expect(isError, text).toBe(false);
     expect(text).toBe(
-      'The line of 2026-10-12, -42.90 EUR, "CB FUELSTOP 0412 RIVERTON", is now in Transport > Fuel (expense). Kept as the user\'s choice: no rule changes it unasked.',
+      [
+        'The line of 2026-10-12, -42.90 EUR, "CB FUELSTOP 0412 RIVERTON", is now in Transport > Fuel (expense). Kept as the user\'s choice: no rule changes it unasked.',
+        'To classify lines like it this way from now on, propose this rule to the user: rules {"action":"create","conditions":[{"field":"label","operator":"contains","value":"FUELSTOP"}],"category":"Transport > Fuel","from_correction":true}',
+      ].join("\n"),
     );
     expect(entryOf(categories, fuel)).toMatchObject({
       categoryId: fuelCategory.id,
@@ -878,6 +885,7 @@ describe("the lines tool", () => {
       "lines",
       "merchants",
       "categories",
+      "rules",
     ]);
     expect(tool?.title).toBe("Lines");
 

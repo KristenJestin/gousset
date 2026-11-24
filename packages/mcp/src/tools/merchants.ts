@@ -242,7 +242,7 @@ function mergedText(merged: Merged): string {
  * The merchant of that name, or the refusal to give: close names to choose from, read through a
  * call that only reads.
  */
-function merchantNamed(owner: string, name: string) {
+export function merchantNamed(owner: string, name: string) {
   return Effect.gen(function* () {
     const merchants = yield* Merchants;
 

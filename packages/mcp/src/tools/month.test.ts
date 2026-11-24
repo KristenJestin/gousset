@@ -5,6 +5,7 @@ import {
   Imports,
   Ledger,
   Merchants,
+  RuleJobs,
   Transfers,
   flags,
   importState,
@@ -18,6 +19,7 @@ import {
   spending,
   spendingDays,
 } from "@gousset/core";
+import { UserData } from "@gousset/db/user-data";
 import { Effect, Exit, Layer } from "effect";
 import { TestClock } from "effect/testing";
 import { describe, expect, test } from "vite-plus/test";
@@ -52,6 +54,8 @@ function onDay(day: string, ledger: Layer.Layer<Ledger> = FixtureLedger): Runner
             Layer.mock(DataExport, {}),
             Layer.mock(Merchants, {}),
             Layer.mock(Transfers, {}),
+            Layer.mock(UserData, {}),
+            Layer.mock(RuleJobs, {}),
             TestClock.layer(),
           ),
         ),

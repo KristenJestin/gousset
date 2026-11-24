@@ -9,6 +9,7 @@ import {
   ImportProfiles,
   Imports,
   Merchants,
+  RuleJobs,
   Transfers,
   UnknownFormat,
   memoryAccountStore,
@@ -24,6 +25,7 @@ import type {
   Undone,
   Upload,
 } from "@gousset/core";
+import { UserData } from "@gousset/db/user-data";
 import { Effect, Fiber, Layer, Schema } from "effect";
 import { TestClock } from "effect/testing";
 import { describe, expect, test } from "vite-plus/test";
@@ -192,6 +194,8 @@ function runnerOf(state: Fake): Runner<GoussetServices> {
           Layer.mock(DataExport, {}),
           Layer.mock(Merchants, {}),
           Layer.mock(Transfers, {}),
+          Layer.mock(UserData, {}),
+          Layer.mock(RuleJobs, {}),
         ),
       ),
     );
@@ -221,6 +225,8 @@ function runnerWithTime(state: Fake): Runner<GoussetServices> {
             Layer.mock(DataExport, {}),
             Layer.mock(Merchants, {}),
             Layer.mock(Transfers, {}),
+            Layer.mock(UserData, {}),
+            Layer.mock(RuleJobs, {}),
             TestClock.layer(),
           ),
         ),
