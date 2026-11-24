@@ -155,11 +155,40 @@ test("the operations page proposes a cancellation as a refund, links it once con
   await animationsDone(page);
   await expectAccessible(page);
 
-  await sheet.getByRole("button", { name: "Save the split" }).click();
+  // A sheet still open after the save says why: its text (a refusal under the shares), whether its
+  // button is busy, the calls sent and answered since, and any error the page threw.
+  const save = sheet.getByRole("button", { name: "Save the split" });
+  const sent: Array<string> = [];
+  const answered: Array<string> = [];
+  const thrown: Array<string> = [];
 
-  // Closed once saved; a sheet still open says why in its text (a refusal under the shares).
+  page.on("request", (request) => {
+    if (request.url().includes("/_serverFn/")) {
+      sent.push(request.method());
+    }
+  });
+  page.on("response", (response) => {
+    if (response.url().includes("/_serverFn/")) {
+      answered.push(String(response.status()));
+    }
+  });
+  page.on("pageerror", (error) => {
+    thrown.push(error.message);
+  });
+
+  await save.click();
   await expect
-    .poll(async () => ((await sheet.count()) === 0 ? "" : await sheet.innerText()))
+    .poll(async () =>
+      (await sheet.count()) === 0
+        ? ""
+        : [
+            await sheet.innerText(),
+            `busy: ${String(await save.getAttribute("aria-busy"))}`,
+            `sent: ${sent.join(",")}`,
+            `answered: ${answered.join(",")}`,
+            `thrown: ${thrown.join("; ")}`,
+          ].join("\n"),
+    )
     .toBe("");
 
   const shares = stores.getByRole("region", { name: "Split across 2 categories" });
