@@ -193,8 +193,7 @@ function Operations() {
     enabled: openId !== undefined,
   });
 
-  // The detail opens once its line is read: the row and the panel change places in one render,
-  // which is what lets the panel grow out of the row.
+  // The detail opens once its line is read, at its full size: its column widens, never empty.
   const open = openId !== undefined && opened?.ok === true ? opened.line : undefined;
 
   const openLine = (id: string) => {
@@ -337,7 +336,6 @@ function OpenLine({
 
   return (
     <LineDetail
-      id={line.id}
       label={line.label}
       amount={line.amount}
       account={account}

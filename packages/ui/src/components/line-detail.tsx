@@ -1,16 +1,16 @@
-import { domMax, LazyMotion, m } from "motion/react";
-import { useEffect, useRef, useState } from "react";
+import { use, useEffect, useRef, useState } from "react";
 import type { KeyboardEvent, ReactNode } from "react";
 
 import { useHydrated } from "../hooks/use-hydrated";
+import { useLargeScreen } from "../hooks/use-large-screen";
 import { usePageLanguage } from "../hooks/use-page-language";
 import { useUiMessages } from "../hooks/use-ui-messages";
+import { DetailCameWithPage, DetailClosing } from "../lib/detail-closing";
 import type { Money } from "../lib/money";
-import { transition } from "../lib/motion";
-import { operationLayoutId } from "../lib/operations";
 import { cn } from "../lib/utils";
 import { Amount, AmountSkeleton } from "./amount";
 import { IconButton } from "./icon-button";
+import { Sheet } from "./sheet";
 import { Skeleton, SkeletonFrame } from "./skeleton";
 
 /** The import a line came from, already worded. */
@@ -24,8 +24,6 @@ export type LineImport = {
 };
 
 export type LineDetailProps = {
-  /** The line's id: the same as its row's in `OperationsList`, which the detail grows out of. */
-  id: string;
   /** The line's label, the panel's title. */
   label: string;
   amount: Money;
@@ -70,16 +68,18 @@ function DetailGroup({ children }: { children: ReactNode }) {
  * counterparty, the original amount when it was in another currency, its expiry, "To review:
  * looks like …" on a held line, and the import it came from or "Entered by hand". Every text comes
  * worded from the page. The close button or Escape closes it; the focus goes into it when it opens.
- * `OperationsLayout` sets it beside the list on a wide screen and over it on a phone.
+ * From Tailwind's `lg` on it is a panel, which `OperationsLayout` sets in a column beside the list;
+ * below, a modal `Sheet` over the list (from the bottom on a phone, from the side on a tablet),
+ * its label and amount at its top.
  *
- * Motion: it grows out of its row of `OperationsList` (a shared layout on `operationLayoutId`,
- * 300 ms, ease-out) and its content fades in after 100 ms; closing, it folds back into the row,
- * which needs it to leave inside an `AnimatePresence` (`OperationsLayout` has one). A detail the
- * server drew (a line opened from the address) shows as it is, with no `style` attribute. Cut
+ * Motion (#128): the panel's content, laid out at its full width from the start, fades in and
+ * slides 8 px from the right (180 ms, ease-out) once its column has room for it (after 120 ms);
+ * closing, it fades out (150 ms, ease-in) before the column closes (`DetailClosing`). Nothing in
+ * it ever scales, so no text is squashed. The sheet rises from its edge in 300 ms and goes back
+ * down in 200 ms. A detail the server drew (a line opened from the address) shows as it is. Cut
  * under reduced motion.
  */
 export function LineDetail({
-  id,
   label,
   amount,
   account,
@@ -100,8 +100,10 @@ export function LineDetail({
   const pageLocale = usePageLanguage();
   const writtenIn = locale ?? pageLocale;
   const panel = useRef<HTMLElement>(null);
-  // Opened by the user once the page runs: it moves. Drawn by the server: it stays still, so that
-  // its markup carries no `style` attribute (the Content Security Policy forbids them).
+  const large = useLargeScreen();
+  const closing = use(DetailClosing);
+  const cameWithPage = use(DetailCameWithPage);
+  // Opened by the user once the page runs: it moves. Drawn by the server: it stays still.
   const hydrated = useHydrated();
   const [moves] = useState(hydrated);
 
@@ -163,59 +165,60 @@ export function LineDetail({
     </>
   );
 
-  const header = (
-    <div className="flex items-start gap-3">
-      <div className="flex min-w-0 flex-1 flex-col gap-1">
-        <h2 className="text-base font-semibold break-words">{label}</h2>
-        <Amount value={amount} size="lg" roll={false} locale={writtenIn} />
-      </div>
-      <IconButton icon="close" label={messages.overlays.close} size="sm" onClick={onClose} />
-    </div>
-  );
+  const amountShown = <Amount value={amount} size="lg" roll={false} locale={writtenIn} />;
 
-  // The panel carries its own block: it is what moves, out of its row and back.
-  const classes =
-    "flex h-full min-h-0 w-full flex-col gap-4 overflow-y-auto rounded-lg border bg-card p-4 outline-none";
-
-  if (!moves) {
+  if (!large) {
+    // A phone, a tablet: a sheet over the list, which goes back down before it is taken away.
     return (
-      <section
-        ref={panel}
-        tabIndex={-1}
-        aria-label={label}
-        data-slot="line-detail"
-        className={cn(classes)}
-        onKeyDown={onKeyDown}
+      <Sheet
+        open={!closing}
+        onOpenChange={(open) => {
+          if (!open) {
+            onClose();
+          }
+        }}
+        title={label}
+        description={amountShown}
+        // Opened from the address: there at once, never rising on its own.
+        appear={moves && !cameWithPage}
       >
-        {header}
-        <div className="flex flex-col gap-4">{content}</div>
-      </section>
+        <div data-slot="line-detail" className="flex flex-col gap-4">
+          {content}
+        </div>
+      </Sheet>
     );
   }
 
   return (
-    <LazyMotion features={domMax}>
-      <m.section
-        ref={panel}
-        layoutId={operationLayoutId(id)}
-        transition={transition.slow}
-        tabIndex={-1}
-        aria-label={label}
-        data-slot="line-detail"
-        className={cn(classes)}
-        onKeyDown={onKeyDown}
+    <section
+      ref={panel}
+      tabIndex={-1}
+      aria-label={label}
+      data-slot="line-detail"
+      className="flex h-full min-h-0 w-full flex-col overflow-hidden rounded-lg border bg-card outline-none"
+      onKeyDown={onKeyDown}
+    >
+      {/* What fades: the panel's block stays, revealed by its column's width. */}
+      <div
+        data-slot="line-detail-content"
+        data-closing={closing ? "" : undefined}
+        className={cn(
+          "flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4",
+          "transition delay-120 duration-180 ease-out",
+          moves && "starting:translate-x-2 starting:opacity-0",
+          "data-closing:opacity-0 data-closing:delay-0 data-closing:duration-150 data-closing:ease-in",
+        )}
       >
-        {header}
-        <m.div
-          className="flex flex-col gap-4"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ ...transition.base, delay: 0.1 }}
-        >
-          {content}
-        </m.div>
-      </m.section>
-    </LazyMotion>
+        <div className="flex items-start gap-3">
+          <div className="flex min-w-0 flex-1 flex-col gap-1">
+            <h2 className="text-base font-semibold break-words">{label}</h2>
+            {amountShown}
+          </div>
+          <IconButton icon="close" label={messages.overlays.close} size="sm" onClick={onClose} />
+        </div>
+        {content}
+      </div>
+    </section>
   );
 }
 

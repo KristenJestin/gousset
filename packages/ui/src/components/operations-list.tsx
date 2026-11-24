@@ -11,7 +11,6 @@ import { useUiMessages } from "../hooks/use-ui-messages";
 import type { Money } from "../lib/money";
 import { transition } from "../lib/motion";
 import { asksNextPage, rowsMark } from "../lib/next-page";
-import { operationLayoutId } from "../lib/operations";
 import { cn } from "../lib/utils";
 import { Amount, AmountSkeleton } from "./amount";
 import { Chip } from "./chip";
@@ -87,7 +86,7 @@ function rowWindow(first: Followed) {
     id === null || id === undefined ? -1 : props.rows.findIndex((row) => row.id === id);
 
   // The open line and the focused one stay in the page wherever the list is scrolled: the detail
-  // folds back into its row, and the focus never falls to the page.
+  // gives the focus back to its row, and the focus never falls to the page.
   const kept = () => [indexOf(props.openId), indexOf(focusedId)].filter((index) => index >= 0);
 
   // Not the virtualiser's `onEnd`, which asks once per row count for good: the list's rows are
@@ -141,7 +140,9 @@ function rowWindow(first: Followed) {
 const COLUMN = {
   day: "w-16 shrink-0",
   line: "flex min-w-0 flex-1 items-center gap-2",
-  account: "hidden w-40 shrink-0 truncate md:block",
+  // Shown while the list has room for it: a detail open beside a narrow list takes it, never the
+  // amounts.
+  account: "hidden w-40 shrink-0 truncate @xl:block",
   amount: "flex w-28 shrink-0 justify-end",
 };
 
@@ -160,10 +161,11 @@ const COLUMN = {
  *
  * Motion: when the rows change (a new search, a filter), the rows that stay slide to their new
  * place (a layout move, by transform), new ones fade in and gone ones fade out, in 200 ms
- * (ease-out). Rows that enter or leave the view by scrolling neither fade nor slide. Opening a
- * line, its `LineDetail` grows out of the row (a shared layout, `operationLayoutId`) and folds
- * back into it on close. Cut under reduced motion. When nothing matches, the rows that were there
- * fade out over the empty state.
+ * (ease-out). Rows that enter or leave the view by scrolling neither fade nor slide. Cut under
+ * reduced motion. When nothing matches, the rows that were there fade out over the empty state.
+ *
+ * The account column shows while the list is at least 576 px wide (a container query): a list
+ * narrowed by an open detail gives it up, never the amounts.
  */
 export function OperationsList({
   rows,
@@ -233,10 +235,6 @@ export function OperationsList({
     <RowButton
       row={row}
       open={row.id === openId}
-      // The open row gives its anchor to the detail: the one leaves as the other comes, which is
-      // what Motion's shared layout moves between. An anchor coming back under an open detail
-      // would take its place and hide it.
-      anchored={hydrated && row.id !== openId}
       locale={writtenIn}
       onOpen={onOpen}
       onFocusChange={(focused) => shown.focus(focused ? row.id : null)}
@@ -252,7 +250,7 @@ export function OperationsList({
 
   return (
     <LazyMotion features={domMax}>
-      <div data-slot="operations-list" className="flex h-full min-h-0 flex-col">
+      <div data-slot="operations-list" className="@container flex h-full min-h-0 flex-col">
         <ColumnTitles />
         <m.div
           ref={scroller}
@@ -391,7 +389,6 @@ function ColumnTitles() {
 function RowButton({
   row,
   open,
-  anchored,
   locale,
   onOpen,
   onFocusChange,
@@ -399,8 +396,6 @@ function RowButton({
 }: {
   row: OperationRow;
   open: boolean;
-  /** Carries the shared layout's anchor: once hydrated (it is Motion's), while not open. */
-  anchored: boolean;
   locale: string;
   onOpen: (id: string) => void;
   onFocusChange: (focused: boolean) => void;
@@ -423,16 +418,6 @@ function RowButton({
       onFocus={() => onFocusChange(true)}
       onBlur={() => onFocusChange(false)}
     >
-      {anchored ? (
-        // The detail grows out of this box and folds back into it: it carries nothing to see,
-        // so the row looks the same with it or without it.
-        <m.span
-          aria-hidden="true"
-          layoutId={operationLayoutId(row.id)}
-          transition={transition.slow}
-          className="pointer-events-none absolute inset-0"
-        />
-      ) : null}
       <span className={cn(COLUMN.day, "text-muted-foreground tabular-nums")}>{row.day}</span>
       <span className={COLUMN.line}>
         <span className="truncate">{row.label}</span>
@@ -464,7 +449,7 @@ function RowButton({
 export function OperationsListSkeleton({ rows = 10 }: { rows?: number }) {
   return (
     <SkeletonFrame>
-      <div className="flex h-full min-h-0 flex-col overflow-hidden">
+      <div className="@container flex h-full min-h-0 flex-col overflow-hidden">
         <div className="flex h-9 shrink-0 items-center gap-3 border-b px-3">
           <Skeleton className="h-3 w-10" />
         </div>
