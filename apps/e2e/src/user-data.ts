@@ -1,13 +1,15 @@
 import { appConnection } from "@gousset/db/app-role";
 import type { APP_ROLE } from "@gousset/db/app-role";
 import { relations } from "@gousset/db/relations";
-import { authUser } from "@gousset/db/schema/auth";
-import { importProfile } from "@gousset/db/schema/ledger";
+import { randomUUID } from "node:crypto";
+
+import { authOauthClient, authOauthConsent, authUser } from "@gousset/db/schema/auth";
+import { importProfile, importUpload } from "@gousset/db/schema/ledger";
 import { seedMadeUpData } from "@gousset/db/seed";
 import type { SeedSummary } from "@gousset/db/seed";
 import { UserData, userDataLayer } from "@gousset/db/user-data";
 import type { QueryFailed, USER_ROLE, UserTransaction } from "@gousset/db/user-data";
-import { eq, sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/node-postgres";
 import { Effect, Option, Schema } from "effect";
 
@@ -29,7 +31,17 @@ export const USER_TABLES: ReadonlyArray<UserTable> = [
   { name: "import", key: "id", rows: "imports" },
   { name: "import_file", key: "import_id", rows: "imported files" },
   { name: "import_profile", key: "id", rows: "import profiles" },
+  { name: "import_upload", key: "id", rows: "file uploads" },
 ];
+
+/**
+ * The user tables an export leaves out, and why: a file upload is a file on its way in, deleted
+ * once imported and within minutes otherwise (#129); its import, once made, is exported.
+ */
+export const NOT_EXPORTED: ReadonlySet<string> = new Set(["import_upload"]);
+
+/** The client the seeded file uploads' grant is for: no test authorizes it, none revokes it. */
+const SEED_CLIENT_ID = "gousset-e2e-seed";
 
 /**
  * Every table of the `public` schema the app's own role reaches, outside a user's transaction: what
@@ -236,9 +248,9 @@ export function openUserData(database: string) {
     seed: (owner: string): Promise<SeedSummary> =>
       Effect.runPromise(
         seedMadeUpData(owner, ["2026-09", "2026-10"], "2026-10-31").pipe(
-          Effect.tap((summary) =>
+          Effect.tap((seeded) =>
             Effect.gen(function* () {
-              if (summary.accounts === 0) {
+              if (seeded.accounts === 0) {
                 return;
               }
 
@@ -257,6 +269,69 @@ export function openUserData(database: string) {
           Effect.provide(layer),
         ),
       ),
+
+    /**
+     * A file upload of `owner`'s, far from its expiry, for a grant of a client of its own, unless
+     * they have one already. The grant is listed among the user's connected clients: a spec that
+     * seeds it forgets it when it ends (`forgetFileUploads`), so that other specs of the worker
+     * see the user's clients as they left them.
+     */
+    seedFileUpload: async (owner: string): Promise<void> => {
+      const uploads = await Effect.runPromise(
+        transaction(owner, (each) => each.select({ id: importUpload.id }).from(importUpload)),
+      );
+
+      if (uploads.length > 0) {
+        return;
+      }
+
+      const now = new Date();
+      const grantId = randomUUID();
+
+      await db
+        .insert(authOauthClient)
+        .values({
+          id: randomUUID(),
+          clientId: SEED_CLIENT_ID,
+          name: "Seeded uploads",
+          redirectUris: ["http://127.0.0.1:47213/seed/callback"],
+          createdAt: now,
+          updatedAt: now,
+        })
+        .onConflictDoNothing({ target: authOauthClient.clientId });
+
+      await db.insert(authOauthConsent).values({
+        id: grantId,
+        clientId: SEED_CLIENT_ID,
+        userId: owner,
+        scopes: ["read", "write"],
+        createdAt: now,
+        updatedAt: now,
+      });
+
+      await Effect.runPromise(
+        transaction(owner, (each) =>
+          each.insert(importUpload).values({
+            userId: owner,
+            grantId,
+            secretSha256: "0".repeat(64),
+            fileName: "seeded.ofx",
+            size: 1,
+            parts: 1,
+            expiresAt: new Date("2099-01-01T00:00:00.000Z"),
+          }),
+        ),
+      );
+    },
+
+    /** Forgets the grant `seedFileUpload` made for `owner`, and its file uploads with it. */
+    forgetFileUploads: async (owner: string): Promise<void> => {
+      await db
+        .delete(authOauthConsent)
+        .where(
+          and(eq(authOauthConsent.userId, owner), eq(authOauthConsent.clientId, SEED_CLIENT_ID)),
+        );
+    },
 
     /**
      * Postgres's code when it refuses `work` run on the app's own handle, outside any user's

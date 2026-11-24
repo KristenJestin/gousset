@@ -16,7 +16,7 @@ import { connectInProcess } from "./test-client";
 // room: the maintainer decides.
 const MAX_TOOLS = 15;
 const MAX_LISTING_CHARACTERS = 30_000;
-const MAX_DESCRIPTION_CHARACTERS = 2048;
+const MAX_DESCRIPTION_CHARACTERS = 4000;
 const MAX_INSTRUCTION_WORDS = 600;
 
 const reader = { userId: "guard", canWrite: false };

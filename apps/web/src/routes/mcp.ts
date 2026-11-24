@@ -98,7 +98,14 @@ function protect(resource: string) {
 
       const token = (request.headers.get("authorization") ?? "").replace(/^Bearer /i, "");
 
-      return endpoint(request, authInfoOf({ userId, canWrite }, token, clientId));
+      return endpoint(
+        request,
+        authInfoOf(
+          { userId, canWrite, grantId: grant.id, origin: mcpAddress.origin },
+          token,
+          clientId,
+        ),
+      );
     },
     { resource, challengeScopes: MCP_SCOPES },
   );

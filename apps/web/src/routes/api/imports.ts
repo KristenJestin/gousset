@@ -3,6 +3,7 @@ import { MAX_FILE_BYTES } from "@gousset/core/imports";
 import { createFileRoute } from "@tanstack/react-router";
 import { Effect, Option, Schema } from "effect";
 
+import { boundedBody } from "../../lib/bounded-body";
 import type { UploadAnswer } from "../../lib/upload";
 import { usableSession } from "../../lib/session.server";
 import { runCore } from "../../services";
@@ -21,51 +22,6 @@ const json = (body: UploadAnswer, status = 200) =>
   });
 
 const refused = (code: string, status: number) => json({ refused: code }, status);
-
-/**
- * The request's body, read until `MAX_FILE_BYTES`: past it, reading stops and `undefined` says
- * the file is too large, before anything is kept or read. A `Content-Length` over the limit is
- * refused before a byte is read.
- */
-async function boundedBody(request: Request): Promise<Uint8Array | undefined> {
-  const declared = Number(request.headers.get("content-length") ?? "0");
-
-  if (declared > MAX_FILE_BYTES || request.body === null) {
-    return declared > MAX_FILE_BYTES ? undefined : new Uint8Array();
-  }
-
-  const reader = request.body.getReader();
-  const parts: Array<Uint8Array> = [];
-  let size = 0;
-
-  for (;;) {
-    const { done, value } = await reader.read();
-
-    if (done) {
-      break;
-    }
-
-    size += value.byteLength;
-
-    if (size > MAX_FILE_BYTES) {
-      await reader.cancel();
-
-      return undefined;
-    }
-
-    parts.push(value);
-  }
-
-  const bytes = new Uint8Array(size);
-  let at = 0;
-
-  for (const part of parts) {
-    bytes.set(part, at);
-    at += part.byteLength;
-  }
-
-  return bytes;
-}
 
 /**
  * Uploads one statement file for the signed-in user and starts its import: the body is the file's
@@ -91,7 +47,7 @@ export const Route = createFileRoute("/api/imports")({
           return refused(refusal, refusal === "SIGN_IN_REQUIRED" ? 401 : 403);
         }
 
-        const content = await boundedBody(request);
+        const content = await boundedBody(request, MAX_FILE_BYTES);
 
         if (content === undefined) {
           return refused("FILE_TOO_LARGE", 413);
