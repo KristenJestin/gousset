@@ -22,13 +22,18 @@ const ID = "019a4f2e-7c1d-7a3b-9e4f-0123456789ab";
 describe("upload addresses", () => {
   test("a token names its owner, its file upload and its secret, and reads back", () => {
     fc.assert(
-      fc.property(fc.string({ minLength: 1, maxLength: 64 }), fc.uuid(), (owner, id) => {
-        const secret = newSecret();
+      // Any owner without a control character; better-auth's ids are letters and digits.
+      fc.property(
+        fc.string({ minLength: 1, maxLength: 64 }).filter((owner) => !/\p{Cc}/u.test(owner)),
+        fc.uuid(),
+        (owner, id) => {
+          const secret = newSecret();
 
-        expect(parseUploadToken(uploadToken(owner, id, secret))).toEqual(
-          Option.some({ owner, id, secret }),
-        );
-      }),
+          expect(parseUploadToken(uploadToken(owner, id, secret))).toEqual(
+            Option.some({ owner, id, secret }),
+          );
+        },
+      ),
     );
   });
 
@@ -54,6 +59,8 @@ describe("upload addresses", () => {
       token.slice(0, -1),
       `${token}A`,
       `.${ID}.${secret}`,
+      // An owner of a control character, which Postgres refuses as a setting.
+      `AA.${ID}.${secret}`,
       // Another spelling of the same owner, which base64url would decode alike.
       `${token.split(".")[0] ?? ""}=.${ID}.${secret}`,
     ]) {

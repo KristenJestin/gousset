@@ -19,6 +19,12 @@ import type { ImportFormat } from "./summary";
 /** How long a file upload waits for its file and its import before it expires. */
 export const UPLOAD_MINUTES = 15;
 
+/**
+ * How long an expired file upload stays before the sweep deletes it: `status` says it expired
+ * meanwhile, rather than that it never was.
+ */
+export const SWEEP_AFTER_MINUTES = 10;
+
 /** How many file uploads a user may have waiting at once. */
 export const MAX_PENDING_UPLOADS = 5;
 
@@ -103,8 +109,9 @@ export function parseUploadToken(
 
   const owner = Buffer.from(encoded, "base64url").toString("utf8");
 
-  // base64url decodes leniently: only the one spelling `uploadToken` writes names its owner.
-  return owner !== "" && encodeOwner(owner) === encoded
+  // base64url decodes leniently: only the one spelling `uploadToken` writes names its owner. No
+  // user's id holds a control character, which Postgres would refuse as a setting.
+  return owner !== "" && !/\p{Cc}/u.test(owner) && encodeOwner(owner) === encoded
     ? Option.some({ owner, id, secret })
     : Option.none();
 }
@@ -231,15 +238,15 @@ export async function deleteExpired(transaction: UserTransaction, now: Date): Pr
 }
 
 /**
- * Deletes `owner`'s file uploads past their expiry, with what they received: the sweep job runs it
- * for every user. How many there were.
+ * Deletes `owner`'s file uploads expired `SWEEP_AFTER_MINUTES` ago or more, with what they
+ * received: the sweep job runs it for every user. How many there were.
  */
 export const sweepUploads = (owner: string) =>
   Effect.gen(function* () {
     const userData = yield* UserData;
 
     return yield* userData.transaction(owner, (transaction) =>
-      deleteExpired(transaction, new Date()),
+      deleteExpired(transaction, new Date(Date.now() - SWEEP_AFTER_MINUTES * 60_000)),
     );
   });
 

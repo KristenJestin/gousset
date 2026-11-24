@@ -159,7 +159,8 @@ async function uploadsOf(database: string, owner: string) {
 
 /** Waits for the import an upload's answer names to be done, and answers its status. */
 async function importDone(client: Client, uploaded: string) {
-  const importId = /Import id: ([\da-f-]{36})/.exec(uploaded)?.[1] ?? "";
+  // Done or waiting, the answer names it; still running, it writes the status call to follow it.
+  const importId = /(?:Import id: |"import":")([\da-f-]{36})/.exec(uploaded)?.[1] ?? "";
 
   expect(importId, uploaded).not.toBe("");
 
@@ -273,16 +274,21 @@ test("an expired file upload is refused", async ({ app, user, page, mcpClientId 
   expect(upload.text).toContain("(15 minutes)");
   expect((await send(upload.address, bytes)).status).toBe(200);
 
-  // Its fifteen minutes past, as the clock would make them.
-  const data = openUserData(app.database);
+  // Its fifteen minutes past, as the clock would make them: expired a second ago, which the sweep
+  // job, scheduled in this app too, leaves for ten minutes more.
+  const expireAt = async (expiresAt: Date) => {
+    const data = openUserData(app.database);
 
-  try {
-    await data.asUser(owner, (transaction) =>
-      transaction.update(importUpload).set({ expiresAt: new Date(Date.now() - 1000) }),
-    );
-  } finally {
-    await data.close();
-  }
+    try {
+      await data.asUser(owner, (transaction) =>
+        transaction.update(importUpload).set({ expiresAt }),
+      );
+    } finally {
+      await data.close();
+    }
+  };
+
+  await expireAt(new Date(Date.now() - 1000));
 
   const status = await callText(client, { action: "status", file_upload: upload.id });
 
@@ -297,13 +303,16 @@ test("an expired file upload is refused", async ({ app, user, page, mcpClientId 
 
   expect(resent.status).toBe(410);
 
-  // The sweep deletes it, with what it received.
+  // Expired long enough, the sweep deletes it with what it received: this call, or the scheduled
+  // job if it ran meanwhile; either way, nothing is left.
+  await expireAt(new Date(Date.now() - 3_600_000));
+
   const sweeping = openUserData(app.database);
 
   try {
-    expect(await Effect.runPromise(sweepUploads(owner).pipe(Effect.provide(sweeping.layer)))).toBe(
-      1,
-    );
+    expect(
+      await Effect.runPromise(sweepUploads(owner).pipe(Effect.provide(sweeping.layer))),
+    ).toBeLessThanOrEqual(1);
   } finally {
     await sweeping.close();
   }

@@ -178,6 +178,30 @@ async function addressed(token: string) {
   return named;
 }
 
+/**
+ * The addresses a request is being read for, in this process: one at a time each, so that requests
+ * sent at once to one address never each hold a part in memory before all but one are refused.
+ */
+const receiving = new Set<string>();
+
+/** Receives what was sent to an address, the only request reading for it meanwhile. */
+async function receiveAlone(request: Request, token: string): Promise<Response> {
+  if (receiving.has(token)) {
+    return text(
+      "A part is being received at this address: wait for its answer, then send the next.",
+      409,
+    );
+  }
+
+  receiving.add(token);
+
+  try {
+    return await receive(request, token);
+  } finally {
+    receiving.delete(token);
+  }
+}
+
 async function receive(request: Request, token: string): Promise<Response> {
   if (fromBrowser(request.headers)) {
     return text(
@@ -232,7 +256,7 @@ async function receive(request: Request, token: string): Promise<Response> {
 export const Route = createFileRoute("/api/import-uploads/$token")({
   server: {
     handlers: {
-      POST: async ({ request, params }) => receive(request, params.token),
+      POST: async ({ request, params }) => receiveAlone(request, params.token),
     },
   },
 });

@@ -95,6 +95,10 @@ type ImportsInput = typeof ImportsInput.Type;
 
 const DESCRIPTION = `Imports bank statement files into the user's accounts, without duplicates, and lists, follows and undoes imports. Use it when the user gives a statement file (OFX, QFX, QIF, CAMT.053, MT940, CSV) or asks what was imported.
 
+A file you can reach from a shell, larger than a few tens of kilobytes, goes through a file upload, so that its bytes never pass through the conversation: {"action":"create_upload","file_name":"2024-2026.ofx","size":1048576} (its exact size in bytes), then, from that shell, curl -sS -F 'file=@2024-2026.ofx' <the address it gave>, then {"action":"upload","file_upload":"<the id it gave>"}. A smaller file goes in the call itself: {"action":"upload","file_name":"october.ofx","content":"OFXHEADER:100..."}
+
+Refused: an empty file, a file over 10 MB (through content, a request carries 4 MB at most, about 3 MB of file in base64: send a larger one through create_upload), a format not recognised, an account name matching none or several of the user's accounts (the refusal names them), more than ${MAX_PENDING_UPLOADS} file uploads waiting, a file upload used, expired or not received whole, an import id the user does not have, and undoing an import still running. A CSV file's columns are confirmed on Gousset's import screen. Writes need a connection allowed to read and write.
+
 Actions:
 - upload (writes): imports one file. Give file_name and exactly one of content (the file's text) or content_base64 (its bytes, for a file not in UTF-8); or file_upload alone, for a file sent to a file upload. The format is told from the file; name it with format when it is not. The account is recognised from the file (IBAN, number); name it with account, the user's name for it, when the file does not say it (QIF and CSV never do). It waits up to 15 seconds and answers the summary: lines read, added, already known (duplicates, never added twice) and held for review as near duplicates. A file imported before adds nothing again, and the answer says so.
 - create_upload (writes): for a file you can reach from a shell, larger than a few tens of kilobytes: its bytes then never pass through the conversation. Give file_name and size (its exact size in bytes), and account or format when needed. It answers a file upload's id and its address, secret and valid ${UPLOAD_MINUTES} minutes. Send the file from your shell, as it is: curl -sS -F 'file=@statement.ofx' <address>. Then call upload with file_upload. A proxy refusing so large a request: declare parts (2 to ${MAX_UPLOAD_PARTS}) and send each part in order, with its number (-F part=1). A file upload is imported once, by this connection only, then deleted; unused, it expires.
@@ -103,12 +107,8 @@ Actions:
 - undo (writes, destructive): removes exactly the lines one import added; lines of other imports it held count again.
 - profiles (reads): the CSV import profiles, the user's and those shipped with Gousset, and how each reads a file. With import (a CSV import's id): those that read its file, and the one it used.
 
-Refused: an empty file, a file over 10 MB (through content, a request carries 4 MB at most, about 3 MB of file in base64: send a larger one through create_upload), a format not recognised, an account name matching none or several of the user's accounts (the refusal names them), an import id the user does not have, undoing an import still running, more than ${MAX_PENDING_UPLOADS} file uploads waiting, and a file upload used, expired or not received whole. A CSV file's columns are confirmed on Gousset's import screen. Writes need a connection allowed to read and write.
-
-Examples:
-{"action":"upload","file_name":"october.ofx","content":"OFXHEADER:100..."}
+More examples:
 {"action":"upload","file_name":"export.csv","content":"date;label;amount...","account":"Joint account"}
-{"action":"create_upload","file_name":"2024-2026.ofx","size":1048576}, then curl -sS -F 'file=@2024-2026.ofx' <the address it gave>, then {"action":"upload","file_upload":"<the id it gave>"}
 {"action":"undo","import":"<the id that upload or list gave>"}`;
 
 /** A call's arguments, as an example writes them. */
@@ -665,7 +665,12 @@ function uploadFile(input: ImportsInput, caller: Caller, id: string) {
           ...again,
           account: "Current account",
         }),
-      ImportUnavailable: UNAVAILABLE,
+      // The file upload was used: the import holding its file exists, failed.
+      ImportUnavailable: () =>
+        refuse(
+          "Gousset kept the file but could not start its import just now: the import is listed as failed, and the file upload is used. Find it with list; the user runs it again on Gousset's import screen, or make a new file upload and send the file again.",
+          { action: "list" },
+        ),
       ImportNotFound: (missing) => IMPORT_NOT_FOUND(missing.importId),
       QueryFailed: failure,
     }),

@@ -10,6 +10,7 @@ import {
   ImportBusy,
   ImportNotFound,
   ImportProfiles,
+  ImportUnavailable,
   Imports,
   TooManyFileUploads,
   UnknownFormat,
@@ -107,7 +108,12 @@ type Fake = {
   createFailure: TooManyFileUploads | FileTooLarge | null;
   /** What each file upload's import was started with: its id, its grant and the choices. */
   readonly uploadStarts: Array<{ id: string; grantId: string; choices: UploadChoices }>;
-  uploadFailure: FileUploadNotFound | FileUploadExpired | FileUploadIncomplete | null;
+  uploadFailure:
+    | FileUploadNotFound
+    | FileUploadExpired
+    | FileUploadIncomplete
+    | ImportUnavailable
+    | null;
   /** What `uploadStatus` answers, by file upload id. */
   uploadStatuses: { [id: string]: FileUploadStatus };
 };
@@ -687,6 +693,16 @@ describe("imports file uploads", () => {
 
     expect(tool?.description).toContain("create_upload (writes)");
     expect(tool?.description).toContain("curl -sS -F 'file=@statement.ofx' <address>");
+
+    // What a client that cuts at 2,048 characters still reads: the way through a file upload,
+    // and the refusals.
+    const kept = tool?.description?.slice(0, 2048) ?? "";
+
+    expect(kept).toContain('{"action":"create_upload","file_name":"2024-2026.ofx","size":1048576}');
+    expect(kept).toContain("curl -sS -F 'file=@2024-2026.ofx' <the address it gave>");
+    expect(kept).toContain('{"action":"upload","file_upload":"<the id it gave>"}');
+    expect(kept).toContain("Refused:");
+    expect(kept).toContain("Writes need a connection allowed to read and write.");
     expect(tool?.annotations?.destructiveHint).toBe(true);
     expect(tool?.annotations?.readOnlyHint).toBe(false);
   });
@@ -874,6 +890,12 @@ describe("imports refusals", () => {
         {},
         { action: "status", file_upload: "nope" },
         "no file upload",
+      ],
+      [
+        "a file upload whose import the queue did not take",
+        { uploadFailure: new ImportUnavailable() },
+        { action: "upload", file_upload: UPLOAD_ID },
+        "the file upload is used",
       ],
     ];
 

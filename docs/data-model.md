@@ -38,7 +38,7 @@ A table below gives each column its Postgres type, whether it may be null (**nul
 
 **Every row of a user's data carries `user_id text not null`**, referencing `auth_user.id` with `on delete cascade`: deleting a user deletes their data, and an export (#22) is one query per table. Child tables carry it too (a line has its own `user_id`, not only its account's), so that every rule of isolation reads one column, with no join.
 
-**A row can only point to a row of the same user.** Each table that is referred to has a unique key on `(user_id, id)`, and the tables that refer to it use composite foreign keys: `statement_line (user_id, account_id) → account (user_id, id)`. The database itself refuses a line of one user on another user's account, whatever the code does. Postgres checks foreign keys as the table's owner, past row-level security, so the check holds whoever runs the query. A nullable reference is checked only when set (`match simple`).
+**A row can only point to a row of the same user.** Each table that is referred to has a unique key on `(user_id, id)`, and the tables that refer to it use composite foreign keys: `statement_line (user_id, account_id) → account (user_id, id)`. The database itself refuses a line of one user on another user's account, whatever the code does. Postgres checks foreign keys as the table's owner, past row-level security, so the check holds whoever runs the query. A nullable reference is checked only when set (`match simple`). One exception: a file upload's grant (`import_upload.grant_id`, below) points to better-auth's `auth_oauth_consent` by its id alone, a table Gousset does not shape.
 
 **Row-level security keeps each user's rows apart** (#13), set per transaction by the server:
 
@@ -227,7 +227,7 @@ The job reads the file from there, so an import interrupted by a restart resumes
 |---|---|---|---|---|
 | `id` | `uuid` | | `uuidv7()` | primary key |
 | `user_id` | `text` | | | |
-| `grant_id` | `text` | | | the MCP grant that made it: `→ auth_oauth_consent on delete cascade`, so that revoking the client, a ban or a new password (each deletes the grant) deletes it at once |
+| `grant_id` | `text` | | | the MCP grant that made it: `→ auth_oauth_consent on delete cascade`, so that revoking the client, a ban or a new password (each deletes the grant) deletes it at once. The one reference of a user's row that is not composite: better-auth's table has no unique `(user_id, id)`, and `pnpm auth:generate` writes it whole; Gousset sets it from the grant the MCP door verified for the caller, and the upload route reads the grant again by both its id and its user |
 | `secret_sha256` | `text` | | | the SHA-256 of its address's secret (256 random bits), in hexadecimal; the secret itself is never kept |
 | `file_name` | `text` | | | as the agent named it, for the user only |
 | `size` | `integer` | | | the size declared, in bytes: the parts add up to it exactly |
@@ -240,7 +240,7 @@ The job reads the file from there, so an import interrupted by a restart resumes
 
 - Checks: `size > 0`; `parts > 0 and parts_received between 0 and parts`; `octet_length(content) <= size`.
 - Index: `(grant_id)`, for the cascade. A user has five at most waiting at once.
-- It is not exported: a file in transit, imported or deleted within minutes; its import, once made, is. The sweep job deletes those past their expiry every ten minutes, each user's in a transaction of theirs ([`architecture.md`](architecture.md#background-jobs)).
+- It is not exported: a file in transit, imported or deleted within minutes; its import, once made, is. The sweep job runs every ten minutes and deletes those expired ten minutes ago or more (meanwhile `status` says it expired, rather than that it never was), each user's in a transaction of theirs ([`architecture.md`](architecture.md#background-jobs)).
 
 **The dedup key** (#20), computed by the import (`packages/core`) from each line a reader gives:
 
