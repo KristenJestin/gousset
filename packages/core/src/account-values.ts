@@ -149,6 +149,11 @@ export const AccountId = Schema.String.check(
   Schema.isUUID(undefined, { message: "An account is named by its id, a UUID." }),
 );
 
+/** A category's id, as the database makes them. */
+export const CategoryId = Schema.String.check(
+  Schema.isUUID(undefined, { message: "A category is named by its id, a UUID." }),
+);
+
 /** An amount in minor units (cents for the euro): an integer, never a float. */
 export const MinorAmount = Schema.Int;
 
@@ -167,6 +172,12 @@ export const AccountInput = Schema.Struct({
   settlesIntoAccountId: Schema.optional(AccountId),
   /** Read for a benefit account only. Left out: `oldest_first` on create, unchanged on edit. */
   creditOrder: Schema.optional(CreditOrder),
+  /**
+   * Read for an account kept by its balance only: the category its movement goes to (#31); `null`
+   * for none, each movement then going to its kind's fallback. Left out: none on create, unchanged
+   * on edit, so that an edit of other settings never clears it.
+   */
+  balanceCategoryId: Schema.optional(Schema.NullOr(CategoryId)),
 });
 
 export type AccountInput = typeof AccountInput.Type;

@@ -70,6 +70,8 @@ export type LineRow = {
    * (held, of no amount) or split across several.
    */
   readonly category: LineCategory | null;
+  /** The movement a noted balance makes (#31): it has no label, the interface names it. */
+  readonly fromBalance: boolean;
 };
 
 export type LinePage = {
@@ -279,6 +281,7 @@ function rowOf(line: FoundLine, reviewing = false): LineRow {
     },
     toReview: line.state === "held" || reviewing,
     category: line.category,
+    fromBalance: line.fromBalance,
   };
 }
 

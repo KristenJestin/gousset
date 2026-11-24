@@ -10,7 +10,13 @@ import {
   memoryId,
   memoryLineStore,
 } from "@gousset/core";
-import type { AccountRecord, MemoryLine, MemoryRows } from "@gousset/core";
+import type {
+  AccountRecord,
+  MemoryLine,
+  MemoryLineDetail,
+  MemoryLineRows,
+  MemoryRows,
+} from "@gousset/core";
 import type { Client } from "@modelcontextprotocol/client";
 import { Effect, Layer } from "effect";
 import { TestClock } from "effect/testing";
@@ -18,7 +24,7 @@ import { describe, expect, test } from "vite-plus/test";
 
 import { goussetServer } from "../gousset";
 import type { GoussetServices } from "../gousset";
-import { RESULT_LIMIT } from "../results";
+import { ERROR_LIMIT, RESULT_LIMIT } from "../results";
 import { connectInProcess } from "../test-client";
 import type { Runner } from "../tool";
 
@@ -26,6 +32,7 @@ import type { Runner } from "../tool";
 
 const TODAY = "2026-11-23";
 const reader = { userId: "ada", canWrite: false, currency: "EUR" };
+const writer = { userId: "ada", canWrite: true, currency: "EUR" };
 
 function account(name: string, change: Partial<AccountRecord> = {}): AccountRecord {
   return {
@@ -41,6 +48,7 @@ function account(name: string, change: Partial<AccountRecord> = {}): AccountReco
     closedOn: null,
     settlesIntoAccountId: null,
     creditOrder: "oldest_first",
+    balanceCategoryId: null,
     ...change,
   };
 }
@@ -117,12 +125,13 @@ const ROWS: MemoryRows = {
   imports: [{ accountId: current.id, status: "done", periodTo: "2026-10-31" }],
 };
 
-function onToday(rows: MemoryRows): Runner<GoussetServices> {
+/** `lineRows`: the lines a search finds, where a noted balance's movement is looked for. */
+function onToday(rows: MemoryRows, lineRows: MemoryLineRows = {}): Runner<GoussetServices> {
   const layer = Layer.mergeAll(
     FixtureLedger,
     memoryAccountStore(new Map([[reader.userId, rows]])),
-    // accounts never reaches the imports, the export nor the line search.
-    memoryLineStore(),
+    // accounts never reaches the imports nor the export.
+    memoryLineStore(new Map([[reader.userId, lineRows]])),
     memoryCategoryStore(),
     Layer.mock(Imports, {}),
     Layer.mock(ImportProfiles, {}),
@@ -512,6 +521,197 @@ describe("accounts show, a benefit account", () => {
   });
 });
 
+const giftCard = account("Gift card", {
+  kind: "benefit",
+  mode: "balance",
+  institution: "Northbank",
+});
+
+/** A movement Gousset made of the balance noted on 2026-10-31: the store is given it. */
+function movementOf(amountMinor: number): MemoryLineDetail {
+  return {
+    id: memoryId(),
+    accountId: giftCard.id,
+    bookedOn: "2026-10-31",
+    valueOn: null,
+    amountMinor,
+    label: "",
+    memo: null,
+    counterpartyName: null,
+    source: "balance",
+  };
+}
+
+const movement: MemoryLineDetail = {
+  ...movementOf(-9000),
+  category: { id: memoryId(), name: "Meal vouchers", parentName: "Food", kind: "expense" },
+};
+
+const NOTED: MemoryLineRows = {
+  accounts: [current, livret, otherLivret, giftCard],
+  balances: [{ accountId: giftCard.id, day: "2026-09-30", minor: 12_000, source: "noted" }],
+};
+
+/** A call to accounts on rows both stores hold, as `caller`: a writer unless said otherwise. */
+async function noting(
+  args: { [key: string]: string },
+  rows: MemoryLineRows = NOTED,
+  caller = writer,
+) {
+  const connected = await connectInProcess(
+    goussetServer,
+    { run: onToday(rows, rows) },
+    caller,
+    "2025-11-25",
+  );
+
+  const result = await connected.callTool({ name: "accounts", arguments: args });
+  const [first] = result.content ?? [];
+
+  return { text: first?.type === "text" ? first.text : "", isError: result.isError === true };
+}
+
+const NOTE = { action: "note_balance", name: "gift card", day: "2026-10-31", balance: "80.00" };
+
+describe("accounts note_balance", () => {
+  test("notes the balance, and names the movement line Gousset made of it", async () => {
+    const { text, isError } = await noting(NOTE, { ...NOTED, lines: [movement] });
+
+    expect(isError, text).toBe(false);
+    expect(text).toBe(
+      "Noted: Gift card (Northbank) held 80.00 EUR at the end of 2026-10-31.\nIts movement, the line Gousset made of it: -90.00 EUR, an expense in Food > Meal vouchers. It is the noted balance less the one before (or the opening balance) and less the account's other lines booked between them, such as transfers.",
+    );
+    expect(text).not.toContain(giftCard.id);
+  });
+
+  test("says when the balance makes no movement", async () => {
+    // A movement of zero is a line of no amount, in no category.
+    const { text, isError } = await noting(NOTE, { ...NOTED, lines: [movementOf(0)] });
+
+    expect(isError, text).toBe(false);
+    expect(text).toContain("No movement: the noted balance is the one before plus");
+  });
+
+  test("reads a balance owed and the currency's minor units, and says where to read its movement", async () => {
+    const { text, isError } = await noting({
+      action: "note_balance",
+      name: "Gift card",
+      institution: "northbank",
+      day: "2026-11-20",
+      balance: "-12,5",
+    });
+
+    expect(isError, text).toBe(false);
+    expect(text).toContain(
+      "Noted: Gift card (Northbank) held -12.50 EUR at the end of 2026-11-20.",
+    );
+    // The memory store makes no movement: the result says how to read it.
+    expect(text).toContain(
+      'read it with lines {"action":"search","account":"Gift card","institution":"Northbank","from":"2026-11-20","to":"2026-11-20"}',
+    );
+  });
+
+  test("refuses a second balance on one day", async () => {
+    const { text, isError } = await noting({ ...NOTE, day: "2026-09-30" });
+
+    expect(isError).toBe(true);
+    expect(text).toContain('A balance of "gift card" is already noted for 2026-09-30: one a day.');
+    expect(text).toContain('A valid call: accounts {"action":"show","name":"gift card"}');
+    expect(text.length).toBeLessThan(ERROR_LIMIT);
+  });
+
+  test("refuses an account kept by its lines, and an unknown name, with a call that answers", async () => {
+    for (const name of ["Current account", "Joint account"]) {
+      const { text, isError } = await noting({ ...NOTE, name });
+
+      expect(isError, name).toBe(true);
+      expect(text.length).toBeLessThan(ERROR_LIMIT);
+      expect(text, name).toMatch(/\nA valid call: accounts \{"action":"list"\}$/);
+      expect((await noting({ action: "list" })).isError).toBe(false);
+    }
+
+    expect((await noting({ ...NOTE, name: "Current account" })).text).toContain(
+      '"Current account" is kept by its lines',
+    );
+    expect((await noting({ ...NOTE, name: "Joint account" })).text).toContain(
+      "Their accounts: Current account (Riverside Bank), Livret A (Riverside Bank), Livret A (Northbank), Gift card (Northbank).",
+    );
+  });
+
+  test("refuses a name two accounts share, with the call that names the first", async () => {
+    const { text, isError } = await noting({ ...NOTE, name: "Livret A" });
+
+    expect(isError).toBe(true);
+    expect(text).toContain("Livret A (Riverside Bank), Livret A (Northbank). Add institution");
+    expect(text).toContain(
+      'A valid call: accounts {"action":"note_balance","name":"Livret A","institution":"Riverside Bank","day":"2026-10-31","balance":"80.00"}',
+    );
+  });
+
+  test("refuses a day or a balance it cannot read, and a call without them, saying how to write them", async () => {
+    const day = await noting({ ...NOTE, day: "2026-02-30" });
+
+    expect(day.isError).toBe(true);
+    expect(day.text).toContain(
+      'day is the day whose end the balance is noted at, a day of the calendar written YYYY-MM-DD: "2026-02-30" is none.',
+    );
+    expect(day.text).toContain('"day":"2026-10-31"');
+
+    for (const balance of ["80.001", "1,250.50", "80 EUR", ""]) {
+      const refused = await noting({ ...NOTE, balance });
+
+      expect(refused.isError, balance).toBe(true);
+      expect(refused.text, balance).toContain(
+        "balance is the balance at the end of the day, a decimal in EUR with at most 2 decimals",
+      );
+      expect(refused.text, balance).toContain('"balance":"80.00"}');
+    }
+
+    const bare = await noting({ action: "note_balance", name: "Gift card" });
+
+    expect(bare.isError).toBe(true);
+    expect(bare.text).toContain("note_balance needs the account's name");
+    expect(bare.text).toContain(
+      'A valid call: accounts {"action":"note_balance","name":"Gift card","day":"2026-10-31","balance":"80.00"}',
+    );
+  });
+
+  test("is refused to a token that reads only, saying how to allow writes", async () => {
+    const { text, isError } = await noting(NOTE, NOTED, reader);
+
+    expect(isError).toBe(true);
+    expect(text).toContain("this connection was allowed to read only");
+    expect(text).toContain("choose Read and write on Gousset's consent page");
+  });
+});
+
+describe("accounts show, an account kept by its balance", () => {
+  test("says where its movements go, and names each movement line", async () => {
+    const { text, isError } = await noting(
+      { action: "show", name: "Gift card" },
+      { ...NOTED, lines: [movement] },
+      reader,
+    );
+
+    expect(isError, text).toBe(false);
+    expect(text).toContain(
+      "Gift card (Northbank), benefit account in EUR, kept by a balance noted each month.",
+    );
+    // The memory store names no category for an account: its movements go to the fallback.
+    expect(text).toContain(
+      "Each noted balance makes one line, its movement: the noted balance less the one before and less the account's other lines booked between them. No category is chosen for them: each goes to its kind's fallback.",
+    );
+    expect(text).toContain("- 2026-10-31: -90.00 EUR, movement of the noted balance");
+    expect(text).not.toContain("(no label)");
+  });
+
+  test("an account kept by its lines says nothing of movements", async () => {
+    const { text } = await accounts({ action: "show", name: "Current account" });
+
+    expect(text).not.toContain("noted balance");
+  });
+});
+
 describe("the accounts tool", () => {
   test("tells an agent that show answers what expires when", async () => {
     const { tools } = await (await client()).listTools();
@@ -520,7 +720,7 @@ describe("the accounts tool", () => {
     expect(tool?.description).toContain("what expires when on my meal vouchers?");
   });
 
-  test("only reads, and says so", async () => {
+  test("notes a balance with the write scope, and says so", async () => {
     const { tools } = await (await client()).listTools();
     const tool = tools.find((each) => each.name === "accounts");
 
@@ -534,9 +734,13 @@ describe("the accounts tool", () => {
       "categories",
     ]);
     expect(tool?.title).toBe("Accounts");
+    expect(tool?.description).toContain(
+      '{"action":"note_balance","name":"Gift card","day":"2026-10-31","balance":"80.00"}',
+    );
+    // A write; noting a day again is refused, so a repeat changes nothing more.
     expect(tool?.annotations).toEqual({
-      readOnlyHint: true,
-      destructiveHint: false,
+      readOnlyHint: false,
+      destructiveHint: true,
       idempotentHint: true,
       openWorldHint: false,
     });

@@ -160,9 +160,15 @@ export const account = pgTable.withRLS(
     creditOrder: creditOrder("credit_order").default("oldest_first").notNull(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
+    // Added by v0.3 (#31), after the others: the category a balance-mode account's movement goes
+    // to. Its key (`on delete set null (balance_category_id)`, which Drizzle cannot write) is in the
+    // custom migration `*_balance_lines_keys`.
+    balanceCategoryId: uuid("balance_category_id"),
   },
   (table) => [
     unique("account_user_id_id_key").on(table.userId, table.id),
+    // A merge of categories moves it, and a deleted category clears it.
+    index("account_balance_category_id_idx").on(table.balanceCategoryId),
     unique("account_user_id_iban_key").on(table.userId, table.iban),
     check("account_currency_iso_4217", sql`${table.currency} ~ '^[A-Z]{3}$'`),
     // One written form, so that the unique key compares like with like.
@@ -275,6 +281,8 @@ export const accountBalance = pgTable.withRLS(
     importId: uuid("import_id"),
   },
   (table) => [
+    // What a line made from a noted balance points to (v0.3, #31).
+    unique("account_balance_user_id_id_key").on(table.userId, table.id),
     foreignKey({
       name: "account_balance_account_fk",
       columns: [table.userId, table.accountId],
@@ -335,6 +343,8 @@ export const statementLine = pgTable.withRLS(
     // The user said this line is no transfer (unpaired it): the automatic pairing leaves it alone
     // until the user pairs it by hand (#26).
     transferRefused: boolean("transfer_refused").default(false).notNull(),
+    // A line made from a noted balance (#31): the balance it was made from, which it goes with.
+    balanceId: uuid("balance_id"),
   },
   (table) => [
     unique("statement_line_user_id_id_key").on(table.userId, table.id),
@@ -350,6 +360,17 @@ export const statementLine = pgTable.withRLS(
       columns: [table.userId, table.importId],
       foreignColumns: [statementImport.userId, statementImport.id],
     }).onDelete("cascade"),
+    // One line per noted balance, deleted with it.
+    unique("statement_line_balance_id_key").on(table.balanceId),
+    foreignKey({
+      name: "statement_line_balance_fk",
+      columns: [table.userId, table.balanceId],
+      foreignColumns: [accountBalance.userId, accountBalance.id],
+    }).onDelete("cascade"),
+    check(
+      "statement_line_balance_has_balance",
+      sql`(${table.source} = 'balance') = (${table.balanceId} is not null)`,
+    ),
     // Lines are ordered by booking date, then by id.
     index("statement_line_account_id_booked_on_id_idx").on(
       table.accountId,

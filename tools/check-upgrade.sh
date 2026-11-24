@@ -246,6 +246,19 @@ done
 [ "$recognised" != 0 ] || fail "Camille's lines got no merchant within a minute of the app's start."
 say "Camille's lines got their merchants at boot: $recognised cleaned label(s)."
 
+# The app makes the movement lines of the accounts kept by their balance at boot (#31): the balance
+# Camille noted on her Livret A before they existed gets its line, of the whole balance (the account
+# opened at zero, with no other line), and that line its one entry.
+moved=0
+for _ in $(seq 60); do
+  moved=$(sql "select count(*) from statement_line l where l.user_id = '$camille' and l.source = 'balance'
+    and l.amount_minor = 1230000 and (select count(*) from entry_part p where p.line_id = l.id) = 1")
+  [ "$moved" = 0 ] || break
+  sleep 1
+done
+[ "$moved" = 1 ] || fail "Camille's noted balance got no movement line with its entry within a minute of the app's start."
+say "Camille's noted balance got its movement line at boot."
+
 # 9. Everyone signs in as before; the session made before still works.
 signin() { call "$1" POST /api/auth/sign-in/email "$4" "{\"email\":\"$2\",\"password\":\"$3\"}"; }
 signin admin-after admin@example.com "$admin_password" 200 > /dev/null
@@ -260,7 +273,8 @@ signin eden eden@example.com "$eden_password" 403 > /dev/null
 say "the administrator, Camille and Dominique sign in with their passwords, Eden is still banned,"
 say "and Camille's session made on $from still works."
 
-# 10. Camille's export (#22): her rows of each table as they were, and her files.
+# 10. Camille's export (#22): her rows of each table as they were, and her files; the movement line
+# the app made at boot from her noted balance (#31, above) is the update's, not the release's.
 curl --silent --show-error --fail --max-time 30 --cookie "$work/camille-after" \
   --output "$work/export.zip" "$base/api/export" || fail "Camille's export failed."
 for pair in accounts:account account-balances:account_balance statement-lines:statement_line \
@@ -268,7 +282,7 @@ for pair in accounts:account account-balances:account_balance statement-lines:st
   file=${pair%%:*} table=${pair#*:}
   drop=$(awk -F '\t' -v t="$table" '$1 == t { print $2 }' "$work/added" | jq -R . | jq -sc .)
   unzip -p "$work/export.zip" "$file.json" > "$work/export.json" || fail "the export has no $file.json."
-  jq -c -S --argjson drop "$drop" '.[] | reduce $drop[] as $c (.; del(.[$c]))' "$work/export.json" |
+  jq -c -S --argjson drop "$drop" '.[] | select(.source != "balance") | reduce $drop[] as $c (.; del(.[$c]))' "$work/export.json" |
     LC_ALL=C sort > "$work/exported"
   awk -F '\t' -v t="$table" '$1 == t { print $2 }' "$work/before" |
     jq -c -S --arg u "$camille" 'select(.user_id == $u)' | LC_ALL=C sort > "$work/held"

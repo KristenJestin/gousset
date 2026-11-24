@@ -1,4 +1,10 @@
-import { account, accountBalance, statementImport, statementLine } from "@gousset/db/schema/ledger";
+import {
+  account,
+  accountBalance,
+  category,
+  statementImport,
+  statementLine,
+} from "@gousset/db/schema/ledger";
 import { UserData } from "@gousset/db/user-data";
 import type { UserTransaction } from "@gousset/db/user-data";
 import { and, asc, desc, eq, lt, lte, sql } from "drizzle-orm";
@@ -9,13 +15,17 @@ import type {
   AccountChange,
   AccountFacts,
   AccountRecord,
+  BalanceCategory,
+  ChoosableCategory,
   EditFacts,
   LineExpiry,
   LineFacts,
   NewAccount,
   StatementBalanceAt,
 } from "./account-store";
+import { remakeBalanceLines } from "./balance-lines";
 import type { DayBalance } from "./balances";
+import { takeCategoryTurn } from "./category-turn";
 import { AccountNotFound, BalanceAlreadyNoted, LineNotFound } from "./errors";
 
 // The accounts in the database, through `UserData` only (docs/data-model.md, "Ownership and
@@ -37,7 +47,52 @@ const record = (row: AccountRow): AccountRecord => ({
   closedOn: row.closedOn,
   settlesIntoAccountId: row.settlesIntoAccountId,
   creditOrder: row.creditOrder,
+  balanceCategoryId: row.balanceCategoryId,
 });
+
+/** Every category of the user's, as a write checks the one an account names. */
+async function choosableCategories(
+  transaction: UserTransaction,
+): Promise<ReadonlyArray<ChoosableCategory>> {
+  const rows = await transaction
+    .select({ id: category.id, archivedAt: category.archivedAt })
+    .from(category);
+
+  return rows.map((row) => ({ id: row.id, archived: row.archivedAt !== null }));
+}
+
+/** The user's categories by id, each named with its parent's for a child. */
+async function namedCategories(
+  transaction: UserTransaction,
+): Promise<ReadonlyMap<string, BalanceCategory>> {
+  const rows = await transaction
+    .select({
+      id: category.id,
+      parentId: category.parentId,
+      name: category.name,
+      kind: category.kind,
+      archivedAt: category.archivedAt,
+    })
+    .from(category);
+
+  const nameOf = new Map(rows.map((row) => [row.id, row.name]));
+
+  return new Map(
+    rows.map((row) => {
+      const parent = row.parentId === null ? undefined : nameOf.get(row.parentId);
+
+      return [
+        row.id,
+        {
+          id: row.id,
+          name: parent === undefined ? row.name : `${parent} > ${row.name}`,
+          kind: row.kind,
+          archived: row.archivedAt !== null,
+        },
+      ];
+    }),
+  );
+}
 
 /** A uuid, as the database writes them: anything else names no row, and would fail the query. */
 const UUID = /^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i;
@@ -107,6 +162,10 @@ async function readFacts(transaction: UserTransaction, day: string) {
     )
     .groupBy(statementLine.accountId, statementDays.day);
 
+  const categories = accounts.some((row) => row.balanceCategoryId !== null)
+    ? await namedCategories(transaction)
+    : new Map<string, BalanceCategory>();
+
   const countedOf = new Map(countedSums.map((row) => [row.accountId, row.minor]));
   const importedOf = new Map(imported.map((row) => [row.accountId, row.to]));
   const notedOf = new Map<string, Array<DayBalance>>();
@@ -157,6 +216,8 @@ async function readFacts(transaction: UserTransaction, day: string) {
 
   return accounts.map((row): AccountFacts => ({
     account: record(row),
+    balanceCategory:
+      row.balanceCategoryId === null ? null : (categories.get(row.balanceCategoryId) ?? null),
     countedMinor: countedOf.get(row.id) ?? 0,
     noted: notedOf.get(row.id) ?? [],
     statements: statementsOf(row.id),
@@ -222,6 +283,7 @@ export const DatabaseAccountStore = Layer.effect(
               memo: statementLine.memo,
               counterpartyName: statementLine.counterpartyName,
               expiresOn: statementLine.expiresOn,
+              source: statementLine.source,
             })
             .from(statementLine)
             .where(and(counted(accountId), lte(statementLine.bookedOn, day), older))
@@ -314,12 +376,16 @@ export const DatabaseAccountStore = Layer.effect(
 
       create: <E>(
         owner: string,
-        decide: (accounts: ReadonlyArray<AccountRecord>) => Result.Result<NewAccount, E>,
+        decide: (
+          accounts: ReadonlyArray<AccountRecord>,
+          categories: ReadonlyArray<ChoosableCategory>,
+        ) => Result.Result<NewAccount, E>,
       ) =>
         userData
           .transaction(owner, async (transaction): Promise<Result.Result<AccountRecord, E>> => {
             const accounts = await transaction.select().from(account);
-            const decided = decide(accounts.map(record));
+            const categories = await choosableCategories(transaction);
+            const decided = decide(accounts.map(record), categories);
 
             if (Result.isFailure(decided)) {
               return Result.fail(decided.failure);
@@ -347,6 +413,9 @@ export const DatabaseAccountStore = Layer.effect(
           .transaction(
             owner,
             async (transaction): Promise<Result.Result<AccountRecord, E | AccountNotFound>> => {
+              // Its opening balance, mode and category shape its movement lines, made again below.
+              await takeCategoryTurn(transaction, owner);
+
               const found = await findAccount(transaction, accountId);
 
               if (found === undefined) {
@@ -359,6 +428,7 @@ export const DatabaseAccountStore = Layer.effect(
                 account: found,
                 accounts: accounts.map(record),
                 hasEntries: await hasEntries(transaction, accountId),
+                categories: await choosableCategories(transaction),
               });
 
               if (Result.isFailure(decided)) {
@@ -371,9 +441,13 @@ export const DatabaseAccountStore = Layer.effect(
                 .where(eq(account.id, accountId))
                 .returning();
 
-              return changed === undefined
-                ? Result.fail(new AccountNotFound({ accountId }))
-                : Result.succeed(record(changed));
+              if (changed === undefined) {
+                return Result.fail(new AccountNotFound({ accountId }));
+              }
+
+              await remakeBalanceLines(transaction, owner);
+
+              return Result.succeed(record(changed));
             },
           )
           .pipe(Effect.flatMap(Effect.fromResult)),
@@ -389,6 +463,9 @@ export const DatabaseAccountStore = Layer.effect(
             async (
               transaction,
             ): Promise<Result.Result<DayBalance, E | AccountNotFound | BalanceAlreadyNoted>> => {
+              // The movement line is made in this transaction (`./balance-lines`).
+              await takeCategoryTurn(transaction, owner);
+
               const found = await findAccount(transaction, accountId);
 
               if (found === undefined) {
@@ -426,6 +503,8 @@ export const DatabaseAccountStore = Layer.effect(
                 balanceMinor: noted.minor,
                 source: "noted",
               });
+
+              await remakeBalanceLines(transaction, owner);
 
               return Result.succeed(noted);
             },

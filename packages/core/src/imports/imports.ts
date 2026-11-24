@@ -21,6 +21,8 @@ import type { CsvFile, CsvProfile, CsvUnsure } from "@gousset/import";
 import { and, asc, desc, eq, gt, inArray, isNull, lt, ne, or, sql } from "drizzle-orm";
 import { Context, Effect, Layer } from "effect";
 
+import { remakeBalanceLines } from "../balance-lines";
+import { takeCategoryTurn } from "../category-turn";
 import { dropEntriesWithoutParts, entriesForLines } from "../entries";
 import type { ImportUnavailable, ProfileNotFound, ProfileUnreadable } from "./errors";
 import {
@@ -456,6 +458,10 @@ export const importsLayer = Layer.effect(
           const statuses = yield* statusesFor(owner, found, UNDOABLE);
 
           const counts = yield* inTransaction(owner, async (transaction) => {
+            // The user's turn before any row lock: the movements of the accounts kept by their
+            // balance are made again below, as an import's end makes them (`../balance-lines`).
+            await takeCategoryTurn(transaction, owner);
+
             // First, and under the row's lock: a job still writing waits, then finds it undone.
             const [claimed] = await transaction
               .update(statementImport)
@@ -505,6 +511,9 @@ export const importsLayer = Layer.effect(
 
             await transaction.delete(accountBalance).where(eq(accountBalance.importId, importId));
             await transaction.delete(importFile).where(eq(importFile.importId, importId));
+
+            // Its lines, and the sides the app made for them, counted in the movements (#31).
+            await remakeBalanceLines(transaction, owner);
 
             const overlapping =
               found.account === null || found.periodFrom === null || found.periodTo === null

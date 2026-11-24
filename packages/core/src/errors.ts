@@ -21,7 +21,10 @@ export class LineSearchRefused extends Schema.TaggedError<LineSearchRefused>()(
  * (`zero_amount`), a line held for review or thrown away (`not_counted`), a line made from a noted
  * balance, which stands for a month's movement (`made_from_balance`), a line that is a side of a
  * transfer already (`already_paired`, `lineId` naming it); with no other side named, a line with no
- * candidate (`no_candidate`) or with several (`several_candidates`), for the user to choose.
+ * candidate (`no_candidate`) or with several (`several_candidates`), for the user to choose. Paired
+ * with an account kept by its balance (#31), whose side the app makes: an account kept by its lines
+ * (`account_kept_by_lines`, which shows its own side), or of another currency than the line's
+ * (`other_currency`).
  */
 export class TransferRefused extends Schema.TaggedError<TransferRefused>()("TransferRefused", {
   reason: Schema.Literals([
@@ -34,6 +37,8 @@ export class TransferRefused extends Schema.TaggedError<TransferRefused>()("Tran
     "already_paired",
     "no_candidate",
     "several_candidates",
+    "account_kept_by_lines",
+    "other_currency",
   ]),
   lineId: Schema.String,
 }) {}
@@ -117,6 +122,15 @@ export class AccountKeptByLines extends Schema.TaggedError<AccountKeptByLines>()
 export class BalanceAlreadyNoted extends Schema.TaggedError<BalanceAlreadyNoted>()(
   "BalanceAlreadyNoted",
   { accountId: Schema.String, day: Schema.String },
+) {}
+
+/**
+ * The category an account kept by its balance sends its movement to (#31) is none of the user's
+ * (`unknown`), or is archived and can no longer be chosen (`archived`).
+ */
+export class BalanceCategoryRefused extends Schema.TaggedError<BalanceCategoryRefused>()(
+  "BalanceCategoryRefused",
+  { categoryId: Schema.String, reason: Schema.Literals(["unknown", "archived"]) },
 ) {}
 
 /** The line is no credit: only a counted positive line of a benefit account has an expiry. */

@@ -100,11 +100,13 @@ function withAccount(own: MemoryLineRows, line: MemoryLineDetail): FoundLine | u
       currency: owned.currency,
     },
     category: line.category ?? null,
+    fromBalance: sourceOf(line) === "balance",
   };
 }
 
-const sourceOf = (line: MemoryLineDetail): FoundLineDetail["source"] =>
-  line.source ?? (line.importId === undefined ? "manual" : "import");
+function sourceOf(line: MemoryLineDetail): FoundLineDetail["source"] {
+  return line.source ?? (line.importId === undefined ? "manual" : "import");
+}
 
 /**
  * The counted lines of `own` booked on or before `day` with several candidates for their transfer's
