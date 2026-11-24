@@ -115,7 +115,8 @@ jobs:
           browsers=true
           if [ "$EVENT" = push ] && [ "$REF" = refs/heads/main ]; then browsers=false; fi
           # The image: every push to dev and next/x.y; a pull request (not the release's, whose
-          # commit is dev's, built on its push) when it touches what the image holds or checks.
+          # commit is dev's, built on its push) when it touches what the image holds or checks,
+          # among it what reads again the statement the upgrade check imports (#132).
           image=false
           if [ "$EVENT" = push ] && [ "$REF" != refs/heads/main ]; then image=true; fi
           if [ "$EVENT" = pull_request ] && [ "$BASE_REF" != main ]; then
@@ -124,7 +125,8 @@ jobs:
               case "$file" in
                 packages/db/* | packages/auth/* | Dockerfile | docker-compose*.yml | \
                   tools/docker-entrypoint.sh | tools/check-image.sh | tools/check-upgrade.* | \
-                  .github/workflows/ci.yml)
+                  packages/import/* | packages/core/src/imports/* | apps/web/src/jobs/* | \
+                  apps/web/src/routes/api/imports.ts | .github/workflows/ci.yml)
                   image=true ;;
               esac
             done <<< "$files"

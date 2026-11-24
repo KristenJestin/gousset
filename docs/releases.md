@@ -376,10 +376,11 @@ and a squash add a commit `dev` does not have; GitHub's rebase always writes new
 From v0.2 on, installations hold real data, and an update must keep every row of it (#102).
 The `upgrade` job of `ci.yml` runs on every push to `dev` and `next/**`, and on a pull request
 (but the release's, whose commit was tested on its push) that touches what an update runs through
-(`packages/db`, `packages/auth`, the `Dockerfile`, the compose files, `tools/docker-entrypoint.sh`)
-or the jobs themselves (`tools/check-image.sh`, `tools/check-upgrade.*`, the workflow): it takes
-the commit's image from the `image` job and runs `tools/check-upgrade.sh` on it, which, on a fresh
-project and volume:
+(`packages/db`, `packages/auth`, the `Dockerfile`, the compose files, `tools/docker-entrypoint.sh`),
+what reads again the statement the release imported (the readers of `packages/import`, the import
+of `packages/core/src/imports`, the app's jobs and its import route, #132) or the jobs themselves
+(`tools/check-image.sh`, `tools/check-upgrade.*`, the workflow): it takes the commit's image from
+the `image` job and runs `tools/check-upgrade.sh` on it, which, on a fresh project and volume:
 
 1. installs **the last release** (the highest tag `vX.Y.Z`, `--from` to choose another) with that
    release's own `docker-compose.yml`, its image pulled from the registry;
@@ -390,6 +391,9 @@ project and volume:
    accounts screen nor an import route, so two users' accounts of every kind, balances, an import
    with its file and its lines (a held duplicate, a foreign currency, a discarded line), a CSV
    profile, and an MCP client with its consent and tokens are written as the app would write them;
+   and, where the release has its import route (from 0.2.0), a user uploads an invented statement
+   (`tools/check-upgrade.ofx`, whose bank encodes entities twice, #132), read as that release
+   reads it;
 3. stops the app, as an update does, and reads every row of every table of the `public` schema;
 4. puts the image under test in its place, as the [update](#installing) does, the compose file
    unchanged: **`migrate` runs and ends**, and has recorded every migration of the commit; run
@@ -397,14 +401,22 @@ project and volume:
 5. reads every row again: **every table and column of before is still there, and every row is
    identical**, but in the columns and tables the new migrations add (those of the commit's
    `packages/db/src/migrations` the release did not have), each of which must be named in them
-   (`ALTER TABLE "t" ADD COLUMN "c"`, `CREATE TABLE "t"`);
+   (`ALTER TABLE "t" ADD COLUMN "c"`, `CREATE TABLE "t"`), and in the rows a new migration
+   declares it changes. A migration that must change rows (#132 decodes labels and computes their
+   keys again) declares each change in `tools/check-upgrade.changes.json`, under its own name: the
+   table, the values that find the rows (`where`), the values they take (`set`), and why. Each
+   declaration must find a row of the release once its statement was imported, the rows after the
+   update must be exactly the rows before with the declared changes, and no other row may change:
+   a declaration says what changes, it never lets a table or a column change freely;
 6. starts the app: `/health` answers 200; **the administrator and both users sign in with the same
    passwords**, the temporary one still has to be replaced, the banned one is still refused, and a
    session made before the update still works;
 7. downloads the user's **export** (#22, `/api/export`), which the last release may not have: each
-   of its tables holds that user's rows exactly as the release held them, and each imported file
-   its bytes;
-8. migrates an empty database beside it with the same image: **the updated schema is a fresh
+   of its tables holds that user's rows exactly as the release held them, with the declared
+   changes, and each imported file its bytes;
+8. uploads the statement of step 2 again, through the updated app: **it adds nothing**, every line
+   found as a duplicate under the key the update gave it;
+9. migrates an empty database beside it with the same image: **the updated schema is a fresh
    installation's**, to the column order and the grant.
 
 It removes everything it started, whatever happened. To run it on a clone, with the release's tag

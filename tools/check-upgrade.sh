@@ -3,10 +3,12 @@
 # "Every release is an upgrade"): the release's image with its own docker-compose.yml, filled with
 # invented data, then the image under test in its place. Checks that `migrate` runs and ends, twice
 # with the same result; that no row of any table changed, went or came, but in the columns and
-# tables the new migrations add, which must be named in them; that the upgraded schema is the one
-# a fresh installation gets; that the app answers, that every user signs in with the same password
-# (a banned one still cannot), that a session made before still works, and that a user's export
-# holds their rows as they were. Removes everything it started, whatever happened.
+# tables the new migrations add, which must be named in them, and as the changes they declare in
+# tools/check-upgrade.changes.json, each found in the release's rows; that the upgraded schema is
+# the one a fresh installation gets; that the app answers, that every user signs in with the same
+# password (a banned one still cannot), that a session made before still works, that a user's
+# export holds their rows as they were, and that a statement the release imported adds nothing
+# when imported again. Removes everything it started, whatever happened.
 #   tools/check-upgrade.sh <tag>                   from the last release (the highest tag vX.Y.Z)
 #   tools/check-upgrade.sh --from 0.1.1 <tag>
 #   docker build -t ghcr.io/kristenjestin/gousset:local . && tools/check-upgrade.sh local
@@ -62,14 +64,25 @@ git -C "$root" show "v$from:docker-compose.yml" > "$work/docker-compose.yml" ||
 migrations=$root/packages/db/src/migrations
 git -C "$root" ls-tree --name-only "v$from" packages/db/src/migrations/ | xargs -n 1 basename > "$work/old-migrations"
 : > "$work/new-migrations.sql"
+: > "$work/new-migration-names"
 brought=0
 for folder in "$migrations"/*/; do
   name=$(basename "$folder")
   if ! grep -qxF "$name" "$work/old-migrations"; then
     cat "$folder/migration.sql" >> "$work/new-migrations.sql"
+    echo "$name" >> "$work/new-migration-names"
     brought=$((brought + 1))
   fi
 done
+
+# The changes to existing rows the new migrations declare (tools/check-upgrade.changes.json, by
+# migration): each finds rows of a table by some of their values (`where`) and gives the values they
+# take (`set`). No other row may change.
+jq -c --rawfile names "$work/new-migration-names" \
+  '. as $declared | [$names | split("\n")[] | select(. != "") | ($declared[.] // [])[]]' \
+  "$root/tools/check-upgrade.changes.json" > "$work/changes" ||
+  fail "tools/check-upgrade.changes.json cannot be read."
+echo '[]' > "$work/no-changes"
 expected=$(find "$migrations" -mindepth 2 -maxdepth 2 -name migration.sql | wc -l)
 
 mkdir "$work/secrets"
@@ -119,6 +132,43 @@ dump() { # <columns file> <added file> <out>
 
 applied() { sql "select count(*) from drizzle.__drizzle_migrations"; }
 
+# A dump's rows, each written again by jq, with the changes of <changes file> applied to the rows
+# they find; sorted. Run on the rows before the update, it gives the rows expected after it.
+expect() { # <dump> <changes file> <out>
+  jq -R -r --slurpfile changes "$2" '
+    index("\t") as $at | .[:$at] as $table | (.[$at + 1:] | fromjson) as $row
+    | reduce ($changes[0][] | select(.table == $table and (.where | to_entries | all(.value == $row[.key]))))
+        as $change ($row; . + $change.set)
+    | "\($table)\t\(tojson)"' "$1" | LC_ALL=C sort > "$3"
+}
+
+# Uploads a file as the jar's user, through the import route, as the import screen does; prints
+# the import's id, or nothing when the release has no such route.
+upload() { # <jar> <file>
+  local jar=$work/$1 out code
+  out=$(curl --silent --show-error --max-time 30 --cookie "$jar" --cookie-jar "$jar" \
+    --header "Origin: $origin" --header 'Content-Type: application/octet-stream' \
+    --data-binary "@$2" --write-out '\n%{http_code}' "$base/api/imports?name=$(basename "$2")") ||
+    fail "the upload of $(basename "$2") did not answer."
+  code=${out##*$'\n'}
+  [ "$code" != 404 ] || return 0
+  [ "$code" = 200 ] || fail "the upload of $(basename "$2") answered $code: ${out%$'\n'*}"
+  printf '%s\n' "${out%$'\n'*}" | jq -r .importId
+}
+
+# An import, once its job has ended: its status, lines added and lines found already known.
+settled() { # <import id>
+  local row
+  for _ in $(seq 90); do
+    row=$(sql "select status || ' ' || lines_added || ' ' || lines_duplicate from import where id = '$1'")
+    case $row in
+      queued* | reading* | saving* | '') sleep 1 ;;
+      *) echo "$row"; return 0 ;;
+    esac
+  done
+  fail "the import $1 did not end within 90 seconds."
+}
+
 # /health, once the app listens: 200 when it can serve someone.
 health() {
   local code=000
@@ -167,6 +217,20 @@ call camille POST /api/auth/change-password 200 \
 "${compose[@]}" exec -T postgres psql -X -q -U gousset -d gousset -v camille="$camille" -v admin="$admin" \
   -f - < "$root/tools/check-upgrade.sql" > /dev/null || fail "tools/check-upgrade.sql did not fill $from."
 
+# 3b. A statement through the release's own import route, where it has one (from 0.2.0): an
+# invented OFX whose bank encodes entities twice (#132), read as that release reads it, into
+# Camille's account, which its IBAN names. Imported again after the update, below.
+statement=$root/tools/check-upgrade.ofx
+first_import=$(upload camille "$statement")
+if [ -n "$first_import" ]; then
+  ended=$(settled "$first_import")
+  [ "$ended" = "done 6 0" ] ||
+    fail "$from did not import $(basename "$statement") whole: $ended, not \"done 6 0\"."
+  say "Camille imported $(basename "$statement") through $from's own route."
+else
+  say "$from has no import route: $(basename "$statement") is not imported."
+fi
+
 # 4. The data as the release leaves it, the app stopped (an owner's update replaces it).
 "${compose[@]}" stop web > /dev/null 2>&1
 columns "$work/columns-before"
@@ -200,14 +264,30 @@ while IFS=$'\t' read -r table column; do
 done < "$work/added"
 cut -f 1 "$work/added" | uniq | grep -vxF -f "$work/tables-before" | sed 's/^/check-upgrade.sh:   a new table: /' || true
 
-# Every row, but in the columns added, as it was.
-dump "$work/columns-before" "$work/added" "$work/after"
-if ! diff "$work/before" "$work/after" > "$work/rows.diff"; then
-  echo "check-upgrade.sh: rows changed (< before the update, > after), the first lines:" >&2
-  head -n 20 "$work/rows.diff" | cut -c 1-300 >&2
-  fail "the update changed, removed or added rows of existing tables."
+# Every row, but in the columns added, as it was, or as the new migrations declare it changes; each
+# declared change found in the release's rows, once a statement came through its import route.
+if [ -n "$first_import" ]; then
+  unmatched=$(jq -R -s -r --slurpfile changes "$work/changes" '
+    [split("\n")[] | select(. != "") | index("\t") as $at
+      | {table: .[:$at], row: (.[$at + 1:] | fromjson)}] as $rows
+    | $changes[0][] | . as $change
+    | select(any($rows[]; .table == $change.table
+        and (.row as $row | $change.where | to_entries | all(.value == $row[.key]))) | not)
+    | .why' "$work/before")
+  [ -z "$unmatched" ] ||
+    fail "a change the new migrations declare (tools/check-upgrade.changes.json) finds no row of $from: $unmatched"
 fi
-say "migrate of $tag applied the $brought new migrations and ended; every row is as it was."
+expect "$work/before" "$work/no-changes" "$work/before-rows"
+expect "$work/before" "$work/changes" "$work/expected"
+dump "$work/columns-before" "$work/added" "$work/after"
+expect "$work/after" "$work/no-changes" "$work/after-rows"
+if ! diff "$work/expected" "$work/after-rows" > "$work/rows.diff"; then
+  echo "check-upgrade.sh: rows changed (< expected after the update, > after), the first lines:" >&2
+  head -n 20 "$work/rows.diff" | cut -c 1-300 >&2
+  fail "the update changed, removed or added rows of existing tables, beyond what its migrations declare."
+fi
+say "migrate of $tag applied the $brought new migrations and ended; every row is as it was,"
+say "  but the $(LC_ALL=C comm -13 "$work/before-rows" "$work/expected" | wc -l) rows its migrations declare they change, changed as declared."
 
 # 7. Run again on a database that has them: nothing more applied, nothing changed.
 migrate "$work/migrate-2"
@@ -248,7 +328,7 @@ for pair in accounts:account account-balances:account_balance statement-lines:st
   unzip -p "$work/export.zip" "$file.json" > "$work/export.json" || fail "the export has no $file.json."
   jq -c -S --argjson drop "$drop" '.[] | reduce $drop[] as $c (.; del(.[$c]))' "$work/export.json" |
     LC_ALL=C sort > "$work/exported"
-  awk -F '\t' -v t="$table" '$1 == t { print $2 }' "$work/before" |
+  awk -F '\t' -v t="$table" '$1 == t { print $2 }' "$work/expected" |
     jq -c -S --arg u "$camille" 'select(.user_id == $u)' | LC_ALL=C sort > "$work/held"
   [ -s "$work/held" ] || fail "Camille had no row of $table to export: tools/check-upgrade.sql fills one."
   diff -q "$work/held" "$work/exported" > /dev/null ||
@@ -263,7 +343,18 @@ while IFS=$'\t' read -r id content; do
 done < "$work/files"
 say "Camille's export holds her rows of every table and her $(wc -l < "$work/files") files as $from held them."
 
-# 11. The upgraded schema is a fresh installation's.
+# 11. The statement the release imported, imported again (#132): every line is found under the key
+# the update gave it, and nothing is added twice.
+if [ -n "$first_import" ]; then
+  second_import=$(upload camille-after "$statement")
+  [ -n "$second_import" ] || fail "$tag has no import route."
+  ended=$(settled "$second_import")
+  [ "$ended" = "done 0 6" ] ||
+    fail "$(basename "$statement") imported again after the update: $ended, not \"done 0 6\" (nothing added, 6 found)."
+  say "$(basename "$statement"), imported again on $tag, adds nothing: its 6 lines are found."
+fi
+
+# 12. The upgraded schema is a fresh installation's.
 sql "create database gousset_fresh" > /dev/null
 "${compose[@]}" run --rm --no-deps --env DATABASE_URL=postgresql://gousset@postgres:5432/gousset_fresh \
   migrate > "$work/migrate-fresh" 2>&1 || fail "migrate of $tag on an empty database failed: $(tail -n 15 "$work/migrate-fresh")"

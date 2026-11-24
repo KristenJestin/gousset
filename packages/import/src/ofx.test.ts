@@ -231,6 +231,36 @@ describe("reading OFX and QFX files", () => {
     });
   });
 
+  test("reads ofx-double-encoded.ofx (entities encoded twice, and once) as the bank meant them", () => {
+    // A line without a FITID.
+    const debit = (bookedOn: string, amountMinor: number, label: string) => ({
+      ...bare(bookedOn, amountMinor, label, ""),
+      bankId: null,
+    });
+
+    expect(read(statementSamples.ofxDoubleEncoded.bytes)).toEqual({
+      account: DOMESTIC_ACCOUNT,
+      currency: "EUR",
+      lines: [
+        {
+          ...bare("2026-11-02", -450, "CB CAFE DE L'EXEMPLE", "EX2026110201"),
+          memo: "PAIEMENT PAR CARTE",
+        },
+        debit("2026-11-03", -120, "BOULANGERIE L'EPI D'EXEMPLE"),
+        debit("2026-11-03", -120, "BOULANGERIE L'EPI D'EXEMPLE"),
+        {
+          ...debit("2026-11-05", -6412, "PRLV SEPA ELEC & GAZ EXEMPLE"),
+          memo: 'ECHEANCE "NOVEMBRE"',
+        },
+        debit("2026-11-06", -890, "LIBRAIRIE L'ENCRE EXEMPLE"),
+        debit("2026-11-06", -890, "LIBRAIRIE L'ENCRE EXEMPLE"),
+      ],
+      openingBalance: null,
+      balance: { amountMinor: 100_000, on: "2026-11-07" },
+      amountSigns: AS_WRITTEN,
+    });
+  });
+
   test("gives an ACCTID shaped as an IBAN as the account's IBAN too", () => {
     const spaced = ofx([]).replace(
       "<BANKTRANLIST>",
