@@ -10,7 +10,7 @@ import {
 import { transfer } from "@gousset/db/schema/transfers";
 import { UserData } from "@gousset/db/user-data";
 import type { UserTransaction } from "@gousset/db/user-data";
-import { and, count, eq, gte, inArray, lte, or, sql } from "drizzle-orm";
+import { and, count, eq, gte, inArray, lte, min, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { Effect, Layer, Result } from "effect";
 
@@ -230,6 +230,43 @@ export const DatabaseCategoryStore = Layer.effect(
                 : [],
             ),
           }));
+        }),
+
+      spending: (owner, range) =>
+        userData.transaction(owner, async (transaction) => {
+          const month = sql<string>`to_char(${entry.happenedOn}, 'YYYY-MM')`;
+
+          // Each part once: a split line counts in each of its expenses for its own share, a
+          // refund less, a transfer (no entry) and a works council's funding (no part) not at all.
+          return transaction
+            .select({
+              categoryId: entry.categoryId,
+              month,
+              currency: account.currency,
+              minor:
+                sql<number>`sum(case when ${entryPart.role} = 'payment' then ${entryPart.amountMinor} else -${entryPart.amountMinor} end)::bigint`.mapWith(
+                  Number,
+                ),
+            })
+            .from(entry)
+            .innerJoin(entryPart, eq(entryPart.entryId, entry.id))
+            .innerJoin(statementLine, eq(statementLine.id, entryPart.lineId))
+            .innerJoin(account, eq(account.id, statementLine.accountId))
+            .where(
+              and(
+                eq(entry.kind, "expense"),
+                gte(entry.happenedOn, range.from),
+                lte(entry.happenedOn, range.to),
+              ),
+            )
+            .groupBy(entry.categoryId, month, account.currency);
+        }),
+
+      firstEntry: (owner) =>
+        userData.transaction(owner, async (transaction) => {
+          const [first] = await transaction.select({ day: min(entry.happenedOn) }).from(entry);
+
+          return first?.day ?? null;
         }),
 
       change: <E>(

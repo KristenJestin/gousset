@@ -22,8 +22,13 @@ export type BreakdownRow = {
   name: string;
   icon?: IconName;
   amount: Money;
-  /** The 6-month average this month is held against: its mark on the bar, ⚠ once passed. */
+  /**
+   * The benchmark this month is held against (its 6-month average, or an amount the user set):
+   * its mark on the bar, ⚠ once passed by any amount. None, no mark.
+   */
   benchmark?: Money;
+  /** The benchmark is an amount the user set, not the average: it is read so. */
+  benchmarkSet?: boolean;
 };
 
 export type BreakdownProps = {
@@ -119,8 +124,10 @@ function RowContent({
         <Amount value={row.amount} whole size="sm" locale={locale} />
       </span>
       {row.benchmark === undefined ? null : (
-        <span className="sr-only">
-          {messages.benchmark(formatMoney(row.benchmark, { locale, whole: true }))}
+        <span className="sr-only" data-slot="breakdown-benchmark-text">
+          {(row.benchmarkSet === true ? messages.benchmarkSet : messages.benchmark)(
+            formatMoney(row.benchmark, { locale, whole: true }),
+          )}
         </span>
       )}
     </>
@@ -222,7 +229,8 @@ function More({ count, onMore }: { count: number; onMore: (() => void) | undefin
 /**
  * Where the money goes (docs/wireframes, screen 1, block 2): one row per category, merchant or
  * subject, each with its icon, its name, a bar on a scale shared by every row, and its amount.
- * A dark mark on the bar is its benchmark (the 6-month average); ⚠ once it is passed. Cut after
+ * A dark mark on the bar is its benchmark (the 6-month average, or an amount the user set, read as
+ * such); ⚠ once it is passed by any amount; no mark without one. Cut after
  * `limit` rows with "+ N more"; a sentence when there is nothing.
  *
  * With `selectedId`, the chosen row becomes a panel in the list's place: its name, its amount

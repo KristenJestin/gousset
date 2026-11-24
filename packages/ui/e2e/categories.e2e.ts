@@ -46,7 +46,7 @@ test.describe("CategoryTree", () => {
 
   test("writes French", async ({ page }) => {
     await page.goto(story("categorytree", "french"));
-    await expect(page.getByText("Moyenne sur 6 mois")).toBeVisible();
+    await expect(page.getByText("Moyenne mensuelle")).toBeVisible();
     await expect(page.getByRole("button", { name: "Actions sur Groceries" })).toBeVisible();
   });
 

@@ -47,6 +47,12 @@ test.beforeAll(async ({ app, user }) => {
   data = openUserData(app.database);
   imports = importsOn(data);
   owner = await data.ownerOf(person.email);
+
+  // The user's data starts in April, before the six months averaged (May to October): each of them
+  // counts, so a category's average is what it cost over six (#33).
+  await importInto(await newAccount("Before the window"), "before-the-window", [
+    { bookedOn: "2026-04-15", amountMinor: -1200, label: "CB BRIGHTMILL BAKERY 1504 RIVERTON" },
+  ]);
 });
 
 test.afterAll(async () => {

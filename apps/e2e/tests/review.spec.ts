@@ -194,7 +194,7 @@ test("month answers through MCP that the review is not available yet, inventing 
     const { text, isError } = await month(session.client, args);
 
     expect(isError, args.action).toBe(false);
-    expect(text, args.action).toContain("The monthly review is not available yet");
+    expect(text, args.action).toContain("The rest of the monthly review is not available yet");
     expect(text, args.action).toContain('accounts {"action":"list"}');
     expect(text, args.action).not.toMatch(/\d+\.\d\d/);
     expect(text, args.action).not.toContain("EUR");

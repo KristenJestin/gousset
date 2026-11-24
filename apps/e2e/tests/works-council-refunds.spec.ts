@@ -386,6 +386,16 @@ test("the link shows on both sides", async ({ page, app, user }) => {
 
 test("the month's spending does not count the refund as income", async ({ app, user }) => {
   const { owner } = await ownUser(app, user, "noa.works-council-month");
+
+  // The user's data starts in April, before the six months averaged (May to October): each of them
+  // counts, so a category's average is what it cost over six (#33).
+  await importInto(
+    owner,
+    await newAccount(owner, "Before the window", "current"),
+    "before-the-window",
+    [{ bookedOn: "2026-04-15", amountMinor: -1200, label: "CB BRIGHTMILL BAKERY 1504 RIVERTON" }],
+  );
+
   const made = await worksCouncil(owner);
   const [refund] = made.refunds;
 
