@@ -320,8 +320,7 @@ export const TRANSFERS: ExportTable = {
     // Added after the others (#29): the database keeps it last.
     {
       name: "funds_entry_id",
-      holds:
-        "the expense (entries.id) a refund from a benefit account funds; empty for none",
+      holds: "the expense (entries.id) a refund from a benefit account funds; empty for none",
     },
   ],
 };
