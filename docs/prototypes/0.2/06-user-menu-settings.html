@@ -1,0 +1,233 @@
+<!doctype html>
+<html lang="en" data-color-scheme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>6 · User menu and settings · Prototype 0.2 · Gousset</title>
+<link rel="stylesheet" href="assets/proto.css">
+<link rel="stylesheet" href="assets/icons.css">
+<style>
+  .menu-layer { position: absolute; left: 12px; bottom: 64px; z-index: 30; }
+  .menu-layer .menu { transform-origin: bottom left; }
+  .menu-head .stack { gap: 0; min-width: 0; }
+  .menu-head .t-caption { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .settings { display: flex; align-items: flex-start; gap: 32px; }
+  .settings .content { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 24px; }
+  .settings .block-head { min-height: 0; padding: 16px 20px 0; }
+  .settings .setting .stack { max-width: 600px; }
+  .setting .control-slot .control { width: 200px; }
+  .client .stack { gap: 0; min-width: 0; flex: 1; }
+  .client .icon { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 8px; background: var(--muted); color: var(--soft-foreground); flex-shrink: 0; }
+  .scope { color: var(--soft-foreground); }
+  .person { display: flex; align-items: center; gap: 12px; }
+  .person .avatar { width: 40px; height: 40px; font-size: 14px; }
+  .person .stack { gap: 0; min-width: 0; }
+
+  /* Phone: "More" lists what the tab bar leaves out, then the menu's own items. */
+  .more-list { display: flex; flex-direction: column; }
+  .more-item { display: flex; align-items: center; gap: 12px; min-height: 52px; padding: 0 16px; border-top: 1px solid color-mix(in oklab, var(--border) 70%, transparent); }
+  .more-item:first-child { border-top: 0; }
+  .more-item > .i:first-child { color: var(--muted-foreground); }
+  .more-item .grow { color: var(--foreground); }
+  .more-item .i-chevron-right { color: var(--muted-foreground); }
+  .app.phone .person { padding: 16px; }
+  .app.phone .setting { flex-direction: column; align-items: stretch; gap: 12px; padding: 14px 16px; }
+  .app.phone .setting .control-slot { margin-left: 0; }
+  .app.phone .client { padding: 12px 16px; }
+  .back { display: flex; align-items: center; gap: 4px; color: var(--soft-foreground); font-weight: 500; }
+</style>
+</head>
+<body>
+<div class="proto">
+<header class="bar" data-title="6 · User menu and settings (#105)"></header>
+<main class="canvas">
+<div class="state-switch">
+  <button class="btn sm secondary" type="button" data-replay=".menu-layer"><span class="i i-player-play"></span>Replay the menu</button>
+  <button class="btn sm secondary" type="button" data-close-target=".menu-layer">Close the menu</button>
+  <button class="btn sm secondary" type="button" data-open-target=".menu-layer">Open it</button>
+</div>
+<div class="devices">
+
+<!-- ═══════════════ Desktop: the menu ═══════════════ -->
+<section class="device desktop">
+<div class="caption">Desktop · 1280 px · the menu, opened from the user's button</div>
+<div class="screen">
+<div class="app">
+<aside class="sidebar" data-current="accounts" data-menu="open"></aside>
+<div class="main">
+<div class="page">
+  <header class="page-head"><div class="stack grow"><h1 class="t-title">Accounts</h1><p>Five accounts · €2,418.30 available today</p></div></header>
+  <section class="block">
+    <div class="client" style="border-top:0"><span class="icon"><span class="i i-building-bank"></span></span><div class="stack"><span class="t-strong">Current account</span><span class="t-caption">Northbank · since 2016</span></div><span class="amount">€2,418.30</span></div>
+    <div class="client"><span class="icon"><span class="i i-credit-card"></span></span><div class="stack"><span class="t-strong">MealCard</span><span class="t-caption">Benefit account</span></div><span class="amount">€86.40</span></div>
+    <div class="client"><span class="icon"><span class="i i-pig-money"></span></span><div class="stack"><span class="t-strong">Livret A</span><span class="t-caption">Northbank · kept by its balance</span></div><span class="amount">€12,950.00</span></div>
+    <div class="client"><span class="icon"><span class="i i-chart-line"></span></span><div class="stack"><span class="t-strong">PEA</span><span class="t-caption">Northbank</span></div><span class="amount">€8,204.17</span></div>
+    <div class="client"><span class="icon"><span class="i i-building-bank"></span></span><div class="stack"><span class="t-strong">Home loan</span><span class="t-caption">Harbor Savings · 240 months</span></div><span class="amount">−€148,320.55</span></div>
+  </section>
+</div>
+</div>
+<div class="menu-layer">
+  <div class="menu floating" role="menu" aria-label="Your account">
+    <div class="menu-head">
+      <span class="avatar">AM</span>
+      <div class="stack"><span class="t-strong truncate">Alex Martin</span><span class="t-caption">alex.martin@example.com</span></div>
+    </div>
+    <div class="menu-sep"></div>
+    <a class="menu-item highlighted" role="menuitem" href="06-user-menu-settings.html#settings"><span class="i i-settings"></span>Settings</a>
+    <a class="menu-item" role="menuitem" href="#"><span class="i i-keyboard"></span>Keyboard shortcuts<span class="kbd">?</span></a>
+    <div class="menu-sep"></div>
+    <a class="menu-item" role="menuitem" href="#"><span class="i i-logout"></span>Sign out</a>
+  </div>
+</div>
+</div>
+</div>
+</section>
+
+<!-- ═══════════════ Desktop: Settings › General ═══════════════ -->
+<section class="device desktop" id="settings">
+<div class="caption">Desktop · Settings › General: language and scheme, applied at once</div>
+<div class="screen">
+<div class="app">
+<aside class="sidebar" data-current="settings"></aside>
+<div class="main">
+<div class="page">
+  <header class="page-head"><h1 class="t-title">Settings</h1></header>
+  <div class="settings">
+    <nav class="sections" aria-label="Settings">
+      <a class="section-link" aria-current="page" href="#">General</a>
+      <a class="section-link" href="#">Your account</a>
+      <a class="section-link" href="#">Categories</a>
+      <a class="section-link" href="#">Rules</a>
+      <a class="section-link" href="#">Data</a>
+      <p class="section-group t-label">Administration</p>
+      <a class="section-link" href="#">Users</a>
+      <a class="section-link" href="#">MCP access</a>
+    </nav>
+    <div class="content">
+      <section class="block">
+        <header class="block-head"><h2>Display</h2></header>
+        <div class="setting">
+          <div class="stack"><span class="t-strong">Language</span><span class="t-caption">The language of the interface on this device. It follows your browser until you choose one.</span></div>
+          <div class="control-slot"><span class="control sm select" role="combobox" tabindex="0" aria-label="Language"><span class="i i-language"></span><span>English</span><span class="i i-selector"></span></span></div>
+        </div>
+        <div class="setting">
+          <div class="stack"><span class="t-strong">Colour scheme</span><span class="t-caption">Follow the system, or keep the interface light or dark.</span></div>
+          <div class="control-slot"><span class="seg" role="radiogroup" aria-label="Colour scheme"><button type="button" aria-pressed="true">System</button><button type="button" aria-pressed="false"><span class="i i-sun sm"></span>Light</button><button type="button" aria-pressed="false"><span class="i i-moon sm"></span>Dark</button></span></div>
+        </div>
+      </section>
+      <section class="block">
+        <header class="block-head"><h2>Keyboard shortcuts</h2></header>
+        <div class="setting">
+          <div class="stack"><span class="t-strong">Single-key shortcuts</span><span class="t-caption">Shortcuts made of one key, like ? for this list. Speech input can press them by accident: turn them off, and the list stays in your account menu.</span></div>
+          <div class="control-slot"><span class="switch on" role="switch" aria-checked="true" aria-label="Single-key shortcuts"></span></div>
+        </div>
+      </section>
+    </div>
+  </div>
+</div>
+</div>
+</div>
+</div>
+</section>
+
+<!-- ═══════════════ Phone: More ═══════════════ -->
+<section class="device phone">
+<div class="caption">Phone · the More tab, the same list</div>
+<div class="screen">
+<div class="app phone">
+<div class="statusbar"></div>
+<div class="main">
+<div class="page">
+  <h1 class="t-title">More</h1>
+  <section class="block">
+    <div class="person" style="padding:16px"><span class="avatar">AM</span><div class="stack"><span class="t-strong truncate">Alex Martin</span><span class="t-caption truncate">alex.martin@example.com</span></div></div>
+  </section>
+  <section class="block more-list">
+    <a class="more-item" href="#"><span class="i i-chart-line lg"></span><span class="grow">Investments</span><span class="i i-chevron-right"></span></a>
+    <a class="more-item" href="#"><span class="i i-tags lg"></span><span class="grow">Subjects</span><span class="i i-chevron-right"></span></a>
+    <a class="more-item" href="#"><span class="i i-file-import lg"></span><span class="grow">Import</span><span class="i i-chevron-right"></span></a>
+  </section>
+  <section class="block more-list">
+    <a class="more-item" href="#"><span class="i i-settings lg"></span><span class="grow">Settings</span><span class="i i-chevron-right"></span></a>
+    <a class="more-item" href="#"><span class="i i-keyboard lg"></span><span class="grow">Keyboard shortcuts</span><span class="i i-chevron-right"></span></a>
+  </section>
+  <section class="block more-list">
+    <a class="more-item" href="#"><span class="i i-logout lg"></span><span class="grow">Sign out</span></a>
+  </section>
+</div>
+</div>
+<nav class="tabbar" data-current="more"></nav>
+</div>
+</div>
+</section>
+
+<!-- ═══════════════ Phone: Settings › Your account ═══════════════ -->
+<section class="device phone">
+<div class="caption">Phone · Settings › Your account</div>
+<div class="screen">
+<div class="app phone">
+<div class="statusbar"></div>
+<div class="main">
+<div class="page">
+  <a class="back" href="#"><span class="i i-chevron-left"></span>Settings</a>
+  <h1 class="t-title">Your account</h1>
+  <section class="block">
+    <div class="person"><span class="avatar">AM</span><div class="stack"><span class="t-strong truncate">Alex Martin</span><span class="t-caption truncate">alex.martin@example.com</span></div></div>
+    <div class="setting">
+      <div class="stack"><span class="t-strong">Password</span><span class="t-caption">Changing it signs your other devices out.</span></div>
+      <div class="control-slot"><button class="btn secondary full" type="button"><span class="i i-key"></span>Change your password</button></div>
+    </div>
+  </section>
+  <section class="block">
+    <header class="block-head"><h2>Connected clients</h2></header>
+    <p class="t-caption" style="padding:0 16px 12px">The AI agents you allowed to reach your data. Revoking one cuts it off at once.</p>
+    <div class="client"><span class="icon"><span class="i i-robot"></span></span><div class="stack"><span class="t-strong truncate">Claude Code</span><span class="t-caption scope">Read only · since 3 Nov.</span></div><button class="btn sm ghost" type="button">Revoke</button></div>
+    <div class="client"><span class="icon"><span class="i i-robot"></span></span><div class="stack"><span class="t-strong truncate">Pocket Notes Agent</span><span class="t-caption scope">Read and write · since 21 Oct.</span></div><button class="btn sm ghost" type="button">Revoke</button></div>
+  </section>
+</div>
+</div>
+<nav class="tabbar" data-current="more"></nav>
+</div>
+</div>
+</section>
+
+</div>
+</main>
+
+<aside class="notes">
+  <h2>What changes</h2>
+  <ul>
+    <li><b>The menu holds four things</b>, as #105 shipped: the name and e-mail at its top (a heading, not a button), <i>Settings</i>, <i>Keyboard shortcuts</i> with its key, then <i>Sign out</i> under a rule. Sign out is a plain item: leaving is not destructive.</li>
+    <li><b>The menu is a floating surface</b> (its own surface, edge and shadow), wider than the sidebar so the e-mail fits on one line; it opens upwards from the button, which stays pressed while it is open.</li>
+    <li><b>Settings has sections at the left</b>: General, Your account, Categories, Rules, Data, then Users and MCP access under <i>Administration</i>, for the administrator only.</li>
+    <li><b>General holds what applies at once</b>, inline, each a row with its label over one line of help and the control at the right: language (a select), colour scheme (System, Light, Dark), single-key shortcuts (a switch).</li>
+    <li><b>Your account</b> holds the name and e-mail, the password (a button that opens the dialog, page 3's rules) and the connected MCP clients with <i>Revoke</i>; the consent screen (page 4) points here.</li>
+    <li><b>Phone</b>: the More tab lists the screens the tab bar leaves out, then Settings and Keyboard shortcuts, then Sign out on its own; a settings section is a page of its own with a way back.</li>
+  </ul>
+
+  <h2>Rejected</h2>
+  <ul class="rejected">
+    <li><b>Language and scheme kept in the menu as well</b>: two places for one setting, and the menu grows back to what #105 removed.</li>
+    <li><b>Sign out in red</b>: the menu would shout for the least used item.</li>
+    <li><b>Settings as tabs across the top</b>: six sections, Users only for some, and the labels wrap on a phone.</li>
+    <li><b>Connected clients in General</b>: they are the user's own, not the device's.</li>
+  </ul>
+
+  <h2>Motion</h2>
+  <dl class="timeline">
+    <dt>Open 0–150</dt><dd>The menu fades in and rises 4 px from the button, 150 ms ease-out.</dd>
+    <dt>Close 0–100</dt><dd>It fades out and sinks back 4 px, 100 ms ease-in; focus goes back to the button.</dd>
+    <dt>Scheme</dt><dd>Choosing a scheme changes the colours at once, no fade (a fade of every colour reads as a flicker).</dd>
+    <dt>Reduced</dt><dd>The menu is there, or not.</dd>
+  </dl>
+
+  <h2>To decide</h2>
+  <ul>
+    <li>Today General also holds the connected clients and the switch of MCP access, and the password is a page of its own. Proposed: a <i>Your account</i> section for the password and the clients, and the switch under <i>Administration</i>, so General keeps only what applies to this device.</li>
+    <li>Whether <i>Keyboard shortcuts</i> stays in the More tab on a phone, where there is rarely a keyboard (#105 says it follows the same list: drawn so).</li>
+  </ul>
+</aside>
+</div>
+<script src="assets/proto.js"></script>
+</body>
+</html>

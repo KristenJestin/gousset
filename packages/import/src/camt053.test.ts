@@ -19,7 +19,7 @@ import {
   UnsupportedContent,
 } from "./errors";
 import type { Statement } from "./statement";
-import { madeUpStatements } from "./testing";
+import { madeUpStatementsWithoutEntities } from "./testing";
 
 const read = (bytes: Uint8Array) => Effect.runSync(readCamt053(bytes));
 
@@ -154,6 +154,24 @@ describe("reading CAMT.053 files", () => {
     });
   });
 
+  test("reads camt053-double-encoded.xml (entities encoded twice, and once) as the bank meant them", () => {
+    expect(read(statementSamples.camt053DoubleEncoded.bytes)).toEqual({
+      account: ACCOUNT,
+      currency: "EUR",
+      lines: [
+        {
+          ...line("2026-11-02", -450, "CB CAFE DE L'EXEMPLE", null),
+          valueOn: null,
+          memo: "TICKET L'EXEMPLE",
+          counterparty: { name: "CAFE DE L'EXEMPLE & FILS", iban: null },
+        },
+        { ...line("2026-11-06", -890, "LIBRAIRIE L'ENCRE EXEMPLE", null), valueOn: null },
+      ],
+      openingBalance: null,
+      balance: { amountMinor: 50_000, on: "2026-11-30" },
+    });
+  });
+
   test("reads the account's IBAN spaced and lower case, or its other identifier", () => {
     const spaced = camt().replace(
       "FR7699999000010001234567809",
@@ -173,14 +191,37 @@ describe("reading CAMT.053 files", () => {
     });
   });
 
-  test("reads back any statement writeCamt053 writes", () => {
+  test("reads back any statement writeCamt053 writes, its labels holding no entity", () => {
     fc.assert(
-      fc.property(madeUpStatements, (statement) => {
+      fc.property(madeUpStatementsWithoutEntities, (statement) => {
         const bytes = new TextEncoder().encode(writeCamt053(statement));
 
         expect(read(bytes)).toEqual(writtenByWriteCamt053(statement));
       }),
     );
+  });
+
+  test("reads a written label that looks like an entity as that entity, and keeps what names none", () => {
+    const labels = ["&#0;* ;", "L&apos;EST", "&AMP;LT; R&D", "&#99999999; &UNKNOWN;"];
+
+    const statement = {
+      ...exampleStatement,
+      lines: labels.map((label, at) => ({
+        bookedOn: "2026-11-02",
+        amountMinor: -100,
+        label,
+        reference: `EX${at}`,
+      })),
+    };
+
+    const { lines } = read(new TextEncoder().encode(writeCamt053(statement)));
+
+    expect(lines.map((line) => line.label)).toEqual([
+      "* ;",
+      "L'EST",
+      "< R&D",
+      "&#99999999; &UNKNOWN;",
+    ]);
   });
 });
 

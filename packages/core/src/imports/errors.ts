@@ -82,6 +82,58 @@ export class InvalidProfileFile extends Schema.TaggedError<InvalidProfileFile>()
 ) {}
 
 /**
+ * No file upload of the user's has this id, or this secret, for this MCP grant: it was imported
+ * already (a file upload is used once), it expired and was deleted, its grant was revoked, or it
+ * never existed. Which one is never said: the address is a secret.
+ */
+export class FileUploadNotFound extends Schema.TaggedError<FileUploadNotFound>()(
+  "FileUploadNotFound",
+  {},
+) {}
+
+/** The file upload expired (at `expiresAt`, ISO 8601) before it was imported. */
+export class FileUploadExpired extends Schema.TaggedError<FileUploadExpired>()(
+  "FileUploadExpired",
+  { expiresAt: Schema.String },
+) {}
+
+/** The file upload has not received all its parts yet: it cannot be imported. */
+export class FileUploadIncomplete extends Schema.TaggedError<FileUploadIncomplete>()(
+  "FileUploadIncomplete",
+  {
+    partsReceived: Schema.Number,
+    parts: Schema.Number,
+    bytesReceived: Schema.Number,
+    size: Schema.Number,
+  },
+) {}
+
+/**
+ * A part sent to a file upload's address is refused (`partRefusal`), with the part expected next
+ * and the bytes still expected.
+ */
+export class FileUploadPartRefused extends Schema.TaggedError<FileUploadPartRefused>()(
+  "FileUploadPartRefused",
+  {
+    reason: Schema.Literals(["part_needed", "out_of_order", "complete", "empty", "size"]),
+    expectedPart: Schema.Number,
+    parts: Schema.Number,
+    bytesLeft: Schema.Number,
+  },
+) {}
+
+/** A file upload is declared in more parts than it may be (`limit`). */
+export class TooManyParts extends Schema.TaggedError<TooManyParts>()("TooManyParts", {
+  limit: Schema.Number,
+}) {}
+
+/** The user has `limit` file uploads waiting already (`MAX_PENDING_UPLOADS`). */
+export class TooManyFileUploads extends Schema.TaggedError<TooManyFileUploads>()(
+  "TooManyFileUploads",
+  { limit: Schema.Number },
+) {}
+
+/**
  * An import's job failed: `code` says why (a reader's error, `CURRENCY_MISMATCH`, `QUERY_FAILED`),
  * and `retry` whether another attempt may do better.
  */

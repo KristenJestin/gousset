@@ -18,9 +18,19 @@ export type Statement = {
   to: string;
   openingBalanceMinor: number;
   lines: ReadonlyArray<StatementLine>;
+  /**
+   * The closing balance the file states, when it is not the one its lines make: a bank that writes
+   * 0.00 although the account is not empty. Left out, the opening balance plus every line.
+   */
+  statedClosingBalanceMinor?: number;
 };
 
+/** The closing balance a file of the statement writes. */
 export function closingBalanceMinor(statement: Statement): number {
+  if (statement.statedClosingBalanceMinor !== undefined) {
+    return statement.statedClosingBalanceMinor;
+  }
+
   let balance = statement.openingBalanceMinor;
 
   for (const line of statement.lines) {

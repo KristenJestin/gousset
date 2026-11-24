@@ -1,7 +1,6 @@
 import {
   CategoryStore,
   DataExport,
-  FixtureLedger,
   ImportProfiles,
   Imports,
   LineMerchantRefused,
@@ -417,7 +416,6 @@ function lineRowsOf(state: Store): MemoryLineRows {
 
 function runnerOf(state: Store): Runner<GoussetServices> {
   const layer = Layer.mergeAll(
-    FixtureLedger,
     memoryAccountStore(),
     memoryLineStore(new Map([[writer.userId, lineRowsOf(state)]])),
     categoriesOf(state),

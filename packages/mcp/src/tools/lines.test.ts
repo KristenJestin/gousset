@@ -1,6 +1,5 @@
 import {
   DataExport,
-  FixtureLedger,
   ImportProfiles,
   Imports,
   Merchants,
@@ -204,7 +203,6 @@ function onToday(
   const byOwner = new Map([[reader.userId, rows]]);
 
   const layer = Layer.mergeAll(
-    FixtureLedger,
     memoryAccountStore(byOwner),
     memoryLineStore(byOwner),
     memoryCategoryStore(categories),

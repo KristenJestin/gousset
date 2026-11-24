@@ -37,10 +37,18 @@ test.beforeAll(async ({ app, user, secondUser }) => {
   // A user who already has the rows (a worker that runs this file again) is left as they are.
   await data.seed(alex);
   await data.seed(sam);
+  // A file upload belongs to an MCP grant: each user gets one for these tests alone.
+  await data.seedFileUpload(alex);
+  await data.seedFileUpload(sam);
 });
 
 test.afterAll(async () => {
-  await data.close();
+  try {
+    await data.forgetFileUploads(alex);
+    await data.forgetFileUploads(sam);
+  } finally {
+    await data.close();
+  }
 });
 
 test("every table holding a user's rows is kept apart by row-level security", async () => {

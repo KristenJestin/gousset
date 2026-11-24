@@ -11,6 +11,7 @@ import { merchantsJob } from "./merchants-job.server";
 import { JobQueue, register } from "./queue.server";
 import { ruleJob } from "./rule-job.server";
 import { E2E_JOBS_VARIABLE, testJob } from "./test-job";
+import { uploadSweepJob } from "./upload-sweep.server";
 
 /** Present only when the harness started the app; any value but `on` fails loudly. */
 export const e2eJobs = Config.option(Config.Literal("on", E2E_JOBS_VARIABLE));
@@ -22,6 +23,7 @@ const queue = Layer.unwrap(
 
     const jobs = [
       register(importJob),
+      register(uploadSweepJob),
       register(merchantsJob),
       register(balancesJob),
       register(ruleJob),

@@ -1,3 +1,4 @@
+import { Month } from "@gousset/core/values";
 import { createServerFn } from "@tanstack/react-start";
 import { Effect, Option, Schema } from "effect";
 
@@ -26,6 +27,26 @@ export const startTestJob = createServerFn({ method: "POST" })
         const queue = yield* JobQueue;
 
         return { id: yield* queue.send(testJob, context.owner, data) };
+      }),
+    ),
+  );
+
+/**
+ * The month the test job says it touched, read by the harness's page so that a job's end has a
+ * month's query to read again; refused outside a test run. It holds no figure: the review reads
+ * none until it ships (#126).
+ */
+export const readTouchedMonth = createServerFn({ method: "GET" })
+  .middleware([signedIn])
+  .validator(Schema.toStandardSchemaV1(Schema.Struct({ month: Month })))
+  .handler(({ data }) =>
+    jobs.runPromise(
+      Effect.gen(function* () {
+        if (Option.isNone(yield* e2eJobs)) {
+          return yield* Effect.die("Only the end-to-end harness reads the test job's month.");
+        }
+
+        return { month: data.month };
       }),
     ),
   );

@@ -11,7 +11,10 @@ import { addUser, createUser, signIn } from "../src/auth";
 import type { TestUser } from "../src/auth";
 import { readArchive } from "../src/export";
 import { connectMcp, expect, test, visit } from "../src/test";
-import { USER_TABLES, keysOf, openUserData } from "../src/user-data";
+import { NOT_EXPORTED, USER_TABLES, keysOf, openUserData } from "../src/user-data";
+
+/** The user tables an export carries, as rows or as files. */
+const EXPORTED = USER_TABLES.filter((table) => !NOT_EXPORTED.has(table.name));
 
 // Issue #22, exporting one's data: from Settings, Data, a user downloads one archive of every row
 // of theirs as JSON and CSV, and every file they imported, with a manifest; the MCP door's `data`
@@ -70,7 +73,7 @@ test("an export of the made-up data holds every row", async ({ app, user, page }
   const data = openUserData(app.database);
 
   try {
-    for (const table of USER_TABLES) {
+    for (const table of EXPORTED) {
       // Every row the user has, as their own transaction sees it.
       const keys = await data.asUser(owner, (transaction) => keysOf(transaction, table));
 
@@ -126,9 +129,10 @@ test("every column of every user table is described in the export's manifest", a
   const data = openUserData(app.database);
 
   try {
-    // Every table holding a user's rows is exported; the imported files go as files.
+    // Every table holding a user's rows is exported, but those NOT_EXPORTED says; the imported
+    // files go as files.
     expect(EXPORT_TABLES.map((table) => table.table).toSorted()).toEqual(
-      USER_TABLES.flatMap((table) => (table.name === "import_file" ? [] : [table.name])).toSorted(),
+      EXPORTED.flatMap((table) => (table.name === "import_file" ? [] : [table.name])).toSorted(),
     );
 
     for (const table of EXPORT_TABLES) {
@@ -220,7 +224,7 @@ test("an MCP client with read access learns what the export holds and where to g
   const data = openUserData(app.database);
 
   try {
-    for (const table of USER_TABLES) {
+    for (const table of EXPORTED) {
       const count = (await data.asUser(owner, (transaction) => keysOf(transaction, table))).length;
       const exported = EXPORT_TABLES.find((each) => each.table === table.name);
 

@@ -50,8 +50,9 @@ export type RuleProposalProps = RuleProposalSets & {
  * that merchant (`merchant` in place of `category`): "label contains PAYPAL *PIXELPLAY" gives
  * Pixelplay.
  *
- * Motion: as `Dialog`, it fades and grows in 200 ms, ease-out, and leaves the same way. Cut under
- * reduced motion.
+ * Motion: as `Dialog`, it fades and grows in 200 ms, ease-out, and leaves in 150 ms, ease-in; on a
+ * phone it rises from the bottom edge in 300 ms and goes back down in 200 ms. Cut under reduced
+ * motion.
  */
 export function RuleProposal({
   open,

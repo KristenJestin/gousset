@@ -205,6 +205,8 @@ export async function alignTokensWithConsents(database: Database, userId: string
 
 /** What the user allows a client today, as the door reads it on every call. */
 export type Grant = {
+  /** The consent's id: a file upload belongs to one grant (#129), deleted with it. */
+  id: string;
   scopes: ReadonlyArray<string>;
   /** When the user allowed it (better-auth keeps it to the second). */
   since: Date;
@@ -230,6 +232,7 @@ export async function currentGrant(
 ): Promise<Grant | undefined> {
   const [row] = await database
     .select({
+      id: authOauthConsent.id,
       scopes: authOauthConsent.scopes,
       since: authOauthConsent.createdAt,
       banned: authUser.banned,
@@ -271,6 +274,7 @@ export async function currentGrant(
   );
 
   return {
+    id: row.id,
     scopes: row.scopes,
     since: row.since ?? new Date(0),
     revokedUntil:
@@ -279,6 +283,38 @@ export async function currentGrant(
         : new Date(Math.max(...revocations.map((last) => last.getTime()))),
     currency: row.currency,
   };
+}
+
+/**
+ * Whether the grant `grantId` of `userId` still allows writes now: the consent is there with the
+ * write scope, and its user is neither banned nor held by a temporary password (#70). The upload
+ * route reads it before it keeps a byte of a file upload the grant made (#129).
+ */
+export async function grantStillWrites(
+  database: Database,
+  userId: string,
+  grantId: string,
+  now = new Date(),
+): Promise<boolean> {
+  const [row] = await database
+    .select({
+      scopes: authOauthConsent.scopes,
+      banned: authUser.banned,
+      banExpires: authUser.banExpires,
+      mustChangePassword: authUser.mustChangePassword,
+    })
+    .from(authOauthConsent)
+    .innerJoin(authUser, eq(authUser.id, authOauthConsent.userId))
+    .where(and(eq(authOauthConsent.id, grantId), eq(authOauthConsent.userId, userId)))
+    .limit(1);
+
+  if (row === undefined) {
+    return false;
+  }
+
+  const banned = row.banned === true && (row.banExpires === null || row.banExpires > now);
+
+  return !banned && !row.mustChangePassword && row.scopes.includes(McpScope.write);
 }
 
 /**

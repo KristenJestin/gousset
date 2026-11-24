@@ -56,8 +56,9 @@ export default defineConfig({
   // the project. A changed screenshot is reviewed in the pull request, never updated blindly.
   snapshotPathTemplate: "{testDir}/__screenshots__/{testFilePath}/{arg}-{projectName}{ext}",
   // WebKit joins for the phone layout once CI runs it (issue #40).
-  // The `motion-*` projects film the review's motions; CI runs them in a job of their own and
-  // keeps the videos (.github/workflows/ci.yml, `motion`).
+  // The `motion-*` projects film the review's motions; CI runs them in a job of their own, or in
+  // the e2e shards of a run with every browser and width, and keeps the videos
+  // (.github/workflows/ci.yml, `motion` and `e2e-shard`).
   projects: [
     {
       name: "chromium-desktop",

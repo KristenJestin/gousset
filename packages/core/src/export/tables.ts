@@ -150,6 +150,11 @@ export const IMPORTS: ExportTable = {
     { name: "undone_at", holds: "when it was undone" },
     // Added after the others (#20): the database keeps it last.
     { name: "job_id", holds: "the background job that ran it" },
+    // Added after job_id (#130).
+    {
+      name: "balance_ignored",
+      holds: "true when the file's balance of 0 looked empty, its account's lines saying otherwise",
+    },
   ],
 };
 

@@ -38,7 +38,7 @@ A table below gives each column its Postgres type, whether it may be null (**nul
 
 **Every row of a user's data carries `user_id text not null`**, referencing `auth_user.id` with `on delete cascade`: deleting a user deletes their data, and an export (#22) is one query per table. Child tables carry it too (a line has its own `user_id`, not only its account's), so that every rule of isolation reads one column, with no join.
 
-**A row can only point to a row of the same user.** Each table that is referred to has a unique key on `(user_id, id)`, and the tables that refer to it use composite foreign keys: `statement_line (user_id, account_id) → account (user_id, id)`. The database itself refuses a line of one user on another user's account, whatever the code does. Postgres checks foreign keys as the table's owner, past row-level security, so the check holds whoever runs the query. A nullable reference is checked only when set (`match simple`).
+**A row can only point to a row of the same user.** Each table that is referred to has a unique key on `(user_id, id)`, and the tables that refer to it use composite foreign keys: `statement_line (user_id, account_id) → account (user_id, id)`. The database itself refuses a line of one user on another user's account, whatever the code does. Postgres checks foreign keys as the table's owner, past row-level security, so the check holds whoever runs the query. A nullable reference is checked only when set (`match simple`). One exception: a file upload's grant (`import_upload.grant_id`, below) points to better-auth's `auth_oauth_consent` by its id alone, a table Gousset does not shape.
 
 **Row-level security keeps each user's rows apart** (#13), set per transaction by the server:
 
@@ -123,7 +123,7 @@ better-auth's `auth_user` is the user; its tables keep their `auth_` prefix (its
   - an expiry date never skips a credit: an expired credit with money left is still used in its turn, and is shown as expired and still counted, never silently as available money, until a line takes it out;
   - an account kept by its balance follows no credit: its whole balance shows as restricted.
 
-  The account page and `accounts` `show` give the credits with money left, in that order, and what expires when (the amounts left, summed by expiry day). The expiry date and the order of use are set on the account's page (the credit, the account's settings); the MCP door reads them only.
+  The account page and `accounts` `show` give the credits with money left, in that order, and what expires when (the amounts left, summed by expiry day). The expiry date and the order of use are set on the account's page (the credit, the account's settings), or through the MCP door (`accounts` `set_expiry` on the credit, `credit_order` on `create` and `edit`).
 - **A loan account** holds what is owed: its balance is negative, noted each month (balance mode) or made of its repayments. A subject with a value points to its loan (v0.5).
 
 **`account_balance`**: a balance given for a day, by a statement or by the user.
@@ -143,6 +143,8 @@ better-auth's `auth_user` is the user; its tables keep their `auth_` prefix (its
 - Unique `(account_id, day) where source = 'noted'`: one noted balance a day. Balance mode makes one line per noted balance from the one before it ([Balance mode](#balance-mode)); two on a day would make that order ambiguous. Statement balances may repeat a day (two overlapping files each give theirs), and each goes with its import.
 
 The account page's check (#15) compares the balance the app computes at the end of a day (`opening_balance_minor` plus every counted line booked up to that day) with the latest statement balance on or before today, and shows the difference; any earlier statement balance that disagrees with the app's balance at the end of its own day is shown too, so a past mismatch is never hidden. In balance mode, the noted balances are what the account is kept by.
+
+**A statement balance of zero that the account contradicts is not given** (#130). Some banks' files write 0.00 although the account is not empty (an OFX `LEDGERBAL`, say). When a file's balance, opening or closing, in any format that gives one, is exactly zero while the app's balance at the end of its day is not (as the check computes it, once the file's own lines are saved), the import records no statement balance for it and the account is not checked against it; the import's `balance_ignored` says so, and its summary, on the screen and through the MCP door, with it. A true zero, which the account's lines agree with, is kept. The check reads past such a balance too (`looksEmpty`), so that one an import kept before this rule shows no false gap: no row is changed or dropped, and that import's `balance_ignored` stays false.
 
 ## Statement lines
 
@@ -199,6 +201,7 @@ The account page's check (#15) compares the balance the app computes at the end 
 | `status` | `import_status` | | `'queued'` | `queued`, `reading`, `waiting` (for an account or a profile), `saving`, `done`, `failed`, `undone` |
 | `period_from`, `period_to` | `date` | null | | the days the file covers, as it says or from its lines |
 | `lines_read`, `lines_added`, `lines_duplicate`, `lines_held` | `integer` | | `0` | the summary's counts |
+| `balance_ignored` | `boolean` | | `false` | the file stated a balance of zero that the account's lines contradict on its day: it looked empty and was not recorded (#130, [`account_balance`](#accounts)) |
 | `error_code` | `text` | null | | why it failed, as a code; never the file's content |
 | `job_id` | `uuid` | null | | the pg-boss job that runs it, so that the import screen follows it again after a reload (#20). No foreign key: pg-boss's tables are its own schema, and it purges old jobs |
 | `created_at` | `timestamptz` | | `now()` | |
@@ -217,6 +220,27 @@ The account page's check (#15) compares the balance the app computes at the end 
 | `content` | `bytea` | | | the file as dropped |
 
 The job reads the file from there, so an import interrupted by a restart resumes ([`architecture.md`](architecture.md#background-jobs)); the file can be read again once a reader is fixed, and the export carries it. It is deleted when its import is undone. A file is a few hundred kilobytes; the upload refuses one over 10 MB.
+
+**`import_upload`**: a file on its way in from an agent's shell (#129), rather than its bytes in a tool call. The MCP door's `imports` `create_upload` makes it and answers its address once; the agent sends the file there (`curl -F file=@…`), whole or in numbered parts, appended in order; `imports` `upload` imports it as the import screen imports a file dropped, and deletes it in the same transaction as it makes the import.
+
+| Column | Type | Null | Default | What |
+|---|---|---|---|---|
+| `id` | `uuid` | | `uuidv7()` | primary key |
+| `user_id` | `text` | | | |
+| `grant_id` | `text` | | | the MCP grant that made it: `→ auth_oauth_consent on delete cascade`, so that revoking the client, a ban or a new password (each deletes the grant) deletes it at once. The one reference of a user's row that is not composite: better-auth's table has no unique `(user_id, id)`, and `pnpm auth:generate` writes it whole; Gousset sets it from the grant the MCP door verified for the caller, and the upload route reads the grant again by both its id and its user |
+| `secret_sha256` | `text` | | | the SHA-256 of its address's secret (256 random bits), in hexadecimal; the secret itself is never kept |
+| `file_name` | `text` | | | as the agent named it, for the user only |
+| `size` | `integer` | | | the size declared, in bytes: the parts add up to it exactly |
+| `parts`, `parts_received` | `integer` | | `0` for the second | how many parts it comes in, and how many arrived |
+| `content` | `bytea` | | `''` | the parts received, one after the other |
+| `account_id` | `uuid` | null | | the account named when it was made: `(user_id, account_id) → account on delete cascade` |
+| `format` | `import_format` | null | | the format named when it was made |
+| `created_at` | `timestamptz` | | `now()` | |
+| `expires_at` | `timestamptz` | | | 15 minutes after it was made |
+
+- Checks: `size > 0`; `parts > 0 and parts_received between 0 and parts`; `octet_length(content) <= size`.
+- Index: `(grant_id)`, for the cascade. A user has five at most waiting at once.
+- It is not exported: a file in transit, imported or deleted within minutes; its import, once made, is. The sweep job runs every ten minutes and deletes those expired ten minutes ago or more (meanwhile `status` says it expired, rather than that it never was), each user's in a transaction of theirs ([`architecture.md`](architecture.md#background-jobs)).
 
 **The dedup key** (#20), computed by the import (`packages/core`) from each line a reader gives:
 
@@ -295,7 +319,7 @@ From v0.2 on, installations hold real households' data, and every update runs th
 - **Every migration runs inside a transaction**, and is safe to run on a database that already has it. Drizzle's migrator applies every pending migration in one transaction and records each by name in `drizzle.__drizzle_migrations`, so a migration that fails leaves the database as it was. Nothing in a migration may need to run outside one (`create index concurrently`, `alter type … add value` used in the same migration); what Drizzle does not write (roles, grants, policies, a `do` block) is written so that it does nothing the second time (`if not exists`, `when duplicate_object`), as `user_data_isolation` and `app_role` are.
 - **A migration's timestamp follows every migration of its target branch** (`dev` or `next/x.y`) when it lands. The migrator applies, in the order of their names, the migrations a database has not recorded: one that lands with an older timestamp than a migration already released runs last on an updated installation and in its place on a fresh one, and the two schemas may differ. After merging the target branch into one's own, a migration made before the merge that is no longer the last is generated again (`drizzle-kit generate` after removing it), never renamed by hand.
 
-The `upgrade` workflow checks every push to `dev` and `next/**`, and every pull request that touches what an update runs through (the list is in [`releases.md`](releases.md#every-release-is-an-upgrade): `packages/db` among it), against these rules ([`releases.md`](releases.md#every-release-is-an-upgrade)): the last release, filled with invented data, updated to the commit, with every row of every table compared before and after, and the schema compared with a fresh installation's.
+The `upgrade` job of `ci.yml` checks every push to `dev` and `next/**`, and every pull request but the release's that touches what an update runs through (the list is in [`releases.md`](releases.md#every-release-is-an-upgrade): `packages/db` among it), against these rules ([`releases.md`](releases.md#every-release-is-an-upgrade)): the last release, filled with invented data, updated to the commit, with every row of every table compared before and after, and the schema compared with a fresh installation's. A row may change only as a new migration declares it in `tools/check-upgrade.changes.json` (#132: the labels read before the fix, decoded and keyed again), each change found in the release's rows and no other row changed; a statement the release imported, imported again after the update, adds nothing.
 
 ## What later milestones add
 
@@ -359,7 +383,7 @@ An entry's parts are all in one currency, refused otherwise by `packages/core`, 
 
 **On `statement_line`**: `review_state review_state` default `to_review` (`to_review`, `done`): what the monthly review lists, set to `done` by the import when a rule classified the line surely, or by the user. Every v0.2 line starts `to_review`, which is what it is. `transfer_refused boolean` default `false`: the user said the line is no transfer (#26), so that nothing pairs it again without them. A line is classified when its parts add up to it, when it is the side of a transfer, or (v0.6) when it is the cash of an investment operation; that is read, not stored. And `balance_id uuid` null, unique, `(user_id, balance_id) → account_balance (user_id, id) on delete cascade`, for a line of `source = balance`: it goes with its noted balance. v0.3 adds `account_balance`'s unique `(user_id, id)` for it.
 
-**On `account`**: `balance_category_id uuid` null (`on delete set null (balance_category_id)`), the category a balance-mode account's movement goes to (#31).
+**On `account`**: `balance_category_id uuid` null (`on delete set null (balance_category_id)`), the category a balance-mode account's movement goes to (#31), set on the account's settings or through the MCP door (`accounts` `category` on `create` and `edit`; left out, an edit keeps it).
 
 #### Balance mode
 

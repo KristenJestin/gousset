@@ -1,6 +1,7 @@
 import { AccountRow } from "@gousset/ui/components/accounts-overview";
 import { NavLink, SectionLink, TabLink } from "@gousset/ui/components/app-shell";
 import { ListLinkItem } from "@gousset/ui/components/list";
+import { ReviewComingLink } from "@gousset/ui/components/review-coming";
 import { TextLink } from "@gousset/ui/components/text-link";
 import { createLink } from "@tanstack/react-router";
 
@@ -20,3 +21,6 @@ export const ListRowLink = createLink(ListLinkItem);
 
 /** One row of the accounts overview, a router link to its page. */
 export const AccountRowLink = createLink(AccountRow);
+
+/** One row of the review's empty state, a router link to a screen that works today. */
+export const AppReviewComingLink = createLink(ReviewComingLink);

@@ -119,8 +119,8 @@ const FIRST_CONDITION: RuleConditionsDraft = {
  *
  * Motion: the sheet slides in from the right in about 300 ms (`Sheet`, from the bottom on a
  * phone); a condition added fades and slides in 150 ms (`RuleConditionsEditor`); the lines changed fade
- * in 200 ms once the job ends; "Delete"'s question grows in 200 ms (`AlertDialog`). Cut under
- * reduced motion.
+ * in 200 ms once the job ends; "Delete"'s question grows in 200 ms (`AlertDialog`; it rises in
+ * 300 ms on a phone). Cut under reduced motion.
  */
 export function RuleEditor(props: RuleEditorProps) {
   const messages = useUiMessages().rules;

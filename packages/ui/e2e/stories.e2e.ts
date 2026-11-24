@@ -9,7 +9,8 @@ import { expect, test } from "@playwright/test";
  * story in every browser would put over a thousand images in Git. Reduced motion: each story is
  * caught in its final state, never on its way.
  *
- * The references come from CI (`.github/workflows/ui-snapshots.yml`), never from a local browser.
+ * The references come from CI (the `references` job of `.github/workflows/ci.yml`), never from a
+ * local browser.
  */
 type Shot = {
   id: string;
@@ -17,6 +18,8 @@ type Shot = {
   open?: "click" | "focus";
   /** The trigger's name, when it is not the story's first button. */
   trigger?: string;
+  /** A field to focus once the popup is open, by its label: its ring is in the picture. */
+  field?: string;
   /** The screenshot's name, when a story is shot twice. */
   name?: string;
   /** A phone's width, for a story whose layout is the phone's (its `Phone` story). */
@@ -47,6 +50,12 @@ const SHOTS: ReadonlyArray<Shot> = [
   { id: "overlays-popover--default", open: "click" },
   { id: "overlays-dialog--default", open: "click" },
   { id: "overlays-sheet--default", open: "click" },
+  // A focused field's ring, whole at the edge of a dialog and of a sheet's scrolling body (#122);
+  // a form sheet opens on its first field.
+  { id: "overlays-dialog--with-form", open: "click", field: "Balance" },
+  { id: "overlays-sheet--with-form", open: "click" },
+  // On a phone, a long form is a bottom sheet (#121).
+  { id: "overlays-sheet--with-form-on-phone", open: "click", width: 320 },
   { id: "feedback-toaster--failed" },
   { id: "feedback-job-progress--running" },
   { id: "import-file-drop--default" },
@@ -59,6 +68,10 @@ const SHOTS: ReadonlyArray<Shot> = [
   { id: "import-csv-preview--default" },
   { id: "states-emptystate--in-a-block" },
   { id: "states-errorstate--beside-a-working-block" },
+  // The review until it reads real lines (#126): a user with lines, a new user, a phone.
+  { id: "states-reviewcoming--with-data" },
+  { id: "states-reviewcoming--new-user" },
+  { id: "states-reviewcoming--phone", width: 320 },
   { id: "layout-card--with-description" },
   { id: "layout-screen--sign-in" },
   { id: "data-list--loading-beside-loaded" },
@@ -179,6 +192,10 @@ for (const scheme of ["light", "dark"] as const) {
             .filter({ visible: true })
             .first(),
         ).toBeVisible();
+      }
+
+      if (shot.field !== undefined) {
+        await page.getByLabel(shot.field, { exact: true }).focus();
       }
 
       await expect(page).toHaveScreenshot(`${name}-${scheme}.png`);

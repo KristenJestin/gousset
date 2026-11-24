@@ -1,8 +1,9 @@
 import { Effect } from "effect";
+import fc from "fast-check";
 import { describe, expect, test } from "vite-plus/test";
 
 import { UnsupportedContent } from "./errors";
-import { cleanValue, decodeText, quote } from "./text";
+import { cleanValue, decodeEntities, decodeText, quote } from "./text";
 
 const decode = (bytes: Uint8Array) => Effect.runSync(decodeText(bytes));
 
@@ -71,6 +72,120 @@ describe("quoting the file's text in an error", () => {
 
   test("cuts a long text to 40 characters", () => {
     expect(quote("x".repeat(100))).toBe(`"${"x".repeat(40)}…"`);
+  });
+});
+
+/** Text as an XML writer escapes it: `&` first, so that what it writes is not escaped again. */
+function escapeXml(text: string): string {
+  return text
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&apos;");
+}
+
+/** Text rich in what entities are made of, so that the properties meet them often. */
+const entityLike = fc
+  .array(
+    fc.oneof(
+      fc.constantFrom("&", ";", "#", "x", "amp", "apos", "AMP", "lt", "#39", "#x26", "#59"),
+      fc.string({ maxLength: 3 }),
+    ),
+    { maxLength: 20 },
+  )
+  .map((parts) => parts.join(""));
+
+describe("decoding entities (#132)", () => {
+  test("decodes an apostrophe encoded twice, as some banks write it", () => {
+    expect(decodeEntities("CB CAFE DE L&amp;apos;EXEMPLE")).toBe("CB CAFE DE L'EXEMPLE");
+  });
+
+  test("decodes an ampersand encoded twice, and an apostrophe encoded once", () => {
+    expect(decodeEntities("PRLV ELEC &amp;amp; GAZ EXEMPLE")).toBe("PRLV ELEC & GAZ EXEMPLE");
+    expect(decodeEntities("LIBRAIRIE L&apos;ENCRE EXEMPLE")).toBe("LIBRAIRIE L'ENCRE EXEMPLE");
+  });
+
+  test("decodes until no known entity is left, numeric ones and any case included", () => {
+    expect(decodeEntities("A&amp;amp;amp;lt;B")).toBe("A<B");
+    expect(decodeEntities("L&amp;#39;EST L&AMP;#x27;OUEST")).toBe("L'EST L'OUEST");
+    // An entity may close on a character another one gives.
+    expect(decodeEntities("&lt&#59; &#38;apos;")).toBe("< '");
+  });
+
+  test("leaves what names no entity as it is, once what encodes it is decoded", () => {
+    expect(decodeEntities("R&D & CO")).toBe("R&D & CO");
+    expect(decodeEntities("&amp;unknown; &#99999999; &#x;")).toBe("&unknown; &#99999999; &#x;");
+  });
+
+  test("leaves text without an entity untouched", () => {
+    fc.assert(
+      fc.property(fc.string({ unit: "grapheme" }), (text) => {
+        fc.pre(!text.includes("&"));
+        expect(decodeEntities(text)).toBe(text);
+      }),
+    );
+  });
+
+  test("gives back text escaped once or twice, when that text holds no entity itself", () => {
+    fc.assert(
+      fc.property(fc.oneof(entityLike, fc.string({ unit: "grapheme" })), (text) => {
+        fc.pre(decodeEntities(text) === text);
+        expect(decodeEntities(escapeXml(text))).toBe(text);
+        expect(decodeEntities(escapeXml(escapeXml(text)))).toBe(text);
+      }),
+    );
+  });
+
+  test("gives what decoding one level per pass gives, once a pass changes nothing", () => {
+    const named = new Map([
+      ["amp", "&"],
+      ["lt", "<"],
+      ["gt", ">"],
+      ["quot", '"'],
+      ["apos", "'"],
+      ["nbsp", String.fromCodePoint(0xa0)],
+    ]);
+
+    const onePass = (text: string) =>
+      text.replaceAll(/&(#x[\da-f]+|#\d+|[a-z]+);/gi, (entity: string, name: string) => {
+        if (!name.startsWith("#")) {
+          return named.get(name.toLowerCase()) ?? entity;
+        }
+
+        const hexadecimal = name.startsWith("#x") || name.startsWith("#X");
+        const code = Number.parseInt(name.slice(hexadecimal ? 2 : 1), hexadecimal ? 16 : 10);
+
+        return code <= 0x10_ff_ff ? String.fromCodePoint(code) : entity;
+      });
+
+    const passByPass = (text: string): string => {
+      const next = onePass(text);
+
+      return next === text ? text : passByPass(next);
+    };
+
+    fc.assert(
+      fc.property(entityLike, (text) => {
+        expect(decodeEntities(text)).toBe(passByPass(text));
+      }),
+      { numRuns: 2000 },
+    );
+  });
+
+  test("is idempotent: what it gives holds no entity left to decode", () => {
+    fc.assert(
+      fc.property(entityLike, (text) => {
+        const decoded = decodeEntities(text);
+
+        expect(decodeEntities(decoded)).toBe(decoded);
+      }),
+    );
+  });
+
+  test("decodes a crafted run of nested entities in linear time", () => {
+    // Decoding one level per pass would take a million passes over five megabytes.
+    expect(decodeEntities(`&${"amp;".repeat(1_000_000)}apos;`)).toBe("'");
   });
 });
 
