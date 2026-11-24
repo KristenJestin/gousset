@@ -56,78 +56,28 @@ const Scalar = Schema.Union([Schema.String, Schema.Number]);
 /** A condition as a caller writes it: an account by its name, not its id. */
 const WrittenCondition = Schema.Struct({
   field: Schema.Literals(CONDITION_FIELDS),
-  operator: Schema.Literals(OPERATORS).annotate({
-    description: "Which field takes which: see the description.",
-  }),
-  value: Schema.Union([Scalar, Schema.Array(Scalar)]).annotate({
-    description: "between: [low, high].",
-  }),
-  institution: Schema.optional(
-    Schema.String.annotate({ description: "account: its bank, when two share the name." }),
-  ),
+  operator: Schema.Literals(OPERATORS),
+  value: Schema.Union([Scalar, Schema.Array(Scalar)]),
+  institution: Schema.optional(Schema.String),
 });
 
 export type WrittenCondition = typeof WrittenCondition.Type;
 
 const RulesInput = Schema.Struct({
-  action: Schema.Literals([
-    "list",
-    "show",
-    "create",
-    "edit",
-    "disable",
-    "delete",
-    "apply_to_past",
-  ]).annotate({
-    description:
-      "list, show: read. create, edit, disable (turns one off), delete, apply_to_past (to the lines already there): write.",
-  }),
-  rule: Schema.optional(
-    Schema.String.annotate({
-      description: "The rule's id, as list writes it after Id:.",
-    }),
-  ),
+  action: Schema.Literals(["list", "show", "create", "edit", "disable", "delete", "apply_to_past"]),
+  // The description says what each field is for; its fields repeat none of it (docs/mcp.md's
+  // listing budget).
+  rule: Schema.optional(Schema.String),
   conditions: Schema.optional(
-    Schema.Array(WrittenCondition)
-      .check(Schema.isMaxLength(MAX_CONDITIONS))
-      .annotate({
-        description: `create, edit: 1 to ${MAX_CONDITIONS}, all to be met; edit replaces them all.`,
-      }),
+    Schema.Array(WrittenCondition).check(Schema.isMaxLength(MAX_CONDITIONS)),
   ),
-  merchant: Schema.optional(
-    Schema.NullOr(Schema.String).annotate({
-      description: "create, edit: the merchant set, by name (any case); edit: null clears it.",
-    }),
-  ),
-  category: Schema.optional(
-    Schema.NullOr(Schema.String).annotate({
-      description:
-        'create, edit: the category set, by name or "Parent > Child" (any case); edit: null clears it.',
-    }),
-  ),
-  kind: Schema.optional(
-    Schema.Literals(["expense", "income"]).annotate({
-      description: "With category: expense or income, when both kinds have one of the name.",
-    }),
-  ),
-  enabled: Schema.optional(
-    Schema.Boolean.annotate({ description: "edit: true turns the rule on, false off." }),
-  ),
-  place: Schema.optional(
-    Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: MAX_RULES })).annotate({
-      description: "edit: its place in the order rules are tried, from 1.",
-    }),
-  ),
-  from_correction: Schema.optional(
-    Schema.Boolean.annotate({
-      description: "create: true when it comes from the user's correction of a line.",
-    }),
-  ),
-  include_by_hand: Schema.optional(
-    Schema.Boolean.annotate({
-      description: "apply_to_past: true also changes the lines the user classified by hand.",
-    }),
-  ),
+  merchant: Schema.optional(Schema.NullOr(Schema.String)),
+  category: Schema.optional(Schema.NullOr(Schema.String)),
+  kind: Schema.optional(Schema.Literals(["expense", "income"])),
+  enabled: Schema.optional(Schema.Boolean),
+  place: Schema.optional(Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: MAX_RULES }))),
+  from_correction: Schema.optional(Schema.Boolean),
+  include_by_hand: Schema.optional(Schema.Boolean),
 });
 
 type RulesInput = typeof RulesInput.Type;
@@ -147,15 +97,15 @@ const CREATE_EXAMPLE = {
   category: "Groceries",
 } as const satisfies Encoded;
 
-const DESCRIPTION = `Rules classify lines by themselves: conditions a line must all meet, and a merchant, a category or both to set. Rules are tried in order; the first that applies wins. They classify each line imported from then on; the lines already there change only with \`apply_to_past\`, which leaves the lines the user classified by hand alone unless \`include_by_hand: true\`. \`list\` gives them in order, each a sentence ending with its id; \`show\` gives one with what it would do to the lines already there.
+const DESCRIPTION = `Rules classify lines by themselves: conditions a line must all meet, and a merchant, a category or both to set; tried in order, the first that applies wins. They classify each new line; lines already there change only with \`apply_to_past\`, which leaves lines classified by hand alone unless \`include_by_hand: true\`. \`list\`: in order, each a sentence ending with its id; \`show\`: one, with its effect on the lines already there.
 
-Use it when the user wants lines like one classified the same way from now on: \`lines\` \`classify\` ends by proposing the exact create call. \`merchants\` and \`categories\` change those themselves.
+Use it so lines like one are classified alike from now on: \`lines\` \`classify\` proposes the exact create call.
 
-Writes, with the write scope: \`create\` (\`conditions\`; \`merchant\`, \`category\` or both, by name; \`from_correction: true\` when it comes from a correction); \`edit\` one by \`rule\` id: \`conditions\` (replaced whole), \`merchant\` or \`category\` (null clears), \`enabled\`, \`place\`; \`disable\` turns one off; \`delete\`; \`apply_to_past\` waits up to 15 s and says how many lines changed.
+Writes (write scope): \`create\` (\`conditions\`; \`merchant\`, \`category\` ("Parent > Child"; \`kind\` when both kinds have the name) or both, by name; \`from_correction: true\` after a correction); \`edit\` one by \`rule\` (its id): \`conditions\` (replaced whole), \`merchant\` or \`category\` (null clears), \`enabled\`, \`place\` (from 1); \`disable\` turns one off; \`delete\`; \`apply_to_past\` waits up to 15 s and answers how many lines changed.
 
-A condition is {"field","operator","value"}: label (contains, startsWith, endsWith, eq, notContains; any case); account (eq, neq; its name as \`accounts\` lists it, any case, with "institution" when two share it); amount (eq, neq, gte, lte, gt, lt, between; no sign, in the account's currency: 12.5 for 12.50); direction (eq "out" or "in"); day of the month (eq, gte, lte, between; 1 to 31); date (eq, gte, lte, between; YYYY-MM-DD). between takes [low, high], both included. At most ${MAX_CONDITIONS}.
+A condition is {"field","operator","value"}: label (contains, startsWith, endsWith, eq, notContains; any case); account (eq, neq; by name as \`accounts\` lists it, with "institution" when two share it); amount (eq, neq, gte, lte, gt, lt, between; no sign, in the account's currency: 12.5 for 12.50); direction (eq: "out", "in"); day of the month (eq, gte, lte, between; 1 to 31); date (eq, gte, lte, between; YYYY-MM-DD). between takes [low, high], both included. At most ${MAX_CONDITIONS}.
 
-Refused, with what to do: no condition or too many, a value of the wrong form, an unknown or ambiguous name (with names to choose), nothing set, an archived category, an unknown id, ${MAX_RULES} rules already.
+Refused, saying what to do: no or too many conditions, a malformed value, an unknown or ambiguous name, nothing set, an archived category, an unknown id, ${MAX_RULES} rules.
 
 Example: ${JSON.stringify(CREATE_EXAMPLE)}`;
 

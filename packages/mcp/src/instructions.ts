@@ -26,6 +26,6 @@ Which tool answers what:
 - \`lines\`: searches every line by text, account, period, amount or to review, and shows one with its category, the import it came from and its transfer; classifies a line in a category or as a transfer, or undoes one. Use it for "is this a transfer to my savings?".
 - \`merchants\`: lists, searches and shows the merchants with the cleaned labels that name them; renames one, merges two, splits one by moving a cleaned label to another merchant, or sets the category its entries go in by default. Use it for "which shop is this?" or to tidy merchants up.
 - \`categories\`: the expense and income categories on two levels, with their benchmarks and six-month averages; creates, renames, moves, merges and archives them. Name a category as listed, "Parent > Child" for a child.
-- \`rules\`: the rules that classify lines by themselves; creates, edits, turns off, and applies one to the lines already there. After a correction with \`lines\`, propose the rule its answer writes.
+- \`rules\`: rules that classify lines by themselves; creates, edits, turns off, applies one to past lines. After a \`lines\` correction, propose the rule it writes.
 
 Results are text, with names rather than ids. A long result comes in parts: its last line writes the next call to make. An error says what to do and gives a valid call. A write needs the connection to have been allowed to read and write; a refusal says how to get it.`;
