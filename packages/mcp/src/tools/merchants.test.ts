@@ -15,6 +15,7 @@ import {
   MerchantNotFound,
   Merchants,
   RuleJobs,
+  Subscriptions,
   Transfers,
   memoryAccountStore,
   memoryCategory,
@@ -46,7 +47,13 @@ import type { Caller, Runner } from "../tool";
 const writer: Caller = { userId: "ada", canWrite: true, currency: "EUR" };
 const reader: Caller = { userId: "ada", canWrite: false, currency: "EUR" };
 
-type StoredMerchant = { id: string; name: string; aliases: Array<string>; intermediary?: boolean };
+type StoredMerchant = {
+  id: string;
+  name: string;
+  aliases: Array<string>;
+  intermediary?: boolean;
+  subscriptionDismissed?: boolean;
+};
 
 /** A line paid through an intermediary (#30), as core reads it: its intermediary and who was paid. */
 type PaidLine = {
@@ -226,6 +233,7 @@ function merchantsOf(state: Store) {
         id: found.id,
         name: found.name,
         intermediary: found.intermediary === true,
+        subscriptionDismissed: found.subscriptionDismissed === true,
         defaultCategory: defaultOf(state, found.id),
         aliases: found.aliases.toSorted(),
         lines: state.lines.get(found.id) ?? [],
@@ -311,6 +319,12 @@ function merchantsOf(state: Store) {
     markIntermediary: (_owner, merchantId, intermediary) =>
       Effect.map(byId(merchantId), (found) => {
         found.intermediary = intermediary;
+
+        return summaryOf(found);
+      }),
+    markSubscription: (_owner, merchantId, dismissed) =>
+      Effect.map(byId(merchantId), (found) => {
+        found.subscriptionDismissed = dismissed;
 
         return summaryOf(found);
       }),
@@ -430,6 +444,7 @@ function runnerOf(state: Store): Runner<GoussetServices> {
     Layer.mock(Expenses, {}),
     Layer.mock(UserData, {}),
     Layer.mock(RuleJobs, {}),
+    Layer.mock(Subscriptions, {}),
     merchantsOf(state),
   );
 
@@ -1270,6 +1285,64 @@ describe("merchants and payment intermediaries", () => {
   });
 });
 
+describe("merchants and subscriptions", () => {
+  test("edit with subscription false dismisses a merchant's payments, true proposes them again", async () => {
+    const state = store();
+    const greenmarket = () => state.merchants.find((each) => each.name === "Greenmarket");
+
+    const dismissed = await merchants(state, {
+      action: "edit",
+      merchant: "greenmarket",
+      subscription: false,
+    });
+
+    expect(dismissed.isError, dismissed.text).toBe(false);
+    expect(dismissed.text).toContain(
+      "Greenmarket's payments are no subscription: month subscriptions never proposes them again.",
+    );
+    expect(greenmarket()?.subscriptionDismissed).toBe(true);
+
+    const shown = await merchants(state, { action: "show", merchant: "Greenmarket" });
+
+    expect(shown.text).toContain("The user said its payments are no subscription");
+
+    const back = await merchants(state, {
+      action: "edit",
+      merchant: "Greenmarket",
+      subscription: true,
+    });
+
+    expect(back.isError, back.text).toBe(false);
+    expect(back.text).toContain("Greenmarket's payments may be proposed as a subscription again");
+    expect(greenmarket()?.subscriptionDismissed).toBe(false);
+
+    const again = await merchants(state, { action: "show", merchant: "Greenmarket" });
+
+    expect(again.text).not.toContain("no subscription");
+  });
+
+  test("edit with subscription does one thing at a time, on a merchant that exists", async () => {
+    const both = await merchants(store(), {
+      action: "edit",
+      merchant: "Greenmarket",
+      subscription: false,
+      name: "Green Market",
+    });
+
+    expect(both.isError).toBe(true);
+    expect(both.text).toContain("edit does one thing at a time");
+
+    const unknown = await merchants(store(), {
+      action: "edit",
+      merchant: "Pantry",
+      subscription: false,
+    });
+
+    expect(unknown.isError).toBe(true);
+    expect(await expectValidExample(unknown.text)).toEqual({ action: "list" });
+  });
+});
+
 describe("the merchants tool", () => {
   test("refuses its writes to a token allowed to read only, and says how to get the write scope", async () => {
     const state = store();
@@ -1277,6 +1350,7 @@ describe("the merchants tool", () => {
     const writes: ReadonlyArray<Arguments> = [
       { action: "edit", merchant: "Greenmarket", name: "Green Market" },
       { action: "merge", merchant: "Green Grocer", into: "Greenmarket" },
+      { action: "edit", merchant: "Greenmarket", subscription: false },
     ];
 
     for (const args of writes) {
@@ -1293,6 +1367,8 @@ describe("the merchants tool", () => {
       "Fuelstop",
       "Green Grocer",
     ]);
+
+    expect(state.merchants.some((each) => each.subscriptionDismissed === true)).toBe(false);
 
     const read = await merchants(state, { action: "show", merchant: "Greenmarket" }, reader);
 

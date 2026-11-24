@@ -14,6 +14,7 @@ import {
   Imports,
   Merchants,
   RuleJobs,
+  Subscriptions,
   TooManyFileUploads,
   Transfers,
   UnknownFormat,
@@ -279,6 +280,7 @@ function runnerOf(state: Fake): Runner<GoussetServices> {
           Layer.mock(Expenses, {}),
           Layer.mock(UserData, {}),
           Layer.mock(RuleJobs, {}),
+          Layer.mock(Subscriptions, {}),
         ),
       ),
     );
@@ -310,6 +312,7 @@ function runnerWithTime(state: Fake): Runner<GoussetServices> {
             Layer.mock(Expenses, {}),
             Layer.mock(UserData, {}),
             Layer.mock(RuleJobs, {}),
+            Layer.mock(Subscriptions, {}),
             TestClock.layer(),
           ),
         ),
