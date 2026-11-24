@@ -31,6 +31,8 @@ export const TEXT_PAIRS = [
   ["--primary", "--card"],
   ["--destructive", "--background"],
   ["--destructive", "--card"],
+  ["--warning", "--card"],
+  ["--warning", "--background"],
   ["--money-spent", "--background"],
   ["--money-spent", "--card"],
   ["--money-saved", "--background"],

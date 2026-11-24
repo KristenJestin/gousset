@@ -33,6 +33,7 @@ const SWATCHES = new Map(
     "--accent": "bg-accent",
     "--accent-foreground": "bg-accent-foreground",
     "--destructive": "bg-destructive",
+    "--warning": "bg-warning",
     "--border": "bg-border",
     "--input": "bg-input",
     "--ring": "bg-ring",

@@ -97,7 +97,7 @@ test("the token page shows every token in both schemes", async ({ page }) => {
     await page.emulateMedia({ colorScheme: scheme });
     await page.goto(TOKENS);
     // The text pairs and the floating surfaces' edges, each table with its header.
-    await expect(page.getByRole("row")).toHaveCount(40);
+    await expect(page.getByRole("row")).toHaveCount(42);
 
     const shown = await page.locator("li code").allTextContents();
 
