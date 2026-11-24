@@ -159,7 +159,7 @@ test("the operations page proposes a cancellation as a refund, links it once con
 
   // Saved, the sheet closes. Firefox keeps a closed sheet in the page, marked closed, inert and slid
   // out, while its exit transition does not report its end (as the detail's own fade, #128): what
-  // counts is that no sheet stays open. The next step loads the page again.
+  // counts is that no sheet stays open, and that the page still answers below.
   await expect(page.locator('[data-slot="drawer-content"]:not([data-closed])')).toHaveCount(0);
 
   const shares = stores.getByRole("region", { name: "Split across 2 categories" });
@@ -169,6 +169,17 @@ test("the operations page proposes a cancellation as a refund, links it once con
   await expect(shares).toContainText("Groceries");
   await expect(shares).toContainText("€30.00");
   await expect(shares).toContainText("€60.00");
+
+  // The page is in use again before any reload: a click reaches it (no closed sheet, nor its
+  // backdrop, covers it), and the split opens again with its two shares.
+  await stores.getByRole("button", { name: "Split", exact: true }).click();
+
+  const again = page.locator('[data-slot="drawer-content"]:not([data-closed])');
+
+  await expect(again).toHaveCount(1);
+  await expect(again.locator('[data-slot="split-share"]')).toHaveCount(2);
+  await again.getByRole("button", { name: "Cancel" }).click();
+  await expect(again).toHaveCount(0);
 
   // 75 paid 25 + 50 on two accounts: linked from the card's line, then separated again.
   await visit(page, "/operations?q=harbor%20home");
