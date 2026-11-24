@@ -129,4 +129,22 @@ test.describe("SplitLine", () => {
     await sheet.getByRole("button", { name: "Remove share 2" }).click();
     await expect(sheet.locator('[data-slot="split-share"]')).toHaveCount(1);
   });
+
+  test("saves the shares and closes once they make the whole line", async ({ page }) => {
+    await page.goto(story("split-sheet"));
+    await page.getByRole("button", { name: "Split", exact: true }).click();
+
+    const sheet = page.getByRole("dialog", { name: "Split across categories" });
+
+    await sheet.getByRole("textbox", { name: "Amount 1" }).fill("30");
+    await sheet.getByRole("button", { name: "Add a category" }).click();
+    await sheet.getByRole("combobox", { name: "Category 2" }).pressSequentially("home");
+    await page.getByRole("option", { name: "Shopping › Home and garden" }).click();
+    await expect(sheet.locator('[data-slot="split-left"]')).toHaveText(
+      "The shares make the whole line.",
+    );
+
+    await sheet.getByRole("button", { name: "Save the split" }).click();
+    await expect(sheet).toHaveCount(0);
+  });
 });

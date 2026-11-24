@@ -156,7 +156,11 @@ test("the operations page proposes a cancellation as a refund, links it once con
   await expectAccessible(page);
 
   await sheet.getByRole("button", { name: "Save the split" }).click();
-  await expect(sheet).toHaveCount(0);
+
+  // Closed once saved; a sheet still open says why in its text (a refusal under the shares).
+  await expect
+    .poll(async () => ((await sheet.count()) === 0 ? "" : await sheet.innerText()))
+    .toBe("");
 
   const shares = stores.getByRole("region", { name: "Split across 2 categories" });
 
