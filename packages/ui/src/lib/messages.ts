@@ -328,6 +328,23 @@ function uiMessages(locale: Locale) {
       merchantNew: m.uiOperationsMerchantNew({}, options),
       merchantAssign: m.uiOperationsMerchantAssign({}, options),
     },
+    /** `ReviewProposal`: what Gousset proposes for a line to review, accepted or corrected (#35). */
+    review: {
+      proposes: m.uiReviewProposes({}, options),
+      accept: m.uiReviewAccept({}, options),
+      /** The buttons' names, which say the action and the line: "Accept the proposal for CB GREENMARKET". */
+      acceptLabel: (label: string) => m.uiReviewAcceptLabel({ label }, options),
+      correct: m.uiReviewCorrect({}, options),
+      correctLabel: (label: string) => m.uiReviewCorrectLabel({ label }, options),
+      /** A held repeat's correction: it is kept, and needs no dialog. */
+      keep: m.uiReviewKeep({}, options),
+      keepLabel: (label: string) => m.uiReviewKeepLabel({ label }, options),
+      correctTitle: m.uiReviewCorrectTitle({}, options),
+      correctDescription: (label: string) => m.uiReviewCorrectDescription({ label }, options),
+      category: m.uiReviewCategory({}, options),
+      categorySearch: m.uiReviewCategorySearch({}, options),
+      correctSubmit: m.uiReviewCorrectSubmit({}, options),
+    },
     categories: {
       columns: {
         category: m.uiCategoriesColumnCategory({}, options),

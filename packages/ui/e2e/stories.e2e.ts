@@ -173,6 +173,15 @@ const SHOTS: ReadonlyArray<Shot> = [
     trigger: "Change the merchant",
   },
   { id: "operations-linedetail--with-merchant" },
+  // What Gousset proposes for a line to review, at the top of its detail, and Correct's dialog (#35).
+  { id: "operations-reviewproposal--in-detail" },
+  { id: "operations-reviewproposal--duplicate" },
+  {
+    id: "operations-reviewproposal--category",
+    open: "click",
+    trigger: "Correct CB GREENMARKET 2110 RIVERTON",
+    name: "operations-reviewproposal--correcting",
+  },
 ];
 
 async function openPopup(page: Page, open: Shot["open"], name: Shot["trigger"]) {
