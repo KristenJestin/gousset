@@ -41,8 +41,9 @@ export type RuleProposalProps = {
  * "label contains" the line's cleaned label words, editable, for the category chosen, and to apply
  * it to the lines already there that it would change. Cancel leaves everything as it was.
  *
- * Motion: as `Dialog`, it fades and grows in 200 ms, ease-out, and leaves the same way. Cut under
- * reduced motion.
+ * Motion: as `Dialog`, it fades and grows in 200 ms, ease-out, and leaves in 150 ms, ease-in; on a
+ * phone it rises from the bottom edge in 300 ms and goes back down in 200 ms. Cut under reduced
+ * motion.
  */
 export function RuleProposal({
   open,

@@ -5,6 +5,7 @@ import { eq } from "drizzle-orm";
 import type { WorkerEnvironment } from "../src/app-server";
 import { addUser } from "../src/auth";
 import type { TestUser } from "../src/auth";
+import { onPhone } from "../src/frame";
 import { animationsDone, expect, fixDay, test, visit } from "../src/test";
 import { openUserData } from "../src/user-data";
 
@@ -282,7 +283,8 @@ test("the pairing dialog fades and grows in 200 ms, and appears at once under re
 
   // Closed with its own Cancel, so that the line's detail behind it stays open.
   await detail.getByRole("button", { name: "Pair with an account" }).click();
-  await expect(dialog).toHaveCSS("transition-duration", "0.2s");
+  // The shared dialog's motion: it fades and grows in 200 ms; on a phone it rises in 300 ms.
+  await expect(dialog).toHaveCSS("transition-duration", onPhone(page) ? "0.3s" : "0.2s");
   await expect(dialog).toHaveCSS("transition-timing-function", "cubic-bezier(0, 0, 0.2, 1)");
   await dialog.getByRole("button", { name: "Cancel" }).click();
   await expect(dialog).toBeHidden();

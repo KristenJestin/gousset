@@ -1,6 +1,5 @@
 import {
   DataExport,
-  FixtureLedger,
   ImportProfiles,
   Imports,
   Merchants,
@@ -48,13 +47,12 @@ describe("a call to the MCP door", () => {
       const client = await connectInProcess(
         goussetServer,
         {
-          // The call reads the month only: no import nor export is reached.
+          // The call reaches no import nor export.
           run: (effect) =>
             Effect.runPromiseExit(
               Effect.provide(
                 effect,
                 Layer.mergeAll(
-                  FixtureLedger,
                   memoryAccountStore(),
                   memoryLineStore(),
                   memoryCategoryStore(),

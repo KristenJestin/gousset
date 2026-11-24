@@ -1,6 +1,6 @@
 import type { Page } from "@playwright/test";
 
-import { openAccountMenu } from "../src/frame";
+import { onPhone, openAccountMenu } from "../src/frame";
 import { animationsDone, expect, test, visit } from "../src/test";
 
 /** The page, once its scripts are loaded and the shortcuts listen. */
@@ -200,7 +200,8 @@ test("the dialog fades in over 200 ms, and not at all under reduced motion", asy
 
   const dialog = page.getByRole("dialog", { name: "Keyboard shortcuts" });
 
-  await expect(dialog).toHaveCSS("transition-duration", "0.2s");
+  // On a phone the dialog is a bottom sheet, rising in 300 ms.
+  await expect(dialog).toHaveCSS("transition-duration", onPhone(page) ? "0.3s" : "0.2s");
   await expect(dialog).toHaveCSS("transition-property", /opacity/);
 
   await page.keyboard.press("Escape");

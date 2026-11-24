@@ -216,6 +216,79 @@ const ofxSgmlDates = lf([
   "</OFX>",
 ]);
 
+/**
+ * OFX 1.02, SGML, from a bank that encodes its labels' entities twice (#132): `&amp;apos;` for an
+ * apostrophe, `&amp;amp;` for an ampersand, `&amp;quot;` in a memo; and one label encoded once
+ * (`&apos;`), on two identical lines of a day. Only the first line has a `FITID`: the others are
+ * recognised by their content, which their label is part of.
+ */
+const ofxDoubleEncoded = crlf([
+  ...sgmlHeader("102"),
+  "<OFX>",
+  ...sgmlSignOn("20261107", "FRA"),
+  "<BANKMSGSRSV1>",
+  "<STMTTRNRS>",
+  "<TRNUID>00000000",
+  "<STATUS>",
+  "<CODE>0",
+  "<SEVERITY>INFO",
+  "</STATUS>",
+  "<STMTRS>",
+  "<CURDEF>EUR",
+  ...bankAccountSgml,
+  "<BANKTRANLIST>",
+  "<DTSTART>20261101",
+  "<DTEND>20261107",
+  "<STMTTRN>",
+  "<TRNTYPE>DEBIT",
+  "<DTPOSTED>20261102",
+  "<TRNAMT>-4.50",
+  "<FITID>EX2026110201",
+  "<NAME>CB CAFE DE L&amp;apos;EXEMPLE",
+  "<MEMO>PAIEMENT PAR CARTE",
+  "</STMTTRN>",
+  "<STMTTRN>",
+  "<TRNTYPE>DEBIT",
+  "<DTPOSTED>20261103",
+  "<TRNAMT>-1.20",
+  "<NAME>BOULANGERIE L&amp;apos;EPI D&amp;apos;EXEMPLE",
+  "</STMTTRN>",
+  "<STMTTRN>",
+  "<TRNTYPE>DEBIT",
+  "<DTPOSTED>20261103",
+  "<TRNAMT>-1.20",
+  "<NAME>BOULANGERIE L&amp;apos;EPI D&amp;apos;EXEMPLE",
+  "</STMTTRN>",
+  "<STMTTRN>",
+  "<TRNTYPE>DIRECTDEBIT",
+  "<DTPOSTED>20261105",
+  "<TRNAMT>-64.12",
+  "<NAME>PRLV SEPA ELEC &amp;amp; GAZ EXEMPLE",
+  "<MEMO>ECHEANCE &amp;quot;NOVEMBRE&amp;quot;",
+  "</STMTTRN>",
+  "<STMTTRN>",
+  "<TRNTYPE>DEBIT",
+  "<DTPOSTED>20261106",
+  "<TRNAMT>-8.90",
+  "<NAME>LIBRAIRIE L&apos;ENCRE EXEMPLE",
+  "</STMTTRN>",
+  "<STMTTRN>",
+  "<TRNTYPE>DEBIT",
+  "<DTPOSTED>20261106",
+  "<TRNAMT>-8.90",
+  "<NAME>LIBRAIRIE L&apos;ENCRE EXEMPLE",
+  "</STMTTRN>",
+  "</BANKTRANLIST>",
+  "<LEDGERBAL>",
+  "<BALAMT>1000.00",
+  "<DTASOF>20261107",
+  "</LEDGERBAL>",
+  "</STMTRS>",
+  "</STMTTRNRS>",
+  "</BANKMSGSRSV1>",
+  "</OFX>",
+]);
+
 function xmlTransaction(type: string, day: string, amount: string, id: string, name: string) {
   return [
     "<STMTTRN>",
@@ -615,6 +688,40 @@ const camt053Version02 = lf([
 ]);
 
 /**
+ * CAMT.053 version 001.08 from a bank that encodes its text's entities twice (#132): a label, a
+ * creditor's name and remittance information with `&amp;apos;` and `&amp;amp;`, and one numeric
+ * reference encoded twice (`&amp;#39;`). No `AcctSvcrRef`: the lines are recognised by their content.
+ */
+const camt053DoubleEncoded = lf([
+  '<?xml version="1.0" encoding="UTF-8"?>',
+  '<Document xmlns="urn:iso:std:iso:20022:tech:xsd:camt.053.001.08">',
+  "  <BkToCstmrStmt>",
+  "    <GrpHdr><MsgId>EX20261130E</MsgId><CreDtTm>2026-11-30T20:00:00</CreDtTm></GrpHdr>",
+  "    <Stmt>",
+  "      <Id>EX-2026-11-E</Id>",
+  "      <CreDtTm>2026-11-30T20:00:00</CreDtTm>",
+  ...camtAccount,
+  ...camtBalance("CLBD", "500.00", "CRDT", "<Dt>2026-11-30</Dt>"),
+  ...camtEntry("4.50", "DBIT", [
+    "<Sts><Cd>BOOK</Cd></Sts>",
+    "<BookgDt><Dt>2026-11-02</Dt></BookgDt>",
+    "<NtryDtls><TxDtls>",
+    "  <RltdPties><Cdtr><Pty><Nm>CAFE DE L&amp;apos;EXEMPLE &amp;amp; FILS</Nm></Pty></Cdtr></RltdPties>",
+    "  <RmtInf><Ustrd>TICKET L&amp;#39;EXEMPLE</Ustrd></RmtInf>",
+    "</TxDtls></NtryDtls>",
+    "<AddtlNtryInf>CB CAFE DE L&amp;apos;EXEMPLE</AddtlNtryInf>",
+  ]),
+  ...camtEntry("8.90", "DBIT", [
+    "<Sts><Cd>BOOK</Cd></Sts>",
+    "<BookgDt><Dt>2026-11-06</Dt></BookgDt>",
+    "<AddtlNtryInf>LIBRAIRIE L&apos;ENCRE EXEMPLE</AddtlNtryInf>",
+  ]),
+  "    </Stmt>",
+  "  </BkToCstmrStmt>",
+  "</Document>",
+]);
+
+/**
  * CAMT.053 version 001.04 with an overdrawn opening balance (`OPBD` and `DBIT`): a batch entry of
  * two direct debits booked as one line (`Btch`, two `TxDtls`), a salary with its remittance
  * information and no bank label, a payment whose only text is its creditor's name, a structured
@@ -868,6 +975,7 @@ export const statementSamples = {
     bytes: utf8.encode(ofxUnsignedNoDebit),
   },
   qfxCreditCard: { fileName: "qfx-credit-card.qfx", bytes: utf8.encode(qfxCreditCard) },
+  ofxDoubleEncoded: { fileName: "ofx-double-encoded.ofx", bytes: utf8.encode(ofxDoubleEncoded) },
   /** QIF, UTF-8, day first: the example statement as `writeQif` writes it. */
   qifDayFirst: { fileName: "qif-day-first.qif", bytes: utf8.encode(writeQif(exampleStatement)) },
   qifQuicken: { fileName: "qif-quicken.qif", bytes: utf8.encode(qifQuicken) },
@@ -881,6 +989,10 @@ export const statementSamples = {
   camt053Version02: { fileName: "camt053-version-02.xml", bytes: utf8.encode(camt053Version02) },
   camt053Batch: { fileName: "camt053-batch.xml", bytes: utf8.encode(camt053Batch) },
   camt053Daily: { fileName: "camt053-daily.xml", bytes: utf8.encode(camt053Daily) },
+  camt053DoubleEncoded: {
+    fileName: "camt053-double-encoded.xml",
+    bytes: utf8.encode(camt053DoubleEncoded),
+  },
   /** MT940, CRLF, free-text `:86:`: the example statement as `writeMt940` writes it. */
   mt940Plain: { fileName: "mt940-plain.sta", bytes: utf8.encode(writeMt940(exampleStatement)) },
   mt940SwiftBlocks: { fileName: "mt940-swift-blocks.sta", bytes: utf8.encode(mt940SwiftBlocks) },

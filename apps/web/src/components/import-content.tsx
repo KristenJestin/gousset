@@ -163,6 +163,7 @@ function Done({ summary }: { summary: Import }) {
       added={{ label: m.importLinesAdded(), count: summary.linesAdded }}
       known={{ label: m.importLinesKnown(), count: summary.linesDuplicate }}
       review={{ label: m.importLinesReview(), count: summary.linesHeld }}
+      note={summary.balanceIgnored ? m.importBalanceIgnored() : undefined}
       locale={getLocale()}
       actions={
         <>

@@ -6,7 +6,8 @@ import { expect, test } from "@playwright/test";
  * dark. Firefox draws the same components in its own checks. Reduced motion: caught in their final
  * state.
  *
- * The references come from CI (`.github/workflows/ui-snapshots.yml`), never from a local browser.
+ * The references come from CI (the `references` job of `.github/workflows/ci.yml`), never from a
+ * local browser.
  */
 const story = (name: string) => `/iframe.html?id=layout-app-shell--${name}&viewMode=story`;
 

@@ -1,0 +1,447 @@
+{
+  "type": "diff",
+  "version": "10",
+  "dialect": "postgres",
+  "id": "38a64239-1d4c-42aa-8971-e6084856cdcd",
+  "prevIds": ["5188bb81-0035-4dac-a6a5-a0af3e26e25b"],
+  "footprints": [
+    {
+      "statementType": "create_table",
+      "statementTarget": ["table", "public", "import_upload"],
+      "writes": [
+        "s|tbl|public.import_upload",
+        "n|tbl|public.import_upload",
+        "e|tbl|public.import_upload",
+        "n|rel|public.import_upload",
+        "n|type|public.import_upload",
+        "n|rel|public.import_upload_pkey"
+      ],
+      "reads": ["n|sch|public", "n|enum|public.import_format"]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": ["index", "public", "import_upload", "import_upload_grant_id_idx"],
+      "writes": [
+        "s|idx|public.import_upload_grant_id_idx",
+        "n|idx|public.import_upload_grant_id_idx",
+        "e|idx|public.import_upload_grant_id_idx",
+        "n|rel|public.import_upload_grant_id_idx"
+      ],
+      "reads": ["n|tbl|public.import_upload", "n|sch|public", "n|col|public.import_upload.grant_id"]
+    },
+    {
+      "statementType": "create_fk",
+      "statementTarget": ["table", "public", "import_upload"],
+      "writes": [
+        "s|fk|public.import_upload.import_upload_user_id_auth_user_id_fkey",
+        "n|fk|public.import_upload.import_upload_user_id_auth_user_id_fkey",
+        "e|fk|public.import_upload.import_upload_user_id_auth_user_id_fkey",
+        "n|con|public.import_upload.import_upload_user_id_auth_user_id_fkey"
+      ],
+      "reads": [
+        "n|tbl|public.import_upload",
+        "n|sch|public",
+        "n|tbl|public.auth_user",
+        "n|sch|public",
+        "n|col|public.import_upload.user_id",
+        "n|col|public.auth_user.id",
+        "e|uniqueness|public.auth_user.id"
+      ]
+    },
+    {
+      "statementType": "create_fk",
+      "statementTarget": ["table", "public", "import_upload"],
+      "writes": [
+        "s|fk|public.import_upload.import_upload_grant_id_auth_oauth_consent_id_fkey",
+        "n|fk|public.import_upload.import_upload_grant_id_auth_oauth_consent_id_fkey",
+        "e|fk|public.import_upload.import_upload_grant_id_auth_oauth_consent_id_fkey",
+        "n|con|public.import_upload.import_upload_grant_id_auth_oauth_consent_id_fkey"
+      ],
+      "reads": [
+        "n|tbl|public.import_upload",
+        "n|sch|public",
+        "n|tbl|public.auth_oauth_consent",
+        "n|sch|public",
+        "n|col|public.import_upload.grant_id",
+        "n|col|public.auth_oauth_consent.id",
+        "e|uniqueness|public.auth_oauth_consent.id"
+      ]
+    },
+    {
+      "statementType": "create_fk",
+      "statementTarget": ["table", "public", "import_upload"],
+      "writes": [
+        "s|fk|public.import_upload.import_upload_account_fk",
+        "n|fk|public.import_upload.import_upload_account_fk",
+        "e|fk|public.import_upload.import_upload_account_fk",
+        "n|con|public.import_upload.import_upload_account_fk"
+      ],
+      "reads": [
+        "n|tbl|public.import_upload",
+        "n|sch|public",
+        "n|tbl|public.account",
+        "n|sch|public",
+        "n|col|public.import_upload.user_id",
+        "n|col|public.import_upload.account_id",
+        "n|col|public.account.user_id",
+        "n|col|public.account.id",
+        "e|uniqueness|public.account.id.user_id"
+      ]
+    },
+    {
+      "statementType": "create_policy",
+      "statementTarget": ["table", "public", "import_upload"],
+      "writes": [
+        "s|pol|public.import_upload.import_upload_own_rows_only",
+        "n|pol|public.import_upload.import_upload_own_rows_only",
+        "e|pol|public.import_upload.import_upload_own_rows_only"
+      ],
+      "reads": ["n|tbl|public.import_upload", "n|sch|public", "e|rls|public.import_upload"]
+    }
+  ],
+  "deltas": [
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "name": "import_upload",
+        "isRlsEnabled": true,
+        "entityType": "tables"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "import_upload",
+        "name": "id",
+        "type": "uuid",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "uuidv7()",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "import_upload",
+        "name": "user_id",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "import_upload",
+        "name": "grant_id",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "import_upload",
+        "name": "secret_sha256",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "import_upload",
+        "name": "file_name",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "import_upload",
+        "name": "size",
+        "type": "integer",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "import_upload",
+        "name": "parts",
+        "type": "integer",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "import_upload",
+        "name": "parts_received",
+        "type": "integer",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "0",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "import_upload",
+        "name": "content",
+        "type": "bytea",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "''",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "import_upload",
+        "name": "account_id",
+        "type": "uuid",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "import_upload",
+        "name": "format",
+        "type": "import_format",
+        "typeSchema": "public",
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "import_upload",
+        "name": "created_at",
+        "type": "timestamp with time zone",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "now()",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "import_upload",
+        "name": "expires_at",
+        "type": "timestamp with time zone",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "import_upload",
+        "name": "import_upload_grant_id_idx",
+        "nameExplicit": true,
+        "columns": [
+          {
+            "value": "grant_id",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          }
+        ],
+        "isUnique": false,
+        "where": null,
+        "with": "",
+        "method": "btree",
+        "entityType": "indexes"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "import_upload",
+        "name": "import_upload_user_id_auth_user_id_fkey",
+        "nameExplicit": false,
+        "columns": ["user_id"],
+        "schemaTo": "public",
+        "tableTo": "auth_user",
+        "columnsTo": ["id"],
+        "onUpdate": "NO ACTION",
+        "onDelete": "CASCADE",
+        "entityType": "fks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "import_upload",
+        "name": "import_upload_grant_id_auth_oauth_consent_id_fkey",
+        "nameExplicit": false,
+        "columns": ["grant_id"],
+        "schemaTo": "public",
+        "tableTo": "auth_oauth_consent",
+        "columnsTo": ["id"],
+        "onUpdate": "NO ACTION",
+        "onDelete": "CASCADE",
+        "entityType": "fks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "import_upload",
+        "name": "import_upload_account_fk",
+        "nameExplicit": true,
+        "columns": ["user_id", "account_id"],
+        "schemaTo": "public",
+        "tableTo": "account",
+        "columnsTo": ["user_id", "id"],
+        "onUpdate": "NO ACTION",
+        "onDelete": "CASCADE",
+        "entityType": "fks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "import_upload",
+        "name": "import_upload_pkey",
+        "columns": ["id"],
+        "nameExplicit": false,
+        "entityType": "pks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "import_upload",
+        "name": "import_upload_size",
+        "value": "\"size\" > 0",
+        "entityType": "checks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "import_upload",
+        "name": "import_upload_parts",
+        "value": "\"parts\" > 0 and \"parts_received\" between 0 and \"parts\"",
+        "entityType": "checks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "import_upload",
+        "name": "import_upload_content_size",
+        "value": "octet_length(\"content\") <= \"size\"",
+        "entityType": "checks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "import_upload",
+        "name": "import_upload_own_rows_only",
+        "as": "PERMISSIVE",
+        "for": "ALL",
+        "roles": ["public"],
+        "using": "\"user_id\" = current_setting('gousset.user_id', true)",
+        "withCheck": "\"user_id\" = current_setting('gousset.user_id', true)",
+        "entityType": "policies"
+      }
+    }
+  ]
+}

@@ -6,7 +6,8 @@ import { expect, test } from "@playwright/test";
  * on a phone, light and dark. Firefox draws the same components in its own checks; a third set of
  * this page would only add images. Reduced motion: caught in its final state.
  *
- * The references come from CI (`.github/workflows/ui-snapshots.yml`), never from a local browser.
+ * The references come from CI (the `references` job of `.github/workflows/ci.yml`), never from a
+ * local browser.
  */
 const STORY = "/iframe.html?id=layout-app-shell--users-section&viewMode=story";
 

@@ -36,6 +36,7 @@ import { Route as AuthedSettingsDataRouteImport } from './routes/_authed/setting
 import { Route as AuthedSettingsRulesRouteImport } from './routes/_authed/settings/rules'
 import { Route as AuthedSettingsUsersRouteImport } from './routes/_authed/settings/users'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
+import { Route as ApiImportUploadsTokenRouteImport } from './routes/api/import-uploads/$token'
 import { Route as AuthedSettingsMerchantsIndexRouteImport } from './routes/_authed/settings/merchants/index'
 import { Route as AuthedSettingsMerchantsMerchantIdRouteImport } from './routes/_authed/settings/merchants/$merchantId'
 import { Route as ApiJobsJobIdEventsRouteImport } from './routes/api/jobs/$jobId/events'
@@ -175,6 +176,11 @@ const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
   path: '/api/auth/$',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiImportUploadsTokenRoute = ApiImportUploadsTokenRouteImport.update({
+  id: '/api/import-uploads/$token',
+  path: '/api/import-uploads/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AuthedSettingsMerchantsIndexRoute =
   AuthedSettingsMerchantsIndexRouteImport.update({
     id: '/merchants/',
@@ -218,6 +224,7 @@ export interface FileRoutesByFullPath {
   '/settings/rules': typeof AuthedSettingsRulesRoute
   '/settings/users': typeof AuthedSettingsUsersRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/import-uploads/$token': typeof ApiImportUploadsTokenRoute
   '/accounts/': typeof AuthedAccountsIndexRoute
   '/settings/': typeof AuthedSettingsIndexRoute
   '/settings/merchants/$merchantId': typeof AuthedSettingsMerchantsMerchantIdRoute
@@ -248,6 +255,7 @@ export interface FileRoutesByTo {
   '/settings/rules': typeof AuthedSettingsRulesRoute
   '/settings/users': typeof AuthedSettingsUsersRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/import-uploads/$token': typeof ApiImportUploadsTokenRoute
   '/accounts': typeof AuthedAccountsIndexRoute
   '/settings': typeof AuthedSettingsIndexRoute
   '/settings/merchants/$merchantId': typeof AuthedSettingsMerchantsMerchantIdRoute
@@ -281,6 +289,7 @@ export interface FileRoutesById {
   '/_authed/settings/rules': typeof AuthedSettingsRulesRoute
   '/_authed/settings/users': typeof AuthedSettingsUsersRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/import-uploads/$token': typeof ApiImportUploadsTokenRoute
   '/_authed/accounts/': typeof AuthedAccountsIndexRoute
   '/_authed/settings/': typeof AuthedSettingsIndexRoute
   '/_authed/settings/merchants/$merchantId': typeof AuthedSettingsMerchantsMerchantIdRoute
@@ -314,6 +323,7 @@ export interface FileRouteTypes {
     | '/settings/rules'
     | '/settings/users'
     | '/api/auth/$'
+    | '/api/import-uploads/$token'
     | '/accounts/'
     | '/settings/'
     | '/settings/merchants/$merchantId'
@@ -344,6 +354,7 @@ export interface FileRouteTypes {
     | '/settings/rules'
     | '/settings/users'
     | '/api/auth/$'
+    | '/api/import-uploads/$token'
     | '/accounts'
     | '/settings'
     | '/settings/merchants/$merchantId'
@@ -376,6 +387,7 @@ export interface FileRouteTypes {
     | '/_authed/settings/rules'
     | '/_authed/settings/users'
     | '/api/auth/$'
+    | '/api/import-uploads/$token'
     | '/_authed/accounts/'
     | '/_authed/settings/'
     | '/_authed/settings/merchants/$merchantId'
@@ -394,6 +406,7 @@ export interface RootRouteChildren {
   ApiImportsRoute: typeof ApiImportsRoute
   E2eTodayRoute: typeof E2eTodayRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
+  ApiImportUploadsTokenRoute: typeof ApiImportUploadsTokenRoute
   ApiJobsJobIdEventsRoute: typeof ApiJobsJobIdEventsRoute
 }
 
@@ -588,6 +601,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAuthSplatRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/import-uploads/$token': {
+      id: '/api/import-uploads/$token'
+      path: '/api/import-uploads/$token'
+      fullPath: '/api/import-uploads/$token'
+      preLoaderRoute: typeof ApiImportUploadsTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_authed/settings/merchants/': {
       id: '/_authed/settings/merchants/'
       path: '/merchants'
@@ -680,6 +700,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiImportsRoute: ApiImportsRoute,
   E2eTodayRoute: E2eTodayRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
+  ApiImportUploadsTokenRoute: ApiImportUploadsTokenRoute,
   ApiJobsJobIdEventsRoute: ApiJobsJobIdEventsRoute,
 }
 export const routeTree = rootRouteImport

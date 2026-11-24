@@ -4,7 +4,6 @@ import type {
   DataExport,
   ImportProfiles,
   Imports,
-  Ledger,
   LineStore,
   Merchants,
   RuleJobs,
@@ -25,12 +24,11 @@ import { monthTool } from "./tools/month";
 import { rulesTool } from "./tools/rules";
 
 /**
- * The services Gousset's tools need (the made-up month, the user's accounts, the imports and their
- * profiles, the export, every line searched across accounts, the transfers between accounts, the
- * merchants, the categories, and the rules' database and job).
+ * The services Gousset's tools need (the user's accounts, the imports and their profiles, the
+ * export, every line searched across accounts, the transfers between accounts, the merchants, the
+ * categories, and the rules' database and job).
  */
 export type GoussetServices =
-  | Ledger
   | AccountStore
   | Imports
   | ImportProfiles

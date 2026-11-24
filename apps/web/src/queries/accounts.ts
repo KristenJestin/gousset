@@ -6,6 +6,7 @@ import { getAccount, getAccounts } from "@/functions/accounts";
 
 import { accountKeys } from "./account-keys";
 import { lineKeys } from "./line-keys";
+import { reviewKeys } from "./review-keys";
 
 /** The query of the accounts page and of an account's, for loaders and components alike. */
 export const accountQueries = {
@@ -28,11 +29,12 @@ export const accountQueries = {
 /**
  * After a write to an account (create, edit, close, reopen, a noted balance): the list's groups and
  * totals and the account's page may all have changed, so every accounts query is read again; the
- * operations name each line's account, so theirs are too.
+ * operations name each line's account, so theirs are too, and the review counts the accounts.
  */
 export async function invalidateAccounts(queryClient: QueryClient): Promise<void> {
   await Promise.all([
     queryClient.invalidateQueries({ queryKey: accountKeys.all }),
     queryClient.invalidateQueries({ queryKey: lineKeys.all }),
+    queryClient.invalidateQueries({ queryKey: reviewKeys.all }),
   ]);
 }

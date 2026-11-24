@@ -5,7 +5,7 @@ whoever installs it. Two branches publish, each with a version that says where i
 
 | Branch | Image tags (example)           | Made by                                                    |
 | ------ | ------------------------------ | ---------------------------------------------------------- |
-| `dev`  | `0.1.3-beta.12`, `sha-<commit>`, `beta` | each push, once its `verify` passed (`beta.yml`)  |
+| `dev`  | `0.1.3-beta.12`, `sha-<commit>`, `beta` | each push, once its `verify` passed (`ci.yml`, `beta`) |
 | `main` | `0.1.3`, `latest`, tag `v0.1.3` | a release pull request `dev → main`, then the `Release` workflow (`release.yml`) |
 
 The image is `ghcr.io/kristenjestin/gousset`. A published version is never replaced: a run again
@@ -54,8 +54,8 @@ volume, with secrets made for the run (the database password holds `/ # ? @ : % 
 space), checks that `migrate` succeeded, that `/health` answers 200 and that the app serves its
 page (`tools/check-page.sh`: without a session nor an administrator yet, `/` redirects to `/setup`,
 which answers Gousset's page), then that the image is not healthy without `BETTER_AUTH_SECRET`,
-nor with a wrong database password; it removes everything it started, whatever happened. The beta workflow runs it on every
-beta before publishing it.
+nor with a wrong database password; it removes everything it started, whatever happened. CI runs
+it on every image it builds (`ci.yml`, `image`), so on every beta before it is published.
 
 ## Installing
 
@@ -287,23 +287,26 @@ v0.1 carries `Release-As: 0.1.0`.
   `0.1.1`, `0.1.2`…, each one **a coherent batch**, released when what `dev` holds since the last
   release makes sense together, not at each merge.
 - **`next/x.y` carries the next minor's milestone**, `next/0.2` today: its pull requests target it
-  (by squash, as into `dev`), and its CI runs every browser and width on each push, as `dev`'s
-  does. It has no beta and no release of its own: its versions come once it is in `dev`, where a
+  (by squash, as into `dev`), and its CI runs on each push as `dev`'s does, the `upgrade` job
+  included. It has no beta and no release of its own: its versions come once it is in `dev`, where a
   `Release-As: 0.2.0` footer moves the minor (above).
 
 ## Betas
 
-`.github/workflows/beta.yml` runs when the `ci` workflow (`ci.yml`) completes on a push to `dev`.
-It reads that run's `verify` job: if it did not pass, nothing is published (a notice says so).
-Otherwise it checks out the pushed commit, computes its beta version, builds the image, runs
-`tools/check-image.sh` on it, and only then signs in to the registry and pushes
-`X.Y.Z-beta.N`. Two jobs: `build` runs the branch's code (the version, the build, the check) with a
-token that can only read, and saves the image; `publish` holds the token that writes images, checks
-nothing out and runs no code of the branch: it loads the saved image and pushes it as
-`sha-<commit>` and `X.Y.Z-beta.N`. A version already published is reused only when it is that
-commit's image (`sha-<commit>`, same digest); another commit's under that name fails the run. `beta`
-moves only while the commit is still `dev`'s head: a push made since publishes its own. There is no
-concurrency group, which would cancel a waiting run: every push gets its beta.
+The `ci` workflow (`ci.yml`) publishes the beta of each push to `dev`, in two of its jobs, without
+waiting for its browser checks. `image` checks out the pushed commit, computes its beta version,
+builds the image (anew: no layer of the Actions cache, which pull requests' builds use, reaches a
+beta), runs `tools/check-image.sh` on it and saves it as the run's `image` artifact, the one
+`upgrade` tests too: the image of a commit is built once. Once `verify` passed as well, `beta`
+checks the artifact is the one `image` saved (its SHA-256, passed as a job output, which no other
+job can replace), signs in to the registry and pushes it as
+`sha-<commit>` and `X.Y.Z-beta.N`; if `verify` failed, nothing is published. `image` runs the
+branch's code (the version, the build, the check) with a token that can only read; `beta` holds
+the token that writes images, checks nothing out and runs no code of the branch: it loads the saved
+image and pushes it. A version already published is reused only when it is that commit's image
+(`sha-<commit>`, same digest); another commit's under that name fails the job. `beta` moves only
+while the commit is still `dev`'s head: a push made since publishes its own. Each push's run has a
+concurrency group of its own, so that none waiting is cancelled: every push gets its beta.
 
 ## Releasing
 
@@ -334,11 +337,14 @@ and a squash add a commit `dev` does not have; GitHub's rebase always writes new
   given, it is of `dev` into `main` in this repository, open (or merged already, `main` at its head:
   a run again), and its head is a commit of `dev` that `main` is an ancestor of; something was
   committed since the last release. **Its checks passed**: the whole `ci` run of the commit's push
-  to `dev` (every job, the full matrix of `ui` and `e2e` included, where the beta needs only
-  `verify`), and the pull request's own `ci` and `pull-request` runs on that commit
-  (`react-doctor`, `privacy`, the commit messages); each workflow's last run counts, at its last
-  attempt, and one not finished is refused like one that failed. And **the `upgrade` job passed
-  on the commit's push to `dev`** ([Every release is an upgrade](#every-release-is-an-upgrade)).
+  to `dev` (every job, where the beta needs only `verify`), with **its `upgrade` job**
+  ([Every release is an upgrade](#every-release-is-an-upgrade)); the pull request's own `ci` run
+  on that commit, which **runs `ui` and `e2e` with every browser and width** (`ci.yml` does on a
+  pull request into `main`; the release finds their shards, `ui full i/n` and `e2e full i/n`, each
+  passed); and its `pull-request` run (`react-doctor`, `privacy`, the commit messages). Each
+  workflow's last run counts, at its last attempt, and one not finished is refused like one that
+  failed. The first release, with no pull request, needs its push's run to be a full one
+  (`E2E-Matrix: full`).
   Then, before writing anything,
   that **the beta of that commit was published** (`sha-<commit>`): a release is never built again.
   Any of these refused, nothing moves and the run fails, saying why.
@@ -363,16 +369,18 @@ and a squash add a commit `dev` does not have; GitHub's rebase always writes new
   the workflow's token starts no workflow, and nothing is left to check. `main` is then a commit of
   `dev` whose every check passed, on its push and on the release pull request, and GitHub keeps a
   check by commit, not by branch; on `main`, `ci.yml` would run that same `verify` again and
-  nothing else, and `beta.yml` follows `dev` only.
+  nothing else, and the beta follows `dev` only.
 
 ## Every release is an upgrade
 
 From v0.2 on, installations hold real data, and an update must keep every row of it (#102).
-`.github/workflows/upgrade.yml` runs on every push to `dev` and `next/**`, and on a pull request that
-touches what an update runs through (`packages/db`, `packages/auth`, the `Dockerfile`, the compose
-files, `tools/docker-entrypoint.sh`) or the job itself (`tools/check-upgrade.*`, the workflow): it
-builds the commit's image and runs `tools/check-upgrade.sh` on it, which, on a fresh project
-and volume:
+The `upgrade` job of `ci.yml` runs on every push to `dev` and `next/**`, and on a pull request
+(but the release's, whose commit was tested on its push) that touches what an update runs through
+(`packages/db`, `packages/auth`, the `Dockerfile`, the compose files, `tools/docker-entrypoint.sh`),
+what reads again the statement the release imported (the readers of `packages/import`, the import
+of `packages/core/src/imports`, the app's jobs and its import route, #132) or the jobs themselves
+(`tools/check-image.sh`, `tools/check-upgrade.*`, the workflow): it takes the commit's image from
+the `image` job and runs `tools/check-upgrade.sh` on it, which, on a fresh project and volume:
 
 1. installs **the last release** (the highest tag `vX.Y.Z`, `--from` to choose another) with that
    release's own `docker-compose.yml`, its image pulled from the registry;
@@ -383,6 +391,9 @@ and volume:
    accounts screen nor an import route, so two users' accounts of every kind, balances, an import
    with its file and its lines (a held duplicate, a foreign currency, a discarded line), a CSV
    profile, and an MCP client with its consent and tokens are written as the app would write them;
+   and, where the release has its import route (from 0.2.0), a user uploads an invented statement
+   (`tools/check-upgrade.ofx`, whose bank encodes entities twice, #132), read as that release
+   reads it;
 3. stops the app, as an update does, and reads every row of every table of the `public` schema;
 4. puts the image under test in its place, as the [update](#installing) does, the compose file
    unchanged: **`migrate` runs and ends**, and has recorded every migration of the commit; run
@@ -390,14 +401,22 @@ and volume:
 5. reads every row again: **every table and column of before is still there, and every row is
    identical**, but in the columns and tables the new migrations add (those of the commit's
    `packages/db/src/migrations` the release did not have), each of which must be named in them
-   (`ALTER TABLE "t" ADD COLUMN "c"`, `CREATE TABLE "t"`);
+   (`ALTER TABLE "t" ADD COLUMN "c"`, `CREATE TABLE "t"`), and in the rows a new migration
+   declares it changes. A migration that must change rows (#132 decodes labels and computes their
+   keys again) declares each change in `tools/check-upgrade.changes.json`, under its own name: the
+   table, the values that find the rows (`where`), the values they take (`set`), and why. Each
+   declaration must find a row of the release once its statement was imported, the rows after the
+   update must be exactly the rows before with the declared changes, and no other row may change:
+   a declaration says what changes, it never lets a table or a column change freely;
 6. starts the app: `/health` answers 200; **the administrator and both users sign in with the same
    passwords**, the temporary one still has to be replaced, the banned one is still refused, and a
    session made before the update still works;
 7. downloads the user's **export** (#22, `/api/export`), which the last release may not have: each
-   of its tables holds that user's rows exactly as the release held them, and each imported file
-   its bytes;
-8. migrates an empty database beside it with the same image: **the updated schema is a fresh
+   of its tables holds that user's rows exactly as the release held them, with the declared
+   changes, and each imported file its bytes;
+8. uploads the statement of step 2 again, through the updated app: **it adds nothing**, every line
+   found as a duplicate under the key the update gave it;
+9. migrates an empty database beside it with the same image: **the updated schema is a fresh
    installation's**, to the column order and the grant.
 
 It removes everything it started, whatever happened. To run it on a clone, with the release's tag
@@ -443,6 +462,6 @@ In the repository's settings, never in the repository:
    force, nothing else, so whoever may write to the repository, and any branch's workflow given
    `contents: write`, can fast-forward it too. The release then fails while `main` is not an
    ancestor of `dev`. The release needs no secret and no environment.
-3. The beta follows the workflow named `ci` and its job named `verify`, and the release reads the
-   runs of `ci.yml` and `pull-request.yml`: renaming one means changing `beta.yml` and
-   `release.yml` with it.
+3. The release reads the runs of `ci.yml` and `pull-request.yml`, the `upgrade` job and the
+   shards' names (`ui full i/n`, `e2e full i/n`): renaming one means changing `release.yml` with
+   it.

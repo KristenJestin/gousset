@@ -1,7 +1,9 @@
 import { account, statementLine } from "@gousset/db/schema/ledger";
+import { exampleStatement, writeStatement } from "@gousset/fixture";
 import type { Page } from "@playwright/test";
 import type { Client } from "@modelcontextprotocol/client";
 
+import { addUser } from "../src/auth";
 import { connectMcp, expect, test } from "../src/test";
 import { openUserData } from "../src/user-data";
 
@@ -26,7 +28,12 @@ const allowReadOnly = (page: Page) => page.getByRole("button", { name: "Allow re
 
 /** The text of the tool's answer, and whether it is an error. */
 async function callAccounts(client: Client, args: { [key: string]: string }) {
-  const result = await client.callTool({ name: "accounts", arguments: args });
+  return callText(client, "accounts", args);
+}
+
+/** The text of a tool's answer, and whether it is an error. */
+async function callText(client: Client, name: string, args: { [key: string]: string }) {
+  const result = await client.callTool({ name, arguments: args });
   const [first] = result.content ?? [];
 
   return { text: first?.type === "text" ? first.text : "", isError: result.isError === true };
@@ -193,4 +200,83 @@ test("an MCP client shows a benefit account's restricted money, the credits left
   expect(expiring).toBeGreaterThanOrEqual(0);
   expect(june).toBeGreaterThan(expiring);
   expect(december).toBeGreaterThan(june);
+});
+
+const allowReadAndWrite = (page: Page) =>
+  page.getByRole("button", { name: "Allow read and write" }).click();
+
+// Issue #124's scenario: an agent sets an account up, imports a statement into it and reads its
+// balance, all through the MCP door, with no visit to the accounts page.
+test("an MCP client creates an account, imports a file into it and reads its balance", async ({
+  app,
+  user,
+  page,
+  baseURL,
+  mcpClientId,
+}, testInfo) => {
+  // The upload waits for the app's import job.
+  test.setTimeout(90_000);
+
+  // A user of the test's own: no other test's accounts share its names, nor this statement's IBAN.
+  const owner = await addUser(app.baseURL, user, {
+    name: "Sam Example",
+    email: `sam.accounts.worker${app.slot}.${testInfo.repeatEachIndex}@example.com`,
+    password: `e2e-sam-password-${app.slot}`,
+  });
+
+  await page.context().addCookies([...owner.cookies]);
+
+  const session = await connectMcp({
+    baseURL: baseURL ?? "",
+    page,
+    consent: allowReadAndWrite,
+    scope: "read write",
+    clientId: mcpClientId,
+  });
+
+  // The statement's own opening balance, so that its closing balance checks out.
+  const created = await callAccounts(session.client, {
+    action: "create",
+    name: "Everyday account",
+    kind: "current",
+    institution: "Example Bank",
+    currency: "EUR",
+    opening_balance: "1,234.56",
+  });
+
+  expect(created.isError, created.text).toBe(false);
+  expect(created.text).toContain("Created Everyday account (Example Bank).");
+  expect(created.text).toContain("Opening balance: 1,234.56 EUR.");
+
+  const statement = writeStatement("camt053", exampleStatement);
+
+  const imported = await callText(session.client, "imports", {
+    action: "upload",
+    file_name: statement.fileName,
+    content: statement.contents,
+    account: "Everyday account",
+  });
+
+  expect(imported.isError, imported.text).toBe(false);
+  expect(imported.text).toContain(`Imported ${statement.fileName} into Everyday account`);
+  expect(imported.text).toContain("6 lines read: 6 added");
+
+  const shown = await callAccounts(session.client, { action: "show", name: "everyday account" });
+
+  expect(shown.isError, shown.text).toBe(false);
+  // 1,234.56 EUR opening, then the six lines: +2,450.00 −4.20 −850.00 −62.37 −12.99 +35.00. An
+  // import's period ends on its last line's day (2026-10-21), its closing balance on the statement's.
+  expect(shown.text).toMatch(
+    /Balance at the end of \d{4}-\d\d-\d\d: 2,790\.00 EUR; statements until 2026-10-21\./,
+  );
+  expect(shown.text).toContain(
+    "Check: on 2026-10-31 the statement and Gousset agree, both 2,790.00 EUR.",
+  );
+  expect(shown.text).toContain("VIR SEPA ACME CONSEIL SALAIRE OCTOBRE");
+
+  const listed = await callAccounts(session.client, { action: "list" });
+
+  expect(listed.text).toContain(
+    "- Everyday account (Example Bank), current account: 2,790.00 EUR; statements until 2026-10-21.",
+  );
 });

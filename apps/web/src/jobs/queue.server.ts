@@ -98,6 +98,8 @@ type ClaimedRow = JobWithMetadata<object>;
 export type RegisteredJob = {
   readonly name: string;
   readonly options: ReturnType<typeof sendOptions>;
+  /** Its cron schedule, for a job of the installation's own (`JobDefinition.schedule`). */
+  readonly schedule: string | undefined;
   readonly attempt: (claimed: ClaimedRow) => Effect.Effect<AttemptOutcome, never, JobProgress>;
 };
 
@@ -108,6 +110,7 @@ export function register<Input, Encoded>(definition: JobDefinition<Input, Encode
   return {
     name: definition.name,
     options: sendOptions(definition),
+    schedule: definition.schedule,
     attempt: (claimed) =>
       Schema.decodeUnknownEffect(envelope)(claimed.data).pipe(
         Effect.mapError(invalidInput),
@@ -331,6 +334,12 @@ export class JobQueue extends Context.Service<
                     ),
                   ),
               );
+
+              // Kept in pg-boss's tables: written again at each start, it is sent once per
+              // occurrence however many processes run.
+              if (job.schedule !== undefined) {
+                await boss.schedule(job.name, job.schedule, { owner: "", input: {} }, job.options);
+              }
             },
             catch: () => new JobQueueUnavailable(),
           });

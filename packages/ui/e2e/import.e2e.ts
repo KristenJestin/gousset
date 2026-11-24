@@ -313,6 +313,18 @@ test.describe("ImportSummary", () => {
     await expect(summary.getByRole("button", { name: "Continue to the review" })).toBeVisible();
   });
 
+  test("says the page's note under its figures, and none without one", async ({ page }) => {
+    await page.goto(story("import-summary", "with-note"));
+
+    const summary = page.getByRole("region", { name: "Import summary" });
+
+    await expect(summary.locator('[data-slot="import-summary-note"]')).toHaveText(
+      /^This file's balance looks empty and was ignored/,
+    );
+    await page.goto(story("import-summary", "default"));
+    await expect(page.locator('[data-slot="import-summary-note"]')).toHaveCount(0);
+  });
+
   test("lines to review stand out only while there are some", async ({ page }) => {
     await page.goto(story("import-summary", "default"));
     await expect(page.locator('[data-figure="review"] dd')).toHaveClass(/text-primary/);
