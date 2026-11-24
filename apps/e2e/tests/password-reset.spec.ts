@@ -363,8 +363,9 @@ async function answerTo(
 
 const HELD = "PASSWORD_CHANGE_REQUIRED";
 
-const isMonthCall = (call: Call) =>
-  call.method === "GET" && decodeURIComponent(call.url).includes("2026-10");
+/** The operations' line search: a read of the user's data, the only call with a page size. */
+const isLinesCall = (call: Call) =>
+  call.method === "GET" && decodeURIComponent(call.url).includes("limit");
 
 test("a temporary password opens nothing but its change, on the server too", async ({
   browser,
@@ -381,7 +382,7 @@ test("a temporary password opens nothing but its change, on the server too", asy
     password: "ivy-password-e2e",
   });
 
-  // While the password is their own: the calls their pages make for their month and a setting,
+  // While the password is their own: the calls their pages make for their lines and a setting,
   // kept to be sent again.
   const calls: Array<Call> = [];
   const context = await browser.newContext({ baseURL: app.baseURL });
@@ -399,9 +400,9 @@ test("a temporary password opens nothing but its change, on the server too", asy
 
     await fixDay(page, "2026-10-31");
     await visit(page, "/accounts");
-    // The review's month loads on hover, from the browser.
-    await page.getByRole("link", { name: "Review" }).hover();
-    await expect.poll(() => calls.some(isMonthCall)).toBe(true);
+    // The operations' lines load on hover, from the browser.
+    await page.getByRole("link", { name: "Operations" }).hover();
+    await expect.poll(() => calls.some(isLinesCall)).toBe(true);
 
     await visit(page, "/settings");
 
@@ -415,14 +416,14 @@ test("a temporary password opens nothing but its change, on the server too", asy
     await context.close();
   }
 
-  const monthCall = calls.find(isMonthCall);
+  const linesCall = calls.find(isLinesCall);
   const settingCall = calls.find((call) => call.method === "POST");
 
-  if (monthCall === undefined || settingCall === undefined) {
-    throw new Error("The pages made no call to read the month or to save the setting.");
+  if (linesCall === undefined || settingCall === undefined) {
+    throw new Error("The pages made no call to read the lines or to save the setting.");
   }
 
-  for (const call of [monthCall, settingCall]) {
+  for (const call of [linesCall, settingCall]) {
     const own = await answerTo(app.baseURL, person.cookies, call);
 
     expect(own.status, call.url).toBe(200);
@@ -441,7 +442,7 @@ test("a temporary password opens nothing but its change, on the server too", asy
   const otherDevice = await signIn(app.baseURL, temporary);
 
   // No data and no setting: the server functions refuse it, whatever the pages show.
-  for (const call of [monthCall, settingCall]) {
+  for (const call of [linesCall, settingCall]) {
     expect((await answerTo(app.baseURL, held.cookies, call)).text, call.url).toContain(HELD);
   }
 
@@ -497,7 +498,7 @@ test("a temporary password opens nothing but its change, on the server too", asy
   expect(changed.status).toBe(200);
 
   // Their own password again: the same session reaches the month.
-  const after = await answerTo(app.baseURL, held.cookies, monthCall);
+  const after = await answerTo(app.baseURL, held.cookies, linesCall);
 
   expect(after.status).toBe(200);
   expect(after.text).not.toContain(HELD);
