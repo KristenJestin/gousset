@@ -323,6 +323,47 @@ test("the consent page says where the client will be sent back", async ({
   });
 });
 
+// Issue #123: the consent's parts, as the route builds them from what the client asks.
+test("the consent page says what write allows only when write is asked", async ({
+  userPage,
+  baseURL,
+  mcpClientId,
+}) => {
+  await connectMcp({
+    baseURL: baseURL ?? "",
+    page: userPage,
+    consent: async (page) => {
+      await expect(page.getByRole("heading", { name: "It also asks to write" })).toBeVisible();
+      await expect(page.getByRole("button", { name: /^Allow/ })).toHaveCount(2);
+      await expect(
+        page.getByText("You can revoke it at any time in Settings › General › Connected clients."),
+      ).toBeVisible();
+      await allowReadOnly(page);
+    },
+    scope: "read write",
+    clientId: mcpClientId,
+  });
+});
+
+test("the consent page offers one Allow and no write part when only read is asked", async ({
+  userPage,
+  baseURL,
+  mcpClientId,
+}) => {
+  await connectMcp({
+    baseURL: baseURL ?? "",
+    page: userPage,
+    consent: async (page) => {
+      await expect(page.getByRole("heading", { name: "It will read" })).toBeVisible();
+      await expect(page.getByRole("heading", { name: "It also asks to write" })).toHaveCount(0);
+      await expect(page.getByRole("button", { name: /^Allow/ })).toHaveCount(1);
+      await page.getByRole("button", { name: "Allow", exact: true }).click();
+    },
+    scope: "read",
+    clientId: mcpClientId,
+  });
+});
+
 test("a client whose redirect is not on its own site is refused before any consent", async ({
   request,
   baseURL,
