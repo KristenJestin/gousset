@@ -59,6 +59,10 @@ const SHOTS: ReadonlyArray<Shot> = [
   { id: "import-csv-preview--default" },
   { id: "states-emptystate--in-a-block" },
   { id: "states-errorstate--beside-a-working-block" },
+  // The review until it reads real lines (#126): a user with lines, a new user, a phone.
+  { id: "states-reviewcoming--with-data" },
+  { id: "states-reviewcoming--new-user" },
+  { id: "states-reviewcoming--phone", width: 320 },
   { id: "layout-card--with-description" },
   { id: "layout-screen--sign-in" },
   { id: "data-list--loading-beside-loaded" },
