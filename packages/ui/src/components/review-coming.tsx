@@ -69,15 +69,17 @@ export function ReviewComing({
         className="grid grid-cols-1 gap-3.5 px-4 pb-4 sm:grid-cols-2 sm:px-5 sm:pb-5 lg:grid-cols-4"
       >
         {parts.map((part) => (
-          <div key={part.part} className="flex items-start gap-2.5">
-            <span
-              data-part={part.part}
-              className={cn("mt-1.5 size-2.5 shrink-0 rounded-full", SWATCHES[part.part])}
-            />
-            <div className="flex flex-col">
-              <dt className="text-sm font-medium">{part.title}</dt>
-              <dd className="text-xs text-muted-foreground">{part.description}</dd>
-            </div>
+          // A `dl` holds only its `dt` and `dd` pairs, each in one `div`: the swatch goes in the term.
+          <div key={part.part} className="flex flex-col">
+            <dt className="flex items-center gap-2.5 text-sm font-medium">
+              <span
+                aria-hidden
+                data-part={part.part}
+                className={cn("size-2.5 shrink-0 rounded-full", SWATCHES[part.part])}
+              />
+              {part.title}
+            </dt>
+            <dd className="pl-5 text-xs text-muted-foreground">{part.description}</dd>
           </div>
         ))}
       </dl>
