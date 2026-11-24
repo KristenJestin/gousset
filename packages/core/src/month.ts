@@ -8,10 +8,10 @@ import { averageWindow, benchmarksOf, lastDayOf, monthsCounted } from "./benchma
 import type { CategoryInMonth } from "./benchmarks";
 import type { CategoryRecord, EntryKind, LineCategory, MonthlySpending } from "./category-store";
 import type { CountedLine } from "./credits";
-import { searchLines } from "./lines";
 import type { LineAccount } from "./lines";
 import { merchantKey } from "./merchants/labels";
 import { monthRowsIn } from "./month-rows";
+import { reviewQueue } from "./review-queue";
 import { detectSubscriptions, subscriptionsOfMonth } from "./subscriptions/detection";
 import type { Charge } from "./subscriptions/detection";
 import {
@@ -286,7 +286,7 @@ export type LineToReview = {
   readonly amount: Money;
 };
 
-/** The operations page's lines "to review" (#35's filter), booked in the month. */
+/** The lines to review (#35's queue), booked in the month. */
 export type MonthLinesToReview = {
   readonly month: string;
   readonly from: string;
@@ -1138,8 +1138,8 @@ export const monthMovements = (owner: string, month: string, currency: string) =
   Effect.map(readMonth(owner, month, currency, false), movementsOf);
 
 /**
- * The lines to review booked in the month: the operations page's filter (`searchLines` with
- * `toReview`), how many and the first few. A month to come is refused.
+ * The lines to review booked in the month: #35's review queue (`reviewQueue`), how many and the
+ * first few. A month to come is refused.
  */
 export const monthLinesToReview = (owner: string, month: string) =>
   Effect.gen(function* () {
@@ -1148,19 +1148,17 @@ export const monthLinesToReview = (owner: string, month: string) =>
     const from = `${month}-01`;
     const to = lastDayOf(month);
 
-    const page = yield* searchLines(owner, {
-      toReview: true,
-      from,
-      to,
-      limit: LINES_TO_REVIEW_SHOWN,
-    }).pipe(Effect.catchTag("LineSearchRefused", Effect.die));
+    // A month's first and last days always read: the search refuses no such period.
+    const page = yield* reviewQueue(owner, { from, to, limit: LINES_TO_REVIEW_SHOWN }).pipe(
+      Effect.catchTag("LineSearchRefused", Effect.die),
+    );
 
     const read: MonthLinesToReview = {
       month,
       from,
       to,
       count: page.total,
-      lines: page.lines.map((line) => ({
+      lines: page.lines.map(({ line }) => ({
         id: line.id,
         day: line.bookedOn,
         label: line.label,

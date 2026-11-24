@@ -1,12 +1,16 @@
 import { Effect, Layer } from "effect";
 import { describe, expect, test } from "vite-plus/test";
 
+import type { AccountRecord } from "./account-store";
 import type { AccountKind } from "./account-values";
 import type { CategoryRecord } from "./category-store";
 import { memoryCategory } from "./category-store-memory";
+import { Expenses } from "./expenses/expenses";
 import type { LineStore } from "./line-store";
 import { memoryLineStore } from "./line-store-memory";
+import type { MemoryLineRows } from "./line-store-memory";
 import { merchantKey } from "./merchants/labels";
+import { Merchants } from "./merchants/merchants";
 import {
   MonthFacts,
   monthFlags,
@@ -28,6 +32,7 @@ import type {
 } from "./month";
 import type { Charge } from "./subscriptions/detection";
 import { Today } from "./today";
+import { Transfers } from "./transfers/transfers";
 
 // The month read (#32): every figure computed from made-up rows, as `MonthFacts` would read them.
 // Today is 2026-11-24; most tests read October, a month gone by.
@@ -173,10 +178,11 @@ function transfer(
 }
 
 function run<A, E>(
-  effect: Effect.Effect<A, E, MonthFacts | LineStore>,
+  effect: Effect.Effect<A, E, MonthFacts | LineStore | Transfers | Expenses | Merchants>,
   rows: Draft,
   day = TODAY,
   asked: Array<MonthScope> = [],
+  lines: MemoryLineRows = {},
 ) {
   return Effect.runPromise(
     Effect.provide(
@@ -191,7 +197,13 @@ function run<A, E>(
             }),
         }),
         Layer.succeed(Today, { day: Effect.succeed(day) }),
-        memoryLineStore(),
+        memoryLineStore(new Map([["ada", lines]])),
+        // The review queue's proposals: no transfer waits, nothing comes back, no merchant known.
+        Layer.mock(Transfers, {}),
+        Layer.mock(Expenses, {}),
+        Layer.mock(Merchants, {
+          ofLine: () => Effect.succeed({ merchant: null, intermediary: null, asks: false }),
+        }),
       ),
     ),
   );
@@ -726,5 +738,60 @@ describe("monthReview", () => {
       lines: [],
     });
     expect(review.importState.accounts).toBe(2);
+  });
+
+  test("the lines to review are the review queue's, booked in the month, newest first", async () => {
+    const { rows, current } = household();
+
+    const record: AccountRecord = {
+      ...current,
+      envelope: null,
+      settlesIntoAccountId: null,
+      balanceCategoryId: null,
+      topUpDays: 3,
+      topUpCapMinor: null,
+    };
+
+    const other = { id: "other", name: "Other", parentName: null, kind: "expense" as const };
+
+    const line = (id: string, bookedOn: string, classifiedBy: "default" | "rule") => ({
+      id,
+      accountId: current.id,
+      bookedOn,
+      valueOn: null,
+      amountMinor: -1500,
+      label: `CARD ${id.toUpperCase()}`,
+      memo: null,
+      counterpartyName: null,
+      classifiedBy,
+      category: other,
+    });
+
+    const lines: MemoryLineRows = {
+      accounts: [record],
+      lines: [
+        line("early", "2026-10-02", "default"),
+        line("late", "2026-10-20", "default"),
+        // A rule's choice is the user's: never to review.
+        line("ruled", "2026-10-21", "rule"),
+        // Booked in the month after.
+        line("next", "2026-11-02", "default"),
+      ],
+    };
+
+    const review = await run(monthReview("ada", "2026-10", "EUR"), rows, TODAY, [], lines);
+
+    expect(review.linesToReview.count).toBe(2);
+    expect(review.linesToReview.lines).toEqual([
+      {
+        id: "late",
+        day: "2026-10-20",
+        label: "CARD LATE",
+        category: other,
+        account: expect.objectContaining({ name: "Current account" }),
+        amount: { minor: -1500, currency: "EUR" },
+      },
+      expect.objectContaining({ id: "early", day: "2026-10-02" }),
+    ]);
   });
 });

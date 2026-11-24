@@ -52,6 +52,11 @@ export type LineDetailProps = {
    * out, "Entered by hand".
    */
   origin?: string;
+  /**
+   * In review mode (#35), what Gousset proposes for the line (`ReviewProposal`), at the very top;
+   * the focus goes to it rather than to the panel when the line opens.
+   */
+  review?: ReactNode;
   /** Its category, to see and change: a `CategoryPicker`; left out for a line with none. */
   category?: ReactNode;
   /** Who the line paid (`LineMerchant`), under its category; left out for a line with none. */
@@ -143,6 +148,7 @@ export function LineDetail({
   looksLike,
   importedFrom,
   origin,
+  review,
   category,
   merchant,
   transfer,
@@ -155,6 +161,7 @@ export function LineDetail({
   const pageLocale = usePageLanguage();
   const writtenIn = locale ?? pageLocale;
   const panel = useRef<HTMLElement>(null);
+  const proposal = useRef<HTMLDivElement>(null);
   const large = useLargeScreen();
   const closing = use(DetailClosing);
   const cameWithPage = use(DetailCameWithPage);
@@ -162,10 +169,11 @@ export function LineDetail({
   const hydrated = useHydrated();
   const [moves] = useState(hydrated);
 
-  // The focus goes into the panel when the user opens it, so that Escape and Tab start there.
+  // The focus goes into the panel when the user opens it, so that Escape and Tab start there; in
+  // review mode, onto the proposal, so that the next line's is read and acted on at once.
   useEffect(() => {
     if (moves) {
-      panel.current?.focus();
+      (proposal.current ?? panel.current)?.focus();
     }
   }, [moves]);
 
@@ -178,6 +186,16 @@ export function LineDetail({
 
   const content = (
     <>
+      {review === undefined ? null : (
+        <div
+          ref={proposal}
+          tabIndex={-1}
+          data-slot="line-review"
+          className="rounded-md outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+        >
+          {review}
+        </div>
+      )}
       {category === undefined ? null : <div data-slot="line-category">{category}</div>}
       {merchant}
       {looksLike === undefined ? null : (

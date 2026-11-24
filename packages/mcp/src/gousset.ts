@@ -24,6 +24,7 @@ import { importsTool } from "./tools/imports";
 import { linesTool } from "./tools/lines";
 import { merchantsTool } from "./tools/merchants";
 import { monthTool } from "./tools/month";
+import { reviewTool } from "./tools/review";
 import { rulesTool } from "./tools/rules";
 
 /**
@@ -60,6 +61,7 @@ export const goussetTools: ReadonlyArray<Tool<GoussetServices>> = [
   merchantsTool,
   categoriesTool,
   rulesTool,
+  reviewTool,
 ];
 
 export const goussetServer: ServerDefinition<GoussetServices> = {

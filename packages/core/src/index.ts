@@ -10,6 +10,7 @@ export {
   BalanceAlreadyNoted,
   BalanceCategoryRefused,
   CategoryKindMismatch,
+  CategoryRequired,
   CategoryNameAmbiguous,
   CategoryNameTaken,
   CategoryNameUnknown,
@@ -27,7 +28,9 @@ export {
   NotACredit,
   NotATransfer,
   NotFunding,
+  NotHeld,
   NotLinked,
+  ProposalChanged,
   SettlementRefused,
   SplitRefused,
   TransferRefused,
@@ -227,6 +230,27 @@ export { DatabaseLineStore } from "./line-store-database";
 export { memoryLineStore } from "./line-store-memory";
 
 export type { MemoryLineDetail, MemoryLineImport, MemoryLineRows } from "./line-store-memory";
+
+export {
+  acceptProposal,
+  correctLine,
+  discardHeldLine,
+  keepHeldLine,
+  queuedLine,
+  reviewQueue,
+} from "./review-queue";
+
+export type {
+  CorrectedLine,
+  Correction,
+  QueuedLine,
+  ReviewQueuePage,
+  ReviewSearch,
+} from "./review-queue";
+
+export { proposalKey, proposalOf } from "./review-proposal";
+
+export type { ProposalFacts, RepeatedLine, ReviewProposal } from "./review-proposal";
 
 export { startingPoints } from "./starting-points";
 

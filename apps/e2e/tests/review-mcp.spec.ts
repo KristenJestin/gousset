@@ -1,377 +1,570 @@
-import type { Page } from "@playwright/test";
-import { merchantKey } from "@gousset/core";
-import {
-  account,
-  category,
-  entry,
-  entryPart,
-  merchant,
-  merchantAlias,
-  statementLine,
-} from "@gousset/db/schema/ledger";
-import { transfer } from "@gousset/db/schema/transfers";
-import type { UserTransaction } from "@gousset/db/user-data";
 import type { Client } from "@modelcontextprotocol/client";
-import { and, eq, isNull } from "drizzle-orm";
+import type { Page } from "@playwright/test";
+import { account, statementLine } from "@gousset/db/schema/ledger";
+import { exampleStatement } from "@gousset/fixture";
+import type { Statement, StatementLine } from "@gousset/fixture";
+import { eq } from "drizzle-orm";
 
-import { addUser, connectMcp, expect, personOfItsOwn, test } from "../src/test";
+import { addUser } from "../src/auth";
+import { importsOn, statementFile } from "../src/imports";
+import { connectMcp, expect, test } from "../src/test";
 import { openUserData } from "../src/user-data";
 
-// Issue #32 through the MCP door: `month` `summary`, `spending` and `days` read the user's own
-// month, through the official MCP client and the real OAuth flow, against the built app and a real
-// Postgres. Each user is the file's own, their rows written as the app writes them: a salary, two
-// grocery runs at a market a month apart, a payment still in "Other" waiting to be reviewed, a
-// transfer to a savings account. Every name and amount is invented.
-//
-// The MCP door reads today from the server's clock (a client sends no cookie): the rows are written
-// in the two months before the current one, so that they read the same whenever the test runs.
+// Issue #35 through the MCP door: the `review` tool, called by the official MCP client over the
+// real OAuth flow, against the built app and a real Postgres. The lines to review come from
+// statements imported as the import job runs them, into accounts of the test's own user: a near
+// duplicate held, a transfer with two candidates, lines still classified by default. Every amount
+// and label is invented.
 
-let data: ReturnType<typeof openUserData>;
-
-test.beforeAll(({ app }) => {
-  data = openUserData(app.database);
-});
-
-test.afterAll(async () => {
-  await data.close();
-});
-
-/** The month `offset` months from the current one, `YYYY-MM`, as the server's clock reads it. */
-function monthFromNow(offset: number): string {
-  const now = new Date();
-
-  return new Date(Date.UTC(now.getFullYear(), now.getMonth() + offset, 1))
-    .toISOString()
-    .slice(0, 7);
-}
-
-/** The last day of a month `YYYY-MM`. */
-function lastDayOf(month: string): string {
-  const [year = 0, number = 1] = month.split("-").map(Number);
-
-  return new Date(Date.UTC(year, number, 0)).toISOString().slice(0, 10);
-}
-
-const LAST_MONTH = monthFromNow(-1);
-const TWO_MONTHS_AGO = monthFromNow(-2);
+const allowReadAndWrite = (page: Page) =>
+  page.getByRole("button", { name: "Allow read and write" }).click();
 
 const allowReadOnly = (page: Page) => page.getByRole("button", { name: "Allow read only" }).click();
 
-type Arguments = { readonly [key: string]: string | boolean };
+type Arguments = { readonly [key: string]: string | number };
 
-async function callTool(client: Client, name: string, args: Arguments) {
+/** The text of a tool's answer, and whether it is an error. */
+async function callText(client: Client, name: string, args: Arguments) {
   const result = await client.callTool({ name, arguments: args });
   const [first] = result.content ?? [];
 
   return { text: first?.type === "text" ? first.text : "", isError: result.isError === true };
 }
 
-/** A top-level category of the user's, of the defaults they were given. */
-async function categoryNamed(
-  transaction: UserTransaction,
-  kind: "expense" | "income",
-  name: string,
-) {
-  const [found] = await transaction
-    .select({ id: category.id })
-    .from(category)
-    .where(and(eq(category.kind, kind), eq(category.name, name), isNull(category.parentId)));
-
-  if (found === undefined) {
-    throw new Error(`No ${kind} category named ${name}.`);
-  }
-
-  return found.id;
-}
-
-/**
- * The user's month, as the app writes it: each line counted with its entry, the transfer's two
- * sides with none.
- */
-function seedMonth(owner: string) {
-  return data.asUser(owner, async (transaction) => {
-    const [everyday, savings] = await transaction
-      .insert(account)
-      .values([
-        { userId: owner, name: "Everyday account", kind: "current", currency: "EUR" },
-        { userId: owner, name: "Rainy-day savings", kind: "savings", currency: "EUR" },
-      ])
-      .returning({ id: account.id });
-
-    if (everyday === undefined || savings === undefined) {
-      throw new Error("The accounts were not made.");
-    }
-
-    const groceries = await categoryNamed(transaction, "expense", "Groceries");
-    const other = await categoryNamed(transaction, "expense", "Other");
-    const salary = await categoryNamed(transaction, "income", "Salary");
-
-    const [market] = await transaction
-      .insert(merchant)
-      .values({ userId: owner, name: "Greenmarket" })
-      .returning({ id: merchant.id });
-
-    if (market === undefined) {
-      throw new Error("The merchant was not made.");
-    }
-
-    await transaction.insert(merchantAlias).values({
-      userId: owner,
-      merchantId: market.id,
-      alias: merchantKey("GREENMARKET", null) ?? "GREENMARKET",
-    });
-
-    const line = async (
-      accountId: string,
-      bookedOn: string,
-      amountMinor: number,
-      label: string,
-    ) => {
-      const [made] = await transaction
-        .insert(statementLine)
-        .values({ userId: owner, accountId, source: "manual", bookedOn, amountMinor, label })
-        .returning({ id: statementLine.id });
-
-      if (made === undefined) {
-        throw new Error("The line was not made.");
-      }
-
-      return made.id;
-    };
-
-    /** A line and its one entry; classified by the user unless said otherwise. */
-    const classified = async (
-      kind: "expense" | "income",
-      categoryId: string,
-      bookedOn: string,
-      amountMinor: number,
-      label: string,
-      classifiedBy: "default" | "user" = "user",
-    ) => {
-      const lineId = await line(everyday.id, bookedOn, amountMinor, label);
-
-      const [made] = await transaction
-        .insert(entry)
-        .values({ userId: owner, kind, happenedOn: bookedOn, categoryId, classifiedBy })
-        .returning({ id: entry.id });
-
-      if (made === undefined) {
-        throw new Error("The entry was not made.");
-      }
-
-      await transaction.insert(entryPart).values({
-        userId: owner,
-        entryId: made.id,
-        lineId,
-        role: "payment",
-        amountMinor: Math.abs(amountMinor),
-      });
-    };
-
-    await classified("expense", groceries, `${TWO_MONTHS_AGO}-10`, -12_000, "GREENMARKET");
-    await classified("income", salary, `${LAST_MONTH}-01`, 200_000, "ACME PAYROLL");
-    await classified("expense", groceries, `${LAST_MONTH}-12`, -8000, "GREENMARKET");
-    await classified("expense", other, `${LAST_MONTH}-18`, -1500, "CARD 4417 KIOSK", "default");
-
-    await transaction.insert(transfer).values({
-      userId: owner,
-      outLineId: await line(everyday.id, `${LAST_MONTH}-05`, -50_000, "TO SAVINGS"),
-      inLineId: await line(savings.id, `${LAST_MONTH}-05`, 50_000, "FROM EVERYDAY"),
-      pairedBy: "user",
-    });
-  });
-}
-
-/** A user of the file's own, signed in on `page`, with their month seeded unless `empty`. */
-async function personWithMonth(
-  page: Page,
-  app: { readonly baseURL: string },
-  user: Parameters<typeof addUser>[1],
-  local: string,
-  empty = false,
-) {
-  const person = await addUser(app.baseURL, user, personOfItsOwn(local));
-
-  if (!empty) {
-    await seedMonth(await data.ownerOf(person.email));
-  }
-
-  await page.context().addCookies([...person.cookies]);
-
-  return person;
-}
-
-test("month summary reads the user's own month", async ({ page, app, user, mcpClientId }) => {
-  await personWithMonth(page, app, user, "solene");
-
-  const { client } = await connectMcp({
-    baseURL: app.baseURL,
-    page,
-    consent: allowReadOnly,
-    scope: "read write",
-    clientId: mcpClientId,
-  });
-
-  const { text, isError } = await callTool(client, "month", {
-    action: "summary",
-    month: LAST_MONTH,
-  });
-
-  expect(isError, text).toBe(false);
-  expect(text).toContain(`The month ${LAST_MONTH}, in EUR`);
-  expect(text).toContain("Received 2,000.00 EUR, from Salary 2,000.00 EUR.");
-  expect(text).toContain("Spent 95.00 EUR; average 120.00 EUR; previous month 120.00 EUR.");
-  expect(text).toContain("Set aside 500.00 EUR (net, onto savings and investment accounts).");
-  expect(text).toContain("Left 1,405.00 EUR.");
-  expect(text).toContain(
-    `- ${LAST_MONTH}-05, transfer: Everyday account → Rainy-day savings, 500.00 EUR`,
-  );
-  expect(text).toContain(
-    `- ${LAST_MONTH}-01, income: ACME PAYROLL → Everyday account, 2,000.00 EUR (Salary)`,
-  );
-  expect(text).toContain("Lines to review: 1 booked in the month");
-  expect(text).toContain(
-    `- ${LAST_MONTH}-18, Everyday account: "CARD 4417 KIOSK", -15.00 EUR, in Other`,
-  );
-
-  const search = {
-    action: "search",
-    to_review: true,
-    from: `${LAST_MONTH}-01`,
-    to: lastDayOf(LAST_MONTH),
+/** A statement of these lines alone, each with a reference of its own. */
+function statementOf(name: string, lines: ReadonlyArray<Omit<StatementLine, "reference">>) {
+  const statement: Statement = {
+    ...exampleStatement,
+    lines: lines.map((line, index) => ({ ...line, reference: `${name}-${index + 1}` })),
   };
 
-  expect(text).toContain(`List them all with lines ${JSON.stringify(search)}.`);
+  return statement;
+}
 
-  // The call it writes lists the line to review.
-  const listed = await callTool(client, "lines", search);
+const STREAMING = { bookedOn: "2026-10-20", amountMinor: -1899, label: "PRLV NIMBUS STREAMING" };
+const GYM = { bookedOn: "2026-10-22", amountMinor: -2999, label: "PRLV CITYGYM MEMBERSHIP" };
+const GROCER = { bookedOn: "2026-10-09", amountMinor: -4320, label: "CB HARBOR GROCER 0910" };
+const TO_SAVINGS = { bookedOn: "2026-10-15", amountMinor: -7000, label: "SEPA TRF TO SAVINGS" };
 
-  expect(listed.isError, listed.text).toBe(false);
-  expect(listed.text).toContain("CARD 4417 KIOSK");
+/** The same payments read again from a CSV: a day later, their labels written otherwise. */
+const STREAMING_AGAIN = {
+  bookedOn: "2026-10-21",
+  amountMinor: -1899,
+  label: "NIMBUS STREAMING ABO",
+};
 
-  // A month to come is refused, with a valid call.
-  const toCome = await callTool(client, "month", { action: "summary", month: monthFromNow(1) });
+const GYM_AGAIN = { bookedOn: "2026-10-23", amountMinor: -2999, label: "CITYGYM MEMBER" };
 
-  expect(toCome.isError).toBe(true);
-  expect(toCome.text).toContain("is a month to come");
-});
+/** A row of `review list`: its text, the line's handle and the proposal's. */
+type Row = { readonly row: string; readonly line: string; readonly proposal: string };
 
-test("month spending by category and merchant against the average and the previous month", async ({
-  page,
-  app,
-  user,
-  mcpClientId,
-}) => {
-  await personWithMonth(page, app, user, "tristan");
+function rowsOf(text: string): ReadonlyArray<Row> {
+  return text.split("\n").flatMap((row) => {
+    const match = /; line: (\S+); proposal: (\S+)$/.exec(row);
 
-  const { client } = await connectMcp({
-    baseURL: app.baseURL,
-    page,
-    consent: allowReadOnly,
-    scope: "read write",
-    clientId: mcpClientId,
+    return match === null ? [] : [{ row, line: match[1] ?? "", proposal: match[2] ?? "" }];
   });
+}
 
-  const byCategory = await callTool(client, "month", { action: "spending", month: LAST_MONTH });
+/** The line or category a proposal's handle names after its kind (`transfer:<line>`). */
+const namedBy = (proposal: string) => proposal.slice(proposal.indexOf(":") + 1);
 
-  expect(byCategory.isError, byCategory.text).toBe(false);
-  expect(byCategory.text).toContain(
-    `Where the money went in ${LAST_MONTH}, by category, in EUR, each at its net cost: averages over 1 month(s) of ${monthFromNow(-7)} to ${TWO_MONTHS_AGO}; the previous month is ${TWO_MONTHS_AGO}.`,
-  );
-  expect(byCategory.text).toContain(
-    "\n- Groceries: spent 80.00 EUR; average 120.00 EUR; previous month 120.00 EUR; benchmark 120.00 EUR (automatic)\n",
-  );
-  expect(byCategory.text).toContain(
-    "\n- Other: spent 15.00 EUR; average 0.00 EUR; previous month 0.00 EUR",
-  );
+/**
+ * The row whose own label is `label`: written before its proposal (`, "<label>": <proposal>`), never
+ * the label a proposal quotes (the line a held one repeats, the expense a refund cancels).
+ */
+function rowOf(rows: ReadonlyArray<Row>, label: string): Row {
+  const found = rows.find((each) => each.row.includes(`, "${label}": `));
 
-  const byMerchant = await callTool(client, "month", {
-    action: "spending",
-    by: "merchant",
-    month: LAST_MONTH,
-  });
-
-  expect(byMerchant.isError, byMerchant.text).toBe(false);
-  expect(byMerchant.text).toContain(
-    "\n- Greenmarket: spent 80.00 EUR; average 120.00 EUR; previous month 120.00 EUR",
-  );
-  expect(byMerchant.text).toContain("\n- no merchant: spent 15.00 EUR");
-});
-
-test("month days follows a category day by day", async ({ page, app, user, mcpClientId }) => {
-  await personWithMonth(page, app, user, "ulysse");
-
-  const { client } = await connectMcp({
-    baseURL: app.baseURL,
-    page,
-    consent: allowReadOnly,
-    scope: "read write",
-    clientId: mcpClientId,
-  });
-
-  const { text, isError } = await callTool(client, "month", {
-    action: "days",
-    month: LAST_MONTH,
-    name: "groceries",
-  });
-
-  expect(isError, text).toBe(false);
-  expect(text).toContain(`Groceries (category) in ${LAST_MONTH}, in EUR`);
-  expect(text).toContain(`${LAST_MONTH}-09: 0.00 EUR; previous month 0.00 EUR`);
-  expect(text).toContain(`${LAST_MONTH}-11: 0.00 EUR; previous month 120.00 EUR`);
-  expect(text).toContain(`${LAST_MONTH}-12: 80.00 EUR; previous month 120.00 EUR`);
-
-  const unknown = await callTool(client, "month", {
-    action: "days",
-    month: LAST_MONTH,
-    name: "Gardening",
-  });
-
-  expect(unknown.isError).toBe(true);
-  expect(unknown.text).toContain('is named "Gardening"');
-});
-
-test("another user's month is never read", async ({ page, app, user, mcpClientId }) => {
-  // Valentin's month is seeded; Wanda has nothing, and reads only her own.
-  await personWithMonth(page, app, user, "valentin");
-  await page.context().clearCookies();
-  await personWithMonth(page, app, user, "wanda", true);
-
-  const { client } = await connectMcp({
-    baseURL: app.baseURL,
-    page,
-    consent: allowReadOnly,
-    scope: "read write",
-    clientId: mcpClientId,
-  });
-
-  const summary = await callTool(client, "month", { action: "summary", month: LAST_MONTH });
-
-  expect(summary.isError, summary.text).toBe(false);
-  expect(summary.text).toContain("Received 0.00 EUR.");
-  expect(summary.text).toContain("Spent 0.00 EUR");
-  expect(summary.text).toContain("Set aside 0.00 EUR");
-  expect(summary.text).toContain("No line of the month waits to be reviewed.");
-
-  for (const theirs of ["2,000.00", "ACME PAYROLL", "Everyday account", "Rainy-day", "KIOSK"]) {
-    expect(summary.text).not.toContain(theirs);
+  if (found === undefined) {
+    throw new Error(`No line "${label}" to review.`);
   }
 
-  const merchants = await callTool(client, "month", {
-    action: "spending",
-    by: "merchant",
-    month: LAST_MONTH,
+  return found;
+}
+
+test("an MCP client lists the lines to review with their proposals, accepts and corrects them", async ({
+  app,
+  user,
+  page,
+  baseURL,
+  mcpClientId,
+}, testInfo) => {
+  // Four imports run here, then the calls.
+  test.setTimeout(120_000);
+
+  const reviewer = await addUser(app.baseURL, user, {
+    name: "Rae Example",
+    email: `rae.review.worker${app.slot}.${testInfo.repeatEachIndex}@example.com`,
+    password: `e2e-rae-password-${app.slot}`,
   });
 
-  expect(merchants.text).not.toContain("Greenmarket");
+  const data = openUserData(app.database);
+  const imports = importsOn(data);
 
-  const days = await callTool(client, "month", {
-    action: "days",
-    month: LAST_MONTH,
-    name: "Groceries",
+  try {
+    const owner = await data.ownerOf(reviewer.email);
+
+    const newAccount = async (name: string, kind: "current" | "savings") => {
+      const [created] = await data.asUser(owner, (transaction) =>
+        transaction
+          .insert(account)
+          .values({ userId: owner, name, kind, currency: "EUR" })
+          .returning({ id: account.id }),
+      );
+
+      if (created === undefined) {
+        throw new Error("The account was not created.");
+      }
+
+      return created.id;
+    };
+
+    const importInto = async (
+      accountId: string,
+      name: string,
+      format: "ofx" | "csv",
+      lines: ReadonlyArray<Omit<StatementLine, "reference">>,
+    ) => {
+      const done = await imports.importFile(
+        owner,
+        accountId,
+        statementFile(format, statementOf(name, lines), `${name}.${format}`),
+      );
+
+      expect(done.status, name).toBe("done");
+
+      return done;
+    };
+
+    const current = await newAccount("Review current", "current");
+    const savingsOne = await newAccount("Review savings one", "savings");
+    const savingsTwo = await newAccount("Review savings two", "savings");
+
+    // Two lines may be the other side of the transfer out: the user chooses.
+    await importInto(savingsOne, "review-one", "ofx", [
+      { bookedOn: "2026-10-16", amountMinor: 7000, label: "SEPA TRF RECEIVED ONE" },
+    ]);
+
+    await importInto(savingsTwo, "review-two", "ofx", [
+      { bookedOn: "2026-10-14", amountMinor: 7000, label: "SEPA TRF RECEIVED TWO" },
+    ]);
+
+    await importInto(current, "review-current", "ofx", [GROCER, TO_SAVINGS, STREAMING, GYM]);
+
+    const again = await importInto(current, "review-again", "csv", [STREAMING_AGAIN, GYM_AGAIN]);
+
+    expect(again).toMatchObject({ linesAdded: 0, linesHeld: 2 });
+
+    await page.context().addCookies([...reviewer.cookies]);
+
+    const session = await connectMcp({
+      baseURL: baseURL ?? "",
+      page,
+      consent: allowReadAndWrite,
+      scope: "read write",
+      clientId: mcpClientId,
+    });
+
+    const review = (args: Arguments) => callText(session.client, "review", args);
+
+    expect(session.client.getInstructions()).toContain("`review`");
+
+    // The queue: every line held, waiting for its transfer, or classified by default.
+    const listed = await review({ action: "list" });
+
+    expect(listed.isError, listed.text).toBe(false);
+    expect(listed.text).toContain("8 line(s) to review.");
+
+    const rows = rowsOf(listed.text);
+
+    expect(rows).toHaveLength(8);
+
+    const heldStreaming = rowOf(rows, STREAMING_AGAIN.label);
+    const heldGym = rowOf(rows, GYM_AGAIN.label);
+    const transfer = rowOf(rows, TO_SAVINGS.label);
+    const streaming = rowOf(rows, STREAMING.label);
+    const grocer = rowOf(rows, GROCER.label);
+
+    expect(heldStreaming.row).toContain(
+      `discard it, it repeats the line of ${STREAMING.bookedOn}, -18.99 EUR, "${STREAMING.label}"`,
+    );
+
+    expect(heldStreaming.proposal).toBe(`duplicate:${streaming.line}`);
+    expect(transfer.row).toContain("pair it as a transfer with the line of 2026-10-1");
+    expect(transfer.row).toContain("(1 other candidate: lines show)");
+    expect(streaming.row).toContain("keep it in Other");
+    expect(grocer.row).toContain("keep it in Other");
+
+    // Accepted: the near duplicate is discarded.
+    const discarded = await review({
+      action: "accept",
+      line: heldStreaming.line,
+      proposal: heldStreaming.proposal,
+    });
+
+    expect(discarded.isError, discarded.text).toBe(false);
+    expect(discarded.text).toContain("is discarded");
+
+    const [held] = await data.asUser(owner, (transaction) =>
+      transaction
+        .select({ state: statementLine.state })
+        .from(statementLine)
+        .where(eq(statementLine.id, heldStreaming.line)),
+    );
+
+    expect(held?.state).toBe("discarded");
+
+    // Accepted: the transfer is paired with its first candidate; both sides leave the queue.
+    const paired = await review({
+      action: "accept",
+      line: transfer.line,
+      proposal: transfer.proposal,
+    });
+
+    expect(paired.isError, paired.text).toBe(false);
+    expect(paired.text).toContain("is paired as a transfer");
+
+    const shown = await callText(session.client, "lines", { action: "show", line: transfer.line });
+
+    expect(transfer.proposal).toMatch(/^transfer:/);
+    expect(shown.text).toContain(`line: ${namedBy(transfer.proposal)}`);
+    expect(shown.text).toContain("paired by the user");
+
+    // Accepted: the line keeps its category, as the user's choice.
+    const kept = await review({
+      action: "accept",
+      line: streaming.line,
+      proposal: streaming.proposal,
+    });
+
+    expect(kept.isError, kept.text).toBe(false);
+    expect(kept.text).toContain("stays in its category, as the user's choice");
+
+    const [done] = await data.asUser(owner, (transaction) =>
+      transaction
+        .select({ reviewState: statementLine.reviewState })
+        .from(statementLine)
+        .where(eq(statementLine.id, streaming.line)),
+    );
+
+    expect(done?.reviewState).toBe("done");
+
+    // Corrected: the line goes in the category the user names, and a rule is proposed.
+    const corrected = await review({ action: "correct", line: grocer.line, category: "Groceries" });
+
+    expect(corrected.isError, corrected.text).toBe(false);
+    expect(corrected.text).toContain("is now in Groceries, as the user's choice");
+    expect(corrected.text).toContain("propose this rule to the user");
+
+    // Corrected without a category: the held line is kept, counted, and still to review.
+    const counted = await review({ action: "correct", line: heldGym.line });
+
+    expect(counted.isError, counted.text).toBe(false);
+    expect(counted.text).toContain("is kept: it counts now");
+
+    const after = rowsOf((await review({ action: "list" })).text);
+    const lines = after.map((each) => each.line);
+
+    expect(lines).not.toContain(heldStreaming.line);
+    expect(lines).not.toContain(transfer.line);
+    expect(lines).not.toContain(namedBy(transfer.proposal));
+    expect(lines).not.toContain(streaming.line);
+    expect(lines).not.toContain(grocer.line);
+    expect(rowOf(after, GYM_AGAIN.label).row).toContain("keep it in Other");
+
+    // A line reviewed already, and a proposal that is not the one listed, are refused.
+    const twice = await review({ action: "accept", line: grocer.line, proposal: grocer.proposal });
+
+    expect(twice.isError).toBe(true);
+    expect(twice.text).toContain("no longer to review");
+    expect(twice.text).toContain('A valid call: review {"action":"list"}');
+
+    const gym = rowOf(after, GYM.label);
+    const stale = await review({ action: "accept", line: gym.line, proposal: grocer.line });
+
+    expect(stale.isError).toBe(true);
+    expect(stale.text).toContain("proposal changed since it was listed");
+
+    const missing = await review({ action: "correct", line: gym.line });
+
+    expect(missing.isError).toBe(true);
+    expect(missing.text).toContain("correct needs category for this line");
+  } finally {
+    await data.close();
+  }
+});
+
+const BOOKS = {
+  bookedOn: "2026-10-05",
+  amountMinor: -3400,
+  label: "CB WILLOW BOOKS 0510 RIVERTON",
+};
+
+const BOOKS_BACK = {
+  bookedOn: "2026-10-07",
+  amountMinor: 3400,
+  label: "AVOIR WILLOW BOOKS RIVERTON",
+};
+
+test("an MCP client accepts a refund, and the line leaves the lines to review", async ({
+  app,
+  user,
+  page,
+  baseURL,
+  mcpClientId,
+}, testInfo) => {
+  test.setTimeout(90_000);
+
+  const reviewer = await addUser(app.baseURL, user, {
+    name: "Rae Example",
+    email: `rae.refund.worker${app.slot}.${testInfo.repeatEachIndex}@example.com`,
+    password: `e2e-rae-password-${app.slot}`,
   });
 
-  expect(days.isError, days.text).toBe(false);
-  expect(days.text).toContain(`${LAST_MONTH}-12: 0.00 EUR`);
-  expect(days.text).not.toContain("80.00");
+  const data = openUserData(app.database);
+  const imports = importsOn(data);
+
+  try {
+    const owner = await data.ownerOf(reviewer.email);
+    const accountId = await imports.createAccount(owner, "Refund current");
+
+    // The purchase and its credit note alone: the only expense the line coming back may cancel.
+    const done = await imports.importFile(
+      owner,
+      accountId,
+      statementFile("ofx", statementOf("review-refund", [BOOKS, BOOKS_BACK]), "review-refund.ofx"),
+    );
+
+    expect(done.status).toBe("done");
+
+    await page.context().addCookies([...reviewer.cookies]);
+
+    const session = await connectMcp({
+      baseURL: baseURL ?? "",
+      page,
+      consent: allowReadAndWrite,
+      scope: "read write",
+      clientId: mcpClientId,
+    });
+
+    const review = (args: Arguments) => callText(session.client, "review", args);
+    const listed = await review({ action: "list" });
+
+    expect(listed.isError, listed.text).toBe(false);
+
+    // The credit note's row names the purchase in its proposal: it is the newer, listed first.
+    const back = rowOf(rowsOf(listed.text), BOOKS_BACK.label);
+
+    expect(back.row).toContain("link it as a refund of the expense in Other costing 34.00 EUR");
+    expect(back.row).toContain(`"${BOOKS.label}"`);
+    expect(back.proposal).toMatch(/^refund:/);
+
+    const linked = await review({ action: "accept", line: back.line, proposal: back.proposal });
+
+    expect(linked.isError, linked.text).toBe(false);
+    expect(linked.text).toContain("is linked as a refund of that expense");
+
+    // Linked, it follows its expense: it is no longer to review, with a category or otherwise.
+    const after = rowsOf((await review({ action: "list" })).text);
+
+    expect(after.map((each) => each.line)).not.toContain(back.line);
+
+    const shown = await callText(session.client, "lines", { action: "show", line: back.line });
+
+    expect(shown.text).toContain("This line is one of its refunds.");
+  } finally {
+    await data.close();
+  }
+});
+
+test("an MCP client corrects a transfer's line and held lines, and is refused an archived category", async ({
+  app,
+  user,
+  page,
+  baseURL,
+  mcpClientId,
+}, testInfo) => {
+  // Four imports run here, then the calls.
+  test.setTimeout(120_000);
+
+  const reviewer = await addUser(app.baseURL, user, {
+    name: "Rae Example",
+    email: `rae.correct.worker${app.slot}.${testInfo.repeatEachIndex}@example.com`,
+    password: `e2e-rae-password-${app.slot}`,
+  });
+
+  const data = openUserData(app.database);
+  const imports = importsOn(data);
+
+  try {
+    const owner = await data.ownerOf(reviewer.email);
+
+    const newAccount = async (name: string, kind: "current" | "savings") => {
+      const [created] = await data.asUser(owner, (transaction) =>
+        transaction
+          .insert(account)
+          .values({ userId: owner, name, kind, currency: "EUR" })
+          .returning({ id: account.id }),
+      );
+
+      if (created === undefined) {
+        throw new Error("The account was not created.");
+      }
+
+      return created.id;
+    };
+
+    const importInto = async (
+      accountId: string,
+      name: string,
+      format: "ofx" | "csv",
+      lines: ReadonlyArray<Omit<StatementLine, "reference">>,
+    ) => {
+      const done = await imports.importFile(
+        owner,
+        accountId,
+        statementFile(format, statementOf(name, lines), `${name}.${format}`),
+      );
+
+      expect(done.status, name).toBe("done");
+
+      return done;
+    };
+
+    const lineOf = async (lineId: string) => {
+      const [found] = await data.asUser(owner, (transaction) =>
+        transaction
+          .select({
+            state: statementLine.state,
+            reviewState: statementLine.reviewState,
+            transferRefused: statementLine.transferRefused,
+          })
+          .from(statementLine)
+          .where(eq(statementLine.id, lineId)),
+      );
+
+      return found;
+    };
+
+    const current = await newAccount("Correct current", "current");
+    const savingsOne = await newAccount("Correct savings one", "savings");
+    const savingsTwo = await newAccount("Correct savings two", "savings");
+
+    // Two lines may be the other side of the transfer out: the user chooses.
+    await importInto(savingsOne, "correct-one", "ofx", [
+      { bookedOn: "2026-10-16", amountMinor: 7000, label: "SEPA TRF RECEIVED ONE" },
+    ]);
+
+    await importInto(savingsTwo, "correct-two", "ofx", [
+      { bookedOn: "2026-10-14", amountMinor: 7000, label: "SEPA TRF RECEIVED TWO" },
+    ]);
+
+    await importInto(current, "correct-current", "ofx", [TO_SAVINGS, STREAMING, GYM]);
+
+    const again = await importInto(current, "correct-again", "csv", [STREAMING_AGAIN, GYM_AGAIN]);
+
+    expect(again).toMatchObject({ linesAdded: 0, linesHeld: 2 });
+
+    await page.context().addCookies([...reviewer.cookies]);
+
+    const session = await connectMcp({
+      baseURL: baseURL ?? "",
+      page,
+      consent: allowReadAndWrite,
+      scope: "read write",
+      clientId: mcpClientId,
+    });
+
+    const review = (args: Arguments) => callText(session.client, "review", args);
+    const categories = (args: Arguments) => callText(session.client, "categories", args);
+    const rows = rowsOf((await review({ action: "list" })).text);
+    const transfer = rowOf(rows, TO_SAVINGS.label);
+    const heldStreaming = rowOf(rows, STREAMING_AGAIN.label);
+    const heldGym = rowOf(rows, GYM_AGAIN.label);
+
+    expect(transfer.proposal).toMatch(/^transfer:/);
+
+    // Corrected: the transfer's line is no transfer, in the category named, and out of the queue.
+    const notTransfer = await review({
+      action: "correct",
+      line: transfer.line,
+      category: "Groceries",
+    });
+
+    expect(notTransfer.isError, notTransfer.text).toBe(false);
+    expect(notTransfer.text).toContain("is now in Groceries, as the user's choice");
+    expect(notTransfer.text).toContain("It is no transfer: the automatic pairing leaves it alone.");
+
+    expect(await lineOf(transfer.line)).toMatchObject({
+      reviewState: "done",
+      transferRefused: true,
+    });
+
+    // Corrected with a category: the held line is kept, counted, in it, and out of the queue.
+    const kept = await review({
+      action: "correct",
+      line: heldStreaming.line,
+      category: "Groceries",
+    });
+
+    expect(kept.isError, kept.text).toBe(false);
+    expect(kept.text).toContain("is now in Groceries, as the user's choice");
+    expect(await lineOf(heldStreaming.line)).toMatchObject({
+      state: "counted",
+      reviewState: "done",
+    });
+
+    // An archived category is refused before anything is written: the line is still held.
+    const hobby = `Old Hobby ${app.slot}`;
+
+    expect((await categories({ action: "create", name: hobby })).isError).toBe(false);
+    expect((await categories({ action: "archive", category: hobby })).isError).toBe(false);
+
+    const refused = await review({ action: "correct", line: heldGym.line, category: hobby });
+
+    expect(refused.isError).toBe(true);
+    expect(refused.text).toContain("That category is archived");
+    expect((await lineOf(heldGym.line))?.state).toBe("held");
+
+    const after = rowsOf((await review({ action: "list" })).text);
+    const lines = after.map((each) => each.line);
+
+    expect(lines).not.toContain(transfer.line);
+    expect(lines).not.toContain(heldStreaming.line);
+    expect(rowOf(after, GYM_AGAIN.label).row).toContain("discard it, it repeats the line of");
+  } finally {
+    await data.close();
+  }
+});
+
+test("a token allowed to read only lists the lines to review, and is refused accept and correct", async ({
+  userPage,
+  baseURL,
+  mcpClientId,
+}) => {
+  const session = await connectMcp({
+    baseURL: baseURL ?? "",
+    page: userPage,
+    consent: allowReadOnly,
+    scope: "read write",
+    clientId: mcpClientId,
+  });
+
+  const listed = await callText(session.client, "review", { action: "list" });
+
+  expect(listed.isError, listed.text).toBe(false);
+  expect(listed.text).toMatch(/^\d+ line\(s\) to review\./);
+
+  const writes: ReadonlyArray<Arguments> = [
+    { action: "accept", line: "a-handle", proposal: "a-proposal" },
+    { action: "correct", line: "a-handle", category: "Groceries" },
+  ];
+
+  for (const args of writes) {
+    const refused = await callText(session.client, "review", args);
+
+    expect(refused.isError).toBe(true);
+    expect(refused.text).toContain("allowed to read only");
+  }
 });

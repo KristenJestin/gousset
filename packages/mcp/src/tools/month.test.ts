@@ -126,7 +126,10 @@ function connect(given: Connection = {}) {
               Layer.mock(Imports, {}),
               Layer.mock(ImportProfiles, {}),
               Layer.mock(DataExport, {}),
-              Layer.mock(Merchants, {}),
+              // The review queue's proposals for the lines to review: no merchant known.
+              Layer.mock(Merchants, {
+                ofLine: () => Effect.succeed({ merchant: null, intermediary: null, asks: false }),
+              }),
               Layer.mock(Transfers, {}),
               Layer.mock(Expenses, {}),
               Layer.mock(UserData, {}),
@@ -354,7 +357,7 @@ function ada() {
   return { rows, current, groceries };
 }
 
-/** The line to review of Ada's, as the operations page's filter finds it. */
+/** The line to review of Ada's, as the review queue finds it. */
 function toReview(current: MonthAccount): MemoryLineRows {
   const record: AccountRecord = {
     ...current,
@@ -410,7 +413,7 @@ describe("month summary", () => {
       '- 2026-10-04, Current account: "CARD 0410 CRUSTY", -15.00 EUR, in Other',
     );
     expect(text).toContain(
-      'List them all with lines {"action":"search","to_review":true,"from":"2026-10-01","to":"2026-10-31"}.',
+      'List them with their proposals, to accept or correct each: review {"action":"list"} (every month\'s, newest first).',
     );
     expect(text).toContain("Imported: 1 of 2 account(s) have statements reaching 2026-10-31.");
     expect(text).toContain("- Savings book: reaches 2026-10-15.");

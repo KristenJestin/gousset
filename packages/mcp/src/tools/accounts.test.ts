@@ -737,6 +737,7 @@ describe("the accounts tool", () => {
       "merchants",
       "categories",
       "rules",
+      "review",
     ]);
     expect(tool?.title).toBe("Accounts");
     expect(tool?.description).toContain("it makes the day's movement line, in its `category`");

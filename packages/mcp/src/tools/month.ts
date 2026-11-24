@@ -14,9 +14,11 @@ import type {
   CategoryInMonth,
   CategorySpending,
   CategoryStore,
+  Expenses,
   FutureMonthRefused,
   LineStore,
   MerchantSpending,
+  Merchants,
   MonthBenchmark,
   MonthBenchmarks,
   MonthFacts,
@@ -26,6 +28,7 @@ import type {
   MonthSubscriptionsRead,
   SpendingDays,
   Subscriptions,
+  Transfers,
 } from "@gousset/core";
 import { Effect, Schema } from "effect";
 
@@ -68,7 +71,7 @@ const MOVEMENTS_LISTED = 60;
 
 const DESCRIPTION = `The monthly review of the user's own money, in their currency (other currencies apart, never converted). Read only. Every action takes month (YYYY-MM, the current one if left out); a month to come is refused.
 
-\`summary\`: the month in one read. Received (and from which categories), spent against the average of the months before and the previous month, set aside (net transfers onto savings and investment accounts), left and its part restricted to benefit accounts; the incomes and transfers of the month; how many lines wait to be reviewed; how far each account's statements go; what is flagged (categories above their benchmark, subscriptions that rose or stopped, benefit credits about to expire, accounts not imported). Use it for "how did my month go?" or "what is left?".
+\`summary\`: the month in one read. Received (and from which categories), spent against the average of the months before and the previous month, set aside (net transfers onto savings and investment accounts), left and its part restricted to benefit accounts; the incomes and transfers of the month; how many lines of the month wait to be reviewed (review settles them); how far each account's statements go; what is flagged (categories above their benchmark, subscriptions that rose or stopped, benefit credits about to expire, accounts not imported). Use it for "how did my month go?" or "what is left?".
 
 \`spending\`, with by (category, the default, or merchant): where the money went, each row against its average and the previous month; categories with their children indented, their benchmark and drift. An expense counts at its net cost, on the day it happened; a transfer is never spending. A merchant is who was paid: the expense's own, else its line's, a payment intermediary (PayPal) when nothing better is known; expenses naming several merchants or none share the row "${NO_MERCHANT}", last.
 
@@ -361,8 +364,6 @@ function movementsOf(review: MonthReview): string {
 function toReviewOf(review: MonthReview): string {
   const { linesToReview } = review;
 
-  const search = `lines ${JSON.stringify({ action: "search", to_review: true, from: linesToReview.from, to: linesToReview.to })}`;
-
   if (linesToReview.count === 0) {
     return "No line of the month waits to be reviewed.";
   }
@@ -377,7 +378,8 @@ function toReviewOf(review: MonthReview): string {
 
       return `- ${line.day}, ${line.account.name}: "${line.label}", ${amount(line.amount)}${category}`;
     }),
-    `List them all with ${search}.`,
+    // `review list` takes no period: it gives every month's lines to review, newest first.
+    `List them with their proposals, to accept or correct each: review ${JSON.stringify({ action: "list" })} (every month's, newest first).`,
   ].join("\n");
 }
 
@@ -589,7 +591,8 @@ const days = (input: MonthInput, owner: string, currency: string) =>
 export const monthTool = defineTool<
   MonthInput,
   Encoded,
-  Subscriptions | CategoryStore | MonthFacts | LineStore
+  // The summary's lines to review are #35's queue, whose proposals read transfers, refunds, merchants.
+  Subscriptions | CategoryStore | MonthFacts | LineStore | Transfers | Expenses | Merchants
 >({
   name: "month",
   title: "Monthly review (summary, spending, days, subscriptions, benchmarks)",
