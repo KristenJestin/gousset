@@ -610,6 +610,31 @@ describe("monthImportState", () => {
       "New account",
     ]);
   });
+
+  test("an account closed during the month is imported once its statements reach its closing", async () => {
+    const rows = draft();
+    const closing = account(rows, "Closed account", "current", { closedOn: "2026-10-15" });
+
+    rows.reach.push({ accountId: closing.id, importedTo: "2026-10-15", statementTo: null });
+
+    const state = await run(monthImportState("ada", "2026-10", "EUR"), rows);
+
+    expect(state).toEqual({
+      month: "2026-10",
+      expected: "2026-10-31",
+      accounts: 1,
+      imported: 1,
+      partial: [],
+    });
+
+    rows.reach.splice(0, 1, { accountId: closing.id, importedTo: "2026-10-14", statementTo: null });
+
+    const short = await run(monthImportState("ada", "2026-10", "EUR"), rows);
+
+    expect(short.partial).toEqual([
+      { accountId: closing.id, account: "Closed account", reached: "2026-10-14" },
+    ]);
+  });
 });
 
 /** A charge of a merchant, for the subscriptions read. */

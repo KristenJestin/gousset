@@ -984,8 +984,10 @@ function importStateOf(reading: Reading): ImportState {
       });
 
       const reached = until?.day ?? null;
+      // An account closed during the month has no statement after its closing day.
+      const due = account.closedOn === null ? expected : earlier(account.closedOn, expected);
 
-      return reached !== null && reached >= expected
+      return reached !== null && reached >= due
         ? []
         : [{ accountId: account.id, account: accountName(reading, account.id), reached }];
     })
