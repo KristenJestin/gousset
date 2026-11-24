@@ -1,377 +1,216 @@
+import { exampleStatement } from "@gousset/fixture";
 import type { Page } from "@playwright/test";
+import type { Client } from "@modelcontextprotocol/client";
 
-import { onPhone } from "../src/frame";
-import { block, closeBlock, openBlock } from "../src/review";
-import { animationsDone, expect, test, visit } from "../src/test";
+import type { TestUser } from "../src/auth";
+import { importsOn, statementFile } from "../src/imports";
+import { addUser, connectMcp, expect, fixDay, personOfItsOwn, test, visit } from "../src/test";
+import { openUserData } from "../src/user-data";
 
-// The scenarios of issue #10, the monthly review on made-up data: what the screen shows, block by
-// block, and its four motions. Each month here is a whole one, whatever the day of the run; a test
-// that approves a line has a month of its own, since an approval lasts for the rest of the run.
+// The scenarios of issue #126, "How to verify": until the review reads the user's own lines (v0.4),
+// a fresh user and a user with imported lines both see its empty state, and no invented name or
+// figure appears in the app or in MCP results. Each user is the file's own (`personOfItsOwn`):
+// Inès has nothing; Romane has one account and one statement imported through the real import.
 
-const OCTOBER = "/?month=2026-10";
-
-const monthSwitcher = (page: Page) => page.getByRole("group", { name: "Month", exact: true });
-
-/** The first amount a text holds, in cents: "Housing €690 benchmark €690" gives 69000. */
-function centsIn(text: string): number {
-  const match = /€([\d,]+(?:\.\d{2})?)/.exec(text);
-
-  return match?.[1] === undefined ? 0 : Math.round(Number(match[1].replaceAll(",", "")) * 100);
-}
-
-/** A digit's roll as the browser was given it: how long it lasts, and whether it moves the digit. */
-type Roll = { duration: number; moves: boolean };
+const TODAY = "2026-11-15";
 
 /**
- * Presses "Previous month" and returns the rolls started on a digit of a rolling column, from the
- * press until 30 frames after the switcher announces `month`: the digits roll once that month's
- * data is on screen, which may be long after the press, and the roll lasts 200 ms, 12 frames.
- *
- * The rolls started, not the frames drawn. Motion plays a digit's roll as a Web Animation of its
- * transform (`new Animation(new KeyframeEffect(...))`), started just before the frame that lays
- * out and paints the whole new month: on a busy runner (seen in Firefox) that one frame can
- * outlast the 140 ms or so in which both digits are drawn, and no frame ever shows the roll
- * midway. Each effect created in that window is recorded by wrapping `KeyframeEffect` for that
- * window only, so none can end unseen. Under reduced motion Motion starts none and moves the
- * digit at once.
+ * Names of the made-up household the review used to show (packages/fixture's ledger): none may
+ * appear for any user. Romane's own lines come from another made-up statement, with other names.
  */
-async function rollsTo(page: Page, month: string) {
-  const rolls = page.evaluate(
-    ({ columns, announced, after, cap }) =>
-      new Promise<Array<Roll>>((resolve) => {
-        document.addEventListener(
-          "pointerdown",
-          () => {
-            const Native = window.KeyframeEffect;
-            const created: Array<KeyframeEffect> = [];
-            const start = performance.now();
-            let frames = 0;
-            let shownAt: number | null = null;
+const INVENTED = ["Acme Consulting", "MealCard", "Northbank", "Streamly", "Groceries", "Housing"];
 
-            // The form Motion calls; defined rather than assigned, since the global's type also has
-            // the copy constructor, which nothing calls while the month changes.
-            Object.defineProperty(window, "KeyframeEffect", {
-              configurable: true,
-              writable: true,
-              value: class extends Native {
-                constructor(
-                  target: Element | null,
-                  keyframes: Array<Keyframe> | PropertyIndexedKeyframes | null,
-                  options?: number | KeyframeEffectOptions,
-                ) {
-                  super(target, keyframes, options);
-                  created.push(this);
-                }
-              },
-            });
+let data: ReturnType<typeof openUserData>;
+let ines: TestUser;
+let romane: TestUser;
 
-            const done = () => {
-              Object.defineProperty(window, "KeyframeEffect", {
-                configurable: true,
-                writable: true,
-                value: Native,
-              });
+/** What Romane's import added: her counted lines, and those held for review. */
+let imported = { added: 0, held: 0 };
 
-              resolve(
-                created.flatMap((effect) => {
-                  if (!effect.target?.closest(columns)) {
-                    return [];
-                  }
+test.beforeAll(async ({ app, user }) => {
+  data = openUserData(app.database);
+  ines = await addUser(app.baseURL, user, personOfItsOwn("ines"));
+  romane = await addUser(app.baseURL, user, personOfItsOwn("romane"));
 
-                  const transforms = effect.getKeyframes().map(({ transform }) => transform);
+  const owner = await data.ownerOf(romane.email);
+  const imports = importsOn(data);
+  const accountId = await imports.createAccount(owner, "Everyday account");
 
-                  return [
-                    {
-                      duration: Math.round(Number(effect.getTiming().duration)),
-                      moves: new Set(transforms).size > 1,
-                    },
-                  ];
-                }),
-              );
-            };
-
-            const count = () => {
-              frames += 1;
-
-              const label = document.querySelector('[data-slot="month-switcher"] [aria-live]');
-
-              if (shownAt === null && label?.textContent?.includes(announced) === true) {
-                shownAt = frames;
-              }
-
-              if (
-                (shownAt !== null && frames - shownAt > after) ||
-                performance.now() - start > cap
-              ) {
-                done();
-              } else {
-                requestAnimationFrame(count);
-              }
-            };
-
-            requestAnimationFrame(count);
-          },
-          { once: true, capture: true },
-        );
-      }),
-    { columns: '[data-slot="rolling-digit"]', announced: month, after: 30, cap: 10_000 },
+  const summary = await imports.importFile(
+    owner,
+    accountId,
+    statementFile("ofx", exampleStatement),
   );
 
-  await monthSwitcher(page).getByRole("button", { name: "Previous month" }).click();
+  imported = { added: summary.linesAdded, held: summary.linesHeld };
+});
 
-  return rolls;
+test.afterAll(async () => {
+  await data.close();
+});
+
+async function signedInAs(page: Page, person: TestUser) {
+  await page.context().addCookies([...person.cookies]);
+  await fixDay(page, TODAY);
 }
 
-/** A row of "Where the money goes", by its name: a button that opens its detail. */
-const spendingRow = (page: Page, name: string) =>
-  block(page, "Where the money goes").getByRole("button", { name: new RegExp(`^${name}`) });
+const emptyState = (page: Page) => page.locator('[data-slot="review-coming"]');
 
-test("the review of a month shows each of its blocks, labelled as made-up", async ({
-  userPage: page,
-}) => {
-  await visit(page, OCTOBER);
+const worksToday = (page: Page) => page.getByRole("list", { name: "What works today" });
 
-  await expect(page.getByRole("heading", { level: 1, name: "Monthly review" })).toBeVisible();
-  await expect(monthSwitcher(page)).toContainText("October 2026");
-  await expect(
-    page.getByText("Made-up data: every account, line and amount here is invented."),
-  ).toBeVisible();
+/** The review shows no figure and none of the made-up household's names. */
+async function expectNothingInvented(page: Page) {
+  const main = page.getByRole("main");
 
-  // The header: the state of the imports, and the link down to the lines to review.
-  await expect(page.getByText(/\d of 4 accounts imported/)).toBeVisible();
-  await expect(page.getByRole("link", { name: "6 lines to review" })).toHaveAttribute(
-    "href",
-    "#to-review",
-  );
-
-  // The month bar: what came in, cut into spent, set aside and left. October's meal vouchers were
-  // all spent: nothing restricted, nothing hatched (September's are, below).
-  const month = block(page, "The month");
-
-  await expect(month).toContainText("received");
-  await expect(month).toContainText("Salary and Meal vouchers");
-  await expect(month).toContainText("spent");
-  await expect(month).toContainText("set aside");
-  await expect(month.locator('[data-slot="month-bar-restricted"]')).toHaveCount(0);
-
-  await expect(block(page, "Where the money goes")).toContainText("Housing");
-
-  // The movements between the accounts, the investments and what is flagged.
-  const movements = await openBlock(page, "Movements between your accounts");
-
-  await expect(movements).toContainText("Acme Consulting");
-  await expect(movements).toContainText("buy World index ETF");
-  await closeBlock(page);
-
-  const investments = await openBlock(page, "Investments");
-
-  await expect(investments).toContainText("Northbank PEA");
-  await closeBlock(page);
-
-  const flagged = await openBlock(page, "Flagged");
-
-  await expect(flagged).toContainText("Streamly goes from €8.99 to €9.49");
-  await closeBlock(page);
-
-  const toReview = await openBlock(page, "To review");
-
-  await expect(toReview.getByRole("button", { name: /^Approve / })).toHaveCount(3);
-  await expect(toReview).toContainText("Show the other 3");
-  await closeBlock(page);
-  await animationsDone(page);
-});
-
-test("money left on the meal voucher card is hatched at the end of the part left", async ({
-  userPage: page,
-}) => {
-  await visit(page, "/?month=2026-09");
-
-  const month = block(page, "The month");
-
-  await expect(month.locator('[data-slot="month-bar-restricted"]')).toHaveAttribute(
-    "fill",
-    /^url\(#/,
-  );
-  await expect(month).toContainText("left, €153 restricted");
-  await animationsDone(page);
-});
-
-test("where the money goes has its three tabs, each row with its benchmark mark", async ({
-  userPage: page,
-}) => {
-  await visit(page, OCTOBER);
-
-  const spending = block(page, "Where the money goes");
-
-  // The subscription's price rose this month: above its 6-month average, marked so.
-  await expect(spending.locator('[data-slot="breakdown-benchmark"]').first()).toBeAttached();
-  await expect(spendingRow(page, "Housing")).toContainText("€690");
-
-  await spending.getByRole("tab", { name: "Merchants" }).click();
-  await expect(spending.getByRole("tabpanel")).toContainText("Glycine Homes");
-
-  await spending.getByRole("tab", { name: "Subjects" }).click();
-  await expect(spending.getByRole("tabpanel")).toContainText("Home");
-  await expect(spending.getByRole("tabpanel")).toContainText("Van");
-  await animationsDone(page);
-});
-
-test("changing month moves the bars and amounts to the next month, the digits rolling", async ({
-  userPage: page,
-}) => {
-  await visit(page, OCTOBER);
-
-  const received = block(page, "The month").locator('[data-slot="amount"]').first();
-  const october = await received.textContent();
-
-  // Each digit that changes rolls to the new one, moved by its transform over 200 ms.
-  expect(await rollsTo(page, "September 2026")).toContainEqual({ duration: 200, moves: true });
-  await expect(monthSwitcher(page)).toContainText("September 2026");
-  await animationsDone(page);
-  expect(await received.textContent()).not.toBe(october);
-});
-
-test("under reduced motion, changing month changes the amounts without rolling their digits", async ({
-  userPage: page,
-}) => {
-  await page.emulateMedia({ reducedMotion: "reduce" });
-  await visit(page, OCTOBER);
-
-  const received = block(page, "The month").locator('[data-slot="amount"]').first();
-  const october = await received.textContent();
-
-  expect(await rollsTo(page, "September 2026")).toEqual([]);
-  await expect(monthSwitcher(page)).toContainText("September 2026");
-  await animationsDone(page);
-  expect(await received.textContent()).not.toBe(october);
-});
-
-test("approving a line folds it away, the counter drops and its category's bar grows", async ({
-  userPage: page,
-}) => {
-  // May is this test's own month.
-  await visit(page, "/?month=2026-05");
-
-  const toReview = await openBlock(page, "To review");
-
-  const first = toReview
-    .getByRole("listitem")
-    .filter({ has: page.getByRole("button", { name: /^Approve / }) })
-    .first();
-
-  const category = (await first.locator("span.rounded-md").first().textContent()) ?? "";
-  const label = (await first.getByRole("button").getAttribute("aria-label")) ?? "";
-  const counter = block(page, "To review").locator('[data-slot="count"]').first();
-
-  await expect(counter).toContainText("6");
-
-  // On a phone the sheet covers the categories: read them once it is closed.
-  await closeBlock(page);
-
-  const spending = block(page, "Where the money goes");
-  const more = spending.getByRole("button", { name: /^Show the other \d+$/ });
-
-  if ((await more.count()) > 0) {
-    await more.click();
+  for (const name of INVENTED) {
+    await expect(main.getByText(name)).toHaveCount(0);
   }
 
-  const row = spendingRow(page, category);
-  const before = (await row.count()) === 0 ? 0 : centsIn((await row.textContent()) ?? "");
+  await expect(main).not.toContainText("€");
+  await expect(main).not.toContainText("Made-up data");
+}
 
-  const list = await openBlock(page, "To review");
+/** A month call's text, and whether it is an error. */
+async function month(client: Client, args: { [key: string]: string }) {
+  const result = await client.callTool({ name: "month", arguments: args });
+  const [first] = result.content ?? [];
 
-  await list.getByRole("button", { name: label }).click();
+  return { text: first?.type === "text" ? first.text : "", isError: result.isError === true };
+}
 
-  // The line folds away at once; the counter goes down.
-  await expect(list.getByRole("button", { name: label })).toHaveCount(0);
-  await expect(counter).toContainText("5");
+test("a fresh user sees the empty state, the first import first", async ({ page }) => {
+  await signedInAs(page, ines);
+  await visit(page, "/");
 
-  await closeBlock(page);
+  await expect(page.getByRole("heading", { level: 1, name: "Monthly review" })).toBeVisible();
+  await expect(
+    emptyState(page).getByRole("heading", { name: "Your monthly review is not ready yet" }),
+  ).toBeVisible();
+  await expect(emptyState(page)).toContainText("nothing here is invented");
 
-  // Once the server has it, the category counts the line's expense.
-  await expect.poll(async () => centsIn((await row.textContent()) ?? "")).toBeGreaterThan(before);
-  await animationsDone(page);
+  // The four parts the review will hold, in words only: no chart, no skeleton.
+  const parts = page.getByRole("definition");
+
+  await expect(page.getByRole("term")).toHaveText(["Income", "Spent", "Set aside", "Left"]);
+  await expect(parts).toHaveCount(4);
+  await expect(page.locator('[data-slot="skeleton"]')).toHaveCount(0);
+
+  // What works today: the first import first, then the accounts and the operations, none yet.
+  const links = worksToday(page).getByRole("link");
+
+  await expect(links).toHaveCount(3);
+  await expect(links.nth(0)).toContainText("Import your first statement");
+  await expect(links.nth(0)).toHaveAttribute("href", "/import");
+  await expect(links.nth(1)).toContainText("Accounts");
+  await expect(links.nth(1)).toContainText("None yet");
+  await expect(links.nth(2)).toContainText("Operations");
+  await expect(links.nth(2)).toContainText("None yet");
+
+  await expectNothingInvented(page);
+
+  await links.nth(0).click();
+  await expect(page).toHaveURL(/\/import$/);
 });
 
-test("opening a detail turns the row into its panel, and closing folds it back in place", async ({
-  userPage: page,
+test("a user with imported lines sees the same empty state, with their own counts", async ({
+  page,
 }) => {
-  await visit(page, OCTOBER);
+  await signedInAs(page, romane);
+  await visit(page, "/");
 
-  const housing = spendingRow(page, "Housing");
+  await expect(
+    emptyState(page).getByRole("heading", { name: "Your monthly review is not ready yet" }),
+  ).toBeVisible();
 
-  await housing.click();
+  const links = worksToday(page).getByRole("link");
 
-  const panel = block(page, "Where the money goes").getByRole("group", { name: "Housing" });
+  await expect(links).toHaveCount(3);
+  await expect(links.nth(0)).toContainText("Accounts");
+  await expect(links.nth(0)).toContainText("1 account");
+  await expect(links.nth(1)).toContainText("Import");
+  // The harness's browser speaks en-US: "Nov 24". The day is the import's own, a real one.
+  await expect(links.nth(1)).toContainText(/Last on [A-Z][a-z]{2} \d{1,2}\b/);
+  await expect(links.nth(2)).toContainText("Operations");
+  await expect(links.nth(2)).toContainText(
+    imported.held === 0
+      ? `${imported.added} lines`
+      : `${imported.added} lines · ${imported.held} to review`,
+  );
+  await expect(page.getByText("Import your first statement")).toHaveCount(0);
 
-  await expect(panel).toBeVisible();
-  await expect(panel.getByRole("figure", { name: /^Housing: spending in October/ })).toBeVisible();
+  await expectNothingInvented(page);
 
-  await page.keyboard.press("Escape");
-
-  await expect(panel).toHaveCount(0);
-  await expect(spendingRow(page, "Housing")).toBeFocused();
-  // The row shrinks back by a layout move, drawn frame by frame, which `getAnimations` does not
-  // list: the list is settled once the button under it takes the pointer again.
-  await block(page, "Where the money goes")
-    .getByRole("button", { name: /^Show the other \d+$/ })
-    .click({ trial: true });
-  await animationsDone(page);
+  await links.nth(2).click();
+  await expect(page).toHaveURL(/\/operations/);
+  await expect(page.getByRole("heading", { level: 1, name: "Operations" })).toBeVisible();
 });
 
-test("hovering the chart moves its crosshair, and the value slides to the day under it", async ({
-  userPage: page,
+test("the empty state speaks French", async ({ browser, baseURL }) => {
+  const context = await browser.newContext({ baseURL, locale: "fr-FR" });
+
+  try {
+    const page = await context.newPage();
+
+    await signedInAs(page, romane);
+    await visit(page, "/");
+
+    await expect(page.getByRole("heading", { level: 1, name: "Bilan du mois" })).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "Votre bilan du mois n'est pas encore prêt" }),
+    ).toBeVisible();
+    await expect(page.getByRole("term")).toHaveText(["Revenus", "Dépensé", "Mis de côté", "Reste"]);
+
+    const links = page.getByRole("list", { name: "Ce qui marche déjà" }).getByRole("link");
+
+    await expect(links.nth(0)).toContainText("1 compte");
+    await expect(links.nth(1)).toContainText("Dernier le");
+  } finally {
+    await context.close();
+  }
+});
+
+test("month answers through MCP that the review is not available yet, inventing nothing", async ({
+  page,
+  baseURL,
+  mcpClientId,
 }) => {
-  test.skip(onPhone(page), "A phone has no pointer to hover with.");
+  await signedInAs(page, romane);
 
-  await visit(page, OCTOBER);
-  await spendingRow(page, "Groceries").click();
-
-  const chart = block(page, "Where the money goes").getByRole("figure", {
-    name: /^Groceries: spending in October/,
+  const session = await connectMcp({
+    baseURL: baseURL ?? "",
+    page,
+    consent: (consent) => consent.getByRole("button", { name: "Allow read only" }).click(),
+    scope: "read write",
+    clientId: mcpClientId,
   });
 
-  await expect(chart).toBeVisible();
-  await animationsDone(page);
+  const asked: ReadonlyArray<{ [key: string]: string; action: string }> = [
+    { action: "summary", month: "2026-10" },
+    { action: "review", month: "2026-10" },
+    { action: "days", month: "2026-10", by: "category", row: "Groceries" },
+  ];
 
-  // The plot itself: the last drawing of the figure, under its legend.
-  const plot = chart
-    .locator("svg")
-    .filter({ has: page.locator("g") })
-    .last();
+  for (const args of asked) {
+    const { text, isError } = await month(session.client, args);
 
-  const tooltip = page.locator('[data-slot="spending-tooltip"]');
+    expect(isError, args.action).toBe(false);
+    expect(text, args.action).toContain("The monthly review is not available yet");
+    expect(text, args.action).toContain('accounts {"action":"list"}');
+    expect(text, args.action).not.toMatch(/\d+\.\d\d/);
+    expect(text, args.action).not.toContain("EUR");
 
-  /**
-   * A point of the plot, across its width, as the page shows it now: in view, measured again each
-   * time, since a pointer outside the window or at a stale place reaches nothing.
-   */
-  const pointAt = async (across: number) => {
-    await plot.scrollIntoViewIfNeeded();
-
-    const box = await plot.boundingBox();
-
-    if (box === null) {
-      throw new Error("The chart has no plot to hover.");
+    for (const name of [...INVENTED, "October"]) {
+      expect(text, `${args.action}: ${name}`).not.toContain(name);
     }
+  }
 
-    return { x: box.x + box.width * across, y: box.y + box.height / 2 };
-  };
+  // Her own lines are read where the answer points.
+  const lines = await session.client.callTool({
+    name: "lines",
+    arguments: { action: "search", text: "fournil" },
+  });
 
-  // Bklit's line chart listens to the pointer once its lines are drawn.
-  await expect(async () => {
-    const start = await pointAt(0.2);
+  const [first] = lines.content ?? [];
 
-    await page.mouse.move(start.x, start.y);
-    await page.mouse.move(start.x + 2, start.y);
-    await expect(tooltip).toBeVisible({ timeout: 500 });
-  }).toPass({ timeout: 5000 });
-
-  const early = await tooltip.textContent();
-  const end = await pointAt(0.9);
-
-  await page.mouse.move(end.x, end.y, { steps: 8 });
-  await expect.poll(async () => tooltip.textContent()).not.toBe(early);
-  await page.mouse.move(0, 0);
-  await animationsDone(page);
+  expect(first?.type === "text" ? first.text : "").toContain("LE FOURNIL DES TILLEULS");
 });
