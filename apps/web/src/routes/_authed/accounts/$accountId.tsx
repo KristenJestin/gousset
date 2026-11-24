@@ -281,6 +281,8 @@ function AccountPage() {
           settlesIntoAccountId: account.settlesInto?.id ?? null,
           creditOrder: account.creditOrder,
           balanceCategoryId: account.balanceCategory?.id ?? null,
+          topUpDays: account.topUpDays,
+          topUpCapMinor: account.topUpCap?.minor ?? null,
         }}
         settlesIntoChoices={settlesIntoChoices}
         balanceCategory={account.balanceCategory}

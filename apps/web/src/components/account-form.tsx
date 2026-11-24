@@ -1,6 +1,6 @@
 import type { BalanceCategory, CategoryTree, EntryKind } from "@gousset/core";
 import type { AccountChoice, AccountMode, CreditOrder } from "@gousset/core/account-values";
-import { ACCOUNT_CHOICES } from "@gousset/core/account-values";
+import { ACCOUNT_CHOICES, MAX_TOP_UP_DAYS } from "@gousset/core/account-values";
 import { m } from "@gousset/i18n/messages";
 import { Button } from "@gousset/ui/components/button";
 import { Combobox } from "@gousset/ui/components/combobox";
@@ -44,6 +44,10 @@ export type AccountFormValues = {
    * keeps it.
    */
   balanceCategoryId: string | null;
+  /** A benefit account: the days its issuer may take to book a top-up on the bank card (#28). */
+  topUpDays: number;
+  /** A benefit account: the most the card pays a day; `null` when unknown. */
+  topUpCapMinor: number | null;
 };
 
 /** What a submit answers: the id of the account written (new, or the one edited), or a refusal. */
@@ -95,8 +99,27 @@ export function accountFormInput(values: AccountFormValues) {
     creditOrder: values.choice === "benefit" ? (values.creditOrder ?? undefined) : undefined,
     // None is sent as `null`, which clears it; left out, an edit keeps the account's own.
     balanceCategoryId: values.mode === "balance" ? values.balanceCategoryId : undefined,
+    // Read for a benefit account only; left out for another kind, which keeps them.
+    topUpDays: values.choice === "benefit" ? values.topUpDays : undefined,
+    topUpCapMinor: values.choice === "benefit" ? values.topUpCapMinor : undefined,
   };
 }
+
+function topUpDaysLabel(count: number): string {
+  if (count === 0) {
+    return m.topUpDaysSame();
+  }
+
+  return count === 1 ? m.topUpDaysOne() : m.topUpDaysCount({ count: String(count) });
+}
+
+const TOP_UP_DAY_ITEMS: ReadonlyArray<ChoiceItem> = Array.from(
+  { length: MAX_TOP_UP_DAYS + 1 },
+  (_, count) => ({
+    value: String(count),
+    label: topUpDaysLabel(count),
+  }),
+);
 
 /** The category field's value for none: a category's id is a UUID, never this word. */
 const NO_CATEGORY = "none";
@@ -167,7 +190,8 @@ export type AccountFormProps = {
  * The account create and edit form, a long form in a side `Sheet` (docs/design.md, "Actions and
  * forms"; a sheet along the bottom edge on a phone) composed of `packages/ui` fields: name, kind,
  * institution, currency, tracking, opening balance, opened on and, for a card, the current account
- * it settles into; for a benefit account, the order its credits are used in; for an account kept by
+ * it settles into; for a benefit account, the order its credits are used in and, kept by its lines,
+ * the days its issuer takes to book a top-up and its daily cap (#28); for an account kept by
  * its balance, the category its movements go to, among the categories it reads itself (the page's
  * loader reads them first). `key`d by the account's id (or "new") at the call site so that editing
  * another account starts from its own values. Motion: the shared `Sheet`'s, sliding in from its
@@ -206,6 +230,8 @@ export function AccountForm({
     initial.balanceCategoryId,
   );
 
+  const [topUpDays, setTopUpDays] = useState(initial.topUpDays);
+  const [topUpCapMinor, setTopUpCapMinor] = useState<number | null>(initial.topUpCapMinor);
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
 
@@ -248,7 +274,11 @@ export function AccountForm({
   }
 
   async function submit() {
-    if (openingBalanceInvalid) {
+    // Only while the field is shown: a cap typed then hidden by another kind or mode blocks nothing.
+    const capInvalid =
+      choice === "benefit" && mode === "lines" && topUpCapMinor !== null && topUpCapMinor <= 0;
+
+    if (openingBalanceInvalid || capInvalid) {
       return;
     }
 
@@ -264,6 +294,12 @@ export function AccountForm({
         settlesIntoAccountId: choice === "card" ? settlesIntoAccountId : null,
         creditOrder: choice === "benefit" ? creditOrder : null,
         balanceCategoryId: mode === "balance" ? balanceCategoryId : null,
+        topUpDays,
+        // A cap hidden by the mode, or left invalid there, is not sent: the account keeps its own.
+        topUpCapMinor:
+          mode === "lines" && (topUpCapMinor === null || topUpCapMinor > 0)
+            ? topUpCapMinor
+            : initial.topUpCapMinor,
       }),
     );
 
@@ -372,6 +408,27 @@ export function AccountForm({
           value={creditOrder}
           onValueChange={onCreditOrderChange}
         />
+      ) : null}
+      {choice === "benefit" && mode === "lines" ? (
+        <>
+          <Select
+            label={m.fieldTopUpDays()}
+            description={m.fieldTopUpDaysDescription()}
+            items={TOP_UP_DAY_ITEMS}
+            value={String(topUpDays)}
+            onValueChange={(value) => setTopUpDays(value === null ? topUpDays : Number(value))}
+          />
+          <MoneyField
+            label={m.fieldTopUpCap()}
+            description={m.fieldTopUpCapDescription()}
+            currency={currency}
+            value={topUpCapMinor}
+            error={
+              topUpCapMinor !== null && topUpCapMinor <= 0 ? m.fieldTopUpCapInvalid() : undefined
+            }
+            onValueChange={setTopUpCapMinor}
+          />
+        </>
       ) : null}
       <FormMessage message={error} />
     </Sheet>

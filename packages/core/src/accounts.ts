@@ -13,6 +13,7 @@ import type {
 import {
   DEFAULT_CHART_DAYS,
   DEFAULT_LINES,
+  DEFAULT_TOP_UP_DAYS,
   MAX_CHART_DAYS,
   MAX_LINES,
   choiceOf,
@@ -166,6 +167,10 @@ export type AccountDetail = {
     readonly settlesInto: { readonly id: string; readonly name: string } | null;
     /** Read for an account kept by its balance: the category its movement goes to (#31). */
     readonly balanceCategory: BalanceCategory | null;
+    /** Read for a benefit account: the days its issuer may take to book a top-up (#28). */
+    readonly topUpDays: number;
+    /** Read for a benefit account: the most the card pays a day; null when unknown. */
+    readonly topUpCap: Money | null;
   };
   readonly day: string;
   readonly balance: Money;
@@ -376,6 +381,9 @@ export const showAccount = (owner: string, accountId: string, view: AccountView 
             ? null
             : { id: settlesInto.account.id, name: settlesInto.account.name },
         balanceCategory: found.balanceCategory,
+        topUpDays: account.topUpDays,
+        topUpCap:
+          account.topUpCapMinor === null ? null : money(account.topUpCapMinor, account.currency),
       },
       day,
       balance: money(balanceAt(account, found.countedMinor, found.noted, day), account.currency),
@@ -532,6 +540,7 @@ function settingsOf(
   settlesIntoAccountId: string | null,
   creditOrder: CreditOrder,
   balanceCategoryId: string | null,
+  topUp: { readonly days: number; readonly capMinor: number | null },
 ) {
   const { kind, envelope } = storedAs(input.choice);
 
@@ -548,6 +557,8 @@ function settingsOf(
     settlesIntoAccountId,
     creditOrder: input.creditOrder ?? creditOrder,
     balanceCategoryId,
+    topUpDays: input.topUpDays ?? topUp.days,
+    topUpCapMinor: input.topUpCapMinor === undefined ? topUp.capMinor : input.topUpCapMinor,
   };
 }
 
@@ -578,7 +589,10 @@ function decideNew(
   }
 
   return Result.map(balanceCategoryOf(input, categories, null), (category) => ({
-    ...settingsOf(input, settlesInto.success, "oldest_first", category),
+    ...settingsOf(input, settlesInto.success, "oldest_first", category, {
+      days: DEFAULT_TOP_UP_DAYS,
+      capMinor: null,
+    }),
     closedOn: null,
   }));
 }
@@ -616,7 +630,10 @@ function decideEdit(
   const category = balanceCategoryOf(input, categories, account.balanceCategoryId);
 
   return Result.map(category, (chosen) =>
-    settingsOf(input, settlesInto.success, account.creditOrder, chosen),
+    settingsOf(input, settlesInto.success, account.creditOrder, chosen, {
+      days: account.topUpDays,
+      capMinor: account.topUpCapMinor,
+    }),
   );
 }
 
