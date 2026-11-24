@@ -12,6 +12,7 @@ import { List, ListItem } from "@gousset/ui/components/list";
 import { NameField } from "@gousset/ui/components/name-field";
 import { Actions } from "@gousset/ui/components/screen";
 import { SegmentedChoice } from "@gousset/ui/components/segmented-choice";
+import { Switch } from "@gousset/ui/components/switch";
 import { TextField } from "@gousset/ui/components/text-field";
 import { usePageLanguage } from "@gousset/ui/hooks/use-page-language";
 import { notify } from "@gousset/ui/lib/notify";
@@ -27,6 +28,7 @@ import {
   moveMerchantLabel,
   renameMerchant,
   setMerchantCategory,
+  setMerchantIntermediary,
 } from "@/functions/merchants";
 import type { MerchantRefusalCode } from "@/functions/merchants";
 import { merchantRefusalMessage } from "@/i18n/messages";
@@ -45,7 +47,8 @@ const TYPING_WAIT_MS = 200;
  * One merchant (#24): its name, its default category (#23), the cleaned labels that name it and
  * its latest lines, with what the user does to it, each in a dialog: rename it, choose its default
  * category, merge it into another merchant, or move one of its labels to another merchant (a new
- * one when the name is new), which splits it.
+ * one when the name is new), which splits it; and whether it is a payment intermediary (#30), a
+ * switch that applies at once.
  *
  * Motion: each dialog fades and grows in over 200 ms, ease-out, and leaves the same way (`Dialog`);
  * the category picker's list fades and grows in over 150 ms (`Combobox`); the toast that says what
@@ -131,6 +134,7 @@ function MerchantPage() {
           </Button>
           <AppLink to="/settings/merchants">{m.merchantsAll()}</AppLink>
         </Actions>
+        <IntermediarySwitch merchant={merchant} />
       </Block>
       <Block title={m.merchantDefaultTitle()} description={m.merchantDefaultDescription()}>
         <List label={m.merchantDefaultTitle()}>
@@ -199,6 +203,46 @@ function MerchantPage() {
         />
       ) : null}
     </>
+  );
+}
+
+/**
+ * Whether the merchant is a payment intermediary (#30): its labels hide who was paid, and each of
+ * its lines asks for its merchant. As the settings' switches, it moves at once and shows the value
+ * being saved, one save at a time; done, the merchants and the lines (which ask, or no longer ask)
+ * are read again; refused, it goes back to what the merchant holds and a toast says why.
+ */
+function IntermediarySwitch({ merchant }: { merchant: MerchantDetail }) {
+  const queryClient = useQueryClient();
+  const [saving, setSaving] = useState<boolean>();
+
+  async function turn(next: boolean) {
+    if (saving !== undefined) {
+      return;
+    }
+
+    setSaving(next);
+
+    const answer = await answerOf(
+      setMerchantIntermediary({ data: { merchantId: merchant.id, intermediary: next } }),
+    );
+
+    if (answer.ok) {
+      await invalidateMerchantEntries(queryClient);
+    } else {
+      notify.failed({ description: merchantRefusalMessage(answer.code, answer.name) });
+    }
+
+    setSaving(undefined);
+  }
+
+  return (
+    <Switch
+      label={m.merchantIntermediary()}
+      description={m.merchantIntermediaryDescription()}
+      checked={saving ?? merchant.intermediary}
+      onCheckedChange={(next) => void turn(next)}
+    />
   );
 }
 

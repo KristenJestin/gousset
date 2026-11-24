@@ -495,6 +495,7 @@ test("an unlink and a link meeting on one expense both go through, neither ended
   const first = openUserData(app.database);
   const second = openUserData(app.database);
   const { promise: released, resolve: release } = Promise.withResolvers<void>();
+  const { promise: locked, resolve: lock } = Promise.withResolvers<void>();
 
   const held = holder.asUser(owner, async (transaction) => {
     await transaction
@@ -502,10 +503,15 @@ test("an unlink and a link meeting on one expense both go through, neither ended
       .from(entry)
       .where(eq(entry.id, expense))
       .for("update");
+    lock();
     await released;
   });
 
   try {
+    // The unlink starts once the expense is held, or it may take the expense first and wait for
+    // nothing; a holder that fails ends the wait too.
+    await Promise.race([locked, held]);
+
     const unlinked = runOn(first)(unlinkLine(owner, paid));
 
     await expect.poll(waitingLocks).toBeGreaterThanOrEqual(1);

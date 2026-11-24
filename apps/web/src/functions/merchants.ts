@@ -1,13 +1,18 @@
 import {
   MAX_MERCHANTS_LISTED,
   Merchants,
+  assignLineMerchant as assignCoreLineMerchant,
+  lineMerchant,
   listMerchants,
+  markIntermediary,
   setMerchantDefaultCategory,
   showMerchant,
 } from "@gousset/core";
+import type { LineMerchantRefused } from "@gousset/core";
 import { createServerFn } from "@tanstack/react-start";
 import { Effect, Schema } from "effect";
 
+import { LineId } from "@/lib/operations-search";
 import { runCore } from "@/services";
 
 import { signedIn, slowedInDevelopment } from "./month";
@@ -25,13 +30,24 @@ export type MerchantRefusalCode =
   | "MERGE_INTO_ITSELF"
   | "MERGE_INTO_UNKNOWN"
   | "CATEGORY_NOT_FOUND"
-  | "CATEGORY_ARCHIVED";
+  | "CATEGORY_ARCHIVED"
+  | "LINE_NOT_FOUND"
+  | "NOT_INTERMEDIARY"
+  | "NOT_ONE_ENTRY"
+  | "INTERMEDIARY_CHOSEN";
 
 /** A refusal, with the merchant's name it is about when there is one (the one taken, say). */
 const refused = (code: MerchantRefusalCode, name?: string) =>
   Effect.succeed({ ok: false as const, code, name });
 
 const NAME_CODES = { blank: "NAME_BLANK", too_long: "NAME_TOO_LONG" } as const;
+
+/** Why who was paid cannot be set on a line (#30), by its reason. */
+const LINE_MERCHANT_CODES = {
+  not_intermediary: "NOT_INTERMEDIARY",
+  not_one_entry: "NOT_ONE_ENTRY",
+  intermediary_chosen: "INTERMEDIARY_CHOSEN",
+} as const satisfies { [Reason in LineMerchantRefused["reason"]]: MerchantRefusalCode };
 
 /**
  * Room for anything a person types, and no more: the server never reads a page of text. A name
@@ -148,6 +164,67 @@ export const setMerchantCategory = createServerFn({ method: "POST" })
           MerchantNotFound: () => refused("MERCHANT_NOT_FOUND"),
           CategoryNotFound: () => refused("CATEGORY_NOT_FOUND"),
           CategoryRefused: () => refused("CATEGORY_ARCHIVED"),
+        }),
+      ),
+    ),
+  );
+
+/**
+ * Marks a merchant a payment intermediary (#30), or not: its lines' labels hide who was paid, and
+ * each of them asks for its merchant. A merchant the user does not have comes back as a code.
+ */
+export const setMerchantIntermediary = createServerFn({ method: "POST" })
+  .middleware([signedIn, slowedInDevelopment])
+  .validator(
+    Schema.toStandardSchemaV1(
+      Schema.Struct({ merchantId: MerchantId, intermediary: Schema.Boolean }),
+    ),
+  )
+  .handler(({ data, context }) =>
+    runCore(
+      markIntermediary(context.owner, data.merchantId, data.intermediary).pipe(
+        Effect.map((merchant) => ({ ok: true as const, merchant })),
+        Effect.catchTags({ MerchantNotFound: () => refused("MERCHANT_NOT_FOUND") }),
+      ),
+    ),
+  );
+
+/**
+ * Who a line paid, the payment intermediary its label names, and whether who was paid is asked of
+ * the user (#30). A line the user does not have comes back as a code.
+ */
+export const getLineMerchant = createServerFn({ method: "GET" })
+  .middleware([signedIn, slowedInDevelopment])
+  .validator(Schema.toStandardSchemaV1(Schema.Struct({ lineId: LineId })))
+  .handler(({ data, context }) =>
+    runCore(
+      lineMerchant(context.owner, data.lineId).pipe(
+        Effect.map((merchant) => ({ ok: true as const, merchant })),
+        Effect.catchTags({ LineNotFound: () => refused("LINE_NOT_FOUND") }),
+      ),
+    ),
+  );
+
+/**
+ * Sets who was paid on a line paid through an intermediary (#30): the merchant named `name` (any
+ * case), made when none has it; the entry goes in its default category when it was not classified
+ * yet. Refused with a code: a line the user does not have, one whose label names no intermediary,
+ * one that is no single entry of its own, a merchant that is an intermediary itself, a blank name
+ * or one too long.
+ */
+export const assignLineMerchant = createServerFn({ method: "POST" })
+  .middleware([signedIn, slowedInDevelopment])
+  .validator(Schema.toStandardSchemaV1(Schema.Struct({ lineId: LineId, name: Typed })))
+  .handler(({ data, context }) =>
+    runCore(
+      assignCoreLineMerchant(context.owner, data.lineId, data.name).pipe(
+        Effect.map((assigned) => ({ ok: true as const, assigned })),
+        Effect.catchTags({
+          LineNotFound: () => refused("LINE_NOT_FOUND"),
+          // An intermediary chosen is named as typed, for the message to say which.
+          LineMerchantRefused: (refusal) =>
+            refused(LINE_MERCHANT_CODES[refusal.reason], data.name.trim()),
+          MerchantNameRefused: (refusal) => refused(NAME_CODES[refusal.reason]),
         }),
       ),
     ),

@@ -33,11 +33,14 @@ export const ruleQueries = {
       queryFn: () => getRuleReach({ data: { ...draft, ruleId } }),
       placeholderData: keepPreviousData,
     }),
-  /** The rule a correction proposes: its words, and how many lines already there it would change. */
-  proposal: (lineId: string, categoryId: string) =>
+  /**
+   * The rule a correction proposes, setting the category or the merchant (`sets`): its words, and
+   * how many lines already there it would change.
+   */
+  proposal: (lineId: string, sets: Omit<RuleReachDraft, "conditions">) =>
     queryOptions({
-      queryKey: ruleKeys.proposal(lineId, categoryId),
-      queryFn: () => getRuleProposal({ data: { lineId, categoryId } }),
+      queryKey: ruleKeys.proposal(lineId, sets.categoryId, sets.merchantId),
+      queryFn: () => getRuleProposal({ data: { lineId, ...sets } }),
       // A proposal is read once, as the correction is made: the lines may change after.
       gcTime: 0,
     }),

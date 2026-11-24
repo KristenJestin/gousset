@@ -95,7 +95,8 @@ export function categoryRefusalMessage(code: string, fallback?: string | null): 
 
 /**
  * A merchant write or read's refusal (`MerchantRefusalCode`), by its code; `name` is the merchant
- * it is about, when the refusal names one (the one that has the name already).
+ * it is about, when the refusal names one (the one that has the name already, the intermediary
+ * chosen as who was paid).
  */
 export function merchantRefusalMessage(code: string, name?: string): string {
   switch (code) {
@@ -117,6 +118,14 @@ export function merchantRefusalMessage(code: string, name?: string): string {
       return m.merchantRefusalCategoryNotFound();
     case "CATEGORY_ARCHIVED":
       return m.merchantRefusalCategoryArchived();
+    case "LINE_NOT_FOUND":
+      return m.merchantRefusalLineNotFound();
+    case "NOT_INTERMEDIARY":
+      return m.merchantRefusalNotIntermediary();
+    case "NOT_ONE_ENTRY":
+      return m.merchantRefusalNotOneEntry();
+    case "INTERMEDIARY_CHOSEN":
+      return name === undefined ? m.errorUnknown() : m.merchantRefusalIntermediaryChosen({ name });
     default:
       return m.errorUnknown();
   }
@@ -153,6 +162,8 @@ export function ruleRefusalMessage(
       return m.ruleRefusalCategoryNotFound();
     case "MERCHANT_NOT_FOUND":
       return m.ruleRefusalMerchantNotFound();
+    case "MERCHANT_INTERMEDIARY":
+      return m.ruleRefusalMerchantIntermediary();
     case "TOO_MANY_RULES":
       return m.ruleRefusalTooMany({ max: limit ?? 0 });
     case "JOB_UNAVAILABLE":

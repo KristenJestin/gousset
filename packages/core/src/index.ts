@@ -296,6 +296,7 @@ export { ImportJobInput, markFailed, runImport } from "./imports/run";
 export type { ImportProgress, ImportRun } from "./imports/run";
 
 export {
+  LineMerchantRefused,
   MerchantAliasNotFound,
   MerchantMergeRefused,
   MerchantNameRefused,
@@ -306,6 +307,12 @@ export {
 
 export { merchantKey, merchantName } from "./merchants/labels";
 
+export { KNOWN_INTERMEDIARIES, isKnownIntermediary } from "./merchants/intermediaries";
+
+export { ruleWords } from "./merchants/rule-words";
+
+export type { LineMerchant, LineMerchantAssigned, NamedMerchant } from "./merchants/line-merchant";
+
 export {
   DEFAULT_MERCHANTS_LISTED,
   MAX_MERCHANT_NAME,
@@ -313,7 +320,10 @@ export {
   MERCHANT_LINES_SCANNED,
   MERCHANT_LINES_SHOWN,
   Merchants,
+  assignLineMerchant,
+  lineMerchant,
   listMerchants,
+  markIntermediary,
   merchantsLayer,
   recogniseMerchants,
   showMerchant,

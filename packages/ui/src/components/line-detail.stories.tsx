@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 import { InFrench } from "../stories/in-french";
 import { CategoryPicker } from "./category-picker";
 import { LineDetail, LineDetailSkeleton } from "./line-detail";
+import { LineMerchant } from "./line-merchant";
 import { LineTransfer } from "./line-transfer";
 
 const eur = (minor: number) => ({ minor, currency: "EUR" });
@@ -19,7 +20,8 @@ function Column({ children }: { children: ReactNode }) {
  * original amount of a line in another currency, its expiry, "To review: looks like …" on a held
  * line, and the import it came from, "Entered by hand" or where the app made it from (`origin`);
  * first, a counted line's category, through
- * the control the page gives (`category`, a `CategoryPicker`). Every value comes worded from the
+ * the control the page gives (`category`, a `CategoryPicker`), and who it paid (`merchant`, a
+ * `LineMerchant`). Every value comes worded from the
  * page; the close button or Escape closes it.
  *
  * Loading: `LineDetailSkeleton`, its title, amount and rows at the same heights.
@@ -83,6 +85,60 @@ export const WithCategory: Story = {
         ]}
         value="supermarket"
         onValueChange={() => undefined}
+      />
+    ),
+  },
+};
+
+const categories = [
+  { id: "leisure", name: "Leisure", children: [{ id: "games", name: "Games" }] },
+  { id: "other", name: "Other" },
+];
+
+/**
+ * Paid through PayPal, its merchant not known yet: under its category, the merchant row asks who
+ * was really paid (`LineMerchant`).
+ */
+export const WithMerchant: Story = {
+  args: {
+    label: "CB PAYPAL *PIXELPLAY 21/10",
+    rawLabel: "CB PAYPAL *PIXELPLAY 21/10 CARTE 4971",
+    amount: eur(-1499),
+    memo: undefined,
+    counterparty: undefined,
+    category: (
+      <CategoryPicker
+        label="Category"
+        placeholder="Search a category"
+        size="sm"
+        categories={categories}
+        value="games"
+        onValueChange={() => undefined}
+      />
+    ),
+    merchant: (
+      <LineMerchant
+        merchant={null}
+        intermediary="PayPal"
+        asks
+        merchants={["Greenmarket", "Pixelplay", "Streamly"]}
+        onAssign={() => Promise.resolve(true)}
+      />
+    ),
+  },
+};
+
+/** Its merchant assigned by hand: "Pixelplay, through PayPal", which can be changed. */
+export const WithAssignedMerchant: Story = {
+  args: {
+    ...WithMerchant.args,
+    merchant: (
+      <LineMerchant
+        merchant="Pixelplay"
+        intermediary="PayPal"
+        asks={false}
+        merchants={["Greenmarket", "Pixelplay", "Streamly"]}
+        onAssign={() => Promise.resolve(true)}
       />
     ),
   },

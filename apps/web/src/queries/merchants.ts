@@ -45,14 +45,21 @@ export const merchantQueries = {
       enabled: text.trim() !== "",
       placeholderData: keepPreviousData,
     }),
-  /** The merchants a rule may set, by name: the first `CHOICES`. */
+  /**
+   * The merchants a rule may set, by name: the first `CHOICES`, each saying whether it is a payment
+   * intermediary, which is never who a line paid (#30).
+   */
   choices: () =>
     queryOptions({
       queryKey: merchantKeys.choices(),
       queryFn: async () => {
         const page = await getMerchants({ data: { limit: CHOICES } });
 
-        return page.merchants.map((merchant) => ({ id: merchant.id, name: merchant.name }));
+        return page.merchants.map((merchant) => ({
+          id: merchant.id,
+          name: merchant.name,
+          intermediary: merchant.intermediary,
+        }));
       },
     }),
   /** One merchant's page; one the user does not have comes back as `{ ok: false, code }`. */

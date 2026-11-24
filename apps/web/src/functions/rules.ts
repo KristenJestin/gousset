@@ -2,21 +2,22 @@ import {
   createRule as createCoreRule,
   deleteRule as deleteCoreRule,
   editRule as editCoreRule,
+  lineMerchant,
   listRules,
   moveRule as moveCoreRule,
   previewRule,
+  ruleWords,
   showLine,
   showRule,
   startApplyToPast,
 } from "@gousset/core";
-import type { RuleConditionsRefused } from "@gousset/core";
+import type { RuleConditionsRefused, RuleEffectRefused } from "@gousset/core";
 import { Conditions, MAX_CONDITIONS } from "@gousset/core/rule-values";
 import { createServerFn } from "@tanstack/react-start";
 import { Effect, Schema } from "effect";
 
 import { LineId } from "@/lib/operations-search";
 import { proposalConditions } from "@/lib/rule-conditions";
-import { proposalWords } from "@/lib/rule-proposal";
 import { runCore } from "@/services";
 
 import { CategoryId } from "./categories";
@@ -40,9 +41,11 @@ export type RuleRefusalCode =
   | "CATEGORY_ARCHIVED"
   | "CATEGORY_NOT_FOUND"
   | "MERCHANT_NOT_FOUND"
+  | "MERCHANT_INTERMEDIARY"
   | "TOO_MANY_RULES"
   | "JOB_UNAVAILABLE"
-  | "LINE_NOT_FOUND";
+  | "LINE_NOT_FOUND"
+  | "NO_WORDS";
 
 /**
  * A refusal's code, the condition it is about (from 0) when one is the cause, and the limit it
@@ -58,6 +61,12 @@ const CONDITION_CODES = {
   unknown_account: "CONDITION_UNKNOWN_ACCOUNT",
 } as const satisfies { [Reason in RuleConditionsRefused["reason"]]: RuleRefusalCode };
 
+const EFFECT_CODES = {
+  nothing_set: "NOTHING_SET",
+  category_archived: "CATEGORY_ARCHIVED",
+  merchant_intermediary: "MERCHANT_INTERMEDIARY",
+} as const satisfies { [Reason in RuleEffectRefused["reason"]]: RuleRefusalCode };
+
 /** Every refusal a rule's conditions and effect may meet, as its code. */
 const DRAFT_REFUSALS = {
   RuleConditionsRefused: (refusal: RuleConditionsRefused) =>
@@ -66,8 +75,7 @@ const DRAFT_REFUSALS = {
       refusal.index,
       refusal.reason === "too_many" ? MAX_CONDITIONS : null,
     ),
-  RuleEffectRefused: (refusal: { readonly reason: "nothing_set" | "category_archived" }) =>
-    refused(refusal.reason === "nothing_set" ? "NOTHING_SET" : "CATEGORY_ARCHIVED"),
+  RuleEffectRefused: (refusal: RuleEffectRefused) => refused(EFFECT_CODES[refusal.reason]),
   CategoryNotFound: () => refused("CATEGORY_NOT_FOUND"),
   MerchantNotFound: () => refused("MERCHANT_NOT_FOUND"),
 };
@@ -235,21 +243,33 @@ export const applyRuleToPast = createServerFn({ method: "POST" })
 
 /**
  * The rule a correction proposes (#25): "label contains" the words that name the line's merchant
- * in its label, for the category the user just chose, with how many lines already there it would
- * change. A line or a category gone: a code.
+ * in its label, for the category the user just chose or the merchant they gave a line paid through
+ * an intermediary (#30), with how many lines already there it would change. An intermediary's line
+ * is looked for by the intermediary through who was paid (`PAYPAL *PIXELPLAY`), never by the
+ * intermediary alone, whichever is set: one whose label names no one after the intermediary
+ * proposes none (`NO_WORDS`, which the page does not offer). A line, a category or a merchant gone:
+ * a code.
  */
 export const getRuleProposal = createServerFn({ method: "GET" })
   .middleware([signedIn, slowedInDevelopment])
-  .validator(Schema.toStandardSchemaV1(Schema.Struct({ lineId: LineId, categoryId: CategoryId })))
+  .validator(Schema.toStandardSchemaV1(Schema.Struct({ lineId: LineId, ...Effects })))
   .handler(({ data, context }) =>
     runCore(
       Effect.gen(function* () {
-        const line = yield* showLine(context.owner, data.lineId);
-        const words = proposalWords(line.label, line.counterpartyName);
+        const [line, paid] = yield* Effect.all([
+          showLine(context.owner, data.lineId),
+          lineMerchant(context.owner, data.lineId),
+        ]);
+
+        const words = ruleWords(line.label, line.counterpartyName, paid.intermediary !== null);
+
+        if (words === null) {
+          return yield* refused("NO_WORDS");
+        }
 
         const reach = yield* previewRule(context.owner, {
           conditions: proposalConditions(words),
-          merchantId: null,
+          merchantId: data.merchantId,
           categoryId: data.categoryId,
         });
 
