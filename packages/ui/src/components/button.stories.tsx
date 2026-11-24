@@ -30,7 +30,8 @@ function LoadingFor({ milliseconds }: { milliseconds: number }) {
 
 /**
  * A button, on ui-sdk's `Button`. `primary` for the one action of a form or a screen,
- * `secondary` for the others, `ghost` in toolbars and rows, `destructive` for what deletes.
+ * `secondary` for the others, `ghost` in toolbars and rows, `quiet` for a way back beside the way
+ * forward (undo an import: red only on hover), `destructive` for what deletes.
  *
  * Loading: the loader takes the place of the icon (or of the label, without an icon), the button
  * keeps its width, is disabled and `aria-busy`, and its label may change. It shows only after
@@ -59,6 +60,18 @@ export const Secondary: Story = { args: { variant: "secondary", children: "Cance
 export const Ghost: Story = { args: { variant: "ghost", children: "Edit" } };
 
 export const Destructive: Story = { args: { variant: "destructive", children: "Delete" } };
+
+/** A way back beside the way forward: no surface, set apart from the primary; red on hover. */
+export const Quiet: Story = {
+  render: () => (
+    <div className="flex flex-wrap items-center gap-4">
+      <Button variant="quiet" size="sm" icon="undo">
+        Undo this import
+      </Button>
+      <Button size="sm">Continue to the review</Button>
+    </div>
+  ),
+};
 
 export const WithIcon: Story = { args: { icon: "import", children: "Import statements" } };
 
