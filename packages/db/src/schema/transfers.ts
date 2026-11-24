@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import {
   check,
   foreignKey,
+  index,
   pgEnum,
   pgPolicy,
   pgTable,
@@ -37,6 +38,10 @@ export const transfer = pgTable.withRLS(
     outLineId: uuid("out_line_id").notNull(),
     inLineId: uuid("in_line_id").notNull(),
     pairedBy: pairedBy("paired_by").notNull(),
+    // Added with the works council refunds (#29): the expense a transfer out of a benefit account
+    // funds, which keeps its cost. Its key (`on delete set null (funds_entry_id)`, which Drizzle
+    // cannot write) is in the custom migration `*_transfer_funds_key`.
+    fundsEntryId: uuid("funds_entry_id"),
   },
   (table) => [
     unique("transfer_user_id_id_key").on(table.userId, table.id),
@@ -54,6 +59,8 @@ export const transfer = pgTable.withRLS(
       foreignColumns: [statementLine.userId, statementLine.id],
     }).onDelete("cascade"),
     check("transfer_two_lines", sql`${table.outLineId} <> ${table.inLineId}`),
+    // An expense's fundings are read with it, and a deleted entry clears them.
+    index("transfer_funds_entry_id_idx").on(table.fundsEntryId),
     pgPolicy("transfer_own_rows_only", {
       as: "permissive",
       for: "all",

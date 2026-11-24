@@ -73,6 +73,35 @@ export class LinkRefused extends Schema.TaggedError<LinkRefused>()("LinkRefused"
   lineId: Schema.String,
 }) {}
 
+/**
+ * A transfer cannot fund that expense (#29): its line is no side of a transfer (`not_a_transfer`), or
+ * of a transfer that does not go from a benefit account to an account of another kind
+ * (`not_from_benefit`); the expense's line is part of no expense (held, of no amount, a side of a
+ * transfer, an income: `not_an_expense`), or is split across several (`split`); the expense is in
+ * another currency than the transfer's side out (`currency`), happened after it was booked
+ * (`later`), or costs less than the transfer and its other fundings together (`over_cost`); the
+ * transfer funds another expense already, to unfund first (`already_funding`). `lineId` names the
+ * line refused.
+ */
+export class FundRefused extends Schema.TaggedError<FundRefused>()("FundRefused", {
+  reason: Schema.Literals([
+    "not_a_transfer",
+    "not_from_benefit",
+    "not_an_expense",
+    "split",
+    "currency",
+    "later",
+    "over_cost",
+    "already_funding",
+  ]),
+  lineId: Schema.String,
+}) {}
+
+/** The line is no side of a transfer that funds an expense: there is nothing to unfund. */
+export class NotFunding extends Schema.TaggedError<NotFunding>()("NotFunding", {
+  lineId: Schema.String,
+}) {}
+
 /** The line is the only line of its expense: there is nothing to unlink it from. */
 export class NotLinked extends Schema.TaggedError<NotLinked>()("NotLinked", {
   lineId: Schema.String,
@@ -81,7 +110,8 @@ export class NotLinked extends Schema.TaggedError<NotLinked>()("NotLinked", {
 /**
  * A line cannot be split across these categories (#27): a line held or thrown away
  * (`not_counted`), of nothing (`zero_amount`), a side of a transfer (`transfer`), a line that is
- * part of an expense with other lines (`linked`), no share or more than `MAX_SHARES` (`count`),
+ * part of an expense with other lines (`linked`), the line of an expense a transfer funds, to unfund
+ * first (`funded`, #29), no share or more than `MAX_SHARES` (`count`),
  * shares that do not add up to the line (`sum`); the share at `index` has no positive amount of the
  * line's currency (`amount`), a category of the other kind (`kind`) or an archived one (`archived`).
  */
@@ -91,6 +121,7 @@ export class SplitRefused extends Schema.TaggedError<SplitRefused>()("SplitRefus
     "zero_amount",
     "transfer",
     "linked",
+    "funded",
     "count",
     "sum",
     "amount",

@@ -2,11 +2,13 @@ import { MAX_SHARES } from "@gousset/core/values";
 import type {
   AccountList,
   ExpensePart,
+  FundedExpense,
   LineAccount,
   LineDetail as Line,
   LineExpenses,
   LineRow,
   LineTransfer as Transfer,
+  TransferFunding,
   TransferSide,
 } from "@gousset/core";
 import { m } from "@gousset/i18n/messages";
@@ -17,6 +19,8 @@ import { FormMessage } from "@gousset/ui/components/form-message";
 import { LineDetail } from "@gousset/ui/components/line-detail";
 import { LineExpense, LinkLine, SplitLine } from "@gousset/ui/components/line-expense";
 import type { ExpenseLineView } from "@gousset/ui/components/line-expense";
+import { LineFundedBy, LineFunds } from "@gousset/ui/components/line-funding";
+import type { FundedExpenseView } from "@gousset/ui/components/line-funding";
 import { LineMerchant } from "@gousset/ui/components/line-merchant";
 import {
   LineTransfer,
@@ -45,14 +49,16 @@ import type { ProposedRuleSets } from "@/components/proposed-rule";
 import { RuleJobNotice } from "@/components/rule-job";
 import {
   classifyLine,
+  fundLine,
   linkLine,
   pairLine,
   pairLineWithAccount,
   splitLine,
+  unfundLine,
   unlinkLine,
   unpairLine,
 } from "@/functions/lines";
-import type { ExpenseRefusalCode, TransferRefusalCode } from "@/functions/lines";
+import type { ExpenseRefusalCode, FundRefusalCode, TransferRefusalCode } from "@/functions/lines";
 import { assignLineMerchant } from "@/functions/merchants";
 import { categoryRefusalMessage, merchantRefusalMessage } from "@/i18n/messages";
 import { dayRange, longDay, shortDay, shortDays } from "@/lib/account-day";
@@ -622,14 +628,128 @@ const touchedBy = (line: Line, other: TransferSide | undefined) => ({
   ],
 });
 
+/** A refusal to fund or unfund an expense, worded; `FAILED` when the server failed. */
+function fundRefusal(code: FundRefusalCode | "FAILED"): string {
+  switch (code) {
+    case "LINE_NOT_FOUND": {
+      return m.operationsTransferLineGone();
+    }
+
+    case "FUND_NOT_FROM_BENEFIT": {
+      return m.operationsFundRefusedNotFromBenefit();
+    }
+
+    case "FUND_NOT_AN_EXPENSE": {
+      return m.operationsFundRefusedNotAnExpense();
+    }
+
+    case "FUND_SPLIT": {
+      return m.operationsFundRefusedSplit();
+    }
+
+    case "FUND_CURRENCY": {
+      return m.operationsFundRefusedCurrency();
+    }
+
+    case "FUND_LATER": {
+      return m.operationsFundRefusedLater();
+    }
+
+    case "FUND_OVER_COST": {
+      return m.operationsFundRefusedOverCost();
+    }
+
+    case "FUND_ALREADY_FUNDING": {
+      return m.operationsFundRefusedAlreadyFunding();
+    }
+
+    case "NOT_FUNDING": {
+      return m.operationsFundNotFunding();
+    }
+
+    case "FAILED": {
+      return m.operationsTransferFailed();
+    }
+  }
+}
+
 /**
- * The open line's transfer: the other side, which `onOpen` opens, and "Not a transfer"; or the
- * lines that may be its other side, to pair with one, and the accounts kept by their balance it may
- * be paired with. Nothing when it is neither.
+ * The open line's works council refund (#29), a side of a transfer from a benefit account: the
+ * expense it funds, which `onOpen` opens, and "Unfund"; or the expenses it may fund, to fund one.
+ * Funding moves no figure, the expense keeping its cost: done, the lines are read again, the
+ * expense's detail with them.
+ */
+function FundingOf({
+  line,
+  funding,
+  locale,
+  onOpen,
+}: {
+  line: Line;
+  funding: TransferFunding;
+  locale: string;
+  onOpen: (id: string) => void;
+}) {
+  const queryClient = useQueryClient();
+  const [error, setError] = useState<string>();
+
+  const view = (expense: FundedExpense): FundedExpenseView => ({
+    id: expense.line.lineId,
+    day: shortDay(expense.happenedOn, locale),
+    category: categoryPath(expense.category),
+    label: expense.line.label,
+    net: expense.net,
+  });
+
+  /** Runs a change: true once done, the refusal shown otherwise. */
+  const run = async (
+    change: () => Promise<{ ok: true } | { ok: false; code: FundRefusalCode }>,
+  ) => {
+    try {
+      const answer = await change();
+
+      if (!answer.ok) {
+        setError(fundRefusal(answer.code));
+
+        return false;
+      }
+
+      setError(undefined);
+      await invalidateTouched(queryClient, { months: [] });
+
+      return true;
+    } catch {
+      setError(fundRefusal("FAILED"));
+
+      return false;
+    }
+  };
+
+  return (
+    <LineFunds
+      funds={funding.funds === null ? undefined : view(funding.funds)}
+      candidates={funding.candidates.map(view)}
+      onOpenExpense={onOpen}
+      onFund={(expenseLineId) => run(() => fundLine({ data: { lineId: line.id, expenseLineId } }))}
+      onUnfund={async () => {
+        await run(() => unfundLine({ data: { lineId: line.id } }));
+      }}
+      error={error}
+      locale={locale}
+    />
+  );
+}
+
+/**
+ * The open line's transfer: the other side, which `onOpen` opens, and "Not a transfer", with the
+ * expense a works council refund funds or may fund; or the lines that may be its other side, to
+ * pair with one, and the accounts kept by their balance it may be paired with. Nothing when it is
+ * neither.
  */
 function TransferOf({
   line,
   transfer,
+  funding,
   balanceAccounts,
   nameOf,
   locale,
@@ -637,6 +757,7 @@ function TransferOf({
 }: {
   line: Line;
   transfer: Transfer;
+  funding: TransferFunding | null;
   balanceAccounts: ReadonlyArray<BalanceAccountView>;
   nameOf: (account: LineAccount) => string;
   locale: string;
@@ -748,22 +869,27 @@ function TransferOf({
 
   if (paired !== null) {
     return (
-      <LineTransfer
-        direction={paired.direction}
-        other={view(paired.other)}
-        setAside={paired.setAside}
-        madeOn={
-          paired.other.madeByApp
-            ? nameOf(paired.other.account)
-            : line.source === "counterpart"
-              ? nameOf(line.account)
-              : undefined
-        }
-        onOpenOther={onOpen}
-        onUnpair={unpair}
-        error={error}
-        locale={locale}
-      />
+      <>
+        <LineTransfer
+          direction={paired.direction}
+          other={view(paired.other)}
+          setAside={paired.setAside}
+          madeOn={
+            paired.other.madeByApp
+              ? nameOf(paired.other.account)
+              : line.source === "counterpart"
+                ? nameOf(line.account)
+                : undefined
+          }
+          onOpenOther={onOpen}
+          onUnpair={unpair}
+          error={error}
+          locale={locale}
+        />
+        {funding === null ? null : (
+          <FundingOf line={line} funding={funding} locale={locale} onOpen={onOpen} />
+        )}
+      </>
     );
   }
 
@@ -915,6 +1041,8 @@ function ExpenseOf({
 
   const together = others.length === 0 && only.payments.length + only.refunds.length > 1;
   const split = others.length > 0;
+  // A works council refund funds it (#29): it is split once unfunded, from the refund's line.
+  const funded = only.fundings.length > 0;
   const digits = minorDigits(line.amount.currency);
   const whole = { minor: Math.abs(line.amount.minor), currency: line.amount.currency };
 
@@ -927,92 +1055,109 @@ function ExpenseOf({
   }));
 
   return (
-    <LineExpense
-      lineId={line.id}
-      expense={
-        together
-          ? {
-              kind: only.kind,
-              payments: only.payments.map(view),
-              refunds: only.refunds.map(view),
-              net: only.net,
-            }
-          : undefined
-      }
-      shares={
-        split
-          ? expenses.expenses.map((each) => ({
-              id: each.id,
-              category: categoryPath(each.category),
-              amount: each.net,
-            }))
-          : undefined
-      }
-      proposals={expenses.proposals.map((proposal) => ({
-        ...view(proposal.line),
-        category: categoryPath(proposal.category),
-        net: proposal.net,
-      }))}
-      onOpenLine={onOpen}
-      onUnlink={
-        together
-          ? async () => {
-              await run(() => unlinkLine({ data: { lineId: line.id } }));
-            }
-          : undefined
-      }
-      onConfirmRefund={async (intoId) => {
-        await linkTo(intoId);
-      }}
-      actions={
-        <>
-          {/* A line joins an expense from its own: alone, neither linked nor split. */}
-          {together || split ? null : (
-            <LinkLine
-              candidates={candidates}
-              search={search}
-              onSearchChange={setSearch}
-              onOpen={() => setLinking(true)}
-              onLink={linkTo}
-              error={error}
-              locale={locale}
-            />
-          )}
-          {together ? null : (
-            <SplitLine
-              total={whole}
-              categories={tree === undefined ? [] : choicesOf(tree, kind)}
-              initial={
-                split
-                  ? expenses.expenses.map((each) => ({
-                      categoryId: each.category.id,
-                      minor: each.net.minor,
-                    }))
-                  : [{ categoryId: only.category.id, minor: whole.minor }]
+    <>
+      <LineExpense
+        lineId={line.id}
+        expense={
+          together
+            ? {
+                kind: only.kind,
+                payments: only.payments.map(view),
+                refunds: only.refunds.map(view),
+                net: only.net,
               }
-              max={MAX_SHARES}
-              onSplit={(shares) =>
-                run(() =>
-                  splitLine({
-                    data: {
-                      lineId: line.id,
-                      shares: shares.map((share) => ({
-                        categoryId: share.categoryId,
-                        amount: toDecimalString(share.minor, digits),
-                      })),
-                    },
-                  }),
-                )
+            : undefined
+        }
+        shares={
+          split
+            ? expenses.expenses.map((each) => ({
+                id: each.id,
+                category: categoryPath(each.category),
+                amount: each.net,
+              }))
+            : undefined
+        }
+        proposals={expenses.proposals.map((proposal) => ({
+          ...view(proposal.line),
+          category: categoryPath(proposal.category),
+          net: proposal.net,
+        }))}
+        onOpenLine={onOpen}
+        onUnlink={
+          together
+            ? async () => {
+                await run(() => unlinkLine({ data: { lineId: line.id } }));
               }
-              error={error}
-              locale={locale}
-            />
-          )}
-        </>
-      }
-      error={error}
-      locale={locale}
-    />
+            : undefined
+        }
+        onConfirmRefund={async (intoId) => {
+          await linkTo(intoId);
+        }}
+        actions={
+          <>
+            {/* A line joins an expense from its own: alone, neither linked nor split. */}
+            {together || split ? null : (
+              <LinkLine
+                candidates={candidates}
+                search={search}
+                onSearchChange={setSearch}
+                onOpen={() => setLinking(true)}
+                onLink={linkTo}
+                error={error}
+                locale={locale}
+              />
+            )}
+            {together || funded ? null : (
+              <SplitLine
+                total={whole}
+                categories={tree === undefined ? [] : choicesOf(tree, kind)}
+                initial={
+                  split
+                    ? expenses.expenses.map((each) => ({
+                        categoryId: each.category.id,
+                        minor: each.net.minor,
+                      }))
+                    : [{ categoryId: only.category.id, minor: whole.minor }]
+                }
+                max={MAX_SHARES}
+                onSplit={(shares) =>
+                  run(() =>
+                    splitLine({
+                      data: {
+                        lineId: line.id,
+                        shares: shares.map((share) => ({
+                          categoryId: share.categoryId,
+                          amount: toDecimalString(share.minor, digits),
+                        })),
+                      },
+                    }),
+                  )
+                }
+                error={error}
+                locale={locale}
+              />
+            )}
+          </>
+        }
+        error={error}
+        locale={locale}
+      />
+      {funded ? (
+        <LineFundedBy
+          fundings={only.fundings.map((funding) => ({
+            id: funding.outLineId,
+            day: shortDay(funding.bookedOn, locale),
+            label: funding.label,
+            account: nameOf(funding.account),
+            amount: funding.amount,
+          }))}
+          funded={only.funded}
+          net={only.net}
+          onOpenLine={onOpen}
+          locale={locale}
+        />
+      ) : null}
+    </>
   );
 }
 
@@ -1084,6 +1229,7 @@ function OpenLine({
         <TransferOf
           line={line}
           transfer={transfer}
+          funding={expenses.funding}
           balanceAccounts={transfer.paired === null ? balanceAccounts : []}
           nameOf={nameOf}
           locale={locale}

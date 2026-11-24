@@ -2,6 +2,7 @@ import {
   MAX_SEARCH_LINES,
   MAX_SHARES,
   classifyLine as classifyCoreLine,
+  fundExpense,
   lineExpensesOf,
   lineTransferOf,
   linkLine as linkCoreLine,
@@ -10,10 +11,11 @@ import {
   searchLines,
   showLine,
   splitLine as splitCoreLine,
+  unfundExpense,
   unlinkLine as unlinkCoreLine,
   unpairLine as unpairCoreLine,
 } from "@gousset/core";
-import type { LinkRefused, TransferRefused } from "@gousset/core";
+import type { FundRefused, LinkRefused, TransferRefused } from "@gousset/core";
 import { AccountId } from "@gousset/core/account-values";
 import { MAX_FILTER_TEXT } from "@gousset/ui/lib/operations";
 import { createServerFn } from "@tanstack/react-start";
@@ -345,6 +347,73 @@ export const splitLine = createServerFn({ method: "POST" })
           LineNotFound: () => expenseRefused("LINE_NOT_FOUND"),
           SplitRefused: () => expenseRefused("SPLIT_REFUSED"),
           CategoryNotFound: () => expenseRefused("SPLIT_REFUSED"),
+        }),
+      ),
+    ),
+  );
+
+/**
+ * Why funding an expense with a works council refund, or unfunding it, was refused (#29), as a code
+ * for the interface to translate: the line is gone; the transfer is no refund from a benefit
+ * account; the line chosen is part of no expense, or of a split one; the expense is in another
+ * currency, happened after the refund, or costs less than it with its other refunds; the refund
+ * funds another expense already; or it funds none any more.
+ */
+export type FundRefusalCode =
+  | "LINE_NOT_FOUND"
+  | "FUND_NOT_FROM_BENEFIT"
+  | "FUND_NOT_AN_EXPENSE"
+  | "FUND_SPLIT"
+  | "FUND_CURRENCY"
+  | "FUND_LATER"
+  | "FUND_OVER_COST"
+  | "FUND_ALREADY_FUNDING"
+  | "NOT_FUNDING";
+
+const fundRefused = (code: FundRefusalCode) => Effect.succeed({ ok: false as const, code });
+
+const FUND_CODES = {
+  not_a_transfer: "FUND_NOT_FROM_BENEFIT",
+  not_from_benefit: "FUND_NOT_FROM_BENEFIT",
+  not_an_expense: "FUND_NOT_AN_EXPENSE",
+  split: "FUND_SPLIT",
+  currency: "FUND_CURRENCY",
+  later: "FUND_LATER",
+  over_cost: "FUND_OVER_COST",
+  already_funding: "FUND_ALREADY_FUNDING",
+} as const satisfies { readonly [Reason in FundRefused["reason"]]: FundRefusalCode };
+
+/**
+ * Makes the transfer the line is a side of, a works council refund, fund the expense of
+ * `expenseLineId`, one of its lines: the expense keeps its cost. Answers the expense as it is now;
+ * refused with a code.
+ */
+export const fundLine = createServerFn({ method: "POST" })
+  .middleware([signedIn, slowedInDevelopment])
+  .validator(Schema.toStandardSchemaV1(Schema.Struct({ lineId: LineId, expenseLineId: LineId })))
+  .handler(({ data, context }) =>
+    runCore(
+      fundExpense(context.owner, data.lineId, data.expenseLineId).pipe(
+        Effect.map((expense) => ({ ok: true as const, expense })),
+        Effect.catchTags({
+          LineNotFound: () => fundRefused("LINE_NOT_FOUND"),
+          FundRefused: (refusal) => fundRefused(FUND_CODES[refusal.reason]),
+        }),
+      ),
+    ),
+  );
+
+/** The transfer the line is a side of funds no expense any more; it stays a transfer. */
+export const unfundLine = createServerFn({ method: "POST" })
+  .middleware([signedIn, slowedInDevelopment])
+  .validator(Schema.toStandardSchemaV1(Schema.Struct({ lineId: LineId })))
+  .handler(({ data, context }) =>
+    runCore(
+      unfundExpense(context.owner, data.lineId).pipe(
+        Effect.map(() => ({ ok: true as const })),
+        Effect.catchTags({
+          LineNotFound: () => fundRefused("LINE_NOT_FOUND"),
+          NotFunding: () => fundRefused("NOT_FUNDING"),
         }),
       ),
     ),
