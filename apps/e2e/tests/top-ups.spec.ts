@@ -8,14 +8,17 @@ import {
   expensesLayer,
   lineExpensesOf,
   matchTopUps,
+  recogniseMerchants,
+  setMerchantDefaultCategory,
   unlinkLine,
 } from "@gousset/core";
+import type { AccountInput } from "@gousset/core/account-values";
 import type { AccountStore, CategoryStore, Expenses } from "@gousset/core";
 import type { UserData } from "@gousset/db/user-data";
-import { account, entry, entryPart, statementLine } from "@gousset/db/schema/ledger";
+import { account, entry, entryPart, merchant, statementLine } from "@gousset/db/schema/ledger";
 import { exampleStatement } from "@gousset/fixture";
 import type { Statement, StatementLine } from "@gousset/fixture";
-import { asc, eq, inArray } from "drizzle-orm";
+import { asc, eq, inArray, sql } from "drizzle-orm";
 import { Effect, Layer } from "effect";
 
 import { addUser } from "../src/auth";
@@ -389,4 +392,82 @@ test("without the card's lines, the top-up goes to the card's category", async (
   const [back] = await entriesOf([topUpLine]);
 
   expect(back?.categoryId).toBe(other?.categoryId);
+});
+
+/** A card kept by its balance in a category of its own, and a bank top-up of it in that category. */
+async function balanceCardWithTopUp(issuer: string, amountMinor: number) {
+  const meals = (await run(createCategory(owner, { kind: "expense", name: `${issuer} meals` }))).id;
+
+  const card = await newAccount({
+    name: `${issuer} card`,
+    kind: "benefit",
+    institution: issuer,
+    mode: "balance",
+    balanceCategoryId: meals,
+  });
+
+  const current = await newAccount({ name: `${issuer} current`, kind: "current" });
+
+  await importInto(current, `${issuer}-current`, [
+    { bookedOn: "2026-10-10", amountMinor, label: `CB ${issuer.toUpperCase()}*TOPUP` },
+  ]);
+
+  const line = await lineOf(current, amountMinor);
+  const [entered] = await entriesOf([line]);
+
+  expect(entered?.categoryId).toBe(meals);
+
+  return { meals, card, line };
+}
+
+const editCard = (cardId: string, issuer: string, change: Partial<AccountInput>) =>
+  run(
+    editAccount(owner, cardId, {
+      name: `${issuer} card`,
+      choice: "benefit",
+      institution: issuer,
+      currency: "EUR",
+      mode: "balance",
+      openingBalanceMinor: 0,
+      ...change,
+    }),
+  );
+
+const categoryOf = async (lineId: string) => (await entriesOf([lineId]))[0]?.categoryId;
+
+test("a top-up in its merchant's own default category stays there once the card no longer sends it", async () => {
+  const { meals, card, line } = await balanceCardWithTopUp("Sweetbite", -955);
+
+  const [named] = await data.asUser(owner, (transaction) =>
+    transaction
+      .select({ id: merchant.id })
+      .from(merchant)
+      .where(sql`lower(${merchant.name}) like 'sweetbite%'`),
+  );
+
+  await run(setMerchantDefaultCategory(owner, named?.id ?? "", meals));
+  await editCard(card, "Sweetbite", { mode: "lines" });
+
+  expect(await categoryOf(line)).toBe(meals);
+
+  // And at the boot's runs, again and again.
+  await run(recogniseMerchants(owner));
+  await run(matchTopUps(owner));
+  await run(recogniseMerchants(owner));
+
+  expect(await categoryOf(line)).toBe(meals);
+});
+
+test("a card's category cleared, or its issuer renamed, sends its top-ups back", async () => {
+  const cleared = await balanceCardWithTopUp("Nibbleton", -965);
+
+  await editCard(cleared.card, "Nibbleton", { balanceCategoryId: null });
+
+  expect(await categoryOf(cleared.line)).not.toBe(cleared.meals);
+
+  const renamed = await balanceCardWithTopUp("Morselly", -975);
+
+  await editCard(renamed.card, "Morselly", { institution: "Other Issuer" });
+
+  expect(await categoryOf(renamed.line)).not.toBe(renamed.meals);
 });

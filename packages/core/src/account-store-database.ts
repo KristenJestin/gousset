@@ -27,6 +27,7 @@ import { remakeBalanceLines } from "./balance-lines";
 import type { DayBalance } from "./balances";
 import { takeCategoryTurn } from "./category-turn";
 import { AccountNotFound, BalanceAlreadyNoted, LineNotFound } from "./errors";
+import { topUpsToBalanceCategories } from "./expenses/top-up-categories";
 import { matchTopUpsIn } from "./expenses/top-ups";
 import { classifyByMerchants } from "./merchants/default-classification";
 
@@ -459,6 +460,13 @@ export const DatabaseAccountStore = Layer.effect(
               // A benefit card's issuer, days, cap and category shape what its top-ups are (#28).
               // The defaults first, then the top-ups sent to a card's category or back from it.
               await classifyByMerchants(transaction, { every: true });
+
+              // Its top-ups as its old issuer and category had them: a category cleared or an
+              // issuer renamed sends them back too.
+              if (found.kind === "benefit") {
+                await topUpsToBalanceCategories(transaction, { every: true }, found);
+              }
+
               await matchTopUpsIn(transaction, owner);
 
               return Result.succeed(record(changed));
