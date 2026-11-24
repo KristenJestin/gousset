@@ -410,6 +410,8 @@ function lineRowsOf(state: Store): MemoryLineRows {
     settlesIntoAccountId: null,
     creditOrder: "oldest_first",
     balanceCategoryId: null,
+    topUpDays: 3,
+    topUpCapMinor: null,
   } as const;
 
   return { accounts: [account], lines: (state.paid ?? []).map((each) => each.line), imports: [] };

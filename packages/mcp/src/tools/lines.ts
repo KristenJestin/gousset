@@ -755,7 +755,7 @@ function unlinkRun(input: LinesInput, owner: string) {
           ? ""
           : ` It is ${own.kind === "expense" ? "an expense" : "an income"} of its own again, in ${pathText(own.category)}, and counts ${amount(own.net)}.`;
 
-      return `Unlinked.${alone} Refunds the expense's payments no longer cover are each their own again.`;
+      return `Unlinked.${alone} Refunds the expense's payments no longer cover are each their own again. Gousset will not link this line again by itself.`;
     }),
     Effect.catchTags({
       LineNotFound: (missing) => lineRefused(missing.lineId, NOT_FOUND),

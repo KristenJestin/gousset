@@ -67,6 +67,8 @@ function accountOf(name: string, currency = "EUR"): AccountRecord {
     settlesIntoAccountId: null,
     creditOrder: "oldest_first",
     balanceCategoryId: null,
+    topUpDays: 3,
+    topUpCapMinor: null,
   };
 }
 

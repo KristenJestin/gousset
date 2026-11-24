@@ -167,9 +167,15 @@ export const account = pgTable.withRLS(
     // to. Its key (`on delete set null (balance_category_id)`, which Drizzle cannot write) is in the
     // custom migration `*_balance_lines_keys`.
     balanceCategoryId: uuid("balance_category_id"),
+    // Read for a benefit account only (#28): how many days after its own line the issuer charges
+    // the rest of a purchase to a linked bank card, and the most the card pays a day, when known.
+    topUpDays: integer("top_up_days").default(3).notNull(),
+    topUpCapMinor: minor("top_up_cap_minor"),
   },
   (table) => [
     unique("account_user_id_id_key").on(table.userId, table.id),
+    check("account_top_up_days_range", sql`${table.topUpDays} between 0 and 7`),
+    check("account_top_up_cap_positive", sql`${table.topUpCapMinor} > 0`),
     // A merge of categories moves it, and a deleted category clears it.
     index("account_balance_category_id_idx").on(table.balanceCategoryId),
     unique("account_user_id_iban_key").on(table.userId, table.iban),
@@ -400,6 +406,9 @@ export const statementLine = pgTable.withRLS(
     transferRefused: boolean("transfer_refused").default(false).notNull(),
     // A line made from a noted balance (#31): the balance it was made from, which it goes with.
     balanceId: uuid("balance_id"),
+    // The user took this line out of an expense of several lines (#28): the automatic matching of
+    // top-ups leaves it alone until the user links it by hand.
+    linkRefused: boolean("link_refused").default(false).notNull(),
   },
   (table) => [
     unique("statement_line_user_id_id_key").on(table.userId, table.id),

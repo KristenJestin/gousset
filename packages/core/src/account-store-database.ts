@@ -27,6 +27,9 @@ import { remakeBalanceLines } from "./balance-lines";
 import type { DayBalance } from "./balances";
 import { takeCategoryTurn } from "./category-turn";
 import { AccountNotFound, BalanceAlreadyNoted, LineNotFound } from "./errors";
+import { topUpsToBalanceCategories } from "./expenses/top-up-categories";
+import { matchTopUpsIn } from "./expenses/top-ups";
+import { classifyByMerchants } from "./merchants/default-classification";
 
 // The accounts in the database, through `UserData` only (docs/data-model.md, "Ownership and
 // isolation"): each call is one transaction of the user's, which row-level security keeps to their
@@ -48,6 +51,8 @@ const record = (row: AccountRow): AccountRecord => ({
   settlesIntoAccountId: row.settlesIntoAccountId,
   creditOrder: row.creditOrder,
   balanceCategoryId: row.balanceCategoryId,
+  topUpDays: row.topUpDays,
+  topUpCapMinor: row.topUpCapMinor,
 });
 
 /** Every category of the user's, as a write checks the one an account names. */
@@ -383,6 +388,9 @@ export const DatabaseAccountStore = Layer.effect(
       ) =>
         userData
           .transaction(owner, async (transaction): Promise<Result.Result<AccountRecord, E>> => {
+            // A benefit card's issuer and category classify the bank's top-ups below (#28).
+            await takeCategoryTurn(transaction, owner);
+
             const accounts = await transaction.select().from(account);
             const categories = await choosableCategories(transaction);
             const decided = decide(accounts.map(record), categories);
@@ -399,6 +407,8 @@ export const DatabaseAccountStore = Layer.effect(
             if (created === undefined) {
               throw new Error("The insert returned no row.");
             }
+
+            await classifyByMerchants(transaction, { every: true });
 
             return Result.succeed(record(created));
           })
@@ -446,6 +456,18 @@ export const DatabaseAccountStore = Layer.effect(
               }
 
               await remakeBalanceLines(transaction, owner);
+
+              // A benefit card's issuer, days, cap and category shape what its top-ups are (#28).
+              // The defaults first, then the top-ups sent to a card's category or back from it.
+              await classifyByMerchants(transaction, { every: true });
+
+              // Its top-ups as its old issuer and category had them: a category cleared or an
+              // issuer renamed sends them back too.
+              if (found.kind === "benefit") {
+                await topUpsToBalanceCategories(transaction, { every: true }, found);
+              }
+
+              await matchTopUpsIn(transaction, owner);
 
               return Result.succeed(record(changed));
             },

@@ -39,6 +39,14 @@ const AXE_READING_ATTRIBUTES = `${axe.source}
 )} } });`;
 
 /**
+ * The popups on their first frame (`data-starting-style`), whose transition has not started yet and
+ * so lists no animation, and those leaving (`data-ending-style`): `ENTRANCES_DONE` alone, run then,
+ * finds nothing to wait for, and axe reads the popup as it fades in. A dialog opened a moment
+ * before was read at 3.8 where it holds 4.5 (#30's merchant dialog).
+ */
+const POPUPS_MOVING = `document.querySelectorAll("[data-starting-style], [data-ending-style]").length`;
+
+/**
  * Waits for the screen's entrance animations to end: text still fading in is half transparent, and
  * axe would measure its contrast mid-fade. Endless animations (a loader, a skeleton) are not
  * waited for.
@@ -56,6 +64,9 @@ const ENTRANCES_DONE = `Promise.all(
  * fix it.
  */
 export async function expectAccessible(page: Page): Promise<void> {
+  // Every popup past its first frame and its exit, as #151's checks of the overlays wait for it,
+  // then every entrance listed by then.
+  await expect.poll(async () => Number(await page.evaluate(POPUPS_MOVING))).toBe(0);
   await page.evaluate(ENTRANCES_DONE);
 
   const firefox = page.context().browser()?.browserType().name() === "firefox";
