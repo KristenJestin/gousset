@@ -9,6 +9,7 @@ import type {
   LineExpenses,
   LineRow,
   LineTransfer as Transfer,
+  QueuedLine,
   TransferFunding,
   TransferSide,
 } from "@gousset/core";
@@ -245,6 +246,8 @@ type ReviewModeInput = {
   /** How many lines match, as the server says; `undefined` until a first list comes. */
   total: number | undefined;
   openId: string | undefined;
+  /** The open line's detail is read: its proposal shows with it. */
+  detailRead: boolean;
   openLine: (id: string) => void;
 };
 
@@ -254,7 +257,7 @@ type ReviewModeInput = {
  * it is out of the rows and the count at once, until the list read again no longer holds it. Another
  * search, or the review mode left, hides none.
  */
-function useReviewMode({ applied, loaded, total, openId, openLine }: ReviewModeInput) {
+function useReviewMode({ applied, loaded, total, openId, detailRead, openLine }: ReviewModeInput) {
   const navigate = Route.useNavigate();
   const queryClient = useQueryClient();
   const reviewing = applied.toReview;
@@ -293,6 +296,9 @@ function useReviewMode({ applied, loaded, total, openId, openLine }: ReviewModeI
     ...reviewQueries.line(openId ?? ""),
     enabled: reviewing && openId !== undefined,
   });
+
+  // In review mode, the open line's proposal, once read.
+  const queued = reviewing && detailRead && queuedOpen?.ok === true ? queuedOpen : undefined;
 
   // In review mode a line opens once its detail and its proposal are read: the detail opens whole,
   // its proposal focused, as the one before it goes.
@@ -365,7 +371,23 @@ function useReviewMode({ applied, loaded, total, openId, openLine }: ReviewModeI
   useHotkey(closed ? appHotkeys["review.accept"] : null, onStep(1));
   useHotkey(closed ? appHotkeys["review.correct"] : null, onStep(1));
 
-  return { reviewing, rows, shownTotal, foldingId, ruleProposal, queuedOpen, goTo, reviewedLine };
+  return { reviewing, rows, shownTotal, foldingId, ruleProposal, queued, goTo, reviewedLine };
+}
+
+/** What a screen reader hears of the line to review open: its day, label, amount and proposal. */
+function announcementOf(
+  queued: QueuedLine | undefined,
+  locale: string,
+  nameOf: (account: LineAccount) => string,
+) {
+  return queued === undefined
+    ? undefined
+    : m.reviewAnnounce({
+        day: shortDay(queued.line.bookedOn, locale),
+        label: lineLabel(queued.line),
+        amount: formatMoney(queued.line.amount, { locale }),
+        proposal: proposalText(queued.proposal, locale, nameOf),
+      });
 }
 
 function Operations() {
@@ -389,24 +411,14 @@ function Operations() {
     void navigate({ search: (previous) => ({ ...previous, line: id }), resetScroll: false });
   };
 
-  const { reviewing, rows, shownTotal, foldingId, ruleProposal, queuedOpen, goTo, reviewedLine } =
-    useReviewMode({ applied, loaded, total, openId, openLine });
+  const open = useOpenedLine(openId);
+
+  const { reviewing, rows, shownTotal, foldingId, ruleProposal, queued, goTo, reviewedLine } =
+    useReviewMode({ applied, loaded, total, openId, detailRead: open !== undefined, openLine });
 
   // Rules a correction proposed and applied to the past: a toast follows each one's job, the line
   // closed or not.
   const [ruleJobs, setRuleJobs] = useState<ReadonlyArray<string>>([]);
-
-  const { data: opened } = useQuery({
-    ...lineQueries.detail(openId ?? ""),
-    enabled: openId !== undefined,
-  });
-
-  // The detail opens once its line is read, at its full size: its column widens, never empty.
-  const open = openId !== undefined && opened?.ok === true ? opened : undefined;
-
-  // In review mode, the open line's proposal, once read.
-  const queued =
-    reviewing && open !== undefined && queuedOpen?.ok === true ? queuedOpen : undefined;
 
   const close = () => {
     void navigate({
@@ -436,26 +448,18 @@ function Operations() {
     );
   }
 
-  const amountError = refusal === "AMOUNT_INVALID" ? m.operationsAmountRefused() : undefined;
-
   return (
     <Page title={m.operationsTitle()}>
       <OperationsLayout
         filters={
-          <>
-            <OperationsFilters
-              values={draft}
-              onChange={change}
-              accounts={accountChoices(accounts, nameOf)}
-              minError={draft.min.trim() === "" ? undefined : amountError}
-              maxError={draft.max.trim() === "" ? undefined : amountError}
-              count={shownTotal}
-              locale={locale}
-            />
-            <FormMessage
-              message={refusal === "PERIOD_INVALID" ? m.operationsPeriodRefused() : undefined}
-            />
-          </>
+          <FilterBar
+            draft={draft}
+            onChange={change}
+            refusal={refusal}
+            accounts={accountChoices(accounts, nameOf)}
+            count={shownTotal}
+            locale={locale}
+          />
         }
         count={shownTotal}
         countAction={<ClearFilters values={draft} onChange={change} />}
@@ -522,19 +526,50 @@ function Operations() {
           onApplied={(jobId) => setRuleJobs([...ruleJobs, jobId])}
         />
       )}
-      <ReviewAnnouncer
-        message={
-          queued === undefined
-            ? undefined
-            : m.reviewAnnounce({
-                day: shortDay(queued.queued.line.bookedOn, locale),
-                label: lineLabel(queued.queued.line),
-                amount: formatMoney(queued.queued.line.amount, { locale }),
-                proposal: proposalText(queued.queued.proposal, locale, nameOf),
-              })
-        }
-      />
+      <ReviewAnnouncer message={announcementOf(queued?.queued, locale, nameOf)} />
     </Page>
+  );
+}
+
+/** The open line's detail, once read: the detail opens at its full size, its column never empty. */
+function useOpenedLine(openId: string | undefined) {
+  const { data: opened } = useQuery({
+    ...lineQueries.detail(openId ?? ""),
+    enabled: openId !== undefined,
+  });
+
+  return openId !== undefined && opened?.ok === true ? opened : undefined;
+}
+
+type FilterBarProps = {
+  draft: OperationsFilterValues;
+  onChange: (values: OperationsFilterValues) => void;
+  /** Why the server refused the applied filters, said under the field it is about. */
+  refusal: ReturnType<typeof useShownLines>["refusal"];
+  accounts: ReturnType<typeof accountChoices>;
+  count: number | undefined;
+  locale: string;
+};
+
+/** The filters of the list, a refused amount or period said under its field. */
+function FilterBar({ draft, onChange, refusal, accounts, count, locale }: FilterBarProps) {
+  const amountError = refusal === "AMOUNT_INVALID" ? m.operationsAmountRefused() : undefined;
+
+  return (
+    <>
+      <OperationsFilters
+        values={draft}
+        onChange={onChange}
+        accounts={accounts}
+        minError={draft.min.trim() === "" ? undefined : amountError}
+        maxError={draft.max.trim() === "" ? undefined : amountError}
+        count={count}
+        locale={locale}
+      />
+      <FormMessage
+        message={refusal === "PERIOD_INVALID" ? m.operationsPeriodRefused() : undefined}
+      />
+    </>
   );
 }
 
