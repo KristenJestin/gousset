@@ -88,6 +88,8 @@ function uiMessages(locale: Locale) {
       },
       /** Under the part left when some of it sits on benefit accounts. */
       leftRestricted: (amount: string) => m.uiMoneyLeftRestricted({ amount }, options),
+      /** In place of "set aside" when more came back from savings than went to them. */
+      takenFromSavings: m.uiMoneyTakenFromSavings({}, options),
       /** In place of "left" when more went out than came in. */
       overspent: m.uiMoneyOverspent({}, options),
       /** The month bar's parts, as a group. */

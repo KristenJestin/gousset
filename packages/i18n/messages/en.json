@@ -619,6 +619,7 @@
   "uiMoneyReceived": "received",
   "uiMoneySpent": "spent",
   "uiMoneySaved": "set aside",
+  "uiMoneyTakenFromSavings": "taken from savings",
   "uiMoneyLeft": "left",
   "uiMoneyOverspent": "overspent",
   "uiMoneyParts": "What came in, by part",

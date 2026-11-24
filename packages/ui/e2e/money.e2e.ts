@@ -321,6 +321,16 @@ test.describe("MonthBar", () => {
     await expect(page.locator('rect[data-role="left"]')).toHaveAttribute("width", "0%");
   });
 
+  test("money taken back from savings leaves money, not an overspent month", async ({ page }) => {
+    await page.goto(story("month-bar", "taken-from-savings"));
+    await expect(page.getByText("taken from savings")).toBeVisible();
+    await expect(spokenAmount(page, "€500")).toBeAttached();
+    await expect(spokenAmount(page, "€200")).toBeAttached();
+    await expect(page.getByText("overspent")).toHaveCount(0);
+    await expect(page.locator('[data-slot="month-bar-received-mark"]')).toHaveCount(0);
+    await expect(page.locator('rect[data-role="saved"]')).toHaveAttribute("width", "0%");
+  });
+
   test("an empty month has an empty bar and nothing to click", async ({ page }) => {
     await page.goto(story("month-bar", "empty"));
     await expect(spokenAmount(page, "€0").first()).toBeAttached();

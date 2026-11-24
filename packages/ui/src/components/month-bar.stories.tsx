@@ -114,15 +114,16 @@ export const Overspent: Story = {
 };
 
 /**
- * Money taken back from savings: set aside is less than nothing. The bar draws no part for it; its
- * figure says it.
+ * Money taken back from savings: set aside is less than nothing. More was spent than received, yet
+ * money is left, so the month is not overspent: the bar stretches past the money received with no
+ * mark, draws no part for the savings, and their key reads "€500 taken from savings".
  */
 export const TakenFromSavings: Story = {
   args: {
-    received: { minor: 210_000, currency: "EUR" },
-    spent: { minor: 190_000, currency: "EUR" },
-    saved: { minor: -30_000, currency: "EUR" },
-    left: { minor: 50_000, currency: "EUR" },
+    received: { minor: 200_000, currency: "EUR" },
+    spent: { minor: 230_000, currency: "EUR" },
+    saved: { minor: -50_000, currency: "EUR" },
+    left: { minor: 20_000, currency: "EUR" },
     note: "salary",
   },
 };

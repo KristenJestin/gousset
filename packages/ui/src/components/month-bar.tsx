@@ -141,9 +141,12 @@ function PartContent({
   const messages = useUiMessages().money;
   const language = usePageLanguage();
   const over = role === "left" && overspent;
+  // More came back from savings than went to them: said as such, the amount without its sign.
+  const takenBack = role === "saved" && amount.minor < 0;
 
-  const label =
-    restricted === null
+  const label = takenBack
+    ? messages.takenFromSavings
+    : restricted === null
       ? messages.roles[role]
       : messages.leftRestricted(
           formatMoney(restricted, { locale: locale ?? language, whole: true }),
@@ -165,7 +168,7 @@ function PartContent({
           />
         )}
         <Amount
-          value={over ? { ...amount, minor: Math.abs(amount.minor) } : amount}
+          value={over || takenBack ? { ...amount, minor: Math.abs(amount.minor) } : amount}
           whole
           size="sm"
           locale={locale}
@@ -200,7 +203,9 @@ const PART_CLASSES =
  * name cut short, so the block's height never changes. Each key is a button when `onSelect` is
  * given. When more went out than came in, the bar stretches to what went out, a dark mark shows
  * where the money received ended, and the part left says by how much the month is overspent, in
- * red. With `restricted`, the end of the part left is hatched (benefit accounts' money) and its
+ * red; the month is overspent only when `left` is below zero. Set aside below zero (taken back
+ * from savings) draws no part, and its key says "taken from savings" with the amount. With
+ * `restricted`, the end of the part left is hatched (benefit accounts' money) and its
  * label says how much of it. `notes` adds a quiet line each under the legend (the month in another
  * currency), cut short rather than wrapped.
  *
