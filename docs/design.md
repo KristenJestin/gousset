@@ -78,6 +78,12 @@ What floats above the page (menus, popovers, a select's or a combobox's list, th
 
 The classes live once in `packages/ui` (`floatingSurfaceClasses`); a floating component uses them and adds only its size and spacing. A sheet keeps its edge on the side that faces the page. The charts' tooltip is Bklit's own panel, vendored: it takes the same edge and shadow (`border-popover-border`, `shadow-popover`) as a recorded local change (`charts/UPSTREAM.md`), its surface being `--chart-tooltip-background`, which is `--popover`.
 
+Behind a dialog or a sheet, a **backdrop** dims the page: the scrim `--overlay`, dark in both schemes, so the page behind never reads as disabled. Over it the sheet or the dialog stands out by its own surface and its shadow: in light the white fill against the dimmed page (about 2.1:1), in dark its edge (about 2.2:1). The 1.7:1 rule of the edge holds for what floats over the page itself, not over the scrim, where the light edge is about 1.1:1 and the fill carries it. A press on it closes what it is behind, as Escape and the close button do, except while a form there is being sent.
+
+### The focus ring
+
+2 px in `--ring`, 2 px away from the element, on everything that takes focus. It is **never clipped**: a container that scrolls keeps 4 px of padding inside the scroller on every side where a field can sit, and as much scroll padding, so a field scrolled into view keeps its ring whole (a sheet's body, a dialog). A row of a list, whose neighbours touch it, draws its ring 2 px inside instead.
+
 ## Actions and forms
 
 A page shows things; it does not hold an action's form.
@@ -85,11 +91,11 @@ A page shows things; it does not hold an action's form.
 - **An action that asks for input** (create, edit, reset, note a balance, set an expiry…) is a button that opens a **dialog** holding the form (`Dialog` with `onSubmit`). The button sits where the action applies: beside the title of the block it changes ("Create a user" beside the list of users), or beside the page's title for the screen's main action.
 - **A long form** (several groups of fields, with effects to read: creating a subject, editing a rule) opens in a side `Sheet` instead, as the wireframes draw it (screens 8 and 9). It is still a button that opens it, never a form inline in the page.
 - **On a phone** (below 768 px, where the tab bar shows) both are a **sheet** along the bottom edge, its whole width: the dialog, and the side sheet.
-- The dialog's actions are Cancel, then the submit button. While the form is sent the dialog stays open, its button busy. A refusal keeps the dialog open and says why under the field at fault; once the form is accepted the dialog closes, focus goes back to the button that opened it, and the page shows the result (the new line in its list, a sentence saying what was done).
+- The dialog's actions are Cancel (a ghost button), then the submit button. While the form is sent the dialog stays open, its button busy: neither the backdrop, Escape, the close button nor Cancel closes it. A refusal keeps the dialog open and says why under the field at fault; once the form is accepted the dialog closes, focus goes back to the button that opened it, and the page shows the result (the new line in its list, a sentence saying what was done).
 - **Settings that apply at once** (a switch, a choice, a button that turns something on) stay inline in the page: they ask for nothing to fill in.
 - A screen that is itself the task (signing in, the first setup, changing a temporary password, an MCP client's consent, importing a statement) is not a page that shows things: its form is the screen. On the import screen, what an import asks before it goes on (the account a file is for, a CSV file's columns) stays under its row, a step of that import.
 
-Motion: the dialog fades and grows in 200 ms, ease-out, and on a phone slides up from the bottom edge; it leaves the same way. Cut under reduced motion.
+Motion: the dialog fades and grows from 96 % in 200 ms, ease-out, and leaves in 150 ms, ease-in. The side sheet slides in from beyond its edge in 300 ms, ease-out, and back out in 200 ms, ease-in. On a phone both rise from the bottom edge in 300 ms and go back down in 200 ms. The backdrop fades in and out in 200 ms. Cut under reduced motion: they are there, or not. A form sheet opens on its first field; a dialog on its title.
 
 ## Motion
 
