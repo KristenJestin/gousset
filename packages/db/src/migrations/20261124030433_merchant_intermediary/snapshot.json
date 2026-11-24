@@ -1,0 +1,37 @@
+{
+  "type": "diff",
+  "version": "10",
+  "dialect": "postgres",
+  "id": "5c7c9627-8a13-46f3-bb7f-575731e5df49",
+  "prevIds": ["0dd6da5d-3d72-435f-aa58-57ebec10b34d"],
+  "footprints": [
+    {
+      "statementType": "add_column",
+      "statementTarget": ["column", "public", "merchant", "is_intermediary"],
+      "writes": [
+        "s|col|public.merchant.is_intermediary",
+        "n|col|public.merchant.is_intermediary",
+        "e|col|public.merchant.is_intermediary"
+      ],
+      "reads": ["n|tbl|public.merchant", "n|sch|public"]
+    }
+  ],
+  "deltas": [
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "merchant",
+        "name": "is_intermediary",
+        "type": "boolean",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "false",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    }
+  ]
+}

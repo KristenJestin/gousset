@@ -39,8 +39,13 @@ A key is upper-case ASCII words separated by one space, made only of `A`–`Z`, 
    - the separators `//`, `-` and `*`.
 7. **Card processors.** `SQ *`, `TST*` and `SP *` stand before the shop's own name, so they are
    dropped: `SQ *CORNER CAFE` → `CORNER CAFE`. A **payment intermediary** is not a processor: in
-   `PAYLINK *PIXELPLAY` the `*` ends the name and the key is `PAYLINK`. Telling the real merchant
-   behind an intermediary is issue #30's work.
+   `PAYLINK *PIXELPLAY` the `*` ends the name and the key is `PAYLINK`: the intermediary is the
+   label's merchant, marked as one (#30). Recognition marks a merchant it makes from a key equal,
+   letters and digits only, to a known intermediary's name (`intermediaries.ts`: `PAYPAL`, `LYDIA`,
+   `SUMUP`…; never a prefix, `LYDIA MARTIN` is a person), and the user marks any other. Who was
+   paid is then set on the line's entry by hand, and a rule remembers it: its words run from the
+   intermediary's name through the name after it (`CB PAYPAL *PIXELPLAY 21/10` → `PAYPAL
+   *PIXELPLAY`, `ruleWords` in `rule-words.ts`), never the intermediary alone.
 8. **What comes before the name** is skipped: payment words (`CB`, `CARTE`, `PAIEMENT PAR CARTE`,
    `PRLV SEPA`, `PRELEVEMENT EUROPEEN`, `VIR`, `VIREMENT INSTANTANE EMIS`, `CARD PAYMENT TO`,
    `DIRECT DEBIT`, `POS`, `CONTACTLESS`, `VISA DEBIT`, `BANCONTACT`, `KARTENZAHLUNG`,
