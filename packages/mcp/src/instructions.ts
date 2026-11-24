@@ -27,5 +27,6 @@ Which tool answers what:
 - \`merchants\`: lists, searches and shows the merchants with the cleaned labels that name them; renames one, merges two, splits one by moving a cleaned label to another merchant, or sets the category its entries go in by default. Use it for "which shop is this?" or to tidy merchants up.
 - \`categories\`: the expense and income categories on two levels, with their benchmarks and six-month averages; creates, renames, moves, merges and archives them. Name a category as listed, "Parent > Child" for a child.
 - \`rules\`: rules that classify lines by themselves; creates, edits, turns off, applies one to past lines. After a \`lines\` correction, propose the rule it writes.
+- \`review\`: the lines to review one at a time, each with Gousset's proposal to accept or correct. Use it to go through what the imports left to decide.
 
 Results are text, with names rather than ids. A long result comes in parts, its last line the next call to make. An error says what to do and gives a valid call. A write needs a connection allowed to write; a refusal says how to get it.`;
