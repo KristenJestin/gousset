@@ -87,22 +87,94 @@ const ENTITIES = new Map([
   ["nbsp", " "],
 ]);
 
+/** What may stand between an entity's `&` and its `;`. */
+const NAME_PART = /^[\da-z#]+$/i;
+
+const ENTITY_NAME = /^(?:#x[\da-f]+|#\d+|[a-z]+)$/i;
+
+/** The character an entity's name (`apos`, `#39`, `#x27`) stands for; `undefined` for none. */
+function characterOf(name: string): string | undefined {
+  if (!ENTITY_NAME.test(name)) {
+    return undefined;
+  }
+
+  if (!name.startsWith("#")) {
+    return ENTITIES.get(name.toLowerCase());
+  }
+
+  const hexadecimal = name.startsWith("#x") || name.startsWith("#X");
+  const code = Number.parseInt(name.slice(hexadecimal ? 2 : 1), hexadecimal ? 16 : 10);
+
+  // Unicode's last code point, U+10FFFF: anything above is no character.
+  return code <= 1_114_111 ? String.fromCodePoint(code) : undefined;
+}
+
 /**
- * XML's entities and the few SGML files use, named or numeric; a bare `&`, as some banks write,
- * stays as it is. No other entity is ever defined: the readers read no document type declaration.
+ * Replaces the entity `pieces` end with, if they end with one (`&`, a name, `;`), by its
+ * character, and says whether it did. Only the pieces since the last `&` are read, and a failed
+ * look leaves its `;` behind for the next one to stop at: each piece is read a bounded number of
+ * times.
  */
-export function decodeEntities(text: string): string {
-  return text.replaceAll(/&(#x[\da-f]+|#\d+|[a-z]+);/gi, (entity: string, name: string) => {
-    if (!name.startsWith("#")) {
-      return ENTITIES.get(name.toLowerCase()) ?? entity;
+function replaceLastEntity(pieces: Array<string>): boolean {
+  const name: Array<string> = [];
+
+  for (let at = pieces.length - 2; at >= 0; at -= 1) {
+    const piece = pieces[at] ?? "";
+
+    if (piece === "&") {
+      const character = characterOf(name.toReversed().join(""));
+
+      if (character === undefined) {
+        return false;
+      }
+
+      pieces.length = at;
+      pieces.push(character);
+
+      return true;
     }
 
-    const hexadecimal = name.startsWith("#x") || name.startsWith("#X");
-    const code = Number.parseInt(name.slice(hexadecimal ? 2 : 1), hexadecimal ? 16 : 10);
+    if (!NAME_PART.test(piece)) {
+      return false;
+    }
 
-    // Unicode's last code point, U+10FFFF: anything above is no character.
-    return code <= 1_114_111 ? String.fromCodePoint(code) : entity;
-  });
+    name.push(piece);
+  }
+
+  return false;
+}
+
+/**
+ * XML's entities and the few SGML files use, named or numeric, decoded until none is left (#132):
+ * some banks encode their text twice, `&amp;apos;` for an apostrophe, and the label is the text
+ * they meant, `'`. A bare `&`, as some banks write, and what names no entity stay as they are. No
+ * other entity is ever defined: the readers read no document type declaration.
+ *
+ * Entities never overlap, so whatever order they are decoded in, the text ends the same: this
+ * reads it once, from left to right, and decodes an entity as soon as its `;` comes, also when an
+ * entity decoded just before gave that `;` or completed its name (`&amp;apos;`). Linear in the
+ * text's length, where decoding one level per pass would take as many passes as the levels.
+ */
+export function decodeEntities(text: string): string {
+  if (!text.includes("&")) {
+    return text;
+  }
+
+  // The text decoded so far: each `&` and `;` a piece of its own, the text between them whole.
+  const pieces: Array<string> = [];
+
+  for (const [piece] of text.matchAll(/[^&;]+|[&;]/g)) {
+    pieces.push(piece);
+
+    let replaced = piece === ";";
+
+    // A decoded `;` (`&#59;`) may close the entity before it in turn.
+    while (replaced) {
+      replaced = pieces.at(-1) === ";" && replaceLastEntity(pieces);
+    }
+  }
+
+  return pieces.join("");
 }
 
 /**
