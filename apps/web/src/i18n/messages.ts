@@ -162,6 +162,8 @@ export function ruleRefusalMessage(
       return m.ruleRefusalCategoryNotFound();
     case "MERCHANT_NOT_FOUND":
       return m.ruleRefusalMerchantNotFound();
+    case "MERCHANT_INTERMEDIARY":
+      return m.ruleRefusalMerchantIntermediary();
     case "TOO_MANY_RULES":
       return m.ruleRefusalTooMany({ max: limit ?? 0 });
     case "JOB_UNAVAILABLE":

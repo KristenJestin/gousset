@@ -25,7 +25,7 @@ describe("the known intermediaries", () => {
 });
 
 describe("the words a rule born from a line looks for", () => {
-  const CASES: ReadonlyArray<readonly [string, string, string | null, boolean, string]> = [
+  const CASES: ReadonlyArray<readonly [string, string, string | null, boolean, string | null]> = [
     [
       "a normal line: its cleaned label",
       "CB GREENMARKET 2110 RIVERTON",
@@ -61,13 +61,24 @@ describe("the words a rule born from a line looks for", () => {
       true,
       "PAYLINK *CORNER CAFE",
     ],
+    ["an intermediary with nothing after it: none", " PAYPAL 21/10 ", null, true, null],
+    ["an intermediary alone: none", "PAYPAL", null, true, null],
+    ["an intermediary after a payment word: none", "CB PAYPAL", null, true, null],
     [
-      "an intermediary with nothing after it: the label",
-      " PAYPAL 21/10 ",
+      "an intermediary followed by its own company's legal form: none",
+      "PRLV SEPA PAYPAL EUROPE SARL",
       null,
       true,
-      "PAYPAL 21/10",
+      null,
     ],
+    [
+      "an intermediary's legal form, then who was paid",
+      "PAYPAL EUROPE SARL *PIXELPLAY 21/10",
+      null,
+      true,
+      "PAYPAL EUROPE SARL *PIXELPLAY",
+    ],
+    ["a normal line naming no one: the label", " 21/10 X1234 ", null, false, "21/10 X1234"],
     [
       "an intermediary named by the counterparty: found in the label",
       "PAYPAL *PIXELPLAY 21/10",
@@ -90,8 +101,8 @@ describe("the words a rule born from a line looks for", () => {
   test("are cut to what a condition holds", () => {
     const long = `PAYPAL *${"PIXELPLAY ".repeat(40)}`;
 
-    expect(ruleWords(long, null, true).length).toBeLessThanOrEqual(MAX_LABEL_TEXT);
-    expect(ruleWords(long, null, false).length).toBeLessThanOrEqual(MAX_LABEL_TEXT);
+    expect(ruleWords(long, null, true)?.length).toBeLessThanOrEqual(MAX_LABEL_TEXT);
+    expect(ruleWords(long, null, false)?.length).toBeLessThanOrEqual(MAX_LABEL_TEXT);
   });
 
   test("are found in the label, in any case, whatever it holds", () => {
@@ -126,8 +137,10 @@ describe("the words a rule born from a line looks for", () => {
       fc.property(labels, fc.option(labels), fc.boolean(), (label, counterparty, intermediary) => {
         const words = ruleWords(label, counterparty, intermediary);
 
-        expect(label.toUpperCase()).toContain(words.toUpperCase());
-        expect(words.length).toBeLessThanOrEqual(MAX_LABEL_TEXT);
+        // Only an intermediary's line may have none: a rule is then not proposed.
+        expect(words !== null || intermediary).toBe(true);
+        expect(label.toUpperCase()).toContain((words ?? "").toUpperCase());
+        expect((words ?? "").length).toBeLessThanOrEqual(MAX_LABEL_TEXT);
       }),
     );
   });

@@ -283,23 +283,27 @@ export async function recogniseIn(
   }
 
   const merchants = await transaction
-    .select({ id: merchant.id, name: merchant.name })
+    .select({ id: merchant.id, name: merchant.name, intermediary: merchant.isIntermediary })
     .from(merchant);
+
+  // An intermediary's keys match only exactly (#30): `LYDIA MARTIN` is not paid through Lydia.
+  const marked = new Set(merchants.flatMap((row) => (row.intermediary ? [row.id] : [])));
 
   const known: Array<KnownKey> = aliases.map((row) => ({
     key: row.alias,
     merchantId: row.merchantId,
+    intermediary: marked.has(row.merchantId),
   }));
 
   for (const row of merchants) {
     const key = nameKey(row.name);
 
     if (key !== "") {
-      known.push({ key, merchantId: row.id });
+      known.push({ key, merchantId: row.id, intermediary: row.intermediary });
     }
   }
 
-  const assigned = assignMerchants([...keys], known);
+  const assigned = assignMerchants([...keys], known, isKnownIntermediary);
   const names = new Set<string>();
   // A merchant made from a known intermediary's cleaned label is one (#30).
   const intermediaries = new Set<string>();

@@ -434,18 +434,34 @@ function refusalsOf(input: RulesInput, encoded: Encoded, retry: Retry) {
         }
       }
     },
-    RuleEffectRefused: (refused: { readonly reason: "nothing_set" | "category_archived" }) =>
-      refused.reason === "nothing_set"
-        ? refuse(
+    RuleEffectRefused: (refused: {
+      readonly reason: "nothing_set" | "category_archived" | "merchant_intermediary";
+    }) => {
+      switch (refused.reason) {
+        case "nothing_set": {
+          return refuse(
             "A rule sets a merchant, a category, or both: give merchant or category (by name), and never clear both.",
             { ...encoded, merchant: undefined, category: "Groceries" },
-          )
-        : Effect.fail(
+          );
+        }
+
+        case "category_archived": {
+          return Effect.fail(
             new ToolRefusal({
               message: `"${clip(input.category ?? "")}" is archived: it classifies nothing new. Restore it, or choose a category in use.`,
               example: `categories ${JSON.stringify({ action: "archive", category: input.category ?? "", restore: true })}`,
             }),
-          ),
+          );
+        }
+
+        case "merchant_intermediary": {
+          return refuse(
+            `"${clip(input.merchant ?? "")}" is a payment intermediary, never who was paid: name the shop or person paid through it, as the label says after its name.`,
+            { ...encoded, merchant: "Pixelplay" },
+          );
+        }
+      }
+    },
     MerchantNotFound: () =>
       Effect.fail(
         new ToolRefusal({
@@ -685,13 +701,13 @@ function applyToPast(owner: string, input: RulesInput) {
  * The one sentence `lines` `classify` and `merchants` `assign` end with: the exact call that makes a
  * rule of the correction, setting its category or its merchant. Its condition is `words`
  * (`ruleWords`: the cleaned merchant name, the intermediary through who was paid, or the label);
- * none for a line of no label.
+ * none for a line of no label, or an intermediary's line that names no one after it (null).
  */
 export function proposedRule(
-  words: string,
+  words: string | null,
   sets: { readonly category: string } | { readonly merchant: string },
 ): string | undefined {
-  const text = words.slice(0, MAX_LABEL_TEXT);
+  const text = (words ?? "").slice(0, MAX_LABEL_TEXT);
 
   if (text === "") {
     return undefined;

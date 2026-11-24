@@ -119,11 +119,13 @@ function RuleSheetEditor({
 
   const reach = reachOf(rule, edited, reachFor, preview.data);
 
-  // The rule's merchant stays offered when it is past the picker's first names.
+  // A payment intermediary is never who was paid (#30): none is offered. The rule's merchant stays
+  // offered when it is past the picker's first names, or was marked an intermediary since.
   const own = rule?.merchant ?? null;
+  const payees = merchants.filter((choice) => !choice.intermediary);
 
   const offered =
-    own === null || merchants.some(({ id }) => id === own.id) ? merchants : [...merchants, own];
+    own === null || payees.some(({ id }) => id === own.id) ? payees : [...payees, own];
 
   const close = () => onOpenChange(false);
 

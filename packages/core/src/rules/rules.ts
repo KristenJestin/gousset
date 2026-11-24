@@ -550,13 +550,16 @@ type EffectProblem = CategoryNotFound | MerchantNotFound | RuleEffectRefused;
 
 /**
  * What is wrong with a rule's conditions and effect, against the user's rows; null when nothing. A
- * category archived since it was chosen is kept when the rule keeps it (`keptCategory`).
+ * category archived since it was chosen is kept when the rule keeps it (`keptCategory`), and a
+ * merchant marked an intermediary since, or merged into one (`keptMerchant`): its lines ask who
+ * was paid all the same (`../merchants/line-merchant`).
  */
 async function problemOf(
   transaction: UserTransaction,
   conditions: Conditions,
   effect: RuleEffect,
   keptCategory: string | null = null,
+  keptMerchant: string | null = null,
 ): Promise<RuleConditionsRefused | EffectProblem | null> {
   const accounts = await accountsOf(transaction);
 
@@ -579,13 +582,18 @@ async function problemOf(
   if (effect.merchantId !== null) {
     const [found] = isId(effect.merchantId)
       ? await transaction
-          .select({ id: merchant.id })
+          .select({ id: merchant.id, intermediary: merchant.isIntermediary })
           .from(merchant)
           .where(eq(merchant.id, effect.merchantId))
       : [];
 
     if (found === undefined) {
       return new MerchantNotFound({ merchantId: effect.merchantId });
+    }
+
+    // A payment intermediary is never who was paid (#30).
+    if (found.intermediary && effect.merchantId !== keptMerchant) {
+      return new RuleEffectRefused({ reason: "merchant_intermediary" });
     }
   }
 
@@ -760,8 +768,14 @@ export const editRule = (owner: string, ruleId: string, edit: RuleEdit) =>
         };
 
         // A rule that keeps its category (turned off or on, say) is not refused for a category
-        // archived since: it keeps what it had.
-        const problem = await problemOf(transaction, conditions, effect, row.setCategoryId);
+        // archived since, nor for a merchant marked an intermediary since: it keeps what it had.
+        const problem = await problemOf(
+          transaction,
+          conditions,
+          effect,
+          row.setCategoryId,
+          row.setMerchantId,
+        );
 
         if (problem !== null) {
           return Result.fail(problem);

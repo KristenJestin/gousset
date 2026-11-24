@@ -22,7 +22,8 @@ import { merchantKey } from "./labels";
 // A line's merchant, and who was paid behind an intermediary (#30; docs/data-model.md, v0.3). The
 // intermediary is read from the label as a line's merchant is (its cleaned label's merchant, marked
 // as one), so nothing follows marks, merges or moved labels; who was paid is the line's entry's
-// `merchant_id`, which a rule or the user sets.
+// `merchant_id`, which a rule or the user sets. An intermediary is never who was paid: an entry's
+// merchant that is one (a mark or a merge after it was set) counts as none, and the line asks.
 
 /** A merchant as a line names it. */
 export type NamedMerchant = { readonly id: string; readonly name: string };
@@ -69,7 +70,7 @@ type WholeEntry = {
 
 type LineFacts = {
   readonly labelMerchant: LabelMerchant | undefined;
-  /** The merchant of its entry when it has exactly one, else null. */
+  /** The merchant of its entry when it has exactly one and that is no intermediary, else null. */
   readonly entryMerchant: NamedMerchant | null;
   readonly whole: WholeEntry | undefined;
 };
@@ -118,6 +119,7 @@ async function factsOf(
       categoryId: entry.categoryId,
       merchantId: entry.merchantId,
       merchantName: entryMerchant.name,
+      merchantIntermediary: entryMerchant.isIntermediary,
       classifiedBy: entry.classifiedBy,
       ruleId: entry.ruleId,
       role: entryPart.role,
@@ -138,7 +140,10 @@ async function factsOf(
   return {
     labelMerchant: named,
     entryMerchant:
-      one?.merchantId === null || one?.merchantId === undefined || one.merchantName === null
+      one?.merchantId === null ||
+      one?.merchantId === undefined ||
+      one.merchantName === null ||
+      one.merchantIntermediary !== false
         ? null
         : { id: one.merchantId, name: one.merchantName },
     whole:

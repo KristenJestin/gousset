@@ -1,6 +1,7 @@
 import fc from "fast-check";
 import { describe, expect, test } from "vite-plus/test";
 
+import { isKnownIntermediary } from "./intermediaries";
 import { MAX_KEY_LENGTH, assignMerchants, merchantKey, merchantName, nameKey } from "./labels";
 import type { KnownKey } from "./labels";
 
@@ -432,6 +433,50 @@ describe("assigning keys to merchants", () => {
     ]);
   });
 
+  test("a key longer than a marked intermediary's gets a merchant of its own", () => {
+    const known: Array<KnownKey> = [{ key: "LYDIA", merchantId: "lydia", intermediary: true }];
+
+    expect(assignMerchants(["LYDIA MARTIN", "LY DIA"], known, isKnownIntermediary)).toEqual([
+      { alias: "LY DIA", merchant: { id: "lydia" } },
+      { alias: "LYDIA MARTIN", merchant: { name: "Lydia Martin" } },
+    ]);
+
+    const paypal: Array<KnownKey> = [{ key: "PAYPAL", merchantId: "paypal", intermediary: true }];
+
+    expect(assignMerchants(["PAYPAL EUROPE"], paypal, isKnownIntermediary)).toEqual([
+      { alias: "PAYPAL EUROPE", merchant: { name: "Paypal Europe" } },
+    ]);
+  });
+
+  test("an intermediary's key made in the same run takes no longer key", () => {
+    expect(assignMerchants(["LYDIA MARTIN", "LYDIA"], [], isKnownIntermediary)).toEqual([
+      { alias: "LYDIA", merchant: { name: "Lydia" } },
+      { alias: "LYDIA MARTIN", merchant: { name: "Lydia Martin" } },
+    ]);
+  });
+
+  test("an intermediary's key joins no merchant whose longer key it starts", () => {
+    const known: Array<KnownKey> = [{ key: "PAYPAL EUROPE", merchantId: "company" }];
+
+    expect(assignMerchants(["PAYPAL"], known, isKnownIntermediary)).toEqual([
+      { alias: "PAYPAL", merchant: { name: "Paypal" } },
+    ]);
+  });
+
+  test("a key starting a merchant's that is no intermediary still joins it", () => {
+    const known: Array<KnownKey> = [
+      { key: "GREENMARKET", merchantId: "m1", intermediary: false },
+      { key: "NORTHWIND ENERGIE", merchantId: "m4" },
+    ];
+
+    expect(
+      assignMerchants(["GREENMARKET RIVERTON", "NORTHWIND"], known, isKnownIntermediary),
+    ).toEqual([
+      { alias: "NORTHWIND", merchant: { id: "m4" } },
+      { alias: "GREENMARKET RIVERTON", merchant: { id: "m1" } },
+    ]);
+  });
+
   test("a key given twice is assigned once", () => {
     expect(assignMerchants(["TLX", "TLX"], [])).toEqual([
       { alias: "TLX", merchant: { name: "TLX" } },
@@ -453,20 +498,29 @@ describe("assigning keys to merchants", () => {
     "TLX",
     "BAR",
     "BAR RIVERTON",
+    "LYDIA",
+    "LYDIA MARTIN",
+    "PAYPAL",
+    "PAYPAL EUROPE",
   ];
 
   const knownKeys = fc.array(
-    fc.record({ key: fc.constantFrom(...pool), merchantId: fc.constantFrom("a", "b", "c") }),
+    fc.record({
+      key: fc.constantFrom(...pool),
+      merchantId: fc.constantFrom("a", "b", "c"),
+      intermediary: fc.boolean(),
+    }),
     { maxLength: 5 },
   );
 
   test("gives one assignment per distinct key, whatever the order of the keys", () => {
     fc.assert(
       fc.property(fc.shuffledSubarray(pool), knownKeys, (keys, known) => {
-        const assigned = assignMerchants(keys, known);
+        const assigned = assignMerchants(keys, known, isKnownIntermediary);
+        const again = [...keys, ...keys].toReversed();
 
-        expect(assigned).toEqual(assignMerchants([...keys].toSorted(), known));
-        expect(assigned).toEqual(assignMerchants([...keys, ...keys].toReversed(), known));
+        expect(assigned).toEqual(assignMerchants([...keys].toSorted(), known, isKnownIntermediary));
+        expect(assigned).toEqual(assignMerchants(again, known, isKnownIntermediary));
         expect(assigned.map(({ alias }) => alias).toSorted()).toEqual(keys.toSorted());
       }),
     );

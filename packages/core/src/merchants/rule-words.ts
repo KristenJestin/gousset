@@ -1,5 +1,5 @@
 import { MAX_LABEL_TEXT } from "../rules/conditions";
-import { merchantKey } from "./labels";
+import { merchantKey, namesNoOne } from "./labels";
 
 // The words a rule born from a line looks for in a label (#25, #30), as `lines` classify, `merchants`
 // assign and the web's proposals write them: a rule's `label contains` compares the raw label in any
@@ -54,7 +54,9 @@ function spanOf(text: string, key: string, from: number): readonly [number, numb
 /**
  * An intermediary's line: from the intermediary's name through the name after it, up to the next
  * break (`CB PAYPAL *PIXELPLAY 21/10` → `PAYPAL *PIXELPLAY`), upper case; undefined when the label
- * names no one after it.
+ * names no one after it. Words after the name that only a key's end drops (a legal form, a country:
+ * `PRLV SEPA PAYPAL EUROPE SARL`) are the intermediary's own company, not who was paid: they are
+ * passed over, and who was paid is looked for after them (`PAYPAL EUROPE SARL *PIXELPLAY`).
  */
 function throughIntermediary(label: string, counterpartyName: string | null): string | undefined {
   const upper = label.toUpperCase();
@@ -75,10 +77,24 @@ function throughIntermediary(label: string, counterpartyName: string | null): st
       continue;
     }
 
-    const after = merchantKey(upper.slice(named[1]), null);
-    const paid = after === null ? undefined : spanOf(text, after, named[1]);
+    let from = named[1];
 
-    return paid === undefined ? undefined : upper.slice(named[0], paid[1]);
+    while (from < text.length) {
+      const after = merchantKey(upper.slice(from), null);
+      const paid = after === null ? undefined : spanOf(text, after, from);
+
+      if (after === null || paid === undefined) {
+        return undefined;
+      }
+
+      if (!namesNoOne(after)) {
+        return upper.slice(named[0], paid[1]);
+      }
+
+      from = paid[1];
+    }
+
+    return undefined;
   }
 
   return undefined;
@@ -88,18 +104,23 @@ function throughIntermediary(label: string, counterpartyName: string | null): st
  * The words a rule born from correcting this line looks for: for a line of a merchant, its cleaned
  * label when the label holds it as it is, else the label itself; for an intermediary's line
  * (`intermediary`), the intermediary's name through the name of who was paid, so that the rule is
- * never "contains PAYPAL", or the label itself when it names no one after the intermediary. Cut to
- * what a condition holds.
+ * never "contains PAYPAL". Null, for an intermediary's line only, when the label names no one after
+ * the intermediary (`CB PAYPAL`, `PAYPAL 21/10`): any words would match every line of the
+ * intermediary, so no rule is proposed. Cut to what a condition holds.
  */
 export function ruleWords(
   label: string,
   counterpartyName: string | null,
   intermediary: boolean,
-): string {
-  const through = intermediary ? throughIntermediary(label, counterpartyName) : undefined;
-  const key = intermediary ? null : merchantKey(label, counterpartyName);
+): string | null {
+  if (intermediary) {
+    const through = throughIntermediary(label, counterpartyName);
 
-  const words = through ?? (key !== null && label.toUpperCase().includes(key) ? key : label.trim());
+    return through === undefined ? null : through.slice(0, MAX_LABEL_TEXT).trim();
+  }
+
+  const key = merchantKey(label, counterpartyName);
+  const words = key !== null && label.toUpperCase().includes(key) ? key : label.trim();
 
   return words.slice(0, MAX_LABEL_TEXT).trim();
 }

@@ -849,6 +849,7 @@
   "ruleRefusalCategoryArchived": "Cette catégorie est archivée : choisissez-en une autre.",
   "ruleRefusalCategoryNotFound": "Cette catégorie n’existe plus.",
   "ruleRefusalMerchantNotFound": "Ce marchand n’existe plus.",
+  "ruleRefusalMerchantIntermediary": "Ce marchand est un intermédiaire de paiement : choisissez qui a vraiment été payé.",
   "ruleRefusalTooMany": "Vous avez déjà {max} règles : supprimez-en une d’abord.",
   "ruleRefusalJobUnavailable": "La règle n’a pas pu être appliquée maintenant : réessayez dans un instant.",
   "ruleRefusalLineNotFound": "Cette ligne n’existe plus."

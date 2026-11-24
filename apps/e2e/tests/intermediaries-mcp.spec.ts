@@ -295,3 +295,165 @@ test("a merchant the user marks is an intermediary", async ({
   });
   expect((await show(label)).text).toContain("Merchant: Corner Bakery, paid through Paylink.");
 });
+
+test("a transfer to a person is not paid through an intermediary", async ({
+  app,
+  user,
+  page,
+  mcpClientId,
+}, testInfo) => {
+  test.setTimeout(120_000);
+
+  const { call, upload, show } = await intermediariesUser(
+    { app, user, page, mcpClientId, repeat: testInfo.repeatEachIndex },
+    "Tatum",
+  );
+
+  const paidThrough = "CB LYDIA *CORNER BAKERY 03/11";
+  const transfer = "VIR SEPA LYDIA MARTIN 04/11";
+
+  // One statement: the intermediary's cleaned label and a person's that starts with it.
+  await upload([
+    line("2026-11-03", -640, paidThrough, "LY0311"),
+    line("2026-11-04", -2500, transfer, "LY0411"),
+  ]);
+
+  expect((await show(paidThrough)).text).toContain(
+    `Paid through Lydia, a payment intermediary: ${ASKS}.`,
+  );
+
+  const person = await show(transfer);
+
+  expect(person.text).toContain("Merchant: Lydia Martin.");
+  expect(person.text).not.toContain("paid through");
+  expect(person.text).not.toContain(ASKS);
+
+  const found = await call("merchants", { action: "search", text: "lydia" });
+
+  expect(found.text).toContain("- Lydia (payment intermediary): 1 cleaned label");
+  expect(found.text).not.toContain("Lydia Martin (payment intermediary)");
+});
+
+test("a merge keeps the intermediary mark", async ({ app, user, page, mcpClientId }, testInfo) => {
+  test.setTimeout(120_000);
+
+  const { call, upload, show } = await intermediariesUser(
+    { app, user, page, mcpClientId, repeat: testInfo.repeatEachIndex },
+    "Umber",
+  );
+
+  const card = "CB PAYPAL *PIXELPLAY 21/10";
+
+  // The direct debit's cleaned label, PAYPAL EUROPE, is a merchant of its own, not marked.
+  await upload([
+    line("2026-10-21", -1999, card, "PP2110"),
+    line("2026-10-24", -1250, "PRLV SEPA PAYPAL EUROPE SARL", "PP2410"),
+  ]);
+
+  const merged = await call("merchants", {
+    action: "merge",
+    merchant: "Paypal",
+    into: "Paypal Europe",
+  });
+
+  expect(merged.isError, merged.text).toBe(false);
+  expect(merged.text).toContain("Merged Paypal into Paypal Europe");
+
+  const found = await call("merchants", { action: "search", text: "paypal" });
+
+  expect(found.text).toContain("- Paypal Europe (payment intermediary): 2 cleaned labels");
+  expect((await show(card)).text).toContain(
+    `Paid through Paypal Europe, a payment intermediary: ${ASKS}.`,
+  );
+});
+
+test("marking a merchant set on lines makes them ask", async ({
+  app,
+  user,
+  page,
+  mcpClientId,
+}, testInfo) => {
+  test.setTimeout(120_000);
+
+  const { call, upload, show } = await intermediariesUser(
+    { app, user, page, mcpClientId, repeat: testInfo.repeatEachIndex },
+    "Vesper",
+  );
+
+  const label = "CB PAYPAL *PIXELPLAY 21/10";
+
+  await upload([line("2026-10-21", -1999, label, "PP2110")]);
+
+  const assigned = await call("merchants", {
+    action: "assign",
+    line: (await show(label)).handle,
+    merchant: "Pixelplay",
+  });
+
+  expect(assigned.isError, assigned.text).toBe(false);
+  expect((await show(label)).text).toContain("Merchant: Pixelplay, paid through Paypal.");
+
+  const marked = await call("merchants", {
+    action: "edit",
+    merchant: "Pixelplay",
+    intermediary: true,
+  });
+
+  expect(marked.isError, marked.text).toBe(false);
+
+  // An intermediary is never who was paid: the line asks again.
+  const asked = await show(label);
+
+  expect(asked.text).toContain(`Paid through Paypal, a payment intermediary: ${ASKS}.`);
+  expect(asked.text).not.toContain("Merchant: Pixelplay");
+
+  // Nor does a rule set one.
+  const refused = await call("rules", {
+    action: "create",
+    conditions: [{ field: "label", operator: "contains", value: "PAYPAL *PIXELPLAY" }],
+    merchant: "Pixelplay",
+  });
+
+  expect(refused.isError).toBe(true);
+  expect(refused.text).toContain("is a payment intermediary, never who was paid");
+});
+
+test("a merge into an intermediary makes its lines ask", async ({
+  app,
+  user,
+  page,
+  mcpClientId,
+}, testInfo) => {
+  test.setTimeout(120_000);
+
+  const { call, upload, show } = await intermediariesUser(
+    { app, user, page, mcpClientId, repeat: testInfo.repeatEachIndex },
+    "Wren",
+  );
+
+  const label = "CB PAYPAL *PIXELPLAY 21/10";
+
+  await upload([line("2026-10-21", -1999, label, "PP2110")]);
+
+  const assigned = await call("merchants", {
+    action: "assign",
+    line: (await show(label)).handle,
+    merchant: "Pixelplay",
+  });
+
+  expect(assigned.isError, assigned.text).toBe(false);
+
+  const merged = await call("merchants", {
+    action: "merge",
+    merchant: "Pixelplay",
+    into: "Paypal",
+  });
+
+  expect(merged.isError, merged.text).toBe(false);
+
+  // The entry's merchant is now the intermediary: it counts as none, and the line asks.
+  const asked = await show(label);
+
+  expect(asked.text).toContain(`Paid through Paypal, a payment intermediary: ${ASKS}.`);
+  expect(asked.text).not.toContain("Merchant: Paypal");
+});
