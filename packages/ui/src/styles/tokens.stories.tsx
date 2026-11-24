@@ -28,6 +28,8 @@ const SWATCHES = new Map(
     "--secondary-foreground": "bg-secondary-foreground",
     "--muted": "bg-muted",
     "--muted-foreground": "bg-muted-foreground",
+    "--soft-foreground": "bg-soft-foreground",
+    "--success": "bg-success",
     "--accent": "bg-accent",
     "--accent-foreground": "bg-accent-foreground",
     "--destructive": "bg-destructive",
