@@ -1,9 +1,9 @@
-import type { Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 import { exampleStatement } from "@gousset/fixture";
 import type { Statement, StatementLine } from "@gousset/fixture";
 
 import { addUser } from "../src/auth";
-import { lineDetail, onPhone } from "../src/frame";
+import { detailSight, lineDetail, onPhone } from "../src/frame";
 import { importsOn, statementFile } from "../src/imports";
 import { animationsDone, expect, expectAccessible, fixDay, test, visit } from "../src/test";
 import { openUserData } from "../src/user-data";
@@ -11,8 +11,9 @@ import { openUserData } from "../src/user-data";
 // Issue #27 on the operations page: a cancellation proposed as a refund and confirmed, the expense
 // then shown once at its net cost with its payments and refunds; a line split across two
 // categories in the side sheet, the shares making the whole line; a line linked to an expense from
-// the dialog, then separated again. The user is the test's own; statements are imported as the
-// import job runs them. Every amount and label is invented.
+// the dialog, then separated again, its detail left in sight (#158), under reduced motion too. The
+// user is the test's own; statements are imported as the import job runs them. Every amount and
+// label is invented.
 
 const TODAY = "2026-11-15";
 
@@ -70,6 +71,45 @@ async function openLine(page: Page, label: string, text: string) {
   return lineDetail(page, label);
 }
 
+const HARBOR_HOME = "CB HARBOR HOME 1210 RIVERTON";
+
+/**
+ * 75 paid 25 + 50 on two accounts: the card's line linked to the other from the dialog, then
+ * separated again. Returns the card's line's detail, still open.
+ */
+async function linkThenSeparate(page: Page): Promise<Locator> {
+  await visit(page, "/operations?q=harbor%20home");
+  await hydrated(page);
+
+  const onCard = await openLine(page, HARBOR_HOME, "Travel card");
+
+  await onCard.getByRole("button", { name: "Link to an expense" }).click();
+
+  const dialog = page.getByRole("dialog", { name: "Link to an expense" });
+
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole("searchbox", { name: "Search a line" }).fill("harbor home");
+  await dialog.getByRole("radio").first().check();
+  await dialog.getByRole("button", { name: "Link", exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+
+  const linked = onCard.getByRole("region", { name: "One expense, counted once" });
+
+  await expect(linked).toBeVisible();
+  await expect(linked.locator('[data-slot="expense-part"]')).toHaveCount(2);
+  await expect(linked.locator('[data-slot="expense-net"]')).toContainText("€75.00");
+
+  await linked.getByRole("button", { name: "Separate this line" }).click();
+
+  const separate = page.getByRole("alertdialog", { name: "Separate this line?" });
+
+  await separate.getByRole("button", { name: "Separate", exact: true }).click();
+  await expect(separate).toHaveCount(0);
+  await expect(onCard.getByRole("region", { name: "One expense, counted once" })).toHaveCount(0);
+
+  return onCard;
+}
+
 test("the operations page proposes a cancellation as a refund, links it once confirmed, splits a line and separates a payment", async ({
   page,
   app,
@@ -89,11 +129,11 @@ test("the operations page proposes a cancellation as a refund, links it once con
     { bookedOn: "2026-10-03", amountMinor: -5600, label: "CB CORNER BISTRO 0310 RIVERTON" },
     { bookedOn: "2026-10-06", amountMinor: 5600, label: "AVOIR CORNER BISTRO RIVERTON" },
     { bookedOn: "2026-10-08", amountMinor: -9000, label: "CB LANTERN STORES 0810 RIVERTON" },
-    { bookedOn: "2026-10-12", amountMinor: -2500, label: "CB HARBOR HOME 1210 RIVERTON" },
+    { bookedOn: "2026-10-12", amountMinor: -2500, label: HARBOR_HOME },
   ]);
 
   await importInto(owner, "Travel card", [
-    { bookedOn: "2026-10-12", amountMinor: -5000, label: "CB HARBOR HOME 1210 RIVERTON" },
+    { bookedOn: "2026-10-12", amountMinor: -5000, label: HARBOR_HOME },
   ]);
 
   await page.context().addCookies([...person.cookies]);
@@ -200,35 +240,44 @@ test("the operations page proposes a cancellation as a refund, links it once con
   await openSheet.getByRole("button", { name: "Cancel" }).click();
   await expect(openSheet).toHaveCount(0);
 
-  // 75 paid 25 + 50 on two accounts: linked from the card's line, then separated again.
-  await visit(page, "/operations?q=harbor%20home");
-  await hydrated(page);
+  // The card's line separated again, its detail stays in sight (#158): once its motion has
+  // settled, nothing left under way on its content, which is fully opaque. A fade that never ends
+  // was seen there, its content held at opacity 0.
+  const onCard = await linkThenSeparate(page);
 
-  const onCard = await openLine(page, "CB HARBOR HOME 1210 RIVERTON", "Travel card");
+  await expect.poll(async () => (await detailSight(onCard)).moving).toBe(0);
+  expect(await detailSight(onCard)).toEqual({ opacity: 1, moving: 0 });
+});
 
-  await onCard.getByRole("button", { name: "Link to an expense" }).click();
+test("a line separated from its expense keeps its detail visible, nothing moving under reduced motion", async ({
+  page,
+  app,
+  user,
+}, testInfo) => {
+  test.setTimeout(60_000);
 
-  const dialog = page.getByRole("dialog", { name: "Link to an expense" });
+  const person = await addUser(app.baseURL, user, {
+    name: "Sam Example",
+    email: `sam.separate.worker${app.slot}.${testInfo.repeatEachIndex}.${crypto.randomUUID().slice(0, 8)}@example.com`,
+    password: `e2e-sam-password-${app.slot}`,
+  });
 
-  await expect(dialog).toBeVisible();
-  await dialog.getByRole("searchbox", { name: "Search a line" }).fill("harbor home");
-  await dialog.getByRole("radio").first().check();
-  await dialog.getByRole("button", { name: "Link", exact: true }).click();
-  await expect(dialog).toHaveCount(0);
+  const owner = await data.ownerOf(person.email);
 
-  const linked = onCard.getByRole("region", { name: "One expense, counted once" });
+  await importInto(owner, "Everyday account", [
+    { bookedOn: "2026-10-12", amountMinor: -2500, label: HARBOR_HOME },
+  ]);
 
-  await expect(linked).toBeVisible();
-  await expect(linked.locator('[data-slot="expense-part"]')).toHaveCount(2);
-  await expect(linked.locator('[data-slot="expense-net"]')).toContainText("€75.00");
+  await importInto(owner, "Travel card", [
+    { bookedOn: "2026-10-12", amountMinor: -5000, label: HARBOR_HOME },
+  ]);
 
-  await linked.getByRole("button", { name: "Separate this line" }).click();
+  await page.context().addCookies([...person.cookies]);
+  await fixDay(page, TODAY);
+  await page.emulateMedia({ reducedMotion: "reduce" });
 
-  const separate = page.getByRole("alertdialog", { name: "Separate this line?" });
+  // Nothing moves: read at once, the detail is already whole, with nothing under way on it.
+  const onCard = await linkThenSeparate(page);
 
-  await separate.getByRole("button", { name: "Separate", exact: true }).click();
-  await expect(separate).toHaveCount(0);
-  // The scenario ends on its own assertions, not on "nothing animating": once its block changes,
-  // the line detail's own content fade can stay mid-way, the known open bug #128.
-  await expect(onCard.getByRole("region", { name: "One expense, counted once" })).toHaveCount(0);
+  expect(await detailSight(onCard)).toEqual({ opacity: 1, moving: 0 });
 });
