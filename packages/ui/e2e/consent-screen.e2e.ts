@@ -120,6 +120,20 @@ test.describe("the choices", () => {
     });
   }
 
+  test("a long client name never hides where it comes from on the narrowest phone", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 320, height: 568 });
+    await open(page, "long-client-name");
+
+    // The origin's last line ends above the pinned choices.
+    const origin = await page.getByText(/will be sent back to 127\.0\.0\.1:53682\./).boundingBox();
+    const allow = await boxOf(page, /^Allow read only/);
+
+    expect(origin).not.toBeNull();
+    expect((origin?.y ?? Infinity) + (origin?.height ?? 0)).toBeLessThan(allow.y);
+  });
+
   test("the pressed choice is busy and the others are disabled", async ({ page }) => {
     await open(page, "answering");
 

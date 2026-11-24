@@ -96,7 +96,9 @@ export function ConsentScreen({
               <Icon name="agent" size="lg" />
             </span>
             <div className="flex min-w-0 flex-col gap-1">
-              <h1 id={titleId} className="text-base font-semibold">
+              {/* The name is the client's own words: clamped, so that a long one can never push
+                  where it really comes from out of sight above the pinned choices. */}
+              <h1 id={titleId} className="line-clamp-3 text-base font-semibold break-words">
                 {title}
               </h1>
               {origin === undefined ? null : (

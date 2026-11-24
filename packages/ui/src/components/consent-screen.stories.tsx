@@ -109,6 +109,13 @@ export const Failed: Story = {
   args: { error: "Something went wrong. Try again." },
 };
 
+/** A client that names itself at length: its name is clamped, where it comes from stays in sight. */
+export const LongClientName: Story = {
+  args: {
+    title: `Allow ${"A very long client name ".repeat(20)}to reach your Gousset?`,
+  },
+};
+
 /** In French, whose labels are the longest. */
 export const French: Story = { args: french };
 
