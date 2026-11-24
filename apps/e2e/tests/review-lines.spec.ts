@@ -386,13 +386,8 @@ test("with single-key shortcuts off, the review's keys do nothing and its button
     .click();
   await expect(count(page)).toHaveText("4 lines");
 
-  if (onPhone(page)) {
-    // The next line opened in its sheet: closed first, so that Escape below has one dialog.
-    await page.keyboard.press("Escape");
-    await expect(page).not.toHaveURL(/[?&]line=/);
-  }
-
-  // Not listed either.
+  // Not listed either. Asked for as the next line opens (#164): the list stays over its sheet, and
+  // Escape closes the list alone.
   await page.keyboard.press("ControlOrMeta+/");
 
   const shortcuts = page.getByRole("dialog", { name: "Keyboard shortcuts" });
@@ -400,6 +395,7 @@ test("with single-key shortcuts off, the review's keys do nothing and its button
   await expect(shortcuts.getByRole("term")).toHaveText(["Show keyboard shortcuts", "Search"]);
   await page.keyboard.press("Escape");
   await expect(shortcuts).toBeHidden();
+  await expect(page).toHaveURL(/[?&]line=/);
 });
 
 const Heights = Schema.Array(Schema.Number);

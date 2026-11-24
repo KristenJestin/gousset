@@ -1,11 +1,11 @@
-import { use, useEffect, useRef, useState } from "react";
+import { use, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { KeyboardEvent, ReactNode } from "react";
 
 import { useHydrated } from "../hooks/use-hydrated";
 import { useLargeScreen } from "../hooks/use-large-screen";
 import { usePageLanguage } from "../hooks/use-page-language";
 import { useUiMessages } from "../hooks/use-ui-messages";
-import { DetailCameWithPage, DetailClosing } from "../lib/detail-closing";
+import { DetailCameWithPage, DetailClosing, DetailSheetHead } from "../lib/detail-closing";
 import type { Money } from "../lib/money";
 import { cn } from "../lib/utils";
 import { Amount, AmountSkeleton } from "./amount";
@@ -125,7 +125,8 @@ function BankWords({
  * button or Escape closes it; the focus goes into it when it opens.
  * From Tailwind's `lg` on it is a panel, which `OperationsLayout` sets in a column beside the list;
  * below, a modal `Sheet` over the list (from the bottom on a phone, from the side on a tablet),
- * its label and amount at its top.
+ * its label and amount at its top: `OperationsLayout`'s own, kept open from one line to the next
+ * (it draws the content alone, and the focus goes back to the sheet), or one of its own elsewhere.
  *
  * Motion (#128): the panel's content, laid out at its full width from the start, fades in and
  * slides 8 px from the right (180 ms, ease-out) once its column has room for it (after 120 ms);
@@ -168,17 +169,30 @@ export function LineDetail({
   // Opened by the user once the page runs: it moves. Drawn by the server: it stays still.
   const hydrated = useHydrated();
   const [moves] = useState(hydrated);
+  // In the layout's sheet, which stays open from one line to the next: where its head goes.
+  const sheetHead = use(DetailSheetHead);
+  const body = useRef<HTMLDivElement>(null);
+
+  // Before the sheet is drawn: its head is this line's.
+  useLayoutEffect(() => {
+    sheetHead?.({ title: label, amount, locale: writtenIn, onClose });
+  }, [sheetHead, label, amount, writtenIn, onClose]);
 
   // The focus goes into the panel when the user opens it, so that Escape and Tab start there; in
-  // review mode, onto the proposal, so that the next line's is read and acted on at once.
+  // review mode, onto the proposal, so that the next line's is read and acted on at once; in a
+  // sheet, onto the sheet, which the last line's content may have held it in. Never from a dialog
+  // opened over it meanwhile (#164: the list of shortcuts asked for as the next line opens).
   useEffect(() => {
-    if (moves) {
-      (proposal.current ?? panel.current)?.focus();
+    const target = proposal.current ?? panel.current ?? dialogOf(body.current);
+
+    if (moves && target !== null && target !== undefined && !dialogAbove(target)) {
+      target.focus();
     }
   }, [moves]);
 
+  // Escape is the panel's while no dialog is over it: a dialog's own, or both would close (#164).
   const onKeyDown = (event: KeyboardEvent<HTMLElement>) => {
-    if (event.key === "Escape") {
+    if (event.key === "Escape" && !dialogAbove(event.currentTarget)) {
       event.stopPropagation();
       onClose();
     }
@@ -235,6 +249,15 @@ export function LineDetail({
 
   const amountShown = <Amount value={amount} size="lg" roll={false} locale={writtenIn} />;
 
+  if (!large && sheetHead !== undefined) {
+    // The layout's sheet holds it, its head said above.
+    return (
+      <div ref={body} data-slot="line-detail" className="flex flex-col gap-4">
+        {content}
+      </div>
+    );
+  }
+
   if (!large) {
     // A phone, a tablet: a sheet over the list, which goes back down before it is taken away.
     return (
@@ -250,7 +273,7 @@ export function LineDetail({
         // Opened from the address: there at once, never rising on its own.
         appear={moves && !cameWithPage}
       >
-        <div data-slot="line-detail" className="flex flex-col gap-4">
+        <div ref={body} data-slot="line-detail" className="flex flex-col gap-4">
           {content}
         </div>
       </Sheet>
@@ -288,6 +311,18 @@ export function LineDetail({
       </div>
     </section>
   );
+}
+
+/** Whether a dialog is open over the page that does not hold `own`: one over the detail. */
+function dialogAbove(own: Element) {
+  return [
+    ...document.querySelectorAll('[role="dialog"][data-open], [role="alertdialog"][data-open]'),
+  ].some((dialog) => !dialog.contains(own));
+}
+
+/** The dialog an element sits in: a sheet's, to give it the focus. */
+function dialogOf(element: HTMLElement | null) {
+  return element?.closest<HTMLElement>('[role="dialog"]');
 }
 
 function RowSkeleton() {

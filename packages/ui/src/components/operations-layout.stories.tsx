@@ -3,6 +3,7 @@ import { useState } from "react";
 
 import { InFrench } from "../stories/in-french";
 import { ACCOUNTS, madeUpOperations } from "../stories/made-up";
+import { Button } from "./button";
 import { LineDetail, LineDetailSkeleton } from "./line-detail";
 import { NO_OPERATIONS_FILTERS } from "../lib/operations";
 import type { OperationsFilterValues } from "../lib/operations";
@@ -30,12 +31,17 @@ function matching(values: OperationsFilterValues) {
   );
 }
 
-/** The screen as the page composes it: filters, count, list and the open line's detail. */
-function Screen({ start }: { start?: string }) {
+/**
+ * The screen as the page composes it: filters, count, list and the open line's detail; `stepping`,
+ * the detail opens the next line from its top, as the review does once a line is reviewed.
+ */
+function Screen({ start, stepping = false }: { start?: string; stepping?: boolean }) {
   const [values, setValues] = useState(NO_OPERATIONS_FILTERS);
   const [openId, setOpenId] = useState<string | undefined>(start);
   const rows = matching(values);
-  const open = ROWS.find((row) => row.id === openId);
+  const index = ROWS.findIndex((row) => row.id === openId);
+  const open = ROWS[index];
+  const next = ROWS[index + 1];
 
   return (
     <OperationsLayout
@@ -62,6 +68,13 @@ function Screen({ start }: { start?: string }) {
         open === undefined ? undefined : (
           <LineDetail
             key={open.id}
+            review={
+              stepping && next !== undefined ? (
+                <Button variant="secondary" onClick={() => setOpenId(next.id)}>
+                  Next line
+                </Button>
+              ) : undefined
+            }
             label={open.label}
             amount={open.amount}
             account={open.account}
@@ -165,6 +178,19 @@ export const LineOpenFrench: Story = {
         <Screen start="line-3" />
       </div>
     </InFrench>
+  ),
+};
+
+/**
+ * On a phone, from one line to the next (the review's "Next line"): the sheet stays open and
+ * still, the next line's content in the last one's place.
+ */
+export const PhoneNextLine: Story = {
+  globals: { viewport: { value: "mobile1", isRotated: false } },
+  render: () => (
+    <div className="p-4">
+      <Screen start="line-3" stepping />
+    </div>
   ),
 };
 

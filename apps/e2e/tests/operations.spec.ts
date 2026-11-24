@@ -594,6 +594,37 @@ test("a line opens its detail, Escape closes it, and its address opens it on the
   await animationsDone(page);
 });
 
+// Issue #164: the shortcuts list opened over a line's detail (a sheet below `lg`) is the topmost
+// dialog: Escape closes it alone, and the focus goes into it and back to the detail.
+test("over a line's detail, Escape closes the shortcuts list alone, then the detail", async ({
+  page,
+}) => {
+  await signedInAs(page, oriane);
+  await visit(page, "/operations");
+  await hydrated(page);
+
+  await row(page, GREENMARKET).getByRole("button").click();
+
+  const panel = detail(page, GREENMARKET);
+  const shortcuts = page.getByRole("dialog", { name: "Keyboard shortcuts" });
+
+  // `?` works from the detail, which holds the focus.
+  await expect(panel).toBeFocused();
+  await page.keyboard.press("?");
+  await expect(shortcuts).toBeVisible();
+  await expect(shortcuts).toBeFocused();
+
+  await page.keyboard.press("Escape");
+  // Both said, whichever fails: which dialog Escape closed.
+  await expect.soft(shortcuts).toBeHidden();
+  await expect(panel).toBeVisible();
+  await expect(panel).toBeFocused();
+
+  await page.keyboard.press("Escape");
+  await expect(panel).toHaveCount(0);
+  await expect(row(page, GREENMARKET).getByRole("button")).toBeFocused();
+});
+
 test("on a phone, a line opened from its address leaves the rows in sight, then shows as a sheet that does not rise", async ({
   browser,
   page,
@@ -696,8 +727,10 @@ async function sampleBoxes(page: Page, selector: string, text = "") {
 
 /**
  * Samples, each animation frame until `window.__e2eStop`, the detail beside the list: its
- * column's width, its content's opacity, and whether the panel or its content carries a scale.
- * Install before the press that opens it.
+ * column's width from the column's first frame, its content's opacity (`null` while the content is
+ * not there yet: the column can open around the detail's skeleton first, and Firefox was seen to have
+ * it halfway open by the content's first frame), and whether the panel or its content carries a
+ * scale. Install before the press that opens it.
  */
 async function sampleColumn(page: Page) {
   await page.evaluate(`(() => {
@@ -720,10 +753,10 @@ async function sampleColumn(page: Page) {
       const column = document.querySelector('[data-slot="operations-detail"]');
       const content = document.querySelector('[data-slot="line-detail-content"]');
 
-      if (column !== null && content !== null) {
+      if (column !== null) {
         window.__e2eColumn.push({
           width: Math.round(column.getBoundingClientRect().width),
-          opacity: Number(getComputedStyle(content).opacity),
+          opacity: content === null ? null : Number(getComputedStyle(content).opacity),
           scaled: scaled(document.querySelector('[data-slot="line-detail"]')) || scaled(content),
         });
       }
@@ -737,7 +770,11 @@ async function sampleColumn(page: Page) {
   })()`);
 
   const Frames = Schema.Array(
-    Schema.Struct({ width: Schema.Number, opacity: Schema.Number, scaled: Schema.Boolean }),
+    Schema.Struct({
+      width: Schema.Number,
+      opacity: Schema.NullOr(Schema.Number),
+      scaled: Schema.Boolean,
+    }),
   );
 
   return {
@@ -784,14 +821,19 @@ for (const reduced of [false, true]) {
     expect(seen.filter((frame) => frame.scaled)).toEqual([]);
 
     if (reduced) {
-      // There at once, whole.
-      expect(seen.filter((frame) => frame.width !== COLUMN_WIDTH || frame.opacity !== 1)).toEqual(
-        [],
-      );
+      // There at once, whole: the column at its width, the content opaque from its first frame.
+      expect(
+        seen.filter(
+          (frame) =>
+            frame.width !== COLUMN_WIDTH || (frame.opacity !== null && frame.opacity !== 1),
+        ),
+      ).toEqual([]);
     } else {
       // The column widened from far narrower, and the content faded in.
       expect(Math.min(...seen.map((frame) => frame.width))).toBeLessThan(COLUMN_WIDTH / 2);
-      expect(seen.some((frame) => frame.opacity > 0 && frame.opacity < 1)).toBe(true);
+      expect(
+        seen.some((frame) => frame.opacity !== null && frame.opacity > 0 && frame.opacity < 1),
+      ).toBe(true);
     }
 
     await animationsDone(page);
