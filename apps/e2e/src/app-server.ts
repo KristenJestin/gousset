@@ -12,6 +12,7 @@ import { harness } from "./config";
 import {
   databaseUrl,
   dropDatabase,
+  holdingPortLock,
   recreateDatabase,
   templateDatabase,
   workerDatabaseName,
@@ -221,10 +222,20 @@ export async function startApp(
   logFile: string,
   extra: AppEnvironment = {},
 ): Promise<WorkerEnvironment> {
+  mkdirSync(dirname(logFile), { recursive: true });
+
+  // Held from the port's choice until the app answers on it (`holdingPortLock` says why).
+  return holdingPortLock(() => startAppOnFreePort(slot, database, logFile, extra));
+}
+
+async function startAppOnFreePort(
+  slot: number,
+  database: string,
+  logFile: string,
+  extra: AppEnvironment,
+): Promise<WorkerEnvironment> {
   const port = await freePort();
   const baseURL = `http://${APP_HOST}:${port}`;
-
-  mkdirSync(dirname(logFile), { recursive: true });
 
   // Appended: a worker that replaces a failed one on the same slot keeps the failed one's log.
   const log = createWriteStream(logFile, { flags: "a" });
@@ -251,11 +262,13 @@ export async function startApp(
     await dropDatabase(database);
   };
 
-  const restart = async () => {
-    await stopProcess(app.launched, app.container);
-    app = start();
-    await waitUntilServing(baseURL, app.launched, logFile);
-  };
+  // The port is free between the stop and the start: held, so that no other app is given it.
+  const restart = () =>
+    holdingPortLock(async () => {
+      await stopProcess(app.launched, app.container);
+      app = start();
+      await waitUntilServing(baseURL, app.launched, logFile);
+    });
 
   try {
     await waitUntilServing(baseURL, app.launched, logFile);
