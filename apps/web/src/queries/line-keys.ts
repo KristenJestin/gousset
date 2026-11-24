@@ -20,4 +20,7 @@ export const lineKeys = {
    * lines again (a category, a merchant, a rule, an import) reads it again too.
    */
   merchant: (lineId: string) => [...lineKeys.all, "merchant", lineId] as const,
+  /** The lines a line may be linked to, as its dialog searches them (#27). */
+  linkCandidates: (lineId: string, text: string) =>
+    [...lineKeys.all, "link-candidates", lineId, text] as const,
 };

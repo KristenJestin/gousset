@@ -1,6 +1,7 @@
 import {
   DataExport,
   EmptyFile,
+  Expenses,
   FileTooLarge,
   FileUploadExpired,
   FileUploadIncomplete,
@@ -275,6 +276,7 @@ function runnerOf(state: Fake): Runner<GoussetServices> {
           Layer.mock(DataExport, {}),
           Layer.mock(Merchants, {}),
           Layer.mock(Transfers, {}),
+          Layer.mock(Expenses, {}),
           Layer.mock(UserData, {}),
           Layer.mock(RuleJobs, {}),
         ),
@@ -305,6 +307,7 @@ function runnerWithTime(state: Fake): Runner<GoussetServices> {
             Layer.mock(DataExport, {}),
             Layer.mock(Merchants, {}),
             Layer.mock(Transfers, {}),
+            Layer.mock(Expenses, {}),
             Layer.mock(UserData, {}),
             Layer.mock(RuleJobs, {}),
             TestClock.layer(),

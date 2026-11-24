@@ -41,9 +41,15 @@ const pairable = and(
 );
 
 /**
+ * A line the user made part of an expense with other lines, as a payment or a refund (#27): it is
+ * no transfer's side unless the user says so.
+ */
+const notLinked = sql`not exists (select 1 from entry_part p inner join entry_part q on q.entry_id = p.entry_id and q.line_id <> p.line_id where p.line_id = ${statementLine.id})`;
+
+/**
  * Which lines a pairing looks at: `automatic` (the import's, on demand, the lines to review) leaves
- * out those the user said are no transfer; `by hand` (the candidates a line's detail offers) keeps
- * them, so that the user can change their mind.
+ * out those the user said are no transfer, and those the user linked to an expense; `by hand` (the
+ * candidates a line's detail offers) keeps them, so that the user can change their mind.
  */
 export type PairingBy = "automatic" | "by hand";
 
@@ -76,7 +82,7 @@ export function pairableLines(
     .where(
       and(
         pairable,
-        by === "automatic" ? eq(statementLine.transferRefused, false) : undefined,
+        by === "automatic" ? and(eq(statementLine.transferRefused, false), notLinked) : undefined,
         where,
       ),
     );
@@ -399,7 +405,7 @@ export async function pairTransfers(
   const targets = debits.filter((line) => !taken.has(line.id) && candidates(line).length === 0);
   const cardDebitsPaired = await pairCardDebits(transaction, owner, targets);
 
-  await dropEntriesOfTransferSides(transaction);
+  await dropEntriesOfTransferSides(transaction, owner);
 
   return { paired, cardDebits: cardDebitsPaired, replaced: replaced.size };
 }

@@ -381,7 +381,7 @@ async function pairInTransaction(
     .where(inArray(statementLine.id, [out.id, into.id]));
 
   // A transfer is never an expense nor an income: both lines lose their entry (#23).
-  await dropEntriesOfTransferSides(transaction);
+  await dropEntriesOfTransferSides(transaction, owner);
 
   return { done: await lineTransfer(transaction, line, day) };
 }
@@ -490,7 +490,7 @@ async function pairWithAccountInTransaction(
     .where(inArray(statementLine.id, [line.id, made.id]));
 
   // A transfer is never an expense nor an income (#23); the account's movements count it (#31).
-  await dropEntriesOfTransferSides(transaction);
+  await dropEntriesOfTransferSides(transaction, owner);
   await remakeBalanceLines(transaction, owner);
 
   return { done: await lineTransfer(transaction, line, day) };

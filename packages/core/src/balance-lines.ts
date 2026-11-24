@@ -6,7 +6,7 @@ import { Effect } from "effect";
 
 import { balanceMovements } from "./balance-movements";
 import { takeCategoryTurn } from "./category-turn";
-import { dropEntriesWithoutParts, entriesForLines } from "./entries";
+import { entriesForLines, settleEntries } from "./entries";
 
 // An account kept by its balance (#31; docs/data-model.md, v0.3, "Balance mode"): every noted
 // balance makes one line (`source = balance`, its `balance_id`), the movement since the balance
@@ -180,7 +180,9 @@ export async function remakeBalanceLines(
     touched.push(...changedIds, ...inserted.map((line) => line.id));
   }
 
-  await dropEntriesWithoutParts(transaction);
+  // A movement is never part of another line's expense (#27 refuses it), so no payment that left
+  // dated one: only the entries left with none go.
+  await settleEntries(transaction, owner, []);
   await entriesForLines(transaction, owner, touched);
   await placeBalanceEntries(transaction);
 }

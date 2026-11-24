@@ -1,5 +1,6 @@
 import {
   DataExport,
+  Expenses,
   ImportProfiles,
   Imports,
   Merchants,
@@ -214,6 +215,11 @@ function onToday(
     Layer.mock(UserData, {}),
     Layer.mock(RuleJobs, {}),
     transfers,
+    // No line of these is part of an expense of several lines; those are tried end to end (#27,
+    // expenses-mcp.spec).
+    Layer.mock(Expenses, {
+      ofLine: () => Effect.succeed({ expenses: [], role: null, proposals: [] }),
+    }),
     TestClock.layer(),
   );
 

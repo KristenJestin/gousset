@@ -1,5 +1,6 @@
 import {
   DataExport,
+  Expenses,
   ImportProfiles,
   Imports,
   Merchants,
@@ -36,6 +37,7 @@ async function month(args: { [key: string]: string }) {
               Layer.mock(DataExport, {}),
               Layer.mock(Merchants, {}),
               Layer.mock(Transfers, {}),
+              Layer.mock(Expenses, {}),
               Layer.mock(UserData, {}),
               Layer.mock(RuleJobs, {}),
             ),
