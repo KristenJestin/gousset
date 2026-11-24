@@ -21,14 +21,11 @@ import type { openUserData } from "./user-data";
 export const block = (page: Page, title: string) => page.getByRole("region", { name: title });
 
 /**
- * The month switcher beside the review's title, in the page's header: in today's month, the
- * recurring payments' calendar has a switcher of its own, also named "Month".
+ * The month switcher beside the review's title. The recurring payments' calendar has one of its
+ * own in today's month, named apart ("Recurring payments month"): one group alone is "Month".
  */
 export const monthSwitcher = (page: Page) =>
-  page
-    .locator("header")
-    .filter({ has: page.getByRole("heading", { level: 1 }) })
-    .getByRole("group", { name: "Month", exact: true });
+  page.getByRole("group", { name: "Month", exact: true });
 
 /**
  * A key of the month bar's legend, by its role (spent, saved, left): its amount and its name. The

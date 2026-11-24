@@ -676,6 +676,7 @@
   "uiAccountsCreditsUncovered": "{amount} dépensés au-delà des crédits",
   "uiAccountsCreditsEmpty": "Plus rien sur les crédits de ce compte.",
   "uiRecurringViews": "Vue du calendrier",
+  "uiRecurringMonth": "Mois des paiements récurrents",
   "uiRecurringViewMonth": "Mois",
   "uiRecurringViewAgenda": "Agenda",
   "uiRecurringPaid": "Payé",

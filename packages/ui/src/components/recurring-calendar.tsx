@@ -495,6 +495,7 @@ export function RecurringCalendar({
               value={shown}
               earliest={current}
               latest={addMonths(current, 1)}
+              label={messages.month}
               onChange={(next) => onMonthChange(monthKey(next))}
             />
           )}

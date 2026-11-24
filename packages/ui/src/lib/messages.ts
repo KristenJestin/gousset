@@ -167,6 +167,8 @@ function uiMessages(locale: Locale) {
     /** `RecurringCalendar`: what recurs this month, and the marks it draws. */
     recurring: {
       views: m.uiRecurringViews({}, options),
+      /** Its month switcher's name, apart from the page's own "Month". */
+      month: m.uiRecurringMonth({}, options),
       viewMonth: m.uiRecurringViewMonth({}, options),
       viewAgenda: m.uiRecurringViewAgenda({}, options),
       paid: m.uiRecurringPaid({}, options),

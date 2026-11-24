@@ -18,6 +18,9 @@ const previousAt = (month: number) =>
     />,
   ).match(/<button[^>]*aria-label="Previous month"[^>]*>/)?.[0];
 
+/** The name a switcher's group is given. */
+const named = (markup: string) => markup.match(/role="group"[^>]*aria-label="([^"]*)"/)?.[1];
+
 describe("MonthSwitcher on the server", () => {
   it("disables Next without a latest month, however far back the month is", () => {
     const tag = nextTag(
@@ -40,6 +43,28 @@ describe("MonthSwitcher on the server", () => {
 
     expect(tag).toBeDefined();
     expect(tag).not.toMatch(/aria-disabled="true"|\sdisabled=""/);
+  });
+
+  it("is named Month, or the label it is given when a page has two", () => {
+    expect(
+      named(
+        renderToString(
+          <MonthSwitcher value={{ year: 2026, month: 10 }} onChange={() => undefined} />,
+        ),
+      ),
+    ).toBe("Month");
+
+    expect(
+      named(
+        renderToString(
+          <MonthSwitcher
+            value={{ year: 2026, month: 10 }}
+            label="Recurring payments month"
+            onChange={() => undefined}
+          />,
+        ),
+      ),
+    ).toBe("Recurring payments month");
   });
 
   it("disables Previous on the earliest month it is given, and only there", () => {

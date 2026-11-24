@@ -20,6 +20,8 @@ export type MonthSwitcherProps = {
   latest?: YearMonth;
   /** The first month it may reach; none by default, the past being open. */
   earliest?: YearMonth;
+  /** Its name for assistive technologies: "Month" by default; another when a page has two. */
+  label?: string;
 };
 
 // The label slides in from the side the month comes from, and the old one out the other way.
@@ -38,7 +40,13 @@ const slide = {
  * Motion: the label slides out and the new one slides in from the side it comes from, 200 ms,
  * easing out; cut under reduced motion.
  */
-export function MonthSwitcher({ value, onChange, latest, earliest }: MonthSwitcherProps) {
+export function MonthSwitcher({
+  value,
+  onChange,
+  latest,
+  earliest,
+  label: name,
+}: MonthSwitcherProps) {
   const messages = useUiMessages();
   const language = usePageLanguage();
   const index = monthIndex(value);
@@ -81,7 +89,7 @@ export function MonthSwitcher({ value, onChange, latest, earliest }: MonthSwitch
   return (
     <div
       role="group"
-      aria-label={messages.pieces.month}
+      aria-label={name ?? messages.pieces.month}
       data-slot="month-switcher"
       className="inline-flex items-center gap-1"
       onKeyDown={onKeyDown}

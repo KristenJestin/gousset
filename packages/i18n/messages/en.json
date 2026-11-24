@@ -681,6 +681,7 @@
   "uiAccountsCreditsUncovered": "{amount} spent beyond the credits",
   "uiAccountsCreditsEmpty": "Nothing left on this account's credits.",
   "uiRecurringViews": "Calendar view",
+  "uiRecurringMonth": "Recurring payments month",
   "uiRecurringViewMonth": "Month",
   "uiRecurringViewAgenda": "Agenda",
   "uiRecurringPaid": "Paid",
