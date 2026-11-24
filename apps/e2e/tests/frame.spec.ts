@@ -286,6 +286,15 @@ test("an older month address still opens its screen", async ({ userPage }) => {
 
   // The operations read the older address's month as its first to last day.
   await visit(userPage, "/operations?month=2025-02");
+
+  // On a phone the period is in the Filters sheet (#127).
+  const filters = userPage.getByRole("button", { name: "Filters", exact: true });
+
+  if (await filters.isVisible()) {
+    await expect(filters).toHaveAttribute("data-hydrated", "");
+    await filters.click();
+  }
+
   await expect(userPage.getByRole("textbox", { name: "From", exact: true })).toHaveValue(
     "02/01/2025",
   );

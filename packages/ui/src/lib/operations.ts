@@ -1,14 +1,5 @@
-// What the operations screen's components share with the page: the shared layout's names, and
-// the filters' values with their empty state.
-
-/**
- * The shared layout's name of a line: its row's anchor in `OperationsList` and its open
- * `LineDetail` carry the same, so that the detail grows out of the row and folds back into it
- * (docs/design.md, "Motion").
- */
-export function operationLayoutId(id: string) {
-  return `operation-line-${id}`;
-}
+// What the operations screen's components share with the page: the filters' values with their
+// empty state.
 
 /**
  * The most characters the search's words, and each amount bound, take: the server reads no more,
@@ -42,6 +33,20 @@ export const NO_OPERATIONS_FILTERS: OperationsFilterValues = {
   max: "",
   toReview: false,
 };
+
+/**
+ * How many filters a narrow screen folds behind its Filters button are set, the number on that
+ * button: the account, the period (one or both days), the amount (one or both bounds) and the
+ * lines to review. The search stays in sight beside the button, so it is not counted.
+ */
+export function foldedFiltersCount(values: OperationsFilterValues) {
+  return [
+    values.accountId !== null,
+    values.from !== null || values.to !== null,
+    values.min !== "" || values.max !== "",
+    values.toReview,
+  ].filter(Boolean).length;
+}
 
 /** Whether any filter is set, which shows "Clear filters". */
 export function hasOperationsFilters(values: OperationsFilterValues) {

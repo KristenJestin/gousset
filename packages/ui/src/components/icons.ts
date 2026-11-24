@@ -3,6 +3,7 @@
 // the stroke or the whole library touches this file and `icon.tsx` only. Pages draw an icon with
 // `<Icon name="import" />` and never import Tabler (a lint rule refuses it).
 import {
+  IconAdjustmentsHorizontal,
   IconAlertCircle,
   IconAlertTriangle,
   IconArrowBackUp,
@@ -51,6 +52,7 @@ import {
   IconReceipt,
   IconRefresh,
   IconRepeat,
+  IconRobot,
   IconSchool,
   IconSearch,
   IconSelector,
@@ -84,6 +86,8 @@ export const interfaceIcons = {
   add: IconPlus,
   more: IconDots,
   search: IconSearch,
+  // The Filters button that a narrow screen folds its filters behind.
+  filters: IconAdjustmentsHorizontal,
   calendar: IconCalendar,
   retry: IconRefresh,
   undo: IconArrowBackUp,
@@ -123,6 +127,8 @@ export const interfaceIcons = {
   colorScheme: IconSunMoon,
   shortcuts: IconKeyboard,
   signOut: IconLogout,
+  // An MCP client asking for access, on the consent screen.
+  agent: IconRobot,
 } as const;
 
 /**

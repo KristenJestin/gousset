@@ -21,11 +21,18 @@ export const TEXT_PAIRS = [
   ["--muted-foreground", "--background"],
   ["--muted-foreground", "--card"],
   ["--muted-foreground", "--muted"],
+  ["--soft-foreground", "--background"],
+  ["--soft-foreground", "--card"],
+  ["--soft-foreground", "--muted"],
+  ["--success", "--card"],
+  ["--success", "--muted"],
   ["--primary-foreground", "--primary"],
   ["--primary", "--background"],
   ["--primary", "--card"],
   ["--destructive", "--background"],
   ["--destructive", "--card"],
+  ["--warning", "--card"],
+  ["--warning", "--background"],
   ["--money-spent", "--background"],
   ["--money-spent", "--card"],
   ["--money-saved", "--background"],
@@ -34,6 +41,9 @@ export const TEXT_PAIRS = [
   ["--money-left", "--card"],
   ["--money-income", "--background"],
   ["--money-income", "--card"],
+  // An operation's amount, on its row and on the band of a hovered or open row.
+  ["--amount-in", "--card"],
+  ["--amount-in", "--muted"],
   ["--money-restricted", "--background"],
   ["--money-restricted", "--card"],
   ["--chart-label", "--chart-background"],
@@ -61,6 +71,7 @@ export const MONEY_COLORS = [
   "--money-saved",
   "--money-left",
   "--money-income",
+  "--amount-in",
 ] as const;
 
 const DECLARATION = /^\s*(--[a-z0-9-]+):\s*([^;]+);/gm;

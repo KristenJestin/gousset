@@ -84,6 +84,20 @@ describe("the theme", () => {
     },
   );
 
+  it.each(["light", "dark"] as const)(
+    "keeps the success colour apart from every money colour in %s",
+    (scheme) => {
+      const declarations = readDeclarations(css);
+      const success = resolveColor(declarations, "--success", scheme);
+
+      for (const money of MONEY_COLORS) {
+        expect(
+          hueDistance(success, resolveColor(declarations, money, scheme)),
+        ).toBeGreaterThanOrEqual(45);
+      }
+    },
+  );
+
   it("uses the brand violet as the accent and the focus ring", () => {
     const declarations = readDeclarations(css);
 

@@ -1,9 +1,10 @@
-import type { Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 import { account, statementImport, statementLine } from "@gousset/db/schema/ledger";
 import { sql } from "drizzle-orm";
 import { Schema } from "effect";
 
 import type { TestUser } from "../src/auth";
+import { onPhone } from "../src/frame";
 import {
   addUser,
   animationsDone,
@@ -162,7 +163,34 @@ const list = (page: Page) => page.getByRole("list", { name: "Operations" });
 const rows = (page: Page) => list(page).getByRole("listitem");
 const row = (page: Page, label: string) => rows(page).filter({ hasText: label });
 const count = (page: Page) => page.locator('[data-slot="operations-count"]');
-const detail = (page: Page, label: string) => page.getByRole("region", { name: label });
+
+// A line's detail: a panel beside the list on a wide screen, a sheet on a phone.
+const detail = (page: Page, label: string) =>
+  page.getByRole(onPhone(page) ? "dialog" : "region", { name: label });
+
+/**
+ * Runs `act` on the filters' fields: on a wide screen, those of the filter row; on a phone, those of
+ * the Filters sheet (#127), opened first and closed after, so that the list is in sight again.
+ */
+async function inFilters(page: Page, act: (fields: Locator) => Promise<void>) {
+  const button = page.getByRole("button", { name: /^Filters/ });
+
+  if (!(await button.isVisible())) {
+    await act(page.getByRole("group", { name: "Filters" }));
+
+    return;
+  }
+
+  await expect(button).toHaveAttribute("data-hydrated", "");
+  await button.click();
+
+  const sheet = page.getByRole("dialog", { name: "Filters" });
+
+  await expect(sheet).toBeVisible();
+  await act(sheet);
+  await sheet.getByRole("button", { name: /^Show / }).click();
+  await expect(sheet).toHaveCount(0);
+}
 
 /** Once hydrated, the list places its rows itself, from script: the browser runs the page. */
 async function hydrated(page: Page) {
@@ -405,13 +433,18 @@ test("the account filter narrows the list to that account's lines", async ({ pag
   await hydrated(page);
 
   // Two accounts share a name: each is named with its institution.
-  await page.getByRole("combobox", { name: "Account" }).click();
-  await page.getByRole("option", { name: "Everyday (Harbor Credit)", exact: true }).click();
+  await inFilters(page, async (fields) => {
+    await fields.getByRole("combobox", { name: "Account" }).click();
+    await page.getByRole("option", { name: "Everyday (Harbor Credit)", exact: true }).click();
+  });
 
   await expect(count(page)).toHaveText("2 lines");
   await expect(rows(page)).toHaveCount(2);
   await expect(row(page, SALARY)).toBeVisible();
   await expect(row(page, HARDWARE)).toBeVisible();
+  // Money in carries its plus, money out its minus: the direction reads without the colour.
+  await expect(row(page, SALARY)).toContainText("+€2,500.00");
+  await expect(row(page, HARDWARE)).toContainText("−€80.00");
   await expect(page).toHaveURL(/[?&]account=[\da-f-]{36}(&|$)/);
   await animationsDone(page);
 });
@@ -428,8 +461,14 @@ test("the period filter narrows the list to its days, and the older month addres
 
   // The review's link names a month: its first to last day.
   await visit(page, "/operations?month=2026-09");
-  await expect(page.getByRole("textbox", { name: "From", exact: true })).toHaveValue("09/01/2026");
-  await expect(page.getByRole("textbox", { name: "To", exact: true })).toHaveValue("09/30/2026");
+  await inFilters(page, async (fields) => {
+    await expect(fields.getByRole("textbox", { name: "From", exact: true })).toHaveValue(
+      "09/01/2026",
+    );
+    await expect(fields.getByRole("textbox", { name: "To", exact: true })).toHaveValue(
+      "09/30/2026",
+    );
+  });
   await expect(count(page)).toHaveText("1 line");
   await expect(row(page, SAVINGS)).toBeVisible();
 
@@ -446,8 +485,10 @@ test("the amount filter narrows the list to amounts between its bounds", async (
 
   // Bounds against the amount whatever its sign: 500.00 only, of 42.50, 12.99, 2,500, 80, 500 and
   // the paged 10.00 to 12.49.
-  await page.getByRole("textbox", { name: "Amount from", exact: true }).fill("100");
-  await page.getByRole("textbox", { name: "Amount up to", exact: true }).fill("600");
+  await inFilters(page, async (fields) => {
+    await fields.getByRole("textbox", { name: "Amount from", exact: true }).fill("100");
+    await fields.getByRole("textbox", { name: "Amount up to", exact: true }).fill("600");
+  });
 
   await expect(count(page)).toHaveText("1 line");
   await expect(row(page, SAVINGS)).toBeVisible();
@@ -455,7 +496,9 @@ test("the amount filter narrows the list to amounts between its bounds", async (
   await expect(page).toHaveURL(/[?&]max=600(&|$)/);
 
   // An amount the server cannot read is said under its field; the list stays as it was.
-  await page.getByRole("textbox", { name: "Amount from", exact: true }).fill("12.5.0");
+  await inFilters(page, async (fields) => {
+    await fields.getByRole("textbox", { name: "Amount from", exact: true }).fill("12.5.0");
+  });
   await expect(page.getByText("Type an amount as 12.50").first()).toBeVisible();
   await expect(count(page)).toHaveText("1 line");
   await animationsDone(page);
@@ -466,7 +509,9 @@ test("the to-review filter shows the lines held for review, marked so", async ({
   await visit(page, "/operations");
   await hydrated(page);
 
-  await page.getByRole("checkbox", { name: "To review only" }).click();
+  await inFilters(page, async (fields) => {
+    await fields.getByRole("checkbox", { name: "To review only" }).click();
+  });
 
   await expect(count(page)).toHaveText("1 line");
   await expect(row(page, HELD)).toContainText("To review");
@@ -549,6 +594,55 @@ test("a line opens its detail, Escape closes it, and its address opens it on the
   await animationsDone(page);
 });
 
+test("on a phone, a line opened from its address leaves the rows in sight, then shows as a sheet that does not rise", async ({
+  browser,
+  page,
+  app,
+}) => {
+  const phone = { width: 390, height: 844 };
+  const address = `/operations?line=${greenmarketId}`;
+
+  // The server's first paint, before any script: the list whole, no column squeezing it.
+  const still = await browser.newContext({
+    javaScriptEnabled: false,
+    viewport: phone,
+    locale: "en-US",
+    timezoneId: "Europe/Paris",
+  });
+
+  const first = await still.newPage();
+
+  await still.addCookies([...oriane.cookies]);
+  await fixDay(first, TODAY);
+  await first.goto(`${app.baseURL}${address}`);
+  await expect(row(first, GREENMARKET)).toBeVisible();
+  await expect(row(first, STREAMLY)).toBeVisible();
+  await expect(first.locator('[data-slot="operations-detail"]')).toBeHidden();
+  await still.close();
+
+  // Once the page runs, the detail is a sheet, in its place from its first frame.
+  await page.setViewportSize(phone);
+  await signedInAs(page, oriane);
+  await page.goto(address);
+
+  const sheet = page.getByRole("dialog", { name: GREENMARKET });
+
+  await expect(sheet).toContainText(FILE_NAME);
+  // Nothing moves it: each animation found is named, so that a failure says what moved.
+  expect(
+    await sheet.evaluate((node) =>
+      node
+        .getAnimations()
+        .map((animation) =>
+          "transitionProperty" in animation
+            ? String(animation.transitionProperty)
+            : animation.constructor.name,
+        ),
+    ),
+  ).toEqual([]);
+  await animationsDone(page);
+});
+
 test("a user with no line is told where the lines will come from", async ({ page, app, user }) => {
   const noemie = await addUser(app.baseURL, user, personOfItsOwn("noemie"));
 
@@ -600,10 +694,69 @@ async function sampleBoxes(page: Page, selector: string, text = "") {
   };
 }
 
+/**
+ * Samples, each animation frame until `window.__e2eStop`, the detail beside the list: its
+ * column's width, its content's opacity, and whether the panel or its content carries a scale.
+ * Install before the press that opens it.
+ */
+async function sampleColumn(page: Page) {
+  await page.evaluate(`(() => {
+    window.__e2eColumn = [];
+    window.__e2eStop = false;
+
+    const scaled = (element) => {
+      if (element === null) {
+        return false;
+      }
+
+      const style = getComputedStyle(element);
+      const matrix = new DOMMatrixReadOnly(style.transform === "none" ? undefined : style.transform);
+
+      return Math.abs(matrix.a - 1) > 0.001 || Math.abs(matrix.d - 1) > 0.001 ||
+        (style.scale !== "none" && style.scale !== "1");
+    };
+
+    const sample = () => {
+      const column = document.querySelector('[data-slot="operations-detail"]');
+      const content = document.querySelector('[data-slot="line-detail-content"]');
+
+      if (column !== null && content !== null) {
+        window.__e2eColumn.push({
+          width: Math.round(column.getBoundingClientRect().width),
+          opacity: Number(getComputedStyle(content).opacity),
+          scaled: scaled(document.querySelector('[data-slot="line-detail"]')) || scaled(content),
+        });
+      }
+
+      if (!window.__e2eStop) {
+        requestAnimationFrame(sample);
+      }
+    };
+
+    requestAnimationFrame(sample);
+  })()`);
+
+  const Frames = Schema.Array(
+    Schema.Struct({ width: Schema.Number, opacity: Schema.Number, scaled: Schema.Boolean }),
+  );
+
+  return {
+    read: async () => Schema.decodeUnknownSync(Frames)(await page.evaluate("window.__e2eColumn")),
+    stop: () => page.evaluate("window.__e2eStop = true"),
+  };
+}
+
+/** The detail's column at its full width: a 16 px gap and the 360 px panel. */
+const COLUMN_WIDTH = 376;
+
 for (const reduced of [false, true]) {
   const how = reduced ? "under reduced motion, nothing moves" : "it moves";
 
-  test(`motion: the detail opens from its row; ${how}`, async ({ page }) => {
+  test(`motion: the detail opens beside the list, its width moving, never a scale; ${how}`, async ({
+    page,
+  }) => {
+    test.skip(onPhone(page), "On a phone the detail is a sheet (the next test)");
+
     if (reduced) {
       await page.emulateMedia({ reducedMotion: "reduce" });
     }
@@ -613,44 +766,73 @@ for (const reduced of [false, true]) {
     await hydrated(page);
     await expect(page.locator("html")).toHaveAttribute("data-motion", reduced ? "reduced" : "full");
 
-    const boxes = await sampleBoxes(page, '[data-slot="line-detail"]');
+    const frames = await sampleColumn(page);
 
     await row(page, GREENMARKET).getByRole("button").click();
-
-    const panel = detail(page, GREENMARKET);
-
-    await expect(panel).toBeVisible();
-
-    // Its own height, as laid out (`offsetHeight` leaves the motion's transform out); settled
-    // once the frames draw it so.
-    const final = await panel.evaluate<number, undefined, HTMLElement>(
-      (element) => element.offsetHeight,
-    );
-
+    await expect(detail(page, GREENMARKET)).toBeVisible();
     await expect
-      .poll(async () => Math.abs(((await boxes.read()).at(-1)?.height ?? 0) - final))
-      .toBeLessThanOrEqual(1);
-    await boxes.stop();
+      .poll(async () => {
+        const last = (await frames.read()).at(-1);
 
-    const heights = (await boxes.read()).map((box) => box.height);
-    const smallest = Math.min(...heights);
+        return last?.width === COLUMN_WIDTH && last.opacity === 1;
+      })
+      .toBe(true);
+    await frames.stop();
 
-    expect(final).toBeGreaterThan(48);
+    const seen = await frames.read();
+
+    expect(seen.filter((frame) => frame.scaled)).toEqual([]);
 
     if (reduced) {
-      // In place at once, at its own size. Motion still measures the change and may draw the panel
-      // where its row was for the frame of the change, then puts it in place with no tween: at most
-      // that one frame, the first, may be smaller.
-      const smaller = heights.flatMap((height, index) => (height < final - 1 ? [index] : []));
-
-      expect(smaller.length).toBeLessThanOrEqual(1);
-      expect(smaller.every((index) => index === 0)).toBe(true);
+      // There at once, whole.
+      expect(seen.filter((frame) => frame.width !== COLUMN_WIDTH || frame.opacity !== 1)).toEqual(
+        [],
+      );
     } else {
-      // It grew out of its 48 px row: some frame drew it far smaller than it ends.
-      expect(smallest).toBeLessThan(final / 2);
+      // The column widened from far narrower, and the content faded in.
+      expect(Math.min(...seen.map((frame) => frame.width))).toBeLessThan(COLUMN_WIDTH / 2);
+      expect(seen.some((frame) => frame.opacity > 0 && frame.opacity < 1)).toBe(true);
     }
 
     await animationsDone(page);
+  });
+
+  test(`motion: on a phone, the detail is a sheet rising from the bottom; ${how}`, async ({
+    page,
+  }) => {
+    test.skip(!onPhone(page), "On a wide screen the detail opens beside the list");
+
+    if (reduced) {
+      await page.emulateMedia({ reducedMotion: "reduce" });
+    }
+
+    await signedInAs(page, oriane);
+    await visit(page, "/operations");
+    await hydrated(page);
+    await expect(page.locator("html")).toHaveAttribute("data-motion", reduced ? "reduced" : "full");
+
+    const boxes = await sampleBoxes(page, '[role="dialog"]');
+
+    await row(page, GREENMARKET).getByRole("button").click();
+
+    const sheet = detail(page, GREENMARKET);
+
+    await expect(sheet).toBeVisible();
+    await animationsDone(page);
+
+    const rest = (await boxes.read()).at(-1)?.top ?? 0;
+
+    await boxes.stop();
+
+    const below = (await boxes.read()).filter((box) => box.top > rest + 1);
+
+    if (reduced) {
+      // In its place at once.
+      expect(below).toEqual([]);
+    } else {
+      // Drawn on its way up from the bottom edge.
+      expect(below.length).toBeGreaterThan(1);
+    }
   });
 
   test(`motion: the rows slide to their new places on a new search; ${how}`, async ({ page }) => {

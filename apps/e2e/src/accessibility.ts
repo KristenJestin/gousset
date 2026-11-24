@@ -49,14 +49,19 @@ const POPUPS_MOVING = `document.querySelectorAll("[data-starting-style], [data-e
 /**
  * Waits for the screen's entrance animations to end: text still fading in is half transparent, and
  * axe would measure its contrast mid-fade. Endless animations (a loader, a skeleton) are not
- * waited for.
+ * waited for. Listed two frames on: a CSS transition the page starts right after it loads (a
+ * detail's `@starting-style` fade, #128) is only listed once a frame has computed its style.
  */
-const ENTRANCES_DONE = `Promise.all(
-  document
-    .getAnimations()
-    .filter((animation) => Number.isFinite(animation.effect?.getComputedTiming().endTime))
-    .map((animation) => animation.finished.catch(() => undefined)),
-).then(() => undefined)`;
+const ENTRANCES_DONE = `new Promise((frame) => requestAnimationFrame(() => requestAnimationFrame(frame)))
+  .then(() =>
+    Promise.all(
+      document
+        .getAnimations()
+        .filter((animation) => Number.isFinite(animation.effect?.getComputedTiming().endTime))
+        .map((animation) => animation.finished.catch(() => undefined)),
+    ),
+  )
+  .then(() => undefined)`;
 
 /**
  * Runs axe on the screen once its entrance animations ended; any violation fails the test, listed

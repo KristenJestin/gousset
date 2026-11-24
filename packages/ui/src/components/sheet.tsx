@@ -46,8 +46,8 @@ function useWideScreen() {
 export type SheetProps = {
   /** Names the sheet, at its top. */
   title: string;
-  /** A sentence under the title saying what the sheet is for. */
-  description?: string;
+  /** A sentence under the title saying what the sheet is for, or what it is about (an amount). */
+  description?: ReactNode;
   /** The body; it scrolls when long. */
   children?: ReactNode;
   /** `Button`s at the bottom, the main one last. */
@@ -72,6 +72,12 @@ export type SheetProps = {
   onOpenChange?: (open: boolean) => void;
   /** Its width on a wide screen: `md` 440 px, `lg` 512 px for a form of rows (a rule). */
   size?: "md" | "lg";
+  /**
+   * False: a sheet mounted open shows in its place at once, its backdrop too, instead of sliding
+   * in; it still leaves by sliding out. For a sheet the server's page already meant to show (a
+   * detail opened from the address), which must not rise on its own once the page runs.
+   */
+  appear?: boolean;
 };
 
 /**
@@ -98,6 +104,7 @@ export function Sheet({
   open,
   onOpenChange,
   size = "md",
+  appear = true,
 }: SheetProps) {
   const wide = useWideScreen();
 
@@ -132,14 +139,20 @@ export function Sheet({
   return (
     <DialogRoot open={open} dismissible={!sending} onOpenChange={(next) => onOpenChange?.(next)}>
       {trigger === undefined ? null : <DialogTrigger render={trigger} />}
-      <DialogBackdrop className={backdropClasses} />
+      <DialogBackdrop
+        className={cn(backdropClasses, !appear && "data-starting-style:opacity-100!")}
+      />
       {/* A form starts on its first field; otherwise focus starts on the sheet itself, reading
           from the title, and Escape closes it at once (on the close button, its tooltip would
           take the first Escape). */}
       <DialogContent
         initialFocus={onSubmit === undefined ? "content" : FIRST_FIELD}
         data-side={wide ? "right" : "bottom"}
-        className={cn(sheetClasses, size === "lg" && "md:w-lg")}
+        className={cn(
+          sheetClasses,
+          size === "lg" && "md:w-lg",
+          !appear && "data-starting-style:translate-none!",
+        )}
       >
         <SheetHeader title={title} description={description} sending={sending} />
         {onSubmit === undefined ? (
@@ -188,7 +201,7 @@ function SheetHeader({
   sending,
 }: {
   title: string;
-  description?: string;
+  description?: ReactNode;
   sending: boolean;
 }) {
   const messages = useUiMessages();

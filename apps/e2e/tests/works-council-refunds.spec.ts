@@ -28,7 +28,7 @@ import { Effect, Layer } from "effect";
 
 import { addUser } from "../src/auth";
 import type { TestUser } from "../src/auth";
-import { onPhone } from "../src/frame";
+import { lineDetail, onPhone } from "../src/frame";
 import { importsOn, statementFile } from "../src/imports";
 import {
   animationsDone,
@@ -293,7 +293,7 @@ async function hydrated(page: Page) {
 async function openLine(page: Page, label: string) {
   await rows(page).filter({ hasText: label }).first().getByRole("button").click();
 
-  const detail = page.getByRole("region", { name: label });
+  const detail = lineDetail(page, label);
 
   await expect(detail).toBeVisible();
 
@@ -347,7 +347,7 @@ test("the link shows on both sides", async ({ page, app, user }) => {
   // The other side: the expense's detail, funded by the refund, at its whole cost.
   await funded.click();
 
-  const expense = page.getByRole("region", { name: SPORTS_CLUB });
+  const expense = lineDetail(page, SPORTS_CLUB);
   const fundedBy = expense.getByRole("region", { name: "Funded by" });
 
   await expect(fundedBy).toBeVisible();
@@ -362,7 +362,7 @@ test("the link shows on both sides", async ({ page, app, user }) => {
   // Back to the refund from its funding, and unfunded there: the transfer stays.
   await fundedBy.getByRole("button", { name: new RegExp(REFUND) }).click();
 
-  const again = page.getByRole("region", { name: REFUND });
+  const again = lineDetail(page, REFUND);
   const block2 = again.getByRole("region", { name: "Funds an expense" });
 
   await block2.getByRole("button", { name: "Unfund" }).click();

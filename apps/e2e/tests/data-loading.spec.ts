@@ -229,11 +229,27 @@ test("an error stays in its block, with a retry, and the rest of the page works"
   });
 
   // The rest of the page has its data, and its controls still work: the filters offer the
-  // accounts.
+  // accounts. On a phone the account is in the Filters sheet (#127), closed again after.
+  const filters = page.getByRole("button", { name: "Filters", exact: true });
+  const folded = await filters.isVisible();
+
+  if (folded) {
+    await expect(filters).toHaveAttribute("data-hydrated", "");
+    await filters.click();
+  }
+
   await page.getByRole("combobox", { name: "Account" }).click();
   await expect(page.getByRole("option", { name: "Lucien current", exact: true })).toBeVisible();
   await page.keyboard.press("Escape");
   await expect(page.getByRole("option")).toHaveCount(0);
+
+  const sheet = page.getByRole("dialog", { name: "Filters" });
+
+  // Escape closed the list alone; the sheet stays until its own button closes it.
+  if (folded && (await sheet.isVisible())) {
+    await sheet.getByRole("button", { name: /^Show / }).click();
+    await expect(sheet).toHaveCount(0);
+  }
 
   failing = false;
   await block.getByRole("button", { name: "Try again" }).click();

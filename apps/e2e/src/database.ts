@@ -73,6 +73,30 @@ export function databaseUrl(database: string): string {
 const TEMPLATE_LOCK = 4040;
 
 /**
+ * A port is free when the harness probes it and taken only once the app listens: two workers whose
+ * apps start at once could be given the same one, and the loser would then take the winner's app,
+ * and its database, for its own. Apps start one at a time through this lock, from the port's choice
+ * until the app answers, so that no port is handed out twice in between.
+ */
+const PORT_LOCK = 4041;
+
+/** Runs `start` holding the port lock, across every worker and every run on this server. */
+export async function holdingPortLock<T>(start: () => Promise<T>): Promise<T> {
+  const client = new pg.Client({ connectionString: harness.databaseUrl });
+
+  await client.connect();
+
+  try {
+    await client.query("SELECT pg_advisory_lock($1)", [PORT_LOCK]);
+
+    return await start();
+  } finally {
+    // Closing the session releases its advisory lock.
+    await client.end();
+  }
+}
+
+/**
  * Runs statements one after the other on the server, through the database the harness was given,
  * holding the template lock throughout when asked to.
  */

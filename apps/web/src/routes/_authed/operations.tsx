@@ -28,7 +28,7 @@ import {
   LineTransferToAccount,
 } from "@gousset/ui/components/line-transfer";
 import type { BalanceAccountView, TransferSideView } from "@gousset/ui/components/line-transfer";
-import { OperationsFilters } from "@gousset/ui/components/operations-filters";
+import { ClearFilters, OperationsFilters } from "@gousset/ui/components/operations-filters";
 import type { OperationsFilterValues } from "@gousset/ui/components/operations-filters";
 import { OperationsLayout } from "@gousset/ui/components/operations-layout";
 import { CategoryPicker } from "@gousset/ui/components/category-picker";
@@ -248,8 +248,7 @@ function Operations() {
     enabled: openId !== undefined,
   });
 
-  // The detail opens once its line is read: the row and the panel change places in one render,
-  // which is what lets the panel grow out of the row.
+  // The detail opens once its line is read, at its full size: its column widens, never empty.
   const open = openId !== undefined && opened?.ok === true ? opened : undefined;
 
   const openLine = (id: string) => {
@@ -297,6 +296,8 @@ function Operations() {
               accounts={accountChoices(accounts, nameOf)}
               minError={draft.min.trim() === "" ? undefined : amountError}
               maxError={draft.max.trim() === "" ? undefined : amountError}
+              count={total}
+              locale={locale}
             />
             <FormMessage
               message={refusal === "PERIOD_INVALID" ? m.operationsPeriodRefused() : undefined}
@@ -304,6 +305,7 @@ function Operations() {
           </>
         }
         count={total}
+        countAction={<ClearFilters values={draft} onChange={change} />}
         list={
           failed ? (
             <ErrorState onRetry={() => void lines.refetch()} />
@@ -1193,7 +1195,6 @@ function OpenLine({
         )
       }
       merchant={<LineMerchantOf line={line} onRuleJob={onRuleJob} />}
-      id={line.id}
       label={lineLabel(line)}
       amount={line.amount}
       account={nameOf(line.account)}
