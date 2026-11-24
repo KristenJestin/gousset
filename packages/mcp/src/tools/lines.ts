@@ -2,6 +2,7 @@ import {
   MAX_SHARES,
   accountNamed,
   classifyLine,
+  fundExpense,
   lineExpensesOf,
   lineMerchant,
   lineTransferOf,
@@ -13,6 +14,7 @@ import {
   searchLines,
   showLine,
   splitLine,
+  unfundExpense,
   unlinkLine,
   unpairLine,
 } from "@gousset/core";
@@ -23,6 +25,8 @@ import type {
   Expense,
   ExpensePart,
   Expenses,
+  FundRefused,
+  FundedExpense,
   LineDetail,
   LineExpenses,
   LineMerchant,
@@ -63,7 +67,7 @@ const LinesInput = Schema.Struct({
     "split",
   ]).annotate({
     description:
-      "search: the lines that match, across accounts, newest first. show: one line, all that is known of it. pair: two lines as one transfer (writes). classify: what one line is (writes). unpair: undoes a line's transfer (writes). link: a line becomes a payment or a refund of another line's expense (writes). unlink: a line leaves its expense (writes). split: a line across categories (writes).",
+      "search: the lines that match, across accounts, newest first. show: one line, all that is known of it. pair: two lines as one transfer (writes). classify: what one line is (writes). unpair: undoes a line's transfer (writes). link: a line becomes a payment or a refund of another line's expense; a side of a transfer from a benefit account funds it, which keeps its cost (writes). unlink: a line leaves its expense, or unfunds (writes). split: a line across categories (writes).",
   }),
   text: Schema.optional(
     Schema.String.annotate({
@@ -131,7 +135,7 @@ const LinesInput = Schema.Struct({
   into: Schema.optional(
     Schema.String.annotate({
       description:
-        "link: the handle of a line of the expense that line joins: one of its payments or refunds.",
+        "link: the handle of a line of the expense that line joins or funds: one of its payments or refunds.",
     }),
   ),
   shares: Schema.optional(
@@ -384,6 +388,22 @@ const KIND_WORDS = {
   readonly [Kind in EntryKind]: { readonly name: string; readonly net: string };
 };
 
+/**
+ * The transfers from a benefit account funding an expense (#29), each with its side out's handle;
+ * nothing when none does.
+ */
+function fundingsText(expense: Expense): Array<string> {
+  return expense.fundings.length === 0
+    ? []
+    : [
+        `Funded by transfers from a benefit account (works council refunds), ${amount(expense.funded)} in all; it still costs ${amount(expense.net)}:`,
+        ...expense.fundings.map(
+          (funding) =>
+            `- ${amount(funding.amount)} on ${funding.bookedOn} from ${named(funding.account)}, ${quoted(funding.label)}; line: ${funding.outLineId}`,
+        ),
+      ];
+}
+
 /** An expense made of several lines: its category, its net cost once, its payments and refunds. */
 function expenseText(expense: Expense): string {
   const words = KIND_WORDS[expense.kind];
@@ -392,7 +412,41 @@ function expenseText(expense: Expense): string {
     `${words.name} of ${expense.happenedOn} in ${pathText(expense.category)}, counted once at its ${words.net} of ${amount(expense.net)}.`,
     ...expense.payments.map((part) => `- paid ${partText(part)}`),
     ...expense.refunds.map((part) => `- refunded ${partText(part)}`),
+    ...fundingsText(expense),
   ].join("\n");
+}
+
+/** An expense a transfer funds or may fund: its day, category and cost, and its first line. */
+const fundedText = (funded: FundedExpense) =>
+  `the expense of ${funded.happenedOn} in ${pathText(funded.category)}, costing ${amount(funded.net)}, paid by ${partText(funded.line)}`;
+
+/** What a side of a transfer from a benefit account funds, or the expenses it may fund (#29). */
+function fundingText(lineId: string, funding: LineExpenses["funding"]): Array<string> {
+  if (funding === null) {
+    return [];
+  }
+
+  if (funding.funds !== null) {
+    return [
+      `A works council refund: it funds ${fundedText(funding.funds)}. That expense keeps its cost. To unfund it: ${call({ action: "unlink", line: lineId })}`,
+    ];
+  }
+
+  const [first] = funding.candidates;
+
+  if (first === undefined) {
+    return [
+      "A works council refund (a transfer from a benefit account): no expense of the 90 days before it, in its currency, costs at least its amount less what funds it already. It may fund one named with into.",
+    ];
+  }
+
+  return [
+    [
+      "A works council refund (a transfer from a benefit account): it may fund one of these expenses, which keeps its cost. Never applied unasked: the user chooses.",
+      ...funding.candidates.map((each) => `- ${fundedText(each)}`),
+      `Fund one with: ${call({ action: "link", line: lineId, into: first.line.lineId })}`,
+    ].join("\n"),
+  ];
 }
 
 /** A line's expense: split, made of several lines, or proposed as a refund; nothing when alone. */
@@ -420,9 +474,13 @@ function expensesText(lineId: string, found: LineExpenses): Array<string> {
   }
 
   const [first] = proposals;
+  const funded = only === undefined ? [] : fundingsText(only);
 
   if (first === undefined) {
-    return [];
+    return [
+      ...(funded.length === 0 ? [] : [funded.join("\n")]),
+      ...fundingText(lineId, found.funding),
+    ];
   }
 
   return [
@@ -682,6 +740,56 @@ const LINK_REFUSALS = {
     "The line {line} would refund more than the expense still costs: an expense never costs less than nothing. Link it to the expense it refunds, or leave it as it is.",
 } as const satisfies { readonly [Reason in LinkRefused["reason"]]: string };
 
+const FUND_REFUSALS = {
+  not_a_transfer:
+    "The line {line} is no side of a transfer: only a transfer from a benefit account funds an expense.",
+  not_from_benefit:
+    "The line {line} is a side of a transfer that does not go from a benefit account to an account of another kind: only such a transfer, a works council refund, funds an expense. Unpair it first if it is no transfer.",
+  not_an_expense:
+    "The line {line} is part of no expense (held, of no amount, a side of a transfer, or an income): give as into a line of the expense the transfer funds.",
+  split:
+    "The line {line} is split across several categories: put it back in one (split with one share) before a transfer funds it.",
+  currency:
+    "The expense of the line {line} is in another currency than the transfer: a transfer funds an expense of its own currency.",
+  later:
+    "The expense of the line {line} happened after the transfer: a refund funds an expense that happened by its day.",
+  over_cost:
+    "The transfer would fund more than the expense of the line {line} costs, its other fundings counted: choose an expense that costs at least the transfer, as show lists them.",
+  already_funding:
+    "The transfer of the line {line} funds another expense already: unfund it first with unlink, then link it again.",
+} as const satisfies { readonly [Reason in FundRefused["reason"]]: string };
+
+/**
+ * `link` with a side of a transfer as `line` (#29): the transfer funds the expense of `into`, which
+ * keeps its cost.
+ */
+function fundRun(owner: string, line: string, into: string) {
+  return fundExpense(owner, line, into).pipe(
+    Effect.map((expense) =>
+      [
+        `Funded: the transfer funds the expense of ${expense.happenedOn} in ${pathText(expense.category)}, which keeps its cost of ${amount(expense.net)}.`,
+        ...fundingsText(expense),
+        `To unfund it: ${call({ action: "unlink", line })}`,
+      ].join("\n"),
+    ),
+    Effect.catchTags({
+      LineNotFound: (missing) => lineRefused(missing.lineId, NOT_FOUND),
+      FundRefused: (refused) =>
+        Effect.fail(
+          new ToolRefusal({
+            message: FUND_REFUSALS[refused.reason].replace("{line}", refused.lineId),
+            example: Match.value(refused.reason).pipe(
+              Match.when("not_from_benefit", () => call({ action: "unpair", line })),
+              Match.when("already_funding", () => call({ action: "unlink", line })),
+              Match.orElse(() => call({ action: "show", line })),
+            ),
+          }),
+        ),
+      QueryFailed: Effect.die,
+    }),
+  );
+}
+
 /**
  * The call that helps after a refusal about `line`: unpair a transfer's side, unlink a line linked
  * already, else `otherwise`.
@@ -718,17 +826,20 @@ function linkRun(input: LinesInput, owner: string) {
     ),
     Effect.catchTags({
       LineNotFound: (missing) => lineRefused(missing.lineId, NOT_FOUND),
+      // A side of a transfer joins no expense: it may fund one, a works council refund (#29).
       LinkRefused: (refused) =>
-        Effect.fail(
-          new ToolRefusal({
-            message: LINK_REFUSALS[refused.reason].replace("{line}", refused.lineId),
-            example: helpingCall(
-              refused.reason,
-              refused.lineId,
-              call({ action: "show", line: refused.lineId }),
+        refused.reason === "transfer" && refused.lineId === line
+          ? fundRun(owner, line, into)
+          : Effect.fail(
+              new ToolRefusal({
+                message: LINK_REFUSALS[refused.reason].replace("{line}", refused.lineId),
+                example: helpingCall(
+                  refused.reason,
+                  refused.lineId,
+                  call({ action: "show", line: refused.lineId }),
+                ),
+              }),
             ),
-          }),
-        ),
       QueryFailed: Effect.die,
     }),
   );
@@ -759,11 +870,23 @@ function unlinkRun(input: LinesInput, owner: string) {
     }),
     Effect.catchTags({
       LineNotFound: (missing) => lineRefused(missing.lineId, NOT_FOUND),
+      // In no expense of several lines: the side of a transfer that funds one unfunds it (#29).
       NotLinked: () =>
-        Effect.fail(
-          new ToolRefusal({
-            message: `The line "${line.slice(0, 80)}" is the only line of its expense: there is nothing to unlink it from.`,
-            example: call({ action: "show", line }),
+        unfundExpense(owner, line).pipe(
+          Effect.map(
+            () =>
+              `Unfunded: the line stays a side of its transfer, and the expense it funded keeps its cost. To fund one again: ${call({ action: "show", line })}`,
+          ),
+          Effect.catchTags({
+            LineNotFound: (missing) => lineRefused(missing.lineId, NOT_FOUND),
+            NotFunding: () =>
+              Effect.fail(
+                new ToolRefusal({
+                  message: `The line "${line.slice(0, 80)}" is the only line of its expense, and funds none: there is nothing to unlink it from.`,
+                  example: call({ action: "show", line }),
+                }),
+              ),
+            QueryFailed: Effect.die,
           }),
         ),
       QueryFailed: Effect.die,
@@ -778,6 +901,8 @@ const SPLIT_REFUSALS = {
   transfer:
     "This line is a side of a transfer, never an expense nor an income: unpair it first if it is no transfer.",
   linked: "This line is part of an expense with other lines: unlink it first, then split it.",
+  funded:
+    "A transfer from a benefit account funds this line's expense: unfund it first (unlink with that transfer's side, as show gives it), then split the line.",
   count: `Give 1 to ${MAX_SHARES} shares; one share puts the whole line in one category.`,
   sum: "The shares must add up to the line's absolute amount, exactly.",
   amount:

@@ -1,9 +1,12 @@
 import {
   DataExport,
   Expenses,
+  FundRefused,
   ImportProfiles,
   Imports,
+  LinkRefused,
   Merchants,
+  NotLinked,
   RuleJobs,
   TransferRefused,
   Transfers,
@@ -16,6 +19,8 @@ import {
 import type {
   AccountRecord,
   CategoryRecord,
+  Expense,
+  FundedExpense,
   LineTransfer,
   MemoryCategoryRows,
   MemoryLineDetail,
@@ -196,10 +201,19 @@ const PAID = Layer.mock(Merchants, {
     ),
 });
 
+/**
+ * No line of these is part of an expense of several lines; those are tried end to end (#27,
+ * expenses-mcp.spec).
+ */
+const NO_EXPENSE = Layer.mock(Expenses, {
+  ofLine: () => Effect.succeed({ expenses: [], role: null, proposals: [], funding: null }),
+});
+
 function onToday(
   rows: MemoryLineRows,
   categories: Map<string, MemoryCategoryRows> = new Map(),
   transfers = NO_TRANSFER,
+  expenses = NO_EXPENSE,
 ): Runner<GoussetServices> {
   const byOwner = new Map([[reader.userId, rows]]);
 
@@ -215,11 +229,7 @@ function onToday(
     Layer.mock(UserData, {}),
     Layer.mock(RuleJobs, {}),
     transfers,
-    // No line of these is part of an expense of several lines; those are tried end to end (#27,
-    // expenses-mcp.spec).
-    Layer.mock(Expenses, {
-      ofLine: () => Effect.succeed({ expenses: [], role: null, proposals: [] }),
-    }),
+    expenses,
     TestClock.layer(),
   );
 
@@ -906,6 +916,154 @@ describe("lines and the accounts kept by their balance", () => {
       expect(refused.text).toContain('"account":"Gift card"}');
       expect(refused.pairings).toEqual([]);
     }
+  });
+});
+
+// A works council refund (#29): PerksHub, a benefit account, refunds 80.00 of the fuel line's
+// expense to the current account. What the database does is tried end to end
+// (works-council-refunds.spec); here, what `lines` says and which of the logic's calls it makes.
+const perksHub = account("PerksHub", { kind: "benefit", institution: "PerksHub" });
+const perksOut = line(perksHub.id, "2026-10-20", -3000, "PERKSHUB REFUND 0042");
+
+const PERKS: MemoryLineRows = {
+  ...ROWS,
+  accounts: [current, livret, otherLivret, brokerage, perksHub],
+  lines: [salary, fuel, perksOut],
+};
+
+const fuelPart = {
+  lineId: fuel.id,
+  bookedOn: fuel.bookedOn,
+  label: fuel.label,
+  account: { id: current.id, name: current.name, institution: current.institution },
+  amount: { minor: 4290, currency: "EUR" },
+};
+
+const fuelExpense: FundedExpense = {
+  id: memoryId(),
+  happenedOn: fuel.bookedOn,
+  category: lineCategory(otherExpense),
+  net: { minor: 4290, currency: "EUR" },
+  line: fuelPart,
+};
+
+const fundedFuel: Expense = {
+  id: fuelExpense.id,
+  kind: "expense",
+  happenedOn: fuel.bookedOn,
+  category: lineCategory(otherExpense),
+  classifiedBy: "default",
+  payments: [fuelPart],
+  refunds: [],
+  net: { minor: 4290, currency: "EUR" },
+  fundings: [
+    {
+      outLineId: perksOut.id,
+      inLineId: memoryId(),
+      bookedOn: perksOut.bookedOn,
+      label: perksOut.label,
+      amount: { minor: 3000, currency: "EUR" },
+      account: { id: perksHub.id, name: perksHub.name, institution: perksHub.institution },
+    },
+  ],
+  funded: { minor: 3000, currency: "EUR" },
+};
+
+/** A call on `PERKS` as a writer, the logic answering as a works council refund's side would. */
+async function refundCall(args: Arguments, funded = false) {
+  const calls: Array<string> = [];
+
+  const expenses = Layer.mock(Expenses, {
+    ofLine: (_owner, lineId) =>
+      Effect.succeed({
+        expenses: [],
+        role: null,
+        proposals: [],
+        funding:
+          lineId === perksOut.id
+            ? { funds: funded ? fuelExpense : null, candidates: funded ? [] : [fuelExpense] }
+            : null,
+      }),
+    link: (_owner, lineId) => Effect.fail(new LinkRefused({ reason: "transfer", lineId })),
+    fund: (_owner, transferLineId, expenseLineId) => {
+      calls.push(`fund ${transferLineId} ${expenseLineId}`);
+
+      return expenseLineId === fuel.id
+        ? Effect.succeed(fundedFuel)
+        : Effect.fail(new FundRefused({ reason: "over_cost", lineId: expenseLineId }));
+    },
+    unlink: (_owner, lineId) => Effect.fail(new NotLinked({ lineId })),
+    unfund: (_owner, transferLineId) => {
+      calls.push(`unfund ${transferLineId}`);
+
+      return Effect.succeed({ expenses: [], role: null, proposals: [], funding: null });
+    },
+  });
+
+  const client = await connectInProcess(
+    goussetServer,
+    { run: onToday(PERKS, new Map(), NO_TRANSFER, expenses) },
+    writer,
+    "2025-11-25",
+  );
+
+  const result = await client.callTool({ name: "lines", arguments: args });
+  const [first] = result.content ?? [];
+
+  return {
+    text: first?.type === "text" ? first.text : "",
+    isError: result.isError === true,
+    calls,
+  };
+}
+
+describe("lines and works council refunds", () => {
+  test("show offers a refund's side the expenses it may fund, with the call that funds one", async () => {
+    const { text, isError } = await refundCall({ action: "show", line: perksOut.id });
+
+    expect(isError, text).toBe(false);
+    expect(text).toContain("A works council refund (a transfer from a benefit account)");
+    expect(text).toContain(
+      `- the expense of 2026-10-12 in Other, costing 42.90 EUR, paid by 42.90 EUR on 2026-10-12, Current account (Riverside Bank), "CB FUELSTOP 0412 RIVERTON"; line: ${fuel.id}`,
+    );
+    expect(writtenCall(text, "Fund one with: ")).toEqual({
+      action: "link",
+      line: perksOut.id,
+      into: fuel.id,
+    });
+
+    const funding = await refundCall({ action: "show", line: perksOut.id }, true);
+
+    expect(funding.text).toContain("A works council refund: it funds the expense of 2026-10-12");
+    expect(writtenCall(funding.text, "To unfund it: ")).toEqual({
+      action: "unlink",
+      line: perksOut.id,
+    });
+  });
+
+  test("link with a refund's side funds the expense, which keeps its cost; unlink unfunds", async () => {
+    const funded = await refundCall({ action: "link", line: perksOut.id, into: fuel.id });
+
+    expect(funded.isError, funded.text).toBe(false);
+    expect(funded.calls).toEqual([`fund ${perksOut.id} ${fuel.id}`]);
+    expect(funded.text).toContain("which keeps its cost of 42.90 EUR");
+    expect(funded.text).toContain(
+      `- 30.00 EUR on 2026-10-20 from PerksHub (PerksHub), "PERKSHUB REFUND 0042"; line: ${perksOut.id}`,
+    );
+
+    const unfunded = await refundCall({ action: "unlink", line: perksOut.id });
+
+    expect(unfunded.isError, unfunded.text).toBe(false);
+    expect(unfunded.calls).toEqual([`unfund ${perksOut.id}`]);
+    expect(unfunded.text).toContain("Unfunded: the line stays a side of its transfer");
+  });
+
+  test("refuses a funding past the expense's cost, with a valid call", async () => {
+    const refused = await refundCall({ action: "link", line: perksOut.id, into: salary.id });
+
+    expect(refused.isError).toBe(true);
+    expect(refused.text).toContain("would fund more than the expense");
+    await expectValidExample(refused.text, PERKS);
   });
 });
 
