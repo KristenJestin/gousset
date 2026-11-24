@@ -350,7 +350,10 @@ test("the consent page offers one Allow and no write part when only read is aske
   baseURL,
   mcpClientId,
 }) => {
-  await connectMcp({
+  expect(mcpClientId).toBe(TEST_CLIENT_ID);
+
+  // By hand: the official client asks for every scope the server lists.
+  const tokens = await authorizeByHand({
     baseURL: baseURL ?? "",
     page: userPage,
     consent: async (page) => {
@@ -360,8 +363,9 @@ test("the consent page offers one Allow and no write part when only read is aske
       await page.getByRole("button", { name: "Allow", exact: true }).click();
     },
     scope: "read",
-    clientId: mcpClientId,
   });
+
+  expect((tokens.scope ?? "").split(" ")).not.toContain("write");
 });
 
 test("a client whose redirect is not on its own site is refused before any consent", async ({
