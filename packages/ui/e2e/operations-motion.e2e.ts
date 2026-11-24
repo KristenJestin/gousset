@@ -472,7 +472,7 @@ test.describe("Line detail on a tablet", () => {
       timesWhen(opening, 0, (left) => left !== "none" && Number(left) > rest + 1).length,
     ).toBeGreaterThan(1);
     expect(await listWidth()).toBe(before);
-    await expect(page.locator('[data-slot="operations-detail"]')).toHaveCount(0);
+    await expect(page.locator('[data-slot="operations-detail"]')).toBeHidden();
   });
 });
 

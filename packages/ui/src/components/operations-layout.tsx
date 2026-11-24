@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 
 import { useHydrated } from "../hooks/use-hydrated";
-import { useLargeScreen } from "../hooks/use-large-screen";
 import { usePageLanguage } from "../hooks/use-page-language";
 import { useUiMessages } from "../hooks/use-ui-messages";
 import { formatCount } from "../lib/count";
@@ -38,7 +37,8 @@ const shows = (detail: ReactNode) => detail !== undefined && detail !== null;
  * 360 px panel, laid out at its full width from the start) and the list narrows with it; closing,
  * it waits for the content to fade, then narrows back to nothing. Its width moves, never a scale.
  * A column the server drew is there from the first paint, still. Below `lg` it never shows: the
- * first paint keeps the list whole, and once the page runs the detail is a sheet.
+ * first paint keeps the list whole, and once the page runs the detail is a sheet (drawn in a
+ * portal, outside the hidden column).
  */
 function DetailColumn({ closing, children }: { closing: boolean; children: ReactNode }) {
   const hydrated = useHydrated();
@@ -81,7 +81,6 @@ export function OperationsLayout({ filters, count, list, detail, locale }: Opera
   const words = useUiMessages().operations;
   const pageLocale = usePageLanguage();
   const writtenIn = locale ?? pageLocale;
-  const large = useLargeScreen();
 
   // The detail drawn: the open one, or the last one while it leaves.
   const [kept, setKept] = useState(detail);
@@ -121,7 +120,10 @@ export function OperationsLayout({ filters, count, list, detail, locale }: Opera
         <div className="min-w-0 flex-1 overflow-hidden rounded-lg border bg-card">{list}</div>
         {shows(kept) ? (
           <DetailClosing value={closing}>
-            {large ? <DetailColumn closing={closing}>{kept}</DetailColumn> : kept}
+            {/* On every screen, so that the detail keeps its place in the tree when the page
+                learns the screen's width: below `lg` the column is hidden and the detail draws its
+                sheet outside it, the server's still sheet staying still. */}
+            <DetailColumn closing={closing}>{kept}</DetailColumn>
           </DetailClosing>
         ) : null}
       </div>
