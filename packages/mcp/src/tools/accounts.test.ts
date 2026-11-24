@@ -1,6 +1,5 @@
 import {
   DataExport,
-  FixtureLedger,
   ImportProfiles,
   Imports,
   memoryAccountStore,
@@ -116,7 +115,6 @@ const ROWS: MemoryRows = {
 
 function onToday(rows: MemoryRows): Runner<GoussetServices> {
   const layer = Layer.mergeAll(
-    FixtureLedger,
     memoryAccountStore(new Map([[reader.userId, rows]])),
     // accounts never reaches the imports, the export nor the line search.
     memoryLineStore(),
