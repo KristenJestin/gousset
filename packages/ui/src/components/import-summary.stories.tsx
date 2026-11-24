@@ -4,6 +4,7 @@ import type { ReactNode } from "react";
 
 import { InFrench } from "../stories/in-french";
 import { Button } from "./button";
+import { ButtonLink } from "./button-link";
 import { ImportSummary } from "./import-summary";
 import type { ImportSummaryProps } from "./import-summary";
 
@@ -18,17 +19,19 @@ const SUMMARY: ImportSummaryProps = {
 function Actions() {
   return (
     <>
-      <Button variant="secondary" icon="undo">
-        Undo
+      <Button variant="quiet" size="sm" icon="undo">
+        Undo this import
       </Button>
-      <Button>Continue to the review</Button>
+      <ButtonLink href="#" size="sm" trailingIcon="next">
+        Continue to the review
+      </ButtonLink>
     </>
   );
 }
 
 /** The block a page puts it in: the component itself draws no surface. */
 function InBlock({ children }: { children: ReactNode }) {
-  return <div className="w-full max-w-4xl rounded-lg border bg-card p-6">{children}</div>;
+  return <div className="w-full max-w-5xl rounded-lg border bg-card p-4 md:p-6">{children}</div>;
 }
 
 /** The summary appears once the import ends: it unfolds. */
@@ -74,12 +77,15 @@ function Counting() {
 }
 
 /**
- * An import's summary before moving on to the review (wireframe, screen 6, block 4): the lines
- * read, those added, those the app already had (duplicates skipped), and those held as near
- * duplicates for the review, which stand out while there are some; under them, a note when the
- * import has something to say beyond its counts. The page gives every label, the note
- * and its actions ("Undo", "Continue to the review"); the component writes the counts in the
- * page's language, in tabular figures.
+ * An import's summary before moving on to the review (wireframe, screen 6, block 4), on an inset
+ * under its file's row: the lines read, those added, those the app already had (duplicates
+ * skipped), and those held as near duplicates for the review, which stand out while there are
+ * some, as one group; under them, a note when the import has something to say beyond its counts.
+ * Then its actions at the right edge: a quiet "Undo this import" (red only on hover), set apart
+ * from the way forward, "Continue to the review", a primary `ButtonLink`, last. On a phone the
+ * actions stack under the figures, full width, the way forward on top. The page gives every
+ * label, the note and its actions; the component writes the counts in the page's language, in
+ * tabular figures.
  *
  * Accessibility: a labelled region and a list of terms; each count is heard whole, never a digit
  * on its way. It is no live region: the import's `JobProgress` announces the end.
@@ -161,7 +167,7 @@ export const French: Story = {
   ),
 };
 
-/** On a phone the figures sit two by two, the actions under them. */
+/** On a phone the figures sit two by two, the actions under them, the way forward on top. */
 export const Phone: Story = {
   globals: { viewport: { value: "mobile1", isRotated: false } },
 };
