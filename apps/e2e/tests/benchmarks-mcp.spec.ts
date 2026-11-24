@@ -69,7 +69,11 @@ test("month benchmarks says each category's benchmark and flags the ones above i
     clientId: mcpClientId,
   });
 
-  expect(client.getInstructions()).toContain("benchmarks (each expense category against its mark");
+  // The instructions send an agent to `month` for benchmarks, and say what one is.
+  expect(client.getInstructions()).toContain("a row's days, subscriptions and benchmarks.");
+  expect(client.getInstructions()).toContain(
+    "- benchmark: a suggested monthly mark for a category",
+  );
 
   const first = await benchmarks(client);
 
