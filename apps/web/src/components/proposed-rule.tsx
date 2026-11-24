@@ -1,6 +1,6 @@
 import { MAX_LABEL_TEXT } from "@gousset/core/rule-values";
 import { RuleProposal } from "@gousset/ui/components/rule-proposal";
-import type { RuleProposalAnswer } from "@gousset/ui/components/rule-proposal";
+import type { RuleProposalAnswer, RuleProposalSets } from "@gousset/ui/components/rule-proposal";
 import { usePageLanguage } from "@gousset/ui/hooks/use-page-language";
 import { m } from "@gousset/i18n/messages";
 import { notify } from "@gousset/ui/lib/notify";
@@ -16,26 +16,45 @@ import { invalidateRules, ruleQueries } from "@/queries/rules";
 /** How long the count waits for the typing to stop before it is read again. */
 const TYPING_WAIT_MS = 300;
 
+/**
+ * What the rule sets: the category the line was just put in, by id and by its path ("Food ›
+ * Groceries"), or the merchant a line paid through an intermediary was just given (#30), by id and
+ * by name.
+ */
+export type ProposedRuleSets = {
+  kind: "category" | "merchant";
+  id: string;
+  name: string;
+};
+
 export type ProposedRuleProps = {
   lineId: string;
-  /** The category the line was just put in, by id and by its path ("Food › Groceries"). */
-  categoryId: string;
-  category: string;
+  sets: ProposedRuleSets;
   /** The rule was applied to the past: its job, which the page follows. */
   onApplied: (jobId: string) => void;
 };
 
 /**
- * A correction proposes a rule (#25): once the line's category is changed, "Make it a rule?",
- * read from the server (the line's cleaned label, and how many lines already there it would
- * change), opens; the count is read again as the words change. Made from a correction, it is
- * applied to the past, if asked, without touching a line classified by hand. Cancel changes
+ * A correction proposes a rule (#25): once the line's category is changed, or the merchant of a
+ * line paid through an intermediary is chosen (#30), "Make it a rule?", read from the server (the
+ * line's cleaned label, or the intermediary through who was paid, and how many lines already there
+ * it would change), opens; the count is read again as the words change. Made from a correction, it
+ * is applied to the past, if asked, without touching a line classified by hand. Cancel changes
  * nothing. A proposal the server cannot make (a label of nothing to look for) is not offered.
  */
-export function ProposedRule({ lineId, categoryId, category, onApplied }: ProposedRuleProps) {
+export function ProposedRule({ lineId, sets, onApplied }: ProposedRuleProps) {
   const queryClient = useQueryClient();
   const locale = usePageLanguage();
-  const proposal = useQuery(ruleQueries.proposal(lineId, categoryId));
+
+  const effect =
+    sets.kind === "merchant"
+      ? { merchantId: sets.id, categoryId: null }
+      : { merchantId: null, categoryId: sets.id };
+
+  const named: RuleProposalSets =
+    sets.kind === "merchant" ? { merchant: sets.name } : { category: sets.name };
+
+  const proposal = useQuery(ruleQueries.proposal(lineId, effect));
   const [open, setOpen] = useState(true);
   const [error, setError] = useState<string>();
   // The words typed, once the typing stops; none while they are the proposal's own.
@@ -43,10 +62,7 @@ export function ProposedRule({ lineId, categoryId, category, onApplied }: Propos
   const typing = useDebouncer(setTyped, { wait: TYPING_WAIT_MS });
 
   const preview = useQuery({
-    ...ruleQueries.reach(
-      { conditions: proposalConditions(typed ?? ""), merchantId: null, categoryId },
-      null,
-    ),
+    ...ruleQueries.reach({ conditions: proposalConditions(typed ?? ""), ...effect }, null),
     enabled: typed !== null && typed.trim() !== "",
   });
 
@@ -67,8 +83,7 @@ export function ProposedRule({ lineId, categoryId, category, onApplied }: Propos
     const made = await createRule({
       data: {
         conditions: proposalConditions(words),
-        merchantId: null,
-        categoryId,
+        ...effect,
         enabled: true,
         createdFrom: "correction",
       },
@@ -102,9 +117,9 @@ export function ProposedRule({ lineId, categoryId, category, onApplied }: Propos
 
   return (
     <RuleProposal
+      {...named}
       open={open}
       onOpenChange={setOpen}
-      category={category}
       words={offered.words}
       onWordsChange={(words) => {
         setError(undefined);

@@ -23,7 +23,8 @@ const TYPING_WAIT_MS = 300;
 
 /**
  * The user's merchants (#24), by name, recognised from the lines of each import: a search on their
- * names and cleaned labels, a page at a time, each opening its own page.
+ * names and cleaned labels, a page at a time, each opening its own page; a payment intermediary
+ * (#30) says so under its name.
  *
  * Motion: none of its own. The section fades in as any screen does (200 ms), and a new search
  * keeps the last rows until its own come, so nothing flashes; a merchant's dialogs are on its page.
@@ -129,7 +130,11 @@ function Rows({
           to="/settings/merchants/$merchantId"
           params={{ merchantId: merchant.id }}
           title={merchant.name}
-          description={labelsCount(merchant.aliases, locale)}
+          description={
+            merchant.intermediary
+              ? m.merchantsLabelsIntermediary({ labels: labelsCount(merchant.aliases, locale) })
+              : labelsCount(merchant.aliases, locale)
+          }
         />
       ))}
     </List>

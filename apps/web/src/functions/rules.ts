@@ -2,9 +2,11 @@ import {
   createRule as createCoreRule,
   deleteRule as deleteCoreRule,
   editRule as editCoreRule,
+  lineMerchant,
   listRules,
   moveRule as moveCoreRule,
   previewRule,
+  ruleWords,
   showLine,
   showRule,
   startApplyToPast,
@@ -16,7 +18,6 @@ import { Effect, Schema } from "effect";
 
 import { LineId } from "@/lib/operations-search";
 import { proposalConditions } from "@/lib/rule-conditions";
-import { proposalWords } from "@/lib/rule-proposal";
 import { runCore } from "@/services";
 
 import { CategoryId } from "./categories";
@@ -235,21 +236,27 @@ export const applyRuleToPast = createServerFn({ method: "POST" })
 
 /**
  * The rule a correction proposes (#25): "label contains" the words that name the line's merchant
- * in its label, for the category the user just chose, with how many lines already there it would
- * change. A line or a category gone: a code.
+ * in its label, for the category the user just chose or the merchant they gave a line paid through
+ * an intermediary (#30), with how many lines already there it would change. An intermediary's line
+ * is looked for by the intermediary through who was paid (`PAYPAL *PIXELPLAY`), never by the
+ * intermediary alone, whichever is set. A line, a category or a merchant gone: a code.
  */
 export const getRuleProposal = createServerFn({ method: "GET" })
   .middleware([signedIn, slowedInDevelopment])
-  .validator(Schema.toStandardSchemaV1(Schema.Struct({ lineId: LineId, categoryId: CategoryId })))
+  .validator(Schema.toStandardSchemaV1(Schema.Struct({ lineId: LineId, ...Effects })))
   .handler(({ data, context }) =>
     runCore(
       Effect.gen(function* () {
-        const line = yield* showLine(context.owner, data.lineId);
-        const words = proposalWords(line.label, line.counterpartyName);
+        const [line, paid] = yield* Effect.all([
+          showLine(context.owner, data.lineId),
+          lineMerchant(context.owner, data.lineId),
+        ]);
+
+        const words = ruleWords(line.label, line.counterpartyName, paid.intermediary !== null);
 
         const reach = yield* previewRule(context.owner, {
           conditions: proposalConditions(words),
-          merchantId: null,
+          merchantId: data.merchantId,
           categoryId: data.categoryId,
         });
 

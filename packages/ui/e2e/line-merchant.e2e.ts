@@ -133,10 +133,10 @@ test.describe("LineMerchant", () => {
     await page.goto(story("linemerchant", "french"));
     await expect(page.getByText("Payé via PayPal")).toBeVisible();
     await expect(page.getByText("via PayPal", { exact: true })).toBeVisible();
-    await expect(page.getByRole("button", { name: "Changer le marchand" })).toBeVisible();
-    await page.getByRole("button", { name: "Choisir le marchand" }).click();
+    await expect(page.getByRole("button", { name: "Changer le commerçant" })).toBeVisible();
+    await page.getByRole("button", { name: "Choisir le commerçant" }).click();
     await expect(
-      page.getByRole("dialog").getByRole("combobox", { name: "Marchand" }),
+      page.getByRole("dialog").getByRole("combobox", { name: "Commerçant" }),
     ).toBeVisible();
     await expect(page.getByRole("dialog").getByRole("button", { name: "Attribuer" })).toBeVisible();
   });

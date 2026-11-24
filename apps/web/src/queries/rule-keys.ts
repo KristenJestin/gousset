@@ -10,7 +10,10 @@ export const ruleKeys = {
   detail: (ruleId: string) => [...ruleKeys.all, "detail", ruleId] as const,
   /** What a draft would do to the lines already there, by the draft as JSON. */
   reach: (draft: string) => [...ruleKeys.all, "reach", draft] as const,
-  /** The rule a correction proposes, for a line and the category it was put in. */
-  proposal: (lineId: string, categoryId: string) =>
-    [...ruleKeys.all, "proposal", lineId, categoryId] as const,
+  /**
+   * The rule a correction proposes, for a line and the category it was put in, or the merchant it
+   * was given (#30).
+   */
+  proposal: (lineId: string, categoryId: string | null, merchantId: string | null) =>
+    [...ruleKeys.all, "proposal", lineId, categoryId, merchantId] as const,
 };

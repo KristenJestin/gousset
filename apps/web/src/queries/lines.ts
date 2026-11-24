@@ -1,6 +1,7 @@
 import { infiniteQueryOptions, keepPreviousData, queryOptions } from "@tanstack/react-query";
 
 import { getLine, getLines } from "@/functions/lines";
+import { getLineMerchant } from "@/functions/merchants";
 
 import { lineKeys } from "./line-keys";
 import type { LineFilters } from "./line-keys";
@@ -34,5 +35,14 @@ export const lineQueries = {
     queryOptions({
       queryKey: lineKeys.detail(lineId),
       queryFn: () => getLine({ data: { lineId } }),
+    }),
+  /**
+   * Who a line paid, through which intermediary, and whether it asks (#30); a line the user does
+   * not have comes back as `{ ok: false, code }`.
+   */
+  merchant: (lineId: string) =>
+    queryOptions({
+      queryKey: lineKeys.merchant(lineId),
+      queryFn: () => getLineMerchant({ data: { lineId } }),
     }),
 };
