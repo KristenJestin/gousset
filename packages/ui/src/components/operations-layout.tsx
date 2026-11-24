@@ -6,8 +6,11 @@ import { useLargeScreen } from "../hooks/use-large-screen";
 import { usePageLanguage } from "../hooks/use-page-language";
 import { useUiMessages } from "../hooks/use-ui-messages";
 import { formatCount } from "../lib/count";
-import { DetailCameWithPage, DetailClosing } from "../lib/detail-closing";
+import { DetailCameWithPage, DetailClosing, DetailSheetHead } from "../lib/detail-closing";
+import type { DetailHead } from "../lib/detail-closing";
 import { cn } from "../lib/utils";
+import { Amount } from "./amount";
+import { Sheet } from "./sheet";
 import { Skeleton } from "./skeleton";
 
 export type OperationsLayoutProps = {
@@ -83,19 +86,62 @@ function DetailColumn({
 }
 
 /**
+ * Below `lg`, the detail's sheet: one for every line opened in a row, so that the next line's
+ * content takes the last one's place in it, still, while the sheet stays open and stays where it
+ * is among the page's dialogs (#164). Its head is the open line's, which `LineDetail` says.
+ */
+function DetailSheet({
+  head,
+  closing,
+  still,
+  onHead,
+  children,
+}: {
+  head: DetailHead | undefined;
+  closing: boolean;
+  /** It came with the page: there at once, never rising on its own. */
+  still: boolean;
+  onHead: (head: DetailHead) => void;
+  children: ReactNode;
+}) {
+  return (
+    <Sheet
+      open={!closing}
+      onOpenChange={(open) => {
+        if (!open) {
+          head?.onClose();
+        }
+      }}
+      title={head?.title ?? ""}
+      description={
+        head === undefined ? undefined : (
+          <Amount value={head.amount} size="lg" roll={false} locale={head.locale} />
+        )
+      }
+      appear={!still}
+    >
+      <DetailSheetHead value={onHead}>{children}</DetailSheetHead>
+    </Sheet>
+  );
+}
+
+/**
  * The operations screen's places (docs/wireframes, screen 2): the filters, the count of lines
  * that match, the list in a block that takes the height left in the screen, with its own
  * scroller, and the open line's detail. From Tailwind's `lg` on, the detail sits in a 360 px
  * column at the list's right, never over it: the list makes room, its amounts stay whole. Below,
- * the detail is a sheet (`LineDetail` draws it) over the list, which keeps its place and scroll
- * under it. The whole takes the screen's height (at least 480 px), so that the list scrolls in
+ * the detail is a sheet over the list, which keeps its place and scroll under it: one sheet for
+ * the lines opened one after the other (the review's next line), which stays open while the next
+ * line's content takes the last one's place, so that it never comes up again over a dialog opened
+ * since (#164). The whole takes the screen's height (at least 480 px), so that the list scrolls in
  * itself.
  *
  * Motion (#128): the detail's column widens from 0 in 300 ms (ease-out) as the list narrows; the
  * detail's content fades in once there is room. Closing, the content fades out first (150 ms),
  * then the column closes (150 ms, ease-in): the closed detail stays drawn meanwhile, and
- * `DetailClosing` tells it so. Below `lg` the sheet rises from its edge and goes back down. A new
- * count is said to screen readers. Cut under reduced motion: the detail is there, or not.
+ * `DetailClosing` tells it so. Below `lg` the sheet rises from its edge and goes back down; from
+ * one line to the next it stays still, its content changed at once. A new count is said to screen
+ * readers. Cut under reduced motion: the detail is there, or not.
  */
 export function OperationsLayout({
   filters,
@@ -124,6 +170,9 @@ export function OperationsLayout({
   const [withPage, setWithPage] = useState(() => keyOf(detail));
   const cameWithPage = withPage !== null && keyOf(kept) === withPage;
 
+  // Below `lg`, the open line's head on its sheet.
+  const [head, setHead] = useState<DetailHead>();
+
   useEffect(() => {
     if (!closing) {
       return;
@@ -134,6 +183,7 @@ export function OperationsLayout({
     const timer = window.setTimeout(() => {
       setKept(undefined);
       setWithPage(null);
+      setHead(undefined);
     }, wait);
 
     return () => window.clearTimeout(timer);
@@ -168,7 +218,13 @@ export function OperationsLayout({
                 sheet, and the server's still sheet stays still. */}
             <DetailCameWithPage value={cameWithPage}>
               <DetailColumn closing={closing} beside={large}>
-                {kept}
+                {large ? (
+                  kept
+                ) : (
+                  <DetailSheet head={head} closing={closing} still={cameWithPage} onHead={setHead}>
+                    {kept}
+                  </DetailSheet>
+                )}
               </DetailColumn>
             </DetailCameWithPage>
           </DetailClosing>

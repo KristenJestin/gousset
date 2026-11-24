@@ -543,4 +543,37 @@ test.describe("Line detail on a phone", () => {
     expect(offEdge(closing, rest)).toEqual([]);
     await expect(page.getByRole("dialog")).toHaveCount(0);
   });
+
+  // #164: the sheet put up again for the next line would land over a dialog opened since.
+  test("from one line to the next, the sheet stays open and still, the focus on the next line", async ({
+    page,
+  }) => {
+    await page.goto(story("operationslayout", "phone-next-line"));
+
+    const dialog = page.getByRole("dialog");
+    const title = dialog.locator('[id$="-title"]');
+
+    await expect(dialog).toBeVisible();
+
+    await restingTop(page);
+
+    const first = await title.textContent();
+
+    // The same element after: a sheet put up again would be a new one.
+    await dialog.evaluate((node) => node.setAttribute("data-e2e-first", ""));
+
+    const stepping = await sampleFrames(
+      page,
+      [{ selector: '[role="dialog"]', text: "", read: "top" }],
+      { trigger: dialog.getByRole("button", { name: "Next line" }) },
+      400,
+    );
+
+    await expect(title).not.toHaveText(first ?? "");
+    await expect(page.locator('[role="dialog"][data-e2e-first]')).toHaveCount(1);
+    expect(stepping.every(({ values }) => values[0] !== "none")).toBe(true);
+    // Still: its top jumps to the next line's height at once, never sliding there.
+    expect(new Set(stepping.map(({ values }) => values[0])).size).toBeLessThanOrEqual(2);
+    await expect(dialog.locator('[data-slot="line-review"]')).toBeFocused();
+  });
 });
