@@ -130,6 +130,9 @@ const SHOTS: ReadonlyArray<Shot> = [
   { id: "categories-categorypicker--chosen" },
   { id: "operations-linedetail--with-category" },
   { id: "operations-lineexpense--linked" },
+  // A works council refund and the expense it funds, each on its side's detail (#29).
+  { id: "operations-linefunding--funds" },
+  { id: "operations-linefunding--funded-by" },
   { id: "rules-ruleslist--default" },
   { id: "rules-ruleeditor--default" },
   { id: "rules-ruleproposal--default" },
