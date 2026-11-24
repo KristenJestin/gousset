@@ -78,6 +78,16 @@ describe("the words a rule born from a line looks for", () => {
       true,
       "PAYPAL EUROPE SARL *PIXELPLAY",
     ],
+    ["a store number after the intermediary: a break", "CB PAYPAL 2110 RIVERTON", null, true, null],
+    ["a date after the intermediary: a break", "PAYPAL 21/10 RIVERTON", null, true, null],
+    ["a reference after the intermediary: a break", "PAYPAL *1234 PIXELPLAY", null, true, null],
+    [
+      "a long number after the intermediary: a break",
+      "PAYPAL 1043211234567 PIXELPLAY",
+      null,
+      true,
+      null,
+    ],
     ["a normal line naming no one: the label", " 21/10 X1234 ", null, false, "21/10 X1234"],
     [
       "an intermediary named by the counterparty: found in the label",
@@ -103,6 +113,14 @@ describe("the words a rule born from a line looks for", () => {
 
     expect(ruleWords(long, null, true)?.length).toBeLessThanOrEqual(MAX_LABEL_TEXT);
     expect(ruleWords(long, null, false)?.length).toBeLessThanOrEqual(MAX_LABEL_TEXT);
+  });
+
+  test("cost no more for a very long label", () => {
+    const long = `PAYPAL${" SA".repeat(40_000)} *PIXELPLAY`;
+    const started = performance.now();
+
+    expect(ruleWords(long, null, true)).toBeNull();
+    expect(performance.now() - started).toBeLessThan(1000);
   });
 
   test("are found in the label, in any case, whatever it holds", () => {
