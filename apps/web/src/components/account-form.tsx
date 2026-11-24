@@ -171,7 +171,8 @@ export type AccountFormProps = {
  * its balance, the category its movements go to, among the categories it reads itself (the page's
  * loader reads them first). `key`d by the account's id (or "new") at the call site so that editing
  * another account starts from its own values. Motion: the shared `Sheet`'s, sliding in from its
- * edge, a fade under reduced motion; the category field appears with no motion of its own.
+ * edge over the backdrop, cut under reduced motion; the category field appears with no motion of
+ * its own.
  */
 export function AccountForm({
   open,
@@ -281,14 +282,9 @@ export function AccountForm({
     <Sheet
       title={title}
       open={open}
-      onOpenChange={(next) => {
-        // While the form is sent it stays open: its answer lands on the form that sent it.
-        if (!next && busy) {
-          return;
-        }
-
-        onOpenChange(next);
-      }}
+      onOpenChange={onOpenChange}
+      // While the form is sent it stays open: its answer lands on the form that sent it.
+      sending={busy}
       onSubmit={(event) => {
         event.preventDefault();
         void submit();

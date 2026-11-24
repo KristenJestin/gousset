@@ -6,10 +6,11 @@ import type { Touched } from "@/jobs/view";
 
 import { accountKeys } from "./account-keys";
 import { categoryKeys } from "./category-keys";
-import { invalidateApproval, invalidateMerchantEntries, invalidateTouched } from "./invalidate";
+import { invalidateMerchantEntries, invalidateTouched } from "./invalidate";
 import { lineKeys } from "./line-keys";
 import { merchantKeys } from "./merchant-keys";
 import { monthKeys } from "./month-keys";
+import { reviewKeys } from "./review-keys";
 import { ruleKeys } from "./rule-keys";
 
 const isInvalidated = (client: QueryClient, queryKey: QueryKey) =>
@@ -29,21 +30,23 @@ function clientWith(keys: ReadonlyArray<QueryKey>) {
 const SEARCH = lineKeys.search({ text: "greenmarket" });
 const DETAIL = lineKeys.detail("6f1c2a4e-0d5b-4c3e-9a7f-2b8d1e4c5a60");
 const ACCOUNTS = accountKeys.list();
+const COUNTS = reviewKeys.startingPoints();
 const MERCHANTS = merchantKeys.list("");
 const MERCHANT = merchantKeys.detail("0b6e3f9a-4c2d-4e8b-9f1a-7d5c3b2e1a90");
 
 describe("invalidateTouched", () => {
-  test("reads the operations and the accounts again, after an import or its undo", async () => {
+  test("reads the operations, the accounts and the review's counts again, after an import or its undo", async () => {
     const touchedOnes: ReadonlyArray<Touched> = [{ months: ["2026-10"] }, { everyMonth: true }];
 
     for (const touched of touchedOnes) {
-      const client = clientWith([SEARCH, DETAIL, ACCOUNTS]);
+      const client = clientWith([SEARCH, DETAIL, ACCOUNTS, COUNTS]);
 
       await invalidateTouched(client, touched);
 
       expect(isInvalidated(client, SEARCH)).toBe(true);
       expect(isInvalidated(client, DETAIL)).toBe(true);
       expect(isInvalidated(client, ACCOUNTS)).toBe(true);
+      expect(isInvalidated(client, COUNTS)).toBe(true);
     }
   });
 
@@ -77,11 +80,22 @@ describe("invalidateTouched", () => {
 
     expect(isInvalidated(client, categoryKeys.list())).toBe(true);
   });
+
+  test("reads again the months a job touched, and only those", async () => {
+    const october = [...monthKeys.of("2026-10"), "e2e-touched"];
+    const november = [...monthKeys.of("2026-11"), "e2e-touched"];
+    const client = clientWith([october, november]);
+
+    await invalidateTouched(client, { months: ["2026-10"] });
+
+    expect(isInvalidated(client, october)).toBe(true);
+    expect(isInvalidated(client, november)).toBe(false);
+  });
 });
 
 describe("invalidateMerchantEntries", () => {
   test("reads the merchants, the operations, the months and the categories again: the entries moved", async () => {
-    const october = monthKeys.summary("2026-10");
+    const october = [...monthKeys.of("2026-10"), "e2e-touched"];
     const categories = categoryKeys.list();
     const client = clientWith([MERCHANTS, MERCHANT, SEARCH, DETAIL, october, categories]);
 
@@ -90,32 +104,5 @@ describe("invalidateMerchantEntries", () => {
     for (const queryKey of [MERCHANTS, MERCHANT, SEARCH, DETAIL, october, categories]) {
       expect(isInvalidated(client, queryKey), JSON.stringify(queryKey)).toBe(true);
     }
-  });
-});
-
-describe("invalidateApproval", () => {
-  test("reads the month again, and the next month's day-by-day spending, which it is compared with", async () => {
-    const october = monthKeys.summary("2026-10");
-    const novemberDays = monthKeys.spendingDays("2026-11", "category", "Groceries");
-    const novemberSummary = monthKeys.summary("2026-11");
-    const decemberDays = monthKeys.spendingDays("2026-12", "category", "Groceries");
-    const client = clientWith([october, novemberDays, novemberSummary, decemberDays]);
-
-    await invalidateApproval(client, "2026-10");
-
-    expect(isInvalidated(client, october)).toBe(true);
-    expect(isInvalidated(client, novemberDays)).toBe(true);
-    // The rest of the next month counts every expense, approved or not: it stays as it was.
-    expect(isInvalidated(client, novemberSummary)).toBe(false);
-    expect(isInvalidated(client, decemberDays)).toBe(false);
-  });
-
-  test("reads the operations again: an approved line is no longer to review", async () => {
-    const client = clientWith([SEARCH, DETAIL]);
-
-    await invalidateApproval(client, "2026-10");
-
-    expect(isInvalidated(client, SEARCH)).toBe(true);
-    expect(isInvalidated(client, DETAIL)).toBe(true);
   });
 });

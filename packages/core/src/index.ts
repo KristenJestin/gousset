@@ -171,6 +171,10 @@ export type {
   PartialImport,
 } from "./review";
 
+export { startingPoints } from "./starting-points";
+
+export type { StartingPoints } from "./starting-points";
+
 export { Today, currentMonth, today } from "./today";
 
 export { Month, SpendingGroup, addMonths } from "./values";

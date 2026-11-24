@@ -82,7 +82,7 @@ From Anthropic's [Writing effective tools for agents](https://www.anthropic.com/
 
    | Family | Arrives in |
    |---|---|
-   | `month` | v0.1 (made-up data), then v0.4 |
+   | `month` | v0.1 (made-up data; since 0.2.1 it says the review is not available yet, with no figure), then v0.4 |
    | `accounts`, `lines`, `imports` | v0.2 |
    | `data` (what an export holds, and where to download it) | v0.2 |
    | `categories`, `merchants`, `rules` (`list`, `show`, `create`, `edit`, `disable`, `delete`, `apply_to_past`) | v0.3 |

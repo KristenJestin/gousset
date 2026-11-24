@@ -1,6 +1,5 @@
 import {
   DataExport,
-  FixtureLedger,
   ImportProfiles,
   Imports,
   Merchants,
@@ -88,7 +87,6 @@ afterEach(async () => {
 async function connect(rows: MemoryRows = ROWS, caller: Caller = writer) {
   const runtime = ManagedRuntime.make(
     Layer.mergeAll(
-      FixtureLedger,
       memoryAccountStore(new Map([[caller.userId, rows]])),
       // accounts never reaches the imports, the export, the merchants, the transfers nor the rules;
       // it searches the lines for a noted balance's movement (#31), and reads the categories.

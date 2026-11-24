@@ -1,6 +1,5 @@
 import {
   DataExport,
-  FixtureLedger,
   ImportProfiles,
   Imports,
   Merchants,
@@ -130,7 +129,6 @@ const ROWS: MemoryRows = {
 /** `lineRows`: the lines a search finds, where a noted balance's movement is looked for. */
 function onToday(rows: MemoryRows, lineRows: MemoryLineRows = {}): Runner<GoussetServices> {
   const layer = Layer.mergeAll(
-    FixtureLedger,
     memoryAccountStore(new Map([[reader.userId, rows]])),
     // accounts never reaches the imports nor the export.
     memoryLineStore(new Map([[reader.userId, lineRows]])),

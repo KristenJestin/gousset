@@ -1,6 +1,5 @@
 import {
   DataExport,
-  FixtureLedger,
   ImportProfiles,
   Imports,
   Merchants,
@@ -36,7 +35,6 @@ async function listing() {
           Effect.provide(
             effect,
             Layer.mergeAll(
-              FixtureLedger,
               memoryAccountStore(),
               memoryLineStore(),
               memoryCategoryStore(),

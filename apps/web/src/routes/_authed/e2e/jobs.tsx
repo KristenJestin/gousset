@@ -1,24 +1,23 @@
 import { m } from "@gousset/i18n/messages";
-import { Amount } from "@gousset/ui/components/amount";
 import { Button } from "@gousset/ui/components/button";
 import { Card } from "@gousset/ui/components/card";
 import { EmptyState } from "@gousset/ui/components/empty-state";
 import { JobProgress } from "@gousset/ui/components/job-progress";
 import { Actions, Form, Screen } from "@gousset/ui/components/screen";
 import { TextField } from "@gousset/ui/components/text-field";
-import { useQuery } from "@tanstack/react-query";
+import { queryOptions, useQuery } from "@tanstack/react-query";
 import { createFileRoute, notFound } from "@tanstack/react-router";
 import { Schema } from "effect";
 import { useState } from "react";
 import type { FormEvent } from "react";
 
-import { e2eJobsEnabled, startTestJob } from "@/functions/jobs";
+import { e2eJobsEnabled, readTouchedMonth, startTestJob } from "@/functions/jobs";
 import { jobFailureMessage } from "@/i18n/messages";
 import { TEST_JOB_STEPS } from "@/jobs/test-job";
 import { formText } from "@/lib/form";
 import { whileBusy } from "@/lib/while-busy";
 import { useJob } from "@/queries/jobs";
-import { monthQueries } from "@/queries/month";
+import { monthKeys } from "@/queries/month-keys";
 
 /** The month the test job says it touched, which this page shows. */
 const MONTH = "2026-10";
@@ -46,19 +45,16 @@ export const Route = createFileRoute("/_authed/e2e/jobs")({
   component: TestJobs,
 });
 
-/** The month the job touches: read again once the job ends. */
-function TouchedMonth() {
-  const { data } = useQuery(monthQueries.summary(MONTH));
+/** The month the job touches, under that month's key: read again once the job ends. */
+const touchedMonth = queryOptions({
+  queryKey: [...monthKeys.of(MONTH), "e2e-touched"],
+  queryFn: () => readTouchedMonth({ data: { month: MONTH } }),
+});
 
-  return (
-    <Card title={m.jobTestMonth()}>
-      {data === undefined ? null : (
-        <p>
-          {m.jobTestReceived()} <Amount value={data.received} />
-        </p>
-      )}
-    </Card>
-  );
+function TouchedMonth() {
+  const { data } = useQuery(touchedMonth);
+
+  return <Card title={m.jobTestMonth()}>{data === undefined ? null : <p>{data.month}</p>}</Card>;
 }
 
 function TestJobs() {

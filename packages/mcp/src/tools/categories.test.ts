@@ -1,6 +1,5 @@
 import {
   DataExport,
-  FixtureLedger,
   ImportProfiles,
   Imports,
   Merchants,
@@ -94,7 +93,6 @@ function freshRows(): MemoryCategoryRows {
 
 function onToday(rows: Map<string, MemoryCategoryRows>): Runner<GoussetServices> {
   const layer = Layer.mergeAll(
-    FixtureLedger,
     memoryAccountStore(),
     memoryLineStore(),
     memoryCategoryStore(rows),

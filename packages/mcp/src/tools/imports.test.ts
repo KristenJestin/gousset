@@ -5,7 +5,6 @@ import {
   FileUploadExpired,
   FileUploadIncomplete,
   FileUploadNotFound,
-  FixtureLedger,
   IMPORTS_LISTED,
   ImportBusy,
   ImportNotFound,
@@ -268,7 +267,6 @@ function runnerOf(state: Fake): Runner<GoussetServices> {
       Effect.provide(
         effect,
         Layer.mergeAll(
-          FixtureLedger,
           memoryAccountStore(),
           memoryLineStore(),
           memoryCategoryStore(),
@@ -299,7 +297,6 @@ function runnerWithTime(state: Fake): Runner<GoussetServices> {
       }).pipe(
         Effect.provide(
           Layer.mergeAll(
-            FixtureLedger,
             memoryAccountStore(),
             memoryLineStore(),
             memoryCategoryStore(),
