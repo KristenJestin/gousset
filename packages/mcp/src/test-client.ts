@@ -38,7 +38,7 @@ export async function connectInProcess<R>(
 export async function callText(
   client: Client,
   name: string,
-  args: { [key: string]: string },
+  args: { [key: string]: string | number },
 ): Promise<{ text: string; isError: boolean }> {
   const result = await client.callTool({ name, arguments: args });
   const [first] = result.content ?? [];

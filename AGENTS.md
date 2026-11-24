@@ -190,7 +190,7 @@ The app serves MCP at `/mcp` (`docs/mcp.md`). For every change to its tools:
   example call where an argument is easy to get wrong; `readOnlyHint` on reads, `idempotentHint`
   where a repeat is harmless, `destructiveHint` on writes, `openWorldHint: false`.
 - **The guards**: at most 15 tools, 30,000 characters of definitions, every description under
-  2,048 characters. A guard that fails goes to the maintainer; **no description is trimmed to make
+  4,000 characters. A guard that fails goes to the maintainer; **no description is trimmed to make
   room for another**.
 - **Results** text first, names rather than ids, under 20,000 characters, paged with the next
   call written in the result. **Errors** under 2,000 characters, saying what to do with a valid

@@ -221,6 +221,27 @@ The account page's check (#15) compares the balance the app computes at the end 
 
 The job reads the file from there, so an import interrupted by a restart resumes ([`architecture.md`](architecture.md#background-jobs)); the file can be read again once a reader is fixed, and the export carries it. It is deleted when its import is undone. A file is a few hundred kilobytes; the upload refuses one over 10 MB.
 
+**`import_upload`**: a file on its way in from an agent's shell (#129), rather than its bytes in a tool call. The MCP door's `imports` `create_upload` makes it and answers its address once; the agent sends the file there (`curl -F file=@…`), whole or in numbered parts, appended in order; `imports` `upload` imports it as the import screen imports a file dropped, and deletes it in the same transaction as it makes the import.
+
+| Column | Type | Null | Default | What |
+|---|---|---|---|---|
+| `id` | `uuid` | | `uuidv7()` | primary key |
+| `user_id` | `text` | | | |
+| `grant_id` | `text` | | | the MCP grant that made it: `→ auth_oauth_consent on delete cascade`, so that revoking the client, a ban or a new password (each deletes the grant) deletes it at once |
+| `secret_sha256` | `text` | | | the SHA-256 of its address's secret (256 random bits), in hexadecimal; the secret itself is never kept |
+| `file_name` | `text` | | | as the agent named it, for the user only |
+| `size` | `integer` | | | the size declared, in bytes: the parts add up to it exactly |
+| `parts`, `parts_received` | `integer` | | `0` for the second | how many parts it comes in, and how many arrived |
+| `content` | `bytea` | | `''` | the parts received, one after the other |
+| `account_id` | `uuid` | null | | the account named when it was made: `(user_id, account_id) → account on delete cascade` |
+| `format` | `import_format` | null | | the format named when it was made |
+| `created_at` | `timestamptz` | | `now()` | |
+| `expires_at` | `timestamptz` | | | 15 minutes after it was made |
+
+- Checks: `size > 0`; `parts > 0 and parts_received between 0 and parts`; `octet_length(content) <= size`.
+- Index: `(grant_id)`, for the cascade. A user has five at most waiting at once.
+- It is not exported: a file in transit, imported or deleted within minutes; its import, once made, is. The sweep job deletes those past their expiry every ten minutes, each user's in a transaction of theirs ([`architecture.md`](architecture.md#background-jobs)).
+
 **The dedup key** (#20), computed by the import (`packages/core`) from each line a reader gives:
 
 - **When the format makes the bank's id unique within the account**: `bank:` and the id (`bank:20261021-000184`). That is OFX's and QFX's `FITID` and CAMT.053's account servicer reference, `Ntry/AcctSvcrRef`. CAMT.053's entry reference, `Ntry/NtryRef`, is never used: it is optional and often a sequence number within one statement, so line 1 of November would collide with line 1 of October and be dropped as a duplicate. QIF's `N` (a cheque number or any reference) and MT940's references (often `NONREF`) do not count: they are kept in `bank_id` and the content key is used. A line whose format counts but whose field is missing (a CAMT.053 entry without `AcctSvcrRef`) gets the content key too.

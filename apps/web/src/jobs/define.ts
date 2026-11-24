@@ -45,6 +45,11 @@ export type JobDefinition<Input, Encoded> = {
   /** Seconds an attempt may run: past it, pg-boss stops it, and it counts as failed. */
   readonly timeoutSeconds: number;
   /**
+   * A job of the installation's own, sent by pg-boss on this cron schedule (in UTC) rather than for
+   * a user: its input is empty, its owner none.
+   */
+  readonly schedule?: string;
+  /**
    * What it does, for the user who sent it, ending on what it touched for their pages to read
    * again. It is run again from the start on each attempt, so it must not double what an earlier
    * attempt did. `attempt` says whether no other attempt will follow a failure.

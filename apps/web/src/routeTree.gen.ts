@@ -36,6 +36,7 @@ import { Route as AuthedSettingsDataRouteImport } from './routes/_authed/setting
 import { Route as AuthedSettingsRulesRouteImport } from './routes/_authed/settings/rules'
 import { Route as AuthedSettingsUsersRouteImport } from './routes/_authed/settings/users'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
+import { Route as ApiImportUploadsTokenRouteImport } from './routes/api/import-uploads/$token'
 import { Route as ApiJobsJobIdEventsRouteImport } from './routes/api/jobs/$jobId/events'
 
 const AuthedRoute = AuthedRouteImport.update({
@@ -173,6 +174,11 @@ const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
   path: '/api/auth/$',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiImportUploadsTokenRoute = ApiImportUploadsTokenRouteImport.update({
+  id: '/api/import-uploads/$token',
+  path: '/api/import-uploads/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const ApiJobsJobIdEventsRoute = ApiJobsJobIdEventsRouteImport.update({
   id: '/api/jobs/$jobId/events',
   path: '/api/jobs/$jobId/events',
@@ -204,6 +210,7 @@ export interface FileRoutesByFullPath {
   '/settings/rules': typeof AuthedSettingsRulesRoute
   '/settings/users': typeof AuthedSettingsUsersRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/import-uploads/$token': typeof ApiImportUploadsTokenRoute
   '/accounts/': typeof AuthedAccountsIndexRoute
   '/settings/': typeof AuthedSettingsIndexRoute
   '/api/jobs/$jobId/events': typeof ApiJobsJobIdEventsRoute
@@ -232,6 +239,7 @@ export interface FileRoutesByTo {
   '/settings/rules': typeof AuthedSettingsRulesRoute
   '/settings/users': typeof AuthedSettingsUsersRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/import-uploads/$token': typeof ApiImportUploadsTokenRoute
   '/accounts': typeof AuthedAccountsIndexRoute
   '/settings': typeof AuthedSettingsIndexRoute
   '/api/jobs/$jobId/events': typeof ApiJobsJobIdEventsRoute
@@ -263,6 +271,7 @@ export interface FileRoutesById {
   '/_authed/settings/rules': typeof AuthedSettingsRulesRoute
   '/_authed/settings/users': typeof AuthedSettingsUsersRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
+  '/api/import-uploads/$token': typeof ApiImportUploadsTokenRoute
   '/_authed/accounts/': typeof AuthedAccountsIndexRoute
   '/_authed/settings/': typeof AuthedSettingsIndexRoute
   '/api/jobs/$jobId/events': typeof ApiJobsJobIdEventsRoute
@@ -294,6 +303,7 @@ export interface FileRouteTypes {
     | '/settings/rules'
     | '/settings/users'
     | '/api/auth/$'
+    | '/api/import-uploads/$token'
     | '/accounts/'
     | '/settings/'
     | '/api/jobs/$jobId/events'
@@ -322,6 +332,7 @@ export interface FileRouteTypes {
     | '/settings/rules'
     | '/settings/users'
     | '/api/auth/$'
+    | '/api/import-uploads/$token'
     | '/accounts'
     | '/settings'
     | '/api/jobs/$jobId/events'
@@ -352,6 +363,7 @@ export interface FileRouteTypes {
     | '/_authed/settings/rules'
     | '/_authed/settings/users'
     | '/api/auth/$'
+    | '/api/import-uploads/$token'
     | '/_authed/accounts/'
     | '/_authed/settings/'
     | '/api/jobs/$jobId/events'
@@ -368,6 +380,7 @@ export interface RootRouteChildren {
   ApiImportsRoute: typeof ApiImportsRoute
   E2eTodayRoute: typeof E2eTodayRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
+  ApiImportUploadsTokenRoute: typeof ApiImportUploadsTokenRoute
   ApiJobsJobIdEventsRoute: typeof ApiJobsJobIdEventsRoute
 }
 
@@ -562,6 +575,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiAuthSplatRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/import-uploads/$token': {
+      id: '/api/import-uploads/$token'
+      path: '/api/import-uploads/$token'
+      fullPath: '/api/import-uploads/$token'
+      preLoaderRoute: typeof ApiImportUploadsTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/jobs/$jobId/events': {
       id: '/api/jobs/$jobId/events'
       path: '/api/jobs/$jobId/events'
@@ -635,6 +655,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiImportsRoute: ApiImportsRoute,
   E2eTodayRoute: E2eTodayRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
+  ApiImportUploadsTokenRoute: ApiImportUploadsTokenRoute,
   ApiJobsJobIdEventsRoute: ApiJobsJobIdEventsRoute,
 }
 export const routeTree = rootRouteImport

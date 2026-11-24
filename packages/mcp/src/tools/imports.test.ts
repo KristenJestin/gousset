@@ -2,17 +2,23 @@ import {
   DataExport,
   EmptyFile,
   FileTooLarge,
+  FileUploadExpired,
+  FileUploadIncomplete,
+  FileUploadNotFound,
   FixtureLedger,
   IMPORTS_LISTED,
   ImportBusy,
   ImportNotFound,
   ImportProfiles,
   Imports,
+  TooManyFileUploads,
   UnknownFormat,
   memoryAccountStore,
   memoryLineStore,
 } from "@gousset/core";
 import type {
+  FileUploadRequest,
+  FileUploadStatus,
   ImportAccount,
   ImportProfileEntry,
   ImportSummary,
@@ -20,6 +26,7 @@ import type {
   Started,
   Undone,
   Upload,
+  UploadChoices,
 } from "@gousset/core";
 import { Effect, Fiber, Layer, Schema } from "effect";
 import { TestClock } from "effect/testing";
@@ -31,8 +38,11 @@ import { ERROR_LIMIT, RESULT_LIMIT } from "../results";
 import { callText, connectInProcess } from "../test-client";
 import type { Caller, Runner } from "../tool";
 
-const writer: Caller = { userId: "ada", canWrite: true };
-const reader: Caller = { userId: "ada", canWrite: false };
+const ORIGIN = "https://gousset.example.com";
+const GRANT = "grant-1";
+
+const writer: Caller = { userId: "ada", canWrite: true, grantId: GRANT, origin: ORIGIN };
+const reader: Caller = { userId: "ada", canWrite: false, grantId: GRANT, origin: ORIGIN };
 
 const idOf = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
 
@@ -92,6 +102,14 @@ type Fake = {
   profiles: ReadonlyArray<ImportProfileEntry>;
   /** What `ImportProfiles.forImport` answers, by import id. */
   profilesFor: { [importId: string]: ProfilesForImport };
+  /** What each file upload was made with. */
+  readonly fileUploads: Array<FileUploadRequest>;
+  createFailure: TooManyFileUploads | FileTooLarge | null;
+  /** What each file upload's import was started with: its id, its grant and the choices. */
+  readonly uploadStarts: Array<{ id: string; grantId: string; choices: UploadChoices }>;
+  uploadFailure: FileUploadNotFound | FileUploadExpired | FileUploadIncomplete | null;
+  /** What `uploadStatus` answers, by file upload id. */
+  uploadStatuses: { [id: string]: FileUploadStatus };
 };
 
 function fake(changes: Partial<Fake> = {}): Fake {
@@ -106,9 +124,21 @@ function fake(changes: Partial<Fake> = {}): Fake {
     undoCounts: { linesRemoved: 6, linesGivenBack: 0, laterOverlapping: 0, months: ["2026-10"] },
     profiles: [],
     profilesFor: {},
+    fileUploads: [],
+    createFailure: null,
+    uploadStarts: [],
+    uploadFailure: null,
+    uploadStatuses: {},
     ...changes,
   };
 }
+
+/** The file upload the fake makes. */
+const UPLOAD_ID = idOf(500);
+
+/** The token its address ends with. */
+const TOKEN =
+  "YWRh.019a4f2e-7c1d-7a3b-9e4f-0123456789ab.secret-of-the-example-upload-address-000000";
 
 /** `ImportProfiles` over the fake's lists: no database, no file read. */
 function profilesOf(state: Fake) {
@@ -162,6 +192,39 @@ function importsOf(state: Fake) {
           : Effect.fail(new ImportBusy({ importId, status: found.status })),
       ),
     resume: (_owner, importId) => find(importId),
+    createUpload: (_owner, request) => {
+      state.fileUploads.push(request);
+
+      return state.createFailure === null
+        ? Effect.succeed({
+            id: UPLOAD_ID,
+            token: TOKEN,
+            fileName: request.fileName,
+            size: request.size,
+            parts: request.parts,
+            expiresAt: "2026-11-24T10:15:00.000Z",
+          })
+        : Effect.fail(state.createFailure);
+    },
+    // The upload route's: never called by the tool.
+    uploadAddress: () => Effect.fail(new FileUploadNotFound()),
+    receivePart: () => Effect.fail(new FileUploadNotFound()),
+    uploadStatus: (_owner, id) => {
+      const found = state.uploadStatuses[id];
+
+      return found === undefined ? Effect.fail(new FileUploadNotFound()) : Effect.succeed(found);
+    },
+    startUpload: (_owner, id, grantId, choices) => {
+      state.uploadStarts.push({ id, grantId, choices });
+
+      if (state.uploadFailure !== null) {
+        return Effect.fail(state.uploadFailure);
+      }
+
+      state.imports.unshift(state.settled ?? state.started);
+
+      return Effect.succeed({ started: state.started, sameFile: state.sameFile });
+    },
     accounts: () => Effect.succeed(state.accounts),
     csvQuestions: (_owner, importId) => Effect.fail(new ImportNotFound({ importId })),
     csvPreview: (_owner, importId) => Effect.fail(new ImportNotFound({ importId })),
@@ -216,7 +279,7 @@ function runnerWithTime(state: Fake): Runner<GoussetServices> {
 
 async function imports(
   state: Fake,
-  args: { [key: string]: string },
+  args: { [key: string]: string | number },
   caller: Caller = writer,
   run: Runner<GoussetServices> = runnerOf(state),
 ) {
@@ -244,10 +307,13 @@ function exampleOf(text: string) {
 }
 
 const Example = Schema.Struct({
-  action: Schema.Literals(["upload", "status", "list", "undo", "profiles"]),
+  action: Schema.Literals(["upload", "create_upload", "status", "list", "undo", "profiles"]),
   account: Schema.optional(Schema.String),
   format: Schema.optional(Schema.String),
   import: Schema.optional(Schema.String),
+  file_upload: Schema.optional(Schema.String),
+  file_name: Schema.optional(Schema.String),
+  size: Schema.optional(Schema.Number),
 });
 
 describe("imports upload", () => {
@@ -435,6 +501,197 @@ describe("imports with a read-only connection", () => {
   });
 });
 
+describe("imports file uploads", () => {
+  const ADDRESS = `${ORIGIN}/api/import-uploads/${TOKEN}`;
+
+  test("create_upload answers the address, the curl command to run and the call that imports", async () => {
+    const state = fake();
+
+    const { text, isError } = await imports(state, {
+      action: "create_upload",
+      file_name: "2024-2026.ofx",
+      size: 1_048_576,
+      account: "savings",
+    });
+
+    expect(isError, text).toBe(false);
+    expect(text).toContain("File upload made for 2024-2026.ofx: 1048576 bytes, in one part");
+    expect(text).toContain("until 2026-11-24T10:15:00.000Z (15 minutes)");
+    expect(text).toContain(`curl -sS -F 'file=@2024-2026.ofx' ${ADDRESS}`);
+    expect(text).toContain(`imports {"action":"upload","file_upload":"${UPLOAD_ID}"}`);
+    expect(text.length).toBeLessThan(RESULT_LIMIT);
+    // Made for the caller's grant, with the account matched by name.
+    expect(state.fileUploads).toEqual([
+      {
+        grantId: GRANT,
+        fileName: "2024-2026.ofx",
+        size: 1_048_576,
+        parts: 1,
+        accountId: SAVINGS.id,
+        format: null,
+      },
+    ]);
+  });
+
+  test("create_upload in parts gives one command per part, numbered, and how to split the file", async () => {
+    const state = fake();
+
+    const { text } = await imports(state, {
+      action: "create_upload",
+      file_name: "my statement.ofx",
+      size: 3_000_000,
+      parts: 3,
+    });
+
+    expect(text).toContain("in 3 parts");
+    expect(text).toContain("split -n 3 -d -a 2 'my statement.ofx' 'my statement.ofx.part'");
+
+    for (const [part, file] of [
+      [1, "part00"],
+      [2, "part01"],
+      [3, "part02"],
+    ] as const) {
+      expect(text).toContain(
+        `curl -sS -F part=${part} -F 'file=@my statement.ofx.${file}' ${ADDRESS}`,
+      );
+    }
+
+    expect(state.fileUploads[0]?.parts).toBe(3);
+  });
+
+  test("a name with a quote stays one word of the command", async () => {
+    const { text } = await imports(fake(), {
+      action: "create_upload",
+      file_name: "Kim's statement.ofx",
+      size: 10,
+    });
+
+    expect(text).toContain(String.raw`-F 'file=@Kim'\''s statement.ofx'`);
+  });
+
+  test("upload with file_upload imports it for the caller's grant and answers the summary", async () => {
+    const state = fake({ started: summary({ status: "queued", linesRead: 0, linesAdded: 0 }) });
+
+    state.settled = summary();
+
+    const { text, isError } = await imports(state, {
+      action: "upload",
+      file_upload: UPLOAD_ID,
+      format: "camt053",
+    });
+
+    expect(isError, text).toBe(false);
+    expect(text).toContain("Imported october.xml into Current account");
+    expect(state.uploadStarts).toEqual([
+      { id: UPLOAD_ID, grantId: GRANT, choices: { format: "camt053", accountId: null } },
+    ]);
+    // Nothing passed through the call itself.
+    expect(state.uploads).toHaveLength(0);
+  });
+
+  test("an import of a file upload that waits for its account says to send it again", async () => {
+    const state = fake({
+      started: summary({ status: "waiting", waitingFor: "account", account: null, format: "qif" }),
+    });
+
+    const { text } = await imports(state, { action: "upload", file_upload: UPLOAD_ID });
+
+    expect(text).toContain("waits for its account");
+    expect(text).toContain("new file upload naming the account");
+    expect(text).not.toContain('"content"');
+  });
+
+  test("refuses a file upload together with content", async () => {
+    const state = fake();
+
+    const { text, isError } = await imports(state, {
+      action: "upload",
+      file_upload: UPLOAD_ID,
+      content: CAMT,
+    });
+
+    expect(isError).toBe(true);
+    expect(text).toContain("not both");
+    expect(state.uploadStarts).toHaveLength(0);
+  });
+
+  test("status says whether a file upload is pending, uploaded or expired", async () => {
+    const status = (changes: Partial<FileUploadStatus>): FileUploadStatus => ({
+      id: UPLOAD_ID,
+      fileName: "2024-2026.ofx",
+      size: 1000,
+      parts: 3,
+      partsReceived: 1,
+      bytesReceived: 400,
+      state: "pending",
+      expiresAt: "2026-11-24T10:15:00.000Z",
+      ...changes,
+    });
+
+    const ask = async (changes: Partial<FileUploadStatus>) =>
+      (
+        await imports(fake({ uploadStatuses: { [UPLOAD_ID]: status(changes) } }), {
+          action: "status",
+          file_upload: UPLOAD_ID,
+        })
+      ).text;
+
+    const pending = await ask({});
+
+    expect(pending).toContain(
+      "2024-2026.ofx: pending, 1 of 3 part(s) received (400 of 1000 bytes)",
+    );
+    expect(pending).toContain("Send part 2 next");
+
+    const uploaded = await ask({ state: "uploaded", partsReceived: 3, bytesReceived: 1000 });
+
+    expect(uploaded).toContain("2024-2026.ofx: uploaded, whole (1000 bytes)");
+    expect(uploaded).toContain(`imports {"action":"upload","file_upload":"${UPLOAD_ID}"}`);
+
+    const expired = await ask({ state: "expired" });
+
+    expect(expired).toContain("2024-2026.ofx: expired at 2026-11-24T10:15:00.000Z");
+    expect(expired).toContain('"action":"create_upload"');
+  });
+
+  test("a read-only connection makes no file upload and imports none, and is told how to write", async () => {
+    const state = fake();
+
+    const made = await imports(
+      state,
+      { action: "create_upload", file_name: "a.ofx", size: 10 },
+      reader,
+    );
+
+    const imported = await imports(state, { action: "upload", file_upload: UPLOAD_ID }, reader);
+
+    for (const refused of [made, imported]) {
+      expect(refused.isError).toBe(true);
+      expect(refused.text).toContain("allowed to read only");
+      expect(refused.text).toContain("Read and write");
+    }
+
+    expect(state.fileUploads).toHaveLength(0);
+    expect(state.uploadStarts).toHaveLength(0);
+  });
+
+  test("the description says when to make a file upload, and gives the command", async () => {
+    const client = await connectInProcess(
+      goussetServer,
+      { run: runnerOf(fake()) },
+      reader,
+      "2025-11-25",
+    );
+
+    const tool = (await client.listTools()).tools.find((each) => each.name === "imports");
+
+    expect(tool?.description).toContain("create_upload (writes)");
+    expect(tool?.description).toContain("curl -sS -F 'file=@statement.ofx' <address>");
+    expect(tool?.annotations?.destructiveHint).toBe(true);
+    expect(tool?.annotations?.readOnlyHint).toBe(false);
+  });
+});
+
 describe("imports status", () => {
   test("says the import's step, counts, account and period", async () => {
     const state = fake({
@@ -548,22 +805,77 @@ describe("imports refusals", () => {
     name: `A savings account with a long name ${n}`,
   }));
 
-  const cases: ReadonlyArray<[string, Partial<Fake>, { [key: string]: string }, string]> = [
-    ["empty file", { startFailure: new EmptyFile() }, upload(), "empty"],
+  const cases: ReadonlyArray<[string, Partial<Fake>, { [key: string]: string | number }, string]> =
     [
-      "file too large",
-      { startFailure: new FileTooLarge({ bytes: 12 * megabytes, limit: 10 * megabytes }) },
-      upload(),
-      "10 MB at most",
-    ],
-    ["unknown format", { startFailure: new UnknownFormat() }, upload(), "Name it with format"],
-    ["no file name", {}, { action: "upload", content: CAMT }, "file_name"],
-    ["unknown account among many", { accounts: longNames }, upload({ account: "Joint" }), "Joint"],
-    ["bad base64", {}, { action: "upload", file_name: "a.ofx", content_base64: "%%%" }, "base64"],
-    ["status without an import", {}, { action: "status" }, "needs import"],
-    ["undo of an unknown import", {}, { action: "undo", import: "nope" }, "no import"],
-    ["profiles of an unknown import", {}, { action: "profiles", import: "nope" }, "no CSV import"],
-  ];
+      ["empty file", { startFailure: new EmptyFile() }, upload(), "empty"],
+      [
+        "file too large",
+        { startFailure: new FileTooLarge({ bytes: 12 * megabytes, limit: 10 * megabytes }) },
+        upload(),
+        "10 MB at most",
+      ],
+      ["unknown format", { startFailure: new UnknownFormat() }, upload(), "Name it with format"],
+      ["no file name", {}, { action: "upload", content: CAMT }, "file_name"],
+      [
+        "unknown account among many",
+        { accounts: longNames },
+        upload({ account: "Joint" }),
+        "Joint",
+      ],
+      ["bad base64", {}, { action: "upload", file_name: "a.ofx", content_base64: "%%%" }, "base64"],
+      ["status without an import", {}, { action: "status" }, "needs import"],
+      ["undo of an unknown import", {}, { action: "undo", import: "nope" }, "no import"],
+      [
+        "profiles of an unknown import",
+        {},
+        { action: "profiles", import: "nope" },
+        "no CSV import",
+      ],
+      [
+        "too many file uploads waiting",
+        { createFailure: new TooManyFileUploads({ limit: 5 }) },
+        { action: "create_upload", file_name: "a.ofx", size: 100 },
+        "5 file uploads waiting already",
+      ],
+      [
+        "a file upload too large",
+        { createFailure: new FileTooLarge({ bytes: 12 * megabytes, limit: 10 * megabytes }) },
+        { action: "create_upload", file_name: "a.ofx", size: 12 * megabytes },
+        "10 MB at most",
+      ],
+      ["a file upload without a size", {}, { action: "create_upload", file_name: "a.ofx" }, "size"],
+      [
+        "a file upload used already",
+        { uploadFailure: new FileUploadNotFound() },
+        { action: "upload", file_upload: UPLOAD_ID },
+        "imported already",
+      ],
+      [
+        "a file upload expired",
+        { uploadFailure: new FileUploadExpired({ expiresAt: "2026-11-24T10:15:00.000Z" }) },
+        { action: "upload", file_upload: UPLOAD_ID },
+        "expired at 2026-11-24T10:15:00.000Z",
+      ],
+      [
+        "a file upload not received whole",
+        {
+          uploadFailure: new FileUploadIncomplete({
+            partsReceived: 1,
+            parts: 3,
+            bytesReceived: 400,
+            size: 1000,
+          }),
+        },
+        { action: "upload", file_upload: UPLOAD_ID },
+        "1 of 3 part(s), 400 of 1000 bytes",
+      ],
+      [
+        "status of an unknown file upload",
+        {},
+        { action: "status", file_upload: "nope" },
+        "no file upload",
+      ],
+    ];
 
   for (const [name, changes, args, says] of cases) {
     test(`${name}: under ${ERROR_LIMIT} characters, with a valid call`, async () => {
@@ -578,7 +890,7 @@ describe("imports refusals", () => {
 });
 
 function expectValidExample(text: string) {
-  expect(exampleOf(text).action).toMatch(/^(upload|status|list|undo|profiles)$/);
+  expect(exampleOf(text).action).toMatch(/^(upload|create_upload|status|list|undo|profiles)$/);
 }
 
 type CsvProfile = NonNullable<ImportProfileEntry["definition"]>;

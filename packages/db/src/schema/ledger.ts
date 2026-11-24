@@ -20,7 +20,7 @@ import {
   uuid,
 } from "drizzle-orm/pg-core";
 
-import { authUser } from "./auth";
+import { authOauthConsent, authUser } from "./auth";
 
 // A user's money: accounts, their balances and lines, the imports that read them and the CSV
 // profiles that read a bank's files (docs/data-model.md, v0.2).
@@ -246,6 +246,55 @@ export const importFile = pgTable.withRLS(
       foreignColumns: [statementImport.userId, statementImport.id],
     }).onDelete("cascade"),
     ownRowsOnly("import_file"),
+  ],
+);
+
+/**
+ * A statement file on its way in from an agent's shell (#129): `imports` `create_upload` makes it,
+ * the upload address fills it, in one part or several, and `imports` `upload` imports it once,
+ * deleting it in the same transaction. Expired, it is deleted by the sweep job.
+ */
+export const importUpload = pgTable.withRLS(
+  "import_upload",
+  {
+    id: id(),
+    userId: owner(),
+    // The MCP grant that made it: only that grant fills or imports it, and revoking the client,
+    // a ban or a new password (each deletes the grant) deletes it at once.
+    grantId: text("grant_id")
+      .notNull()
+      .references(() => authOauthConsent.id, { onDelete: "cascade" }),
+    // The SHA-256 of the upload address's secret, in hexadecimal: the secret is never kept.
+    secretSha256: text("secret_sha256").notNull(),
+    // As the agent named it, for the user only: never in a log nor in telemetry.
+    fileName: text("file_name").notNull(),
+    // The size the agent declared, in bytes: the parts must add up to it exactly.
+    size: integer("size").notNull(),
+    parts: integer("parts").notNull(),
+    partsReceived: integer("parts_received").default(0).notNull(),
+    // The parts received, one after the other.
+    content: bytea("content")
+      .default(sql`''::bytea`)
+      .notNull(),
+    accountId: uuid("account_id"),
+    format: importFormat("format"),
+    createdAt: createdAt(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  },
+  (table) => [
+    foreignKey({
+      name: "import_upload_account_fk",
+      columns: [table.userId, table.accountId],
+      foreignColumns: [account.userId, account.id],
+    }).onDelete("cascade"),
+    index("import_upload_grant_id_idx").on(table.grantId),
+    check("import_upload_size", sql`${table.size} > 0`),
+    check(
+      "import_upload_parts",
+      sql`${table.parts} > 0 and ${table.partsReceived} between 0 and ${table.parts}`,
+    ),
+    check("import_upload_content_size", sql`octet_length(${table.content}) <= ${table.size}`),
+    ownRowsOnly("import_upload"),
   ],
 );
 

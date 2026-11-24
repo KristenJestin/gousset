@@ -117,6 +117,10 @@ export { Month, SpendingGroup, addMonths } from "./values";
 export {
   EmptyFile,
   FileTooLarge,
+  FileUploadExpired,
+  FileUploadIncomplete,
+  FileUploadNotFound,
+  FileUploadPartRefused,
   ImportBusy,
   ImportFailed,
   ImportNotFound,
@@ -126,9 +130,32 @@ export {
   ProfileNotFound,
   ProfileTooLong,
   ProfileUnreadable,
+  TooManyFileUploads,
+  TooManyParts,
   TooManyProfiles,
   UnknownFormat,
 } from "./imports/errors";
+
+export {
+  MAX_PENDING_UPLOADS,
+  MAX_UPLOAD_PARTS,
+  UPLOAD_MINUTES,
+  parseUploadToken,
+  partRefusal,
+  requestRefusal,
+  sweepUploads,
+  uploadState,
+  uploadToken,
+} from "./imports/uploads";
+
+export type {
+  CreatedUpload,
+  FileUploadRequest,
+  FileUploadState,
+  FileUploadStatus,
+  ReceivedPart,
+  UploadProgress,
+} from "./imports/uploads";
 
 export { ImportProfiles, importProfilesLayer } from "./imports/profiles";
 
@@ -142,6 +169,8 @@ export type {
   Started,
   Undone,
   Upload,
+  UploadAddress,
+  UploadChoices,
 } from "./imports/imports";
 
 export { ReadFailed, ReadRequest, StatementReader, inlineStatementReader } from "./imports/read";

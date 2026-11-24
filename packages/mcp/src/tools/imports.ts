@@ -1,5 +1,14 @@
-import { IMPORT_STEPS, ImportProfiles, Imports } from "@gousset/core";
+import {
+  IMPORT_STEPS,
+  ImportProfiles,
+  Imports,
+  MAX_PENDING_UPLOADS,
+  MAX_UPLOAD_PARTS,
+  UPLOAD_MINUTES,
+} from "@gousset/core";
 import type {
+  CreatedUpload,
+  FileUploadStatus,
   ImportAccount,
   ImportFormat,
   ImportPage,
@@ -12,13 +21,21 @@ import type {
 import { Duration, Effect, Exit, Schema } from "effect";
 
 import { ToolRefusal, defineTool } from "../tool";
+import type { Caller } from "../tool";
 
 const FORMATS = ["ofx", "qfx", "qif", "camt053", "mt940", "csv"] as const;
 
 const ImportsInput = Schema.Struct({
-  action: Schema.Literals(["upload", "status", "list", "undo", "profiles"]).annotate({
+  action: Schema.Literals([
+    "upload",
+    "create_upload",
+    "status",
+    "list",
+    "undo",
+    "profiles",
+  ]).annotate({
     description:
-      "upload: import a statement file. status: where one import stands. list: the imports, newest first. undo: remove what one import added. profiles: the CSV import profiles, or those that read one import's file.",
+      "upload: import a statement file. create_upload: an address to send a large file to from a shell, before upload. status: where one import or file upload stands. list: the imports, newest first. undo: remove what one import added. profiles: the CSV import profiles, or those that read one import's file.",
   }),
   file_name: Schema.optional(
     Schema.String.annotate({
@@ -34,14 +51,31 @@ const ImportsInput = Schema.Struct({
         "upload, instead of content: the file's bytes in base64, for a file not in UTF-8.",
     }),
   ),
+  file_upload: Schema.optional(
+    Schema.String.annotate({
+      description:
+        "upload, instead of content: the id create_upload gave, once the file was sent to its address. status: that id, to see whether the file arrived.",
+    }),
+  ),
+  size: Schema.optional(
+    Schema.Int.annotate({
+      description: "create_upload: the file's exact size in bytes (wc -c < statement.ofx).",
+    }),
+  ),
+  parts: Schema.optional(
+    Schema.Int.annotate({
+      description: `create_upload: how many parts the file is sent in, 1 by default, ${MAX_UPLOAD_PARTS} at most: more than one only when a proxy refuses a request that large.`,
+    }),
+  ),
   format: Schema.optional(
     Schema.Literals(FORMATS).annotate({
-      description: "upload: the file's format, when its name and content do not tell it.",
+      description:
+        "upload, create_upload: the file's format, when its name and content do not tell it.",
     }),
   ),
   account: Schema.optional(
     Schema.String.annotate({
-      description: "upload: the account's name, as the user calls it (any case).",
+      description: "upload, create_upload: the account's name, as the user calls it (any case).",
     }),
   ),
   import: Schema.optional(
@@ -62,22 +96,27 @@ type ImportsInput = typeof ImportsInput.Type;
 const DESCRIPTION = `Imports bank statement files into the user's accounts, without duplicates, and lists, follows and undoes imports. Use it when the user gives a statement file (OFX, QFX, QIF, CAMT.053, MT940, CSV) or asks what was imported.
 
 Actions:
-- upload (writes): imports one file. Give file_name and exactly one of content (the file's text) or content_base64 (its bytes, for a file not in UTF-8). The format is told from the file; name it with format when it is not. The account is recognised from the file (IBAN, number); name it with account, the user's name for it, when the file does not say it (QIF and CSV never do). It waits up to 15 seconds and answers the summary: lines read, added, already known (duplicates, never added twice) and held for review as near duplicates. A file imported before adds nothing again, and the answer says so.
-- status (reads): one import's state, step and counts.
+- upload (writes): imports one file. Give file_name and exactly one of content (the file's text) or content_base64 (its bytes, for a file not in UTF-8); or file_upload alone, for a file sent to a file upload. The format is told from the file; name it with format when it is not. The account is recognised from the file (IBAN, number); name it with account, the user's name for it, when the file does not say it (QIF and CSV never do). It waits up to 15 seconds and answers the summary: lines read, added, already known (duplicates, never added twice) and held for review as near duplicates. A file imported before adds nothing again, and the answer says so.
+- create_upload (writes): for a file you can reach from a shell, larger than a few tens of kilobytes: its bytes then never pass through the conversation. Give file_name and size (its exact size in bytes), and account or format when needed. It answers a file upload's id and its address, secret and valid ${UPLOAD_MINUTES} minutes. Send the file from your shell, as it is: curl -sS -F 'file=@statement.ofx' <address>. Then call upload with file_upload. A proxy refusing so large a request: declare parts (2 to ${MAX_UPLOAD_PARTS}) and send each part in order, with its number (-F part=1). A file upload is imported once, by this connection only, then deleted; unused, it expires.
+- status (reads): one import's state, step and counts; or, with file_upload, whether the file upload is pending, uploaded or expired.
 - list (reads): the imports, newest first, 50 a page.
 - undo (writes, destructive): removes exactly the lines one import added; lines of other imports it held count again.
 - profiles (reads): the CSV import profiles, the user's and those shipped with Gousset, and how each reads a file. With import (a CSV import's id): those that read its file, and the one it used.
 
-Refused: an empty file, a file over 10 MB (through MCP a request carries 4 MB at most, about 3 MB of file in base64: import a larger file on Gousset's import screen), a format not recognised, an account name matching none or several of the user's accounts (the refusal names them), an import id the user does not have, and undoing an import still running. A CSV file's columns are confirmed on Gousset's import screen. Writes need a connection allowed to read and write.
+Refused: an empty file, a file over 10 MB (through content, a request carries 4 MB at most, about 3 MB of file in base64: send a larger one through create_upload), a format not recognised, an account name matching none or several of the user's accounts (the refusal names them), an import id the user does not have, undoing an import still running, more than ${MAX_PENDING_UPLOADS} file uploads waiting, and a file upload used, expired or not received whole. A CSV file's columns are confirmed on Gousset's import screen. Writes need a connection allowed to read and write.
 
 Examples:
 {"action":"upload","file_name":"october.ofx","content":"OFXHEADER:100..."}
 {"action":"upload","file_name":"export.csv","content":"date;label;amount...","account":"Joint account"}
+{"action":"create_upload","file_name":"2024-2026.ofx","size":1048576}, then curl -sS -F 'file=@2024-2026.ofx' <the address it gave>, then {"action":"upload","file_upload":"<the id it gave>"}
 {"action":"undo","import":"<the id that upload or list gave>"}`;
 
-const call = (args: { readonly [key: string]: string }) => `imports ${JSON.stringify(args)}`;
+/** A call's arguments, as an example writes them. */
+type Arguments = { readonly [key: string]: string | number };
 
-const refuse = (message: string, example: { readonly [key: string]: string }) =>
+const call = (args: Arguments) => `imports ${JSON.stringify(args)}`;
+
+const refuse = (message: string, example: Arguments) =>
   Effect.fail(new ToolRefusal({ message, example: call(example) }));
 
 /** A name or file name cut to `length`, so that one long name never fills a page. */
@@ -194,7 +233,11 @@ function statusText(summary: ImportSummary): string {
     .join("\n");
 }
 
-function waitingText(summary: ImportSummary, accounts: ReadonlyArray<ImportAccount>): string {
+function waitingText(
+  summary: ImportSummary,
+  accounts: ReadonlyArray<ImportAccount>,
+  viaFileUpload: boolean,
+): string {
   if (summary.waitingFor === "profile") {
     return `${summary.fileName} waits for its CSV columns to be confirmed: the user confirms them on Gousset's import screen (Imports), where this import waits. Then call: ${call({ action: "status", import: summary.id })}`;
   }
@@ -207,7 +250,9 @@ function waitingText(summary: ImportSummary, accounts: ReadonlyArray<ImportAccou
     names.length === 0
       ? "The user has no open account yet: one must be added in Gousset first."
       : `The user's accounts: ${names.join(", ")}.`,
-    `Upload it again naming the account, as ${call({ action: "upload", file_name: summary.fileName, content: "…", account: example })}, or choose the account on Gousset's import screen, where this import waits.`,
+    viaFileUpload
+      ? `Send it again through a new file upload naming the account (create_upload with file_name, size and account: "${example}"), or choose the account on Gousset's import screen, where this import waits.`
+      : `Upload it again naming the account, as ${call({ action: "upload", file_name: summary.fileName, content: "…", account: example })}, or choose the account on Gousset's import screen, where this import waits.`,
     `Import id: ${summary.id}`,
   ].join("\n");
 }
@@ -250,7 +295,7 @@ const UNAVAILABLE = () =>
 function namedAccount(
   owner: string,
   name: string,
-  fileName: string,
+  example: Arguments,
 ): Effect.Effect<string, ToolRefusal, Imports> {
   return Effect.gen(function* () {
     const imports = yield* Imports;
@@ -259,7 +304,6 @@ function namedAccount(
     const matching = accounts.filter((each) => each.name.trim().toLowerCase() === wanted);
     const [only] = matching;
     const names = accounts.map((each) => each.name);
-    const example = { action: "upload", file_name: fileName, content: "…" };
 
     if (matching.length === 1 && only !== undefined) {
       return only.id;
@@ -337,6 +381,7 @@ function settledText(
   owner: string,
   started: Started,
   summary: ImportSummary,
+  viaFileUpload: boolean,
 ): Effect.Effect<string, never, Imports> {
   return Effect.gen(function* () {
     const notice = sameFileText(started);
@@ -352,7 +397,7 @@ function settledText(
         const accounts =
           summary.waitingFor === "account" ? yield* imports.accounts(owner).pipe(Effect.orDie) : [];
 
-        return `${notice}${waitingText(summary, accounts)}`;
+        return `${notice}${waitingText(summary, accounts, viaFileUpload)}`;
       }
 
       case "failed": {
@@ -383,14 +428,20 @@ function upload(input: ImportsInput, owner: string) {
     const content = yield* bytesOf(input, fileName);
 
     const accountId =
-      input.account === undefined ? null : yield* namedAccount(owner, input.account, fileName);
+      input.account === undefined
+        ? null
+        : yield* namedAccount(owner, input.account, {
+            action: "upload",
+            file_name: fileName,
+            content: "…",
+          });
 
     const format: ImportFormat | null = input.format ?? null;
     const imports = yield* Imports;
     const started = yield* imports.start(owner, { fileName, content, format, accountId });
     const settled = yield* settle(owner, started.started);
 
-    return yield* settledText(owner, started, settled);
+    return yield* settledText(owner, started, settled, false);
   }).pipe(
     Effect.catchTags({
       EmptyFile: () =>
@@ -423,6 +474,241 @@ function upload(input: ImportsInput, owner: string) {
         }),
       ImportUnavailable: UNAVAILABLE,
       ImportNotFound: (missing) => IMPORT_NOT_FOUND(missing.importId),
+      QueryFailed: failure,
+    }),
+  );
+}
+
+/** Where the upload route serves (apps/web): the app's own address, then a file upload's token. */
+const UPLOAD_PATH = "/api/import-uploads/";
+
+const CREATE_EXAMPLE = { action: "create_upload", file_name: "statement.ofx", size: 1_048_576 };
+
+/** A word of a shell command, quoted whole. */
+const quoted = (word: string) => `'${word.replaceAll("'", String.raw`'\''`)}'`;
+
+/** The command that sends a file, or one numbered part of it, to an upload address. */
+function curlOf(path: string, address: string, part: number | null): string {
+  const numbered = part === null ? "" : ` -F part=${part}`;
+
+  return `curl -sS${numbered} -F ${quoted(`file=@${path}`)} ${address}`;
+}
+
+function createdText(created: CreatedUpload, origin: string): string {
+  const address = `${origin}${UPLOAD_PATH}${created.token}`;
+  const name = clip(created.fileName, 100);
+
+  const head = [
+    `File upload made for ${name}: ${created.size} bytes, in ${created.parts === 1 ? "one part" : `${created.parts} parts`}, until ${created.expiresAt} (${UPLOAD_MINUTES} minutes). Its address works for this file only and is a secret: write it nowhere but the command.`,
+  ];
+
+  const send =
+    created.parts === 1
+      ? [
+          "Send the file from a shell in its folder, as it is (not converted, not compressed):",
+          curlOf(created.fileName, address, null),
+        ]
+      : [
+          `Send it in ${created.parts} parts, in order, each with its number: together they are the file as it is, ${created.size} bytes. Split it, for example, with: split -n ${created.parts} -d -a 2 ${quoted(created.fileName)} ${quoted(`${created.fileName}.part`)}`,
+          ...Array.from({ length: created.parts }, (_, index) =>
+            curlOf(`${created.fileName}.part${String(index).padStart(2, "0")}`, address, index + 1),
+          ),
+        ];
+
+  return [
+    ...head,
+    ...send,
+    `Each part's answer says what arrived. Then import it: ${call({ action: "upload", file_upload: created.id })}`,
+    `File upload id: ${created.id}`,
+  ].join("\n");
+}
+
+function createUpload(input: ImportsInput, caller: Caller) {
+  const owner = caller.userId;
+  const { grantId, origin } = caller;
+
+  return Effect.gen(function* () {
+    const fileName = input.file_name?.trim().slice(0, 255) ?? "";
+
+    if (fileName === "") {
+      return yield* refuse(
+        "create_upload needs file_name: the file's name with its extension, which tells its format.",
+        CREATE_EXAMPLE,
+      );
+    }
+
+    if (input.size === undefined) {
+      return yield* refuse(
+        "create_upload needs size: the file's exact size in bytes, as wc -c < statement.ofx prints it.",
+        { ...CREATE_EXAMPLE, file_name: fileName },
+      );
+    }
+
+    if (input.content !== undefined || input.content_base64 !== undefined) {
+      return yield* refuse(
+        "create_upload takes no content: the file goes to the address it answers. To give the file's text in the call itself, use upload.",
+        { ...CREATE_EXAMPLE, file_name: fileName, size: input.size },
+      );
+    }
+
+    // The door gives both to every call; a caller without them never made a grant.
+    if (grantId === undefined || origin === undefined) {
+      return yield* refuse(
+        "This connection cannot make a file upload: connect Gousset again through its consent page.",
+        { action: "list" },
+      );
+    }
+
+    const accountId =
+      input.account === undefined
+        ? null
+        : yield* namedAccount(owner, input.account, {
+            ...CREATE_EXAMPLE,
+            file_name: fileName,
+            size: input.size,
+          });
+
+    const imports = yield* Imports;
+
+    const created = yield* imports.createUpload(owner, {
+      grantId,
+      fileName,
+      size: input.size,
+      parts: input.parts ?? 1,
+      accountId,
+      format: input.format ?? null,
+    });
+
+    return createdText(created, origin);
+  }).pipe(
+    Effect.catchTags({
+      EmptyFile: () =>
+        refuse(
+          "size is 0: an empty file imports nothing. Give the file's size in bytes.",
+          CREATE_EXAMPLE,
+        ),
+      FileTooLarge: (tooLarge) =>
+        refuse(
+          `The file is ${(tooLarge.bytes / 1024 / 1024).toFixed(1)} MB; an import takes ${tooLarge.limit / 1024 / 1024} MB at most. Export a shorter period from the bank and upload that.`,
+          CREATE_EXAMPLE,
+        ),
+      TooManyParts: (tooMany) =>
+        refuse(
+          `parts goes from 1 to ${tooMany.limit}, never more parts than bytes. Most files go in one part: leave parts out.`,
+          CREATE_EXAMPLE,
+        ),
+      TooManyFileUploads: (tooMany) =>
+        refuse(
+          `The user has ${tooMany.limit} file uploads waiting already, the most at once. Import them (upload with their file_upload) or let them expire, ${UPLOAD_MINUTES} minutes after they were made; then make this one.`,
+          { action: "upload", file_upload: "<a file upload's id>" },
+        ),
+      AccountNotFound: () =>
+        refuse("This account is no longer the user's. List their accounts again and name one.", {
+          ...CREATE_EXAMPLE,
+          account: "Current account",
+        }),
+      QueryFailed: failure,
+    }),
+  );
+}
+
+/** Imports the file sent to a file upload, as upload imports a file given in the call. */
+function uploadFile(input: ImportsInput, caller: Caller, id: string) {
+  const owner = caller.userId;
+  const again = { action: "upload", file_upload: id };
+
+  return Effect.gen(function* () {
+    if (input.content !== undefined || input.content_base64 !== undefined) {
+      return yield* refuse(
+        "Give the file once: file_upload (a file sent to its address) or content, not both.",
+        again,
+      );
+    }
+
+    const accountId =
+      input.account === undefined ? null : yield* namedAccount(owner, input.account, again);
+
+    const imports = yield* Imports;
+
+    const started = yield* imports.startUpload(owner, id, caller.grantId ?? "", {
+      format: input.format ?? null,
+      accountId,
+    });
+
+    const settled = yield* settle(owner, started.started);
+
+    return yield* settledText(owner, started, settled, true);
+  }).pipe(
+    Effect.catchTags({
+      FileUploadNotFound: () =>
+        refuse(
+          `No file upload ${clip(id, 60)} waits for this connection: it was imported already (a file upload is imported once), it expired and was deleted, or another connection made it. Make a new one and send the file again.`,
+          CREATE_EXAMPLE,
+        ),
+      FileUploadExpired: (expired) =>
+        refuse(
+          `This file upload expired at ${expired.expiresAt}, before it was imported. Make a new one and send the file again.`,
+          CREATE_EXAMPLE,
+        ),
+      FileUploadIncomplete: (incomplete) =>
+        refuse(
+          `The file has not all arrived: ${incomplete.partsReceived} of ${incomplete.parts} part(s), ${incomplete.bytesReceived} of ${incomplete.size} bytes. Send the rest to the address create_upload gave, then call upload again.`,
+          { action: "status", file_upload: id },
+        ),
+      UnknownFormat: () =>
+        refuse(
+          `Gousset cannot tell this file's format from its name or content. Name it with format: one of ${FORMATS.join(", ")}. The file upload waits until it expires.`,
+          { ...again, format: "camt053" },
+        ),
+      AccountNotFound: () =>
+        refuse("This account is no longer the user's. List their accounts again and name one.", {
+          ...again,
+          account: "Current account",
+        }),
+      ImportUnavailable: UNAVAILABLE,
+      ImportNotFound: (missing) => IMPORT_NOT_FOUND(missing.importId),
+      QueryFailed: failure,
+    }),
+  );
+}
+
+/** One file upload, as status answers it. */
+function fileUploadText(status: FileUploadStatus): string {
+  const name = clip(status.fileName, 100);
+
+  switch (status.state) {
+    case "pending": {
+      return [
+        `${name}: pending, ${status.partsReceived} of ${status.parts} part(s) received (${status.bytesReceived} of ${status.size} bytes), until ${status.expiresAt}.`,
+        status.parts === 1
+          ? "Send the file to the address create_upload gave."
+          : `Send part ${status.partsReceived + 1} next to the address create_upload gave.`,
+        `File upload id: ${status.id}`,
+      ].join("\n");
+    }
+
+    case "uploaded": {
+      return `${name}: uploaded, whole (${status.size} bytes), until ${status.expiresAt}. Import it: ${call({ action: "upload", file_upload: status.id })}`;
+    }
+
+    case "expired": {
+      return `${name}: expired at ${status.expiresAt}, before it was imported. Make a new file upload and send the file again: ${call({ action: "create_upload", file_name: status.fileName, size: status.size })}`;
+    }
+  }
+}
+
+function fileUploadStatus(owner: string, id: string) {
+  return Effect.gen(function* () {
+    const imports = yield* Imports;
+
+    return fileUploadText(yield* imports.uploadStatus(owner, id));
+  }).pipe(
+    Effect.catchTags({
+      FileUploadNotFound: () =>
+        refuse(
+          `The user has no file upload ${clip(id, 60)} waiting: it was imported (then list shows its import), or it expired and was deleted.`,
+          { action: "list" },
+        ),
       QueryFailed: failure,
     }),
   );
@@ -585,17 +871,41 @@ export const importsTool = defineTool<
   idempotent: false,
   input: ImportsInput,
   example: { action: "list" },
-  access: { upload: "write", status: "read", list: "read", undo: "write", profiles: "read" },
+  access: {
+    upload: "write",
+    create_upload: "write",
+    status: "read",
+    list: "read",
+    undo: "write",
+    profiles: "read",
+  },
   run: (input, caller) => {
     const owner = caller.userId;
 
     switch (input.action) {
       case "upload": {
-        return upload(input, owner);
+        return input.file_upload === undefined
+          ? upload(input, owner)
+          : uploadFile(input, caller, input.file_upload);
+      }
+
+      case "create_upload": {
+        return createUpload(input, caller);
       }
 
       case "status": {
         const importId = input.import;
+
+        if (input.file_upload !== undefined && importId !== undefined) {
+          return refuse("status reads one thing: an import, or a file upload, not both.", {
+            action: "status",
+            import: importId,
+          });
+        }
+
+        if (input.file_upload !== undefined) {
+          return fileUploadStatus(owner, input.file_upload);
+        }
 
         if (importId === undefined) {
           return needImport("status");

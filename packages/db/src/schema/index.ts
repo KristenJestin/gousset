@@ -18,6 +18,7 @@ import {
   accountBalance,
   importFile,
   importProfile,
+  importUpload,
   statementImport,
   statementLine,
 } from "./ledger";
@@ -44,6 +45,7 @@ export const tables = {
   statementImport,
   importFile,
   importProfile,
+  importUpload,
 };
 
 export { authRelations };

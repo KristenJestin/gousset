@@ -12,6 +12,13 @@ export type Caller = {
   readonly userId: string;
   /** The token was granted the write scope on the consent page. */
   readonly canWrite: boolean;
+  /**
+   * The grant (the user's consent to the client) the token came with: a file upload belongs to
+   * it (#129). The door always gives it; a test of a tool that makes none may leave it out.
+   */
+  readonly grantId?: string;
+  /** The app's own address (`https://gousset.example.com`), which a file upload's starts with. */
+  readonly origin?: string;
 };
 
 /**
