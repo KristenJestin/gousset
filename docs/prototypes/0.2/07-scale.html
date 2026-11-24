@@ -1,0 +1,300 @@
+<!doctype html>
+<html lang="en" data-color-scheme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>7 · The scale · Prototype 0.2 · Gousset</title>
+<link rel="stylesheet" href="assets/proto.css">
+<link rel="stylesheet" href="assets/icons.css">
+<style>
+  .device.desktop .screen.doc { height: auto; overflow: visible; }
+  .doc .page { gap: 24px; }
+  .probe { display: none; }
+  .probe.card { background: var(--card); }
+  .probe.page { background: var(--background); }
+
+  .ref-head { display: flex; align-items: baseline; gap: 12px; }
+  .ref-head p { color: var(--soft-foreground); }
+  .ref-body { padding: 0 20px 20px; display: flex; flex-direction: column; gap: 16px; }
+  .table { display: grid; column-gap: 16px; }
+  .table > .h { padding: 8px 0; border-bottom: 1px solid var(--border); }
+  .table > .c { display: flex; align-items: center; min-height: 44px; padding: 6px 0; border-bottom: 1px solid color-mix(in oklab, var(--border) 70%, transparent); }
+  .colours { grid-template-columns: 200px 220px minmax(0, 1fr) 96px 96px; }
+  .ratio { font-variant-numeric: tabular-nums; font-size: 12px; font-weight: 500; color: var(--soft-foreground); }
+  .ratio[data-pass="true"]::after { content: " ✓"; color: var(--success); }
+  .ratio[data-pass="false"]::after { content: " ✗"; color: var(--destructive); }
+  .tok { font-family: var(--font-mono); font-size: 12px; color: var(--foreground); }
+  .proposed { margin-left: 6px; padding: 0 6px; border-radius: 999px; background: color-mix(in oklab, var(--primary) 12%, transparent); color: var(--primary); font-size: 11px; line-height: 18px; font-weight: 500; }
+  .fg-foreground { color: var(--foreground); }
+  .fg-soft { color: var(--soft-foreground); }
+  .fg-muted { color: var(--muted-foreground); }
+  .fg-primary { color: var(--primary); }
+  .fg-destructive { color: var(--destructive); }
+  .fg-income { color: var(--money-income); }
+  .fg-success { color: var(--success); }
+  .fg-warning { color: var(--warning); }
+
+  .compare { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .compare .inset { padding: 12px 16px; display: flex; flex-direction: column; gap: 8px; }
+  .sample-row { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 10px; background: var(--card); border: 1px solid var(--border); }
+  .sample-row .stack { gap: 2px; min-width: 0; flex: 1; }
+  .two .facts, .two .head { color: var(--muted-foreground); }
+  .three .facts { color: var(--soft-foreground); }
+  .three .head { color: var(--muted-foreground); }
+
+  .types { grid-template-columns: 64px 210px minmax(0, 1fr); }
+  .weights { grid-template-columns: 64px 150px minmax(0, 1fr); }
+  .spaces { display: grid; grid-template-columns: 64px 48px minmax(0, 1fr); align-items: center; row-gap: 10px; column-gap: 16px; }
+  .bar-s { height: 12px; border-radius: 3px; background: color-mix(in oklab, var(--primary) 45%, transparent); }
+  .shelf { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; }
+  .rule-list { display: flex; flex-direction: column; gap: 6px; color: var(--soft-foreground); }
+  .rule-list b { color: var(--foreground); font-weight: 500; }
+  .btn.ring, .icon-btn.ring, .ring-row, .ring-link { outline: 2px solid var(--ring); outline-offset: 2px; }
+  .ring-row.ring-row { outline-offset: -2px; }
+  .ring-row { display: flex; align-items: center; height: 40px; padding: 0 12px; border-radius: 8px; flex: 1; }
+  .ring-link { color: var(--primary); font-weight: 500; border-radius: 4px; }
+  .cols-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+
+  /* Phone sample. */
+  .app.phone .page { gap: 16px; }
+  .psample .sheet-foot { flex-direction: column-reverse; padding: 12px 16px 16px; }
+</style>
+</head>
+<body>
+<div class="proto">
+<header class="bar" data-title="7 · The scale: the rules every fix applies"></header>
+<main class="canvas">
+<span class="probe card" id="bg-card"></span>
+<span class="probe page" id="bg-page"></span>
+<div class="devices">
+
+<section class="device desktop">
+<div class="caption">Desktop · the reference, measured live in the chosen scheme</div>
+<div class="screen doc">
+<div class="page">
+
+  <!-- ─────────── Text colours ─────────── -->
+  <section class="block">
+    <header class="block-head ref-head"><h2>Text colours: three levels, not two</h2><p>Each text says how much it matters by its colour, not by its size alone.</p></header>
+    <div class="ref-body">
+      <div class="table colours" role="table">
+        <span class="h t-label">Token</span><span class="h t-label">Sample</span><span class="h t-label">For</span><span class="h t-label">On a block</span><span class="h t-label">On the page</span>
+
+        <span class="c tok">--foreground</span><span class="c fg-foreground t-strong" id="fg-foreground">Current account</span><span class="c">What a row is: its label, its name.</span><span class="c ratio" data-contrast="#fg-foreground|#bg-card"></span><span class="c ratio" data-contrast="#fg-foreground|#bg-page"></span>
+
+        <span class="c tok">--soft-foreground<span class="proposed">proposed</span></span><span class="c fg-soft" id="fg-soft">Northbank · since 2016</span><span class="c">Its facts: account, date, period, format.</span><span class="c ratio" data-contrast="#fg-soft|#bg-card"></span><span class="c ratio" data-contrast="#fg-soft|#bg-page"></span>
+
+        <span class="c tok">--muted-foreground</span><span class="c fg-muted t-caption" id="fg-muted">Already known</span><span class="c">Labels and help: headers, hints, captions.</span><span class="c ratio" data-contrast="#fg-muted|#bg-card"></span><span class="c ratio" data-contrast="#fg-muted|#bg-page"></span>
+
+        <span class="c tok">--primary</span><span class="c fg-primary t-strong" id="fg-primary">Go to the review</span><span class="c">What to do next: the main action, a link.</span><span class="c ratio" data-contrast="#fg-primary|#bg-card"></span><span class="c ratio" data-contrast="#fg-primary|#bg-page"></span>
+
+        <span class="c tok">--destructive</span><span class="c fg-destructive" id="fg-destructive">The file is damaged</span><span class="c">What failed; a refused field.</span><span class="c ratio" data-contrast="#fg-destructive|#bg-card"></span><span class="c ratio" data-contrast="#fg-destructive|#bg-page"></span>
+
+        <span class="c tok">--money-income</span><span class="c fg-income amount" id="fg-income">+€2,900.00</span><span class="c">Money in, with its +. Money out: the text colour, with −.</span><span class="c ratio" data-contrast="#fg-income|#bg-card"></span><span class="c ratio" data-contrast="#fg-income|#bg-page"></span>
+
+        <span class="c tok">--success<span class="proposed">proposed</span></span><span class="c fg-success t-strong" id="fg-success">Imported</span><span class="c">A state that went well, on an icon or a chip.</span><span class="c ratio" data-contrast="#fg-success|#bg-card"></span><span class="c ratio" data-contrast="#fg-success|#bg-page"></span>
+
+        <span class="c tok">--warning<span class="proposed">proposed</span></span><span class="c fg-warning t-strong" id="fg-warning">To review</span><span class="c">Something waits for a look. Never on an amount.</span><span class="c ratio" data-contrast="#fg-warning|#bg-card"></span><span class="c ratio" data-contrast="#fg-warning|#bg-page"></span>
+      </div>
+
+      <div class="compare">
+        <div class="inset two">
+          <span class="t-label">Today: two levels, the facts as grey as the headers</span>
+          <span class="head t-caption">File</span>
+          <div class="sample-row"><span class="i i-file-text t-muted"></span><div class="stack"><span class="t-strong">northbank_current-account_2026-10.ofx</span><span class="facts t-caption">OFX · Current account · 1 to 31 Oct. 2026</span></div></div>
+        </div>
+        <div class="inset three">
+          <span class="t-label">Proposed: the facts one step darker than the headers</span>
+          <span class="head t-caption">File</span>
+          <div class="sample-row"><span class="i i-file-text t-muted"></span><div class="stack"><span class="t-strong">northbank_current-account_2026-10.ofx</span><span class="facts t-caption">OFX · Current account · 1 to 31 Oct. 2026</span></div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ─────────── Sizes and weights ─────────── -->
+  <div class="cols-2">
+    <section class="block">
+      <header class="block-head"><h2>Sizes: five, Tailwind's own</h2></header>
+      <div class="ref-body">
+        <div class="table types">
+          <span class="h t-label">Size / line</span><span class="h t-label">Sample</span><span class="h t-label">For</span>
+          <span class="c tok">24 / 32</span><span class="c t-figure">€2,418.30</span><span class="c t-soft">A figure alone</span>
+          <span class="c tok">20 / 28</span><span class="c t-title">Operations</span><span class="c t-soft">The page's title</span>
+          <span class="c tok">16 / 24</span><span class="c t-heading">Files</span><span class="c t-soft">A block's title</span>
+          <span class="c tok">14 / 20</span><span class="c">Drop your statements here</span><span class="c t-soft">Everything else</span>
+          <span class="c tok">12 / 16</span><span class="c t-caption">6 files, newest first</span><span class="c t-soft">Captions, chips, hints</span>
+        </div>
+      </div>
+    </section>
+    <section class="block">
+      <header class="block-head"><h2>Weights: three, never bold</h2></header>
+      <div class="ref-body">
+        <div class="table weights">
+          <span class="h t-label">Weight</span><span class="h t-label">Sample</span><span class="h t-label">For</span>
+          <span class="c tok">600</span><span class="c" style="font-weight:600">Add an account</span><span class="c t-soft">Titles, headings, figures</span>
+          <span class="c tok">500</span><span class="c" style="font-weight:500">Current account</span><span class="c t-soft">Names, labels, buttons, chips</span>
+          <span class="c tok">400</span><span class="c">31 Oct. 2026</span><span class="c t-soft">Values, facts, paragraphs</span>
+        </div>
+        <ul class="rule-list"><li><b>One emphasis at a time</b>: a text is either darker or heavier than its neighbour, rarely both.</li></ul>
+      </div>
+    </section>
+  </div>
+
+  <!-- ─────────── Spacing ─────────── -->
+  <section class="block">
+    <header class="block-head ref-head"><h2>Spacing: steps of 4</h2><p>The same gap for the same relation, everywhere.</p></header>
+    <div class="ref-body">
+      <div class="spaces">
+        <span class="tok">4</span><span class="bar-s" style="width:4px"></span><span class="t-soft">A label to its caption; the room a focus ring needs inside a scroller.</span>
+        <span class="tok">8</span><span class="bar-s" style="width:8px"></span><span class="t-soft">An icon to its text; buttons side by side; filters in a row.</span>
+        <span class="tok">12</span><span class="bar-s" style="width:12px"></span><span class="t-soft">A row's parts; two fields in a pair; inside a control (sides).</span>
+        <span class="tok">16</span><span class="bar-s" style="width:16px"></span><span class="t-soft">The page's padding on a phone; a sheet's sides on a phone; a list's columns.</span>
+        <span class="tok">20</span><span class="bar-s" style="width:20px"></span><span class="t-soft">A block's padding; fields one under another.</span>
+        <span class="tok">24</span><span class="bar-s" style="width:24px"></span><span class="t-soft">Blocks one under another; a sheet's sides; settings' control from its text.</span>
+        <span class="tok">32</span><span class="bar-s" style="width:32px"></span><span class="t-soft">The page's padding on a desktop; figures side by side.</span>
+      </div>
+      <ul class="rule-list"><li><b>Heights</b>: a row of a list 48, a file 64, a control 36 (32 in a toolbar row), a button 36 or 32, a chip 22, a menu item 34, a touch target on a phone 44.</li></ul>
+    </div>
+  </section>
+
+  <!-- ─────────── Pills and buttons ─────────── -->
+  <div class="stack" style="gap:24px">
+    <section class="block">
+      <header class="block-head"><h2>Status pills</h2></header>
+      <div class="ref-body">
+        <div class="shelf">
+          <span class="chip done"><span class="i i-circle-check"></span>Imported</span>
+          <span class="chip"><svg class="loader" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M5 11v4a7 7 0 0 0 14 0v-4"/><circle class="coin" cx="12" cy="6" r="3" fill="currentColor" stroke="none"/></svg>Reading</span>
+          <span class="chip action"><span class="i i-alert-circle"></span>Account to choose</span>
+          <span class="chip review"><span class="i i-eye"></span>To review</span>
+          <span class="chip error"><span class="i i-alert-triangle"></span>Failed</span>
+          <span class="chip undone"><span class="i i-arrow-back-up"></span>Undone</span>
+          <span class="chip review tag">To review</span>
+        </div>
+        <ul class="rule-list">
+          <li><b>Colour only where there is something to do, or something failed</b>: violet waits for you, amber asks for a look, red failed. Done stays grey, its icon green.</li>
+          <li><b>Always an icon and a word</b>: the colour is never the only sign.</li>
+          <li><b>22 px, 12 px medium</b>, one line, never wraps; a 20 px tag inside a row.</li>
+        </ul>
+      </div>
+    </section>
+    <section class="block">
+      <header class="block-head"><h2>Buttons</h2></header>
+      <div class="ref-body">
+        <div class="shelf">
+          <button class="btn primary" type="button">Add the account</button>
+          <button class="btn secondary" type="button"><span class="i i-folder-open"></span>Choose files</button>
+          <button class="btn ghost" type="button">Cancel</button>
+          <button class="btn quiet-danger" type="button"><span class="i i-arrow-back-up"></span>Undo this import</button>
+          <button class="btn destructive" type="button">Close the account</button>
+        </div>
+        <div class="shelf">
+          <button class="btn sm primary" type="button">Import into this account</button>
+          <button class="btn sm secondary" type="button"><span class="i i-refresh"></span>Try again</button>
+          <button class="btn primary" type="button" aria-busy="true"><svg class="loader" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M5 11v4a7 7 0 0 0 14 0v-4"/><circle class="coin" cx="12" cy="6" r="3" fill="currentColor" stroke="none"/></svg>Adding…</button>
+          <button class="btn secondary" type="button" disabled>Disabled</button>
+          <button class="icon-btn" type="button" aria-label="Close"><span class="i i-x"></span></button>
+        </div>
+        <ul class="rule-list">
+          <li><b>One primary per place</b>: a page's head, a sheet's foot, a dialog. The rest secondary or ghost.</li>
+          <li><b>Never wraps, never shrinks</b>: a label that does not fit is shortened, or the row stacks (full width on a phone).</li>
+          <li><b>Order</b>: Cancel, then the action, at the right; on a phone the action on top, full width.</li>
+          <li><b>36 or 32 px, both 14 px text</b> (<i>proposed</i>: the small one was 12 px and read as a tag). An icon goes before the word.</li>
+        </ul>
+      </div>
+    </section>
+  </div>
+
+  <!-- ─────────── Focus ─────────── -->
+  <section class="block">
+    <header class="block-head ref-head"><h2>The focus ring</h2><p>2 px in <span class="tok">--ring</span> (the violet), 2 px away from the element, on everything that takes focus.</p></header>
+    <div class="ref-body">
+      <div class="shelf" style="padding:4px">
+        <button class="btn primary ring" type="button">Add the account</button>
+        <button class="btn secondary ring" type="button">Choose files</button>
+        <span class="control focus" style="width:220px"><span class="i i-search"></span><span class="placeholder">Search the labels</span></span>
+        <button class="icon-btn ring" type="button" aria-label="Close"><span class="i i-x"></span></button>
+        <span class="ring-row block">A row of a list</span>
+        <a class="ring-link" href="#">Go to the review</a>
+      </div>
+      <ul class="rule-list">
+        <li><b>Never clipped</b>: a scroller keeps 4 px of padding on every side where a field can sit (page 3); a row in a list draws its ring 2 px inside instead, since its neighbours touch it.</li>
+        <li><b>Shown for the keyboard only</b> (<code>:focus-visible</code>), never on a click; a field shows it on a click too, as it is typed in.</li>
+      </ul>
+    </div>
+  </section>
+
+</div>
+</div>
+</section>
+
+<!-- ─────────── Phone ─────────── -->
+<section class="device phone">
+<div class="caption">Phone · the same scale; what changes is the layout</div>
+<div class="screen">
+<div class="app phone">
+<div class="statusbar"></div>
+<div class="main">
+<div class="page psample">
+  <h1 class="t-title">Import</h1>
+  <p class="t-caption">12 / 16 · captions stay 12 px; nothing goes under it.</p>
+  <section class="block">
+    <header class="block-head"><h2>Files</h2><span class="t-caption">3</span></header>
+    <div class="pfile">
+      <span class="file-name">northbank_current-account_2026-10.ofx</span>
+      <span class="file-facts"><span>OFX</span><span class="sep">·</span><span>Current account</span><span class="sep">·</span><span>Oct. 2026</span></span>
+      <div class="pfile-meta"><span class="chip done"><span class="i i-circle-check"></span>Imported</span><span class="counts num">212 new · 4 known</span></div>
+    </div>
+    <div class="pfile">
+      <span class="file-name">mealcard-export-2026-10.csv</span>
+      <span class="file-facts"><span>CSV</span><span class="sep">·</span><span>profile “MealCard”</span></span>
+      <div class="pfile-meta"><span class="chip action"><span class="i i-alert-circle"></span>Account to choose</span></div>
+    </div>
+  </section>
+  <section class="block">
+    <div class="sheet-foot" style="border-top:0">
+      <button class="btn ghost full" type="button">Cancel</button>
+      <button class="btn primary full" type="button">Import into this account</button>
+    </div>
+  </section>
+  <p class="t-caption">Buttons in a sheet or a form foot: full width, the action on top, 44 px between thumbs and edges.</p>
+</div>
+</div>
+<nav class="tabbar" data-current="more"></nav>
+</div>
+</div>
+</section>
+
+</div>
+</main>
+
+<aside class="notes">
+  <h2>What this page is</h2>
+  <p>The rules every fix of the 0.2 pass applies, so that each screen is fixed the same way. The ratios are measured in the browser from the colours as they resolve in the chosen scheme: switch Light and Dark.</p>
+
+  <h2>What changes</h2>
+  <ul>
+    <li><b>A third text level</b>, <code>--soft-foreground</code>, between the text and the muted grey: a row's facts (account, period, format) no longer share the headers' grey, which is why every text looked the same.</li>
+    <li><b>Two state colours</b>, <code>--success</code> and <code>--warning</code>, so that “imported” never borrows the income green, nor “to review” the spent orange.</li>
+    <li><b>The small button keeps 14 px text</b>; 32 px high instead of 36, never smaller text.</li>
+    <li><b>The scrim</b> <code>--overlay</code> behind sheets and dialogs (page 3).</li>
+  </ul>
+
+  <h2>Rejected</h2>
+  <ul class="rejected">
+    <li><b>Telling levels apart by size only</b> (13 px for facts): a size between Tailwind's steps, and 13 px Geist is blurry at 1×.</li>
+    <li><b>Bold (700)</b> for emphasis: Geist at 700 is heavy beside 500 labels; 600 is the ceiling.</li>
+    <li><b>Lowering the muted grey's contrast</b> to make room: it would fall under 4.5:1.</li>
+  </ul>
+
+  <h2>To decide</h2>
+  <ul>
+    <li>The four proposed tokens (<code>--soft-foreground</code>, <code>--success</code>, <code>--warning</code>, <code>--overlay</code>): each goes into globals.css with its pair in contrast.test.ts.</li>
+    <li>The small button's 14 px text.</li>
+  </ul>
+</aside>
+</div>
+<script src="assets/proto.js"></script>
+</body>
+</html>

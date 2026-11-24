@@ -1,0 +1,328 @@
+<!doctype html>
+<html lang="en" data-color-scheme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>1 · Import · Prototype 0.2 · Gousset</title>
+<link rel="stylesheet" href="assets/proto.css">
+<link rel="stylesheet" href="assets/icons.css">
+<style>
+  .device.desktop .screen { height: 1000px; }
+  .file-cell > .stack { gap: 2px; min-width: 0; flex: 1; }
+  /* A long file name keeps its end (dates, extension): the start gives way. */
+  .mid { display: flex; min-width: 0; }
+  .mid .start { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+  .mid .end { flex-shrink: 0; white-space: nowrap; }
+  .running { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px 12px; }
+  .running .row { justify-content: space-between; }
+  .failed { display: flex; align-items: center; gap: 12px; padding: 8px 8px 8px 12px; }
+  .pfile .figures { display: grid; grid-template-columns: 1fr 1fr; gap: 12px 16px; }
+  .pfile .inset { padding: 12px; display: flex; flex-direction: column; gap: 12px; }
+  .pfile .buttons { display: flex; flex-direction: column; gap: 8px; }
+  .pdrop { display: flex; flex-direction: column; gap: 12px; padding: 16px; border: 1.5px dashed var(--input); border-radius: var(--radius-lg); background: var(--card); }
+  .pdrop .row { gap: 12px; }
+  .pdrop .tile { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 10px; background: var(--muted); color: var(--soft-foreground); flex-shrink: 0; }
+  .fold { color: var(--muted-foreground); }
+</style>
+</head>
+<body>
+<div class="proto">
+<header class="bar" data-title="1 · Import (#125)"></header>
+<main class="canvas">
+<div class="devices">
+
+<!-- ═══════════════ Desktop ═══════════════ -->
+<section class="device desktop">
+<div class="caption">Desktop · 1280 px · six files in every state</div>
+<div class="screen">
+<div class="app">
+<aside class="sidebar" data-current="import"></aside>
+<div class="main">
+<div class="page">
+  <header class="page-head">
+    <div class="stack grow">
+      <h1 class="t-title">Import</h1>
+      <p>Your banks' statements, read into your accounts. Nothing is added twice.</p>
+    </div>
+  </header>
+
+  <div class="drop" aria-label="Drop your statements here">
+    <span class="tile"><span class="i i-file-import lg"></span></span>
+    <div class="stack grow">
+      <span class="t-strong">Drop your statements here</span>
+      <span class="t-caption">OFX, QFX, QIF, CAMT.053, MT940 or CSV, up to 10 MB each. Several at once is fine.</span>
+    </div>
+    <button class="btn secondary sm" type="button"><span class="i i-folder-open"></span>Choose files</button>
+  </div>
+
+  <section class="block">
+    <header class="block-head">
+      <h2>Files</h2>
+      <span class="t-caption">6 files, newest first</span>
+    </header>
+    <div class="files" role="table" aria-label="Files to import">
+      <div class="files-head" role="row">
+        <span class="t-label" role="columnheader">File</span>
+        <span class="t-label r" role="columnheader">New</span>
+        <span class="t-label r" role="columnheader">Already known</span>
+        <span class="t-label" role="columnheader">State</span>
+        <span role="columnheader"><span class="sr-only">Summary</span></span>
+      </div>
+
+      <!-- Waiting for its account -->
+      <div class="file-row has-content" role="row">
+        <div class="file-cell" role="cell">
+          <span class="i i-file-text"></span>
+          <div class="stack">
+            <span class="file-name mid" title="mealcard-transactions-export-2026-10-31T18-42-07.csv"><span class="start">mealcard-transactions-export-</span><span class="end">2026-10-31T18-42-07.csv</span></span>
+            <span class="file-facts"><span>CSV</span><span class="sep">·</span><span>profile “MealCard”</span><span class="sep">·</span><span>1 to 31 Oct. 2026</span></span>
+          </div>
+        </div>
+        <span class="r num t-muted" role="cell" aria-label="Not known yet">—</span>
+        <span class="r num t-muted" role="cell" aria-label="Not known yet">—</span>
+        <span role="cell"><span class="chip action"><span class="i i-alert-circle"></span>Account to choose</span></span>
+        <span role="cell"></span>
+      </div>
+      <div class="file-content" role="row">
+        <div class="inset choose" role="cell">
+          <span class="grow">This file does not say which account it belongs to.</span>
+          <span class="control sm select" role="combobox" aria-label="Account of mealcard-transactions-export-2026-10-31T18-42-07.csv" tabindex="0"><span class="placeholder">Choose the account</span><span class="i i-selector"></span></span>
+          <button class="btn sm primary" type="button">Import into this account</button>
+        </div>
+      </div>
+
+      <!-- Running -->
+      <div class="file-row has-content" role="row">
+        <div class="file-cell" role="cell">
+          <span class="i i-file-text"></span>
+          <div class="stack">
+            <span class="file-name mid" title="northbank-livret-a-savings_2016-01-01_2026-10-31.qif"><span class="start">northbank-livret-a-savings_</span><span class="end">2016-01-01_2026-10-31.qif</span></span>
+            <span class="file-facts"><span>QIF</span><span class="sep">·</span><span>Livret A</span><span class="sep">·</span><span>1 Jan. 2016 to 31 Oct. 2026</span></span>
+          </div>
+        </div>
+        <span class="r num t-muted" role="cell" aria-label="Not known yet">—</span>
+        <span class="r num t-muted" role="cell" aria-label="Not known yet">—</span>
+        <span role="cell"><span class="chip"><svg class="loader" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M5 11v4a7 7 0 0 0 14 0v-4"/><circle class="coin" cx="12" cy="6" r="3" fill="currentColor" stroke="none"/></svg>Reading</span></span>
+        <span role="cell"></span>
+      </div>
+      <div class="file-content" role="row">
+        <div class="inset running" role="cell">
+          <div class="row">
+            <span class="t-soft">Setting aside what is already known</span>
+            <span class="t-caption num">Step 2 of 3 · 1,840 of 2,310 lines</span>
+          </div>
+          <div class="progress" role="progressbar" aria-valuenow="80" aria-valuemin="0" aria-valuemax="100"><span style="width: 80%"></span></div>
+        </div>
+      </div>
+
+      <!-- Failed -->
+      <div class="file-row has-content" role="row">
+        <div class="file-cell" role="cell">
+          <span class="i i-file-text"></span>
+          <div class="stack">
+            <span class="file-name mid" title="harbor-savings-home-loan-statement-2026-09.ofx"><span class="start">harbor-savings-home-loan-statement-</span><span class="end">2026-09.ofx</span></span>
+            <span class="file-facts"><span>OFX</span><span class="sep">·</span><span>Home loan</span><span class="sep">·</span><span class="t-muted">period not read</span></span>
+          </div>
+        </div>
+        <span class="r num t-muted" role="cell" aria-label="Not known yet">—</span>
+        <span class="r num t-muted" role="cell" aria-label="Not known yet">—</span>
+        <span role="cell"><span class="chip error"><span class="i i-alert-triangle"></span>Failed</span></span>
+        <span role="cell"></span>
+      </div>
+      <div class="file-content" role="row">
+        <div class="inset failed" role="cell">
+          <div class="message error grow"><span class="i i-alert-circle"></span><span class="text">The file is damaged or was cut short: download it again from the bank.</span></div>
+          <button class="btn sm quiet-danger" type="button"><span class="i i-arrow-back-up"></span>Undo this import</button>
+          <button class="btn sm secondary" type="button"><span class="i i-refresh"></span>Try again</button>
+        </div>
+      </div>
+
+      <!-- Imported, newest: its summary open -->
+      <div class="file-row has-content" role="row">
+        <div class="file-cell" role="cell">
+          <span class="i i-file-text"></span>
+          <div class="stack">
+            <span class="file-name mid" title="northbank_current-account_statement_full-history_2016-01-01_to_2026-10-31.ofx"><span class="start">northbank_current-account_statement_full-history_</span><span class="end">2016-01-01_to_2026-10-31.ofx</span></span>
+            <span class="file-facts"><span>OFX</span><span class="sep">·</span><span>Current account</span><span class="sep">·</span><span>1 Jan. 2016 to 31 Oct. 2026</span></span>
+          </div>
+        </div>
+        <span class="r num" role="cell">4,790</span>
+        <span class="r num t-soft" role="cell">22</span>
+        <span role="cell"><span class="chip done"><span class="i i-circle-check"></span>Imported</span></span>
+        <span role="cell"><button class="icon-btn fold" type="button" aria-expanded="true" aria-label="Hide the summary"><span class="i i-chevron-up"></span></button></span>
+      </div>
+      <div class="file-content" role="row">
+        <section class="inset summary" role="cell" aria-label="What northbank_current-account_statement_full-history_2016-01-01_to_2026-10-31.ofx brought">
+          <dl class="figures">
+            <div class="figure"><dt>Lines read</dt><dd>4,812</dd></div>
+            <div class="figure"><dt>Added</dt><dd>4,790</dd></div>
+            <div class="figure"><dt>Already known</dt><dd>22</dd></div>
+            <div class="figure stands"><dt>To review</dt><dd>14</dd></div>
+          </dl>
+          <div class="actions">
+            <button class="btn sm quiet-danger" type="button"><span class="i i-arrow-back-up"></span>Undo this import</button>
+            <span class="gap"></span>
+            <a class="btn sm primary trail" href="#">Go to the review<span class="i i-arrow-right"></span></a>
+          </div>
+        </section>
+      </div>
+
+      <!-- Imported, older: folded -->
+      <div class="file-row" role="row">
+        <div class="file-cell" role="cell">
+          <span class="i i-file-text"></span>
+          <div class="stack">
+            <span class="file-name mid" title="northbank-pea-operations-2025-annual.csv"><span class="start">northbank-pea-operations-</span><span class="end">2025-annual.csv</span></span>
+            <span class="file-facts"><span>CSV</span><span class="sep">·</span><span>profile “Northbank PEA”</span><span class="sep">·</span><span>PEA</span><span class="sep">·</span><span>2 Jan. to 31 Dec. 2025</span></span>
+          </div>
+        </div>
+        <span class="r num" role="cell">48</span>
+        <span class="r num t-soft" role="cell">0</span>
+        <span role="cell"><span class="chip done"><span class="i i-circle-check"></span>Imported</span></span>
+        <span role="cell"><button class="icon-btn fold" type="button" aria-expanded="false" aria-label="Show the summary"><span class="i i-chevron-down"></span></button></span>
+      </div>
+
+      <!-- Undone -->
+      <div class="file-row dim" role="row">
+        <div class="file-cell" role="cell">
+          <span class="i i-file-text"></span>
+          <div class="stack">
+            <span class="file-name mid" title="statement_october (1).ofx"><span class="start">statement_october (1)</span><span class="end">.ofx</span></span>
+            <span class="file-facts"><span>OFX</span><span class="sep">·</span><span>Current account</span><span class="sep">·</span><span>undone on 2 Nov. 2026</span></span>
+          </div>
+        </div>
+        <span class="r num t-muted" role="cell">—</span>
+        <span class="r num t-muted" role="cell">—</span>
+        <span role="cell"><span class="chip undone"><span class="i i-arrow-back-up"></span>Undone</span></span>
+        <span role="cell"></span>
+      </div>
+    </div>
+  </section>
+</div>
+</div>
+</div>
+</div>
+</section>
+
+<!-- ═══════════════ Phone ═══════════════ -->
+<section class="device phone">
+<div class="caption">Phone · 390 px</div>
+<div class="screen">
+<div class="app phone">
+<div class="statusbar"></div>
+<div class="main">
+<div class="page">
+  <h1 class="t-title">Import</h1>
+  <div class="pdrop">
+    <div class="row">
+      <span class="tile"><span class="i i-file-import lg"></span></span>
+      <div class="stack">
+        <span class="t-strong">Add your statements</span>
+        <span class="t-caption">OFX, QFX, QIF, CAMT.053, MT940 or CSV, up to 10 MB each.</span>
+      </div>
+    </div>
+    <button class="btn secondary full" type="button"><span class="i i-folder-open"></span>Choose files</button>
+  </div>
+
+  <section class="block">
+    <header class="block-head"><h2>Files</h2><span class="t-caption">6</span></header>
+
+    <div class="pfile">
+      <span class="file-name">mealcard-transactions-export-2026-10-31T18-42-07.csv</span>
+      <span class="file-facts"><span>CSV</span><span class="sep">·</span><span>profile “MealCard”</span><span class="sep">·</span><span>1 to 31 Oct. 2026</span></span>
+      <div class="pfile-meta"><span class="chip action"><span class="i i-alert-circle"></span>Account to choose</span></div>
+      <div class="inset">
+        <span>This file does not say which account it belongs to.</span>
+        <span class="control select" role="combobox" aria-label="Account of mealcard-transactions-export-2026-10-31T18-42-07.csv" tabindex="0"><span class="placeholder">Choose the account</span><span class="i i-selector"></span></span>
+        <button class="btn primary full" type="button">Import into this account</button>
+      </div>
+    </div>
+
+    <div class="pfile">
+      <span class="file-name">northbank_current-account_statement_full-history_2016-01-01_to_2026-10-31.ofx</span>
+      <span class="file-facts"><span>OFX</span><span class="sep">·</span><span>Current account</span><span class="sep">·</span><span>1 Jan. 2016 to 31 Oct. 2026</span></span>
+      <div class="pfile-meta"><span class="chip done"><span class="i i-circle-check"></span>Imported</span><span class="counts num">4,790 new · 22 known</span></div>
+      <div class="inset">
+        <dl class="figures">
+          <div class="figure"><dt>Lines read</dt><dd>4,812</dd></div>
+          <div class="figure"><dt>Added</dt><dd>4,790</dd></div>
+          <div class="figure"><dt>Already known</dt><dd>22</dd></div>
+          <div class="figure stands"><dt>To review</dt><dd>14</dd></div>
+        </dl>
+        <div class="buttons">
+          <a class="btn primary full trail" href="#">Go to the review<span class="i i-arrow-right"></span></a>
+          <button class="btn quiet-danger full" type="button"><span class="i i-arrow-back-up"></span>Undo this import</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="pfile">
+      <span class="file-name">harbor-savings-home-loan-statement-2026-09.ofx</span>
+      <span class="file-facts"><span>OFX</span><span class="sep">·</span><span>Home loan</span></span>
+      <div class="pfile-meta"><span class="chip error"><span class="i i-alert-triangle"></span>Failed</span></div>
+      <div class="inset">
+        <div class="message error"><span class="i i-alert-circle"></span><span class="text">The file is damaged or was cut short: download it again from the bank.</span></div>
+        <div class="buttons">
+          <button class="btn secondary full" type="button"><span class="i i-refresh"></span>Try again</button>
+          <button class="btn quiet-danger full" type="button"><span class="i i-arrow-back-up"></span>Undo this import</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="pfile">
+      <span class="file-name">northbank-pea-operations-2025-annual.csv</span>
+      <span class="file-facts"><span>CSV</span><span class="sep">·</span><span>PEA</span><span class="sep">·</span><span>2 Jan. to 31 Dec. 2025</span></span>
+      <div class="pfile-meta"><span class="chip done"><span class="i i-circle-check"></span>Imported</span><span class="counts num">48 new · 0 known</span></div>
+    </div>
+  </section>
+</div>
+</div>
+<nav class="tabbar" data-current="more"></nav>
+</div>
+</div>
+</section>
+
+</div>
+</main>
+
+<aside class="notes">
+  <h2>What changes</h2>
+  <ul>
+    <li><b>Four columns instead of seven.</b> The file's name first (14 px, medium, the text colour), its facts under it (format · account · period, 12 px, soft); then <b>New</b> and <b>Already known</b> right-aligned in fixed widths, so the numbers line up from file to file; then the state. The wireframe's order is kept, left to right.</li>
+    <li><b>A long name keeps its end.</b> The start gives way with an ellipsis; the last part (dates, extension), which is what tells two statements apart, stays. The whole name is in the tooltip and for screen readers.</li>
+    <li><b>State chips</b>: colour only where something waits for you (violet: <i>Account to choose</i>, <i>Columns to confirm</i>) or something failed (red). <i>Imported</i> is a quiet grey chip with a green check; <i>Reading</i> and <i>Saving</i> carry the loader; <i>Undone</i> is outlined.</li>
+    <li><b>The account question</b> is one inset line, aligned with the name: the sentence, the select (240 px) and the button on one line. The sentence is the visible label; the select is named “Account of &lt;file&gt;” for screen readers. No empty gap.</li>
+    <li><b>The summary</b>: the four counts as one group (16 px semibold, their label under them in 12 px), the actions at the right edge. <b>Go to the review</b> is the primary button, last. <b>Undo this import</b> is a quiet button with its icon, set apart by a wider gap: it turns red only on hover.</li>
+    <li><b>One primary at a time.</b> Older imports fold back to their row (the chevron opens their summary again); only the newest stays open.</li>
+    <li><b>The drop zone is one row</b> (72 px) instead of a tall box; on drag-over its edge and tile turn violet.</li>
+    <li><b>Phone</b>: no drag and drop, so the zone is a <i>Choose files</i> button; each file is a stack (name on two lines at most, facts, chip and counts); the actions are full width, the primary on top.</li>
+  </ul>
+
+  <h2>Rejected</h2>
+  <ul class="rejected">
+    <li><b>Keeping seven columns.</b> Between 1024 and 1280 px, the long names and “1 Jan. 2016 to 31 Oct. 2026” wrap: the reported “labels wrapping”.</li>
+    <li><b>Truncating names at the end</b>: every export of one bank starts the same way.</li>
+    <li><b>“Go to the review” as an underlined link</b>: it is the next step, so it is a button.</li>
+    <li><b>Undo as a bordered button beside the primary</b>: the same weight as the way forward (#125). Undo in a ⋯ menu: it hides a recovery the user needs right after a mistake.</li>
+    <li><b>A green “Imported” chip</b>: a list of six green chips is noise, and green already means income.</li>
+    <li><b>A page-level “Continue” bar under the list</b>: it repeated the newest summary.</li>
+  </ul>
+
+  <h2>Motion</h2>
+  <dl class="timeline">
+    <dt>250 ms</dt><dd>A row's question, progress or summary unfolds (height and fade, ease-out), as today.</dd>
+    <dt>200 ms</dt><dd>The counts roll to their value.</dd>
+    <dt>150 ms</dt><dd>A chip's change cross-fades; the drop zone's colours on drag-over.</dd>
+    <dt>Reduced</dt><dd>All cut: things appear, numbers jump.</dd>
+  </dl>
+
+  <h2>To decide</h2>
+  <ul>
+    <li>The button reads <b>Go to the review</b> (the brief) where the app says <i>Continue to the review</i> (<code>importContinue</code>).</li>
+    <li>The wireframe's step bar (Drop · Check · Review) is not in the app, and not added here.</li>
+  </ul>
+</aside>
+</div>
+<script src="assets/proto.js"></script>
+</body>
+</html>

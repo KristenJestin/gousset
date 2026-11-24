@@ -6,6 +6,7 @@ import { addUser, createUser, hasLiveSession, signIn, signInStatus } from "../sr
 import type { TestUser } from "../src/auth";
 import { resetDuringNextChange, sessionsOf, setMustChangePassword } from "../src/database";
 import { authorizeByHand, clientWithToken, refreshStatus } from "../src/oauth-by-hand";
+import { onPhone } from "../src/frame";
 import { TEST_CLIENT_ID, TEST_REDIRECT_URL } from "../src/oauth-client";
 import { expect, fixDay, test, visit } from "../src/test";
 
@@ -119,8 +120,8 @@ test("reset by the administrator, the old password refused, the temporary one le
 
   const dialog = await openReset(userPage, person);
 
-  // The shared dialog's motion: it fades and grows in 200 ms.
-  await expect(dialog).toHaveCSS("transition-duration", "0.2s");
+  // The shared dialog's motion: it fades and grows in 200 ms; on a phone it rises in 300 ms.
+  await expect(dialog).toHaveCSS("transition-duration", onPhone(userPage) ? "0.3s" : "0.2s");
 
   await dialog.getByLabel("Temporary password").fill("jude-temporary-e2e");
   await dialog.getByRole("button", { name: "Reset the password", exact: true }).click();

@@ -43,6 +43,11 @@ export type DialogProps = {
   onSubmit?: (event: FormEvent<HTMLFormElement>) => void;
   /** With `onSubmit`: something was typed in the form (to take a refusal away). */
   onInput?: () => void;
+  /**
+   * With `onSubmit`: the form is being sent. Nothing closes the dialog meanwhile (a press on the
+   * backdrop, Escape, the close button, Cancel), so that the answer lands on the form that sent it.
+   */
+  sending?: boolean;
   /** The element that opens it, forwarding its props and ref (a `Button`); or control `open`. */
   trigger?: ReactElement;
   open?: boolean;
@@ -51,15 +56,16 @@ export type DialogProps = {
 
 /**
  * A focused task over the page, on ui-sdk's `Dialog`: a title, a description, a body, actions and
- * a close button. Modal: focus stays inside, the page behind is inert; Escape, the close button
- * or a press outside closes it, and focus returns to what opened it. An action that asks for input
- * is a button opening one, holding the form (`onSubmit`); docs/design.md, "Actions and forms".
+ * a close button. Modal: focus stays inside, the page behind is inert and dimmed by the backdrop;
+ * Escape, the close button or a press on the backdrop closes it (not while its form is `sending`),
+ * and focus returns to what opened it. An action that asks for input is a button opening one,
+ * holding the form (`onSubmit`); docs/design.md, "Actions and forms".
  *
  * On a phone (below 768 px) it is a sheet: along the screen's bottom edge, its whole width.
  *
- * Motion: the dialog fades and grows in 200 ms, ease-out (on a phone it slides up from the bottom
- * edge instead), the page behind veils in 200 ms; both leave the same way. Cut under reduced
- * motion.
+ * Motion: the dialog fades and grows from 96 % in 200 ms, ease-out, and leaves in 150 ms, ease-in;
+ * on a phone it rises from the bottom edge in 300 ms and goes back down in 200 ms. The backdrop
+ * fades in and out in 200 ms. Cut under reduced motion.
  */
 export function Dialog({
   title,
@@ -68,6 +74,7 @@ export function Dialog({
   actions,
   onSubmit,
   onInput,
+  sending = false,
   trigger,
   open,
   onOpenChange,
@@ -86,7 +93,7 @@ export function Dialog({
         )
       ) : (
         <DialogActions>
-          <CancelButton />
+          <CancelButton disabled={sending} />
           {actions}
         </DialogActions>
       )}
@@ -94,7 +101,7 @@ export function Dialog({
   );
 
   return (
-    <DialogRoot open={open} onOpenChange={(next) => onOpenChange?.(next)}>
+    <DialogRoot open={open} dismissible={!sending} onOpenChange={(next) => onOpenChange?.(next)}>
       {trigger === undefined ? null : <DialogTrigger render={trigger} />}
       <DialogBackdrop className={backdropClasses} />
       {/* Focus starts on the dialog itself: reading starts at the title, and Escape closes it at
@@ -109,7 +116,7 @@ export function Dialog({
               </DialogDescription>
             )}
           </div>
-          <CloseButton />
+          <CloseButton disabled={sending} />
         </div>
         {onSubmit === undefined ? (
           body
@@ -124,22 +131,30 @@ export function Dialog({
 }
 
 /** The corner's close button: an `IconButton` named "Close", in the page's language. */
-function CloseButton() {
+function CloseButton({ disabled }: { disabled: boolean }) {
   const messages = useUiMessages();
 
   return (
     <DialogClosePart
-      render={<IconButton icon="close" label={messages.overlays.close} size="sm" />}
+      render={
+        <IconButton icon="close" label={messages.overlays.close} size="sm" disabled={disabled} />
+      }
     />
   );
 }
 
 /** A form dialog's Cancel, in the page's language: closes it, sending nothing. */
-function CancelButton() {
+function CancelButton({ disabled }: { disabled: boolean }) {
   const messages = useUiMessages();
 
   return (
-    <DialogClosePart render={<Button variant="secondary">{messages.overlays.cancel}</Button>} />
+    <DialogClosePart
+      render={
+        <Button variant="ghost" disabled={disabled}>
+          {messages.overlays.cancel}
+        </Button>
+      }
+    />
   );
 }
 
@@ -174,7 +189,7 @@ export type AlertDialogProps = {
  * A question that must be answered before going on, on ui-sdk's `AlertDialog`: Cancel and the
  * agreeing answer. A press outside does not close it; Escape and Cancel do. Focus starts on Cancel.
  *
- * Motion: as `Dialog`, 200 ms in and out. Cut under reduced motion.
+ * Motion: as `Dialog`, over the same backdrop. Cut under reduced motion.
  */
 export function AlertDialog({
   title,
@@ -211,9 +226,7 @@ export function AlertDialog({
           {description}
         </AlertDialogDescription>
         <DialogActions>
-          <AlertDialogClose
-            render={<Button variant="secondary">{messages.overlays.cancel}</Button>}
-          />
+          <AlertDialogClose render={<Button variant="ghost">{messages.overlays.cancel}</Button>} />
           <AlertDialogClose
             value="confirm"
             action={confirm}

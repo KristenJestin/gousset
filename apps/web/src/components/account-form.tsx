@@ -105,7 +105,8 @@ export type AccountFormProps = {
  * institution, currency, tracking, opening balance, opened on and, for a card, the current account
  * it settles into; for a benefit account, the order its credits are used in. `key`d by the
  * account's id (or "new") at the call site so that editing another account starts from its own
- * values. Motion: the shared `Sheet`'s, sliding in from its edge, a fade under reduced motion.
+ * values. Motion: the shared `Sheet`'s, sliding in from its edge over the backdrop; cut under
+ * reduced motion.
  */
 export function AccountForm({
   open,
@@ -207,14 +208,9 @@ export function AccountForm({
     <Sheet
       title={title}
       open={open}
-      onOpenChange={(next) => {
-        // While the form is sent it stays open: its answer lands on the form that sent it.
-        if (!next && busy) {
-          return;
-        }
-
-        onOpenChange(next);
-      }}
+      onOpenChange={onOpenChange}
+      // While the form is sent it stays open: its answer lands on the form that sent it.
+      sending={busy}
       onSubmit={(event) => {
         event.preventDefault();
         void submit();
