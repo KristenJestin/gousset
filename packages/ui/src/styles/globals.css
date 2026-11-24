@@ -74,9 +74,10 @@
   /* Three text levels: `--foreground` for what a row is (a file's name), `--soft-foreground` for
      its facts (format, account, period), `--muted-foreground` for what labels or explains. */
   --soft-foreground: light-dark(oklch(0.38 0.011 75), oklch(0.83 0.012 85));
-  /* A state that went well (an import done). A state, not a money role: never on an amount, so
-     that it is never read as income. */
-  --success: light-dark(oklch(0.5 0.1 160), oklch(0.78 0.12 160));
+  /* A state that went well (an import done). A state, not a money role: never on an amount, and
+     its hue kept 45° or more from every money colour (`contrast.test.ts`), between spent and
+     income, so that it is never read as income. */
+  --success: light-dark(oklch(0.5 0.1 100), oklch(0.78 0.12 100));
   --accent: light-dark(oklch(0.945 0.005 85), oklch(0.26 0.006 75));
   --accent-foreground: var(--foreground);
   --destructive: light-dark(oklch(0.53 0.19 27), oklch(0.7 0.16 25));

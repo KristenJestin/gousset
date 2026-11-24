@@ -193,6 +193,9 @@ function Import() {
             locale={getLocale()}
             columns={{
               file: m.importColumnFile(),
+              format: m.importColumnFormat(),
+              account: m.importColumnAccount(),
+              period: m.importColumnPeriod(),
               added: m.importColumnAdded(),
               known: m.importColumnKnown(),
               state: m.importColumnState(),

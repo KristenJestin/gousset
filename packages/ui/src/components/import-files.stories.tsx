@@ -15,6 +15,9 @@ import { Select } from "./select";
 
 const COLUMNS: ImportFilesColumns = {
   file: "File",
+  format: "Format recognised",
+  account: "Account",
+  period: "Period",
   added: "New",
   known: "Already known",
   state: "State",
@@ -226,8 +229,9 @@ function OpeningARow() {
  * already knows, right-aligned in fixed widths so that they line up; where it stands, as a
  * `StatusChip`. A long name keeps its end (dates, extension) and gives way at its start; the
  * whole name is its tooltip. Under a row, what the page puts there: the file's `JobProgress`, a
- * question to answer (`ImportPrompt`), its summary (`ImportSummary`). A count not made yet is a
- * dash (screen readers hear "Not known yet").
+ * question to answer (`ImportPrompt`), its summary (`ImportSummary`). A count or a fact not
+ * found yet is a dash (screen readers hear "Not known yet"); screen readers hear each fact with
+ * its name ("Account: Livret A"). The layout follows the 0.2 prototype (`docs/prototypes/0.2`).
  *
  * The page gives every word: the column headers, the states, the formats, the account's name.
  *
@@ -306,7 +310,15 @@ export const LargeCounts: Story = {
 export const French: Story = {
   args: {
     label: "Fichiers à importer",
-    columns: { file: "Fichier", added: "Nouvelles", known: "Déjà connues", state: "État" },
+    columns: {
+      file: "Fichier",
+      format: "Format reconnu",
+      account: "Compte",
+      period: "Période",
+      added: "Nouvelles",
+      known: "Déjà connues",
+      state: "État",
+    },
     rows: [
       {
         id: "year",

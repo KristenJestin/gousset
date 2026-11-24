@@ -208,7 +208,11 @@ test.describe("ImportFiles", () => {
     const name = file.locator('[data-slot="import-file-name"]');
     const facts = file.locator('[data-slot="import-file-facts"]');
 
-    await expect(facts).toHaveText("OFX · Current account · 1 Jan. 2016 – 31 Oct. 2026");
+    // Each fact named for screen readers, its name hidden from sight.
+    await expect(facts).toHaveText(
+      "Format recognised: OFX · Account: Current account · Period: 1 Jan. 2016 – 31 Oct. 2026",
+    );
+    await expect(facts.locator(".sr-only").first()).toHaveText("Format recognised: ");
     await expect(name).toHaveCSS("font-weight", "500");
     await expect(facts).toHaveCSS("font-size", "12px");
     expect(await name.evaluate((element) => getComputedStyle(element).color)).not.toBe(
@@ -305,7 +309,10 @@ test.describe("ImportFiles", () => {
 
     const first = page.locator('[data-slot="import-file"]').first();
 
-    await expect(first.locator('[data-slot="import-file-facts"]')).toHaveCount(0);
+    for (const fact of ["format", "account", "period"]) {
+      await expect(first.locator(`[data-fact="${fact}"]`)).toContainText("—");
+      await expect(first.locator(`[data-fact="${fact}"]`)).toContainText("Not known yet");
+    }
 
     for (const column of ["added", "known"]) {
       await expect(first.locator(`[data-column="${column}"]`)).toContainText("—");
@@ -386,6 +393,57 @@ test.describe("ImportFiles", () => {
       page.locator('[data-slot="import-file"]').first().locator('[data-column="known"]'),
     ).toContainText(/13\s870/);
     await expect(page.getByText("Pas encore connu").first()).toBeAttached();
+  });
+});
+
+test.describe("ImportPrompt", () => {
+  test("its alert waits in the page, empty and taking no line, until a refusal", async ({
+    page,
+  }) => {
+    await page.goto(story("import-prompt", "default"));
+
+    const alert = page.locator('[data-slot="import-prompt-error"]');
+
+    await expect(alert).toHaveAttribute("role", "alert");
+    await expect(alert).toHaveText("");
+    await expect(alert).toHaveCSS("display", "block");
+    expect((await alert.boundingBox())?.height).toBe(0);
+  });
+
+  test("a refusal fades in under the line in 200 ms", async ({ page }) => {
+    await page.goto(story("import-prompt", "refused"));
+
+    const refusal = page.locator('[data-slot="import-prompt-error"] span');
+
+    await expect(page.getByRole("alert").filter({ hasText: "no longer exists" })).toBeVisible();
+    await expect(refusal).toHaveCSS("animation-duration", "0.2s");
+  });
+
+  test("a refusal appears at once under reduced motion", async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.goto(story("import-prompt", "refused"));
+    await expect(page.locator('[data-slot="import-prompt-error"] span')).toHaveCSS(
+      "animation-duration",
+      "0s",
+    );
+  });
+
+  test("a waiting state and a failure carry one mark each, the same in chip and prompt", async ({
+    page,
+  }) => {
+    await page.goto(story("import-files", "checking"));
+
+    const failedChipMark = page.locator('[data-slot="status-chip"][data-tone="error"] svg').first();
+
+    const failedPromptMark = page
+      .locator('[data-slot="import-prompt"][data-tone="error"] svg')
+      .first();
+
+    expect(await failedChipMark.getAttribute("class")).toContain("tabler-icon-alert-circle");
+    expect(await failedPromptMark.getAttribute("class")).toContain("tabler-icon-alert-circle");
+    await expect(
+      page.locator('[data-slot="status-chip"][data-tone="action"] svg').first(),
+    ).toHaveClass(/tabler-icon-info-circle/);
   });
 });
 

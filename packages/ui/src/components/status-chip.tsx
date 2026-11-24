@@ -10,11 +10,13 @@ import { Loader } from "./loader";
  */
 export type StatusTone = "neutral" | "busy" | "action" | "error" | "done" | "undone";
 
+// One mark per tone, the same wherever the state is said again (`ImportPrompt`, the toasts): a
+// failure is the error circle, a question waiting for the user is information, not an alarm.
 const ICON_OF = {
   neutral: null,
   busy: null,
-  action: "error",
-  error: "warning",
+  action: "info",
+  error: "error",
   done: "success",
   undone: "undo",
 } satisfies { readonly [Tone in StatusTone]: IconName | null };

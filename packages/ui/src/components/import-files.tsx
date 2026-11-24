@@ -12,6 +12,10 @@ import { Unfold } from "./unfold";
 /** The column headers, in the page's words. */
 export type ImportFilesColumns = {
   file: string;
+  /** The file's facts under its name, each named for screen readers. */
+  format: string;
+  account: string;
+  period: string;
   /** Lines the import will add. */
   added: string;
   /** Lines the app already has (duplicates). */
@@ -53,7 +57,7 @@ export type ImportFilesProps = {
   locale?: string;
 };
 
-/** A count the import has not made yet: a dash to see, words to hear. */
+/** A value the import has not found yet: a dash to see, words to hear. */
 function Unknown() {
   const messages = useUiMessages().imports;
 
@@ -129,7 +133,12 @@ function FileRow({
   locale: string;
 }) {
   const open = present(row.content);
-  const facts = [row.format, row.account, row.period].filter((fact) => fact !== null).join(" · ");
+
+  const facts = [
+    { key: "format", label: columns.format, value: row.format },
+    { key: "account", label: columns.account, value: row.account },
+    { key: "period", label: columns.period, value: row.period },
+  ];
 
   return (
     <>
@@ -145,14 +154,22 @@ function FileRow({
       >
         <div role="cell" data-column="file" className="flex min-w-0 basis-full flex-col gap-0.5">
           <FileName name={row.file} />
-          {facts === "" ? null : (
-            <span
-              data-slot="import-file-facts"
-              className="text-xs text-soft-foreground md:truncate"
-            >
-              {facts}
-            </span>
-          )}
+          <span
+            data-slot="import-file-facts"
+            className="block text-xs text-soft-foreground md:truncate"
+          >
+            {facts.map((fact, at) => (
+              <span key={fact.key} data-fact={fact.key}>
+                {at === 0 ? null : (
+                  <span aria-hidden="true" className="text-muted-foreground">
+                    {" · "}
+                  </span>
+                )}
+                <span className="sr-only">{`${fact.label}: `}</span>
+                {fact.value === null ? <Unknown /> : fact.value}
+              </span>
+            ))}
+          </span>
         </div>
         <CountCell column="added" heading={columns.added} value={row.added} locale={locale} />
         <CountCell column="known" heading={columns.known} value={row.known} locale={locale} />
@@ -176,11 +193,12 @@ function FileRow({
 /**
  * The files of an import, one row each (docs/wireframes, screen 6, block 2): first the file's name,
  * its facts set back under it (the format recognised, the account its lines go to, the period it
- * covers); then the lines new to the app and those it already knows, right-aligned in tabular
- * figures and fixed widths so that they line up from file to file; then where it stands, as a
- * `StatusChip`. Under a row, what the page puts there: the file's `JobProgress`, a question to
- * answer (`ImportPrompt`), a summary (`ImportSummary`). A count not made yet shows a dash. It
- * draws no block: the page puts it in one.
+ * covers, each named for screen readers); then the lines new to the app and those it already
+ * knows, right-aligned in tabular figures and fixed widths so that they line up from file to file;
+ * then where it stands, as a `StatusChip`. Under a row, what the page puts there: the file's
+ * `JobProgress`, a question to answer (`ImportPrompt`), a summary (`ImportSummary`). A value not
+ * found yet shows a dash. It draws no block: the page puts it in one. The layout follows the 0.2
+ * prototype (`docs/prototypes/0.2`, Import), which folds the wireframe's seven columns into four.
  *
  * A table on a wide screen (`role="table"`, its headers); on a phone, each file is a stack: its
  * name on two lines at most, its facts, then its state with its counts.
