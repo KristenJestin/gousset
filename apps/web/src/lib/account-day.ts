@@ -30,6 +30,12 @@ export function shortDays(locale: string): (day: string) => string {
   return (day) => format.format(asDate(day));
 }
 
+/**
+ * Thin and narrow no-break spaces: Node's ICU puts them around a range's dash where Chromium's
+ * puts plain spaces, and the server's text must be the browser's, or React draws the page again.
+ */
+const ENGINE_SPACES = /[  ]/g;
+
 /** "1–31 Oct 2026": a statement's period, from its first day to its last. */
 export function dayRange(from: string, to: string, locale: string): string {
   return new Intl.DateTimeFormat(locale, {
@@ -37,7 +43,9 @@ export function dayRange(from: string, to: string, locale: string): string {
     month: "short",
     year: "numeric",
     timeZone: "UTC",
-  }).formatRange(asDate(from), asDate(to));
+  })
+    .formatRange(asDate(from), asDate(to))
+    .replaceAll(ENGINE_SPACES, " ");
 }
 
 /** "31 October 2026": an account's settings, a close confirmation. */
