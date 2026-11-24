@@ -149,13 +149,17 @@ test("the operations page proposes a cancellation as a refund, links it once con
   await sheet.getByRole("button", { name: "Add a category" }).click();
   await sheet.getByRole("combobox", { name: "Category 2" }).pressSequentially("groc");
   await page.getByRole("option", { name: "Groceries", exact: true }).click();
+  await expect(sheet.getByRole("combobox", { name: "Category 2" })).toHaveValue("Groceries");
   await expect(sheet.locator('[data-slot="split-left"]')).toHaveText(
     "The shares make the whole line.",
   );
   await animationsDone(page);
   await expectAccessible(page);
 
-  await sheet.getByRole("button", { name: "Save the split" }).click();
+  const save = sheet.getByRole("button", { name: "Save the split" });
+
+  await expect(save).toBeEnabled();
+  await save.click();
 
   // Saved, the sheet closes. Firefox keeps a closed sheet in the page, marked closed, inert and slid
   // out, while its exit transition does not report its end (as the detail's own fade, #128): what
