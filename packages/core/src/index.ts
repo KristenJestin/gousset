@@ -8,6 +8,7 @@ export {
   AccountNotClosed,
   AccountNotFound,
   BalanceAlreadyNoted,
+  BalanceCategoryRefused,
   CategoryKindMismatch,
   CategoryNameAmbiguous,
   CategoryNameTaken,
@@ -80,7 +81,9 @@ export type {
 
 export { AccountStore } from "./account-store";
 
-export type { AccountRecord, LineExpiry } from "./account-store";
+export type { AccountRecord, BalanceCategory, LineExpiry } from "./account-store";
+
+export { remakeEveryBalanceLine } from "./balance-lines";
 
 export { creditsLeft, expiringOf } from "./credits";
 
@@ -274,6 +277,7 @@ export {
   Transfers,
   lineTransferOf,
   pairEveryLine,
+  pairLineWithAccount,
   pairLines,
   transfersLayer,
   unpairLine,

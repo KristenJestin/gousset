@@ -146,12 +146,18 @@ async function apply(
           .update(rule)
           .set({ setCategoryId: step.into })
           .where(eq(rule.setCategoryId, step.from));
+
+        // An account kept by its balance sends its movement to the target too (#31).
+        await transaction
+          .update(account)
+          .set({ balanceCategoryId: step.into })
+          .where(eq(account.balanceCategoryId, step.from));
         break;
       }
 
       case "delete": {
         // A category still in use, or with children, is refused by its kept references at commit;
-        // a merchant's default on it is cleared by its key.
+        // a merchant's default on it, and an account's category, are cleared by their keys.
         await transaction.delete(category).where(eq(category.id, step.id));
         break;
       }

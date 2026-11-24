@@ -56,6 +56,22 @@ export type LineTransferCandidatesProps = {
   locale?: string;
 };
 
+/** An account kept by its balance that a line can be paired with, already worded. */
+export type BalanceAccountView = {
+  id: string;
+  /** Its name, as the page writes it (with its institution when another account has its name). */
+  name: string;
+};
+
+export type LineTransferToAccountProps = {
+  /** The open accounts kept by their balance, in the line's currency, but its own; at least one. */
+  accounts: ReadonlyArray<BalanceAccountView>;
+  /** Pairs the line with the chosen account: true once paired, which closes the dialog. */
+  onPair: (accountId: string) => Promise<boolean>;
+  /** A refusal of the last pairing, worded by the page, shown in the dialog. */
+  error?: string;
+};
+
 /** A side's label, day, account and amount, on one row. */
 function Side({ side, locale }: { side: TransferSideView; locale: string }) {
   return (
@@ -73,6 +89,12 @@ function Side({ side, locale }: { side: TransferSideView; locale: string }) {
 }
 
 const groupClasses = "flex flex-col gap-3 border-t pt-4";
+
+const radioClasses = cn(
+  "flex size-4 shrink-0 items-center justify-center rounded-full border border-input bg-card",
+  "transition-colors duration-150 ease-out data-checked:border-primary motion-reduce:transition-none",
+  focusRing,
+);
 
 const headingClasses = "flex items-center gap-2 text-sm font-medium text-foreground";
 
@@ -248,17 +270,113 @@ export function LineTransferCandidates({
                 key={candidate.id}
                 className="flex cursor-pointer items-center gap-3 rounded-md border px-3 py-2"
               >
-                <Radio
-                  value={candidate.id}
-                  className={cn(
-                    "flex size-4 shrink-0 items-center justify-center rounded-full border border-input bg-card",
-                    "transition-colors duration-150 ease-out data-checked:border-primary motion-reduce:transition-none",
-                    focusRing,
-                  )}
-                >
+                <Radio value={candidate.id} className={radioClasses}>
                   <RadioIndicator className="size-2 rounded-full bg-primary" />
                 </Radio>
                 <Side side={candidate} locale={writtenIn} />
+              </label>
+            ))}
+          </RadioGroup>
+          <FormMessage message={error} />
+        </form>
+      </Dialog>
+    </div>
+  );
+}
+
+/**
+ * A line whose other side is on an account kept by its balance, which has no line of its own to pair
+ * with, in its detail (`LineDetail`'s `transfer`, after `LineTransferCandidates` when it has some):
+ * "Pair with an account" opens a `Dialog` where the user chooses the account (a radio group, the
+ * first checked), then pairs; Gousset makes that account's side. A refusal shows in the dialog,
+ * which stays open.
+ *
+ * Motion: none of its own. The dialog is `Dialog`'s (200 ms in and out); cut under reduced motion.
+ */
+export function LineTransferToAccount({ accounts, onPair, error }: LineTransferToAccountProps) {
+  const messages = useUiMessages();
+  const words = messages.operations;
+  const formId = useId();
+  const [open, setOpen] = useState(false);
+  const [chosen, setChosen] = useState(accounts[0]?.id ?? "");
+  const [busy, setBusy] = useState(false);
+
+  const pair = async () => {
+    setBusy(true);
+
+    try {
+      if (await onPair(chosen)) {
+        setOpen(false);
+      }
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div data-slot="line-transfer-account" className={groupClasses}>
+      <p className={headingClasses}>
+        <Icon name="transfer" size="sm" />
+        {words.withBalanceAccount}
+      </p>
+      <div className="flex">
+        <Button
+          variant="secondary"
+          size="sm"
+          onClick={() => {
+            // Each opening starts from the first account.
+            setChosen(accounts[0]?.id ?? "");
+            setOpen(true);
+          }}
+        >
+          {words.pairWithAccount}
+        </Button>
+      </div>
+      <Dialog
+        title={words.pairWithAccount}
+        description={words.pairWithAccountDescription}
+        open={open}
+        onOpenChange={setOpen}
+        actions={
+          <>
+            <DialogClose>
+              <Button type="button" variant="secondary">
+                {messages.overlays.cancel}
+              </Button>
+            </DialogClose>
+            <Button type="submit" form={formId} loading={busy}>
+              {words.pair}
+            </Button>
+          </>
+        }
+      >
+        <form
+          id={formId}
+          className="flex flex-col gap-2"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void pair();
+          }}
+        >
+          <RadioGroup
+            aria-label={words.balanceAccount}
+            value={chosen}
+            onValueChange={(next) => {
+              if (next !== null) {
+                setChosen(next);
+              }
+            }}
+            className="flex flex-col gap-2"
+          >
+            {accounts.map((account) => (
+              <label
+                key={account.id}
+                className="flex cursor-pointer items-center gap-3 rounded-md border px-3 py-2 text-sm font-medium text-foreground"
+              >
+                <Radio value={account.id} className={radioClasses}>
+                  <RadioIndicator className="size-2 rounded-full bg-primary" />
+                </Radio>
+                <span className="min-w-0 break-words">{account.name}</span>
               </label>
             ))}
           </RadioGroup>

@@ -66,6 +66,7 @@ function accountOf(name: string, currency = "EUR"): AccountRecord {
     closedOn: null,
     settlesIntoAccountId: null,
     creditOrder: "oldest_first",
+    balanceCategoryId: null,
   };
 }
 
@@ -411,6 +412,7 @@ describe("showLine", () => {
       toReview: true,
       // Held, it has no entry yet: no category.
       category: null,
+      fromBalance: false,
       originalAmount: { minor: -4500, currency: "USD" },
       counterpartyIban: "FR7699999000010001234567809",
       expiresOn: null,

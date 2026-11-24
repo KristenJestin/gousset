@@ -1,4 +1,4 @@
-import type { AccountLine } from "@gousset/core";
+import type { AccountDetail, AccountLine } from "@gousset/core";
 import { m } from "@gousset/i18n/messages";
 import { AccountFigures, AccountFiguresSkeleton } from "@gousset/ui/components/account-figures";
 import { AccountLines, AccountLinesSkeleton } from "@gousset/ui/components/account-lines";
@@ -34,6 +34,7 @@ import {
 import { accountRefusalMessage } from "@/i18n/messages";
 import { longDay, monthLabel, shortDay } from "@/lib/account-day";
 import { accountChoiceLabel, accountGroupLabel } from "@/lib/account-labels";
+import { shownPath } from "@/lib/categories";
 import {
   OPENING_CREDIT_ID,
   benefitCreditsOf,
@@ -42,6 +43,7 @@ import {
 } from "@/lib/benefit-credits";
 import { whileBusy } from "@/lib/while-busy";
 import { accountQueries, invalidateAccounts } from "@/queries/accounts";
+import { invalidateCategories } from "@/queries/categories";
 
 export const Route = createFileRoute("/_authed/accounts/$accountId")({
   loader: async ({ context: { queryClient }, params }) => {
@@ -118,7 +120,14 @@ function AccountPage() {
         return result;
       }
 
-      await invalidateAccounts(queryClient);
+      const movementsRemade = account.mode === "balance" || values.mode === "balance";
+
+      // Kept by its balance, before or now: its movements were made again, which the months and
+      // the categories count.
+      await Promise.all([
+        invalidateAccounts(queryClient),
+        ...(movementsRemade ? [invalidateCategories(queryClient)] : []),
+      ]);
 
       return { ok: true };
     } catch {
@@ -271,8 +280,10 @@ function AccountPage() {
           openedOn: account.openedOn,
           settlesIntoAccountId: account.settlesInto?.id ?? null,
           creditOrder: account.creditOrder,
+          balanceCategoryId: account.balanceCategory?.id ?? null,
         }}
         settlesIntoChoices={settlesIntoChoices}
+        balanceCategory={account.balanceCategory}
         onSubmit={handleEdit}
       />
       <CloseDialog
@@ -551,6 +562,7 @@ function Settings({ accountId, onEdit }: { accountId: string; onEdit: () => void
       institution={account.institution ?? undefined}
       settlesInto={account.settlesInto?.name}
       creditOrder={account.kind === "benefit" ? creditOrderLabel(account.creditOrder) : undefined}
+      balanceCategory={account.mode === "balance" ? balanceCategoryLabel(account) : undefined}
       action={
         <Button variant="secondary" size="sm" icon="edit" onClick={onEdit}>
           {m.accountEdit()}
@@ -560,11 +572,25 @@ function Settings({ accountId, onEdit }: { accountId: string; onEdit: () => void
   );
 }
 
+/** The category an account kept by its balance sends its movements to, worded: "None" for none. */
+function balanceCategoryLabel(account: AccountDetail["account"]): string {
+  const category = account.balanceCategory;
+
+  if (category === null) {
+    return m.accountBalanceCategoryNone();
+  }
+
+  return category.archived
+    ? m.accountBalanceCategoryArchived({ name: shownPath(category.name) })
+    : shownPath(category.name);
+}
+
 function toRow(line: AccountLine, today: string, locale: string): AccountLineRow {
   return {
     id: line.id,
     day: shortDay(line.bookedOn, locale),
-    label: line.label,
+    // The movement a noted balance makes has no label of its own.
+    label: line.fromBalance ? m.lineFromBalance() : line.label,
     amount: line.amount,
     balanceAfter: line.balanceAfter ?? undefined,
     tag: creditExpiryTag(line.expiresOn, today, locale),
@@ -673,7 +699,9 @@ function NoteBalanceDialog({
 
     setError(undefined);
     onSaved(m.accountNoteBalanceSaved({ day: shortDay(noteDay, locale) }));
-    await invalidateAccounts(queryClient);
+    // The balance made its movement, and the one after it again: the months and the categories
+    // count them.
+    await Promise.all([invalidateAccounts(queryClient), invalidateCategories(queryClient)]);
     onOpenChange(false);
   }
 

@@ -11,6 +11,7 @@ import { CsvProfile, detectCsvProfile } from "@gousset/import";
 import { and, count, eq, gte, inArray, isNotNull, isNull, lte, ne, or } from "drizzle-orm";
 import { Effect, Schema } from "effect";
 
+import { remakeBalanceLines } from "../balance-lines";
 import { takeCategoryTurn } from "../category-turn";
 import { entriesForLines } from "../entries";
 import { recogniseIn } from "../merchants/merchants";
@@ -467,6 +468,10 @@ export function runImport(
           to: periodTo,
         });
       }
+
+      // Its lines, on an account kept by its balance, or the sides the pairing replaced there, count
+      // in that account's movements (#31).
+      await remakeBalanceLines(transaction, owner);
 
       const states = await transaction
         .select({ state: statementLine.state, lines: count() })

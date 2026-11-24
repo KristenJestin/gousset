@@ -29,6 +29,11 @@ export type AccountSettingsProps = {
    * for every other kind.
    */
   creditOrder?: string;
+  /**
+   * An account kept by its balance: the category its movements go to, already worded ("Eating out
+   * › Meals", "None"); left out for an account kept by its lines.
+   */
+  balanceCategory?: string;
   /** The "Edit" action, opening the account's form. */
   action?: ReactNode;
 };
@@ -36,7 +41,8 @@ export type AccountSettingsProps = {
 /**
  * An account's settings, read only (docs/wireframes, screen 7, block 4): its kind, how it is
  * tracked, its currency, when it was opened, its institution and, for a card, what it settles
- * into; for a benefit account, the order its credits are used in. `action` holds the "Edit" button that opens the form.
+ * into; for a benefit account, the order its credits are used in; for an account kept by its
+ * balance, the category its movements go to. `action` holds the "Edit" button that opens the form.
  */
 export function AccountSettings({
   kind,
@@ -46,6 +52,7 @@ export function AccountSettings({
   institution,
   settlesInto,
   creditOrder,
+  balanceCategory,
   action,
 }: AccountSettingsProps) {
   const messages = useUiMessages().accounts;
@@ -68,6 +75,9 @@ export function AccountSettings({
         )}
         {creditOrder === undefined ? null : (
           <SettingsRow label={messages.settingsCreditOrder} value={creditOrder} />
+        )}
+        {balanceCategory === undefined ? null : (
+          <SettingsRow label={messages.settingsBalanceCategory} value={balanceCategory} />
         )}
       </dl>
     </div>

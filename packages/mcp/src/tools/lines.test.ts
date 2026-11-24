@@ -5,6 +5,7 @@ import {
   Imports,
   Merchants,
   RuleJobs,
+  TransferRefused,
   Transfers,
   memoryAccountStore,
   memoryCategory,
@@ -15,6 +16,7 @@ import {
 import type {
   AccountRecord,
   CategoryRecord,
+  LineTransfer,
   MemoryCategoryRows,
   MemoryLineDetail,
   MemoryLineRows,
@@ -69,6 +71,7 @@ function account(name: string, change: Partial<AccountRecord> = {}): AccountReco
     closedOn: null,
     settlesIntoAccountId: null,
     creditOrder: "oldest_first",
+    balanceCategoryId: null,
     ...change,
   };
 }
@@ -168,9 +171,15 @@ function categoryRows(): MemoryCategoryRows {
   };
 }
 
+/** No line of these is a transfer; transfers are tried end to end (#26, lines-transfers.spec). */
+const NO_TRANSFER = Layer.mock(Transfers, {
+  ofLine: () => Effect.succeed({ paired: null, candidates: [] }),
+});
+
 function onToday(
   rows: MemoryLineRows,
   categories: Map<string, MemoryCategoryRows> = new Map(),
+  transfers = NO_TRANSFER,
 ): Runner<GoussetServices> {
   const byOwner = new Map([[reader.userId, rows]]);
 
@@ -184,12 +193,9 @@ function onToday(
     Layer.mock(ImportProfiles, {}),
     Layer.mock(DataExport, {}),
     Layer.mock(Merchants, {}),
-    // No line of these is a transfer; transfers are tried end to end (#26, lines-transfers.spec).
     Layer.mock(UserData, {}),
     Layer.mock(RuleJobs, {}),
-    Layer.mock(Transfers, {
-      ofLine: () => Effect.succeed({ paired: null, candidates: [] }),
-    }),
+    transfers,
     TestClock.layer(),
   );
 
@@ -707,6 +713,149 @@ describe("lines classify", () => {
   });
 });
 
+const giftCard = account("Gift card", {
+  kind: "benefit",
+  mode: "balance",
+  institution: "Northbank",
+});
+
+/** The movement Gousset made of a balance noted on the gift card: no label of its own. */
+const movement = line(giftCard.id, "2026-10-31", -9000, "", {
+  source: "balance",
+  category: { id: memoryId(), name: "Meal vouchers", parentName: "Food", kind: "expense" },
+});
+
+const KEPT: MemoryLineRows = {
+  ...ROWS,
+  accounts: [current, livret, otherLivret, brokerage, giftCard],
+  lines: [salary, fuel, movement],
+};
+
+/** The gift card's side of the fuel line, as Gousset makes it. */
+const madeSide: LineTransfer = {
+  paired: {
+    direction: "out",
+    other: {
+      id: memoryId(),
+      bookedOn: fuel.bookedOn,
+      label: fuel.label,
+      amount: { minor: 4290, currency: "EUR" },
+      account: { id: giftCard.id, name: giftCard.name, institution: giftCard.institution },
+      madeByApp: true,
+    },
+    setAside: false,
+    pairedBy: "user",
+  },
+  candidates: [],
+};
+
+/** A pair call on `KEPT` as a writer, the transfers answering each pairing with an account. */
+async function pairWithAccount(args: Arguments) {
+  const pairings: Array<{ lineId: string; accountId: string }> = [];
+
+  const transfers = Layer.mock(Transfers, {
+    ofLine: () => Effect.succeed({ paired: null, candidates: [] }),
+    pairWithAccount: (_owner, lineId, accountId) => {
+      pairings.push({ lineId, accountId });
+
+      return accountId === giftCard.id
+        ? Effect.succeed(madeSide)
+        : Effect.fail(new TransferRefused({ reason: "account_kept_by_lines", lineId }));
+    },
+  });
+
+  const client = await connectInProcess(
+    goussetServer,
+    { run: onToday(KEPT, new Map(), transfers) },
+    writer,
+    "2025-11-25",
+  );
+
+  const result = await client.callTool({ name: "lines", arguments: args });
+  const [first] = result.content ?? [];
+
+  return {
+    text: first?.type === "text" ? first.text : "",
+    isError: result.isError === true,
+    pairings,
+  };
+}
+
+describe("lines and the accounts kept by their balance", () => {
+  test("search and show name a movement of a noted balance, which has no label", async () => {
+    const found = await lines({ action: "search", account: "gift card" }, KEPT);
+
+    expect(found.isError, found.text).toBe(false);
+    expect(found.text).toContain(
+      `- 2026-10-31, Gift card (Northbank): -90.00 EUR, (movement of the noted balance), in Food > Meal vouchers; line: ${movement.id}`,
+    );
+
+    const shown = await lines({ action: "show", line: movement.id }, KEPT);
+
+    expect(shown.isError, shown.text).toBe(false);
+    expect(shown.text).toContain("Label: (movement of the noted balance)");
+    expect(shown.text).toContain("Made by Gousset from a balance the user noted.");
+    expect(shown.text).not.toContain("(no label)");
+  });
+
+  test("pairs a line with an account kept by its balance, whose side Gousset makes", async () => {
+    const { text, isError, pairings } = await pairWithAccount({
+      action: "pair",
+      line: fuel.id,
+      account: "gift card",
+      institution: "Northbank",
+    });
+
+    expect(isError, text).toBe(false);
+    expect(pairings).toEqual([{ lineId: fuel.id, accountId: giftCard.id }]);
+    expect(text).toContain("Paired as a transfer.");
+    expect(text).toContain(
+      "Transfer to Gift card (Northbank), paired by the user: never counted as spending.",
+    );
+    expect(text).toContain("made by Gousset as that account's statement does not show it");
+    expect(text).toContain(
+      "The movements of Gift card (Northbank)'s noted balances leave it out from now on.",
+    );
+    expect(text).not.toContain(giftCard.id);
+  });
+
+  test("refuses an account kept by its lines, saying to pair with its line", async () => {
+    const { text, isError } = await pairWithAccount({
+      action: "pair",
+      line: fuel.id,
+      account: "Livret A",
+      institution: "Riverside Bank",
+    });
+
+    expect(isError).toBe(true);
+    expect(text).toContain("That account is kept by its lines");
+    expect(text.length).toBeLessThan(ERROR_LIMIT);
+  });
+
+  test("refuses an unknown account, other and account together, and account without a line", async () => {
+    const unknown = await pairWithAccount({ action: "pair", line: fuel.id, account: "Joint card" });
+
+    expect(unknown.isError).toBe(true);
+    expect(unknown.text).toContain('No account of the user\'s is named "Joint card"');
+    expect(unknown.text).toContain('A valid call: accounts {"action":"list"}');
+    expect(unknown.pairings).toEqual([]);
+
+    const wrong: ReadonlyArray<Arguments> = [
+      { action: "pair", line: fuel.id, other: salary.id, account: "Gift card" },
+      { action: "pair", account: "Gift card" },
+    ];
+
+    for (const args of wrong) {
+      const refused = await pairWithAccount(args);
+
+      expect(refused.isError).toBe(true);
+      expect(refused.text).toContain("account names the other side of one line's transfer");
+      expect(refused.text).toContain('"account":"Gift card"}');
+      expect(refused.pairings).toEqual([]);
+    }
+  });
+});
+
 describe("the lines tool", () => {
   test("pairs, classifies and unpairs only with the write scope, and says how to get it", async () => {
     for (const action of ["pair", "classify", "unpair"]) {
@@ -754,6 +903,7 @@ describe("the lines tool", () => {
       "an archived category",
       "an unknown or ambiguous category name",
       '{"action":"classify","line":"<a handle search gave>","kind":"expense","category":"Groceries > Bakery"}',
+      '{"action":"pair","line":"<a handle search gave>","account":"Gift card"}',
     ]) {
       expect(description, said).toContain(said);
     }

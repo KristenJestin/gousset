@@ -50,6 +50,11 @@ export const ACCOUNTS: ExportTable = {
     },
     CREATED_AT,
     UPDATED_AT,
+    // Added after the others (v0.3): the database keeps it last.
+    {
+      name: "balance_category_id",
+      holds: "an account kept by its balance: the category (categories.id) its movement goes to",
+    },
   ],
 };
 
@@ -111,6 +116,10 @@ export const STATEMENT_LINES: ExportTable = {
     {
       name: "transfer_refused",
       holds: "true once you said the line is no transfer: Gousset no longer pairs it by itself",
+    },
+    {
+      name: "balance_id",
+      holds: "a line made from a balance you noted: that balance (account-balances.id)",
     },
   ],
 };

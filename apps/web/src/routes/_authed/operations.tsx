@@ -12,8 +12,12 @@ import { EmptyState } from "@gousset/ui/components/empty-state";
 import { ErrorState } from "@gousset/ui/components/error-state";
 import { FormMessage } from "@gousset/ui/components/form-message";
 import { LineDetail } from "@gousset/ui/components/line-detail";
-import { LineTransfer, LineTransferCandidates } from "@gousset/ui/components/line-transfer";
-import type { TransferSideView } from "@gousset/ui/components/line-transfer";
+import {
+  LineTransfer,
+  LineTransferCandidates,
+  LineTransferToAccount,
+} from "@gousset/ui/components/line-transfer";
+import type { BalanceAccountView, TransferSideView } from "@gousset/ui/components/line-transfer";
 import { OperationsFilters } from "@gousset/ui/components/operations-filters";
 import type { OperationsFilterValues } from "@gousset/ui/components/operations-filters";
 import { OperationsLayout } from "@gousset/ui/components/operations-layout";
@@ -32,7 +36,7 @@ import { useState } from "react";
 
 import { ProposedRule } from "@/components/proposed-rule";
 import { RuleJobNotice } from "@/components/rule-job";
-import { classifyLine, pairLine, unpairLine } from "@/functions/lines";
+import { classifyLine, pairLine, pairLineWithAccount, unpairLine } from "@/functions/lines";
 import type { TransferRefusalCode } from "@/functions/lines";
 import { categoryRefusalMessage } from "@/i18n/messages";
 import { dayRange, longDay, shortDay, shortDays } from "@/lib/account-day";
@@ -301,6 +305,7 @@ function Operations() {
               key={open.line.id}
               line={open.line}
               transfer={open.transfer}
+              balanceAccounts={balanceAccountsFor(open.line, accounts, nameOf)}
               nameOf={nameOf}
               locale={locale}
               onOpen={openLine}
@@ -326,12 +331,40 @@ function toRow(
   return {
     id: line.id,
     day: dayOf(line.bookedOn),
-    label: line.label,
+    label: lineLabel(line),
     account: nameOf(line.account),
     amount: line.amount,
     toReview: line.toReview,
     category: line.category === null ? undefined : categoryPath(line.category),
   };
+}
+
+/** A line's label; the movement a noted balance makes has none of its own: the app names it. */
+function lineLabel(line: LineRow): string {
+  return line.fromBalance ? m.lineFromBalance() : line.label;
+}
+
+/**
+ * The accounts a line may be paired with, whose side the app makes (#31): the open accounts kept by
+ * their balance, in the line's currency, but its own. None for a line that cannot be a side: one
+ * already, held for review, of no amount, or a balance's own movement.
+ */
+function balanceAccountsFor(
+  line: Line,
+  list: AccountList | undefined,
+  nameOf: (account: LineAccount) => string,
+): ReadonlyArray<BalanceAccountView> {
+  if (line.fromBalance || line.toReview || line.amount.minor === 0) {
+    return [];
+  }
+
+  return (list?.groups.flatMap((group) => group.accounts) ?? []).flatMap((account) =>
+    account.mode === "balance" &&
+    account.currency === line.amount.currency &&
+    account.id !== line.account.id
+      ? [{ id: account.id, name: nameOf(account) }]
+      : [],
+  );
 }
 
 /** Every account the user has, open or closed, to choose one in the filters. */
@@ -461,6 +494,34 @@ function transferRefusal(code: TransferRefusalCode): string {
     case "NOT_A_TRANSFER": {
       return m.operationsTransferNotATransfer();
     }
+
+    case "ACCOUNT_NOT_FOUND": {
+      return m.operationsTransferAccountGone();
+    }
+
+    case "SAME_ACCOUNT": {
+      return m.operationsTransferSameAccount();
+    }
+
+    case "ZERO_AMOUNT": {
+      return m.operationsTransferZeroAmount();
+    }
+
+    case "NOT_COUNTED": {
+      return m.operationsTransferNotCounted();
+    }
+
+    case "MADE_FROM_BALANCE": {
+      return m.operationsTransferMadeFromBalance();
+    }
+
+    case "ACCOUNT_KEPT_BY_LINES": {
+      return m.operationsTransferKeptByLines();
+    }
+
+    case "OTHER_CURRENCY": {
+      return m.operationsTransferOtherCurrency();
+    }
   }
 }
 
@@ -477,17 +538,20 @@ const touchedBy = (line: Line, other: TransferSide | undefined) => ({
 
 /**
  * The open line's transfer: the other side, which `onOpen` opens, and "Not a transfer"; or the
- * lines that may be its other side, to pair with one. Nothing when it is neither.
+ * lines that may be its other side, to pair with one, and the accounts kept by their balance it may
+ * be paired with. Nothing when it is neither.
  */
 function TransferOf({
   line,
   transfer,
+  balanceAccounts,
   nameOf,
   locale,
   onOpen,
 }: {
   line: Line;
   transfer: Transfer;
+  balanceAccounts: ReadonlyArray<BalanceAccountView>;
   nameOf: (account: LineAccount) => string;
   locale: string;
   onOpen: (id: string) => void;
@@ -514,9 +578,17 @@ function TransferOf({
       }
 
       setError(undefined);
+
+      // A side the app made is deleted with the transfer: on an account kept by its balance, that
+      // remakes its movements, in later months too.
+      const madeSide = result.other.madeByApp || line.source === "counterpart";
+
       // The lines are expenses or incomes again: the categories' figures change too.
       await Promise.all([
-        invalidateTouched(queryClient, touchedBy(line, result.other)),
+        invalidateTouched(
+          queryClient,
+          madeSide ? { everyMonth: true } : touchedBy(line, result.other),
+        ),
         invalidateCategories(queryClient),
       ]);
 
@@ -560,6 +632,32 @@ function TransferOf({
     }
   };
 
+  const pairWithAccount = async (accountId: string) => {
+    try {
+      const result = await pairLineWithAccount({ data: { lineId: line.id, accountId } });
+
+      if (!result.ok) {
+        setError(transferRefusal(result.code));
+
+        return false;
+      }
+
+      setError(undefined);
+      // The line is no expense nor income any more, and the account's movements were made again
+      // from its day on, in later months too.
+      await Promise.all([
+        invalidateTouched(queryClient, { everyMonth: true }),
+        invalidateCategories(queryClient),
+      ]);
+
+      return true;
+    } catch {
+      setError(m.operationsTransferFailed());
+
+      return false;
+    }
+  };
+
   const { paired, candidates } = transfer;
 
   if (paired !== null) {
@@ -583,19 +681,27 @@ function TransferOf({
     );
   }
 
-  return candidates.length === 0 ? null : (
-    <LineTransferCandidates
-      candidates={candidates.map(view)}
-      onPair={pair}
-      error={error}
-      locale={locale}
-    />
+  return (
+    <>
+      {candidates.length === 0 ? null : (
+        <LineTransferCandidates
+          candidates={candidates.map(view)}
+          onPair={pair}
+          error={error}
+          locale={locale}
+        />
+      )}
+      {balanceAccounts.length === 0 ? null : (
+        <LineTransferToAccount accounts={balanceAccounts} onPair={pairWithAccount} error={error} />
+      )}
+    </>
   );
 }
 
 function OpenLine({
   line,
   transfer,
+  balanceAccounts,
   nameOf,
   locale,
   onOpen,
@@ -604,6 +710,8 @@ function OpenLine({
 }: {
   line: Line;
   transfer: Transfer;
+  /** The accounts kept by their balance the line may be paired with: none once it is a side. */
+  balanceAccounts: ReadonlyArray<BalanceAccountView>;
   nameOf: (account: LineAccount) => string;
   locale: string;
   onOpen: (id: string) => void;
@@ -622,7 +730,7 @@ function OpenLine({
         )
       }
       id={line.id}
-      label={line.label}
+      label={lineLabel(line)}
       amount={line.amount}
       account={nameOf(line.account)}
       bookedOn={longDay(line.bookedOn, locale)}
@@ -651,10 +759,12 @@ function OpenLine({
               period: periodOf(source.periodFrom, source.periodTo, locale),
             }
       }
+      origin={line.fromBalance ? m.operationsMadeFromBalance() : undefined}
       transfer={
         <TransferOf
           line={line}
           transfer={transfer}
+          balanceAccounts={transfer.paired === null ? balanceAccounts : []}
           nameOf={nameOf}
           locale={locale}
           onOpen={onOpen}

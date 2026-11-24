@@ -3,6 +3,7 @@ import {
   classifyLine,
   lineTransferOf,
   pairEveryLine,
+  pairLineWithAccount,
   pairLines,
   searchLines,
   showLine,
@@ -26,7 +27,7 @@ import type {
 import { Effect, Schema } from "effect";
 
 import { ToolRefusal, defineTool } from "../tool";
-import { amount, named } from "./accounts";
+import { MOVEMENT, accountToWrite, amount, named } from "./accounts";
 import { namedCategory, pathText } from "./categories";
 import { proposedRule } from "./rules";
 
@@ -46,12 +47,14 @@ const LinesInput = Schema.Struct({
   ),
   account: Schema.optional(
     Schema.String.annotate({
-      description: "search: one account's lines, by its name as accounts lists it (any case).",
+      description:
+        "search: one account's lines, by its name as accounts lists it (any case). pair, classify: in place of other, an account kept by its balance, whose side Gousset makes.",
     }),
   ),
   institution: Schema.optional(
     Schema.String.annotate({
-      description: "search: the account's bank or issuer, when two accounts share the name.",
+      description:
+        "search, pair, classify: the account's bank or issuer, when two accounts share the name.",
     }),
   ),
   from: Schema.optional(
@@ -121,11 +124,11 @@ Use it for "when did I pay this shop?", "what was this 42.90?", "which import br
 
 Writes, with the write scope: \`classify\` says what \`line\` is, by \`kind\`: "transfer", "expense" or "income". With "expense" or "income", the line goes in \`category\`, named as \`categories\` list writes it (any case): a name alone is the top-level category of that name, else its one child; "Parent > Child" names a child. Without \`category\`, the kind's fallback. \`kind\` may be left out with a category: the line's own. Kept as the user's choice: no rule changes it unasked. The answer proposes the \`rules\` call that classifies lines like it the same way from then on. Refused, with what to do: a line held, discarded or of no amount (no expense nor income), a side of a transfer (unpair it first), a line split across several expenses, a kind or category of the other kind than the line's (money out is an expense, money in an income), an archived category, an unknown or ambiguous category name (with the names to choose from), a category with "transfer".
 
-\`pair\` pairs \`line\` and \`other\` as one transfer, never spending; \`line\` alone: its only candidate; neither: every clear pair. \`classify\` \`kind\` "transfer" is the same; \`unpair\` undoes it. Refused: lines of one account or direction, a paired line, several candidates.
+\`pair\` pairs \`line\` and \`other\` as one transfer, never spending; \`line\` alone: its only candidate; neither: every clear pair. \`classify\` \`kind\` "transfer" is the same; \`unpair\` undoes it. Refused: lines of one account or direction, a paired line, several candidates. With \`account\` in place of \`other\`, an account kept by its balance: Gousset makes its side, which its noted balances' movements then leave out; refused for an account kept by its lines or of another currency.
 
 \`account\` is the name as \`accounts\` lists it (any case); add \`institution\` when two accounts share it. An unknown or ambiguous name is refused with the names to choose from. Amounts are decimal strings in each account's own currency, without sign or currency, compared with the line's absolute amount: a -42.90 EUR payment matches "amount_min":"40". A period that ends before it starts, an amount that is no decimal, or an \`after\` no result gave is refused. \`limit\` is 1 to ${MAX_LINES} lines, ${DEFAULT_LINES} by default; when more remain, the result writes the exact next call with \`after\`: copy it.
 
-Examples: {"action":"search","text":"corner cafe","account":"Current account","institution":"Riverside Bank","from":"2026-10-01"} · {"action":"search","amount_min":"40","amount_max":"45.50"} · {"action":"show","line":"<a handle search gave>"} · {"action":"classify","line":"<a handle search gave>","kind":"expense","category":"Groceries > Bakery"}`;
+Examples: {"action":"search","text":"corner cafe","account":"Current account","institution":"Riverside Bank","from":"2026-10-01"} · {"action":"search","amount_min":"40","amount_max":"45.50"} · {"action":"show","line":"<a handle search gave>"} · {"action":"classify","line":"<a handle search gave>","kind":"expense","category":"Groceries > Bakery"} · {"action":"pair","line":"<a handle search gave>","account":"Gift card"}`;
 
 const call = (input: typeof LinesInput.Encoded) => `lines ${JSON.stringify(input)}`;
 
@@ -146,6 +149,10 @@ function searchArguments(input: LinesInput): typeof LinesInput.Encoded {
 }
 
 const quoted = (label: string) => (label === "" ? "(no label)" : `"${label}"`);
+
+/** A line's label, quoted; a movement of a noted balance has none, and is named so (#31). */
+const labelOf = (line: { readonly label: string; readonly fromBalance: boolean }) =>
+  line.fromBalance ? `(${MOVEMENT})` : quoted(line.label);
 
 function amountsText(input: LinesInput): Array<string> {
   const min = input.amount_min?.trim() ?? "";
@@ -185,7 +192,7 @@ function rowText(line: LineRow): string {
   const held = line.toReview ? ", to review" : "";
   const category = line.category === null ? "" : `, in ${pathText(line.category)}`;
 
-  return `- ${line.bookedOn}, ${named(line.account)}: ${amount(line.amount)}, ${quoted(line.label)}${category}${held}; line: ${line.id}`;
+  return `- ${line.bookedOn}, ${named(line.account)}: ${amount(line.amount)}, ${labelOf(line)}${category}${held}; line: ${line.id}`;
 }
 
 /** A page of the search: how many match, the filters, the lines, and the call that reads on. */
@@ -309,7 +316,7 @@ function showText(detail: LineDetail, transfer: LineTransfer): string {
   return [
     `Line of ${named(detail.account)}, booked on ${detail.bookedOn}${valueOn}.`,
     `Amount: ${amount(detail.amount)}${original}.`,
-    `Label: ${quoted(detail.label)}`,
+    `Label: ${labelOf(detail)}`,
     ...(detail.memo === null ? [] : [`Memo: ${detail.memo}`]),
     ...(detail.counterpartyName === null ? [] : [`Counterparty: ${detail.counterpartyName}`]),
     ...(detail.category === null
@@ -347,7 +354,7 @@ const NOT_FOUND = "No line of the user's has the handle {line}.";
 const TRANSFER_REFUSALS = {
   same_line: "A transfer has two sides: name two different lines.",
   same_account:
-    "Both lines are on the same account: a transfer moves money between two of the user's accounts.",
+    "Both sides are on the same account: a transfer moves money between two of the user's accounts.",
   same_sign:
     "Both lines move money the same way: a transfer is one line out (negative) and one line in (positive).",
   zero_amount: "A line of no amount moves no money: it is no side of a transfer.",
@@ -361,6 +368,10 @@ const TRANSFER_REFUSALS = {
     "No line of another of the user's accounts has the opposite amount within a few days (up to 4 days after the next fortnight's start, the 1st or the 16th, when one side is a savings account): name the other side with other (across currencies too).",
   several_candidates:
     "Several lines may be the other side of this transfer: show the line to list them, then pair it with other.",
+  account_kept_by_lines:
+    "That account is kept by its lines: its own side of the transfer is one of its lines. Pair the line {line} with that line, named with other.",
+  other_currency:
+    "That account is in another currency than the line {line}: Gousset makes its side only in the line's currency. Pair it with a line of that account, named with other.",
 } as const satisfies { readonly [Reason in TransferRefused["reason"]]: string };
 
 function transferRefused(input: LinesInput, refused: TransferRefused) {
@@ -381,10 +392,67 @@ function transferRefused(input: LinesInput, refused: TransferRefused) {
   );
 }
 
-/** `pair` and `classify` as a transfer: two lines, one line and its only candidate, or every line. */
+/**
+ * `pair` with an account kept by its balance (#31): Gousset makes that account's side, and its
+ * movements are made again around it.
+ */
+function pairWithAccountRun(input: LinesInput, owner: string, line: string, name: string) {
+  return Effect.gen(function* () {
+    const found = yield* accountToWrite(owner, name, input.institution, (each) =>
+      call({
+        action: "pair",
+        line,
+        account: each.name,
+        institution: each.institution ?? undefined,
+      }),
+    );
+
+    const transfer = yield* pairLineWithAccount(owner, line, found.id);
+
+    return [
+      "Paired as a transfer.",
+      ...transferText(line, transfer),
+      `The movements of ${named(found)}'s noted balances leave it out from now on.`,
+    ].join("\n");
+  }).pipe(
+    Effect.catchTags({
+      LineNotFound: (missing) => lineRefused(missing.lineId, NOT_FOUND),
+      // Found by name a moment before: deleted in between, as good as unknown.
+      AccountNotFound: () =>
+        Effect.fail(
+          new ToolRefusal({
+            message: `The account "${name}" is gone. List the accounts again.`,
+            example: `accounts ${JSON.stringify({ action: "list" })}`,
+          }),
+        ),
+      TransferRefused: (refused) => transferRefused(input, refused),
+      QueryFailed: Effect.die,
+    }),
+  );
+}
+
+/**
+ * `pair` and `classify` as a transfer: two lines, one line and its only candidate, every line, or
+ * one line and an account kept by its balance.
+ */
 function pairRun(input: LinesInput, owner: string) {
   const line = input.line?.trim() ?? "";
   const other = input.other?.trim() ?? "";
+  const account = input.account?.trim() ?? "";
+
+  if (account !== "") {
+    if (other !== "" || line === "") {
+      return Effect.fail(
+        new ToolRefusal({
+          message:
+            "account names the other side of one line's transfer, in place of other: give the line's handle as line, and leave other out.",
+          example: call({ action: "pair", line: line === "" ? "<a handle>" : line, account }),
+        }),
+      );
+    }
+
+    return pairWithAccountRun(input, owner, line, account);
+  }
 
   if (line === "") {
     return other === ""
@@ -581,7 +649,7 @@ function classifyAction(owner: string, input: LinesInput, kind: EntryKind | unde
         ? undefined
         : proposedRule(detail.label, detail.counterpartyName, pathText(placed));
 
-    const done = `The line of ${detail.bookedOn}, ${amount(detail.amount)}, ${quoted(detail.label)}, is now in ${pathText(placed)} (${placed.kind}). Kept as the user's choice: no rule changes it unasked.`;
+    const done = `The line of ${detail.bookedOn}, ${amount(detail.amount)}, ${labelOf(detail)}, is now in ${pathText(placed)} (${placed.kind}). Kept as the user's choice: no rule changes it unasked.`;
 
     return proposal === undefined ? done : `${done}\n${proposal}`;
   }).pipe(

@@ -40,6 +40,7 @@ const NEW_ACCOUNT: Omit<AccountFormValues, "currency"> = {
   openedOn: null,
   settlesIntoAccountId: null,
   creditOrder: "oldest_first",
+  balanceCategoryId: null,
 };
 
 function AccountsPage() {

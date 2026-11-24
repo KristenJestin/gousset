@@ -49,6 +49,7 @@ function account(name: string, institution: string): AccountRecord {
     closedOn: null,
     settlesIntoAccountId: null,
     creditOrder: "oldest_first",
+    balanceCategoryId: null,
   };
 }
 
