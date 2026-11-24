@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 
 import { useHydrated } from "../hooks/use-hydrated";
+import { useLargeScreen } from "../hooks/use-large-screen";
 import { usePageLanguage } from "../hooks/use-page-language";
 import { useUiMessages } from "../hooks/use-ui-messages";
 import { formatCount } from "../lib/count";
@@ -37,10 +38,20 @@ const shows = (detail: ReactNode) => detail !== undefined && detail !== null;
  * 360 px panel, laid out at its full width from the start) and the list narrows with it; closing,
  * it waits for the content to fade, then narrows back to nothing. Its width moves, never a scale.
  * A column the server drew is there from the first paint, still. Below `lg` it never shows: the
- * first paint keeps the list whole, and once the page runs the detail is a sheet (drawn in a
- * portal, outside the hidden column).
+ * first paint keeps the list whole (CSS hides it), and once the page knows the screen is narrow
+ * (`beside` false) the same elements stand back (`display: contents`) for the detail's sheet.
+ * The elements stay the same either way, so that the detail inside keeps its state: a sheet the
+ * server meant to show stays still.
  */
-function DetailColumn({ closing, children }: { closing: boolean; children: ReactNode }) {
+function DetailColumn({
+  closing,
+  beside,
+  children,
+}: {
+  closing: boolean;
+  beside: boolean;
+  children: ReactNode;
+}) {
   const hydrated = useHydrated();
   // Opened once the page runs: it widens. Drawn by the server (or while hydrating): it stays.
   const [widens] = useState(hydrated);
@@ -50,14 +61,18 @@ function DetailColumn({ closing, children }: { closing: boolean; children: React
       data-slot="operations-detail"
       data-closing={closing ? "" : undefined}
       inert={closing}
-      className={cn(
-        "flex min-h-0 w-94 shrink-0 overflow-hidden transition-width duration-300 ease-out",
-        "max-lg:hidden",
-        widens && "starting:w-0",
-        "data-closing:w-0 data-closing:delay-150 data-closing:duration-150 data-closing:ease-in",
-      )}
+      className={
+        beside
+          ? cn(
+              "flex min-h-0 w-94 shrink-0 overflow-hidden transition-width duration-300 ease-out",
+              "max-lg:hidden",
+              widens && "starting:w-0",
+              "data-closing:w-0 data-closing:delay-150 data-closing:duration-150 data-closing:ease-in",
+            )
+          : "contents"
+      }
     >
-      <div className="ml-4 flex min-h-0 w-90 shrink-0">{children}</div>
+      <div className={beside ? "ml-4 flex min-h-0 w-90 shrink-0" : "contents"}>{children}</div>
     </div>
   );
 }
@@ -81,6 +96,7 @@ export function OperationsLayout({ filters, count, list, detail, locale }: Opera
   const words = useUiMessages().operations;
   const pageLocale = usePageLanguage();
   const writtenIn = locale ?? pageLocale;
+  const large = useLargeScreen();
 
   // The detail drawn: the open one, or the last one while it leaves.
   const [kept, setKept] = useState(detail);
@@ -121,9 +137,11 @@ export function OperationsLayout({ filters, count, list, detail, locale }: Opera
         {shows(kept) ? (
           <DetailClosing value={closing}>
             {/* On every screen, so that the detail keeps its place in the tree when the page
-                learns the screen's width: below `lg` the column is hidden and the detail draws its
-                sheet outside it, the server's still sheet staying still. */}
-            <DetailColumn closing={closing}>{kept}</DetailColumn>
+                learns the screen's width: below `lg` the column stands back for the detail's
+                sheet, and the server's still sheet stays still. */}
+            <DetailColumn closing={closing} beside={large}>
+              {kept}
+            </DetailColumn>
           </DetailClosing>
         ) : null}
       </div>
