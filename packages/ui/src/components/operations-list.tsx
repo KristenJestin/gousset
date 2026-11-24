@@ -11,7 +11,6 @@ import { useUiMessages } from "../hooks/use-ui-messages";
 import type { Money } from "../lib/money";
 import { transition } from "../lib/motion";
 import { asksNextPage, rowsMark } from "../lib/next-page";
-import { operationLayoutId } from "../lib/operations";
 import { cn } from "../lib/utils";
 import { Amount, AmountSkeleton } from "./amount";
 import { Chip } from "./chip";
@@ -91,7 +90,7 @@ function rowWindow(first: Followed) {
     id === null || id === undefined ? -1 : props.rows.findIndex((row) => row.id === id);
 
   // The open line and the focused one stay in the page wherever the list is scrolled: the detail
-  // folds back into its row, and the focus never falls to the page.
+  // gives the focus back to its row, and the focus never falls to the page.
   const kept = () => [indexOf(props.openId), indexOf(focusedId)].filter((index) => index >= 0);
 
   // Not the virtualiser's `onEnd`, which asks once per row count for good: the list's rows are
@@ -145,15 +144,18 @@ function rowWindow(first: Followed) {
 const COLUMN = {
   day: "w-16 shrink-0",
   line: "flex min-w-0 flex-1 items-center gap-2",
-  account: "hidden w-40 shrink-0 truncate md:block",
-  category: "hidden w-40 shrink-0 truncate lg:block",
+  // Shown while the list has room for them: a detail open beside a narrow list takes them, the
+  // category first, never the amounts.
+  account: "hidden w-40 shrink-0 truncate @xl:block",
+  category: "hidden w-40 shrink-0 truncate @3xl:block",
   amount: "flex w-28 shrink-0 justify-end",
 };
 
 /**
  * The operations (docs/wireframes, screen 2, block 2): every statement line, newest first, one row
- * each: its day, its raw label (with a "To review" chip on a held line), its category on a wide
- * screen (`withCategory`), its account and its amount. A row opens the line (`onOpen`), by press or keyboard. Virtualised with ui-sdk's
+ * each: its day, its raw label (with a "To review" chip on a held line), its category
+ * (`withCategory`), its account and its amount, coloured by its direction: money in in `--amount-in` with a plus, money out in the text's
+ * colour with a minus. A row opens the line (`onOpen`), by press or keyboard. Virtualised with ui-sdk's
  * `createVirtualizer`: only the rows in view (and a few around) are in the page, each 48 px, in a
  * scroller of its own that fills its parent's height; `onEnd` asks for the next page.
  *
@@ -164,10 +166,12 @@ const COLUMN = {
  *
  * Motion: when the rows change (a new search, a filter), the rows that stay slide to their new
  * place (a layout move, by transform), new ones fade in and gone ones fade out, in 200 ms
- * (ease-out). Rows that enter or leave the view by scrolling neither fade nor slide. Opening a
- * line, its `LineDetail` grows out of the row (a shared layout, `operationLayoutId`) and folds
- * back into it on close. Cut under reduced motion. When nothing matches, the rows that were there
- * fade out over the empty state.
+ * (ease-out). Rows that enter or leave the view by scrolling neither fade nor slide. Cut under
+ * reduced motion. When nothing matches, the rows that were there fade out over the empty state.
+ *
+ * The account column shows while the list is at least 576 px wide, the category column while it
+ * is at least 768 px wide (container queries): a list narrowed by an open detail gives them up,
+ * never the amounts.
  */
 export function OperationsList({
   rows,
@@ -238,10 +242,6 @@ export function OperationsList({
     <RowButton
       row={row}
       open={row.id === openId}
-      // The open row gives its anchor to the detail: the one leaves as the other comes, which is
-      // what Motion's shared layout moves between. An anchor coming back under an open detail
-      // would take its place and hide it.
-      anchored={hydrated && row.id !== openId}
       withCategory={withCategory}
       locale={writtenIn}
       onOpen={onOpen}
@@ -258,7 +258,7 @@ export function OperationsList({
 
   return (
     <LazyMotion features={domMax}>
-      <div data-slot="operations-list" className="flex h-full min-h-0 flex-col">
+      <div data-slot="operations-list" className="@container flex h-full min-h-0 flex-col">
         <ColumnTitles withCategory={withCategory} />
         <m.div
           ref={scroller}
@@ -398,7 +398,6 @@ function ColumnTitles({ withCategory }: { withCategory: boolean }) {
 function RowButton({
   row,
   open,
-  anchored,
   withCategory,
   locale,
   onOpen,
@@ -408,8 +407,6 @@ function RowButton({
   row: OperationRow;
   open: boolean;
   withCategory: boolean;
-  /** Carries the shared layout's anchor: once hydrated (it is Motion's), while not open. */
-  anchored: boolean;
   locale: string;
   onOpen: (id: string) => void;
   onFocusChange: (focused: boolean) => void;
@@ -432,27 +429,31 @@ function RowButton({
       onFocus={() => onFocusChange(true)}
       onBlur={() => onFocusChange(false)}
     >
-      {anchored ? (
-        // The detail grows out of this box and folds back into it: it carries nothing to see,
-        // so the row looks the same with it or without it.
-        <m.span
-          aria-hidden="true"
-          layoutId={operationLayoutId(row.id)}
-          transition={transition.slow}
-          className="pointer-events-none absolute inset-0"
-        />
-      ) : null}
       <span className={cn(COLUMN.day, "text-muted-foreground tabular-nums")}>{row.day}</span>
       <span className={COLUMN.line}>
         <span className="truncate">{row.label}</span>
-        {row.toReview === true ? <Chip>{messages.toReview}</Chip> : null}
+        {row.toReview === true ? (
+          // The label gives way, never the chip: a narrow row truncates the label alone.
+          <span className="flex shrink-0">
+            <Chip>{messages.toReview}</Chip>
+          </span>
+        ) : null}
       </span>
       {withCategory ? (
         <span className={cn(COLUMN.category, "text-muted-foreground")}>{row.category}</span>
       ) : null}
       <span className={cn(COLUMN.account, "text-muted-foreground")}>{row.account}</span>
       <span className={COLUMN.amount}>
-        <Amount value={row.amount} size="sm" roll={false} locale={locale} />
+        {/* Money in is green with its plus, money out keeps the text's colour with its minus: the
+            sign is always written, so the direction reads without the colour. */}
+        <Amount
+          value={row.amount}
+          size="sm"
+          roll={false}
+          locale={locale}
+          sign={row.amount.minor > 0 ? "always" : "auto"}
+          tone={row.amount.minor > 0 ? "in" : "neutral"}
+        />
       </span>
     </button>
   );
@@ -462,7 +463,7 @@ function RowButton({
 export function OperationsListSkeleton({ rows = 10 }: { rows?: number }) {
   return (
     <SkeletonFrame>
-      <div className="flex h-full min-h-0 flex-col overflow-hidden">
+      <div className="@container flex h-full min-h-0 flex-col overflow-hidden">
         <div className="flex h-9 shrink-0 items-center gap-3 border-b px-3">
           <Skeleton className="h-3 w-10" />
         </div>

@@ -207,6 +207,17 @@ function uiMessages(locale: Locale) {
       max: m.uiOperationsMax({}, options),
       onlyToReview: m.uiOperationsOnlyToReview({}, options),
       clear: m.uiOperationsClear({}, options),
+      /** The amount pair's own words, in the filter row: "Amount min – max". */
+      amount: m.uiOperationsColumnAmount({}, options),
+      minPlaceholder: m.uiOperationsMinPlaceholder({}, options),
+      maxPlaceholder: m.uiOperationsMaxPlaceholder({}, options),
+      /** The filters sheet's button, which closes it: "Show 1,234 lines", the count written. */
+      showLines: (count: number, written: string) =>
+        pluralRules[locale].select(count) === "one"
+          ? m.uiOperationsShowLinesOne({ count: written }, options)
+          : m.uiOperationsShowLinesOther({ count: written }, options),
+      /** The same button while the count is not known yet. */
+      showTheLines: m.uiOperationsShowLines({}, options),
       bookedOn: m.uiOperationsBookedOn({}, options),
       valueOn: m.uiOperationsValueOn({}, options),
       rawLabel: m.uiOperationsRawLabel({}, options),

@@ -4,17 +4,17 @@ import { m } from "@gousset/i18n/messages";
 import { getLocale } from "@gousset/i18n/runtime";
 import { Button } from "@gousset/ui/components/button";
 import { FormMessage } from "@gousset/ui/components/form-message";
+import { ImportPrompt } from "@gousset/ui/components/import-prompt";
 import { ImportSummary } from "@gousset/ui/components/import-summary";
 import { JobProgress } from "@gousset/ui/components/job-progress";
-import { Actions, Form } from "@gousset/ui/components/screen";
+import { Form } from "@gousset/ui/components/screen";
 import { Select } from "@gousset/ui/components/select";
-import { StatusMessage } from "@gousset/ui/components/status-message";
 import { notify } from "@gousset/ui/lib/notify";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import type { FormEvent } from "react";
 
-import { AppLink } from "@/components/app-link";
+import { AppButtonLink } from "@/components/app-link";
 import { ConfirmColumns } from "@/components/confirm-columns";
 import { useRefreshImports, useResume } from "@/components/import-resume";
 import { undoImport } from "@/functions/imports";
@@ -83,7 +83,7 @@ function ChooseAccount({ summary }: { summary: Import }) {
   const [busy, setBusy] = useState(false);
 
   if (accounts.length === 0) {
-    return <StatusMessage message={m.importAccountNone()} />;
+    return <ImportPrompt message={m.importAccountNone()} />;
   }
 
   function submit(event: FormEvent<HTMLFormElement>) {
@@ -98,20 +98,26 @@ function ChooseAccount({ summary }: { summary: Import }) {
 
   return (
     <Form onSubmit={submit}>
-      <StatusMessage message={m.importAccountQuestion()} />
-      <Select
-        label={m.importAccountLabel({ file: summary.fileName })}
-        name="account"
-        placeholder={m.importAccountPlaceholder()}
-        items={accounts.map((account) => ({ value: account.id, label: account.name }))}
-        required
+      <ImportPrompt
+        message={m.importAccountQuestion()}
+        control={
+          <Select
+            label={m.importAccountLabel({ file: summary.fileName })}
+            hideLabel
+            size="sm"
+            name="account"
+            placeholder={m.importAccountPlaceholder()}
+            items={accounts.map((account) => ({ value: account.id, label: account.name }))}
+            required
+          />
+        }
+        actions={
+          <Button type="submit" size="sm" loading={busy}>
+            {m.importAccountGo()}
+          </Button>
+        }
+        error={refused}
       />
-      <FormMessage message={refused} />
-      <Actions>
-        <Button type="submit" loading={busy}>
-          {m.importAccountGo()}
-        </Button>
-      </Actions>
     </Form>
   );
 }
@@ -168,16 +174,17 @@ function Done({ summary }: { summary: Import }) {
       actions={
         <>
           <Button
-            variant="secondary"
+            variant="quiet"
+            size="sm"
             icon="undo"
             loading={busy}
             onClick={() => void whileBusy(setBusy, undo)}
           >
             {m.importUndo()}
           </Button>
-          <AppLink to="/" search={{ month }}>
+          <AppButtonLink to="/" search={{ month }} size="sm" trailingIcon="next">
             {m.importContinue()}
-          </AppLink>
+          </AppButtonLink>
         </>
       }
     />
@@ -198,21 +205,28 @@ function Failed({ summary }: { summary: Import }) {
         void whileBusy(setBusy, async () => resume(null, null));
       }}
     >
-      <FormMessage message={refused ?? importFailureMessage(summary.errorCode)} />
-      <Actions>
-        <Button type="submit" variant="secondary" icon="retry" loading={busy}>
-          {m.importTryAgain()}
-        </Button>
-        <Button
-          type="button"
-          variant="secondary"
-          icon="undo"
-          loading={undoing}
-          onClick={() => void whileBusy(setUndoing, undo)}
-        >
-          {m.importUndo()}
-        </Button>
-      </Actions>
+      <ImportPrompt
+        tone="error"
+        message={importFailureMessage(summary.errorCode)}
+        actions={
+          <>
+            <Button
+              type="button"
+              variant="quiet"
+              size="sm"
+              icon="undo"
+              loading={undoing}
+              onClick={() => void whileBusy(setUndoing, undo)}
+            >
+              {m.importUndo()}
+            </Button>
+            <Button type="submit" variant="secondary" size="sm" icon="retry" loading={busy}>
+              {m.importTryAgain()}
+            </Button>
+          </>
+        }
+        error={refused}
+      />
     </Form>
   );
 }
