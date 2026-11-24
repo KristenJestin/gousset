@@ -195,7 +195,8 @@ describe("month, until the rest of the review ships", () => {
       const { text, isError } = await month({ action });
 
       expect(isError).toBe(false);
-      expect(text).toContain("The monthly review is not available yet");
+      expect(text).toContain("The rest of the monthly review is not available yet");
+      expect(text).toContain('month {"action":"benchmarks"}');
       expect(text).toContain('accounts {"action":"list"}');
       expect(text).toContain('lines {"action":"search"');
       expect(text).toContain('month {"action":"subscriptions"}');
@@ -229,7 +230,9 @@ describe("month, until the rest of the review ships", () => {
     const [first] = tools;
 
     expect(first?.name).toBe("month");
-    expect(first?.title).toBe("Monthly review (subscriptions; the rest not available yet)");
+    expect(first?.title).toBe(
+      "Monthly review (subscriptions and benchmarks; the rest not available yet)",
+    );
     expect(first?.annotations).toEqual({
       readOnlyHint: true,
       destructiveHint: false,

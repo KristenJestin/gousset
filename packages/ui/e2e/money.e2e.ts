@@ -398,6 +398,31 @@ test.describe("Breakdown", () => {
     await expect(leisure).toContainText("benchmark €160");
   });
 
+  test("a benchmark the user set is marked and read as set, passed by any amount, none without a mark", async ({
+    page,
+  }) => {
+    await page.goto(story("breakdown", "benchmarks"));
+
+    const row = (name: string) =>
+      page.locator('[data-slot="breakdown"] > li').filter({ hasText: name });
+
+    const over = (name: string) => row(name).getByRole("img", { name: "Above the benchmark" });
+
+    await expect(over("Groceries")).toBeVisible();
+    await expect(row("Groceries")).toContainText("benchmark €395");
+    await expect(over("Leisure")).toBeVisible();
+    await expect(row("Leisure")).toContainText("benchmark €100, set");
+    // Reached, not passed.
+    await expect(over("Transport")).toHaveCount(0);
+    await expect(row("Transport").locator('[data-slot="breakdown-benchmark"]')).toHaveCount(1);
+
+    for (const name of ["Gifts", "Pets"]) {
+      await expect(over(name)).toHaveCount(0);
+      await expect(row(name).locator('[data-slot="breakdown-benchmark"]')).toHaveCount(0);
+      await expect(row(name).locator('[data-slot="breakdown-benchmark-text"]')).toHaveCount(0);
+    }
+  });
+
   test("a row is chosen with the keyboard", async ({ page }) => {
     await page.goto(story("breakdown", "default"));
     await expect(page.getByRole("button", { name: /^Housing/ })).toBeVisible();

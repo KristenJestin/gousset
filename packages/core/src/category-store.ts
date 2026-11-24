@@ -70,6 +70,17 @@ export type CategoryUse = {
   readonly net: ReadonlyArray<{ readonly currency: string; readonly minor: number }>;
 };
 
+/** What a category's own expenses cost in one month, in one currency (#33). */
+export type MonthlySpending = {
+  readonly categoryId: string;
+  /** `YYYY-MM`, by the day each expense happened. */
+  readonly month: string;
+  /** The currency of their lines' accounts. */
+  readonly currency: string;
+  /** Payments less refunds, in minor units: an expense at its net cost. */
+  readonly minor: number;
+};
+
 /** A line's category, as a search or a line's detail gives it; null for a line with no entry. */
 export type LineCategory = {
   readonly id: string;
@@ -109,6 +120,19 @@ export class CategoryStore extends Context.Service<
       owner: string,
       range: { readonly from: string; readonly to: string },
     ) => Effect.Effect<ReadonlyArray<CategoryUse>, QueryFailed>;
+    /**
+     * The user's expenses that happened from `from` to `to` (both included), at their net cost,
+     * summed by category, month and currency; one row per category, month and currency with any.
+     */
+    readonly spending: (
+      owner: string,
+      range: { readonly from: string; readonly to: string },
+    ) => Effect.Effect<ReadonlyArray<MonthlySpending>, QueryFailed>;
+    /**
+     * The day the user's first entry happened, expense or income: where their data starts, and
+     * the first month an average counts. Null with no entry.
+     */
+    readonly firstEntry: (owner: string) => Effect.Effect<string | null, QueryFailed>;
     /** Applies the steps `decide` gives from the user's categories, in one transaction. */
     readonly change: <E>(
       owner: string,

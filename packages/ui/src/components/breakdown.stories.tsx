@@ -121,6 +121,48 @@ export const Merchants: Story = {
   },
 };
 
+/**
+ * Each kind of benchmark (#33): the average (Groceries, passed: ⚠), an amount the user set
+ * (Leisure, passed: ⚠; Transport, reached, so not passed), none (Gifts: no mark), and a category
+ * with nothing to average yet (Pets: no mark). A set benchmark is read "benchmark €100, set".
+ */
+export const Benchmarks: Story = {
+  args: {
+    rows: [
+      {
+        id: "groceries",
+        name: "Groceries",
+        icon: "groceries",
+        amount: { minor: 43_000, currency: "EUR" },
+        benchmark: { minor: 39_500, currency: "EUR" },
+      },
+      {
+        id: "leisure",
+        name: "Leisure",
+        icon: "leisure",
+        amount: { minor: 12_000, currency: "EUR" },
+        benchmark: { minor: 10_000, currency: "EUR" },
+        benchmarkSet: true,
+      },
+      {
+        id: "transport",
+        name: "Transport",
+        icon: "transport",
+        amount: { minor: 9000, currency: "EUR" },
+        benchmark: { minor: 9000, currency: "EUR" },
+        benchmarkSet: true,
+      },
+      {
+        id: "gifts",
+        name: "Gifts",
+        icon: "gifts",
+        amount: { minor: 6000, currency: "EUR" },
+      },
+      { id: "pets", name: "Pets", icon: "pets", amount: { minor: 2500, currency: "EUR" } },
+    ],
+  },
+};
+
 /** Nothing spent: the sentence. */
 export const Empty: Story = { args: { rows: [] } };
 

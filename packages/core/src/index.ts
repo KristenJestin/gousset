@@ -159,6 +159,10 @@ export type {
   LineClassification,
 } from "./categories";
 
+export { BENCHMARK_WINDOW, monthBenchmarks } from "./benchmarks";
+
+export type { CategoryInMonth, MonthBenchmark, MonthBenchmarks } from "./benchmarks";
+
 export { CategoryStore } from "./category-store";
 
 export type { Benchmark, CategoryRecord, EntryKind, LineCategory } from "./category-store";
