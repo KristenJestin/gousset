@@ -1,4 +1,13 @@
-import { expect, expectAccessible, fixDay, slowServerFunctions, test, visit } from "../src/test";
+import {
+  addUser,
+  expect,
+  expectAccessible,
+  fixDay,
+  personOfItsOwn,
+  slowServerFunctions,
+  test,
+  visit,
+} from "../src/test";
 
 test("axe fails a screen that breaks accessibility", async ({ page }) => {
   await page.setContent(
@@ -49,4 +58,17 @@ test("the signed-in users carry their own sessions", async ({
   expect(await session(userPage)).toContain(user.email);
   expect(await session(secondUserPage)).toContain(secondUser.email);
   expect(await session(secondUserPage)).not.toContain(user.email);
+});
+
+// Dev's run 45288876495: a worker ran a file's beforeAll again on its database, and the person it
+// made was refused as already there.
+test("a person of its own made twice on one worker's database is two users", async ({
+  app,
+  user,
+}) => {
+  const first = await addUser(app.baseURL, user, personOfItsOwn("linden"));
+  const again = await addUser(app.baseURL, user, personOfItsOwn("linden"));
+
+  expect(again.name).toBe(first.name);
+  expect(again.email).not.toBe(first.email);
 });
