@@ -1,10 +1,12 @@
 import {
   accountNamed,
   classifyLine,
+  lineMerchant,
   lineTransferOf,
   pairEveryLine,
   pairLineWithAccount,
   pairLines,
+  ruleWords,
   searchLines,
   showLine,
   unpairLine,
@@ -14,11 +16,13 @@ import type {
   CategoryStore,
   EntryKind,
   LineDetail,
+  LineMerchant,
   LineNotClassifiable,
   LinePage,
   LineRow,
   LineStore,
   LineTransfer,
+  Merchants,
   PairingSummary,
   TransferRefused,
   TransferSide,
@@ -296,8 +300,27 @@ function transferText(lineId: string, transfer: LineTransfer): Array<string> {
   ];
 }
 
+/** Who the line paid, through which intermediary, or that the user is asked who (#30). */
+function merchantText(lineId: string, paid: LineMerchant): Array<string> {
+  const through = paid.intermediary === null ? "" : `, paid through ${paid.intermediary.name}`;
+
+  if (paid.merchant !== null) {
+    return [`Merchant: ${paid.merchant.name}${through}.`];
+  }
+
+  if (paid.intermediary === null) {
+    return [];
+  }
+
+  return paid.asks
+    ? [
+        `Paid through ${paid.intermediary.name}, a payment intermediary: who was paid is not set. Ask the user, then: merchants ${JSON.stringify({ action: "assign", line: lineId, merchant: "<who was paid>" })}`,
+      ]
+    : [`Paid through ${paid.intermediary.name}, a payment intermediary.`];
+}
+
 /** One line, in Gousset's words: where and when, how much, what the bank said, where it came from. */
-function showText(detail: LineDetail, transfer: LineTransfer): string {
+function showText(detail: LineDetail, transfer: LineTransfer, paid: LineMerchant): string {
   const valueOn = detail.valueOn === null ? "" : `, value on ${detail.valueOn}`;
 
   const original =
@@ -319,6 +342,7 @@ function showText(detail: LineDetail, transfer: LineTransfer): string {
     `Label: ${labelOf(detail)}`,
     ...(detail.memo === null ? [] : [`Memo: ${detail.memo}`]),
     ...(detail.counterpartyName === null ? [] : [`Counterparty: ${detail.counterpartyName}`]),
+    ...merchantText(detail.id, paid),
     ...(detail.category === null
       ? []
       : [`Category: ${pathText(detail.category)} (${detail.category.kind})`]),
@@ -642,12 +666,17 @@ function classifyAction(owner: string, input: LinesInput, kind: EntryKind | unde
           };
 
     const placed = yield* classifyLine(owner, detail.id, chosen);
+    // An intermediary's line proposes the words of who was paid too, never the intermediary alone.
+    const paid = yield* lineMerchant(owner, detail.id);
 
     // A correction to a category of the user's choosing may become a rule (#25); a fallback, not.
     const proposal =
       category === undefined
         ? undefined
-        : proposedRule(detail.label, detail.counterpartyName, pathText(placed));
+        : proposedRule(
+            ruleWords(detail.label, detail.counterpartyName, paid.intermediary !== null),
+            { category: pathText(placed) },
+          );
 
     const done = `The line of ${detail.bookedOn}, ${amount(detail.amount)}, ${labelOf(detail)}, is now in ${pathText(placed)} (${placed.kind}). Kept as the user's choice: no rule changes it unasked.`;
 
@@ -704,7 +733,7 @@ function classifyAction(owner: string, input: LinesInput, kind: EntryKind | unde
 export const linesTool = defineTool<
   LinesInput,
   typeof LinesInput.Encoded,
-  AccountStore | LineStore | CategoryStore | Transfers
+  AccountStore | LineStore | CategoryStore | Transfers | Merchants
 >({
   name: "lines",
   title: "Lines",
@@ -783,8 +812,9 @@ export const linesTool = defineTool<
         return Effect.all([
           showLine(caller.userId, line.trim()),
           lineTransferOf(caller.userId, line.trim()),
+          lineMerchant(caller.userId, line.trim()),
         ]).pipe(
-          Effect.map(([detail, transfer]) => showText(detail, transfer)),
+          Effect.map(([detail, transfer, paid]) => showText(detail, transfer, paid)),
           Effect.catchTags({
             LineNotFound: () => Effect.fail(UNKNOWN_LINE(line)),
             QueryFailed: Effect.die,

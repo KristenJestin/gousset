@@ -176,6 +176,26 @@ const NO_TRANSFER = Layer.mock(Transfers, {
   ofLine: () => Effect.succeed({ paired: null, candidates: [] }),
 });
 
+// A line paid through an intermediary (#30), apart from `ROWS` so that their searches stay as they
+// are; who was paid behind it is tried end to end (intermediaries-mcp.spec).
+const paypal = line(current.id, "2026-11-05", -1999, "CB PAYPAL *PIXELPLAY 05/11");
+const PAYPAL = { id: memoryId(), name: "PayPal" };
+
+const WITH_PAYPAL: MemoryLineRows = {
+  ...ROWS,
+  lines: [salary, fuel, cafe, heldCafe, interest, deposit, future, paypal],
+};
+
+/** Every line pays no one known but `paypal`, whose merchant is asked of the user. */
+const PAID = Layer.mock(Merchants, {
+  ofLine: (_owner, lineId) =>
+    Effect.succeed(
+      lineId === paypal.id
+        ? { merchant: null, intermediary: PAYPAL, asks: true }
+        : { merchant: null, intermediary: null, asks: false },
+    ),
+});
+
 function onToday(
   rows: MemoryLineRows,
   categories: Map<string, MemoryCategoryRows> = new Map(),
@@ -192,7 +212,7 @@ function onToday(
     Layer.mock(Imports, {}),
     Layer.mock(ImportProfiles, {}),
     Layer.mock(DataExport, {}),
-    Layer.mock(Merchants, {}),
+    PAID,
     Layer.mock(UserData, {}),
     Layer.mock(RuleJobs, {}),
     transfers,
@@ -541,6 +561,16 @@ describe("lines show", () => {
     expect(text).toContain("show needs the line's handle");
     await expectValidExample(text);
   });
+
+  test("an intermediary's line says through whom it was paid, and the call that sets who", async () => {
+    const { text, isError } = await lines({ action: "show", line: paypal.id }, WITH_PAYPAL);
+
+    expect(isError, text).toBe(false);
+    expect(text).toContain("Paid through PayPal, a payment intermediary: who was paid is not set.");
+    expect(text).toContain(
+      `merchants {"action":"assign","line":"${paypal.id}","merchant":"<who was paid>"}`,
+    );
+  });
 });
 
 /** A classify call on rows of its own, and those rows after it. */
@@ -569,6 +599,25 @@ describe("lines classify", () => {
       categoryId: fuelCategory.id,
       classifiedBy: "user",
     });
+  });
+
+  test("an intermediary's line proposes a rule on who was paid, never on the intermediary", async () => {
+    const rows = categoryRows();
+
+    rows.entries.push(entry(paypal, otherExpense));
+    rows.lines.push({ id: paypal.id, amountMinor: paypal.amountMinor });
+
+    const { text, isError } = await lines(
+      { action: "classify", line: paypal.id, category: "Transport" },
+      WITH_PAYPAL,
+      writer,
+      new Map([[writer.userId, rows]]),
+    );
+
+    expect(isError, text).toBe(false);
+    expect(text).toContain(
+      '"conditions":[{"field":"label","operator":"contains","value":"PAYPAL *PIXELPLAY"}]',
+    );
   });
 
   test("reads a shared name in the line's own kind", async () => {

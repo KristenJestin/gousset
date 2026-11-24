@@ -4,6 +4,8 @@ import {
   FixtureLedger,
   ImportProfiles,
   Imports,
+  LineMerchantRefused,
+  LineNotFound,
   MAX_MERCHANT_NAME,
   MerchantAliasNotFound,
   MerchantMergeRefused,
@@ -17,10 +19,13 @@ import {
   memoryAccountStore,
   memoryCategory,
   memoryCategoryStore,
+  memoryId,
   memoryLineStore,
 } from "@gousset/core";
 import type {
   MemoryCategoryRows,
+  MemoryLineDetail,
+  MemoryLineRows,
   MerchantDefaultCategory,
   MerchantLine,
   MerchantSummary,
@@ -41,7 +46,16 @@ import type { Caller, Runner } from "../tool";
 const writer: Caller = { userId: "ada", canWrite: true, currency: "EUR" };
 const reader: Caller = { userId: "ada", canWrite: false, currency: "EUR" };
 
-type StoredMerchant = { id: string; name: string; aliases: Array<string> };
+type StoredMerchant = { id: string; name: string; aliases: Array<string>; intermediary?: boolean };
+
+/** A line paid through an intermediary (#30), as core reads it: its intermediary and who was paid. */
+type PaidLine = {
+  readonly line: MemoryLineDetail;
+  readonly intermediary: string | null;
+  merchant: string | null;
+  /** One whole entry of its own, which who was paid can be set on. */
+  readonly assignable: boolean;
+};
 
 type Store = {
   merchants: Array<StoredMerchant>;
@@ -51,6 +65,8 @@ type Store = {
   categories?: Map<string, MemoryCategoryRows>;
   /** Runs just before a default category is written: what another call does meanwhile. */
   beforeDefault?: () => void;
+  /** Ada's lines, each with its intermediary and who was paid. */
+  paid?: Array<PaidLine>;
 };
 
 let made = 0;
@@ -124,6 +140,7 @@ const summaryOf = (stored: StoredMerchant): MerchantSummary => ({
   id: stored.id,
   name: stored.name,
   aliases: stored.aliases.length,
+  intermediary: stored.intermediary === true,
 });
 
 const nameOf = (name: string) => {
@@ -172,6 +189,15 @@ function merchantsOf(state: Store) {
   const byName = (name: string) =>
     state.merchants.find((each) => each.name.toLowerCase() === name.trim().toLowerCase());
 
+  const paidLine = (lineId: string) => state.paid?.find((each) => each.line.id === lineId);
+
+  /** A merchant of the store by its name, as a line names it; null for none. */
+  const named = (name: string | null) => {
+    const stored = name === null ? undefined : byName(name);
+
+    return stored === undefined ? null : { id: stored.id, name: stored.name };
+  };
+
   return Layer.succeed(Merchants, {
     list: (_owner, query) => {
       const text = query.text?.toLowerCase() ?? "";
@@ -199,6 +225,7 @@ function merchantsOf(state: Store) {
       Effect.map(byId(merchantId), (found) => ({
         id: found.id,
         name: found.name,
+        intermediary: found.intermediary === true,
         defaultCategory: defaultOf(state, found.id),
         aliases: found.aliases.toSorted(),
         lines: state.lines.get(found.id) ?? [],
@@ -281,6 +308,64 @@ function merchantsOf(state: Store) {
         return { into: summaryOf(into), merged: from.name, aliasesMoved: from.aliases.length };
       }),
     recognise: () => Effect.succeed({ merchants: 0, aliases: 0 }),
+    markIntermediary: (_owner, merchantId, intermediary) =>
+      Effect.map(byId(merchantId), (found) => {
+        found.intermediary = intermediary;
+
+        return summaryOf(found);
+      }),
+    ofLine: (_owner, lineId) => {
+      const found = paidLine(lineId);
+
+      if (found === undefined) {
+        return Effect.fail(new LineNotFound({ lineId }));
+      }
+
+      const paid = named(found.merchant);
+
+      return Effect.succeed({
+        merchant: paid,
+        intermediary: named(found.intermediary),
+        asks: found.intermediary !== null && paid === null && found.assignable,
+      });
+    },
+    assignLine: (_owner, lineId, name) =>
+      Effect.gen(function* () {
+        const wanted = yield* nameOf(name);
+        const found = paidLine(lineId);
+
+        if (found === undefined) {
+          return yield* new LineNotFound({ lineId });
+        }
+
+        if (found.intermediary === null) {
+          return yield* new LineMerchantRefused({ lineId, reason: "not_intermediary" });
+        }
+
+        if (!found.assignable) {
+          return yield* new LineMerchantRefused({ lineId, reason: "not_one_entry" });
+        }
+
+        const existing = byName(wanted);
+
+        if (existing?.intermediary === true) {
+          return yield* new LineMerchantRefused({ lineId, reason: "intermediary_chosen" });
+        }
+
+        const paid = existing ?? merchant(wanted, []);
+
+        if (existing === undefined) {
+          state.merchants.push(paid);
+        }
+
+        found.merchant = paid.name;
+
+        return {
+          merchant: { id: paid.id, name: paid.name },
+          created: existing === undefined,
+          category: null,
+        };
+      }),
   });
 }
 
@@ -311,11 +396,30 @@ function categoriesOf(state: Store) {
   ).pipe(Layer.provide(memory));
 }
 
+/** The lines of the store, as the lines' own store reads them. */
+function lineRowsOf(state: Store): MemoryLineRows {
+  const account = {
+    ...CURRENT,
+    kind: "current",
+    envelope: null,
+    currency: "EUR",
+    mode: "lines",
+    openingBalanceMinor: 0,
+    openedOn: null,
+    closedOn: null,
+    settlesIntoAccountId: null,
+    creditOrder: "oldest_first",
+    balanceCategoryId: null,
+  } as const;
+
+  return { accounts: [account], lines: (state.paid ?? []).map((each) => each.line), imports: [] };
+}
+
 function runnerOf(state: Store): Runner<GoussetServices> {
   const layer = Layer.mergeAll(
     FixtureLedger,
     memoryAccountStore(),
-    memoryLineStore(),
+    memoryLineStore(new Map([[writer.userId, lineRowsOf(state)]])),
     categoriesOf(state),
     // merchants never reaches the imports nor the export.
     Layer.mock(Imports, {}),
@@ -1002,6 +1106,165 @@ describe("merchants merge", () => {
     expect(unknown.isError).toBe(true);
     expect(unknown.text).toContain('No merchant of the user\'s is named "Pantry"');
     await expectValidExample(unknown.text);
+  });
+});
+
+/** Ada's store, with PayPal, an intermediary, and a line of hers paid through it. */
+function withPaypal(change: Partial<PaidLine> = {}): Store {
+  const state = store();
+
+  state.merchants.push({ ...merchant("PayPal", ["PAYPAL"]), intermediary: true });
+  state.paid = [
+    {
+      line: {
+        id: memoryId(),
+        accountId: CURRENT.id,
+        bookedOn: "2026-10-21",
+        valueOn: null,
+        amountMinor: -1999,
+        label: "CB PAYPAL *PIXELPLAY 21/10",
+        memo: null,
+        counterpartyName: null,
+      },
+      intermediary: "PayPal",
+      merchant: null,
+      assignable: true,
+      ...change,
+    },
+  ];
+
+  return state;
+}
+
+const paidLineOf = (state: Store) => state.paid?.[0]?.line.id ?? "";
+
+describe("merchants and payment intermediaries", () => {
+  test("list, search and show say which merchant is an intermediary", async () => {
+    const state = withPaypal();
+    const listed = await merchants(state, { action: "list" });
+
+    expect(listed.text).toContain("- PayPal (payment intermediary): 1 cleaned label");
+    expect(listed.text).toContain("- Fuelstop: 1 cleaned label");
+
+    const found = await merchants(state, { action: "search", text: "pay" });
+
+    expect(found.text).toContain("- PayPal (payment intermediary): 1 cleaned label");
+
+    const shown = await merchants(state, { action: "show", merchant: "paypal" });
+
+    expect(shown.isError, shown.text).toBe(false);
+    expect(shown.text).toContain("Merchant: PayPal, a payment intermediary");
+  });
+
+  test("edit with intermediary marks a merchant one, or not", async () => {
+    const state = withPaypal();
+
+    const marked = await merchants(state, {
+      action: "edit",
+      merchant: "Corner Cafe",
+      intermediary: true,
+    });
+
+    expect(marked.isError, marked.text).toBe(false);
+    expect(marked.text).toContain("Corner Cafe is now a payment intermediary");
+    expect(state.merchants.find((each) => each.name === "Corner Cafe")?.intermediary).toBe(true);
+
+    const unmarked = await merchants(state, {
+      action: "edit",
+      merchant: "PayPal",
+      intermediary: false,
+    });
+
+    expect(unmarked.isError, unmarked.text).toBe(false);
+    expect(unmarked.text).toContain("PayPal is no longer a payment intermediary");
+    expect(state.merchants.find((each) => each.name === "PayPal")?.intermediary).toBe(false);
+
+    const both = await merchants(state, {
+      action: "edit",
+      merchant: "PayPal",
+      intermediary: true,
+      name: "Paypal",
+    });
+
+    expect(both.isError).toBe(true);
+  });
+
+  test("assign sets who was paid, made when new, and proposes the rule for next time", async () => {
+    const state = withPaypal();
+
+    const { text, isError } = await merchants(state, {
+      action: "assign",
+      line: paidLineOf(state),
+      merchant: "Pixelplay",
+    });
+
+    expect(isError, text).toBe(false);
+    expect(text).toContain(
+      'Who was paid on the line of 2026-10-21, -19.99 EUR, "CB PAYPAL *PIXELPLAY 21/10", is now Pixelplay, a merchant made for it.',
+    );
+    expect(text).toContain(
+      'propose this rule to the user: rules {"action":"create","conditions":[{"field":"label","operator":"contains","value":"PAYPAL *PIXELPLAY"}],"merchant":"Pixelplay","from_correction":true}',
+    );
+    expect(text).not.toContain('"value":"PAYPAL"}');
+    expect(state.paid?.[0]?.merchant).toBe("Pixelplay");
+    expect(state.merchants.some((each) => each.name === "Pixelplay")).toBe(true);
+
+    // An existing merchant is named in any case, and not made again.
+    const again = await merchants(state, {
+      action: "assign",
+      line: paidLineOf(state),
+      merchant: "corner cafe",
+    });
+
+    expect(again.isError, again.text).toBe(false);
+    expect(again.text).toContain("is now Corner Cafe.");
+    expect(state.merchants.filter((each) => each.name === "Corner Cafe")).toHaveLength(1);
+  });
+
+  test("assign refuses what it cannot set, saying what to do", async () => {
+    const plain = withPaypal({ intermediary: null });
+
+    const refusals = [
+      [plain, "Pixelplay", "names no payment intermediary"],
+      [withPaypal({ assignable: false }), "Pixelplay", "one expense or income of its own"],
+      [withPaypal(), "paypal", "is a payment intermediary itself"],
+    ] as const;
+
+    for (const [state, name, says] of refusals) {
+      const { text, isError } = await merchants(state, {
+        action: "assign",
+        line: paidLineOf(state),
+        merchant: name,
+      });
+
+      expect(isError).toBe(true);
+      expect(text).toContain(says);
+      expect(text).toContain(`lines {"action":"show","line":"${paidLineOf(state)}"}`);
+      expect(text.length).toBeLessThan(ERROR_LIMIT);
+    }
+
+    const unknown = await merchants(withPaypal(), {
+      action: "assign",
+      line: "not-a-line",
+      merchant: "Pixelplay",
+    });
+
+    expect(unknown.isError).toBe(true);
+    expect(unknown.text).toContain("Handles come from search");
+
+    const missing = await merchants(withPaypal(), { action: "assign", merchant: "Pixelplay" });
+
+    expect(missing.isError).toBe(true);
+    expect(missing.text).toContain("assign needs line");
+
+    const readOnly = await merchants(
+      withPaypal(),
+      { action: "assign", line: paidLineOf(plain), merchant: "Pixelplay" },
+      reader,
+    );
+
+    expect(readOnly.isError).toBe(true);
+    expect(readOnly.text).toContain("this connection was allowed to read only");
   });
 });
 

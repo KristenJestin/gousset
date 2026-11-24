@@ -6,7 +6,6 @@ import {
   deleteRule,
   editRule,
   listRules,
-  merchantKey,
   moveRule,
   showRule,
   startApplyToPast,
@@ -683,26 +682,30 @@ function applyToPast(owner: string, input: RulesInput) {
 }
 
 /**
- * The one sentence `lines` `classify` ends with: the exact call that makes a rule of the
- * correction. Its condition is the label's cleaned merchant name when the label holds it, else the
- * label itself; none for a line of no label.
+ * The one sentence `lines` `classify` and `merchants` `assign` end with: the exact call that makes a
+ * rule of the correction, setting its category or its merchant. Its condition is `words`
+ * (`ruleWords`: the cleaned merchant name, the intermediary through who was paid, or the label);
+ * none for a line of no label.
  */
 export function proposedRule(
-  label: string,
-  counterpartyName: string | null,
-  category: string,
+  words: string,
+  sets: { readonly category: string } | { readonly merchant: string },
 ): string | undefined {
-  const key = merchantKey(label, counterpartyName);
-  const text = key !== null && label.toUpperCase().includes(key) ? key : label.trim();
+  const text = words.slice(0, MAX_LABEL_TEXT);
 
   if (text === "") {
     return undefined;
   }
 
-  return `To classify lines like it this way from now on, propose this rule to the user: ${call({
+  const lead =
+    "category" in sets
+      ? "To classify lines like it this way from now on"
+      : `To give lines like it ${sets.merchant} as merchant from now on`;
+
+  return `${lead}, propose this rule to the user: ${call({
     action: "create",
-    conditions: [{ field: "label", operator: "contains", value: text.slice(0, MAX_LABEL_TEXT) }],
-    category,
+    conditions: [{ field: "label", operator: "contains", value: text }],
+    ...sets,
     from_correction: true,
   })}`;
 }
