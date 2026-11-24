@@ -207,7 +207,12 @@ export type AccountView = {
 
 const money = (minor: number, currency: string): Money => ({ minor, currency });
 
-function statementsUntil(facts: AccountFacts): StatementsUntil | null {
+/** How far an account's statements go: its done imports' last day, else its latest statement balance. */
+export function statementsUntil(
+  facts: Pick<AccountFacts, "importedTo"> & {
+    readonly statements: ReadonlyArray<{ readonly day: string }>;
+  },
+): StatementsUntil | null {
   if (facts.importedTo !== null) {
     return { day: facts.importedTo, from: "import" };
   }

@@ -1,15 +1,15 @@
 import { exampleStatement } from "@gousset/fixture";
 import type { Page } from "@playwright/test";
-import type { Client } from "@modelcontextprotocol/client";
 
 import type { TestUser } from "../src/auth";
 import { importsOn, statementFile } from "../src/imports";
-import { addUser, connectMcp, expect, fixDay, personOfItsOwn, test, visit } from "../src/test";
+import { addUser, expect, fixDay, personOfItsOwn, test, visit } from "../src/test";
 import { openUserData } from "../src/user-data";
 
 // The scenarios of issue #126, "How to verify": until the review reads the user's own lines (v0.4),
 // a fresh user and a user with imported lines both see its empty state, and no invented name or
-// figure appears in the app or in MCP results. Each user is the file's own (`personOfItsOwn`):
+// figure appears in the app. The MCP door reads the user's own month since #32
+// (review-mcp.spec.ts). Each user is the file's own (`personOfItsOwn`):
 // Inès has nothing; Romane has one account and one statement imported through the real import.
 
 const TODAY = "2026-11-15";
@@ -68,14 +68,6 @@ async function expectNothingInvented(page: Page) {
 
   await expect(main).not.toContainText("€");
   await expect(main).not.toContainText("Made-up data");
-}
-
-/** A month call's text, and whether it is an error. */
-async function month(client: Client, args: { [key: string]: string }) {
-  const result = await client.callTool({ name: "month", arguments: args });
-  const [first] = result.content ?? [];
-
-  return { text: first?.type === "text" ? first.text : "", isError: result.isError === true };
 }
 
 test("a fresh user sees the empty state, the first import first", async ({ page }) => {
@@ -167,50 +159,4 @@ test("the empty state speaks French", async ({ browser, baseURL }) => {
   } finally {
     await context.close();
   }
-});
-
-test("month answers through MCP that the review is not available yet, inventing nothing", async ({
-  page,
-  baseURL,
-  mcpClientId,
-}) => {
-  await signedInAs(page, romane);
-
-  const session = await connectMcp({
-    baseURL: baseURL ?? "",
-    page,
-    consent: (consent) => consent.getByRole("button", { name: "Allow read only" }).click(),
-    scope: "read write",
-    clientId: mcpClientId,
-  });
-
-  const asked: ReadonlyArray<{ [key: string]: string; action: string }> = [
-    { action: "summary", month: "2026-10" },
-    { action: "review", month: "2026-10" },
-    { action: "days", month: "2026-10", by: "category", row: "Groceries" },
-  ];
-
-  for (const args of asked) {
-    const { text, isError } = await month(session.client, args);
-
-    expect(isError, args.action).toBe(false);
-    expect(text, args.action).toContain("The rest of the monthly review is not available yet");
-    expect(text, args.action).toContain('accounts {"action":"list"}');
-    expect(text, args.action).not.toMatch(/\d+\.\d\d/);
-    expect(text, args.action).not.toContain("EUR");
-
-    for (const name of [...INVENTED, "October"]) {
-      expect(text, `${args.action}: ${name}`).not.toContain(name);
-    }
-  }
-
-  // Her own lines are read where the answer points.
-  const lines = await session.client.callTool({
-    name: "lines",
-    arguments: { action: "search", text: "fournil" },
-  });
-
-  const [first] = lines.content ?? [];
-
-  expect(first?.type === "text" ? first.text : "").toContain("LE FOURNIL DES TILLEULS");
 });

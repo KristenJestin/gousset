@@ -9,6 +9,7 @@ import {
   importProfilesLayer,
   importsLayer,
   merchantsLayer,
+  monthFactsLayer,
   subscriptionsLayer,
   transfersLayer,
 } from "@gousset/core";
@@ -21,6 +22,7 @@ import type {
   Imports,
   LineStore,
   Merchants,
+  MonthFacts,
   RuleJobs,
   Subscriptions,
   Transfers,
@@ -43,8 +45,8 @@ export const auth = createAuth(ENV, db);
  * What Gousset's logic needs: the user's accounts in the database, the imports (#20) and their
  * profiles (#19), the export (#22), every line searched across accounts (#21), the transfers
  * between accounts (#26), the merchants (#24), the categories (#23), the rules' database and job
- * (#25), the expenses made of several lines (#27), and the charges subscriptions are detected
- * from (#34).
+ * (#25), the expenses made of several lines (#27), the charges subscriptions are detected
+ * from (#34), and the rows of a month (#32).
  */
 export type CoreServices =
   | AccountStore
@@ -58,7 +60,8 @@ export type CoreServices =
   | UserData
   | RuleJobs
   | Expenses
-  | Subscriptions;
+  | Subscriptions
+  | MonthFacts;
 
 /**
  * Gousset's logic (`@gousset/core`) runs on one runtime for the whole process, so that the server
@@ -79,6 +82,7 @@ const core = ManagedRuntime.make(
     ruleJobs,
     expensesLayer.pipe(Layer.provide(userData)),
     subscriptionsLayer.pipe(Layer.provide(userData)),
+    monthFactsLayer.pipe(Layer.provide(userData)),
   ),
 );
 

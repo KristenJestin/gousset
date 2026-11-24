@@ -14,6 +14,7 @@ import {
   MerchantNameUnknown,
   MerchantNotFound,
   Merchants,
+  MonthFacts,
   RuleJobs,
   Subscriptions,
   Transfers,
@@ -445,6 +446,7 @@ function runnerOf(state: Store): Runner<GoussetServices> {
     Layer.mock(UserData, {}),
     Layer.mock(RuleJobs, {}),
     Layer.mock(Subscriptions, {}),
+    Layer.mock(MonthFacts, {}),
     merchantsOf(state),
   );
 

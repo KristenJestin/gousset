@@ -4,27 +4,39 @@ import {
   ImportProfiles,
   Imports,
   Merchants,
+  MonthFacts,
   RuleJobs,
   Subscriptions,
   Today,
   Transfers,
   memoryAccountStore,
+  memoryCategory,
   memoryCategoryStore,
+  memoryId,
   memoryLineStore,
+  merchantKey,
 } from "@gousset/core";
-import type { Charge } from "@gousset/core";
+import type {
+  AccountRecord,
+  CategoryRecord,
+  Charge,
+  MemoryLineRows,
+  MonthAccount,
+  MonthPart,
+  MonthRows,
+} from "@gousset/core";
 import { UserData } from "@gousset/db/user-data";
 import { Effect, Layer } from "effect";
 import { describe, expect, test } from "vite-plus/test";
 
 import { goussetServer } from "../gousset";
-import { ERROR_LIMIT } from "../results";
+import { ERROR_LIMIT, RESULT_LIMIT } from "../results";
 import { callText, connectInProcess } from "../test-client";
 import type { Caller } from "../tool";
 
 // The month tool: its subscriptions, detected from the charges `Subscriptions` reads (core's tests
-// hold the detection's own rules), and, until the review reads the user's own lines (v0.4), the
-// other actions answering that they are not available yet, with no figure and no name (#126).
+// hold the detection's own rules), and the month read (#32) from the rows `MonthFacts` gives (core's
+// tests hold every figure's rules): what each action writes, by name, and what it refuses.
 
 const TODAY = "2026-11-24";
 const reader: Caller = { userId: "ada", canWrite: false, currency: "EUR" };
@@ -60,8 +72,46 @@ const CHARGES: ReadonlyArray<Charge> = [
 
 type Range = { readonly from: string; readonly to: string };
 
-/** A client of the server on `charges`, each range they are read over pushed to `asked`. */
-function connect(charges: ReadonlyArray<Charge> = CHARGES, asked: Array<Range> = []) {
+/** A month of the user's: its rows, with how to add to them. */
+type Month = {
+  accounts: Array<MonthAccount>;
+  categories: Array<CategoryRecord>;
+  parts: Array<MonthPart>;
+  transfers: Array<MonthRows["transfers"][number]>;
+  merchants: Array<MonthRows["merchants"][number]>;
+  aliases: Array<MonthRows["aliases"][number]>;
+  firstDay: string | null;
+  benefitLines: Array<MonthRows["benefitLines"][number]>;
+  reach: Array<MonthRows["reach"][number]>;
+  charges: Array<Charge>;
+};
+
+const empty = (): Month => ({
+  accounts: [],
+  categories: [],
+  parts: [],
+  transfers: [],
+  merchants: [],
+  aliases: [],
+  firstDay: null,
+  benefitLines: [],
+  reach: [],
+  charges: [],
+});
+
+type Connection = {
+  readonly charges?: ReadonlyArray<Charge>;
+  readonly asked?: Array<Range>;
+  readonly month?: Month;
+  readonly lines?: MemoryLineRows;
+};
+
+/** A client of the server on the charges and the month's rows given. */
+function connect(given: Connection = {}) {
+  const charges = given.charges ?? CHARGES;
+  const asked = given.asked ?? [];
+  const rows = given.month ?? empty();
+
   return connectInProcess(
     goussetServer,
     {
@@ -71,7 +121,7 @@ function connect(charges: ReadonlyArray<Charge> = CHARGES, asked: Array<Range> =
             effect,
             Layer.mergeAll(
               memoryAccountStore(),
-              memoryLineStore(),
+              memoryLineStore(new Map([["ada", given.lines ?? {}]])),
               memoryCategoryStore(),
               Layer.mock(Imports, {}),
               Layer.mock(ImportProfiles, {}),
@@ -89,6 +139,21 @@ function connect(charges: ReadonlyArray<Charge> = CHARGES, asked: Array<Range> =
                     return charges.filter((each) => each.day >= range.from && each.day <= range.to);
                   }),
               }),
+              Layer.succeed(MonthFacts, {
+                read: (_owner, scope) =>
+                  Effect.succeed({
+                    ...rows,
+                    charges:
+                      scope.charges === null
+                        ? []
+                        : rows.charges.filter(
+                            (each) =>
+                              scope.charges !== null &&
+                              each.day >= scope.charges.from &&
+                              each.day <= scope.charges.to,
+                          ),
+                  }),
+              }),
               Layer.succeed(Today, { day: Effect.succeed(TODAY) }),
             ),
           ),
@@ -99,12 +164,8 @@ function connect(charges: ReadonlyArray<Charge> = CHARGES, asked: Array<Range> =
   );
 }
 
-async function month(
-  args: { [key: string]: string },
-  charges: ReadonlyArray<Charge> = CHARGES,
-  asked: Array<Range> = [],
-) {
-  return callText(await connect(charges, asked), "month", args);
+async function month(args: { [key: string]: string }, given: Connection = {}) {
+  return callText(await connect(given), "month", args);
 }
 
 describe("month subscriptions", () => {
@@ -132,7 +193,7 @@ describe("month subscriptions", () => {
 
   test("reads the current month when none is given, from the three years of charges up to today", async () => {
     const asked: Array<Range> = [];
-    const { text, isError } = await month({ action: "subscriptions" }, CHARGES, asked);
+    const { text, isError } = await month({ action: "subscriptions" }, { asked });
 
     expect(isError, text).toBe(false);
     expect(text).toContain("Subscriptions of 2026-11");
@@ -141,12 +202,7 @@ describe("month subscriptions", () => {
 
   test("reads a month gone by as it stood on its last day", async () => {
     const asked: Array<Range> = [];
-
-    const { text, isError } = await month(
-      { action: "subscriptions", month: "2026-10" },
-      CHARGES,
-      asked,
-    );
+    const { text, isError } = await month({ action: "subscriptions", month: "2026-10" }, { asked });
 
     expect(isError, text).toBe(false);
     expect(text).toContain("up to 2026-10-31.");
@@ -160,7 +216,7 @@ describe("month subscriptions", () => {
   });
 
   test("says when nothing recurs", async () => {
-    const { text, isError } = await month({ action: "subscriptions" }, []);
+    const { text, isError } = await month({ action: "subscriptions" }, { charges: [] });
 
     expect(isError, text).toBe(false);
     expect(text).toContain("No recurring payment detected.");
@@ -188,38 +244,342 @@ describe("month subscriptions", () => {
   });
 });
 
-describe("month, until the rest of the review ships", () => {
-  test.each(["summary", "review", "days"])(
-    "%s says the review is not available yet, and where the user's money is read today",
-    async (action) => {
-      const { text, isError } = await month({ action });
+function account(rows: Month, name: string, kind: MonthAccount["kind"]): MonthAccount {
+  const opened: MonthAccount = {
+    id: memoryId(),
+    name,
+    institution: null,
+    kind,
+    currency: "EUR",
+    mode: "lines",
+    openingBalanceMinor: 0,
+    openedOn: null,
+    closedOn: null,
+    creditOrder: "oldest_first",
+  };
 
-      expect(isError).toBe(false);
-      expect(text).toContain("The rest of the monthly review is not available yet");
-      expect(text).toContain('month {"action":"benchmarks"}');
-      expect(text).toContain('accounts {"action":"list"}');
-      expect(text).toContain('lines {"action":"search"');
-      expect(text).toContain('month {"action":"subscriptions"}');
+  rows.accounts.push(opened);
+
+  return opened;
+}
+
+function category(rows: Month, kind: "expense" | "income", name: string, change = {}) {
+  const created = memoryCategory(kind, name, { position: rows.categories.length, ...change });
+
+  rows.categories.push(created);
+
+  return created;
+}
+
+function merchant(rows: Month, name: string, intermediary = false) {
+  const known = { id: memoryId(), name, intermediary };
+
+  rows.merchants.push(known);
+  rows.aliases.push({ alias: merchantKey(name.toUpperCase(), null) ?? name, merchantId: known.id });
+
+  return known;
+}
+
+function spend(
+  rows: Month,
+  where: { category: CategoryRecord; account: MonthAccount },
+  day: string,
+  minor: number,
+  label = "CARD PAYMENT",
+  kind: "expense" | "income" = "expense",
+) {
+  rows.parts.push({
+    entryId: memoryId(),
+    kind,
+    happenedOn: day,
+    categoryId: where.category.id,
+    entryMerchantId: null,
+    role: "payment",
+    amountMinor: minor,
+    lineId: memoryId(),
+    label,
+    counterpartyName: null,
+    accountId: where.account.id,
+  });
+}
+
+/**
+ * Ada's months: a salary, groceries at Greenmarket and a bakery under them, a purchase through
+ * PayPal, a transfer to her savings; September for the month before, her data from April on.
+ */
+function ada() {
+  const rows = empty();
+  const current = account(rows, "Current account", "current");
+  const savings = account(rows, "Savings book", "savings");
+  const salary = category(rows, "income", "Salary");
+  const groceries = category(rows, "expense", "Groceries");
+  const bakery = category(rows, "expense", "Bakery", { parentId: groceries.id });
+
+  const leisure = category(rows, "expense", "Leisure", {
+    benchmark: { mode: "fixed", minor: 5000 },
+  });
+
+  category(rows, "expense", "Travel");
+  merchant(rows, "Greenmarket");
+  merchant(rows, "PayPal", true);
+
+  rows.firstDay = "2026-04-02";
+  spend(
+    rows,
+    { category: salary, account: current },
+    "2026-10-01",
+    250_000,
+    "ACME PAYROLL",
+    "income",
+  );
+  spend(rows, { category: groceries, account: current }, "2026-09-12", 20_000, "GREENMARKET");
+  spend(rows, { category: groceries, account: current }, "2026-10-03", 24_000, "GREENMARKET");
+  spend(rows, { category: bakery, account: current }, "2026-10-04", 1500, "CARD 0410 CRUSTY");
+  spend(rows, { category: leisure, account: current }, "2026-10-06", 9000, "PAYPAL");
+
+  rows.transfers.push({
+    outAccountId: current.id,
+    outBookedOn: "2026-10-05",
+    outMinor: -50_000,
+    inAccountId: savings.id,
+    inBookedOn: "2026-10-05",
+    inMinor: 50_000,
+  });
+
+  rows.reach.push(
+    { accountId: current.id, importedTo: "2026-10-31", statementTo: null },
+    { accountId: savings.id, importedTo: null, statementTo: "2026-10-15" },
+  );
+
+  return { rows, current, groceries };
+}
+
+/** The line to review of Ada's, as the operations page's filter finds it. */
+function toReview(current: MonthAccount): MemoryLineRows {
+  const record: AccountRecord = {
+    ...current,
+    envelope: null,
+    settlesIntoAccountId: null,
+    balanceCategoryId: null,
+    topUpDays: 3,
+    topUpCapMinor: null,
+  };
+
+  return {
+    accounts: [record],
+    lines: [
+      {
+        id: memoryId(),
+        accountId: current.id,
+        bookedOn: "2026-10-04",
+        valueOn: null,
+        amountMinor: -1500,
+        label: "CARD 0410 CRUSTY",
+        memo: null,
+        counterpartyName: null,
+        classifiedBy: "default",
+        category: { id: "other", name: "Other", parentName: null, kind: "expense" },
+      },
+    ],
+  };
+}
+
+describe("month summary", () => {
+  test("reads the user's own month: received, spent, set aside, left, movements, lines to review, imports, flags", async () => {
+    const { rows, current } = ada();
+
+    const { text, isError } = await month(
+      { action: "summary", month: "2026-10" },
+      { month: rows, lines: toReview(current) },
+    );
+
+    expect(isError, text).toBe(false);
+    expect(text).toContain(
+      "The month 2026-10, in EUR, read on 2026-11-24: averages over 6 month(s) of 2026-04 to 2026-09; the previous month is 2026-09.",
+    );
+    expect(text).toContain("Received 2,500.00 EUR, from Salary 2,500.00 EUR.");
+    expect(text).toContain("Spent 345.00 EUR; average 33.33 EUR; previous month 200.00 EUR.");
+    expect(text).toContain("Set aside 500.00 EUR (net, onto savings and investment accounts).");
+    expect(text).toContain("Left 1,655.00 EUR.");
+    expect(text).toContain(
+      "- 2026-10-01, income: ACME PAYROLL → Current account, 2,500.00 EUR (Salary)",
+    );
+    expect(text).toContain("- 2026-10-05, transfer: Current account → Savings book, 500.00 EUR");
+    expect(text).toContain("Lines to review: 1 booked in the month; the newest:");
+    expect(text).toContain(
+      '- 2026-10-04, Current account: "CARD 0410 CRUSTY", -15.00 EUR, in Other',
+    );
+    expect(text).toContain(
+      'List them all with lines {"action":"search","to_review":true,"from":"2026-10-01","to":"2026-10-31"}.',
+    );
+    expect(text).toContain("Imported: 1 of 2 account(s) have statements reaching 2026-10-31.");
+    expect(text).toContain("- Savings book: reaches 2026-10-15.");
+    expect(text).toContain(
+      "Flagged (3):\n- Groceries drifts above its benchmark: spent 255.00 EUR, benchmark 33.33 EUR.\n- Leisure drifts above its benchmark: spent 90.00 EUR, benchmark 50.00 EUR.",
+    );
+    expect(text).toContain("- Savings book: its statements reach 2026-10-15 only.");
+    expect(text).not.toMatch(/[\da-f]{8}-[\da-f]{4}-/);
+    expect(text.length).toBeLessThan(RESULT_LIMIT);
+  });
+
+  test("a user with nothing yet reads an empty month", async () => {
+    const { text, isError } = await month({ action: "summary" });
+
+    expect(isError, text).toBe(false);
+    expect(text).toContain("The month 2026-11, in EUR");
+    expect(text).toContain("no average yet");
+    expect(text).toContain("Received 0.00 EUR.");
+    expect(text).toContain("No line of the month waits to be reviewed.");
+    expect(text).toContain("Nothing flagged.");
+  });
+});
+
+describe("month spending", () => {
+  test("by category: against the average and the month before, with benchmarks, children indented", async () => {
+    const { rows } = ada();
+
+    const { text, isError } = await month(
+      { action: "spending", month: "2026-10" },
+      { month: rows },
+    );
+
+    expect(isError, text).toBe(false);
+    expect(text).toContain("Where the money went in 2026-10, by category, in EUR");
+    expect(text).toContain(
+      "\n- Groceries: spent 255.00 EUR; average 33.33 EUR; previous month 200.00 EUR; benchmark 33.33 EUR (automatic); DRIFTS, 221.67 EUR above\n  - Bakery: spent 15.00 EUR; average 0.00 EUR; previous month 0.00 EUR; benchmark: none yet",
+    );
+    expect(text).toContain(
+      "\n- Leisure: spent 90.00 EUR; average 0.00 EUR; previous month 0.00 EUR; benchmark 50.00 EUR (set); DRIFTS, 40.00 EUR above",
+    );
+    // Nothing spent in Travel, ever: left out.
+    expect(text).not.toContain("Travel");
+    expect(text).toContain("1 category with nothing spent in these months left out.");
+    expect(text).toContain(
+      'month {"action":"days","by":"category","name":"Groceries","month":"2026-10"}',
+    );
+  });
+
+  test("by merchant: who was paid, an intermediary said so, the expenses naming none last", async () => {
+    const { rows } = ada();
+
+    const { text, isError } = await month(
+      { action: "spending", by: "merchant", month: "2026-10" },
+      { month: rows },
+    );
+
+    expect(isError, text).toBe(false);
+    expect(text).toContain(
+      "Merchants, the largest first:\n- Greenmarket: spent 240.00 EUR; average 33.33 EUR; previous month 200.00 EUR\n- PayPal (a payment intermediary: who was paid behind it is not known): spent 90.00 EUR",
+    );
+    expect(text).toContain(
+      "- no merchant: spent 15.00 EUR; average 0.00 EUR; previous month 0.00 EUR (expenses naming several merchants, or none)",
+    );
+  });
+
+  test("a long list of merchants is cut, saying what the rest holds and how to read it", async () => {
+    const { rows, current, groceries } = ada();
+
+    for (let index = 0; index < 110; index += 1) {
+      const stall = merchant(rows, `Stall ${String(index).padStart(3, "0")}`);
+
+      // The expense's own merchant: no cleaned label needed.
+      rows.parts.push({
+        entryId: memoryId(),
+        kind: "expense",
+        happenedOn: "2026-10-20",
+        categoryId: groceries.id,
+        entryMerchantId: stall.id,
+        role: "payment",
+        amountMinor: 100 + index,
+        lineId: memoryId(),
+        label: "MARKET STALL",
+        counterpartyName: null,
+        accountId: current.id,
+      });
+    }
+
+    const { text } = await month(
+      { action: "spending", by: "merchant", month: "2026-10" },
+      { month: rows },
+    );
+
+    expect(text).toContain("And 12 more merchants,");
+    expect(text).toContain(
+      'read their lines with lines {"action":"search","from":"2026-10-01","to":"2026-10-31"}.',
+    );
+    expect(text.length).toBeLessThan(RESULT_LIMIT);
+  });
+});
+
+describe("month days", () => {
+  test("follows a row day by day, named as spending names it, in any case", async () => {
+    const { rows } = ada();
+
+    const { text, isError } = await month(
+      { action: "days", month: "2026-10", name: "groceries>bakery" },
+      { month: rows },
+    );
+
+    expect(isError, text).toBe(false);
+    expect(text).toContain("Groceries > Bakery (category) in 2026-10, in EUR");
+    expect(text).toContain("2026-10-03: 0.00 EUR; previous month 0.00 EUR");
+    expect(text).toContain("2026-10-04: 15.00 EUR; previous month 0.00 EUR");
+    expect(text).toContain("2026-10-31: 15.00 EUR");
+  });
+
+  test("days to come are said so, in the month under way", async () => {
+    const { rows, current, groceries } = ada();
+
+    spend(rows, { category: groceries, account: current }, "2026-11-02", 3000, "GREENMARKET");
+
+    const { text } = await month(
+      { action: "days", by: "merchant", name: "Greenmarket" },
+      { month: rows },
+    );
+
+    expect(text).toContain("Greenmarket (merchant) in 2026-11");
+    expect(text).toContain("2026-11-02: 30.00 EUR; previous month 0.00 EUR");
+    expect(text).toContain("2026-11-03: 30.00 EUR; previous month 240.00 EUR");
+    expect(text).toContain("From 2026-11-25 on: days to come.");
+  });
+
+  test("an unknown row is refused, naming the month's rows, with a valid call", async () => {
+    const { rows } = ada();
+
+    const { text, isError } = await month(
+      { action: "days", month: "2026-10", name: "Gardening" },
+      { month: rows },
+    );
+
+    expect(isError).toBe(true);
+    expect(text).toContain('No row of 2026-10 by category is named "Gardening".');
+    expect(text).toContain("Groceries > Bakery");
+    expect(text).toContain(
+      'A valid call: month {"action":"days","by":"category","name":"Groceries","month":"2026-10"}',
+    );
+    expect(text.length).toBeLessThan(ERROR_LIMIT);
+
+    const unnamed = await month({ action: "days" }, { month: rows });
+
+    expect(unnamed.isError).toBe(true);
+    expect(unnamed.text).toContain("days needs name");
+  });
+});
+
+describe("month", () => {
+  test.each(["summary", "spending", "days"])(
+    "%s refuses a month to come, with a valid call",
+    async (action) => {
+      const { text, isError } = await month({ action, month: "2027-01", name: "Groceries" });
+
+      expect(isError).toBe(true);
+      expect(text).toContain("2027-01 is a month to come");
+      expect(text).toContain(`A valid call: month {"action":"${action}","month":"2026-11"`);
     },
   );
 
-  test("gives no figure and no name, whatever the month or the row asked for", async () => {
-    const { text, isError } = await month({
-      action: "days",
-      month: "2026-10",
-      by: "category",
-      row: "Groceries",
-    });
-
-    expect(isError).toBe(false);
-    expect(text).not.toMatch(/\d+\.\d\d/);
-    expect(text).not.toContain("EUR");
-    expect(text).not.toContain("Groceries");
-    expect(text).not.toContain("October");
-  });
-
   test("an unknown action is refused with a valid call", async () => {
-    const { text, isError } = await month({ action: "forecast" });
+    const { text, isError } = await month({ action: "review" });
 
     expect(isError).toBe(true);
     expect(text).toContain('month {"action":"subscriptions"}');
@@ -231,7 +591,7 @@ describe("month, until the rest of the review ships", () => {
 
     expect(first?.name).toBe("month");
     expect(first?.title).toBe(
-      "Monthly review (subscriptions and benchmarks; the rest not available yet)",
+      "Monthly review (summary, spending, days, subscriptions, benchmarks)",
     );
     expect(first?.annotations).toEqual({
       readOnlyHint: true,
