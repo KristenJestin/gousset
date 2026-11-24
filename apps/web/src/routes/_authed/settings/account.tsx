@@ -52,11 +52,8 @@ function ChangePassword({ announce }: { announce: (message: string | undefined) 
     <Dialog
       trigger={<Button variant="secondary">{m.settingsChangePassword()}</Button>}
       open={open}
+      sending={busy}
       onOpenChange={(next) => {
-        if (!next && busy) {
-          return;
-        }
-
         setOpen(next);
         clearRefusal();
 

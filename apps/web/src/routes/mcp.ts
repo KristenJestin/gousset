@@ -103,7 +103,14 @@ function protect(resource: string) {
       // role has no grant on auth_user. Euros if the column holds no code Gousset knows.
       const currency = Schema.is(UserCurrency)(grant.currency) ? grant.currency : "EUR";
 
-      return endpoint(request, authInfoOf({ userId, canWrite, currency }, token, clientId));
+      return endpoint(
+        request,
+        authInfoOf(
+          { userId, canWrite, currency, grantId: grant.id, origin: mcpAddress.origin },
+          token,
+          clientId,
+        ),
+      );
     },
     { resource, challengeScopes: MCP_SCOPES },
   );

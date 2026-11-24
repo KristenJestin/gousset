@@ -6,6 +6,7 @@ import { and, asc, eq, isNull } from "drizzle-orm";
 import { Effect } from "effect";
 
 import type { TestUser } from "../src/auth";
+import { onPhone } from "../src/frame";
 import { importsOn, statementFile } from "../src/imports";
 import { addUser, expect, fixDay, personOfItsOwn, test, visit } from "../src/test";
 import { openUserData } from "../src/user-data";
@@ -299,7 +300,7 @@ test("the rules move in 200 ms, and not under reduced motion", async ({ page, ap
   await expect(rows(page).first()).toContainText("E2E STILL");
   await expect(rows(page).first()).toHaveCSS("animation-duration", "0.2s");
 
-  // Delete's question grows in 200 ms.
+  // Delete's question grows in 200 ms; on a phone it rises in 300 ms.
   await ruleNamed(page, "label contains “E2E STILL”").click();
   await page
     .getByRole("dialog", { name: "Rule 1" })
@@ -307,7 +308,7 @@ test("the rules move in 200 ms, and not under reduced motion", async ({ page, ap
     .click();
   await expect(page.getByRole("alertdialog", { name: "Delete this rule?" })).toHaveCSS(
     "transition-duration",
-    "0.2s",
+    onPhone(page) ? "0.3s" : "0.2s",
   );
 
   await page.emulateMedia({ reducedMotion: "reduce" });

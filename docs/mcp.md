@@ -82,7 +82,7 @@ From Anthropic's [Writing effective tools for agents](https://www.anthropic.com/
 
    | Family | Arrives in |
    |---|---|
-   | `month` | v0.1 (made-up data), then v0.4 |
+   | `month` | v0.1 (made-up data; since 0.2.1 it says the review is not available yet, with no figure), then v0.4 |
    | `accounts`, `lines`, `imports` | v0.2 |
    | `data` (what an export holds, and where to download it) | v0.2 |
    | `categories`, `merchants`, `rules` (`list`, `show`, `create`, `edit`, `disable`, `delete`, `apply_to_past`) | v0.3 |
@@ -105,7 +105,7 @@ From Anthropic's [Writing effective tools for agents](https://www.anthropic.com/
 Two guards, held by tests, say when the list grows too big to be read well:
 
 - at most **15 tools**;
-- at most **40,000 characters** of definitions in the listing: about ten tools at the 4,000 characters each may have (about 13,000 tokens, past the 10,000 beyond which Anthropic says tool search starts to help; raised from 30,000 when the lines' expenses, #27, met the rules, #25);
+- at most **40,000 characters** of definitions in the listing (raised from 30,000: about ten tools of up to 4,000 characters each);
 - every **description under 4,000 characters**, within Claude Code's cut of 4,096 for an upfront tool. An older version cuts at 2,048: the important part comes first, so that what it keeps still says what the tool does, with an example call when an argument is easy to get wrong.
 
 They are not a number to trim to. **A tool keeps the description and the example it needs; a new tool is never paid for by shortening another, and a review refuses such a trim.** When a guard fails, nobody trims: the maintainer decides.

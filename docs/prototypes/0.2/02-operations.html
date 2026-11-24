@@ -1,0 +1,331 @@
+<!doctype html>
+<html lang="en" data-color-scheme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>2 · Operations · Prototype 0.2 · Gousset</title>
+<link rel="stylesheet" href="assets/proto.css">
+<link rel="stylesheet" href="assets/icons.css">
+<style>
+  .page.full { height: 100%; gap: 16px; padding-bottom: 24px; }
+  .countline { display: flex; align-items: center; gap: 8px; height: 20px; }
+  .countline .btn { margin-left: auto; height: 28px; }
+  .op .chip { flex-shrink: 0; }
+  .loading-more { display: flex; align-items: center; justify-content: center; gap: 8px; height: 44px; color: var(--muted-foreground); font-size: 12px; }
+  .psearch { display: flex; gap: 8px; }
+  .psearch .control { flex: 1; }
+  .badge { min-width: 18px; height: 18px; padding: 0 5px; border-radius: 999px; background: var(--primary); color: var(--primary-foreground); font-size: 11px; line-height: 18px; font-weight: 600; text-align: center; }
+  .app.phone .page.list { gap: 12px; padding-bottom: 0; }
+  .app.phone .list-block { margin: 0 -16px; border-left: 0; border-right: 0; border-radius: 0; }
+  .app.phone .day-break { padding: 0 16px; }
+  .setting-row { display: flex; align-items: center; gap: 12px; }
+  .detail-sheet .kv { grid-template-columns: 104px minmax(0, 1fr); }
+  .variant-note { font-size: 12px; color: var(--muted-foreground); }
+</style>
+</head>
+<body>
+<div class="proto">
+<header class="bar" data-title="2 · Operations (#127, #128)"></header>
+<main class="canvas">
+<div class="state-switch">
+  <span class="seg" role="group" aria-label="Money out">
+    <button type="button" data-show="variant:out-plain" data-default>Money out in the text colour</button>
+    <button type="button" data-show="variant:out-coloured">Money out in orange</button>
+  </span>
+  <button class="btn sm secondary" type="button" data-replay="detail"><span class="i i-player-play"></span>Replay: close, then open the detail</button>
+  <span class="variant-note">Click any row to open it; the ✕ closes it.</span>
+</div>
+<div class="devices">
+
+<!-- ═══════════════ Desktop ═══════════════ -->
+<section class="device desktop">
+<div class="caption">Desktop · 1280 px · the detail open</div>
+<div class="screen">
+<div class="app">
+<aside class="sidebar" data-current="operations"></aside>
+<div class="main">
+<div class="page full">
+  <header class="page-head"><h1 class="t-title">Operations</h1></header>
+
+  <div class="filters" role="group" aria-label="Filters">
+    <label class="control sm search"><span class="i i-search"></span><input type="search" placeholder="Search the labels" aria-label="Search"></label>
+    <span class="control sm select account" role="combobox" aria-label="Account" tabindex="0"><span class="i i-building-bank"></span><span class="truncate">Current account</span><span class="i i-selector"></span></span>
+    <span class="control sm select period" role="combobox" aria-label="Period" tabindex="0"><span class="i i-calendar"></span><span class="placeholder">Any date</span><span class="i i-selector"></span></span>
+    <span class="range" role="group" aria-label="Amount">
+      <span class="affix">Amount</span>
+      <input inputmode="decimal" placeholder="min" aria-label="Amount from">
+      <span class="to">–</span>
+      <input inputmode="decimal" placeholder="max" aria-label="Amount up to">
+    </span>
+    <button class="toggle" type="button" aria-pressed="false">To review<span class="count">14</span></button>
+  </div>
+
+  <p class="countline t-muted"><span class="num">3,961 lines</span><span>·</span><span>Current account, since 1 Jan. 2016</span><button class="btn sm ghost" type="button"><span class="i i-x"></span>Clear filters</button></p>
+
+  <div class="ops open">
+    <section class="block ops-list" aria-label="Operations">
+      <div class="ops-head" role="row">
+        <span class="t-label">Date</span>
+        <span class="t-label">Label</span>
+        <span class="t-label acct">Account</span>
+        <span class="t-label r">Amount</span>
+      </div>
+      <div class="ops-rows" id="ops-desktop" role="grid" aria-rowcount="3961"></div>
+    </section>
+    <div class="detail-col">
+      <section class="block detail" aria-label="PRLV SEPA HARBOR SAVINGS ECHEANCE PRET IMMO 0042-77 OCT 2026">
+        <div class="detail-inner">
+          <div class="detail-head">
+            <div class="stack grow">
+              <h2>PRLV SEPA HARBOR SAVINGS ECHEANCE PRET IMMO 0042-77 OCT 2026</h2>
+              <span class="t-figure amount">−€610.00</span>
+            </div>
+            <button class="icon-btn" type="button" aria-label="Close" data-close-detail><span class="i i-x"></span></button>
+          </div>
+          <dl class="kv">
+            <dt>Account</dt><dd>Current account <span class="t-soft">· Northbank</span></dd>
+            <dt>Booked on</dt><dd>Wednesday 28 October 2026</dd>
+            <dt>Value date</dt><dd>28 October 2026</dd>
+          </dl>
+          <dl class="kv">
+            <dt class="wide">Bank label</dt>
+            <dd class="wide raw t-mono">PRLV SEPA HARBOR SAVINGS ECHEANCE PRET IMMO 0042-77 OCT 2026 MANDAT HS-PRET-0042-77 ECH 10/240</dd>
+            <dt>Memo</dt><dd>Échéance 10 sur 240</dd>
+            <dt>Counterparty</dt><dd>Harbor Savings</dd>
+          </dl>
+          <dl class="kv">
+            <dt>Imported from</dt><dd>northbank_current-account_statement_full-history_2016-01-01_to_2026-10-31.ofx</dd>
+            <dt>Imported on</dt><dd>2 November 2026</dd>
+            <dt>Period</dt><dd>1 Jan. 2016 to 31 Oct. 2026</dd>
+          </dl>
+        </div>
+      </section>
+    </div>
+  </div>
+</div>
+</div>
+</div>
+</div>
+</section>
+
+<!-- ═══════════════ Phone: the list ═══════════════ -->
+<section class="device phone">
+<div class="caption">Phone · the list</div>
+<div class="screen">
+<div class="app phone">
+<div class="statusbar"></div>
+<div class="main">
+<div class="page list">
+  <h1 class="t-title">Operations</h1>
+  <div class="psearch">
+    <label class="control search"><span class="i i-search"></span><input type="search" placeholder="Search the labels" aria-label="Search"></label>
+    <button class="btn secondary" type="button"><span class="i i-adjustments-horizontal"></span>Filters<span class="badge">1</span></button>
+  </div>
+  <p class="t-caption num">3,961 lines · Current account</p>
+  <section class="block list-block" data-phone-list="40"></section>
+</div>
+</div>
+<nav class="tabbar" data-current="operations"></nav>
+</div>
+</div>
+</section>
+
+<!-- ═══════════════ Phone: the filters sheet ═══════════════ -->
+<section class="device phone">
+<div class="caption">Phone · the filters, a sheet</div>
+<div class="screen">
+<div class="app phone">
+<div class="statusbar"></div>
+<div class="main">
+<div class="page list">
+  <h1 class="t-title">Operations</h1>
+  <div class="psearch">
+    <label class="control search"><span class="i i-search"></span><input type="search" placeholder="Search the labels" aria-label="Search"></label>
+    <button class="btn secondary" type="button"><span class="i i-adjustments-horizontal"></span>Filters<span class="badge">1</span></button>
+  </div>
+  <p class="t-caption num">3,961 lines · Current account</p>
+  <section class="block list-block" data-phone-list="10"></section>
+</div>
+</div>
+<nav class="tabbar" data-current="operations"></nav>
+<div class="backdrop"></div>
+<section class="sheet bottom floating" aria-label="Filters">
+  <div class="grabber"></div>
+  <header class="sheet-head"><div class="stack grow"><h2 class="t-heading">Filters</h2></div><button class="icon-btn" type="button" aria-label="Close"><span class="i i-x"></span></button></header>
+  <div class="sheet-body">
+    <div class="field"><span class="label">Account</span><span class="control select" role="combobox" tabindex="0"><span>Current account</span><span class="i i-selector"></span></span></div>
+    <div class="field-pair">
+      <div class="field"><span class="label">From</span><span class="control"><span class="placeholder">dd/mm/yyyy</span><span class="i i-calendar" style="margin-left:auto"></span></span></div>
+      <div class="field"><span class="label">To</span><span class="control"><span class="placeholder">dd/mm/yyyy</span><span class="i i-calendar" style="margin-left:auto"></span></span></div>
+    </div>
+    <div class="field-pair">
+      <div class="field"><span class="label">Amount from</span><span class="control"><span class="affix">€</span><input inputmode="decimal" placeholder="0.00"></span></div>
+      <div class="field"><span class="label">Up to</span><span class="control"><span class="affix">€</span><input inputmode="decimal" placeholder="any"></span></div>
+    </div>
+    <div class="setting-row"><div class="stack grow"><span class="t-strong">To review only</span><span class="t-caption">14 lines wait for you</span></div><span class="switch" role="switch" aria-checked="false"></span></div>
+  </div>
+  <footer class="sheet-foot">
+    <button class="btn ghost" type="button">Clear filters</button>
+    <button class="btn primary" type="button">Show 3,961 lines</button>
+  </footer>
+</section>
+</div>
+</div>
+</section>
+
+<!-- ═══════════════ Phone: the detail sheet ═══════════════ -->
+<section class="device phone">
+<div class="caption">Phone · a line's detail slides up</div>
+<div class="screen">
+<div class="app phone">
+<div class="statusbar"></div>
+<div class="main">
+<div class="page list">
+  <h1 class="t-title">Operations</h1>
+  <div class="psearch">
+    <label class="control search"><span class="i i-search"></span><input type="search" placeholder="Search the labels" aria-label="Search"></label>
+    <button class="btn secondary" type="button"><span class="i i-adjustments-horizontal"></span>Filters<span class="badge">1</span></button>
+  </div>
+  <p class="t-caption num">3,961 lines · Current account</p>
+  <section class="block list-block" data-phone-list="10"></section>
+</div>
+</div>
+<nav class="tabbar" data-current="operations"></nav>
+<div class="backdrop"></div>
+<section class="sheet bottom floating detail-sheet" aria-label="PRLV SEPA HARBOR SAVINGS ECHEANCE PRET IMMO 0042-77 OCT 2026">
+  <div class="grabber"></div>
+  <header class="sheet-head">
+    <div class="stack grow">
+      <h2 class="t-strong">PRLV SEPA HARBOR SAVINGS ECHEANCE PRET IMMO 0042-77 OCT 2026</h2>
+      <span class="t-figure amount">−€610.00</span>
+    </div>
+    <button class="icon-btn" type="button" aria-label="Close"><span class="i i-x"></span></button>
+  </header>
+  <div class="sheet-body">
+    <dl class="kv">
+      <dt>Account</dt><dd>Current account <span class="t-soft">· Northbank</span></dd>
+      <dt>Booked on</dt><dd>Wed. 28 October 2026</dd>
+      <dt>Value date</dt><dd>28 October 2026</dd>
+    </dl>
+    <dl class="kv">
+      <dt class="wide">Bank label</dt>
+      <dd class="wide raw t-mono">PRLV SEPA HARBOR SAVINGS ECHEANCE PRET IMMO 0042-77 OCT 2026 MANDAT HS-PRET-0042-77 ECH 10/240</dd>
+      <dt>Counterparty</dt><dd>Harbor Savings</dd>
+    </dl>
+    <dl class="kv">
+      <dt>Imported from</dt><dd>northbank_current-account_statement_full-history_2016-01-01_to_2026-10-31.ofx</dd>
+      <dt>Imported on</dt><dd>2 November 2026</dd>
+    </dl>
+  </div>
+</section>
+</div>
+</div>
+</section>
+
+</div>
+</main>
+
+<aside class="notes">
+  <h2>What changes</h2>
+  <ul>
+    <li><b>The filters are one 32 px row</b>, no label above any field: each one says what it is by itself. The search has its icon and placeholder, the account and the period show their value (“All accounts”, “Any date”) with an icon, the amount range is one field pair under one word, <i>Amount</i>, min – max. Every field keeps an accessible name. No hint under a field: the date format is the calendar's placeholder.</li>
+    <li><b>“To review only” is a toggle button in the row</b>, with its count; pressed, it turns violet. The count of lines and <b>Clear filters</b> sit on the line under the row, which says what is filtered in words.</li>
+    <li><b>Amounts by sign</b>: money in is green (<code>--money-income</code>) with a +, money out stays in the text colour with a true minus (−). The sign is always written, so it reads without the colour, for screen readers and colour-blind eyes. Both pass 4.5:1 on the block in each scheme: the scale page measures them.</li>
+    <li><b>Three text levels in a row</b>: the label in medium, the date and the account in the soft colour, the headers in muted 12 px.</li>
+    <li><b>The detail sits beside the list, never over it.</b> The list makes room: its account column gives way while the detail is open (below 1440 px), never the amounts, which stay in their right-aligned column.</li>
+    <li><b>The detail reads as a sheet of facts</b>: the label (14 px, it wraps), the amount large, then three groups (where and when · what the bank wrote · where it came from), names left in muted, values left-aligned after them, so long values wrap cleanly.</li>
+    <li><b>The open row is marked</b>: a muted band and a 3 px violet edge, which stays until the detail has closed.</li>
+    <li><b>Phone</b>: the search and a <i>Filters</i> button with the number of filters set; the filters open in a bottom sheet whose button says how many lines it will show. Rows are two lines (label, then day and account), grouped under the day. A line's detail is a bottom sheet.</li>
+  </ul>
+
+  <h2>Rejected</h2>
+  <ul class="rejected">
+    <li><b>Labels above the filters</b> (today): “Amount from” wraps, the date hints make some fields taller, the row breaks and the box floats alone below.</li>
+    <li><b>A Filters popover on desktop</b>: one more click for the filters used most; the row fits from 1280 px. Between 1024 and 1279 px the period, the amount and the toggle go into a <i>Filters</i> button, as on the phone.</li>
+    <li><b>Money out in orange</b> (the switch above shows it): nine rows out of ten turn orange and the list shouts; orange is “spent” in the month's charts, a role, not a sign.</li>
+    <li><b>The row growing into the panel</b> (the shared layout of docs/design.md, “Opening a detail”): a layout animation scales the box, and its text with it; that is the squashed, ghosting text of #128. Its spirit stays: the row is marked, the panel opens beside it.</li>
+    <li><b>A panel sliding over the list from the right</b>: it covers the amount column, which is the complaint.</li>
+  </ul>
+
+  <h2>Motion of the detail (#128)</h2>
+  <dl class="timeline">
+    <dt>Open 0–300</dt><dd>The detail's column widens from 0 to 360 px (+16 gap), ease-out: the list narrows with it. The width moves, never a scale, so no text is ever squashed.</dd>
+    <dt>Open 120–300</dt><dd>The content, laid out at its final width from the start, fades in and slides 8 px from the right (180 ms, ease-out), once there is room for it.</dd>
+    <dt>Close 0–120</dt><dd>The content fades out (120 ms, ease-in), first.</dd>
+    <dt>Close 100–320</dt><dd>Then the column closes (220 ms, ease-in); the row's mark leaves at the end.</dd>
+    <dt>Phone</dt><dd>The sheet slides up from the bottom edge (300 ms, ease-out) as the backdrop fades in (200 ms); it leaves downwards in 200 ms. It can be dragged down.</dd>
+    <dt>Reduced</dt><dd>Nothing moves: the detail is there, or not.</dd>
+  </dl>
+  <p class="t-caption" style="margin-top:8px">The tests (#128): the column's width at 0, 150 and 300 ms; the content's opacity 0 until 120 ms; no transform with a scale on the panel or its text at any frame; nothing under reduced motion.</p>
+
+  <h2>To decide</h2>
+  <ul>
+    <li>This departs from docs/design.md (“the clicked line becomes the detail panel”): the rule would read “the row is marked and the detail opens beside it”.</li>
+  </ul>
+</aside>
+</div>
+
+<script>
+  // The rows, invented. [day of October 2026, raw label, account, amount in cents, to review]
+  const LINES = [
+    [31, "PRLV SEPA WAVELY MOBILE FACTURE 2026-10 FORFAIT 120 GO REF WM-88412097", "Current account", -1600],
+    [31, "CB GREENMARKET RIVERTON 30/10", "Current account", -5240],
+    [30, "VIR SEPA LUMEN STUDIO SALAIRE OCTOBRE 2026", "Current account", 290000],
+    [30, "VIR PERMANENT VERS LIVRET A NORTHBANK", "Current account", -25000],
+    [29, "CB FUELSTOP AIRE DE BELLEVUE 29/10", "Current account", -5870],
+    [28, "PAYLINK *PIXELPLAY STORE ONLINE PURCHASE 1-4471", "Current account", -1499, true],
+    [28, "PRLV SEPA HARBOR SAVINGS ECHEANCE PRET IMMO 0042-77 OCT 2026", "Current account", -61000, false, true],
+    [27, "CB CORNER PHARMACY RIVERTON 27/10", "Current account", -1960],
+    [27, "VIR HEALTHFUND REMBOURSEMENT SOINS DU 14/10", "Current account", 1372],
+    [26, "CB BOOKNOOK RIVERTON", "Current account", -2390],
+    [25, "CB GREENMARKET RIVERTON 25/10", "Current account", -5200, true],
+    [24, "PRLV SEPA STREAMLY ABONNEMENT PREMIUM FAMILLE OCTOBRE 2026", "Current account", -1799],
+    [23, "RETRAIT DAB NORTHBANK RIVERTON CENTRE", "Current account", -6000],
+    [22, "CB RAILHOP BILLETS EN LIGNE", "Current account", -8640],
+    [21, "VIR SEPA SHARED PARKING REMBOURSEMENT SEPTEMBRE", "Current account", 4500],
+    [20, "CB RIVERSIDE GYM ABONNEMENT MENSUEL", "Current account", -3490],
+    [19, "FRAIS TENUE DE COMPTE OCTOBRE", "Current account", -250],
+    [18, "VIR VERS NORTHBANK PEA", "Current account", -35000],
+    [17, "CB CORNER BISTRO RIVERTON", "Current account", -5600],
+    [16, "PRLV SEPA RIVERTON ENERGIE ELECTRICITE ECHEANCE 10", "Current account", -7400],
+    [15, "CB HARDWARE HUT ZONE DES CHAMPS", "Current account", -4318],
+    [14, "VIR SEPA ALEX MARTIN EPARGNE PROJET", "Current account", -10000],
+  ];
+
+  const money = new Intl.NumberFormat("en-GB", { style: "currency", currency: "EUR" });
+
+  const amount = (cents) =>
+    '<span class="amount' + (cents > 0 ? " in" : "") + '">' + (cents > 0 ? "+" : "−") + money.format(Math.abs(cents) / 100) + "</span>";
+
+  const review = (flag) => (flag ? '<span class="chip review tag">To review</span>' : "");
+
+  document.getElementById("ops-desktop").innerHTML =
+    LINES.map(([day, label, account, cents, toReview, open], index) =>
+      '<div class="op" role="row" tabindex="0" data-op aria-rowindex="' + (index + 1) + '" aria-selected="' + Boolean(open) + '">' +
+      '<span class="day">' + day + " Oct.</span>" +
+      '<span class="label"><span class="text">' + label + "</span>" + review(toReview) + "</span>" +
+      '<span class="acct">' + account + "</span>" +
+      '<span class="r">' + amount(cents) + "</span></div>",
+    ).join("") +
+    '<div class="loading-more"><svg class="loader" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" aria-hidden="true"><path d="M5 11v4a7 7 0 0 0 14 0v-4"/><circle class="coin" cx="12" cy="6" r="3" fill="currentColor" stroke="none"/></svg>Loading more lines</div>';
+
+  document.querySelectorAll("[data-phone-list]").forEach((list) => {
+    let html = "";
+    let last = 0;
+
+    LINES.slice(0, Number(list.dataset.phoneList)).forEach(([day, label, account, cents, toReview]) => {
+      if (day !== last) {
+        const weekday = new Date(2026, 9, day).toLocaleDateString("en-GB", { weekday: "long" });
+        html += '<div class="day-break">' + weekday + " " + day + " October</div>";
+        last = day;
+      }
+
+      html += '<div class="pop"><div class="stack"><span class="text">' + label + '</span><span class="sub">' + account + (toReview ? " · to review" : "") + "</span></div>" + amount(cents) + "</div>";
+    });
+
+    list.innerHTML = html;
+  });
+</script>
+<script src="assets/proto.js"></script>
+</body>
+</html>

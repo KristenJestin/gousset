@@ -1,7 +1,6 @@
 import {
   DataExport,
   Expenses,
-  FixtureLedger,
   ImportProfiles,
   Imports,
   Merchants,
@@ -67,7 +66,6 @@ const ROWS: MemoryRows = {
 
 function onToday(): Runner<GoussetServices> {
   const layer = Layer.mergeAll(
-    FixtureLedger,
     memoryAccountStore(new Map([[reader.userId, ROWS]])),
     // The refusals tried here come before any rule, merchant or category is read.
     memoryLineStore(),

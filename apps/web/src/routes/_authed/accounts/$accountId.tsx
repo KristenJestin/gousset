@@ -324,14 +324,9 @@ function CloseDialog({
       title={m.accountCloseTitle({ name })}
       description={m.accountCloseDescription()}
       open={open}
-      onOpenChange={(next) => {
-        // While the form is sent it stays open: its answer lands on the form that sent it.
-        if (!next && busy) {
-          return;
-        }
-
-        onOpenChange(next);
-      }}
+      onOpenChange={onOpenChange}
+      // While the form is sent it stays open: its answer lands on the form that sent it.
+      sending={busy}
       onSubmit={(event) => {
         event.preventDefault();
         onConfirm();
@@ -526,13 +521,8 @@ function ExpiryDialog({
       title={m.accountCreditExpiryTitle({ label })}
       description={m.accountCreditExpiryDescription()}
       open={open}
-      onOpenChange={(next) => {
-        if (!next && busy) {
-          return;
-        }
-
-        onOpenChange(next);
-      }}
+      onOpenChange={onOpenChange}
+      sending={busy}
       onSubmit={(event) => {
         event.preventDefault();
         void save();
@@ -710,13 +700,8 @@ function NoteBalanceDialog({
       title={m.accountBlockNoteBalance()}
       description={m.accountNoteBalanceDescription()}
       open={open}
-      onOpenChange={(next) => {
-        if (!next && busy) {
-          return;
-        }
-
-        onOpenChange(next);
-      }}
+      onOpenChange={onOpenChange}
+      sending={busy}
       onSubmit={(event) => {
         event.preventDefault();
         void submit();

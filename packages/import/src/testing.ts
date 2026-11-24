@@ -1,6 +1,8 @@
 import { exampleStatement } from "@gousset/fixture";
 import fc from "fast-check";
 
+import { decodeEntities } from "./text";
+
 // Made-up statements of any size, for the property tests: the fixture's writers write them, the
 // readers must read back what they hold.
 
@@ -35,3 +37,13 @@ const parts = fc.record({
 
 /** The example statement's bank and account, with any lines, opening balance and last day. */
 export const madeUpStatements = parts.map((made) => ({ ...exampleStatement, ...made }));
+
+/**
+ * The made-up statements whose labels hold no entity, for the formats that decode them (OFX,
+ * CAMT.053). Their readers decode a label until no entity is left (README, "Entities are decoded
+ * until none is left"), so a label written as `&#0;` or `&AMP;` reads back as the entity it looks
+ * like, never as written: those labels have tests of their own.
+ */
+export const madeUpStatementsWithoutEntities = madeUpStatements.filter((statement) =>
+  statement.lines.every((line) => decodeEntities(line.label) === line.label),
+);

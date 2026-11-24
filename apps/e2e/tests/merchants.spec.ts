@@ -3,6 +3,7 @@ import { exampleStatement } from "@gousset/fixture";
 import type { Statement } from "@gousset/fixture";
 
 import type { TestUser } from "../src/auth";
+import { onPhone } from "../src/frame";
 import { importsOn, statementFile } from "../src/imports";
 import {
   addUser,
@@ -372,7 +373,7 @@ test("choosing a merchant's default category in its page shows it there; None cl
   await animationsDone(page);
 });
 
-test("a merchant's dialog fades and grows in 200 ms, and appears at once under reduced motion", async ({
+test("a merchant's dialog fades and grows in 200 ms (rises in 300 ms on a phone), and appears at once under reduced motion", async ({
   page,
   app,
   user,
@@ -385,7 +386,7 @@ test("a merchant's dialog fades and grows in 200 ms, and appears at once under r
 
   const dialog = page.getByRole("dialog", { name: "Rename Lanternfield" });
 
-  await expect(dialog).toHaveCSS("transition-duration", "0.2s");
+  await expect(dialog).toHaveCSS("transition-duration", onPhone(page) ? "0.3s" : "0.2s");
   await expect(dialog).toHaveCSS("transition-timing-function", "cubic-bezier(0, 0, 0.2, 1)");
   await page.keyboard.press("Escape");
   await expect(dialog).toBeHidden();

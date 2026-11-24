@@ -124,8 +124,8 @@ function DeleteRule() {
 /**
  * A focused task over the page: a title, a description, a body, actions (`Button`s, the main one
  * last; `DialogClose` makes one close it) and a close button in the corner. Modal: focus stays
- * inside, the page behind is inert; Escape, the close button or a press outside closes it, and
- * focus returns to what opened it. `AlertDialog` asks a question that must be answered (Cancel or
+ * inside, the page behind is inert and dimmed by the backdrop; Escape, the close button or a press
+ * on the backdrop closes it (not while its form is `sending`), and focus returns to what opened it. `AlertDialog` asks a question that must be answered (Cancel or
  * the agreeing answer); a press outside does not close it, and a confirmation that returns a
  * promise keeps it open, the button busy, until it settles.
  *
@@ -134,8 +134,9 @@ function DeleteRule() {
  * and the page closes it once the form is accepted. On a phone (below 768 px) the dialog is a
  * sheet along the bottom edge.
  *
- * Motion: the dialog fades and grows in 200 ms, ease-out (on a phone it slides up from the bottom
- * edge), the page behind veils in 200 ms; both leave the same way. Cut under reduced motion.
+ * Motion: the dialog fades and grows from 96 % in 200 ms, ease-out, and leaves in 150 ms, ease-in;
+ * on a phone it rises from the bottom edge in 300 ms and goes back down in 200 ms. The backdrop
+ * fades in and out in 200 ms. Cut under reduced motion.
  *
  * Don't: open a dialog from a dialog, put an action's form inline in a page, use it for what a
  * page or a `Sheet` holds better (a line's detail, a long form), or ask "Are you sure?" where an undo would do.

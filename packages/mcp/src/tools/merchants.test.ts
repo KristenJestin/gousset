@@ -2,7 +2,6 @@ import {
   CategoryStore,
   DataExport,
   Expenses,
-  FixtureLedger,
   ImportProfiles,
   Imports,
   MAX_MERCHANT_NAME,
@@ -314,7 +313,6 @@ function categoriesOf(state: Store) {
 
 function runnerOf(state: Store): Runner<GoussetServices> {
   const layer = Layer.mergeAll(
-    FixtureLedger,
     memoryAccountStore(),
     memoryLineStore(),
     categoriesOf(state),
