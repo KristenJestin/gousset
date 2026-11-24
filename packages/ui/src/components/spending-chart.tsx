@@ -1,3 +1,5 @@
+import { curveMonotoneX } from "d3-shape";
+
 import { useHydrated } from "../hooks/use-hydrated";
 import { useUiMessages } from "../hooks/use-ui-messages";
 import type { SpendingDay, SpendingRow } from "../lib/chart-amounts";
@@ -165,8 +167,11 @@ export function SpendingChart({
           animationDuration={duration.slow * 1000}
         >
           <Grid />
+          {/* A running total never goes down: a monotone curve cannot dip between two days, where
+              Bklit's default (natural) overshoots. */}
           <Line
             dataKey="previous"
+            curve={curveMonotoneX}
             stroke="var(--chart-5)"
             strokeWidth={1.5}
             dashFromIndex={0}
@@ -176,6 +181,7 @@ export function SpendingChart({
           />
           <Line
             dataKey="current"
+            curve={curveMonotoneX}
             stroke="var(--chart-1)"
             strokeWidth={2}
             fadeEdges={false}
