@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en" data-color-scheme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>5 · Monthly review, empty · Prototype 0.2 · Gousset</title>
+<link rel="stylesheet" href="assets/proto.css">
+<link rel="stylesheet" href="assets/icons.css">
+<style>
+  /* The block takes the page's width, as every block does: no half-empty page. */
+  .coming { max-width: none; }
+  .holds { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .coming-head .stack { gap: 4px; }
+  .coming-head p { color: var(--soft-foreground); max-width: 560px; }
+  .hold .t-caption { color: var(--soft-foreground); }
+  .go .t-caption { color: var(--soft-foreground); }
+  .go .count { margin-left: auto; color: var(--muted-foreground); font-size: 12px; white-space: nowrap; }
+  .go.first .icon { background: color-mix(in oklab, var(--primary) 12%, transparent); color: var(--primary); }
+  .go.first .t-strong { color: var(--primary); }
+  .section-label { display: flex; align-items: center; }
+  [data-user="new"] .if-data,
+  [data-user="data"] .if-new { display: none; }
+  .app.phone .coming-head { flex-direction: column; gap: 12px; padding: 16px; }
+  .app.phone .holds { grid-template-columns: 1fr; gap: 14px; padding: 0 16px 16px; }
+  .app.phone .go { padding: 12px 16px; }
+  .app.phone .section-label { padding: 14px 16px 6px; }
+  .mcp-answer { margin-top: 8px; padding: 10px 12px; border-radius: var(--radius-md); background: var(--muted); font-family: var(--font-mono); font-size: 12px; line-height: 18px; color: var(--foreground); white-space: pre-wrap; }
+</style>
+</head>
+<body>
+<div class="proto">
+<header class="bar" data-title="5 · Monthly review, empty (#126)"></header>
+<main class="canvas">
+<div class="state-switch">
+  <span class="seg" role="group" aria-label="Who looks">
+    <button type="button" data-show="user:data" data-default>A user with imported lines</button>
+    <button type="button" data-show="user:new">A new user</button>
+  </span>
+</div>
+<div class="devices">
+
+<!-- ═══════════════ Desktop ═══════════════ -->
+<section class="device desktop">
+<div class="caption">Desktop · 1280 px · the review, until it reads real lines (0.4)</div>
+<div class="screen">
+<div class="app">
+<aside class="sidebar" data-current="review"></aside>
+<div class="main">
+<div class="page">
+  <header class="page-head"><h1 class="t-title">Review</h1></header>
+  <section class="block coming" aria-labelledby="coming-title">
+    <div class="coming-head">
+      <span class="tile"><span class="i i-chart-donut lg"></span></span>
+      <div class="stack">
+        <h2 class="t-heading" id="coming-title">Your monthly review is not ready yet</h2>
+        <p>It will read your imported lines month by month, and say where the money went. It comes in a later version; until then, nothing here is invented.</p>
+      </div>
+    </div>
+    <dl class="holds" aria-label="What the review will hold">
+      <div class="hold"><span class="swatch" style="background:var(--money-income)"></span><div class="stack"><dt class="t-strong">Income</dt><dd class="t-caption">What came in.</dd></div></div>
+      <div class="hold"><span class="swatch" style="background:var(--money-spent)"></span><div class="stack"><dt class="t-strong">Spent</dt><dd class="t-caption">By subject.</dd></div></div>
+      <div class="hold"><span class="swatch" style="background:var(--money-saved)"></span><div class="stack"><dt class="t-strong">Set aside</dt><dd class="t-caption">Savings, investments.</dd></div></div>
+      <div class="hold"><span class="swatch" style="background:var(--money-left)"></span><div class="stack"><dt class="t-strong">Left</dt><dd class="t-caption">What the month leaves.</dd></div></div>
+    </dl>
+    <p class="section-label t-label">What works today</p>
+    <a class="go first if-new" href="#"><span class="icon"><span class="i i-file-import"></span></span><span class="stack grow"><span class="t-strong">Import your first statement</span><span class="t-caption">OFX, QIF, CAMT.053, MT940 or CSV from your bank.</span></span><span class="i i-chevron-right"></span></a>
+    <a class="go" href="#"><span class="icon"><span class="i i-building-bank"></span></span><span class="stack grow"><span class="t-strong">Accounts</span><span class="t-caption">Each balance, its lines and its chart.</span></span><span class="count num if-data">5 accounts</span><span class="count if-new">None yet</span><span class="i i-chevron-right"></span></a>
+    <a class="go if-data" href="#"><span class="icon"><span class="i i-file-import"></span></span><span class="stack grow"><span class="t-strong">Import</span><span class="t-caption">Add your banks' statements; nothing is added twice.</span></span><span class="count num">Last on 2 Nov.</span><span class="i i-chevron-right"></span></a>
+    <a class="go" href="#"><span class="icon"><span class="i i-list-details"></span></span><span class="stack grow"><span class="t-strong">Operations</span><span class="t-caption">Search and filter every imported line.</span></span><span class="count num if-data">4,838 lines · 14 to review</span><span class="count if-new">None yet</span><span class="i i-chevron-right"></span></a>
+  </section>
+</div>
+</div>
+</div>
+</div>
+</section>
+
+<!-- ═══════════════ Phone ═══════════════ -->
+<section class="device phone">
+<div class="caption">Phone · the same, in one column</div>
+<div class="screen">
+<div class="app phone">
+<div class="statusbar"></div>
+<div class="main">
+<div class="page">
+  <h1 class="t-title">Review</h1>
+  <section class="block coming">
+    <div class="coming-head">
+      <span class="tile"><span class="i i-chart-donut lg"></span></span>
+      <div class="stack" style="gap:4px">
+        <h2 class="t-heading">Your monthly review is not ready yet</h2>
+        <p class="t-soft">It will read your lines month by month and say where the money went. Nothing here is invented.</p>
+      </div>
+    </div>
+    <dl class="holds">
+      <div class="hold"><span class="swatch" style="background:var(--money-income)"></span><div class="stack"><dt class="t-strong">Income</dt><dd class="t-caption">What came in, and from where.</dd></div></div>
+      <div class="hold"><span class="swatch" style="background:var(--money-spent)"></span><div class="stack"><dt class="t-strong">Spent</dt><dd class="t-caption">By subject, against the months before.</dd></div></div>
+      <div class="hold"><span class="swatch" style="background:var(--money-saved)"></span><div class="stack"><dt class="t-strong">Set aside</dt><dd class="t-caption">Savings and investments.</dd></div></div>
+      <div class="hold"><span class="swatch" style="background:var(--money-left)"></span><div class="stack"><dt class="t-strong">Left</dt><dd class="t-caption">What the month leaves you.</dd></div></div>
+    </dl>
+    <p class="section-label t-label">What works today</p>
+    <a class="go first if-new" href="#"><span class="icon"><span class="i i-file-import"></span></span><span class="stack grow"><span class="t-strong">Import your first statement</span></span><span class="i i-chevron-right"></span></a>
+    <a class="go" href="#"><span class="icon"><span class="i i-building-bank"></span></span><span class="stack grow"><span class="t-strong">Accounts</span><span class="t-caption if-data num">5 accounts</span><span class="t-caption if-new">None yet</span></span><span class="i i-chevron-right"></span></a>
+    <a class="go if-data" href="#"><span class="icon"><span class="i i-file-import"></span></span><span class="stack grow"><span class="t-strong">Import</span><span class="t-caption">Last on 2 Nov.</span></span><span class="i i-chevron-right"></span></a>
+    <a class="go" href="#"><span class="icon"><span class="i i-list-details"></span></span><span class="stack grow"><span class="t-strong">Operations</span><span class="t-caption if-data num">4,838 lines · 14 to review</span><span class="t-caption if-new">None yet</span></span><span class="i i-chevron-right"></span></a>
+  </section>
+</div>
+</div>
+<nav class="tabbar" data-current="review"></nav>
+</div>
+</div>
+</section>
+
+</div>
+</main>
+
+<aside class="notes">
+  <h2>What changes</h2>
+  <ul>
+    <li><b>No invented figure, name or chart</b>, for any user: the made-up household stays in the fixtures, for tests and Storybook only.</li>
+    <li><b>One block says what the review will be</b>: its four parts, each with the colour it will keep (income, spent, set aside, left), in words only. No grey chart pretending to load: a skeleton promises data that is not coming.</li>
+    <li><b>It points to what works today</b>: Accounts, Import, Operations, with the user's own counts at the right. A new user sees <i>Import your first statement</i> first, in the accent; the counts say “None yet”.</li>
+    <li><b>The block takes the page's width</b>, as the other pages' blocks do; the four parts on one row.</li>
+    <li><b>The page keeps its place in the navigation</b>: the review stays the first tab, so nothing moves when it arrives in 0.4.</li>
+    <li><b>The MCP <code>month</code> tool answers the same</b>, in text, with no figure:</li>
+  </ul>
+  <p class="mcp-answer">The monthly review is not available yet: it comes in a later version of Gousset. Your accounts and lines are: call accounts {"action": "list"} for the balances, or lines {"action": "list", "account": "Current account"} for the lines.</p>
+
+  <h2>Rejected</h2>
+  <ul class="rejected">
+    <li><b>Hiding the review until 0.4</b>: the first tab would change later, and the user would not know it is coming.</li>
+    <li><b>A rough review from the lines</b> (totals in and out per month): a half review, with no subjects, that would contradict the real one once it lands.</li>
+    <li><b>An illustration</b>: the app has none elsewhere; the four colours say enough.</li>
+  </ul>
+
+  <h2>Motion</h2>
+  <dl class="timeline">
+    <dt>Load</dt><dd>None: the block comes with the page, no skeleton, nothing counts up.</dd>
+    <dt>Hover</dt><dd>A row takes the muted band (150 ms) and its chevron moves 2 px right.</dd>
+    <dt>Reduced</dt><dd>The band only.</dd>
+  </dl>
+
+  <h2>To decide</h2>
+  <ul>
+    <li>Whether to say “in 0.4” to the user, or only “a later version” (drawn): a version number means little to most users and ties the promise to a date.</li>
+  </ul>
+</aside>
+</div>
+<script src="assets/proto.js"></script>
+</body>
+</html>

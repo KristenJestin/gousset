@@ -1695,6 +1695,110 @@ a {
   border-top: 1px solid var(--border);
 }
 
+/* Dialog: a floating surface in the middle of the page, over the same backdrop as a sheet. */
+.dialog {
+  position: absolute;
+  z-index: 21;
+  top: 50%;
+  left: 50%;
+  display: flex;
+  flex-direction: column;
+  width: 440px;
+  max-height: calc(100% - 64px);
+  border-radius: var(--radius-lg);
+  translate: -50% -50%;
+}
+.dialog .sheet-head {
+  padding: var(--s-5) var(--s-6) var(--s-3);
+}
+.dialog .sheet-body {
+  gap: var(--s-4);
+}
+.dialog .sheet-foot {
+  border-top: 0;
+  padding-top: 0;
+}
+
+/* A sheet's or a dialog's submit button: its label, or the loader and the busy label while the
+   form is sent (`data-form="sending"` on the root). The button keeps its width. */
+.btn .busy {
+  display: none;
+}
+[data-form="sending"] .btn.submit {
+  cursor: progress;
+  opacity: 0.85;
+}
+[data-form="sending"] .btn.submit .idle {
+  display: none;
+}
+[data-form="sending"] .btn.submit .busy {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s-2);
+}
+[data-form="sending"] .sending-dim {
+  opacity: 0.6;
+  pointer-events: none;
+}
+
+/* Opening and closing (#121). A `.layer` holds a backdrop and what floats over it; with no
+   `data-open` it is drawn open, as a still. In: 300 ms ease-out (the backdrop 200 ms); out:
+   200 ms ease-in, both. The transition set on a state is the one used to reach it. */
+.layer > .backdrop {
+  opacity: 1;
+  transition: opacity var(--base) var(--ease-out);
+}
+.layer > .sheet.side,
+.layer > .sheet.bottom {
+  transform: none;
+  transition: transform var(--slow) var(--ease-out);
+}
+.layer > .dialog {
+  opacity: 1;
+  transform: none;
+  transition:
+    opacity var(--base) var(--ease-out),
+    transform var(--base) var(--ease-out);
+}
+.layer[data-open="false"] > .backdrop {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--base) var(--ease-in);
+}
+.layer[data-open="false"] > .sheet.side {
+  transform: translateX(calc(100% + 32px));
+  transition: transform var(--base) var(--ease-in);
+}
+.layer[data-open="false"] > .sheet.bottom {
+  transform: translateY(calc(100% + 32px));
+  transition: transform var(--base) var(--ease-in);
+}
+.layer[data-open="false"] > .dialog {
+  opacity: 0;
+  transform: scale(0.96);
+  pointer-events: none;
+  transition:
+    opacity 150ms var(--ease-in),
+    transform 150ms var(--ease-in);
+}
+
+/* A menu: fades and rises 4 px from the button that opens it, 150 ms; leaves in 100 ms. */
+.menu-layer > .menu {
+  opacity: 1;
+  transform: none;
+  transition:
+    opacity var(--fast) var(--ease-out),
+    transform var(--fast) var(--ease-out);
+}
+.menu-layer[data-open="false"] > .menu {
+  opacity: 0;
+  transform: translateY(4px);
+  pointer-events: none;
+  transition:
+    opacity 100ms var(--ease-in),
+    transform 100ms var(--ease-in);
+}
+
 /* ───────────────────────── Motion: everything is cut under reduced motion ───────────────────────── */
 
 @media (prefers-reduced-motion: reduce) {
@@ -1813,11 +1917,14 @@ a {
   zoom: var(--fit, 1);
 }
 [data-view="both"] .devices {
-  flex-wrap: nowrap;
   zoom: var(--fit-both, 1);
 }
 [data-view="both"] .devices .device.desktop {
   zoom: 1;
+}
+/* A close-up (no width class) shows in every view, on its own row. */
+.devices > .device:not(.desktop):not(.phone) {
+  flex-basis: 100%;
 }
 .notes {
   overflow-y: auto;
