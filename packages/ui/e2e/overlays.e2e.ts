@@ -10,6 +10,96 @@ async function transitionSeconds(element: Locator) {
   return Math.max(...durations.split(",").map((value) => Number.parseFloat(value)));
 }
 
+/**
+ * The longest transition of each part (`data-slot`) while it leaves, in seconds: read the moment
+ * ui-sdk marks it `data-ending-style`, after `close` (a press, Escape) starts the exit.
+ */
+async function leavingSeconds(
+  page: Page,
+  slots: ReadonlyArray<string>,
+  close: () => Promise<void>,
+) {
+  const watch = await page.evaluateHandle((names) => {
+    const leaving = names.map(
+      (name) =>
+        new Promise<string>((resolve) => {
+          const node = document.querySelector(`[data-slot="${name}"]`);
+
+          if (node === null) {
+            resolve("none");
+
+            return;
+          }
+
+          const observer = new MutationObserver(() => {
+            if (node.hasAttribute("data-ending-style")) {
+              observer.disconnect();
+              resolve(getComputedStyle(node).transitionDuration);
+            }
+          });
+
+          observer.observe(node, { attributes: true, attributeFilter: ["data-ending-style"] });
+        }),
+    );
+
+    return { leaving: Promise.all(leaving) };
+  }, slots);
+
+  await close();
+
+  const durations = await watch.evaluate((held) => held.leaving);
+
+  return durations.map((each) =>
+    Math.max(...each.split(",").map((value) => Number.parseFloat(value))),
+  );
+}
+
+/**
+ * Where a focused field's ring reaches (its outline, outside its box by its offset and its width)
+ * and the box its scrolling container clips to (its padding box), in the page's pixels.
+ */
+async function ringAndClip(field: Locator, scroller: Locator) {
+  const ring = await field.evaluate((node) => {
+    const style = getComputedStyle(node);
+    const reach = Number.parseFloat(style.outlineOffset) + Number.parseFloat(style.outlineWidth);
+    const box = node.getBoundingClientRect();
+
+    return {
+      reach,
+      left: box.left - reach,
+      top: box.top - reach,
+      right: box.right + reach,
+      bottom: box.bottom + reach,
+    };
+  });
+
+  const clip = await scroller.evaluate((node) => {
+    const box = node.getBoundingClientRect();
+    const left = box.left + node.clientLeft;
+    const top = box.top + node.clientTop;
+
+    return { left, top, right: left + node.clientWidth, bottom: top + node.clientHeight };
+  });
+
+  return { ring, clip };
+}
+
+/** The ring, 2 px wide and 2 px away, lies whole inside what clips it (half a pixel of rounding). */
+async function expectRingInside(field: Locator, scroller: Locator) {
+  const { ring, clip } = await ringAndClip(field, scroller);
+
+  expect(ring.reach).toBe(4);
+  expect(ring.left).toBeGreaterThanOrEqual(clip.left - 0.5);
+  expect(ring.top).toBeGreaterThanOrEqual(clip.top - 0.5);
+  expect(ring.right).toBeLessThanOrEqual(clip.right + 0.5);
+  expect(ring.bottom).toBeLessThanOrEqual(clip.bottom + 0.5);
+}
+
+/** Once nothing moves on the page any more: every transition and animation has ended. */
+async function atRest(page: Page) {
+  await expect.poll(async () => page.evaluate(() => document.getAnimations().length)).toBe(0);
+}
+
 test.describe("IconButton", () => {
   test("its name is its label, and its tooltip shows on focus", async ({ page }) => {
     await page.goto(story("actions-iconbutton", "ghost"));
@@ -305,19 +395,81 @@ test.describe("Dialog", () => {
     await expect(page.getByText("Closed")).toBeVisible();
   });
 
-  test("it grows in 200 ms with its backdrop, and not under reduced motion", async ({ page }) => {
+  test("it grows in 200 ms over its backdrop (rises in 300 ms on a phone), and not under reduced motion", async ({
+    page,
+  }) => {
     await page.goto(story("overlays-dialog", "default"));
     await page.getByRole("button", { name: "Rename the account" }).click();
 
     const dialog = page.getByRole("dialog");
     const backdrop = page.locator('[data-slot="dialog-backdrop"]');
+    const wide = (page.viewportSize()?.width ?? 0) >= 768;
 
     await expect(dialog).toBeVisible();
-    expect(await transitionSeconds(dialog)).toBe(0.2);
+    expect(await transitionSeconds(dialog)).toBe(wide ? 0.2 : 0.3);
     expect(await transitionSeconds(backdrop)).toBe(0.2);
     await page.emulateMedia({ reducedMotion: "reduce" });
     expect(await transitionSeconds(dialog)).toBe(0);
     expect(await transitionSeconds(backdrop)).toBe(0);
+  });
+
+  test("it leaves in 150 ms (200 ms on a phone), its backdrop fading out in 200 ms", async ({
+    page,
+  }) => {
+    await page.goto(story("overlays-dialog", "default"));
+    await page.getByRole("button", { name: "Rename the account" }).click();
+
+    const dialog = page.getByRole("dialog");
+    const wide = (page.viewportSize()?.width ?? 0) >= 768;
+
+    await expect(dialog).toBeVisible();
+    await atRest(page);
+
+    const [content, backdrop] = await leavingSeconds(
+      page,
+      ["dialog-content", "dialog-backdrop"],
+      async () => page.keyboard.press("Escape"),
+    );
+
+    expect(content).toBe(wide ? 0.15 : 0.2);
+    expect(backdrop).toBe(0.2);
+    await expect(dialog).toBeHidden();
+  });
+
+  test("its backdrop dims the page in the scrim's colour, in light and in dark", async ({
+    page,
+  }) => {
+    for (const scheme of ["light", "dark"] as const) {
+      await page.emulateMedia({ colorScheme: scheme });
+      await page.goto(story("overlays-dialog", "default"));
+      await page.getByRole("button", { name: "Rename the account" }).click();
+
+      const backdrop = page.locator('[data-slot="dialog-backdrop"]');
+
+      await expect(page.getByRole("dialog")).toBeVisible();
+      await expect(backdrop).toHaveCSS("background-color", await resolveToken(page, "--overlay"));
+      await expect(backdrop).toHaveCSS("opacity", "1");
+    }
+  });
+
+  test("a focused field's ring lies whole inside the dialog", async ({ page }) => {
+    await page.goto(story("overlays-dialog", "with-form"));
+
+    const trigger = page.getByRole("button", { name: "Note a balance" });
+
+    await trigger.focus();
+    await page.keyboard.press("Enter");
+
+    const dialog = page.getByRole("dialog", { name: "Note a balance" });
+    const balance = dialog.getByLabel("Balance");
+
+    await expect(dialog).toBeVisible();
+    await atRest(page);
+    // Reading starts at the title: Tab reaches the close button, then the field.
+    await page.keyboard.press("Tab");
+    await page.keyboard.press("Tab");
+    await expect(balance).toBeFocused();
+    await expectRingInside(balance, page.locator('[data-slot="dialog-content"]'));
   });
 
   test("a form dialog stays open on a refusal, and closes once accepted, focus back on its button", async ({
@@ -383,7 +535,7 @@ test.describe("Dialog", () => {
       expect(Math.round(box?.width ?? 0)).toBe(width);
       expect(Math.round((box?.y ?? 0) + (box?.height ?? 0))).toBe(height);
       await expect(dialog).toHaveCSS("border-bottom-left-radius", "0px");
-      expect(await transitionSeconds(dialog)).toBe(0.2);
+      expect(await transitionSeconds(dialog)).toBe(0.3);
       await page.emulateMedia({ reducedMotion: "reduce" });
       expect(await transitionSeconds(dialog)).toBe(0);
     } else {
@@ -526,7 +678,7 @@ test.describe("Sheet", () => {
     await expect(trigger).toBeFocused();
   });
 
-  test("it slides in, and only fades under reduced motion", async ({ page, hasTouch }) => {
+  test("it slides in, and does not move under reduced motion", async ({ page }) => {
     const positions = async () => {
       await page.goto(story("overlays-sheet", "default"));
 
@@ -542,7 +694,7 @@ test.describe("Sheet", () => {
             const start = performance.now();
 
             const sample = () => {
-              const sheet = document.querySelector('[data-slot="drawer-content"]');
+              const sheet = document.querySelector('[data-slot="dialog-content"]');
 
               if (sheet !== null) {
                 const box = sheet.getBoundingClientRect();
@@ -567,12 +719,113 @@ test.describe("Sheet", () => {
     };
 
     expect(await positions()).toBeGreaterThan(2);
-
-    // On a touch screen ui-sdk moves a bottom sheet with the browser's own scroll snapping,
-    // which still scrolls it into place under reduced motion: only the pointer driver fades.
-    test.skip(hasTouch, "ui-sdk's scroll-snap driver scrolls the sheet in under reduced motion");
     await page.emulateMedia({ reducedMotion: "reduce" });
     expect(await positions()).toBe(1);
+  });
+
+  test("it slides in in 300 ms and out in 200 ms, over a backdrop fading in and out in 200 ms; not under reduced motion", async ({
+    page,
+  }) => {
+    await page.goto(story("overlays-sheet", "default"));
+    await page.getByRole("button", { name: "Filters" }).click();
+
+    const sheet = page.getByRole("dialog", { name: "Filters" });
+    const backdrop = page.locator('[data-slot="dialog-backdrop"]');
+
+    await expect(sheet).toBeVisible();
+    expect(await transitionSeconds(sheet)).toBe(0.3);
+    expect(await transitionSeconds(backdrop)).toBe(0.2);
+    await atRest(page);
+
+    const [leaving, fading] = await leavingSeconds(
+      page,
+      ["dialog-content", "dialog-backdrop"],
+      async () => page.keyboard.press("Escape"),
+    );
+
+    expect(leaving).toBe(0.2);
+    expect(fading).toBe(0.2);
+    await expect(sheet).toBeHidden();
+
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await page.getByRole("button", { name: "Filters" }).click();
+    await expect(sheet).toBeVisible();
+    expect(await transitionSeconds(sheet)).toBe(0);
+    expect(await transitionSeconds(backdrop)).toBe(0);
+  });
+
+  test("a press on the backdrop closes it", async ({ page }) => {
+    await page.goto(story("overlays-sheet", "default"));
+    await page.getByRole("button", { name: "Filters" }).click();
+
+    const sheet = page.getByRole("dialog", { name: "Filters" });
+
+    await expect(sheet).toBeVisible();
+    await atRest(page);
+    // The top left corner: the backdrop, beside a side sheet and above a bottom one.
+    await page.mouse.click(4, 4);
+    await expect(sheet).toBeHidden();
+  });
+
+  test("while its form is sent, neither the backdrop, Escape, the close button nor Cancel closes it", async ({
+    page,
+  }) => {
+    await page.goto(story("overlays-sheet", "with-form"));
+
+    const trigger = page.getByRole("button", { name: "New account" });
+    const sheet = page.getByRole("dialog", { name: "New account" });
+
+    await trigger.focus();
+    await page.keyboard.press("Enter");
+    await expect(sheet.getByLabel("Name")).toBeFocused();
+    await atRest(page);
+    await page.keyboard.type("Joint account");
+    await page.keyboard.press("Enter");
+
+    // Sent: the story's answer takes a second and a half.
+    await expect(sheet.getByRole("button", { name: "Create the account" })).toHaveAttribute(
+      "aria-busy",
+      "true",
+    );
+    await expect(sheet.getByRole("button", { name: "Cancel" })).toBeDisabled();
+    await expect(sheet.getByRole("button", { name: "Close" })).toBeDisabled();
+    await page.mouse.click(4, 4);
+    await page.keyboard.press("Escape");
+    await expect(sheet).toHaveAttribute("data-open");
+    await expect(sheet).not.toHaveAttribute("data-ending-style");
+    await expect(page.getByText("Nothing created")).toBeVisible();
+
+    // Once answered, the page closes it.
+    await expect(sheet).toBeHidden();
+    await expect(page.getByText("Created", { exact: true })).toBeVisible();
+  });
+
+  test("a form sheet starts on its first field, its focus ring whole inside the scrolling body", async ({
+    page,
+  }) => {
+    await page.goto(story("overlays-sheet", "with-form"));
+
+    const trigger = page.getByRole("button", { name: "New account" });
+
+    await trigger.focus();
+    await page.keyboard.press("Enter");
+
+    const sheet = page.getByRole("dialog", { name: "New account" });
+    const name = sheet.getByLabel("Name");
+
+    await expect(name).toBeFocused();
+    await atRest(page);
+    await expectRingInside(name, sheet.locator('[data-slot="sheet-body"]'));
+
+    // Every field of the body, each in its turn.
+    for (const label of ["Institution", "Currency", "Opening balance"]) {
+      await page.keyboard.press("Tab");
+
+      const field = sheet.getByLabel(label);
+
+      await expect(field).toBeFocused();
+      await expectRingInside(field, sheet.locator('[data-slot="sheet-body"]'));
+    }
   });
 });
 

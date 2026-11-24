@@ -112,11 +112,8 @@ function CreateUser({ announce }: { announce: (message: string | undefined) => v
     <Dialog
       trigger={<Button icon="add">{m.usersCreateTitle()}</Button>}
       open={open}
+      sending={busy}
       onOpenChange={(next) => {
-        if (!next && busy) {
-          return;
-        }
-
         setOpen(next);
         setRefusal(undefined);
 
@@ -162,7 +159,7 @@ function CreateUser({ announce }: { announce: (message: string | undefined) => v
  * password: they change it at the next sign-in, and every device and MCP client signed in as them
  * is signed out. As creating one: a refusal keeps the dialog open, said under the field at fault;
  * once reset the dialog closes (focus back on the row's button), the page says so and the list is
- * read again. Motion: the shared `Dialog`'s, 200 ms in and out, cut under reduced motion.
+ * read again. Motion: the shared `Dialog`'s, cut under reduced motion.
  */
 function ResetPassword({
   user,
@@ -211,11 +208,8 @@ function ResetPassword({
         </Button>
       }
       open={open}
+      sending={busy}
       onOpenChange={(next) => {
-        if (!next && busy) {
-          return;
-        }
-
         setOpen(next);
         setRefusal(undefined);
 

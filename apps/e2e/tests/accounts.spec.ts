@@ -119,6 +119,51 @@ test("the account form, a long one, opens in a side sheet, along the bottom on a
   await expect(trigger).toBeFocused();
 });
 
+test("the account sheet opens on its first field, its focus ring whole, and a press on the backdrop closes it", async ({
+  userPage: page,
+}) => {
+  await visit(page, "/accounts");
+
+  const trigger = page.getByRole("button", { name: "Add an account", exact: true });
+
+  await trigger.focus();
+  await page.keyboard.press("Enter");
+
+  const sheet = page.getByRole("dialog", { name: "Add an account" });
+  const name = sheet.getByRole("textbox", { name: "Name" });
+
+  await expect(name).toBeFocused();
+
+  // #122: the ring (2 px, 2 px away) lies inside the box the scrolling body clips to. Both move
+  // together while the sheet slides in, so this holds from the first frame.
+  const scroller = sheet.locator('[data-slot="sheet-body"]');
+
+  const ring = await name.evaluate((node) => {
+    const style = getComputedStyle(node);
+    const reach = Number.parseFloat(style.outlineOffset) + Number.parseFloat(style.outlineWidth);
+    const box = node.getBoundingClientRect();
+
+    return { reach, left: box.left - reach, top: box.top - reach, right: box.right + reach };
+  });
+
+  const clip = await scroller.evaluate((node) => {
+    const box = node.getBoundingClientRect();
+    const left = box.left + node.clientLeft;
+
+    return { left, top: box.top + node.clientTop, right: left + node.clientWidth };
+  });
+
+  expect(ring.reach).toBe(4);
+  expect(ring.left).toBeGreaterThanOrEqual(clip.left - 0.5);
+  expect(ring.top).toBeGreaterThanOrEqual(clip.top - 0.5);
+  expect(ring.right).toBeLessThanOrEqual(clip.right + 0.5);
+
+  // #121: a press on the dimmed page closes it, sending nothing. The top left corner is the
+  // backdrop, beside the side sheet and above the bottom one.
+  await page.mouse.click(4, 4);
+  await expect(sheet).toBeHidden();
+});
+
 test("editing an account changes its settings", async ({ userPage: page }) => {
   await visit(page, "/accounts");
   await page.getByRole("button", { name: "Add an account", exact: true }).click();

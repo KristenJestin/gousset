@@ -6,6 +6,12 @@ import { Button } from "./button";
 import { Sheet } from "./sheet";
 import { TextField } from "./text-field";
 
+function wait(milliseconds: number) {
+  return new Promise<void>((resolve) => {
+    setTimeout(resolve, milliseconds);
+  });
+}
+
 function Filters() {
   return (
     <Sheet
@@ -25,12 +31,22 @@ function Filters() {
 
 /**
  * A long form in a sheet, as a page holds an action with many fields: it stays open while a
- * refusal shows under its field, and closes once the form is accepted.
+ * refusal shows under its field, stays open while it is sent (a second and a half here), and
+ * closes once the form is accepted.
  */
 function NewAccount() {
   const [open, setOpen] = useState(false);
   const [refused, setRefused] = useState(false);
+  const [sending, setSending] = useState(false);
   const [created, setCreated] = useState(false);
+
+  async function send() {
+    setSending(true);
+    await wait(1500);
+    setSending(false);
+    setCreated(true);
+    setOpen(false);
+  }
 
   return (
     <div className="flex flex-col items-start gap-3">
@@ -52,11 +68,15 @@ function NewAccount() {
             return;
           }
 
-          setCreated(true);
-          setOpen(false);
+          void send();
         }}
         onInput={() => setRefused(false)}
-        actions={<Button type="submit">Create the account</Button>}
+        sending={sending}
+        actions={
+          <Button type="submit" loading={sending}>
+            Create the account
+          </Button>
+        }
       >
         <TextField
           label="Name"
@@ -73,15 +93,18 @@ function NewAccount() {
 }
 
 /**
- * A panel over the page, on ui-sdk's `Drawer`: from the right on a wide screen (from 768 px), from
- * the bottom on a phone, where it can be dragged down to close. For a line's detail, the filters,
- * or a long form (`onSubmit`: the body and actions are one form, Cancel comes first, and the page
- * closes it once the form is accepted; docs/design.md, "Actions and forms"). Modal: focus stays
- * inside; Escape, the close button, a press outside or a swipe closes it, and focus returns to what
- * opened it.
+ * A panel over the page, on ui-sdk's `Dialog`: from the right on a wide screen (from 768 px), from
+ * the bottom on a phone. For a line's detail, the filters, or a long form (`onSubmit`: the body and
+ * actions are one form, Cancel comes first, focus starts on the first field, and the page closes
+ * it once the form is accepted; docs/design.md, "Actions and forms"). Modal: focus stays inside,
+ * the page behind is dimmed by the backdrop; Escape, the close button or a press on the backdrop
+ * closes it, but not while its form is `sending`, and focus returns to what opened it.
  *
- * Motion: it slides in from its edge with ui-sdk's short spring (about 300 ms) while the page
- * behind veils; under reduced motion it fades instead of sliding.
+ * Its body scrolls between the header and the actions, its padding inside the scroller: a focused
+ * field's ring is never clipped.
+ *
+ * Motion: it slides in from its edge in 300 ms, ease-out, and out in 200 ms, ease-in, while the
+ * backdrop fades in and out in 200 ms; cut under reduced motion.
  *
  * Don't: stack a sheet on a sheet, use it for a question to answer (that is an `AlertDialog`) or
  * for a short form (that is a `Dialog`), or put the page's main content in it.
@@ -102,5 +125,14 @@ export const Phone: Story = {
   globals: { viewport: { value: "mobile1", isRotated: false } },
 };
 
-/** A long form: Cancel, then the submit button; an empty name is refused under its field. */
+/**
+ * A long form: focus on its first field, Cancel, then the submit button; an empty name is refused
+ * under its field, and while the form is sent nothing closes the sheet.
+ */
 export const WithForm: Story = { render: () => <NewAccount /> };
+
+/** A long form on a phone: a bottom sheet, its actions stacked, the main one on top. */
+export const WithFormOnPhone: Story = {
+  render: () => <NewAccount />,
+  globals: { viewport: { value: "mobile1", isRotated: false } },
+};
