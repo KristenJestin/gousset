@@ -3,11 +3,16 @@ import {
   FixtureLedger,
   ImportProfiles,
   Imports,
+  Merchants,
+  RuleJobs,
+  Transfers,
   memoryAccountStore,
+  memoryCategoryStore,
   memoryId,
   memoryLineStore,
 } from "@gousset/core";
 import type { AccountRecord, MemoryLine, MemoryRows } from "@gousset/core";
+import { UserData } from "@gousset/db/user-data";
 import { Effect, Layer, ManagedRuntime, Schema } from "effect";
 import { TestClock } from "effect/testing";
 import { afterEach, describe, expect, test } from "vite-plus/test";
@@ -21,8 +26,8 @@ import { accountsTool } from "./accounts";
 // made-up accounts that keeps what each call writes for the next one.
 
 const TODAY = "2026-11-23";
-const writer: Caller = { userId: "ada", canWrite: true };
-const reader: Caller = { userId: "ada", canWrite: false };
+const writer: Caller = { userId: "ada", canWrite: true, currency: "EUR" };
+const reader: Caller = { userId: "ada", canWrite: false, currency: "EUR" };
 
 type Arguments = { readonly [key: string]: string | number };
 
@@ -40,6 +45,7 @@ function account(name: string, change: Partial<AccountRecord> = {}): AccountReco
     closedOn: null,
     settlesIntoAccountId: null,
     creditOrder: "oldest_first",
+    balanceCategoryId: null,
     ...change,
   };
 }
@@ -84,11 +90,17 @@ async function connect(rows: MemoryRows = ROWS, caller: Caller = writer) {
     Layer.mergeAll(
       FixtureLedger,
       memoryAccountStore(new Map([[caller.userId, rows]])),
-      // accounts never reaches the imports, the export nor the line search.
+      // accounts never reaches the imports, the export, the merchants, the transfers nor the rules;
+      // it searches the lines for a noted balance's movement (#31), and reads the categories.
       memoryLineStore(),
+      memoryCategoryStore(),
       Layer.mock(Imports, {}),
       Layer.mock(ImportProfiles, {}),
       Layer.mock(DataExport, {}),
+      Layer.mock(Merchants, {}),
+      Layer.mock(Transfers, {}),
+      Layer.mock(UserData, {}),
+      Layer.mock(RuleJobs, {}),
       TestClock.layer(),
     ),
   );
@@ -422,6 +434,23 @@ describe("accounts edit", () => {
     );
   });
 
+  test('sets the category of an account kept by its balance by name, "" for none (#31)', async () => {
+    const call = await connect();
+    const cleared = await call({ action: "edit", name: "Mortgage", category: "" });
+
+    expect(cleared.isError, cleared.text).toBe(false);
+    expect(cleared.text).toContain(
+      "No category is chosen for them: each goes to its kind's fallback.",
+    );
+
+    // The categories tool lists the names an account's category is chosen from.
+    const refused = await call({ action: "edit", name: "Mortgage", category: "Nowhere" });
+
+    expect(refused.isError, refused.text).toBe(true);
+    expect(refused.text).toMatch(/A valid call: categories \{"action":"list"\}$/);
+    expect(refused.text.length).toBeLessThan(2000);
+  });
+
   test("refuses a name two accounts share, until the institution tells them apart", async () => {
     const call = await connect({
       accounts: [account("Livret A"), account("Livret A", { institution: "Northbank" })],
@@ -509,7 +538,7 @@ describe("accounts note_balance", () => {
 
     expect(noted.isError, noted.text).toBe(false);
     expect(noted.text).toContain(
-      "Noted -149,500.00 EUR as the balance of Mortgage (Riverside Bank) at the end of 2026-10-31.",
+      "Noted: Mortgage (Riverside Bank) held -149,500.00 EUR at the end of 2026-10-31.",
     );
     expect((await call({ action: "list" })).text).toContain(
       "- Mortgage (Riverside Bank), loan, kept by a noted balance: -149,500.00 EUR;",

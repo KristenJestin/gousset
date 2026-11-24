@@ -733,7 +733,7 @@ describe("the accounts tool", () => {
       "rules",
     ]);
     expect(tool?.title).toBe("Accounts");
-    expect(tool?.description).toContain("it makes that day's movement line");
+    expect(tool?.description).toContain("it makes the day's movement line, in its `category`");
     // A write; a repeated create makes a second account.
     expect(tool?.annotations).toEqual({
       readOnlyHint: false,

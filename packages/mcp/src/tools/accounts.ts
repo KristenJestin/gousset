@@ -144,7 +144,8 @@ const AccountsInput = Schema.Struct({
   ),
   category_kind: Schema.optional(
     Schema.Literals(["expense", "income"]).annotate({
-      description: "create, edit: the category's kind, when an expense and an income one share its name.",
+      description:
+        "create, edit: the category's kind, when an expense and an income one share its name.",
     }),
   ),
   new_name: Schema.optional(
@@ -182,13 +183,13 @@ const AccountsInput = Schema.Struct({
 
 type AccountsInput = typeof AccountsInput.Type;
 
-const DESCRIPTION = `The user's accounts: read them, and create and change them as Gousset's accounts page does. \`list\`: every account by group (available, restricted, savings and investments, owed) with its balance today and how far its statements go, each group's totals per currency (never converted), closed accounts apart. \`show\`: one account's balance, its last lines newest first with the balance after each (\`lines\`, 1 to ${MAX_LINES}, ${DEFAULT_LINES} by default; the result writes the call to read older ones), the check against its latest statement balance, and a benefit account's credits: order of use, what is left, what expires when; for an account kept by its balance, where its movements go.
+const DESCRIPTION = `The user's accounts: read them, and create and change them as Gousset's accounts page does. \`list\`: every account by group (available, restricted, savings and investments, owed) with its balance today and how far its statements go, each group's totals per currency (never converted), closed accounts apart. \`show\`: one account's balance, its last lines newest first with the balance after each (\`lines\`, 1 to ${MAX_LINES}, ${DEFAULT_LINES} by default; the result writes the call to read older ones), the check against its latest statement balance, and a benefit account's credits: order of use, what is left, what expires when.
 
 Use \`list\` for "how much do I have, and where?", \`show\` for "does my balance match my bank's?" or "what expires when on my meal vouchers?", the writes to set the user's accounts up.
 
-Writes need a connection allowed to write. \`create\` needs \`name\` and \`kind\`, and is not idempotent: a repeat makes a second account, so list first. \`edit\` changes only what it is given. \`close\` keeps the lines and leaves the totals; \`reopen\` undoes it. \`note_balance\`: the balance at the end of \`day\` of an account kept by a noted balance (\`mode\` balance), one a day; it makes that day's movement line, an expense or income in the account's \`category\`: the balance less the one before, less the account's other lines between them (transfers). \`category\`, on \`create\` or \`edit\`, names it as \`categories\` writes it (\`category_kind\` when an expense and an income one share the name). \`set_expiry\`: when a benefit credit expires, by its handle from the \`lines\` tool.
+Writes need a connection allowed to write. \`create\` needs \`name\` and \`kind\`, and is not idempotent: a repeat makes a second account, so list first. \`edit\` changes only what it is given. \`close\` keeps the lines and leaves the totals; \`reopen\` undoes it. \`note_balance\`: the balance of an account kept by a noted balance (\`mode\` balance), one a day; it makes the day's movement line, in its \`category\`. \`set_expiry\`: when a benefit credit expires, by its handle from the \`lines\` tool.
 
-Name an account by \`name\`, as \`list\` writes it (any case), with \`institution\` when two share it. Amounts are decimal strings in the account's currency. Refused, saying what to do: an unknown or ambiguous name, a currency off ISO 4217's list, a card without \`settles_into\` (its current account) or another kind with one, a new currency once the account has lines, closing a closed account, a balance on an account kept by its lines or twice on a day, an unknown or archived category, an expiry before its credit.
+Name an account by \`name\`, as \`list\` writes it (any case), with \`institution\` when two share it. Amounts are decimal strings in the account's currency. Refused, saying what to do: an unknown or ambiguous name, a currency off ISO 4217's list, a card without \`settles_into\` (its current account) or another kind with one, a new currency once the account has lines, closing a closed account, a balance on an account kept by its lines or twice on a day, an expiry before its credit.
 
 Examples: {"action":"show","name":"Livret A","institution":"Riverside Bank"} · {"action":"create","name":"Deferred card","kind":"card","settles_into":"Current account","opening_balance":"-120.40"} · {"action":"note_balance","name":"Mortgage","day":"2026-10-31","balance":"-149500"}`;
 
