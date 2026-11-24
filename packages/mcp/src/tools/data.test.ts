@@ -1,7 +1,6 @@
 import {
   DataExport,
   EXPORT_TABLES,
-  FixtureLedger,
   ImportProfiles,
   Imports,
   memoryAccountStore,
@@ -49,7 +48,6 @@ async function connect(contents: Effect.Effect<ExportContents> = Effect.succeed(
           Effect.provide(
             effect,
             Layer.mergeAll(
-              FixtureLedger,
               memoryAccountStore(),
               memoryLineStore(),
               Layer.mock(Imports, {}),
