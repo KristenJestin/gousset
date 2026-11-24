@@ -3,11 +3,12 @@ import { useState } from "react";
 
 import { useHydrated } from "../hooks/use-hydrated";
 import { InFrench } from "../stories/in-french";
-import { CATEGORIES, MERCHANTS, PREVIOUS_CATEGORIES } from "../stories/made-up";
+import { CATEGORIES, DAILY_SPENDING, MERCHANTS, PREVIOUS_CATEGORIES } from "../stories/made-up";
 import type { MadeUpCategory } from "../stories/made-up";
 import { Breakdown, BreakdownFigures, BreakdownSkeleton } from "./breakdown";
 import type { BreakdownRow } from "./breakdown";
 import { Button } from "./button";
+import { SpendingChart } from "./spending-chart";
 
 function rowsOf(categories: ReadonlyArray<MadeUpCategory>): Array<BreakdownRow> {
   return categories.map((category) => ({
@@ -98,7 +99,13 @@ function OpenWithFigures() {
                 },
               ]}
             >
-              <p className="text-sm text-muted-foreground">What it cost, day by day.</p>
+              <SpendingChart
+                days={DAILY_SPENDING}
+                currency="EUR"
+                label={`${row.name} in October, against September`}
+                currentLabel="October"
+                previousLabel="September"
+              />
             </BreakdownFigures>
           )
         }
