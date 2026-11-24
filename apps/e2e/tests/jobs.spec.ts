@@ -100,7 +100,7 @@ test("a restart of the app resumes the queue", async ({ userPage: page, app }) =
 
 test("a job's end reads again the month it touched", async ({ userPage: page }) => {
   await visit(page, PAGE);
-  await expect(page.getByText("Received")).toBeVisible();
+  await expect(page.getByText("2026-10", { exact: true })).toBeVisible();
 
   const reads: Array<string> = [];
 
