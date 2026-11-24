@@ -1,41 +1,42 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect } from "@playwright/test";
 import type { Page } from "@playwright/test";
+import axe from "axe-core";
 
 /** WCAG 2.2 A and AA, the level Gousset holds (docs/architecture.md, "Quality"). */
 const WCAG_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"];
 
 /**
- * Rules left out in Firefox only, each for a crash of the browser under test, not of the app:
- * Chromium runs them on every screen, so the suite still covers them.
+ * The ARIA relations Firefox reflects as element properties (`ariaLabelledByElements`...), which
+ * axe reads from their attribute instead in Firefox.
  *
- * `label`: after axe-core 4.14.1 runs it in Playwright 1.65.1's Firefox (build 1572), the next
- * focus of a ui-sdk text field (a `<label>` and its `<input>` in a `Field`) kills the content
- * process (signal 11). The same pages, focused and typed into without axe, stay alive; every
- * other rule alone leaves them alive too.
+ * Playwright 1.65's Firefox (build 1572) writes through a null pointer, and its content process
+ * dies ("Page crashed", signal 11), once both the page and Playwright's own script read one
+ * element's `ariaLabelledByElements` (Mozilla bug 2090055, microsoft/playwright#44135). axe-core
+ * 4.14 reads it in the page for every name it computes; `getByRole(..., { name })` and
+ * `getByLabel` read it in Playwright's. A scan and a role query on one page, in either order, then
+ * crash it sooner or later: at the end of the scan, or at the next action. Firefox build 1575
+ * fixes it, from Playwright 1.66; drop this then.
  *
- * `button-name`: the same crash, on the app's frame. After that rule alone runs on the review, the
- * next click (the month, the user's menu, the tab bar's "More") kills the content process; every
- * other WCAG rule alone, run on the same page, leaves it alive, and so does no axe at all.
- *
- * `label-content-name-mismatch`: the same crash, on the settings once they hold a ui-sdk `Switch`
- * (a `role="switch"` named by its field's `<label>`). After that rule alone runs there, the next
- * call to the page kills its content process; every other WCAG rule alone (but `button-name`,
- * above) leaves it alive, and so does no axe at all.
- *
- * `aria-conditional-attr`, `aria-prohibited-attr` and `nested-interactive`: the same crash, on a
- * rule's side sheet (#25: its conditions' editor, comboboxes and `Switch`). Each of them alone,
- * run there on a fresh page, kills the content process, as do `label` and
- * `label-content-name-mismatch`; the other 65 WCAG rules alone leave it alive.
+ * The attribute gives axe the same elements: Gousset sets these relations as attributes only,
+ * never through the properties.
  */
-const FIREFOX_CRASHING_RULES = [
-  "label",
-  "button-name",
-  "label-content-name-mismatch",
-  "aria-conditional-attr",
-  "aria-prohibited-attr",
-  "nested-interactive",
+const ELEMENT_REFLECTIONS = [
+  "aria-actions",
+  "aria-activedescendant",
+  "aria-controls",
+  "aria-describedby",
+  "aria-details",
+  "aria-errormessage",
+  "aria-flowto",
+  "aria-labelledby",
+  "aria-owns",
 ];
+
+const AXE_READING_ATTRIBUTES = `${axe.source}
+;axe.configure({ standards: { ariaAttrs: ${JSON.stringify(
+  Object.fromEntries(ELEMENT_REFLECTIONS.map((attribute) => [attribute, { prop: "" }])),
+)} } });`;
 
 /**
  * Waits for the screen's entrance animations to end: text still fading in is half transparent, and
@@ -57,13 +58,15 @@ const ENTRANCES_DONE = `Promise.all(
 export async function expectAccessible(page: Page): Promise<void> {
   await page.evaluate(ENTRANCES_DONE);
 
-  const builder = new AxeBuilder({ page }).withTags(WCAG_TAGS);
+  const firefox = page.context().browser()?.browserType().name() === "firefox";
 
-  if (page.context().browser()?.browserType().name() === "firefox") {
-    builder.disableRules(FIREFOX_CRASHING_RULES);
-  }
-
-  const results = await builder.analyze();
+  // Every browser scans with the axe this harness pins, so that they run the same version.
+  const results = await new AxeBuilder({
+    page,
+    axeSource: firefox ? AXE_READING_ATTRIBUTES : axe.source,
+  })
+    .withTags(WCAG_TAGS)
+    .analyze();
 
   const violations = results.violations.flatMap((violation) => [
     `${violation.id} (${violation.impact ?? "?"}): ${violation.help}, ${violation.nodes.length} element(s)`,
