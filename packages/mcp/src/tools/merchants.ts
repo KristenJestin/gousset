@@ -38,7 +38,7 @@ const MAX_MERCHANTS = 100;
 const MerchantsInput = Schema.Struct({
   action: Schema.Literals(["list", "search", "show", "edit", "merge", "assign"]).annotate({
     description:
-      "list: every merchant by name. search: those whose name or a cleaned label contains text. show: one merchant, its default category, cleaned labels and latest lines. edit: rename one, move one of its cleaned labels to another merchant, or set its default category. merge: fold one merchant into another.",
+      "list: every merchant by name. search: those whose name or a cleaned label contains text. show: one merchant, its default category, cleaned labels and latest lines. edit: rename one, move one of its cleaned labels to another merchant, or set its default category. merge: fold one merchant into another. assign: who was paid on an intermediary's line.",
   }),
   text: Schema.optional(
     Schema.String.annotate({
@@ -59,7 +59,7 @@ const MerchantsInput = Schema.Struct({
   merchant: Schema.optional(
     Schema.String.annotate({
       description:
-        "show, edit, merge: the merchant's name, as list writes it (any case). merge: the one merged away and deleted.",
+        "show, edit, merge, assign: the merchant's name, as list writes it (any case); assign makes it when none has it. merge: the one merged away and deleted.",
     }),
   ),
   name: Schema.optional(Schema.String.annotate({ description: "edit: the merchant's new name." })),
@@ -94,9 +94,14 @@ const MerchantsInput = Schema.Struct({
         'edit, with category: expense or income, when an expense and an income category share the name ("Other").',
     }),
   ),
-  // The description says what these are for (docs/mcp.md's listing budget).
-  line: Schema.optional(Schema.String),
-  intermediary: Schema.optional(Schema.Boolean),
+  line: Schema.optional(
+    Schema.String.annotate({
+      description: "assign: the line's handle, exactly as lines gives it.",
+    }),
+  ),
+  intermediary: Schema.optional(
+    Schema.Boolean.annotate({ description: "edit: true marks it a payment intermediary." }),
+  ),
 });
 
 type MerchantsInput = typeof MerchantsInput.Type;
