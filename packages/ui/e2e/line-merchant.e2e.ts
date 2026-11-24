@@ -141,7 +141,7 @@ test.describe("LineMerchant", () => {
     await expect(page.getByRole("dialog").getByRole("button", { name: "Attribuer" })).toBeVisible();
   });
 
-  test("the row does not move, its dialog grows in in 200 ms, and not under reduced motion", async ({
+  test("the row does not move, its dialog grows in in 200 ms (rises in 300 ms on a phone), and not under reduced motion", async ({
     page,
   }) => {
     await page.goto(story("linemerchant", "asks"));
@@ -150,7 +150,9 @@ test.describe("LineMerchant", () => {
 
     const dialog = page.getByRole("dialog", { name: "Who was paid?" });
 
-    await expect(dialog).toHaveCSS("transition-duration", "0.2s");
+    const wide = (page.viewportSize()?.width ?? 0) >= 768;
+
+    await expect(dialog).toHaveCSS("transition-duration", wide ? "0.2s" : "0.3s");
     await page.emulateMedia({ reducedMotion: "reduce" });
     await expect(dialog).toHaveCSS("transition-duration", "0s");
   });
