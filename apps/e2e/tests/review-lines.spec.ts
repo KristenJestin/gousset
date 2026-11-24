@@ -99,8 +99,11 @@ async function openReview(page: Page) {
 
 const list = (page: Page) => page.getByRole("list", { name: "Operations" });
 
+/** The row whose label is exactly `label`: "CITYGYM MEMBER" is no row of "PRLV CITYGYM MEMBERSHIP". */
 const row = (page: Page, label: string) =>
-  list(page).getByRole("listitem").filter({ hasText: label });
+  list(page)
+    .getByRole("listitem")
+    .filter({ has: page.getByText(label, { exact: true }) });
 
 const count = (page: Page) => page.locator('[data-slot="operations-count"]');
 
@@ -394,7 +397,9 @@ const Heights = Schema.Array(Schema.Number);
 
 /**
  * Samples, each animation frame until `window.__e2eStop`, the height of the row whose text holds
- * `label`, while it is in the page. Install before the action that removes it.
+ * `label`, while it is in the page: 47 px whole, 0 folded. Its content's (`clientHeight`), its 1 px
+ * bottom border left out: a row at its folded height of 0 still draws that border until it is
+ * removed, which is no frame of a fold. Install before the action that removes it.
  */
 async function sampleRowHeights(page: Page, label: string) {
   await page.evaluate(`(() => {
@@ -407,7 +412,7 @@ async function sampleRowHeights(page: Page, label: string) {
       );
 
       if (found !== undefined) {
-        window.__e2eHeights.push(Math.round(found.getBoundingClientRect().height));
+        window.__e2eHeights.push(found.clientHeight);
       }
 
       if (!window.__e2eStop) {
