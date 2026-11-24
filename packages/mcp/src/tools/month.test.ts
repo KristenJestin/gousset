@@ -593,9 +593,7 @@ describe("month", () => {
     const [first] = tools;
 
     expect(first?.name).toBe("month");
-    expect(first?.title).toBe(
-      "Monthly review (summary, spending, days, subscriptions, benchmarks)",
-    );
+    expect(first?.title).toBe("Monthly review");
     expect(first?.annotations).toEqual({
       readOnlyHint: true,
       destructiveHint: false,

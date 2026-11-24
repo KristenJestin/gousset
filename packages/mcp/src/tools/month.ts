@@ -38,20 +38,19 @@ import { benchmarkCurrency } from "./categories";
 
 const MonthInput = Schema.Struct({
   action: Schema.Literals(["summary", "spending", "days", "subscriptions", "benchmarks"]).annotate({
-    description:
-      "summary: the month in one read. spending: where the money went, by category or merchant. days: one row of spending, day by day. subscriptions: what recurs, stopped or rose. benchmarks: each expense category against its benchmark.",
+    description: "See the description.",
   }),
   month: Schema.optional(
-    Month.annotate({ description: "The month, YYYY-MM; the current month if left out." }),
+    Month.annotate({ description: "YYYY-MM; the current month if left out." }),
   ),
   by: Schema.optional(
     SpendingGroup.annotate({
-      description: "spending, days: category (the default) or merchant.",
+      description: "spending, days: category (default) or merchant.",
     }),
   ),
   name: Schema.optional(
     Schema.String.annotate({
-      description: `days: the row, as spending names it (any case): "Groceries", "Groceries > Bakery", a merchant; "no merchant" for that row.`,
+      description: "days: a row as spending names it.",
     }),
   ),
 });
@@ -69,21 +68,21 @@ const MERCHANTS_LISTED = 100;
 /** How many movements `summary` lists; the others are read with `lines`. */
 const MOVEMENTS_LISTED = 60;
 
-const DESCRIPTION = `The monthly review of the user's own money, in their currency (other currencies apart, never converted). Read only. Every action takes month (YYYY-MM, the current one if left out); a month to come is refused.
+const DESCRIPTION = `The user's own monthly review, in their currency (others apart, never converted). Read only. month: YYYY-MM, the current one if left out; a month to come is refused.
 
-\`summary\`: the month in one read. Received (and from which categories), spent against the average of the months before and the previous month, set aside (net transfers onto savings and investment accounts), left and its part restricted to benefit accounts; the incomes and transfers of the month; how many lines of the month wait to be reviewed (review settles them); how far each account's statements go; what is flagged (categories above their benchmark, subscriptions that rose or stopped, benefit credits about to expire, accounts not imported). Use it for "how did my month go?" or "what is left?".
+\`summary\`, for "how did my month go?": received, spent against the average and the previous month, set aside (net to savings and investments), left, incomes and transfers, lines to review (review settles them), imports, flags.
 
-\`spending\`, with by (category, the default, or merchant): where the money went, each row against its average and the previous month; categories with their children indented, their benchmark and drift. An expense counts at its net cost, on the day it happened; a transfer is never spending. A merchant is who was paid: the expense's own, else its line's, a payment intermediary (PayPal) when nothing better is known; expenses naming several merchants or none share the row "${NO_MERCHANT}", last.
+\`spending\`, by category (default) or merchant: each row at net cost against its average and the previous month; categories with children, benchmark and drift; "${NO_MERCHANT}" holds expenses naming several or none.
 
-\`days\`, with by and name (a row as spending names it): its running total day by day, against the previous month's.
+\`days\`, with by and name (a row as spending names it): its running total by day against the previous month.
 
 \`subscriptions\`, with \`month\` (YYYY-MM, the current one if left out; a month to come is refused): the payments that recur (merchant, weekly, monthly or yearly, usual price, last paid day and amount, next expected day), those that stopped (the expected day that did not come) and the prices that rose (from, to). Detected on read from the user's own expenses of the three years up to the month's end (today, in the current month): one merchant paid at a steady rhythm and price, at least ${MIN_CHARGES.weekly} times weekly, ${MIN_CHARGES.monthly} monthly or ${MIN_CHARGES.yearly} yearly; a bill that varies is none. A merchant the user says is no subscription is never proposed: merchants edit with subscription false; true proposes it again.
 
 \`benchmarks\`, with \`month\` (the current one if left out): every expense category's spending against its benchmark, the categories that drift above it first. Use it for "am I spending more than usual?" or "which categories went over?". Each category: what its expenses cost in the month, each at its net cost (payments less refunds; a split line counts its share in each category; transfers are no spending), a top-level category with its children's; then its benchmark: the monthly average of the six months before (automatic), an amount the user set (set), or none. An automatic benchmark counts only the full months from the user's first entry on, so a new user's is the average of fewer months; there is none yet for a category with nothing spent, net, in those months. A category drifts when it cost more than its benchmark, by any amount; one without a benchmark never drifts. Amounts are in the user's currency; spending on accounts of another currency is shown apart, never converted nor compared. Archived categories show only when they had spending that month. To change a benchmark, use categories edit.
 
-For the user's own money otherwise: accounts (the balances, account by account) and lines (every line, searched by text, account, period, amount or to review). Use them for "how much do I have?" or "what did I pay at the bakery last month?".
+Balances or one payment: use accounts or lines.
 
-Examples: {"action":"summary"} · {"action":"spending","by":"merchant","month":"2026-10"} · {"action":"days","name":"Groceries > Bakery"} · {"action":"benchmarks"}`;
+Examples: {"action":"summary"} · {"action":"spending","by":"merchant","month":"2026-10"} · {"action":"days","name":"Groceries > Bakery"}`;
 
 const CADENCES = { weekly: "weekly", monthly: "monthly", yearly: "yearly" } as const;
 
@@ -595,7 +594,7 @@ export const monthTool = defineTool<
   Subscriptions | CategoryStore | MonthFacts | LineStore | Transfers | Expenses | Merchants
 >({
   name: "month",
-  title: "Monthly review (summary, spending, days, subscriptions, benchmarks)",
+  title: "Monthly review",
   description: DESCRIPTION,
   idempotent: true,
   input: MonthInput,
