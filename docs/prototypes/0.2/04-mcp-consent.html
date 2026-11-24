@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="en" data-color-scheme="light">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>4 · MCP consent · Prototype 0.2 · Gousset</title>
+<link rel="stylesheet" href="assets/proto.css">
+<link rel="stylesheet" href="assets/icons.css">
+<style>
+  .device.desktop .screen { height: 920px; }
+  .stage { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 24px; height: 100%; padding: 32px; background: var(--background); }
+  .stage .brand { justify-content: center; }
+  .consent { display: flex; flex-direction: column; gap: 24px; margin: 0; }
+  .consent h1 { font-size: var(--text-base); line-height: 24px; font-weight: 600; }
+  .consent .consent-who { flex-direction: column; align-items: flex-start; gap: 16px; }
+  .consent-who .stack { gap: 4px; min-width: 0; }
+  .part { display: flex; flex-direction: column; gap: 12px; }
+  .part:not(:last-child) { padding-bottom: 20px; }
+  .part + .part { padding-top: 20px; border-top: 1px solid var(--border); }
+  .choices { display: flex; flex-direction: column; gap: 8px; }
+  .apart { display: flex; flex-direction: column; gap: 16px; padding-top: 16px; border-top: 1px solid var(--border); }
+  .apart .row { justify-content: space-between; }
+  .signed { font-size: 12px; line-height: 16px; color: var(--muted-foreground); }
+  .signed b { color: var(--soft-foreground); font-weight: 500; }
+  .link { color: var(--primary); font-weight: 500; }
+  .host { font-family: var(--font-mono); font-size: 12px; color: var(--soft-foreground); overflow-wrap: anywhere; }
+  .revoke { display: flex; gap: 12px; color: var(--soft-foreground); }
+  .revoke .i { margin-top: 2px; color: var(--muted-foreground); }
+  [data-scope="read"] .if-write,
+  [data-scope="readwrite"] .if-read { display: none; }
+
+  /* Phone: the page is the screen; the choices stay at the bottom, in the thumb's reach. */
+  .pconsent { display: flex; flex-direction: column; height: 100%; }
+  .pconsent .scroll { flex: 1; min-height: 0; overflow-y: auto; display: flex; flex-direction: column; gap: 20px; padding: 8px 20px 20px; }
+  .pconsent .brand { height: 28px; padding: 0; }
+  .pconsent .consent-who { flex-direction: column; align-items: flex-start; gap: 12px; }
+  .pconsent .consent-who + .t-caption { margin-top: -12px; }
+  .pconsent .part:not(:last-child) { padding-bottom: 0; }
+  .pconsent .brand svg { height: 18px; }
+  .pconsent .foot { display: flex; flex-direction: column; gap: 8px; padding: 12px 20px 28px; border-top: 1px solid var(--border); background: var(--card); }
+  .pconsent .foot .btn.deny { margin-top: 4px; }
+</style>
+</head>
+<body>
+<div class="proto">
+<header class="bar" data-title="4 · MCP consent (#123)"></header>
+<main class="canvas">
+<div class="state-switch">
+  <span class="seg" role="group" aria-label="What the client asks">
+    <button type="button" data-show="scope:readwrite" data-default>Read and write asked</button>
+    <button type="button" data-show="scope:read">Read only asked</button>
+  </span>
+</div>
+<div class="devices">
+
+<!-- ═══════════════ Desktop ═══════════════ -->
+<section class="device desktop">
+<div class="caption">Desktop · 1280 px · opened by the client in the browser</div>
+<div class="screen">
+<div class="stage">
+  <div class="brand" data-brand></div>
+  <section class="consent block" aria-labelledby="consent-title">
+    <header class="consent-who">
+      <span class="client-tile"><span class="i i-robot lg"></span></span>
+      <div class="stack">
+        <h1 id="consent-title">Allow Claude Code to reach your Gousset?</h1>
+        <span class="t-caption">It asks as <b class="t-soft">Alex Martin</b>, and will be sent back to <span class="host">http://127.0.0.1:53682/callback</span></span>
+      </div>
+    </header>
+
+    <div class="stack" style="gap:0">
+      <div class="part">
+        <p class="t-label">It will read</p>
+        <ul class="consent-list">
+          <li><span class="i i-building-bank"></span><div class="stack"><span class="t-strong">Your accounts and their balances</span></div></li>
+          <li><span class="i i-list-details"></span><div class="stack"><span class="t-strong">Your lines and your imports</span></div></li>
+          <li><span class="i i-chart-donut"></span><div class="stack"><span class="t-strong">Your months, once the review is ready</span></div></li>
+        </ul>
+      </div>
+
+      <div class="part if-write">
+        <p class="t-label">It also asks to write</p>
+        <div class="write-note">
+          <span class="i i-pencil"></span>
+          <div class="stack" style="gap:2px">
+            <span class="t-strong">With write, it can change your data as you would</span>
+            <span class="t-soft">Add or edit an account, import a statement, undo an import, note a balance. Allow read only unless you want it to act for you.</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="part">
+        <p class="revoke"><span class="i i-key"></span><span>You can revoke it at any time, in <b class="t-strong">Settings › Your account › Connected clients</b>. Revoking cuts it off at once.</span></p>
+      </div>
+    </div>
+
+    <div class="choices">
+      <button class="btn primary full if-write" type="button">Allow read only<span class="recommended">Recommended</span></button>
+      <button class="btn secondary full if-write" type="button">Allow read and write</button>
+      <button class="btn primary full if-read" type="button">Allow read only</button>
+    </div>
+
+    <div class="apart">
+      <div class="row">
+        <span class="signed">Signed in as <b>alex.martin@example.com</b></span>
+        <button class="btn sm ghost" type="button"><span class="i i-x"></span>Deny</button>
+      </div>
+    </div>
+  </section>
+</div>
+</div>
+</section>
+
+<!-- ═══════════════ Phone ═══════════════ -->
+<section class="device phone">
+<div class="caption">Phone · the choices stay at the bottom</div>
+<div class="screen">
+<div class="app phone">
+<div class="statusbar"></div>
+<div class="pconsent">
+  <div class="scroll">
+    <div class="brand" data-brand></div>
+    <header class="consent-who">
+      <span class="client-tile"><span class="i i-robot lg"></span></span>
+      <h1 class="t-heading">Allow Claude Code to reach your Gousset?</h1>
+    </header>
+    <p class="t-caption">It asks as <b class="t-soft">Alex Martin</b>, and will be sent back to <span class="host">http://127.0.0.1:53682/callback</span></p>
+    <div class="part">
+      <p class="t-label">It will read</p>
+      <ul class="consent-list">
+        <li><span class="i i-building-bank"></span><span class="t-strong">Your accounts and their balances</span></li>
+        <li><span class="i i-list-details"></span><span class="t-strong">Your lines and your imports</span></li>
+        <li><span class="i i-chart-donut"></span><span class="t-strong">Your months, once the review is ready</span></li>
+      </ul>
+    </div>
+    <div class="part if-write">
+      <p class="t-label">It also asks to write</p>
+      <div class="write-note"><span class="i i-pencil"></span><span class="t-soft">It could add or edit an account, import a statement, undo an import or note a balance, as you would. Allow read only unless you want it to act for you.</span></div>
+    </div>
+    <div class="part">
+      <p class="revoke"><span class="i i-key"></span><span>Revoke it at any time in <b class="t-strong">Settings › Your account</b>.</span></p>
+    </div>
+  </div>
+  <div class="foot">
+    <button class="btn primary full if-write" type="button">Allow read only<span class="recommended">Recommended</span></button>
+    <button class="btn secondary full if-write" type="button">Allow read and write</button>
+    <button class="btn primary full if-read" type="button">Allow read only</button>
+    <button class="btn ghost full deny" type="button">Deny</button>
+  </div>
+</div>
+</div>
+</div>
+</section>
+
+</div>
+</main>
+
+<aside class="notes">
+  <h2>What changes</h2>
+  <ul>
+    <li><b>One decision, one column</b>: the two “Allow” buttons stacked at full width, read only first and primary, marked <i>Recommended</i>; read and write under it, secondary. Nothing wraps at any width, because nothing sits side by side.</li>
+    <li><b>“Deny” is apart</b>: under a rule, a quiet button at the right, beside who is signed in. It can't be mistaken for the third of three equal choices, and it is never the default.</li>
+    <li><b>The text is cut in four parts</b>, each with its own heading: who asks and where it goes back to (the address in mono, so it can be checked), what it will read, what write would allow (only when asked, in the warning tint), and how to revoke it.</li>
+    <li><b>Only read asked</b> (the switch above): the write part and the second button go; one “Allow read only” and Deny remain.</li>
+    <li><b>Phone</b>: the page is the screen, no card. The text scrolls; the choices stay at the bottom, Deny last and quiet.</li>
+    <li><b>No gap</b>: the card is as tall as its content, centred, with the brand above it, as on the sign-in screen.</li>
+  </ul>
+
+  <h2>Rejected</h2>
+  <ul class="rejected">
+    <li><b>Three buttons on one row</b> (today): “Allow read only” alone, then the two others wrapped under it.</li>
+    <li><b>Deny as a red button</b>: refusing is safe, not destructive; red would make it the loudest choice.</li>
+    <li><b>Checkboxes per right</b> (read accounts, read lines, write…): the server has two scopes; boxes would promise a finer control that does not exist.</li>
+    <li><b>Read and write as the primary</b>: the safer choice is the easy one.</li>
+  </ul>
+
+  <h2>Motion</h2>
+  <dl class="timeline">
+    <dt>Press</dt><dd>The pressed button shows the coin loader after 300 ms and keeps its width until the browser leaves for the client; the other choices are disabled meanwhile.</dd>
+    <dt>Reduced</dt><dd>The coin pulses instead of falling.</dd>
+  </dl>
+
+  <h2>To decide</h2>
+  <ul>
+    <li>Deny placed apart at the right, beside “Signed in as” (drawn), or a full-width ghost button under the two Allow.</li>
+    <li>Settings › <i>Your account</i> holds the connected clients (page 6): this text names it.</li>
+  </ul>
+</aside>
+</div>
+<script src="assets/proto.js"></script>
+</body>
+</html>
