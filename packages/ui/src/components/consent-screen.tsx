@@ -119,8 +119,8 @@ export function ConsentScreen({
             </Part>
             {write === undefined ? null : (
               <Part title={write.title}>
-                <div className="bg-muted flex items-start gap-3 rounded-md p-3 text-sm">
-                  <span className="text-foreground flex pt-0.5">
+                <div className="bg-warning/10 flex items-start gap-3 rounded-md p-3 text-sm">
+                  <span className="text-warning flex pt-0.5">
                     <Icon name="edit" />
                   </span>
                   <div className="flex min-w-0 flex-col gap-0.5">
@@ -140,7 +140,6 @@ export function ConsentScreen({
         </div>
         <div className="bg-card sticky bottom-0 flex flex-col gap-4 border-t px-5 pt-4 pb-6 md:static md:border-t-0 md:bg-transparent md:px-8 md:pt-0 md:pb-8">
           <div className="@container flex flex-col gap-2">
-            <FormMessage message={error} />
             {allow.map((choice, index) => (
               <Button
                 key={choice.label}
@@ -150,13 +149,17 @@ export function ConsentScreen({
                 onClick={() => choice.onClick()}
               >
                 {choice.label}
+                {/* The space keeps the name read apart: "Allow read only Recommended". */}
+                {choice.recommended === undefined ? null : " "}
                 {choice.recommended === undefined ? null : (
-                  <span className="bg-primary-foreground/20 ml-2 hidden rounded-full px-2 text-xs font-medium @xs:inline">
+                  <span className="bg-primary-foreground/20 ml-1 hidden rounded-full px-2 text-xs font-medium @xs:inline">
                     {choice.recommended}
                   </span>
                 )}
               </Button>
             ))}
+            {/* Under the choice just pressed; its line is always there, so nothing jumps. */}
+            <FormMessage message={error} />
           </div>
           <div className="flex items-center justify-between gap-3 md:border-t md:pt-4">
             <p className="text-muted-foreground min-w-0 truncate text-xs">{signedIn}</p>

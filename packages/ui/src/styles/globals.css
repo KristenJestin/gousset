@@ -74,6 +74,9 @@
   --accent: light-dark(oklch(0.945 0.005 85), oklch(0.26 0.006 75));
   --accent-foreground: var(--foreground);
   --destructive: light-dark(oklch(0.53 0.19 27), oklch(0.7 0.16 25));
+  /* A state to heed (what write would allow an MCP client). A state, not a money role: never on
+     an amount, so that it is never read as spent. */
+  --warning: light-dark(oklch(0.52 0.11 70), oklch(0.82 0.12 80));
   --border: light-dark(oklch(0.905 0.006 85), oklch(0.29 0.006 75));
   --input: light-dark(oklch(0.87 0.008 85), oklch(0.34 0.008 75));
   --ring: var(--primary);
@@ -158,6 +161,7 @@
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
+  --color-warning: var(--warning);
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
