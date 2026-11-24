@@ -22,18 +22,26 @@ function centsIn(text: string): number {
 /**
  * Presses "Previous month" and, from that press, samples at every frame whether a digit column
  * draws two digits inside its own box (by at least a pixel), as it does while it rolls: returns
- * how many frames did. It samples until 500 ms after the switcher announces `month`: the digits
- * roll once that month's data is on screen, which may be long after the press; the roll lasts
- * 200 ms.
+ * how many frames did. It samples until 30 frames after the switcher announces `month`: the
+ * digits roll once that month's data is on screen, which may be long after the press; the roll
+ * lasts 200 ms, 12 frames.
  *
  * Sampled from the press, not polled after it: a poll's first look comes after the switcher's
  * own wait and a round trip, often past the roll's end when the month's data comes late (seen in
  * Firefox). What is drawn, not what is in the DOM: a leaving digit stays in the DOM until
  * Motion's exit ends and React renders again, which measures React's scheduling, not the roll.
+ *
+ * On a clock that never runs ahead of the frames drawn. Motion times the roll on
+ * `performance.now()` from its first frame, and the frame after it lays out and paints the whole
+ * new month: on a busy runner (seen in Firefox) that one frame can outlast the 140 ms or so in
+ * which both digits are drawn, and the roll ends without a frame showing it. While it samples,
+ * `performance.now()` moves at most 1/60 s per frame drawn, and never ahead of the real clock: a
+ * browser that keeps up runs on real time, a slow one still draws the roll's 12 frames. An
+ * instant change, as under reduced motion, draws no frame with two digits on any clock.
  */
 async function rollingFramesTo(page: Page, month: string) {
   const frames = page.evaluate(
-    ({ columns, announced, after, cap }) => {
+    ({ columns, announced, after, cap, frame }) => {
       // Whether any column draws two digits at once.
       const rollingNow = () =>
         [...document.querySelectorAll(columns)].some((column) => {
@@ -52,12 +60,16 @@ async function rollingFramesTo(page: Page, month: string) {
         document.addEventListener(
           "pointerdown",
           () => {
-            const start = performance.now();
+            const realNow = performance.now.bind(performance);
+            const start = realNow();
+            let drawn = 0;
             let shownAt: number | null = null;
             let rolling = 0;
 
+            performance.now = () => Math.min(realNow(), start + drawn * frame);
+
             const sample = () => {
-              const now = performance.now();
+              drawn += 1;
 
               if (rollingNow()) {
                 rolling += 1;
@@ -66,10 +78,11 @@ async function rollingFramesTo(page: Page, month: string) {
               const label = document.querySelector('[data-slot="month-switcher"] [aria-live]');
 
               if (shownAt === null && label?.textContent?.includes(announced) === true) {
-                shownAt = now;
+                shownAt = drawn;
               }
 
-              if ((shownAt !== null && now - shownAt > after) || now - start > cap) {
+              if ((shownAt !== null && drawn - shownAt > after) || realNow() - start > cap) {
+                performance.now = realNow;
                 resolve(rolling);
               } else {
                 requestAnimationFrame(sample);
@@ -82,7 +95,13 @@ async function rollingFramesTo(page: Page, month: string) {
         );
       });
     },
-    { columns: '[data-slot="rolling-digit"]', announced: month, after: 500, cap: 10_000 },
+    {
+      columns: '[data-slot="rolling-digit"]',
+      announced: month,
+      after: 30,
+      cap: 10_000,
+      frame: 1000 / 60,
+    },
   );
 
   await monthSwitcher(page).getByRole("button", { name: "Previous month" }).click();
