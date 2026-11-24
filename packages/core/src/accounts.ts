@@ -36,6 +36,7 @@ import {
   dailyBalances,
   daysFrom,
   groupAccounts,
+  looksEmpty,
 } from "./balances";
 import type { DayBalance } from "./balances";
 import { creditsLeft, expiringOf } from "./credits";
@@ -298,7 +299,14 @@ function entryOf(
 }
 
 function checkOf(facts: AccountFacts): StatementCheck | null {
-  const { account, statements, noted } = facts;
+  const { account, noted } = facts;
+
+  // A statement balance of zero the account contradicts on its day looks empty (#130): the check
+  // reads past it, whether an import before that rule kept it or not.
+  const statements = facts.statements.filter(
+    (entry) => !looksEmpty(entry.minor, balanceAt(account, entry.countedMinor, noted, entry.day)),
+  );
+
   const latest = statements.at(-1);
 
   if (latest === undefined) {

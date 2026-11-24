@@ -129,6 +129,7 @@ There are some, but no extra service: the job queue lives in Postgres with **pg-
 | **Importing a statement**: reading the file, deduplication, detecting transfers, matching payment top-ups, rules, detecting subscriptions | at each import | The import screen follows the real progress step by step, and an interrupted import resumes or fails cleanly. |
 | **Investment prices**: sends only ISINs, can be turned off | once a day | It is the only call out of the server; it must be able to fail and retry without blocking anyone. |
 | **Applying a rule to the past**: a merchant attached to a subject, a corrected category | when a rule is created or changed | It can touch years of lines; the user sees "312 lines updated" when it is done. |
+| **Sweeping file uploads**: deletes those past their expiry, with what they received (#129) | every ten minutes, scheduled by pg-boss | An agent that never sends or imports its file leaves nothing behind; each user's are deleted in a transaction of theirs, which the app's role needs. |
 | Later: a reminder before a benefit credit expires, optional bank sync | scheduled | — |
 
 What does **not** run in the background: the month's totals, benchmarks, balances and expiries. They are computed on read, in SQL. One person's volumes (a few thousand lines a year) do not justify a cache, and a recomputed total is never wrong.

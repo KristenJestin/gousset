@@ -18,6 +18,11 @@ export type ImportSummaryProps = {
   known: ImportSummaryFigure;
   /** Lines held as near duplicates, for the review. Stands out while there are some. */
   review: ImportSummaryFigure;
+  /**
+   * One sentence under the figures, when the import has something to say beyond its counts ("This
+   * file's balance looks empty and was ignored").
+   */
+  note?: string;
   /** The page's buttons: "Undo", "Continue to the review". */
   actions?: ReactNode;
   /** The page's language (`<html lang>`) unless given: it writes the counts. */
@@ -53,7 +58,7 @@ function Figure({
 /**
  * An import's summary before moving on to the review (docs/wireframes, screen 6, block 4): the
  * lines read, those added, those the app already had, and those held as near duplicates for the
- * review; then the page's actions. Every word is the page's; it writes the counts in the page's
+ * review, with a note under them when the page gives one; then the page's actions. Every word is the page's; it writes the counts in the page's
  * language, in tabular figures. It draws no block: the page puts it in one.
  *
  * Screen readers hear each count whole, never a digit on its way. It is no live region: the
@@ -69,9 +74,19 @@ export function ImportSummary({
   added,
   known,
   review,
+  note,
   actions,
   locale,
 }: ImportSummaryProps) {
+  const figures = (
+    <dl className="grid grid-cols-2 gap-x-8 gap-y-4 sm:flex sm:flex-wrap">
+      <Figure figure={read} slot="read" stands={false} locale={locale} />
+      <Figure figure={added} slot="added" stands={false} locale={locale} />
+      <Figure figure={known} slot="known" stands={false} locale={locale} />
+      <Figure figure={review} slot="review" stands={review.count > 0} locale={locale} />
+    </dl>
+  );
+
   return (
     <Unfold>
       <section
@@ -79,12 +94,19 @@ export function ImportSummary({
         data-slot="import-summary"
         className="flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between"
       >
-        <dl className="grid grid-cols-2 gap-x-8 gap-y-4 sm:flex sm:flex-wrap">
-          <Figure figure={read} slot="read" stands={false} locale={locale} />
-          <Figure figure={added} slot="added" stands={false} locale={locale} />
-          <Figure figure={known} slot="known" stands={false} locale={locale} />
-          <Figure figure={review} slot="review" stands={review.count > 0} locale={locale} />
-        </dl>
+        {note === undefined ? (
+          figures
+        ) : (
+          <div className="flex flex-col gap-4">
+            {figures}
+            <p
+              data-slot="import-summary-note"
+              className="max-w-prose text-sm text-muted-foreground"
+            >
+              {note}
+            </p>
+          </div>
+        )}
         {actions === undefined ? null : (
           <div className="flex flex-wrap items-center gap-2">{actions}</div>
         )}

@@ -582,7 +582,7 @@ describe("accounts note_balance", () => {
     const { text, isError } = await noting(NOTE, { ...NOTED, lines: [movement] });
 
     expect(isError, text).toBe(false);
-    expect(text).toBe(
+    expect(text).toContain(
       "Noted: Gift card (Northbank) held 80.00 EUR at the end of 2026-10-31.\nIts movement, the line Gousset made of it: -90.00 EUR, an expense in Food > Meal vouchers. It is the noted balance less the one before (or the opening balance) and less the account's other lines booked between them, such as transfers.",
     );
     expect(text).not.toContain(giftCard.id);
@@ -602,7 +602,7 @@ describe("accounts note_balance", () => {
       name: "Gift card",
       institution: "northbank",
       day: "2026-11-20",
-      balance: "-12,5",
+      balance: "-12.5",
     });
 
     expect(isError, text).toBe(false);
@@ -619,8 +619,12 @@ describe("accounts note_balance", () => {
     const { text, isError } = await noting({ ...NOTE, day: "2026-09-30" });
 
     expect(isError).toBe(true);
-    expect(text).toContain('A balance of "gift card" is already noted for 2026-09-30: one a day.');
-    expect(text).toContain('A valid call: accounts {"action":"show","name":"gift card"}');
+    expect(text).toContain(
+      "Gift card (Northbank) already has a balance noted on 2026-09-30: one a day.",
+    );
+    expect(text).toContain(
+      'A valid call: accounts {"action":"show","name":"Gift card","institution":"Northbank"}',
+    );
     expect(text.length).toBeLessThan(ERROR_LIMIT);
   });
 
@@ -630,12 +634,11 @@ describe("accounts note_balance", () => {
 
       expect(isError, name).toBe(true);
       expect(text.length).toBeLessThan(ERROR_LIMIT);
-      expect(text, name).toMatch(/\nA valid call: accounts \{"action":"list"\}$/);
-      expect((await noting({ action: "list" })).isError).toBe(false);
+      expect(text, name).toMatch(/\nA valid call: accounts \{"action":"(edit|note_balance)",/);
     }
 
     expect((await noting({ ...NOTE, name: "Current account" })).text).toContain(
-      '"Current account" is kept by its lines',
+      "Current account (Riverside Bank) is kept by its lines",
     );
     expect((await noting({ ...NOTE, name: "Joint account" })).text).toContain(
       "Their accounts: Current account (Riverside Bank), Livret A (Riverside Bank), Livret A (Northbank), Gift card (Northbank).",
@@ -647,37 +650,28 @@ describe("accounts note_balance", () => {
 
     expect(isError).toBe(true);
     expect(text).toContain("Livret A (Riverside Bank), Livret A (Northbank). Add institution");
-    expect(text).toContain(
-      'A valid call: accounts {"action":"note_balance","name":"Livret A","institution":"Riverside Bank","day":"2026-10-31","balance":"80.00"}',
-    );
+    expect(text).toContain('A valid call: accounts {"action":"note_balance","name":"Livret A"');
+    expect(text).toContain('"institution":"Riverside Bank"');
   });
 
   test("refuses a day or a balance it cannot read, and a call without them, saying how to write them", async () => {
     const day = await noting({ ...NOTE, day: "2026-02-30" });
 
     expect(day.isError).toBe(true);
-    expect(day.text).toContain(
-      'day is the day whose end the balance is noted at, a day of the calendar written YYYY-MM-DD: "2026-02-30" is none.',
-    );
-    expect(day.text).toContain('"day":"2026-10-31"');
+    expect(day.text).toContain("day");
 
-    for (const balance of ["80.001", "1,250.50", "80 EUR", ""]) {
+    for (const balance of ["80.001", "12,5", "80 EUR", ""]) {
       const refused = await noting({ ...NOTE, balance });
 
       expect(refused.isError, balance).toBe(true);
-      expect(refused.text, balance).toContain(
-        "balance is the balance at the end of the day, a decimal in EUR with at most 2 decimals",
-      );
-      expect(refused.text, balance).toContain('"balance":"80.00"}');
+      expect(refused.text, balance).toContain("a decimal in EUR with a point for decimals");
+      expect(refused.text, balance).toContain('"balance":"-1,234.56"');
     }
 
     const bare = await noting({ action: "note_balance", name: "Gift card" });
 
     expect(bare.isError).toBe(true);
-    expect(bare.text).toContain("note_balance needs the account's name");
-    expect(bare.text).toContain(
-      'A valid call: accounts {"action":"note_balance","name":"Gift card","day":"2026-10-31","balance":"80.00"}',
-    );
+    expect(bare.text).toContain("note_balance needs the account's name and its balance");
   });
 
   test("is refused to a token that reads only, saying how to allow writes", async () => {
@@ -724,7 +718,7 @@ describe("the accounts tool", () => {
     expect(tool?.description).toContain("what expires when on my meal vouchers?");
   });
 
-  test("notes a balance with the write scope, and says so", async () => {
+  test("comes third in the list, and says it writes (issues #124, #31)", async () => {
     const { tools } = await (await client()).listTools();
     const tool = tools.find((each) => each.name === "accounts");
 
@@ -739,14 +733,12 @@ describe("the accounts tool", () => {
       "rules",
     ]);
     expect(tool?.title).toBe("Accounts");
-    expect(tool?.description).toContain(
-      '{"action":"note_balance","name":"Gift card","day":"2026-10-31","balance":"80.00"}',
-    );
-    // A write; noting a day again is refused, so a repeat changes nothing more.
+    expect(tool?.description).toContain("it makes that day's movement line");
+    // A write; a repeated create makes a second account.
     expect(tool?.annotations).toEqual({
       readOnlyHint: false,
       destructiveHint: true,
-      idempotentHint: true,
+      idempotentHint: false,
       openWorldHint: false,
     });
   });

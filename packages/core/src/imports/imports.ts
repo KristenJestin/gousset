@@ -4,6 +4,7 @@ import {
   account,
   accountBalance,
   importFile,
+  importUpload,
   statementImport,
   statementLine,
 } from "@gousset/db/schema/ledger";
@@ -19,18 +20,28 @@ import {
 } from "@gousset/import";
 import type { CsvFile, CsvProfile, CsvUnsure } from "@gousset/import";
 import { and, asc, desc, eq, gt, inArray, isNull, lt, ne, or, sql } from "drizzle-orm";
-import { Context, Effect, Layer } from "effect";
+import { Context, Effect, Layer, Option } from "effect";
 
 import { remakeBalanceLines } from "../balance-lines";
 import { takeCategoryTurn } from "../category-turn";
 import { dropEntriesWithoutParts, entriesForLines } from "../entries";
-import type { ImportUnavailable, ProfileNotFound, ProfileUnreadable } from "./errors";
+import type {
+  FileUploadPartRefused,
+  ImportUnavailable,
+  ProfileNotFound,
+  ProfileUnreadable,
+  TooManyParts,
+} from "./errors";
 import {
   AccountNotFound,
   EmptyFile,
   FileTooLarge,
+  FileUploadExpired,
+  FileUploadIncomplete,
+  FileUploadNotFound,
   ImportBusy,
   ImportNotFound,
+  TooManyFileUploads,
   UnknownFormat,
 } from "./errors";
 import { unpairForUndo } from "../transfers/pair-lines";
@@ -38,6 +49,19 @@ import { resolveProfile } from "./profiles";
 import { findSummary, isId, selectSummaries, summaryOf } from "./rows";
 import type { ImportJobInput } from "./run";
 import { MAX_FILE_BYTES, TEST_READ_SHOWN } from "./summary";
+import {
+  MAX_PENDING_UPLOADS,
+  appendPart,
+  insertUpload,
+  isSecretOf,
+  lockedUpload,
+  parseUploadToken,
+  partRefusal,
+  requestRefusal,
+  uploadColumns,
+  uploadState,
+} from "./uploads";
+import type { CreatedUpload, FileUploadRequest, FileUploadStatus, ReceivedPart } from "./uploads";
 import type {
   CsvPreview,
   CsvReadRefusal,
@@ -76,6 +100,20 @@ export class ImportJobs extends Context.Service<
 export type Upload = {
   readonly fileName: string;
   readonly content: Uint8Array;
+  readonly format: ImportFormat | null;
+  readonly accountId: string | null;
+};
+
+/** What an upload address names, once its secret is checked: whose it is, and for which grant. */
+export type UploadAddress = {
+  readonly owner: string;
+  readonly grantId: string;
+  /** The bytes the file upload still expects. */
+  readonly bytesLeft: number;
+};
+
+/** What the agent names when it imports a file upload, over what it declared when making it. */
+export type UploadChoices = {
   readonly format: ImportFormat | null;
   readonly accountId: string | null;
 };
@@ -181,6 +219,57 @@ export class Imports extends Context.Service<
       | AccountNotFound
       | ProfileNotFound
       | ProfileUnreadable
+      | ImportUnavailable
+      | Failure
+    >;
+    /**
+     * Makes a file upload (#129) for a file the MCP door's grant `request.grantId` will send to its
+     * address: refused when it is declared empty, over `MAX_FILE_BYTES` or in too many parts, for
+     * an account the user does not have, and while the user has `MAX_PENDING_UPLOADS` waiting.
+     */
+    readonly createUpload: (
+      owner: string,
+      request: FileUploadRequest,
+    ) => Effect.Effect<
+      CreatedUpload,
+      EmptyFile | FileTooLarge | TooManyParts | TooManyFileUploads | AccountNotFound | Failure
+    >;
+    /** The file upload an address's token names, when its secret matches and it has not expired. */
+    readonly uploadAddress: (
+      token: string,
+    ) => Effect.Effect<UploadAddress, FileUploadNotFound | FileUploadExpired | Failure>;
+    /** Keeps one part sent to an address (`partRefusal` says which it refuses). */
+    readonly receivePart: (
+      token: string,
+      part: number | null,
+      content: Uint8Array,
+    ) => Effect.Effect<
+      ReceivedPart,
+      FileUploadNotFound | FileUploadExpired | FileUploadPartRefused | Failure
+    >;
+    /** Where one of the user's file uploads stands. */
+    readonly uploadStatus: (
+      owner: string,
+      id: string,
+    ) => Effect.Effect<FileUploadStatus, FileUploadNotFound | Failure>;
+    /**
+     * Imports a file upload that received all its parts, as `start` imports a file dropped, and
+     * deletes it in the same transaction: it is imported once. Only the grant that made it may.
+     * Refused before anything is kept (an unknown format, an account the user does not have), it
+     * stays, so that the agent can name them and import it again.
+     */
+    readonly startUpload: (
+      owner: string,
+      id: string,
+      grantId: string,
+      choices: UploadChoices,
+    ) => Effect.Effect<
+      Started,
+      | FileUploadNotFound
+      | FileUploadExpired
+      | FileUploadIncomplete
+      | UnknownFormat
+      | AccountNotFound
       | ImportUnavailable
       | Failure
     >;
@@ -303,6 +392,22 @@ function asRead(importId: string, found: ImportSummary, statuses: Array<ImportSt
   );
 }
 
+/** What `work` does with the file upload a token names; a token that names none is refused. */
+function byToken<A, E>(
+  token: string,
+  work: (owner: string, id: string, secret: string) => Effect.Effect<A, E>,
+): Effect.Effect<A, E | FileUploadNotFound> {
+  return Option.match(parseUploadToken(token), {
+    onNone: () => Effect.fail(new FileUploadNotFound()),
+    onSome: ({ owner, id, secret }) => work(owner, id, secret),
+  });
+}
+
+/** A part sent to an address: kept, or why not. */
+type PartOutcome =
+  | { readonly refused: FileUploadNotFound | FileUploadExpired | FileUploadPartRefused }
+  | { readonly received: ReceivedPart };
+
 /** `Imports` on the database (`UserData`) and the app's job queue (`ImportJobs`). */
 export const importsLayer = Layer.effect(
   Imports,
@@ -364,74 +469,266 @@ export const importsLayer = Layer.effect(
         ),
       );
 
+    /**
+     * Keeps the file and starts its import; with `consumes`, the file upload it comes from is
+     * deleted in the same transaction, and nothing is kept when it is gone already.
+     */
+    const startImport = (owner: string, upload: Upload, consumes: string | null) =>
+      Effect.gen(function* () {
+        const bytes = upload.content.byteLength;
+
+        if (bytes === 0) {
+          return yield* new EmptyFile();
+        }
+
+        if (bytes > MAX_FILE_BYTES) {
+          return yield* new FileTooLarge({ bytes, limit: MAX_FILE_BYTES });
+        }
+
+        const format = upload.format ?? detectFormat(upload.content, upload.fileName);
+
+        if (format === null) {
+          return yield* new UnknownFormat();
+        }
+
+        const fileSha256 = sha256(upload.content);
+        const { accountId } = upload;
+
+        const created = yield* inTransaction(owner, async (transaction) => {
+          if (accountId !== null && !(await accountExists(transaction, accountId))) {
+            return { refused: "account" } as const;
+          }
+
+          if (consumes !== null) {
+            const [taken] = await transaction
+              .delete(importUpload)
+              .where(and(eq(importUpload.id, consumes), gt(importUpload.expiresAt, new Date())))
+              .returning({ id: importUpload.id });
+
+            if (taken === undefined) {
+              return { refused: "upload" } as const;
+            }
+          }
+
+          const [same] = await transaction
+            .select({ fileName: statementImport.fileName, createdAt: statementImport.createdAt })
+            .from(statementImport)
+            .where(
+              and(eq(statementImport.fileSha256, fileSha256), eq(statementImport.status, "done")),
+            )
+            .orderBy(desc(statementImport.id))
+            .limit(1);
+
+          const [row] = await transaction
+            .insert(statementImport)
+            .values({ userId: owner, accountId, fileName: upload.fileName, fileSha256, format })
+            .returning({ id: statementImport.id });
+
+          if (row === undefined) {
+            throw new Error("The insert returned no row.");
+          }
+
+          await transaction
+            .insert(importFile)
+            .values({ importId: row.id, userId: owner, content: Buffer.from(upload.content) });
+
+          return {
+            id: row.id,
+            sameFile:
+              same === undefined
+                ? null
+                : { fileName: same.fileName, importedAt: same.createdAt.toISOString() },
+          };
+        });
+
+        if ("refused" in created) {
+          return yield* created.refused === "account"
+            ? Effect.fail(new AccountNotFound({ accountId: accountId ?? "" }))
+            : Effect.fail(new FileUploadNotFound());
+        }
+
+        yield* sendJob(owner, created.id, null);
+
+        return {
+          started: yield* show(owner, created.id).pipe(Effect.orDie),
+          sameFile: created.sameFile,
+        };
+      });
+
     return {
+      // With nothing to consume, no file upload is ever gone.
       start: (owner, upload) =>
+        startImport(owner, upload, null).pipe(Effect.catchTag("FileUploadNotFound", Effect.die)),
+
+      createUpload: (owner, request) =>
         Effect.gen(function* () {
-          const bytes = upload.content.byteLength;
+          const refusal = requestRefusal(request.size, request.parts);
 
-          if (bytes === 0) {
-            return yield* new EmptyFile();
+          if (refusal !== null) {
+            return yield* Effect.fail(refusal);
           }
 
-          if (bytes > MAX_FILE_BYTES) {
-            return yield* new FileTooLarge({ bytes, limit: MAX_FILE_BYTES });
-          }
+          const { accountId } = request;
 
-          const format = upload.format ?? detectFormat(upload.content, upload.fileName);
+          const created = yield* inTransaction(owner, async (transaction) =>
+            accountId !== null && !(await accountExists(transaction, accountId))
+              ? ("account" as const)
+              : insertUpload(transaction, owner, request, new Date()),
+          );
 
-          if (format === null) {
-            return yield* new UnknownFormat();
-          }
-
-          const fileSha256 = sha256(upload.content);
-          const { accountId } = upload;
-
-          const created = yield* inTransaction(owner, async (transaction) => {
-            if (accountId !== null && !(await accountExists(transaction, accountId))) {
-              return undefined;
-            }
-
-            const [same] = await transaction
-              .select({ fileName: statementImport.fileName, createdAt: statementImport.createdAt })
-              .from(statementImport)
-              .where(
-                and(eq(statementImport.fileSha256, fileSha256), eq(statementImport.status, "done")),
-              )
-              .orderBy(desc(statementImport.id))
-              .limit(1);
-
-            const [row] = await transaction
-              .insert(statementImport)
-              .values({ userId: owner, accountId, fileName: upload.fileName, fileSha256, format })
-              .returning({ id: statementImport.id });
-
-            if (row === undefined) {
-              throw new Error("The insert returned no row.");
-            }
-
-            await transaction
-              .insert(importFile)
-              .values({ importId: row.id, userId: owner, content: Buffer.from(upload.content) });
-
-            return {
-              id: row.id,
-              sameFile:
-                same === undefined
-                  ? null
-                  : { fileName: same.fileName, importedAt: same.createdAt.toISOString() },
-            };
-          });
-
-          if (created === undefined) {
+          if (created === "account") {
             return yield* new AccountNotFound({ accountId: accountId ?? "" });
           }
 
-          yield* sendJob(owner, created.id, null);
+          if (created === null) {
+            return yield* new TooManyFileUploads({ limit: MAX_PENDING_UPLOADS });
+          }
+
+          return created;
+        }),
+
+      uploadAddress: (token) =>
+        byToken(token, (owner, id, secret) =>
+          Effect.gen(function* () {
+            const [row] = yield* inTransaction(owner, (transaction) =>
+              transaction.select(uploadColumns).from(importUpload).where(eq(importUpload.id, id)),
+            );
+
+            if (row === undefined || !isSecretOf(secret, row.secretSha256)) {
+              return yield* new FileUploadNotFound();
+            }
+
+            if (row.expiresAt.getTime() <= Date.now()) {
+              return yield* new FileUploadExpired({ expiresAt: row.expiresAt.toISOString() });
+            }
+
+            return { owner, grantId: row.grantId, bytesLeft: row.size - row.bytesReceived };
+          }),
+        ),
+
+      receivePart: (token, part, content) =>
+        byToken(token, (owner, id, secret) =>
+          Effect.gen(function* () {
+            const kept = yield* inTransaction(owner, async (transaction): Promise<PartOutcome> => {
+              const row = await lockedUpload(transaction, id);
+
+              if (row === undefined || !isSecretOf(secret, row.secretSha256)) {
+                return { refused: new FileUploadNotFound() };
+              }
+
+              if (row.expiresAt.getTime() <= Date.now()) {
+                return {
+                  refused: new FileUploadExpired({ expiresAt: row.expiresAt.toISOString() }),
+                };
+              }
+
+              const refusal = partRefusal(row, part, content.byteLength);
+
+              if (refusal !== null) {
+                return { refused: refusal };
+              }
+
+              await appendPart(transaction, id, content);
+
+              const partsReceived = row.partsReceived + 1;
+
+              return {
+                received: {
+                  id,
+                  part: partsReceived,
+                  size: row.size,
+                  parts: row.parts,
+                  partsReceived,
+                  bytesReceived: row.bytesReceived + content.byteLength,
+                  complete: partsReceived === row.parts,
+                },
+              };
+            });
+
+            return "refused" in kept ? yield* Effect.fail(kept.refused) : kept.received;
+          }),
+        ),
+
+      uploadStatus: (owner, id) =>
+        Effect.gen(function* () {
+          const row = yield* inTransaction(owner, async (transaction) => {
+            if (!isId(id)) {
+              return undefined;
+            }
+
+            const [found] = await transaction
+              .select(uploadColumns)
+              .from(importUpload)
+              .where(eq(importUpload.id, id));
+
+            return found;
+          });
+
+          if (row === undefined) {
+            return yield* new FileUploadNotFound();
+          }
 
           return {
-            started: yield* show(owner, created.id).pipe(Effect.orDie),
-            sameFile: created.sameFile,
+            id: row.id,
+            fileName: row.fileName,
+            size: row.size,
+            parts: row.parts,
+            partsReceived: row.partsReceived,
+            bytesReceived: row.bytesReceived,
+            state: uploadState(row, row.expiresAt, new Date()),
+            expiresAt: row.expiresAt.toISOString(),
           };
+        }),
+
+      startUpload: (owner, id, grantId, choices) =>
+        Effect.gen(function* () {
+          const found = yield* inTransaction(owner, async (transaction) => {
+            if (!isId(id)) {
+              return undefined;
+            }
+
+            const [row] = await transaction
+              .select({ ...uploadColumns, content: importUpload.content })
+              .from(importUpload)
+              .where(eq(importUpload.id, id));
+
+            return row;
+          });
+
+          // Another grant's upload is not said to exist.
+          if (found === undefined || found.grantId !== grantId) {
+            return yield* new FileUploadNotFound();
+          }
+
+          if (found.expiresAt.getTime() <= Date.now()) {
+            return yield* new FileUploadExpired({ expiresAt: found.expiresAt.toISOString() });
+          }
+
+          if (found.partsReceived < found.parts || found.bytesReceived !== found.size) {
+            return yield* new FileUploadIncomplete({
+              partsReceived: found.partsReceived,
+              parts: found.parts,
+              bytesReceived: found.bytesReceived,
+              size: found.size,
+            });
+          }
+
+          return yield* startImport(
+            owner,
+            {
+              fileName: found.fileName,
+              content: new Uint8Array(found.content),
+              format: choices.format ?? found.format,
+              accountId: choices.accountId ?? found.accountId,
+            },
+            found.id,
+          ).pipe(
+            // Read whole and within its limits when it was received: never refused for them now.
+            Effect.catchTags({
+              EmptyFile: (refused) => Effect.die(refused),
+              FileTooLarge: (refused) => Effect.die(refused),
+            }),
+          );
         }),
 
       show,

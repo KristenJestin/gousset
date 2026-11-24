@@ -19,75 +19,107 @@ function centsIn(text: string): number {
   return match?.[1] === undefined ? 0 : Math.round(Number(match[1].replaceAll(",", "")) * 100);
 }
 
+/** A digit's roll as the browser was given it: how long it lasts, and whether it moves the digit. */
+type Roll = { duration: number; moves: boolean };
+
 /**
- * Presses "Previous month" and, from that press, samples at every frame whether a digit column
- * draws two digits inside its own box (by at least a pixel), as it does while it rolls: returns
- * how many frames did. It samples until 500 ms after the switcher announces `month`: the digits
- * roll once that month's data is on screen, which may be long after the press; the roll lasts
- * 200 ms.
+ * Presses "Previous month" and returns the rolls started on a digit of a rolling column, from the
+ * press until 30 frames after the switcher announces `month`: the digits roll once that month's
+ * data is on screen, which may be long after the press, and the roll lasts 200 ms, 12 frames.
  *
- * Sampled from the press, not polled after it: a poll's first look comes after the switcher's
- * own wait and a round trip, often past the roll's end when the month's data comes late (seen in
- * Firefox). What is drawn, not what is in the DOM: a leaving digit stays in the DOM until
- * Motion's exit ends and React renders again, which measures React's scheduling, not the roll.
+ * The rolls started, not the frames drawn. Motion plays a digit's roll as a Web Animation of its
+ * transform (`new Animation(new KeyframeEffect(...))`), started just before the frame that lays
+ * out and paints the whole new month: on a busy runner (seen in Firefox) that one frame can
+ * outlast the 140 ms or so in which both digits are drawn, and no frame ever shows the roll
+ * midway. Each effect created in that window is recorded by wrapping `KeyframeEffect` for that
+ * window only, so none can end unseen. Under reduced motion Motion starts none and moves the
+ * digit at once.
  */
-async function rollingFramesTo(page: Page, month: string) {
-  const frames = page.evaluate(
-    ({ columns, announced, after, cap }) => {
-      // Whether any column draws two digits at once.
-      const rollingNow = () =>
-        [...document.querySelectorAll(columns)].some((column) => {
-          const box = column.getBoundingClientRect();
-
-          const drawn = [...column.children].filter((digit) => {
-            const inner = digit.getBoundingClientRect();
-
-            return Math.min(box.bottom, inner.bottom) - Math.max(box.top, inner.top) >= 1;
-          });
-
-          return drawn.length > 1;
-        });
-
-      return new Promise<number>((resolve) => {
+async function rollsTo(page: Page, month: string) {
+  const rolls = page.evaluate(
+    ({ columns, announced, after, cap }) =>
+      new Promise<Array<Roll>>((resolve) => {
         document.addEventListener(
           "pointerdown",
           () => {
+            const Native = window.KeyframeEffect;
+            const created: Array<KeyframeEffect> = [];
             const start = performance.now();
+            let frames = 0;
             let shownAt: number | null = null;
-            let rolling = 0;
 
-            const sample = () => {
-              const now = performance.now();
+            // The form Motion calls; defined rather than assigned, since the global's type also has
+            // the copy constructor, which nothing calls while the month changes.
+            Object.defineProperty(window, "KeyframeEffect", {
+              configurable: true,
+              writable: true,
+              value: class extends Native {
+                constructor(
+                  target: Element | null,
+                  keyframes: Array<Keyframe> | PropertyIndexedKeyframes | null,
+                  options?: number | KeyframeEffectOptions,
+                ) {
+                  super(target, keyframes, options);
+                  created.push(this);
+                }
+              },
+            });
 
-              if (rollingNow()) {
-                rolling += 1;
-              }
+            const done = () => {
+              Object.defineProperty(window, "KeyframeEffect", {
+                configurable: true,
+                writable: true,
+                value: Native,
+              });
+
+              resolve(
+                created.flatMap((effect) => {
+                  if (!effect.target?.closest(columns)) {
+                    return [];
+                  }
+
+                  const transforms = effect.getKeyframes().map(({ transform }) => transform);
+
+                  return [
+                    {
+                      duration: Math.round(Number(effect.getTiming().duration)),
+                      moves: new Set(transforms).size > 1,
+                    },
+                  ];
+                }),
+              );
+            };
+
+            const count = () => {
+              frames += 1;
 
               const label = document.querySelector('[data-slot="month-switcher"] [aria-live]');
 
               if (shownAt === null && label?.textContent?.includes(announced) === true) {
-                shownAt = now;
+                shownAt = frames;
               }
 
-              if ((shownAt !== null && now - shownAt > after) || now - start > cap) {
-                resolve(rolling);
+              if (
+                (shownAt !== null && frames - shownAt > after) ||
+                performance.now() - start > cap
+              ) {
+                done();
               } else {
-                requestAnimationFrame(sample);
+                requestAnimationFrame(count);
               }
             };
 
-            requestAnimationFrame(sample);
+            requestAnimationFrame(count);
           },
           { once: true, capture: true },
         );
-      });
-    },
-    { columns: '[data-slot="rolling-digit"]', announced: month, after: 500, cap: 10_000 },
+      }),
+    { columns: '[data-slot="rolling-digit"]', announced: month, after: 30, cap: 10_000 },
   );
 
   await monthSwitcher(page).getByRole("button", { name: "Previous month" }).click();
 
-  return frames;
+  return rolls;
 }
 
 /** A row of "Where the money goes", by its name: a button that opens its detail. */
@@ -192,9 +224,23 @@ test("changing month moves the bars and amounts to the next month, the digits ro
   const received = block(page, "The month").locator('[data-slot="amount"]').first();
   const october = await received.textContent();
 
-  // While a digit rolls, its column draws the old digit and the new one; an instant change never
-  // draws both.
-  expect(await rollingFramesTo(page, "September 2026")).toBeGreaterThan(0);
+  // Each digit that changes rolls to the new one, moved by its transform over 200 ms.
+  expect(await rollsTo(page, "September 2026")).toContainEqual({ duration: 200, moves: true });
+  await expect(monthSwitcher(page)).toContainText("September 2026");
+  await animationsDone(page);
+  expect(await received.textContent()).not.toBe(october);
+});
+
+test("under reduced motion, changing month changes the amounts without rolling their digits", async ({
+  userPage: page,
+}) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await visit(page, OCTOBER);
+
+  const received = block(page, "The month").locator('[data-slot="amount"]').first();
+  const october = await received.textContent();
+
+  expect(await rollsTo(page, "September 2026")).toEqual([]);
   await expect(monthSwitcher(page)).toContainText("September 2026");
   await animationsDone(page);
   expect(await received.textContent()).not.toBe(october);

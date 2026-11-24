@@ -18,7 +18,7 @@ import {
 } from "./errors";
 import { readOfx } from "./ofx";
 import type { OfxAmountSigns, OfxOptions, OfxStatement } from "./ofx";
-import { madeUpStatements } from "./testing";
+import { madeUpStatementsWithoutEntities } from "./testing";
 
 const read = (bytes: Uint8Array, options?: OfxOptions) => Effect.runSync(readOfx(bytes, options));
 
@@ -231,6 +231,36 @@ describe("reading OFX and QFX files", () => {
     });
   });
 
+  test("reads ofx-double-encoded.ofx (entities encoded twice, and once) as the bank meant them", () => {
+    // A line without a FITID.
+    const debit = (bookedOn: string, amountMinor: number, label: string) => ({
+      ...bare(bookedOn, amountMinor, label, ""),
+      bankId: null,
+    });
+
+    expect(read(statementSamples.ofxDoubleEncoded.bytes)).toEqual({
+      account: DOMESTIC_ACCOUNT,
+      currency: "EUR",
+      lines: [
+        {
+          ...bare("2026-11-02", -450, "CB CAFE DE L'EXEMPLE", "EX2026110201"),
+          memo: "PAIEMENT PAR CARTE",
+        },
+        debit("2026-11-03", -120, "BOULANGERIE L'EPI D'EXEMPLE"),
+        debit("2026-11-03", -120, "BOULANGERIE L'EPI D'EXEMPLE"),
+        {
+          ...debit("2026-11-05", -6412, "PRLV SEPA ELEC & GAZ EXEMPLE"),
+          memo: 'ECHEANCE "NOVEMBRE"',
+        },
+        debit("2026-11-06", -890, "LIBRAIRIE L'ENCRE EXEMPLE"),
+        debit("2026-11-06", -890, "LIBRAIRIE L'ENCRE EXEMPLE"),
+      ],
+      openingBalance: null,
+      balance: { amountMinor: 100_000, on: "2026-11-07" },
+      amountSigns: AS_WRITTEN,
+    });
+  });
+
   test("gives an ACCTID shaped as an IBAN as the account's IBAN too", () => {
     const spaced = ofx([]).replace(
       "<BANKTRANLIST>",
@@ -247,13 +277,34 @@ describe("reading OFX and QFX files", () => {
     expect(read(encode(ofx([]))).account).toBeNull();
   });
 
-  test("reads back any statement writeOfx writes", () => {
+  test("reads back any statement writeOfx writes, its labels holding no entity", () => {
     fc.assert(
-      fc.property(madeUpStatements, (statement) => {
+      fc.property(madeUpStatementsWithoutEntities, (statement) => {
         const bytes = new TextEncoder().encode(writeOfx(statement));
 
         expect(read(bytes)).toEqual(writtenByWriteOfx(statement));
       }),
+    );
+  });
+
+  test("reads a written label that looks like an entity as that entity, and keeps what names none", () => {
+    const labels = ["&#0;* ;", "L&apos;EST", "&AMP;LT; R&D", "&#99999999; &UNKNOWN;"];
+
+    const statement = {
+      ...exampleStatement,
+      lines: labels.map((label, at) => ({
+        bookedOn: "2026-11-02",
+        amountMinor: -100,
+        label,
+        reference: `EX${at}`,
+      })),
+    };
+
+    const { lines } = read(encode(writeOfx(statement)));
+    const expected = ["* ;", "L'EST", "< R&D", "&#99999999; &UNKNOWN;"];
+
+    expect(lines.map((line) => [line.label, line.memo])).toEqual(
+      expected.map((label) => [label, label]),
     );
   });
 });

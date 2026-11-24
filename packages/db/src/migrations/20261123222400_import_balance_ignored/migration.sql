@@ -1,0 +1,1 @@
+ALTER TABLE "import" ADD COLUMN "balance_ignored" boolean DEFAULT false NOT NULL;
