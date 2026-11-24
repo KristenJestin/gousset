@@ -10,6 +10,7 @@ import type { UserTransaction } from "@gousset/db/user-data";
 import { and, eq, inArray, isNotNull } from "drizzle-orm";
 
 import type { EntryKind } from "../category-store";
+import { topUpsToBalanceCategories } from "../expenses/top-up-categories";
 import { merchantKey } from "./labels";
 
 // A merchant's default category classifies its entries (#23, docs/data-model.md, v0.3): an entry
@@ -87,6 +88,18 @@ const CHUNK = 500;
  * fallback already, since each default set, changed or cleared moved its merchant's.
  */
 export async function classifyByMerchants(
+  transaction: UserTransaction,
+  scope: DefaultScope,
+): Promise<number> {
+  const moved = await classifyByDefaults(transaction, scope);
+
+  // A top-up of a card kept by its balance goes to the card's category, after the defaults (#28).
+  await topUpsToBalanceCategories(transaction, "merchantId" in scope ? { every: true } : scope);
+
+  return moved;
+}
+
+async function classifyByDefaults(
   transaction: UserTransaction,
   scope: DefaultScope,
 ): Promise<number> {

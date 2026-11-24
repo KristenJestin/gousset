@@ -24,6 +24,13 @@ export type AccountRecord = {
   readonly creditOrder: CreditOrder;
   /** Read for an account kept by its balance only: the category its movement goes to (#31). */
   readonly balanceCategoryId: string | null;
+  /**
+   * Read for a benefit account only (#28): how many days after the card's own line its issuer may
+   * book the rest of a purchase on a linked bank card, 0 to 7.
+   */
+  readonly topUpDays: number;
+  /** Read for a benefit account only: the most the card pays a day, in minor units; null unknown. */
+  readonly topUpCapMinor: number | null;
 };
 
 /** A category an account's movement may go to, as a write checks it. */

@@ -63,6 +63,8 @@ export { MAX_SHARES, PROPOSALS_SHOWN, REFUND_DAYS } from "./expenses/parts";
 
 export type { PartRole } from "./expenses/parts";
 
+export { matchTopUps } from "./expenses/top-ups";
+
 export { FixtureLedger, Ledger, MONTHS_FROM_TODAY } from "./ledger";
 
 export {

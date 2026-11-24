@@ -1,3 +1,4 @@
+import { DEFAULT_TOP_UP_DAYS } from "@gousset/core/account-values";
 import { m } from "@gousset/i18n/messages";
 import {
   AccountGroup,
@@ -41,6 +42,8 @@ const NEW_ACCOUNT: Omit<AccountFormValues, "currency"> = {
   settlesIntoAccountId: null,
   creditOrder: "oldest_first",
   balanceCategoryId: null,
+  topUpDays: DEFAULT_TOP_UP_DAYS,
+  topUpCapMinor: null,
 };
 
 function AccountsPage() {

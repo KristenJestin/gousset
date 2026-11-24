@@ -55,6 +55,15 @@ export const ACCOUNTS: ExportTable = {
       name: "balance_category_id",
       holds: "an account kept by its balance: the category (categories.id) its movement goes to",
     },
+    {
+      name: "top_up_days",
+      holds:
+        "a benefit account: the days its issuer takes to charge a purchase's rest to a bank card",
+    },
+    {
+      name: "top_up_cap_minor",
+      holds: "a benefit account: the most it pays a day, in minor units; empty when unknown",
+    },
   ],
 };
 
@@ -120,6 +129,10 @@ export const STATEMENT_LINES: ExportTable = {
     {
       name: "balance_id",
       holds: "a line made from a balance you noted: that balance (account-balances.id)",
+    },
+    {
+      name: "link_refused",
+      holds: "true once you took the line out of an expense: Gousset no longer links it by itself",
     },
   ],
 };

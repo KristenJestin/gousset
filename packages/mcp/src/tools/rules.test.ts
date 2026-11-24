@@ -50,6 +50,8 @@ function account(name: string, institution: string): AccountRecord {
     settlesIntoAccountId: null,
     creditOrder: "oldest_first",
     balanceCategoryId: null,
+    topUpDays: 3,
+    topUpCapMinor: null,
   };
 }
 

@@ -182,8 +182,12 @@ test("the operations page proposes a cancellation as a refund, links it once con
   await expect(shares).toContainText("€30.00");
   await expect(shares).toContainText("€60.00");
 
-  // The page is in use again before any reload: a click reaches it (no closed sheet, nor its
-  // backdrop, covers it), and the split opens again with its two shares.
+  // The page is in use again before any reload, once the sheet has left: a click reaches it (no
+  // closed sheet, nor its backdrop, covers it), and the split opens again with its two shares.
+  // While its backdrop still fades out (300 ms), ui-sdk swallows a press over it on purpose, so
+  // that nothing behind a dimmed page is pressed: the shares are read by then, since the line's
+  // queries came back before the sheet closed, and a click at once would land in that exit.
+  await expect(page.locator('[data-slot="dialog-backdrop"]')).toHaveCount(0);
   await stores.getByRole("button", { name: "Split", exact: true }).click();
 
   await expect(openSheet).toHaveCount(1);
