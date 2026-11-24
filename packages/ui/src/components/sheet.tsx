@@ -70,6 +70,12 @@ export type SheetProps = {
   trigger?: ReactElement;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
+  /**
+   * False: a sheet mounted open shows in its place at once, its backdrop too, instead of sliding
+   * in; it still leaves by sliding out. For a sheet the server's page already meant to show (a
+   * detail opened from the address), which must not rise on its own once the page runs.
+   */
+  appear?: boolean;
 };
 
 /**
@@ -95,6 +101,7 @@ export function Sheet({
   trigger,
   open,
   onOpenChange,
+  appear = true,
 }: SheetProps) {
   const wide = useWideScreen();
 
@@ -129,14 +136,16 @@ export function Sheet({
   return (
     <DialogRoot open={open} dismissible={!sending} onOpenChange={(next) => onOpenChange?.(next)}>
       {trigger === undefined ? null : <DialogTrigger render={trigger} />}
-      <DialogBackdrop className={backdropClasses} />
+      <DialogBackdrop
+        className={cn(backdropClasses, !appear && "data-starting-style:opacity-100!")}
+      />
       {/* A form starts on its first field; otherwise focus starts on the sheet itself, reading
           from the title, and Escape closes it at once (on the close button, its tooltip would
           take the first Escape). */}
       <DialogContent
         initialFocus={onSubmit === undefined ? "content" : FIRST_FIELD}
         data-side={wide ? "right" : "bottom"}
-        className={sheetClasses}
+        className={cn(sheetClasses, !appear && "data-starting-style:translate-none!")}
       >
         <SheetHeader title={title} description={description} sending={sending} />
         {onSubmit === undefined ? (

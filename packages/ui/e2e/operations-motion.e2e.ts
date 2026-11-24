@@ -6,13 +6,13 @@ const story = (component: string, name: string) =>
 
 /**
  * What to read at each frame, on the elements `selector` matches whose text holds `text`: how many
- * there are, or the first one's computed opacity or transform, or the top of its box as drawn
- * ("none" when there is none).
+ * there are, or the first one's computed opacity or transform, or the top or left of its box as
+ * drawn ("none" when there is none).
  */
 type Reading = {
   selector: string;
   text: string;
-  read: "count" | "opacity" | "transform" | "top";
+  read: "count" | "opacity" | "transform" | "top" | "left";
 };
 
 /** One frame: its time from the start, in ms, and each reading's value, in order. */
@@ -49,8 +49,8 @@ async function sampleFrames(
             return "none";
           }
 
-          if (read === "top") {
-            return String(Math.round(first.getBoundingClientRect().top));
+          if (read === "top" || read === "left") {
+            return String(Math.round(first.getBoundingClientRect()[read]));
           }
 
           const style = getComputedStyle(first);
@@ -438,6 +438,43 @@ async function restingTop(page: Page) {
 
   return dialog.evaluate((node) => Math.round(node.getBoundingClientRect().top));
 }
+
+test.describe("Line detail on a tablet", () => {
+  test("between 768 and 1023 px the detail is a modal sheet from the side, the list left whole", async ({
+    page,
+  }) => {
+    await page.setViewportSize({ width: 900, height: 800 });
+    await page.goto(story("operationslayout", "desktop"));
+    await expect(page.locator(ROW).first()).toBeVisible();
+
+    const listWidth = () =>
+      page
+        .locator('[data-slot="operations-scroller"]')
+        .evaluate((node) => Math.round(node.getBoundingClientRect().width));
+
+    const before = await listWidth();
+
+    const opening = await sampleFrames(
+      page,
+      [{ selector: '[role="dialog"]', text: LABEL, read: "left" }],
+      { trigger: openingRow(page) },
+    );
+
+    const dialog = page.getByRole("dialog", { name: "CB GREENMARKET 2110 RIVERTON" });
+
+    await expect(dialog).toBeVisible();
+    await expect.poll(() => page.evaluate(() => document.getAnimations().length)).toBe(0);
+
+    const rest = await dialog.evaluate((node) => Math.round(node.getBoundingClientRect().left));
+
+    // It slid in from the right edge, over the list, which kept its width: no column beside it.
+    expect(
+      timesWhen(opening, 0, (left) => left !== "none" && Number(left) > rest + 1).length,
+    ).toBeGreaterThan(1);
+    expect(await listWidth()).toBe(before);
+    await expect(page.locator('[data-slot="operations-detail"]')).toHaveCount(0);
+  });
+});
 
 test.describe("Line detail on a phone", () => {
   // The sheet's top as drawn: its slide is a `translate`, which the box carries.

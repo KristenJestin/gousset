@@ -24,10 +24,10 @@ export type OperationsLayoutProps = {
 };
 
 /**
- * How long a closing detail stays drawn: its content fades out (120 ms), then its column closes
- * (220 ms, from 100 ms on); a phone's sheet goes back down in 200 ms.
+ * How long a closing detail stays drawn: its content fades out (150 ms), then its column closes
+ * (150 ms, from 150 ms on); a phone's sheet goes back down in 200 ms.
  */
-const CLOSING_MS = 320;
+const CLOSING_MS = 300;
 
 const REDUCED_MOTION = "(prefers-reduced-motion: reduce)";
 
@@ -37,7 +37,8 @@ const shows = (detail: ReactNode) => detail !== undefined && detail !== null;
  * The detail's column beside the list: it widens from nothing to 376 px (a 16 px gap and the
  * 360 px panel, laid out at its full width from the start) and the list narrows with it; closing,
  * it waits for the content to fade, then narrows back to nothing. Its width moves, never a scale.
- * A column the server drew is there from the first paint, still.
+ * A column the server drew is there from the first paint, still. Below `lg` it never shows: the
+ * first paint keeps the list whole, and once the page runs the detail is a sheet.
  */
 function DetailColumn({ closing, children }: { closing: boolean; children: ReactNode }) {
   const hydrated = useHydrated();
@@ -51,8 +52,9 @@ function DetailColumn({ closing, children }: { closing: boolean; children: React
       inert={closing}
       className={cn(
         "flex min-h-0 w-94 shrink-0 overflow-hidden transition-width duration-300 ease-out",
+        "max-lg:hidden",
         widens && "starting:w-0",
-        "data-closing:w-0 data-closing:delay-100 data-closing:duration-220 data-closing:ease-in",
+        "data-closing:w-0 data-closing:delay-150 data-closing:duration-150 data-closing:ease-in",
       )}
     >
       <div className="ml-4 flex min-h-0 w-90 shrink-0">{children}</div>
@@ -70,8 +72,8 @@ function DetailColumn({ closing, children }: { closing: boolean; children: React
  * itself.
  *
  * Motion (#128): the detail's column widens from 0 in 300 ms (ease-out) as the list narrows; the
- * detail's content fades in once there is room. Closing, the content fades out first (120 ms),
- * then the column closes (220 ms, ease-in): the closed detail stays drawn meanwhile, and
+ * detail's content fades in once there is room. Closing, the content fades out first (150 ms),
+ * then the column closes (150 ms, ease-in): the closed detail stays drawn meanwhile, and
  * `DetailClosing` tells it so. Below `lg` the sheet rises from its edge and goes back down. A new
  * count is said to screen readers. Cut under reduced motion: the detail is there, or not.
  */

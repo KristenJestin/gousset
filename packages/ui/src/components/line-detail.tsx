@@ -69,11 +69,12 @@ function DetailGroup({ children }: { children: ReactNode }) {
  * looks like …" on a held line, and the import it came from or "Entered by hand". Every text comes
  * worded from the page. The close button or Escape closes it; the focus goes into it when it opens.
  * From Tailwind's `lg` on it is a panel, which `OperationsLayout` sets in a column beside the list;
- * below, a bottom `Sheet` (a side one from `md`) over the list, its label and amount at its top.
+ * below, a modal `Sheet` over the list (from the bottom on a phone, from the side on a tablet),
+ * its label and amount at its top.
  *
  * Motion (#128): the panel's content, laid out at its full width from the start, fades in and
  * slides 8 px from the right (180 ms, ease-out) once its column has room for it (after 120 ms);
- * closing, it fades out (120 ms, ease-in) before the column closes (`DetailClosing`). Nothing in
+ * closing, it fades out (150 ms, ease-in) before the column closes (`DetailClosing`). Nothing in
  * it ever scales, so no text is squashed. The sheet rises from its edge in 300 ms and goes back
  * down in 200 ms. A detail the server drew (a line opened from the address) shows as it is. Cut
  * under reduced motion.
@@ -177,6 +178,8 @@ export function LineDetail({
         }}
         title={label}
         description={amountShown}
+        // Drawn by the server (opened from the address): there at once, never rising on its own.
+        appear={moves}
       >
         <div data-slot="line-detail" className="flex flex-col gap-4">
           {content}
@@ -202,7 +205,7 @@ export function LineDetail({
           "flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4",
           "transition delay-120 duration-180 ease-out",
           moves && "starting:translate-x-2 starting:opacity-0",
-          "data-closing:opacity-0 data-closing:delay-0 data-closing:duration-120 data-closing:ease-in",
+          "data-closing:opacity-0 data-closing:delay-0 data-closing:duration-150 data-closing:ease-in",
         )}
       >
         <div className="flex items-start gap-3">

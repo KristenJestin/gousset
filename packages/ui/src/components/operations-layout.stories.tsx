@@ -79,15 +79,16 @@ function Screen({ start }: { start?: string }) {
  * The operations screen's places (screen 2): the filters, the count of lines that match, the list
  * in a block filling the screen's height with its own scroller, and the open line's detail in a
  * 360 px column at its right, from Tailwind's `lg` on: the list makes room, its account column
- * giving way when it runs short, never its amounts. Below `lg` the detail is a sheet over the
- * list (from the bottom on a phone), which keeps its scroll under it. The page composes it, and
+ * giving way when it runs short, never its amounts. Below `lg` the detail is a modal sheet over
+ * the list (from the bottom on a phone, from the side on a tablet), which keeps its scroll under
+ * it. The page composes it, and
  * writes no layout class of its own.
  *
  * Loading: `OperationsListSkeleton` in `list`, `LineDetailSkeleton` in `detail`, no `count`.
  *
  * Motion: filtering, the rows that stay slide and the others fade (200 ms). Opening a line, the
  * detail's column widens in 300 ms (ease-out) and its content fades in once it has room; closing,
- * the content fades out first, then the column closes (220 ms, ease-in). A width moves, never a
+ * the content fades out first (150 ms), then the column closes (150 ms, ease-in). A width moves, never a
  * scale. The sheet rises in 300 ms and goes back down in 200 ms. Cut under reduced motion.
  *
  * Don't: put the list in a block of the page's own, or render the detail without its key (the

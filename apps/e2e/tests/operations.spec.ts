@@ -553,6 +553,44 @@ test("a line opens its detail, Escape closes it, and its address opens it on the
   await animationsDone(page);
 });
 
+test("on a phone, a line opened from its address leaves the rows in sight, then shows as a sheet that does not rise", async ({
+  browser,
+  page,
+  app,
+}) => {
+  const phone = { width: 390, height: 844 };
+  const address = `/operations?line=${greenmarketId}`;
+
+  // The server's first paint, before any script: the list whole, no column squeezing it.
+  const still = await browser.newContext({
+    javaScriptEnabled: false,
+    viewport: phone,
+    locale: "en-US",
+    timezoneId: "Europe/Paris",
+  });
+
+  const first = await still.newPage();
+
+  await still.addCookies([...oriane.cookies]);
+  await fixDay(first, TODAY);
+  await first.goto(`${app.baseURL}${address}`);
+  await expect(row(first, GREENMARKET)).toBeVisible();
+  await expect(row(first, STREAMLY)).toBeVisible();
+  await expect(first.locator('[data-slot="operations-detail"]')).toBeHidden();
+  await still.close();
+
+  // Once the page runs, the detail is a sheet, in its place from its first frame.
+  await page.setViewportSize(phone);
+  await signedInAs(page, oriane);
+  await page.goto(address);
+
+  const sheet = page.getByRole("dialog", { name: GREENMARKET });
+
+  await expect(sheet).toContainText(FILE_NAME);
+  expect(await sheet.evaluate((node) => node.getAnimations().length)).toBe(0);
+  await animationsDone(page);
+});
+
 test("a user with no line is told where the lines will come from", async ({ page, app, user }) => {
   const noemie = await addUser(app.baseURL, user, personOfItsOwn("noemie"));
 
