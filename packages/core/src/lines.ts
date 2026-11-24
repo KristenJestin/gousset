@@ -265,7 +265,7 @@ function queryOf(search: LineSearch, day: string): Result.Result<LineQuery, Line
 const money = (minor: number, currency: string): Money => ({ minor, currency });
 
 /** A line as a search gives it: to review when it is held, or among the lines to review. */
-function rowOf(line: FoundLine, reviewing = false): LineRow {
+export function rowOf(line: FoundLine, reviewing = false): LineRow {
   return {
     id: line.id,
     bookedOn: line.bookedOn,
@@ -291,6 +291,22 @@ function rowOf(line: FoundLine, reviewing = false): LineRow {
  * all. Fails with `LineSearchRefused` for an amount, a period or a cursor that cannot be read.
  */
 export const searchLines = (owner: string, search: LineSearch = {}) =>
+  Effect.map(findLines(owner, search), (found) => {
+    const page: LinePage = {
+      lines: found.lines.map((line) => rowOf(line, search.toReview === true)),
+      next: found.next,
+      total: found.total,
+    };
+
+    return page;
+  });
+
+/**
+ * A page of `searchLines`, its lines as the store found them, with those among them that wait for
+ * the user to choose their transfer's other side (`toChoose`): what the review proposes reads it
+ * (`./review-queue`, #35), so that the queue and the filter "to review" are one definition.
+ */
+export const findLines = (owner: string, search: LineSearch = {}) =>
   Effect.gen(function* () {
     const store = yield* LineStore;
     const day = yield* today;
@@ -310,13 +326,42 @@ export const searchLines = (owner: string, search: LineSearch = {}) =>
     const lines = found.lines.slice(0, query.limit);
     const last = lines.at(-1);
 
-    const page: LinePage = {
-      lines: lines.map((line) => rowOf(line, reviewing)),
+    return {
+      lines,
       next: found.lines.length > query.limit && last !== undefined ? cursorOf(last) : null,
       total: found.total,
+      toChoose: new Set(toChoose),
     };
+  });
 
-    return page;
+/**
+ * One line of the user's as the lines to review give it, by the same definition as
+ * `searchLines` with `toReview` (#35); undefined when it is none of them (classified, paired,
+ * discarded, booked after today, or no line of the user's). `waitsForTransfer`: its transfer's
+ * other side is the user's to choose.
+ */
+export const lineToReview = (owner: string, lineId: string) =>
+  Effect.gen(function* () {
+    const store = yield* LineStore;
+    const day = yield* today;
+    const toChoose = yield* store.severalCandidates(owner, day);
+
+    const found = yield* store.search(owner, {
+      text: null,
+      accountId: null,
+      from: null,
+      to: day,
+      amount: null,
+      state: "held",
+      alsoLineIds: toChoose,
+      onlyLineIds: [lineId],
+      after: null,
+      limit: 1,
+    });
+
+    const [line] = found.lines;
+
+    return line === undefined ? undefined : { line, waitsForTransfer: toChoose.includes(lineId) };
   });
 
 /**

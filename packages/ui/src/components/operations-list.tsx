@@ -53,6 +53,11 @@ export type OperationsListProps = {
   locale?: string;
   /** A "Category" column, on a wide screen, with each row's `category`. */
   withCategory?: boolean;
+  /**
+   * The line that leaves the rows because it was just reviewed (#35): as it goes, it folds away
+   * (its height to 0) rather than fade. Give it before, or with, the rows without it.
+   */
+  foldingId?: string;
 };
 
 /** Every row's height, in pixels: `h-12`. The virtualiser places rows by it. */
@@ -64,14 +69,23 @@ const ROW_HEIGHT = 48;
  */
 const FIRST_PAINT_ROWS = 24;
 
+/** How a row leaves: with a change of the rows or not, and the row reviewed, which folds. */
+type Leaving = { fading: boolean; foldingId: string | undefined };
+
 // A row that comes with a change of the rows fades in, one that goes fades out; a row that enters
-// or leaves the window by scrolling comes and goes at once (`custom` says which).
-const ROW_MOTION = {
-  hidden: { opacity: 0 },
-  shown: { opacity: 1 },
-  gone: (fading: boolean) =>
-    fading ? { opacity: 0 } : { opacity: 0, transition: { duration: 0 } },
-} satisfies Variants;
+// or leaves the window by scrolling comes and goes at once (`custom` says which). The row just
+// reviewed folds away: its height to 0, in 200 ms, ease-out. Each row's own, to know it is that one.
+const rowMotion = (id: string) =>
+  ({
+    hidden: { opacity: 0 },
+    shown: { opacity: 1 },
+    gone: ({ fading, foldingId }: Leaving) =>
+      foldingId === id
+        ? { height: 0, opacity: 0, transition: transition.base }
+        : fading
+          ? { opacity: 0 }
+          : { opacity: 0, transition: { duration: 0 } },
+  }) satisfies Variants;
 
 type Followed = Pick<OperationsListProps, "rows" | "total" | "openId" | "onEnd">;
 
@@ -166,8 +180,10 @@ const COLUMN = {
  *
  * Motion: when the rows change (a new search, a filter), the rows that stay slide to their new
  * place (a layout move, by transform), new ones fade in and gone ones fade out, in 200 ms
- * (ease-out). Rows that enter or leave the view by scrolling neither fade nor slide. Cut under
- * reduced motion. When nothing matches, the rows that were there fade out over the empty state.
+ * (ease-out). Rows that enter or leave the view by scrolling neither fade nor slide. The line just
+ * reviewed (`foldingId`) folds away instead: its height to 0 in 200 ms, ease-out, as the rows
+ * under it slide up. Cut under reduced motion. When nothing matches, the rows that were there fade
+ * out over the empty state.
  *
  * The account column shows while the list is at least 576 px wide, the category column while it
  * is at least 768 px wide (container queries): a list narrowed by an open detail gives them up,
@@ -184,6 +200,7 @@ export function OperationsList({
   emptyText,
   locale,
   withCategory = false,
+  foldingId,
 }: OperationsListProps) {
   const messages = useUiMessages().operations;
   const pageLocale = usePageLanguage();
@@ -209,6 +226,7 @@ export function OperationsList({
   }
 
   const fading = change.before !== null;
+  const leaving: Leaving = { fading, foldingId };
 
   useLayoutEffect(() => {
     shown.follow({ rows, total, openId, onEnd });
@@ -274,7 +292,7 @@ export function OperationsList({
           {/* One list and one `AnimatePresence` from the server's first paint on, so that a row that
               goes always fades out, even the last one. */}
           <ul ref={box} aria-label={label} className="relative">
-            <AnimatePresence initial={false} custom={fading}>
+            <AnimatePresence initial={false} custom={leaving}>
               {hydrated
                 ? items.map((item) => {
                     const row = rows[item.index];
@@ -282,8 +300,9 @@ export function OperationsList({
                     return row === undefined ? null : (
                       <PlacedRow
                         key={row.id}
+                        id={row.id}
                         start={item.start}
-                        fading={fading}
+                        leaving={leaving}
                         fadesIn={change.before !== null && !change.before.has(row.id)}
                         total={total}
                         position={item.index + 1}
@@ -334,15 +353,17 @@ export function OperationsList({
  * slides from there (`layout="position"`, by transform).
  */
 function PlacedRow({
+  id,
   start,
-  fading,
+  leaving,
   fadesIn,
   total,
   position,
   children,
 }: {
+  id: string;
   start: number;
-  fading: boolean;
+  leaving: Leaving;
   /** Came with a change of the rows, not by scrolling. */
   fadesIn: boolean;
   total: number;
@@ -361,8 +382,8 @@ function PlacedRow({
     <m.li
       ref={element}
       layout="position"
-      variants={ROW_MOTION}
-      custom={fading}
+      variants={rowMotion(id)}
+      custom={leaving}
       initial={fadesIn ? "hidden" : false}
       animate="shown"
       exit="gone"
@@ -370,7 +391,8 @@ function PlacedRow({
       aria-setsize={total}
       aria-posinset={position}
       data-slot="operation-row"
-      className="absolute inset-x-0 h-12 border-b bg-card"
+      // Hidden overflow: a row folding away takes its content with it.
+      className="absolute inset-x-0 h-12 overflow-hidden border-b bg-card"
     >
       {children}
     </m.li>

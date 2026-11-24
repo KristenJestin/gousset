@@ -118,12 +118,12 @@ const failureOf = (result: Result.Result<Conditions, number>) =>
   Result.isFailure(result) ? result.failure : undefined;
 
 describe("the rules tool", () => {
-  test("comes last in the fixed order, writes, and says how to write a condition", async () => {
+  test("comes before review in the fixed order, writes, and says how to write a condition", async () => {
     const client = await connectInProcess(goussetServer, { run: onToday() }, reader, "2026-07-28");
     const { tools } = await client.listTools();
     const tool = tools.find((each) => each.name === "rules");
 
-    expect(tools.map((each) => each.name).at(-1)).toBe("rules");
+    expect(tools.map((each) => each.name).slice(-2)).toEqual(["rules", "review"]);
     expect(tool?.title).toBe("Rules");
     expect(tool?.annotations).toEqual({
       readOnlyHint: false,
