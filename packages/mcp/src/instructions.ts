@@ -19,7 +19,7 @@ Gousset's words, used in every result:
 - benchmark: a suggested monthly mark for a category, not a budget.
 
 Which tool answers what:
-- \`month\`: the monthly review. Its subscriptions: the payments that recur, those that stopped and the prices that rose. Its benchmarks: each expense category's spending in a month against its benchmark, and what drifts above it. Use it for "am I spending more than usual?". The rest of the review is not available yet: it says so, with no figure; read the user's money with \`accounts\` and \`lines\` meanwhile.
+- \`month\`: a month's subscriptions (recurring payments, stops, price rises) and benchmarks (each expense category against its mark, what drifts). Use it for "am I spending more than usual?". Its summary is not available yet and gives no figure: read money with \`accounts\` and \`lines\`.
 - \`imports\`: imports a bank statement file into an account without duplicates, and lists, follows and undoes imports. Use it when the user gives a statement or asks what was imported.
 - \`accounts\`: the user's accounts by group (available, restricted, savings and investments, owed) with balances and totals per currency, and one account's last lines and balance check against its statement; creates, edits, closes and reopens accounts, notes the balance of one kept by its balance and sets a benefit credit's expiry. Use it for "how much do I have?", "does my balance match my bank's?" or to set accounts up before importing statements.
 - \`data\`: what an export of all the user's data holds, and where to download it. Use it to export or back up their data.
@@ -27,6 +27,6 @@ Which tool answers what:
 - \`merchants\`: lists, searches and shows the merchants with the cleaned labels that name them; renames one, merges two, splits one by moving a cleaned label to another merchant, or sets the category its entries go in by default. Use it for "which shop is this?" or to tidy merchants up.
 - \`categories\`: the expense and income categories on two levels, with their benchmarks and six-month averages; creates, renames, moves, merges and archives them. Name a category as listed, "Parent > Child" for a child.
 - \`rules\`: rules that classify lines by themselves; creates, edits, turns off, applies one to past lines. After a \`lines\` correction, propose the rule it writes.
-- \`review\`: the lines to review one at a time, each with Gousset's proposal to accept or correct. Use it to go through what the imports left to decide.
+- \`review\`: what imports left undecided, line by line, each proposal to accept or correct. Any other change to a line: \`lines\`.
 
 Results are text, with names rather than ids. A long result comes in parts, its last line the next call to make. An error says what to do and gives a valid call. A write needs a connection allowed to write; a refusal says how to get it.`;
