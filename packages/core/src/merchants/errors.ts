@@ -29,6 +29,21 @@ export class MerchantAliasNotFound extends Schema.TaggedError<MerchantAliasNotFo
   { alias: Schema.String },
 ) {}
 
+/**
+ * Who was paid cannot be set on this line (#30): its label names no intermediary, so its merchant is
+ * the label's and moving the cleaned label changes it (`not_intermediary`); it is no one entry made
+ * of the whole line, as a rule's (held, discarded, a side of a transfer, split, linked, of no
+ * amount: `not_one_entry`); or the merchant named is an intermediary itself
+ * (`intermediary_chosen`).
+ */
+export class LineMerchantRefused extends Schema.TaggedError<LineMerchantRefused>()(
+  "LineMerchantRefused",
+  {
+    lineId: Schema.String,
+    reason: Schema.Literals(["not_intermediary", "not_one_entry", "intermediary_chosen"]),
+  },
+) {}
+
 /** A merchant is merged into another one, never into itself. */
 export class MerchantMergeRefused extends Schema.TaggedError<MerchantMergeRefused>()(
   "MerchantMergeRefused",

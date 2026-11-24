@@ -480,6 +480,9 @@ export const merchant = pgTable.withRLS(
     // Its key (`on delete set null (default_category_id)`, which Drizzle cannot write) is in the
     // custom migration `*_merchant_default_category_key`.
     defaultCategoryId: uuid("default_category_id"),
+    // Added with the payment intermediaries (#30): a label naming it hides who was paid, which the
+    // user sets on the line's entry (`entry.merchant_id`).
+    isIntermediary: boolean("is_intermediary").default(false).notNull(),
   },
   (table) => [
     unique("merchant_user_id_id_key").on(table.userId, table.id),
@@ -563,8 +566,9 @@ export const category = pgTable.withRLS(
 );
 
 /**
- * What happened: an expense or an income, with one category, made of parts of lines. Its merchant,
- * intermediary, rule and subscription come with #24, #30, #25 and v0.4.
+ * What happened: an expense or an income, with one category, made of parts of lines. Its merchant
+ * and rule come with #25, its subscription with v0.4; an intermediary is read from its line's label
+ * (#30).
  */
 export const entry = pgTable.withRLS(
   "entry",
@@ -579,9 +583,9 @@ export const entry = pgTable.withRLS(
     classifiedBy: classifiedBy("classified_by").notNull(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
-    // Added with the rules (#25), after the others: the merchant a rule set, and the rule that
-    // classified it. Their keys (`on delete set null (<column>)`, which Drizzle cannot write) are in
-    // the custom migration `*_rules_isolation`.
+    // Added with the rules (#25), after the others: the merchant a rule set (or the user, behind an
+    // intermediary, #30), and the rule that classified it. Their keys (`on delete set null
+    // (<column>)`, which Drizzle cannot write) are in the custom migration `*_rules_isolation`.
     merchantId: uuid("merchant_id"),
     ruleId: uuid("rule_id"),
   },

@@ -5,10 +5,9 @@ import { InFrench } from "../stories/in-french";
 import { MAX_LABEL_TEXT } from "../stories/made-up-rules";
 import { Button } from "./button";
 import { RuleProposal } from "./rule-proposal";
-import type { RuleProposalAnswer } from "./rule-proposal";
+import type { RuleProposalAnswer, RuleProposalSets } from "./rule-proposal";
 
-type ProposingProps = {
-  category: string;
+type ProposingProps = RuleProposalSets & {
   words: string;
   reach: number | null;
   error?: string;
@@ -37,12 +36,9 @@ function Proposing(props: ProposingProps) {
       <RuleProposal
         key={opened}
         open={open}
+        {...props}
         onOpenChange={setOpen}
-        category={props.category}
-        words={props.words}
-        reach={props.reach}
         maxLabelText={MAX_LABEL_TEXT}
-        error={props.error}
         onCreate={async (made) => {
           setAnswer(made);
           setOpen(false);
@@ -56,7 +52,8 @@ function Proposing(props: ProposingProps) {
  * A correction proposes a rule (#25): once a line's category is changed on the operations page,
  * "Make it a rule?" offers "label contains" the line's cleaned label, editable, for the category
  * chosen, and to apply it to the lines already there that it would change. "Not now" changes
- * nothing.
+ * nothing. Once a line paid through an intermediary is given its merchant (#30), it proposes the
+ * same for that merchant (`merchant` in place of `category`).
  *
  * Motion: as `Dialog`, 200 ms in and out, ease-out. Cut under reduced motion.
  *
@@ -74,6 +71,14 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const Default: Story = {};
+
+/**
+ * A line paid through PayPal was given its merchant by hand (#30): the rule sets that merchant for
+ * the same label.
+ */
+export const Merchant: Story = {
+  args: { category: undefined, merchant: "Pixelplay", words: "PAYPAL *PIXELPLAY", reach: 3 },
+};
 
 /** No other line looks like it yet: nothing to apply to the past. */
 export const NoOtherLine: Story = { args: { reach: 0 } };

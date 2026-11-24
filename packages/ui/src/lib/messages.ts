@@ -284,6 +284,24 @@ function uiMessages(locale: Locale) {
       pairWithAccount: m.uiOperationsPairWithAccount({}, options),
       pairWithAccountDescription: m.uiOperationsPairWithAccountDescription({}, options),
       balanceAccount: m.uiOperationsBalanceAccount({}, options),
+      /** `LineMerchant`: who was paid, and the payment service it went through. */
+      merchant: m.uiOperationsMerchant({}, options),
+      merchantThrough: (intermediary: string) =>
+        m.uiOperationsMerchantThrough({ intermediary }, options),
+      merchantPaidThrough: (intermediary: string) =>
+        m.uiOperationsMerchantPaidThrough({ intermediary }, options),
+      merchantAsks: m.uiOperationsMerchantAsks({}, options),
+      merchantChoose: m.uiOperationsMerchantChoose({}, options),
+      merchantChange: m.uiOperationsMerchantChange({}, options),
+      /** The Change button's name, which says what it changes. */
+      merchantChangeLabel: m.uiOperationsMerchantChangeLabel({}, options),
+      merchantTitle: m.uiOperationsMerchantTitle({}, options),
+      merchantDescription: (intermediary: string) =>
+        m.uiOperationsMerchantDescription({ intermediary }, options),
+      merchantDescriptionPlain: m.uiOperationsMerchantDescriptionPlain({}, options),
+      merchantPlaceholder: m.uiOperationsMerchantPlaceholder({}, options),
+      merchantNew: m.uiOperationsMerchantNew({}, options),
+      merchantAssign: m.uiOperationsMerchantAssign({}, options),
     },
     categories: {
       columns: {
@@ -415,6 +433,9 @@ function uiMessages(locale: Locale) {
       proposal: {
         title: m.uiRulesProposalTitle({}, options),
         description: (category: string) => m.uiRulesProposalDescription({ category }, options),
+        /** A rule that sets the merchant a line paid through an intermediary went to. */
+        descriptionMerchant: (merchant: string) =>
+          m.uiRulesProposalDescriptionMerchant({ merchant }, options),
         label: m.uiRulesProposalLabel({}, options),
         apply: (count: number, written: string) =>
           pluralRules[locale].select(count) === "one"

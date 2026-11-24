@@ -5,8 +5,15 @@
 /** A cleaned label: upper-case ASCII words separated by one space. */
 export type MerchantKey = string;
 
-/** What is known already: each alias's key, and each merchant's name key, with the merchant's id. */
-export type KnownKey = { readonly key: MerchantKey; readonly merchantId: string };
+/**
+ * What is known already: each alias's key, and each merchant's name key, with the merchant's id;
+ * `intermediary` when the merchant is a payment intermediary (#30), whose keys match only exactly.
+ */
+export type KnownKey = {
+  readonly key: MerchantKey;
+  readonly merchantId: string;
+  readonly intermediary?: boolean;
+};
 
 export type Assignment = {
   readonly alias: MerchantKey;
@@ -379,6 +386,14 @@ export function merchantKey(label: string, counterpartyName: string | null): Mer
   return counterparty ?? keyOf(label);
 }
 
+/**
+ * Whether every word of the key is one a name's end drops (a country, a US state, a legal form, a
+ * card word): `SARL`, `GMBH`, `FR`. Such words name no one.
+ */
+export function namesNoOne(key: MerchantKey): boolean {
+  return key.split(" ").every((word) => TRAILING.has(word));
+}
+
 function capitalised(word: string): string {
   const lower = word.toLowerCase();
 
@@ -445,11 +460,14 @@ function prefixesOf(key: MerchantKey): ReadonlyArray<string> {
 /**
  * The known keys' owners (`id:<merchant id>`, or `new:<name>` for a merchant of this batch), by
  * each key's compact form and by each of its word prefixes: a key is matched by lookups, never by
- * reading every known key, so that a recognition of tens of thousands of keys stays linear.
+ * reading every known key, so that a recognition of tens of thousands of keys stays linear. An
+ * intermediary's keys are only in `exact`: `LYDIA` never takes `LYDIA MARTIN`, a person, nor joins
+ * it.
  */
 type Known = {
   readonly byCompact: Map<string, Set<string>>;
   readonly byPrefix: Map<string, Set<string>>;
+  readonly exact: Map<string, Set<string>>;
 };
 
 function add(index: Map<string, Set<string>>, form: string, owner: string): void {
@@ -462,7 +480,13 @@ function add(index: Map<string, Set<string>>, form: string, owner: string): void
   }
 }
 
-function learn(known: Known, key: MerchantKey, owner: string): void {
+function learn(known: Known, key: MerchantKey, owner: string, intermediary: boolean): void {
+  if (intermediary) {
+    add(known.exact, compactOf(key), owner);
+
+    return;
+  }
+
   add(known.byCompact, compactOf(key), owner);
 
   for (const prefix of prefixesOf(key)) {
@@ -477,12 +501,18 @@ function ownersOf(index: Map<string, Set<string>>, form: string): ReadonlyArray<
 
 const MIN_PREFIX = 4;
 
-/** The owner a key goes to among the known keys, or undefined for a new merchant. */
-function ownerOf(key: MerchantKey, known: Known): string | undefined {
+/**
+ * The owner a key goes to among the known keys, or undefined for a new merchant; an intermediary's
+ * key (`intermediary`) only to the same compact form.
+ */
+function ownerOf(key: MerchantKey, known: Known, intermediary: boolean): string | undefined {
   const compact = compactOf(key);
-  const [equal] = ownersOf(known.byCompact, compact);
 
-  if (equal !== undefined) {
+  const [equal] = [
+    ...new Set([...ownersOf(known.byCompact, compact), ...ownersOf(known.exact, compact)]),
+  ].toSorted();
+
+  if (equal !== undefined || intermediary) {
     return equal;
   }
 
@@ -532,16 +562,26 @@ function shortestFirst(a: MerchantKey, b: MerchantKey): number {
 /**
  * Which merchant each new key goes to: an existing one, or a new one by name; new keys given in
  * any order, duplicates ignored. One assignment per distinct key, shortest key first.
- * Deterministic.
+ * Deterministic. A key of an intermediary (a known one flagged, a new one `isIntermediary` says is
+ * one, and every key of the merchant it makes) matches only the same compact form.
  */
 export function assignMerchants(
   keys: ReadonlyArray<MerchantKey>,
   known: ReadonlyArray<KnownKey>,
+  isIntermediary: (key: MerchantKey) => boolean = () => false,
 ): ReadonlyArray<Assignment> {
-  const index: Known = { byCompact: new Map(), byPrefix: new Map() };
+  const index: Known = { byCompact: new Map(), byPrefix: new Map(), exact: new Map() };
+  // The owners whose keys match only exactly: intermediaries, known or made in this run.
+  const exactOwners = new Set<string>();
 
-  for (const { key, merchantId } of known) {
-    learn(index, key, `id:${merchantId}`);
+  for (const { key, merchantId, intermediary } of known) {
+    const owner = `id:${merchantId}`;
+
+    if (intermediary === true) {
+      exactOwners.add(owner);
+    }
+
+    learn(index, key, owner, intermediary === true);
   }
 
   const merchants = new Map<string, Assignment["merchant"]>(
@@ -552,12 +592,16 @@ export function assignMerchants(
 
   for (const key of [...new Set(keys)].toSorted(shortestFirst)) {
     const name = merchantName(key);
-    const owner = ownerOf(key, index) ?? `new:${name}`;
+    const owner = ownerOf(key, index, isIntermediary(key)) ?? `new:${name}`;
     const merchant = merchants.get(owner) ?? { name };
+
+    if (isIntermediary(key) && !merchants.has(owner)) {
+      exactOwners.add(owner);
+    }
 
     // Each key assigned is known for the next, as it will be once its alias is written.
     merchants.set(owner, merchant);
-    learn(index, key, owner);
+    learn(index, key, owner, exactOwners.has(owner));
     assignments.push({ alias: key, merchant });
   }
 

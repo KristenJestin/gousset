@@ -15,10 +15,15 @@ import { Context, Effect, Layer, Result } from "effect";
 
 import type { LineCategory } from "../category-store";
 import { takeCategoryTurn } from "../category-turn";
+import { LineNotFound } from "../errors";
 import { isId } from "../imports/rows";
 import { classifyByMerchants } from "./default-classification";
+import { isKnownIntermediary } from "./intermediaries";
+import { assignLineMerchantIn, lineMerchantIn } from "./line-merchant";
+import type { LineMerchant, LineMerchantAssigned } from "./line-merchant";
 import type { Money } from "../month";
 import { today } from "../today";
+import type { LineMerchantRefused } from "./errors";
 import {
   MerchantAliasNotFound,
   MerchantMergeRefused,
@@ -60,6 +65,8 @@ export type MerchantSummary = {
   readonly name: string;
   /** How many cleaned labels name it. */
   readonly aliases: number;
+  /** A payment intermediary (#30): its lines' labels hide who was paid. */
+  readonly intermediary: boolean;
 };
 
 /** What a list of the merchants asks for; every field may be left out. */
@@ -101,6 +108,8 @@ export type MerchantDefaultCategory = LineCategory & { readonly archived: boolea
 export type MerchantDetail = {
   readonly id: string;
   readonly name: string;
+  /** A payment intermediary (#30): its lines' labels hide who was paid. */
+  readonly intermediary: boolean;
   /** The category its entries go in by default; null for none. */
   readonly defaultCategory: MerchantDefaultCategory | null;
   /** The cleaned labels that name it, in alphabetical order. */
@@ -185,6 +194,30 @@ export class Merchants extends Context.Service<
     ) => Effect.Effect<Merged, MerchantNotFound | MerchantMergeRefused | Failure>;
     /** Recognises the merchants of every line whose cleaned label names none yet. */
     readonly recognise: (owner: string) => Effect.Effect<Recognised, Failure>;
+    /** Marks it a payment intermediary, or not (#30). */
+    readonly markIntermediary: (
+      owner: string,
+      merchantId: string,
+      intermediary: boolean,
+    ) => Effect.Effect<MerchantSummary, MerchantNotFound | Failure>;
+    /** Who a line paid, through which intermediary, and whether the user is asked who (#30). */
+    readonly ofLine: (
+      owner: string,
+      lineId: string,
+    ) => Effect.Effect<LineMerchant, LineNotFound | Failure>;
+    /**
+     * Sets who was paid on an intermediary's line: the merchant named `name` (any case), made when
+     * none has it. Refused for a line whose label names no intermediary, one that is not one entry
+     * of the whole line, or an intermediary named as who was paid.
+     */
+    readonly assignLine: (
+      owner: string,
+      lineId: string,
+      name: string,
+    ) => Effect.Effect<
+      LineMerchantAssigned,
+      LineNotFound | LineMerchantRefused | MerchantNameRefused | Failure
+    >;
   }
 >()("@gousset/core/Merchants") {}
 
@@ -200,7 +233,12 @@ const asAlias = (text: string) =>
 
 const aliasCount = sql<number>`(select count(*)::int from ${merchantAlias} where ${merchantAlias.merchantId} = ${merchant.id})`;
 
-const summaryColumns = { id: merchant.id, name: merchant.name, aliases: aliasCount };
+const summaryColumns = {
+  id: merchant.id,
+  name: merchant.name,
+  aliases: aliasCount,
+  intermediary: merchant.isIntermediary,
+};
 
 /**
  * Recognises, in a transaction of `owner`'s, the merchant of every line (counted or held) whose
@@ -245,28 +283,38 @@ export async function recogniseIn(
   }
 
   const merchants = await transaction
-    .select({ id: merchant.id, name: merchant.name })
+    .select({ id: merchant.id, name: merchant.name, intermediary: merchant.isIntermediary })
     .from(merchant);
+
+  // An intermediary's keys match only exactly (#30): `LYDIA MARTIN` is not paid through Lydia.
+  const marked = new Set(merchants.flatMap((row) => (row.intermediary ? [row.id] : [])));
 
   const known: Array<KnownKey> = aliases.map((row) => ({
     key: row.alias,
     merchantId: row.merchantId,
+    intermediary: marked.has(row.merchantId),
   }));
 
   for (const row of merchants) {
     const key = nameKey(row.name);
 
     if (key !== "") {
-      known.push({ key, merchantId: row.id });
+      known.push({ key, merchantId: row.id, intermediary: row.intermediary });
     }
   }
 
-  const assigned = assignMerchants([...keys], known);
+  const assigned = assignMerchants([...keys], known, isKnownIntermediary);
   const names = new Set<string>();
+  // A merchant made from a known intermediary's cleaned label is one (#30).
+  const intermediaries = new Set<string>();
 
   for (const assignment of assigned) {
     if ("name" in assignment.merchant) {
       names.add(assignment.merchant.name);
+
+      if (isKnownIntermediary(assignment.alias)) {
+        intermediaries.add(assignment.merchant.name);
+      }
     }
   }
 
@@ -279,7 +327,9 @@ export async function recogniseIn(
 
     const inserted = await transaction
       .insert(merchant)
-      .values(chunk.map((name) => ({ userId: owner, name })))
+      .values(
+        chunk.map((name) => ({ userId: owner, name, isIntermediary: intermediaries.has(name) })),
+      )
       .onConflictDoNothing({ target: [merchant.userId, merchant.name] })
       .returning({ id: merchant.id });
 
@@ -480,7 +530,14 @@ async function show(
         ];
   });
 
-  return { id: found.id, name: found.name, defaultCategory, aliases: [...names], lines };
+  return {
+    id: found.id,
+    name: found.name,
+    intermediary: found.intermediary,
+    defaultCategory,
+    aliases: [...names],
+    lines,
+  };
 }
 
 const parentCategory = aliasOf(category, "parent");
@@ -640,7 +697,11 @@ export const merchantsLayer = Layer.effect(
                   await transaction
                     .insert(merchant)
                     .values({ userId: owner, name: wanted })
-                    .returning({ id: merchant.id, name: merchant.name })
+                    .returning({
+                      id: merchant.id,
+                      name: merchant.name,
+                      intermediary: merchant.isIntermediary,
+                    })
                 ).map((made) => ({ ...made, aliases: 0 }))[0];
 
               if (target === undefined || target.id === from.id) {
@@ -699,11 +760,12 @@ export const merchantsLayer = Layer.effect(
                 .returning({ id: merchantAlias.id });
 
               // The merchant kept keeps its default category, and takes the merged one's when it
-              // has none.
+              // has none; it is an intermediary when either was (#30).
               await transaction
                 .update(merchant)
                 .set({
                   defaultCategoryId: sql`coalesce(${merchant.defaultCategoryId}, (select m.default_category_id from ${merchant} m where m.id = ${from.id}))`,
+                  isIntermediary: from.intermediary || into.intermediary,
                 })
                 .where(eq(merchant.id, into.id));
 
@@ -725,7 +787,11 @@ export const merchantsLayer = Layer.effect(
               await classifyByMerchants(transaction, { every: true });
 
               return Result.succeed({
-                into: { ...into, aliases: into.aliases + moved.length },
+                into: {
+                  ...into,
+                  aliases: into.aliases + moved.length,
+                  intermediary: from.intermediary || into.intermediary,
+                },
                 merged: from.name,
                 aliasesMoved: moved.length,
               });
@@ -736,6 +802,46 @@ export const merchantsLayer = Layer.effect(
         }),
 
       recognise: (owner) => inTransaction(owner, (transaction) => recogniseIn(transaction, owner)),
+
+      markIntermediary: (owner, merchantId, intermediary) =>
+        inTransaction(owner, async (transaction) => {
+          const found = await summaryById(transaction, merchantId);
+
+          if (found === undefined) {
+            return undefined;
+          }
+
+          await transaction
+            .update(merchant)
+            .set({ isIntermediary: intermediary })
+            .where(eq(merchant.id, found.id));
+
+          return { ...found, intermediary };
+        }).pipe(
+          Effect.flatMap((marked) =>
+            marked === undefined
+              ? Effect.fail(new MerchantNotFound({ merchantId }))
+              : Effect.succeed(marked),
+          ),
+        ),
+
+      ofLine: (owner, lineId) =>
+        inTransaction(owner, (transaction) => lineMerchantIn(transaction, lineId)).pipe(
+          Effect.flatMap((found) =>
+            found === undefined ? Effect.fail(new LineNotFound({ lineId })) : Effect.succeed(found),
+          ),
+        ),
+
+      assignLine: (owner, lineId, name) =>
+        Effect.gen(function* () {
+          const wanted = yield* Effect.fromResult(nameOf(name));
+
+          const assigned = yield* inTransaction(owner, (transaction) =>
+            assignLineMerchantIn(transaction, owner, lineId, wanted),
+          );
+
+          return yield* Effect.fromResult(assigned);
+        }),
     };
   }),
 );
@@ -774,6 +880,37 @@ export const listMerchants = (owner: string, search: MerchantSearch = {}) =>
     const merchants = yield* Merchants;
 
     return yield* merchants.list(owner, queryOf(search));
+  });
+
+/** Marks one of the user's merchants a payment intermediary, or not (#30). */
+export const markIntermediary = (owner: string, merchantId: string, intermediary: boolean) =>
+  Effect.gen(function* () {
+    const merchants = yield* Merchants;
+
+    return yield* merchants.markIntermediary(owner, merchantId, intermediary);
+  });
+
+/**
+ * Who a line of the user's paid (its entry's merchant, else its label's), the intermediary its label
+ * names, and whether who was paid is asked of the user (#30).
+ */
+export const lineMerchant = (owner: string, lineId: string) =>
+  Effect.gen(function* () {
+    const merchants = yield* Merchants;
+
+    return yield* merchants.ofLine(owner, lineId);
+  });
+
+/**
+ * Sets who was paid on an intermediary's line of the user's: the merchant named `name` (any case,
+ * trimmed), made when none has it (#30). The entry is then the user's choice, and goes in the
+ * merchant's default category when it was not classified yet.
+ */
+export const assignLineMerchant = (owner: string, lineId: string, name: string) =>
+  Effect.gen(function* () {
+    const merchants = yield* Merchants;
+
+    return yield* merchants.assignLine(owner, lineId, name);
   });
 
 /** One merchant of the user's, its cleaned labels and its latest lines up to today. */

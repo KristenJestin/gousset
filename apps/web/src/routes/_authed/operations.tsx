@@ -17,6 +17,7 @@ import { FormMessage } from "@gousset/ui/components/form-message";
 import { LineDetail } from "@gousset/ui/components/line-detail";
 import { LineExpense, LinkLine, SplitLine } from "@gousset/ui/components/line-expense";
 import type { ExpenseLineView } from "@gousset/ui/components/line-expense";
+import { LineMerchant } from "@gousset/ui/components/line-merchant";
 import {
   LineTransfer,
   LineTransferCandidates,
@@ -40,6 +41,7 @@ import { Schema } from "effect";
 import { useState } from "react";
 
 import { ProposedRule } from "@/components/proposed-rule";
+import type { ProposedRuleSets } from "@/components/proposed-rule";
 import { RuleJobNotice } from "@/components/rule-job";
 import {
   classifyLine,
@@ -51,7 +53,8 @@ import {
   unpairLine,
 } from "@/functions/lines";
 import type { ExpenseRefusalCode, TransferRefusalCode } from "@/functions/lines";
-import { categoryRefusalMessage } from "@/i18n/messages";
+import { assignLineMerchant } from "@/functions/merchants";
+import { categoryRefusalMessage, merchantRefusalMessage } from "@/i18n/messages";
 import { dayRange, longDay, shortDay, shortDays } from "@/lib/account-day";
 import { categoryPath, choicesOf } from "@/lib/categories";
 import { loadBlocks } from "@/lib/load-blocks";
@@ -66,6 +69,7 @@ import { accountQueries } from "@/queries/accounts";
 import { categoryQueries, invalidateCategories } from "@/queries/categories";
 import { invalidateTouched } from "@/queries/invalidate";
 import { lineQueries } from "@/queries/lines";
+import { merchantQueries } from "@/queries/merchants";
 
 /** How long the search's words and the amounts wait for the typing to stop before they apply. */
 const TYPING_WAIT_MS = 300;
@@ -89,6 +93,8 @@ export const Route = createFileRoute("/_authed/operations")({
         ? []
         : [
             queryClient.ensureQueryData(lineQueries.detail(deps.line)).then(noop),
+            // Who it paid, and whether it asks (#30), drawn with it.
+            queryClient.ensureQueryData(lineQueries.merchant(deps.line)).then(noop),
             // The open line's category is chosen among them.
             queryClient.ensureQueryData(categoryQueries.list()).then(noop),
           ]),
@@ -407,11 +413,7 @@ function LineCategoryPicker({
   const [chosen, setChosen] = useState(current?.id ?? null);
 
   // The rule the last correction proposes, each correction a new proposal.
-  const [proposal, setProposal] = useState<{
-    categoryId: string;
-    category: string;
-    turn: number;
-  }>();
+  const [proposal, setProposal] = useState<{ sets: ProposedRuleSets; turn: number }>();
 
   if (current === null) {
     return null;
@@ -450,8 +452,7 @@ function LineCategoryPicker({
 
     await invalidateCategories(queryClient);
     setProposal({
-      categoryId,
-      category: categoryPath(answer.category),
+      sets: { kind: "category", id: categoryId, name: categoryPath(answer.category) },
       turn: (proposal?.turn ?? 0) + 1,
     });
   }
@@ -470,8 +471,77 @@ function LineCategoryPicker({
         <ProposedRule
           key={proposal.turn}
           lineId={line.id}
-          categoryId={proposal.categoryId}
-          category={proposal.category}
+          sets={proposal.sets}
+          onApplied={onRuleJob}
+        />
+      )}
+    </>
+  );
+}
+
+/**
+ * Who the open line paid (#30): its merchant, and the payment intermediary its label names; a line
+ * paid through one whose merchant nobody set asks for it. Once one is chosen (a new name makes a
+ * merchant), the line, the lines, the merchants and the months are read again, as a category's
+ * correction does (the entry may go in the merchant's default category), and a rule is proposed
+ * that gives the same label's lines that merchant, applied to the past through `onRuleJob`'s job if
+ * the user wants. A refusal shows under the dialog's field, which stays open.
+ */
+function LineMerchantOf({ line, onRuleJob }: { line: Line; onRuleJob: (jobId: string) => void }) {
+  const queryClient = useQueryClient();
+  const { data: paid } = useQuery(lineQueries.merchant(line.id));
+  const { data: choices = [] } = useQuery(merchantQueries.choices());
+  const [error, setError] = useState<string>();
+  const [proposal, setProposal] = useState<{ sets: ProposedRuleSets; turn: number }>();
+
+  if (paid === undefined || !paid.ok) {
+    return null;
+  }
+
+  async function assign(name: string): Promise<boolean> {
+    const answer = await assignLineMerchant({ data: { lineId: line.id, name } }).catch(() => ({
+      ok: false as const,
+      code: "UNKNOWN",
+      name: undefined,
+    }));
+
+    if (!answer.ok) {
+      setError(merchantRefusalMessage(answer.code, answer.name));
+
+      return false;
+    }
+
+    setError(undefined);
+    await invalidateCategories(queryClient);
+
+    const chosen = answer.assigned.merchant;
+
+    setProposal({
+      sets: { kind: "merchant", id: chosen.id, name: chosen.name },
+      turn: (proposal?.turn ?? 0) + 1,
+    });
+
+    return true;
+  }
+
+  const { merchant, intermediary, asks } = paid.merchant;
+
+  return (
+    <>
+      <LineMerchant
+        merchant={merchant?.name ?? null}
+        intermediary={intermediary?.name ?? null}
+        asks={asks}
+        // An intermediary is never who was paid: the server refuses it.
+        merchants={choices.flatMap((choice) => (choice.intermediary ? [] : [choice.name]))}
+        onAssign={assign}
+        error={error}
+      />
+      {proposal === undefined ? null : (
+        <ProposedRule
+          key={proposal.turn}
+          lineId={line.id}
+          sets={proposal.sets}
           onApplied={onRuleJob}
         />
       )}
@@ -977,6 +1047,7 @@ function OpenLine({
           <LineCategoryPicker line={line} onRuleJob={onRuleJob} />
         )
       }
+      merchant={<LineMerchantOf line={line} onRuleJob={onRuleJob} />}
       id={line.id}
       label={lineLabel(line)}
       amount={line.amount}

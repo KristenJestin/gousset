@@ -19,12 +19,12 @@ export class RuleConditionsRefused extends Schema.TaggedError<RuleConditionsRefu
 ) {}
 
 /**
- * What a rule sets was refused: nothing at all, or a category that is archived (it classifies
- * nothing new).
+ * What a rule sets was refused: nothing at all, a category that is archived (it classifies nothing
+ * new), or a merchant that is a payment intermediary (#30: never who was paid).
  */
 export class RuleEffectRefused extends Schema.TaggedError<RuleEffectRefused>()(
   "RuleEffectRefused",
-  { reason: Schema.Literals(["nothing_set", "category_archived"]) },
+  { reason: Schema.Literals(["nothing_set", "category_archived", "merchant_intermediary"]) },
 ) {}
 
 /** The user has `MAX_RULES` rules already. */

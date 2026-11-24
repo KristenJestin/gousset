@@ -3,14 +3,21 @@ import {
   MERCHANT_LINES_SHOWN,
   MAX_MERCHANT_NAME,
   Merchants,
+  assignLineMerchant,
   listMerchants,
+  markIntermediary,
+  ruleWords,
   setMerchantDefaultCategory,
+  showLine,
   showMerchant,
 } from "@gousset/core";
 import type {
   AliasMoved,
   CategoryStore,
   LineCategory,
+  LineMerchantAssigned,
+  LineMerchantRefused,
+  LineStore,
   MerchantDetail,
   MerchantLine,
   MerchantPage,
@@ -22,15 +29,16 @@ import { Effect, Schema } from "effect";
 import { ToolRefusal, defineTool } from "../tool";
 import { amount, named } from "./accounts";
 import { namedCategory, pathText } from "./categories";
+import { proposedRule } from "./rules";
 
 /** The merchants `list` and `search` give when none are asked for, and the most. */
 const DEFAULT_MERCHANTS = 50;
 const MAX_MERCHANTS = 100;
 
 const MerchantsInput = Schema.Struct({
-  action: Schema.Literals(["list", "search", "show", "edit", "merge"]).annotate({
+  action: Schema.Literals(["list", "search", "show", "edit", "merge", "assign"]).annotate({
     description:
-      "list: every merchant by name. search: those whose name or a cleaned label contains text. show: one merchant, its default category, cleaned labels and latest lines. edit: rename one, move one of its cleaned labels to another merchant, or set its default category. merge: fold one merchant into another.",
+      "list: every merchant by name. search: those whose name or a cleaned label contains text. show: one merchant, its default category, cleaned labels and latest lines. edit: rename one, move one of its cleaned labels to another merchant, or set its default category. merge: fold one merchant into another. assign: who was paid on an intermediary's line.",
   }),
   text: Schema.optional(
     Schema.String.annotate({
@@ -51,7 +59,7 @@ const MerchantsInput = Schema.Struct({
   merchant: Schema.optional(
     Schema.String.annotate({
       description:
-        "show, edit, merge: the merchant's name, as list writes it (any case). merge: the one merged away and deleted.",
+        "show, edit, merge, assign: the merchant's name, as list writes it (any case); assign makes it when none has it. merge: the one merged away and deleted.",
     }),
   ),
   name: Schema.optional(Schema.String.annotate({ description: "edit: the merchant's new name." })),
@@ -86,6 +94,14 @@ const MerchantsInput = Schema.Struct({
         'edit, with category: expense or income, when an expense and an income category share the name ("Other").',
     }),
   ),
+  line: Schema.optional(
+    Schema.String.annotate({
+      description: "assign: the line's handle, exactly as lines gives it.",
+    }),
+  ),
+  intermediary: Schema.optional(
+    Schema.Boolean.annotate({ description: "edit: true marks it a payment intermediary." }),
+  ),
 });
 
 type MerchantsInput = typeof MerchantsInput.Type;
@@ -103,6 +119,8 @@ Writes (need a connection allowed to read and write):
 - \`edit\` with \`alias\` and \`to\`: moves one of the merchant's cleaned labels, and its lines, to the merchant named \`to\`, made when none has it: how a merchant is split.
 - \`edit\` with \`category\`: sets the merchant's default category, the one its entries go in by default, expense or income, named as \`categories\` lists it ("Parent > Child" for a child; add \`kind\` when an expense and an income category share the name). \`clear_category: true\`, alone, clears it. Its entries not classified yet (classified by default) of that kind move to it, and still count as to review; cleared, they go back to the fallback; the user's own choices stay. An archived or unknown category is refused. Merging categories moves it; archiving keeps it, shown archived, and it then classifies nothing new.
 - \`merge\`: moves every cleaned label of \`merchant\` to \`into\`, then deletes \`merchant\`; \`into\` keeps its default category, or takes \`merchant\`'s when it has none.
+- \`edit\` with \`intermediary\` true/false: marks it a payment intermediary (PayPal…), whose labels hide who was paid, or not.
+- \`assign\` with \`line\` (a \`lines\` handle) and \`merchant\`: sets who was paid on an intermediary's line, made when none has the name, as the user's choice, and proposes the \`rules\` call for the next ones. Refused: a label naming no intermediary, a line not one whole expense or income, an intermediary as \`merchant\`.
 
 Names are any case. An unknown name is refused with close names; a blank name or one over ${MAX_MERCHANT_NAME} characters, a merge into itself, or a cleaned label the merchant lacks is refused with a valid call. \`limit\` is 1 to ${MAX_MERCHANTS}, ${DEFAULT_MERCHANTS} by default; when more remain, the result writes the next call with \`after\`: copy it.
 
@@ -129,6 +147,10 @@ function pageArguments(input: MerchantsInput): Encoded {
     : { action: "list", limit: input.limit };
 }
 
+/** A payment intermediary (#30) is said so wherever a merchant is named in a list. */
+const marked = (merchant: { readonly intermediary: boolean }) =>
+  merchant.intermediary ? " (payment intermediary)" : "";
+
 /** A page of merchants: how many match, the merchants by name, and the call that reads on. */
 function pageText(page: MerchantPage, input: MerchantsInput): string {
   const text = input.text?.trim() ?? "";
@@ -146,7 +168,9 @@ function pageText(page: MerchantPage, input: MerchantsInput): string {
 
   const rows = [
     `These ${page.merchants.length}, by name (name: how many cleaned labels; show gives them):`,
-    ...page.merchants.map((merchant) => `- ${merchant.name}: ${labels(merchant.aliases)}`),
+    ...page.merchants.map(
+      (merchant) => `- ${merchant.name}${marked(merchant)}: ${labels(merchant.aliases)}`,
+    ),
   ];
 
   const next =
@@ -208,8 +232,12 @@ function showText(detail: MerchantDetail): string {
           `For every line of a cleaned label, search the lines: lines ${JSON.stringify({ action: "search", text: first })}`,
         ];
 
+  const intermediary = detail.intermediary
+    ? ", a payment intermediary: its lines' labels hide who was paid, which assign sets on each line"
+    : "";
+
   return [
-    `Merchant: ${detail.name}.\n${defaultText(detail)}`,
+    `Merchant: ${detail.name}${intermediary}.\n${defaultText(detail)}`,
     aliases.join("\n"),
     [...lines, ...more].join("\n"),
   ].join("\n\n");
@@ -437,8 +465,28 @@ function setDefault(
   );
 }
 
+/** Marks a merchant a payment intermediary, or not (#30). */
+function mark(owner: string, merchant: string, intermediary: boolean) {
+  return Effect.gen(function* () {
+    const found = yield* merchantNamed(owner, merchant);
+    const changed = yield* markIntermediary(owner, found.id, intermediary);
+
+    return changed.intermediary
+      ? `${changed.name} is now a payment intermediary: its lines' labels hide who was paid. lines show says so on each line, and merchants assign sets who was paid.`
+      : `${changed.name} is no longer a payment intermediary: its lines are its own.`;
+  }).pipe(
+    Effect.catchTags({
+      MerchantNotFound: () =>
+        refuse(`The merchant "${clip(merchant)}" is gone: it was just merged or split away.`, {
+          action: "list",
+        }),
+      QueryFailed: Effect.die,
+    }),
+  );
+}
+
 function edit(owner: string, input: MerchantsInput) {
-  const { merchant, name, alias, to, category } = input;
+  const { merchant, name, alias, to, category, intermediary } = input;
   const clearing = input.clear_category === true;
 
   if (merchant === undefined || blank(merchant)) {
@@ -449,7 +497,8 @@ function edit(owner: string, input: MerchantsInput) {
   }
 
   const asked =
-    [name, alias ?? to, category].filter((each) => each !== undefined).length + (clearing ? 1 : 0);
+    [name, alias ?? to, category, intermediary].filter((each) => each !== undefined).length +
+    (clearing ? 1 : 0);
 
   if (asked > 1) {
     return refuse(
@@ -460,6 +509,10 @@ function edit(owner: string, input: MerchantsInput) {
 
   if (clearing) {
     return clearDefault(owner, merchant);
+  }
+
+  if (intermediary !== undefined) {
+    return mark(owner, merchant, intermediary);
   }
 
   if (category !== undefined) {
@@ -530,8 +583,92 @@ function merge(owner: string, input: MerchantsInput) {
   );
 }
 
+/** Who was paid, set on an intermediary's line, and the rule that would do it next time (#30). */
+function assignedText(
+  line: {
+    readonly bookedOn: string;
+    readonly label: string;
+    readonly amount: MerchantLine["amount"];
+  },
+  assigned: LineMerchantAssigned,
+  proposal: string | undefined,
+): string {
+  const made = assigned.created ? ", a merchant made for it" : "";
+
+  const moved =
+    assigned.category === null
+      ? ""
+      : ` It went in ${categoryText(assigned.category)}, ${assigned.merchant.name}'s default category.`;
+
+  const done = `Who was paid on the line of ${line.bookedOn}, ${amount(line.amount)}, ${quoted(line.label)}, is now ${assigned.merchant.name}${made}. Kept as the user's choice: no rule changes it unasked.${moved}`;
+
+  return proposal === undefined ? done : `${done}\n${proposal}`;
+}
+
+/** A refusal whose valid call reads the line: it changes nothing. */
+const refuseWithLine = (message: string, line: string) =>
+  Effect.fail(
+    new ToolRefusal({
+      message,
+      example: `lines ${JSON.stringify({ action: "show", line: line.slice(0, 80) })}`,
+    }),
+  );
+
+const ASSIGN_REFUSALS = {
+  not_intermediary:
+    "This line's label names no payment intermediary: its merchant is the one its cleaned label names. To change it, move that cleaned label to another merchant (edit with alias and to), or mark its merchant an intermediary first (edit with intermediary: true).",
+  not_one_entry:
+    "Who was paid is set on a line that is one expense or income of its own: this one is held for review, discarded, a side of a transfer, split, or of no amount.",
+  intermediary_chosen:
+    "That merchant is a payment intermediary itself: name who was paid through it, as the label says after the intermediary's name (the shop, the person).",
+} as const satisfies { readonly [Reason in LineMerchantRefused["reason"]]: string };
+
+function assign(owner: string, input: MerchantsInput) {
+  const line = input.line?.trim() ?? "";
+  const { merchant } = input;
+
+  if (line === "" || merchant === undefined || blank(merchant)) {
+    return Effect.fail(
+      new ToolRefusal({
+        message:
+          "assign needs line, the line's handle as lines search gives it, and merchant, the name of who was paid (made when no merchant has it).",
+        example: `lines ${JSON.stringify({ action: "search", text: "paypal" })}`,
+      }),
+    );
+  }
+
+  return Effect.gen(function* () {
+    const detail = yield* showLine(owner, line);
+    const assigned = yield* assignLineMerchant(owner, detail.id, merchant);
+
+    const proposal = proposedRule(ruleWords(detail.label, detail.counterpartyName, true), {
+      merchant: assigned.merchant.name,
+    });
+
+    return assignedText(detail, assigned, proposal);
+  }).pipe(
+    Effect.catchTags({
+      LineNotFound: () =>
+        Effect.fail(
+          new ToolRefusal({
+            message: `No line of the user's has the handle "${line.slice(0, 80)}". Handles come from search: search for the line, then use the handle its result gives.`,
+            example: `lines ${JSON.stringify({ action: "search", text: "paypal" })}`,
+          }),
+        ),
+      LineMerchantRefused: (refused) => refuseWithLine(ASSIGN_REFUSALS[refused.reason], line),
+      MerchantNameRefused: (refused) =>
+        nameRefusal(refused.reason, "merchant", { action: "assign", line, merchant: "Pixelplay" }),
+      QueryFailed: Effect.die,
+    }),
+  );
+}
+
 /** The merchants family (docs/mcp.md, "Tools"): reads, and the user's edits and merges. */
-export const merchantsTool = defineTool<MerchantsInput, Encoded, Merchants | CategoryStore>({
+export const merchantsTool = defineTool<
+  MerchantsInput,
+  Encoded,
+  Merchants | CategoryStore | LineStore
+>({
   name: "merchants",
   title: "Merchants",
   description: DESCRIPTION,
@@ -540,7 +677,14 @@ export const merchantsTool = defineTool<MerchantsInput, Encoded, Merchants | Cat
   idempotent: true,
   input: MerchantsInput,
   example: { action: "search", text: "greenmarket" },
-  access: { list: "read", search: "read", show: "read", edit: "write", merge: "write" },
+  access: {
+    list: "read",
+    search: "read",
+    show: "read",
+    edit: "write",
+    merge: "write",
+    assign: "write",
+  },
   run: (input, caller) => {
     switch (input.action) {
       case "list":
@@ -572,6 +716,10 @@ export const merchantsTool = defineTool<MerchantsInput, Encoded, Merchants | Cat
 
       case "merge": {
         return merge(caller.userId, input);
+      }
+
+      case "assign": {
+        return assign(caller.userId, input);
       }
     }
   },

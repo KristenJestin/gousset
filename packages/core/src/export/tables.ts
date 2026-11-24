@@ -243,7 +243,10 @@ export const ENTRIES: ExportTable = {
     CREATED_AT,
     UPDATED_AT,
     // Added after the others (#25): the database keeps them last.
-    { name: "merchant_id", holds: "the merchant a rule set (merchants.id); empty for none" },
+    {
+      name: "merchant_id",
+      holds: "the merchant a rule or you set (merchants.id); empty for none",
+    },
     { name: "rule_id", holds: "the rule that classified it (rules.id); empty for none" },
   ],
 };
@@ -282,6 +285,11 @@ export const MERCHANTS: ExportTable = {
     {
       name: "default_category_id",
       holds: "the category (categories.id) its entries go in by default; empty for none",
+    },
+    // Added after the others (#30): the database keeps it last.
+    {
+      name: "is_intermediary",
+      holds: "true for a payment intermediary (PayPal…): who was paid through it is set by hand",
     },
   ],
 };

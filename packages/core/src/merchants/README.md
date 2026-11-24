@@ -39,8 +39,18 @@ A key is upper-case ASCII words separated by one space, made only of `A`–`Z`, 
    - the separators `//`, `-` and `*`.
 7. **Card processors.** `SQ *`, `TST*` and `SP *` stand before the shop's own name, so they are
    dropped: `SQ *CORNER CAFE` → `CORNER CAFE`. A **payment intermediary** is not a processor: in
-   `PAYLINK *PIXELPLAY` the `*` ends the name and the key is `PAYLINK`. Telling the real merchant
-   behind an intermediary is issue #30's work.
+   `PAYLINK *PIXELPLAY` the `*` ends the name and the key is `PAYLINK`: the intermediary is the
+   label's merchant, marked as one (#30). Recognition marks a merchant it makes from a key equal,
+   letters and digits only, to a known intermediary's name (`intermediaries.ts`: `PAYPAL`, `LYDIA`,
+   `SUMUP`…; never a prefix, `LYDIA MARTIN` is a person), and the user marks any other. Who was
+   paid is then set on the line's entry by hand, and a rule remembers it: its words run from the
+   intermediary's name through the name after it (`CB PAYPAL *PIXELPLAY 21/10` → `PAYPAL
+   *PIXELPLAY`, `ruleWords` in `rule-words.ts`), never the intermediary alone. When nothing after
+   the intermediary's name names anyone (`CB PAYPAL`, `PAYPAL 21/10`), there are no words and no
+   rule is proposed: any would match every line of the intermediary. Words after it that a key's
+   end drops (rule 10: a legal form, a country) are the intermediary's own company, not who was
+   paid: `PRLV SEPA PAYPAL EUROPE SARL` proposes none, and `PAYPAL EUROPE SARL *PIXELPLAY` looks
+   past them to `PIXELPLAY`.
 8. **What comes before the name** is skipped: payment words (`CB`, `CARTE`, `PAIEMENT PAR CARTE`,
    `PRLV SEPA`, `PRELEVEMENT EUROPEEN`, `VIR`, `VIREMENT INSTANTANE EMIS`, `CARD PAYMENT TO`,
    `DIRECT DEBIT`, `POS`, `CONTACTLESS`, `VISA DEBIT`, `BANCONTACT`, `KARTENZAHLUNG`,
@@ -110,6 +120,13 @@ Keys compare in their **compact form**, letters and digits only, so `GREEN MARKE
    digits: that merchant (`NORTHWIND` → the merchant of `NORTHWIND ENERGIE`).
 4. Otherwise **a new merchant** named `merchantName(key)`. Two keys that give the same name get one
    merchant, as names are unique per user.
+
+**A payment intermediary's keys match only by rule 1** (#30), never as a prefix either way: the
+keys of a merchant marked as one (`KnownKey.intermediary`), a new key `isKnownIntermediary` names,
+and every key of the merchant it makes in this run. So `LYDIA MARTIN`, a person paid by transfer,
+gets a merchant "Lydia Martin" rather than joining Lydia, in one import or the next, and a new
+`PAYPAL` never joins a merchant of `PAYPAL EUROPE`. A line is paid through the intermediary its
+cleaned label's merchant is, so a prefix match would make it ask who was paid.
 
 Keys are taken **shortest first** (fewest words, then alphabetically), and each key assigned is
 known for the next ones. So in one import `CORNER CAFE` and `CORNER CAFE RIVERTON` become one
