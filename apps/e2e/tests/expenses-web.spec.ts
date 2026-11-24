@@ -1,4 +1,4 @@
-import type { Page, Response } from "@playwright/test";
+import type { Page } from "@playwright/test";
 import { exampleStatement } from "@gousset/fixture";
 import type { Statement, StatementLine } from "@gousset/fixture";
 
@@ -155,58 +155,12 @@ test("the operations page proposes a cancellation as a refund, links it once con
   await animationsDone(page);
   await expectAccessible(page);
 
-  // A sheet still open after the save says why: its text (a refusal under the shares), its state,
-  // whether its button is busy, the calls sent and answered since (the save's answer whole), what
-  // still animates, and any error the page threw.
-  const save = sheet.getByRole("button", { name: "Save the split" });
-  const sent: Array<string> = [];
-  const answered: Array<string> = [];
-  const posts: Array<Response> = [];
-  const thrown: Array<string> = [];
+  await sheet.getByRole("button", { name: "Save the split" }).click();
 
-  page.on("request", (request) => {
-    if (request.url().includes("/_serverFn/")) {
-      sent.push(request.method());
-    }
-  });
-  page.on("response", (response) => {
-    if (response.url().includes("/_serverFn/")) {
-      answered.push(String(response.status()));
-
-      if (response.request().method() === "POST") {
-        posts.push(response);
-      }
-    }
-  });
-  page.on("pageerror", (error) => {
-    thrown.push(error.message);
-  });
-
-  await save.click();
-  await expect
-    .poll(async () =>
-      (await sheet.count()) === 0
-        ? ""
-        : [
-            await sheet.innerText(),
-            `busy: ${String(await save.getAttribute("aria-busy"))}`,
-            `sent: ${sent.join(",")}`,
-            `answered: ${answered.join(",")}`,
-            `saved: ${(await Promise.all(posts.map((post) => post.text()))).join(" | ").slice(0, 600)}`,
-            `state: ${await sheet.evaluate((element) =>
-              [...element.attributes].map((each) => `${each.name}=${each.value}`).join(" "),
-            )}`,
-            `moving: ${await sheet.evaluate(() =>
-              [...document.querySelectorAll("*")]
-                .flatMap((each) =>
-                  each.getAnimations().length > 0 ? [each.outerHTML.slice(0, 160)] : [],
-                )
-                .join(" | "),
-            )}`,
-            `thrown: ${thrown.join("; ")}`,
-          ].join("\n"),
-    )
-    .toBe("");
+  // Saved, the sheet closes. Firefox keeps a closed sheet in the page, marked closed, inert and slid
+  // out, while its exit transition does not report its end (as the detail's own fade, #128): what
+  // counts is that no sheet stays open. The next step loads the page again.
+  await expect(page.locator('[data-slot="drawer-content"]:not([data-closed])')).toHaveCount(0);
 
   const shares = stores.getByRole("region", { name: "Split across 2 categories" });
 
