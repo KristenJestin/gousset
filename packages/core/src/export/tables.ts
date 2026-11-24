@@ -304,6 +304,12 @@ export const TRANSFERS: ExportTable = {
     { name: "out_line_id", holds: "the line money left by (statement-lines.id)" },
     { name: "in_line_id", holds: "the line it came in by (statement-lines.id)" },
     { name: "paired_by", holds: "who paired them: import (found by Gousset), rule or user" },
+    // Added after the others (#29): the database keeps it last.
+    {
+      name: "funds_entry_id",
+      holds:
+        "the expense (entries.id) a refund from a benefit account funds; empty for none",
+    },
   ],
 };
 
