@@ -121,6 +121,9 @@ async function labelRule(owner: string, text: string, categoryName: string) {
 
 const rows = (page: Page) => page.locator('[data-slot="rule-row"]');
 
+/** The toasts' landmark: the announcer repeats a toast's text for screen readers, outside it. */
+const notifications = (page: Page) => page.getByRole("region", { name: "Notifications" });
+
 /** The rule whose conditions read as `sentence`, as the list says it. */
 const ruleNamed = (page: Page, sentence: string) =>
   page.getByRole("button", { name: sentence, exact: true });
@@ -160,7 +163,7 @@ test("creating a rule from its screen", async ({ page, app, user }) => {
 
   await expect(ruleNamed(page, "label contains “E2E OAKLEAF”")).toBeVisible();
   await expect(rows(page)).toContainText("Groceries");
-  await expect(page.getByText("1 line changed")).toBeVisible();
+  await expect(notifications(page).getByText("1 line changed")).toBeVisible();
   // The job's end reads the list again: the rule classified one line.
   await expect(rows(page)).toContainText("1 time");
 });
@@ -201,7 +204,7 @@ test("a correction proposes a rule, which classifies the line's look-alikes when
   await expect(proposal).toBeHidden();
 
   // The job says how many lines it changed, and the look-alikes are in the category chosen.
-  await expect(page.getByText("2 lines changed")).toBeVisible();
+  await expect(notifications(page).getByText("2 lines changed")).toBeVisible();
   await expect(operationRow(page, "CB E2E BRAMBLE CAFE 08/10")).toContainText("Leisure");
   await expect(operationRow(page, "CB E2E BRAMBLE CAFE 15/10")).toContainText("Leisure");
 
