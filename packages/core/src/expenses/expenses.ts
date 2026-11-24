@@ -10,7 +10,7 @@ import { transfer } from "@gousset/db/schema/transfers";
 import { UserData } from "@gousset/db/user-data";
 import type { QueryFailed, UserTransaction } from "@gousset/db/user-data";
 import { minorDigits } from "@gousset/import";
-import { and, asc, desc, eq, gt, gte, inArray, lt, lte, ne, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gte, inArray, lt, lte, ne, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { Context, Effect, Layer, Result } from "effect";
 
@@ -371,7 +371,7 @@ async function proposalsFor(
         ne(statementLine.source, "balance"),
         ne(statementLine.id, line.id),
         eq(account.currency, line.currency),
-        line.amountMinor > 0 ? lt(statementLine.amountMinor, 0) : gt(statementLine.amountMinor, 0),
+        lt(statementLine.amountMinor, 0),
         sql`abs(${statementLine.amountMinor}) >= ${back}`,
         gte(statementLine.bookedOn, shiftDay(line.bookedOn, -REFUND_DAYS)),
         lte(statementLine.bookedOn, line.bookedOn),
@@ -445,8 +445,10 @@ async function proposalsFor(
   const candidates = pool.flatMap((each) => {
     const expense = expenseOf.get(entryOf.get(each.id) ?? "");
 
-    // The line pays its expense: a purchase, not a refund of one.
-    return expense === undefined || roleOf(expense.kind, each.amountMinor) !== "payment"
+    // The line pays an expense: a purchase, not a refund of one, nor an income.
+    return expense === undefined ||
+      expense.kind !== "expense" ||
+      roleOf(expense.kind, each.amountMinor) !== "payment"
       ? []
       : [proposalLine(each, expense.net.minor)];
   });
@@ -494,11 +496,16 @@ async function lineExpenses(
 
   const role = only.refunds.some((part) => part.lineId === line.id) ? "refund" : "payment";
 
-  // A line on its own, coming back, that the user did not classify: it may cancel an expense.
+  // A line on its own, coming back, that the user did not classify: it may cancel an expense. A
+  // line going out is no refund of anything.
   const alone = lineIdsOf(only).size === 1;
 
   const proposals =
-    alone && only.classifiedBy !== "user" && line.state === "counted" && line.source !== "balance"
+    alone &&
+    line.amountMinor > 0 &&
+    only.classifiedBy !== "user" &&
+    line.state === "counted" &&
+    line.source !== "balance"
       ? await proposalsFor(transaction, line, day)
       : [];
 

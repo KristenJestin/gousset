@@ -380,6 +380,31 @@ test("a cancellation is proposed as a refund, never applied unasked", async () =
   expect((await expensesOf(kept)).proposals).toEqual([]);
 });
 
+test("a purchase is never proposed as the refund of an earlier income", async () => {
+  const current = await newAccount("Purchase current");
+
+  await importInto(current, "purchase-current", [
+    { bookedOn: "2026-11-01", amountMinor: -3000, label: "CB WILLOW SHOP 0111 RIVERTON" },
+    { bookedOn: "2026-11-10", amountMinor: 3000, label: "AVOIR WILLOW SHOP RIVERTON" },
+    { bookedOn: "2026-11-20", amountMinor: -3000, label: "CB WILLOW SHOP 2011 RIVERTON" },
+  ]);
+
+  const [first, back, again] = await data.asUser(owner, (transaction) =>
+    transaction
+      .select({ id: statementLine.id })
+      .from(statementLine)
+      .where(eq(statementLine.accountId, current))
+      .orderBy(asc(statementLine.bookedOn)),
+  );
+
+  // The line coming back may cancel the purchase before it; the purchase after it cancels nothing,
+  // though the line coming back, never linked, is an income of its own of the same merchant.
+  expect((await expensesOf(back?.id ?? "")).proposals.map((each) => each.line.lineId)).toEqual([
+    first?.id,
+  ]);
+  expect((await expensesOf(again?.id ?? "")).proposals).toEqual([]);
+});
+
 test("a line taken out of its expense is its own again", async () => {
   const current = await newAccount("Unlink current");
   const card = await newAccount("Unlink card", "card");
