@@ -436,7 +436,12 @@ function RowButton({
       <span className={cn(COLUMN.day, "text-muted-foreground tabular-nums")}>{row.day}</span>
       <span className={COLUMN.line}>
         <span className="truncate">{row.label}</span>
-        {row.toReview === true ? <Chip>{messages.toReview}</Chip> : null}
+        {row.toReview === true ? (
+          // The label gives way, never the chip: a narrow row truncates the label alone.
+          <span className="flex shrink-0">
+            <Chip>{messages.toReview}</Chip>
+          </span>
+        ) : null}
       </span>
       <span className={cn(COLUMN.account, "text-muted-foreground")}>{row.account}</span>
       <span className={COLUMN.amount}>
