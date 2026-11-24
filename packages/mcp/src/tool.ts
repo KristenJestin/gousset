@@ -13,6 +13,11 @@ export type Caller = {
   /** The token was granted the write scope on the consent page. */
   readonly canWrite: boolean;
   /**
+   * The user's own currency (`auth_user.currency`), an ISO 4217 code: the one fixed benchmarks are
+   * written in. The door reads it with the grant, once per call.
+   */
+  readonly currency: string;
+  /**
    * The grant (the user's consent to the client) the token came with: a file upload belongs to
    * it (#129). The door always gives it; a test of a tool that makes none may leave it out.
    */

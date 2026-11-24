@@ -15,4 +15,12 @@ export const lineKeys = {
   search: (filters: LineFilters) => [...lineKeys.searches(), filters] as const,
   details: () => [...lineKeys.all, "detail"] as const,
   detail: (lineId: string) => [...lineKeys.details(), lineId] as const,
+  /**
+   * Who a line paid and through which intermediary (#30): under `all`, so that whatever reads the
+   * lines again (a category, a merchant, a rule, an import) reads it again too.
+   */
+  merchant: (lineId: string) => [...lineKeys.all, "merchant", lineId] as const,
+  /** The lines a line may be linked to, as its dialog searches them (#27). */
+  linkCandidates: (lineId: string, text: string) =>
+    [...lineKeys.all, "link-candidates", lineId, text] as const,
 };

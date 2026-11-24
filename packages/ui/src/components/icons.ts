@@ -7,6 +7,8 @@ import {
   IconAlertCircle,
   IconAlertTriangle,
   IconArrowBackUp,
+  IconArrowDown,
+  IconArrowUp,
   IconArrowsLeftRight,
   IconBabyCarriage,
   IconBarbell,
@@ -32,6 +34,7 @@ import {
   IconGift,
   IconHeartbeat,
   IconHome,
+  IconHourglass,
   IconInbox,
   IconInfoCircle,
   IconKey,
@@ -104,6 +107,9 @@ export const interfaceIcons = {
   // Overlays (menus, dialogs): editing and deleting a line.
   edit: IconPencil,
   delete: IconTrash,
+  // A list whose order the user sets (the rules): one place earlier, one later.
+  moveUp: IconArrowUp,
+  moveDown: IconArrowDown,
   // Money (Delta): a change too small to count.
   steady: IconMinus,
   // The app's screens, in its navigation.
@@ -124,6 +130,9 @@ export const interfaceIcons = {
   signOut: IconLogout,
   // An MCP client asking for access, on the consent screen.
   agent: IconRobot,
+  // The recurring payments' calendar: a payment that recurs, a credit's last day.
+  recurring: IconRepeat,
+  expiring: IconHourglass,
 } as const;
 
 /**

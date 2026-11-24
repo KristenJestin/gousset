@@ -289,6 +289,9 @@ importers:
       '@types/pg':
         specifier: ^8.23.1
         version: 8.23.1
+      axe-core:
+        specifier: 4.14.1
+        version: 4.14.1
       drizzle-kit:
         specifier: 1.0.0-rc.6
         version: 1.0.0-rc.6(drizzle-orm@1.0.0-rc.6(@opentelemetry/api@1.9.1)(@types/pg@8.23.1)(effect@4.1.5)(pg@8.23.1)(valibot@1.5.0(typescript@7.0.2))(zod@4.6.7))
@@ -461,6 +464,9 @@ importers:
       '@better-auth/oauth-provider':
         specifier: 1.7.27
         version: 1.7.27(@better-auth/core@1.7.27(@better-auth/utils@0.5.1)(@better-fetch/fetch@1.3.3)(@opentelemetry/api@1.9.1)(better-call@1.4.6(zod@4.6.7))(jose@6.2.18)(kysely@0.29.9)(nanostores@1.5.5))(@better-auth/utils@0.5.1)(@better-fetch/fetch@1.3.3)(better-auth@1.7.27(@opentelemetry/api@1.9.1)(@tanstack/react-start@1.169.7(@voidzero-dev/vite-plus-core@8.3.8000(@types/node@26.6.6)(esbuild@0.28.2)(jiti@2.7.0)(typescript@7.0.2)(yaml@2.9.1))(esbuild@0.28.2)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(rolldown@1.3.3))(drizzle-kit@1.0.0-rc.6(drizzle-orm@1.0.0-rc.6(@opentelemetry/api@1.9.1)(@types/pg@8.23.1)(effect@4.1.5)(pg@8.23.1)(valibot@1.5.0(typescript@7.0.2))(zod@4.6.7)))(drizzle-orm@1.0.0-rc.6(@opentelemetry/api@1.9.1)(@types/pg@8.23.1)(effect@4.1.5)(pg@8.23.1)(valibot@1.5.0(typescript@7.0.2))(zod@4.6.7))(pg@8.23.1)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(solid-js@1.9.20)(vitest@5.1.0))(better-call@1.4.6(zod@4.6.7))
+      '@gousset/core':
+        specifier: workspace:*
+        version: link:../core
       '@gousset/db':
         specifier: workspace:*
         version: link:../db
@@ -500,6 +506,9 @@ importers:
       '@gousset/import':
         specifier: workspace:*
         version: link:../import
+      '@qnot/core':
+        specifier: 0.1.0
+        version: 0.1.0
       drizzle-orm:
         specifier: 'catalog:'
         version: 1.0.0-rc.6(@opentelemetry/api@1.9.1)(@types/pg@8.23.1)(effect@4.1.5)(pg@8.23.1)(valibot@1.5.0(typescript@7.0.2))(zod@4.6.7)
@@ -623,6 +632,9 @@ importers:
       '@gousset/core':
         specifier: workspace:*
         version: link:../core
+      '@gousset/db':
+        specifier: workspace:*
+        version: link:../db
       '@gousset/import':
         specifier: workspace:*
         version: link:../import
@@ -667,6 +679,12 @@ importers:
       '@gousset/i18n':
         specifier: workspace:*
         version: link:../i18n
+      '@qnot/core':
+        specifier: 0.1.0
+        version: 0.1.0
+      '@qnot/react':
+        specifier: 0.1.0
+        version: 0.1.0(react@19.3.1)
       '@tabler/icons-react':
         specifier: ^3.52.0
         version: 3.52.0(react@19.3.1)
@@ -2640,6 +2658,16 @@ packages:
 
   '@polka/url@1.0.0-next.29':
     resolution: {integrity: sha512-wwQAWhWSuHaag8c4q/KN/vCoeOJYshAIvMQwD4GpSb3OiZklFfvAgmj0VCBBImRpuF/aFgIRzllXlVX93Jevww==}
+
+  '@qnot/core@0.1.0':
+    resolution: {integrity: sha512-CMNyPhMYqKdyk3/ivFvGB2IBQaDE4WMejo21vIdCDoRgcyN4epA6Kk5JnOKWIHjfBVWLB3GWyCWjl6i4jWbXsg==}
+    engines: {node: '>=18'}
+
+  '@qnot/react@0.1.0':
+    resolution: {integrity: sha512-p7ikxEn1Nt20wpMD5PBETXFZIy3a+ftYbcoyHomV6AYNfTOPnCYbbGEdgUD2zyYP+go3+kq9rnpihZp70TwRdw==}
+    engines: {node: '>=18'}
+    peerDependencies:
+      react: '>=18'
 
   '@rolldown/binding-android-arm-eabi@1.3.3':
     resolution: {integrity: sha512-K1itOg1Xl50XyjLDa4qQZqaYsfiQbFbFRWXOEOupOsGr3whhm5ed4lgySd6Inohv2TB0+sdU4AxORKuS/TGang==}
@@ -7932,6 +7960,13 @@ snapshots:
       playwright: 1.65.1
 
   '@polka/url@1.0.0-next.29': {}
+
+  '@qnot/core@0.1.0': {}
+
+  '@qnot/react@0.1.0(react@19.3.1)':
+    dependencies:
+      '@qnot/core': 0.1.0
+      react: 19.3.1
 
   '@rolldown/binding-android-arm-eabi@1.3.3':
     optional: true

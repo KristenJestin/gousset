@@ -40,7 +40,9 @@ export type AccountRefusalCode =
   | "DAY_RANGE_INVALID"
   | "LINE_NOT_FOUND"
   | "NOT_A_CREDIT"
-  | "EXPIRY_BEFORE_CREDIT";
+  | "EXPIRY_BEFORE_CREDIT"
+  | "BALANCE_CATEGORY_UNKNOWN"
+  | "BALANCE_CATEGORY_ARCHIVED";
 
 const refused = (code: AccountRefusalCode) => Effect.succeed({ ok: false as const, code });
 
@@ -48,6 +50,11 @@ const SETTLEMENT_CODES = {
   required: "SETTLES_INTO_REQUIRED",
   only_a_card: "SETTLES_INTO_ONLY_FOR_A_CARD",
   not_open_current: "SETTLES_INTO_NOT_AN_OPEN_CURRENT_ACCOUNT",
+} as const;
+
+const BALANCE_CATEGORY_CODES = {
+  unknown: "BALANCE_CATEGORY_UNKNOWN",
+  archived: "BALANCE_CATEGORY_ARCHIVED",
 } as const;
 
 /** The accounts page: the four groups with their totals per currency, then the closed accounts. */
@@ -86,7 +93,10 @@ export const getAccount = createServerFn({ method: "GET" })
     );
   });
 
-/** Creates an account; a card's current account that is not right comes back as a code. */
+/**
+ * Creates an account; a card's current account that is not right, or a category for its movements
+ * that is none of the user's or archived, comes back as a code.
+ */
 export const createAccount = createServerFn({ method: "POST" })
   .middleware([signedIn, slowedInDevelopment])
   .validator(Schema.toStandardSchemaV1(AccountInput))
@@ -96,6 +106,7 @@ export const createAccount = createServerFn({ method: "POST" })
         Effect.map((account) => ({ ok: true as const, id: account.id })),
         Effect.catchTags({
           SettlementRefused: (refusal) => refused(SETTLEMENT_CODES[refusal.reason]),
+          BalanceCategoryRefused: (refusal) => refused(BALANCE_CATEGORY_CODES[refusal.reason]),
         }),
       ),
     ),
@@ -103,7 +114,8 @@ export const createAccount = createServerFn({ method: "POST" })
 
 /**
  * Changes an account's settings, all at once. Refused with a code: an account the user does not
- * have, a new currency once it has a line or a balance, a card's current account that is not right.
+ * have, a new currency once it has a line or a balance, a card's current account that is not right,
+ * a category for its movements that is none of the user's or archived (unless it has it already).
  */
 export const editAccount = createServerFn({ method: "POST" })
   .middleware([signedIn, slowedInDevelopment])
@@ -118,6 +130,7 @@ export const editAccount = createServerFn({ method: "POST" })
           AccountNotFound: () => refused("ACCOUNT_NOT_FOUND"),
           CurrencyLocked: () => refused("CURRENCY_LOCKED"),
           SettlementRefused: (refusal) => refused(SETTLEMENT_CODES[refusal.reason]),
+          BalanceCategoryRefused: (refusal) => refused(BALANCE_CATEGORY_CODES[refusal.reason]),
         }),
       ),
     ),

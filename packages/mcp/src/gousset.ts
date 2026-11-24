@@ -1,19 +1,50 @@
-import type { AccountStore, DataExport, ImportProfiles, Imports, LineStore } from "@gousset/core";
+import type {
+  AccountStore,
+  CategoryStore,
+  DataExport,
+  Expenses,
+  ImportProfiles,
+  Imports,
+  LineStore,
+  Merchants,
+  RuleJobs,
+  Subscriptions,
+  Transfers,
+} from "@gousset/core";
+import type { UserData } from "@gousset/db/user-data";
 
 import { INSTRUCTIONS } from "./instructions";
 import type { ServerDefinition } from "./server";
 import type { Tool } from "./tool";
 import { accountsTool } from "./tools/accounts";
+import { categoriesTool } from "./tools/categories";
 import { dataTool } from "./tools/data";
 import { importsTool } from "./tools/imports";
 import { linesTool } from "./tools/lines";
+import { merchantsTool } from "./tools/merchants";
 import { monthTool } from "./tools/month";
+import { reviewTool } from "./tools/review";
+import { rulesTool } from "./tools/rules";
 
 /**
  * The services Gousset's tools need (the user's accounts, the imports and their profiles, the
- * export, every line searched across accounts).
+ * export, every line searched across accounts, the transfers between accounts, the merchants, the
+ * categories, the rules' database and job, the expenses made of several lines, and the charges
+ * subscriptions are detected from).
  */
-export type GoussetServices = AccountStore | Imports | ImportProfiles | DataExport | LineStore;
+export type GoussetServices =
+  | AccountStore
+  | Imports
+  | ImportProfiles
+  | DataExport
+  | LineStore
+  | Transfers
+  | Merchants
+  | CategoryStore
+  | UserData
+  | RuleJobs
+  | Expenses
+  | Subscriptions;
 
 /**
  * Gousset's tools, in the order `tools/list` gives them: one family per concept
@@ -25,6 +56,10 @@ export const goussetTools: ReadonlyArray<Tool<GoussetServices>> = [
   accountsTool,
   dataTool,
   linesTool,
+  merchantsTool,
+  categoriesTool,
+  rulesTool,
+  reviewTool,
 ];
 
 export const goussetServer: ServerDefinition<GoussetServices> = {

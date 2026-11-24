@@ -8,16 +8,66 @@ export {
   AccountNotClosed,
   AccountNotFound,
   BalanceAlreadyNoted,
+  BalanceCategoryRefused,
+  CategoryKindMismatch,
+  CategoryRequired,
+  CategoryNameAmbiguous,
+  CategoryNameTaken,
+  CategoryNameUnknown,
+  CategoryNotFound,
+  CategoryRefused,
   CurrencyLocked,
   DayRangeRefused,
   ExpiryBeforeCredit,
+  FundRefused,
+  FutureMonthRefused,
   LineAlreadyReviewed,
+  LineNotClassifiable,
   LineNotFound,
   LineSearchRefused,
+  LinkRefused,
   MonthOutOfRange,
   NotACredit,
+  NotATransfer,
+  NotFunding,
+  NotHeld,
+  NotLinked,
+  ProposalChanged,
   SettlementRefused,
+  SplitRefused,
+  TransferRefused,
 } from "./errors";
+
+export {
+  Expenses,
+  expensesLayer,
+  fundExpense,
+  lineExpensesOf,
+  linkLine,
+  splitLine,
+  unfundExpense,
+  unlinkLine,
+} from "./expenses/expenses";
+
+export type {
+  Expense,
+  ExpensePart,
+  FundedExpense,
+  Funding,
+  LineExpenses,
+  Linked,
+  RefundProposal,
+  Share,
+  TransferFunding,
+} from "./expenses/expenses";
+
+export { FUND_CANDIDATES, FUND_DAYS } from "./expenses/funding";
+
+export { MAX_SHARES, PROPOSALS_SHOWN, REFUND_DAYS } from "./expenses/parts";
+
+export type { PartRole } from "./expenses/parts";
+
+export { matchTopUps } from "./expenses/top-ups";
 
 export { FixtureLedger, Ledger, MONTHS_FROM_TODAY } from "./ledger";
 
@@ -71,7 +121,9 @@ export type {
 
 export { AccountStore } from "./account-store";
 
-export type { AccountRecord, LineExpiry } from "./account-store";
+export type { AccountRecord, BalanceCategory, LineExpiry } from "./account-store";
+
+export { remakeEveryBalanceLine } from "./balance-lines";
 
 export { creditsLeft, expiringOf } from "./credits";
 
@@ -85,6 +137,59 @@ export type { MemoryBalance, MemoryImport, MemoryLine, MemoryRows } from "./acco
 
 export type { DayBalance } from "./balances";
 
+export {
+  AVERAGE_MONTHS,
+  MAX_CATEGORIES,
+  MAX_CATEGORY_NAME,
+  archiveCategory,
+  categoryNamed,
+  classifyLine,
+  createCategory,
+  editCategory,
+  listCategories,
+  mergeCategory,
+  setMerchantDefaultCategory,
+  restoreCategory,
+} from "./categories";
+
+export type {
+  CategoryEdit,
+  CategoryInput,
+  CategoryListing,
+  CategoryMerge,
+  CategoryNode,
+  CategoryTree,
+  LineClassification,
+} from "./categories";
+
+export { BENCHMARK_WINDOW, monthBenchmarks } from "./benchmarks";
+
+export type { CategoryInMonth, MonthBenchmark, MonthBenchmarks } from "./benchmarks";
+
+export { CategoryStore } from "./category-store";
+
+export type { Benchmark, CategoryRecord, EntryKind, LineCategory } from "./category-store";
+
+export { DatabaseCategoryStore } from "./category-store-database";
+
+export { memoryCategory, memoryCategoryStore } from "./category-store-memory";
+
+export type {
+  MemoryCategoryRows,
+  MemoryEntry,
+  MemoryMerchant,
+  MemoryPart,
+} from "./category-store-memory";
+
+export {
+  DEFAULT_CATEGORIES,
+  copyDefaultCategories,
+  defaultRows,
+  setLanguageOf,
+} from "./default-categories";
+
+export type { DefaultCategory, DefaultName, SetLanguage } from "./default-categories";
+
 export { DEFAULT_SEARCH_LINES, MAX_SEARCH_LINES, searchLines, showLine } from "./lines";
 
 export type { LineAccount, LineDetail, LinePage, LineRow, LineSearch } from "./lines";
@@ -96,6 +201,27 @@ export { DatabaseLineStore } from "./line-store-database";
 export { memoryLineStore } from "./line-store-memory";
 
 export type { MemoryLineDetail, MemoryLineImport, MemoryLineRows } from "./line-store-memory";
+
+export {
+  acceptProposal,
+  correctLine,
+  discardHeldLine,
+  keepHeldLine,
+  queuedLine,
+  reviewQueue,
+} from "./review-queue";
+
+export type {
+  CorrectedLine,
+  Correction,
+  QueuedLine,
+  ReviewQueuePage,
+  ReviewSearch,
+} from "./review-queue";
+
+export { proposalKey, proposalOf } from "./review-proposal";
+
+export type { ProposalFacts, RepeatedLine, ReviewProposal } from "./review-proposal";
 
 export { flags, importState, investments, movements } from "./review";
 
@@ -209,6 +335,67 @@ export { ImportJobInput, markFailed, runImport } from "./imports/run";
 
 export type { ImportProgress, ImportRun } from "./imports/run";
 
+export {
+  LineMerchantRefused,
+  MerchantAliasNotFound,
+  MerchantMergeRefused,
+  MerchantNameRefused,
+  MerchantNameTaken,
+  MerchantNameUnknown,
+  MerchantNotFound,
+} from "./merchants/errors";
+
+export { merchantKey, merchantName } from "./merchants/labels";
+
+export { KNOWN_INTERMEDIARIES, isKnownIntermediary } from "./merchants/intermediaries";
+
+export { ruleWords } from "./merchants/rule-words";
+
+export type { LineMerchant, LineMerchantAssigned, NamedMerchant } from "./merchants/line-merchant";
+
+export {
+  DEFAULT_MERCHANTS_LISTED,
+  MAX_MERCHANT_NAME,
+  MAX_MERCHANTS_LISTED,
+  MERCHANT_LINES_SCANNED,
+  MERCHANT_LINES_SHOWN,
+  Merchants,
+  assignLineMerchant,
+  lineMerchant,
+  listMerchants,
+  markIntermediary,
+  markSubscription,
+  merchantsLayer,
+  recogniseMerchants,
+  showMerchant,
+} from "./merchants/merchants";
+
+export type {
+  AliasMoved,
+  MerchantDefaultCategory,
+  MerchantDetail,
+  MerchantLine,
+  MerchantPage,
+  MerchantSearch,
+  MerchantSummary,
+  Merged,
+  Recognised,
+} from "./merchants/merchants";
+
+export {
+  Transfers,
+  lineTransferOf,
+  pairEveryLine,
+  pairLineWithAccount,
+  pairLines,
+  transfersLayer,
+  unpairLine,
+} from "./transfers/transfers";
+
+export type { LineTransfer, PairingSummary, TransferSide, Unpaired } from "./transfers/transfers";
+
+export { CARD_DAYS, TRANSFER_DAYS } from "./transfers/pairing";
+
 export { DataExport, dataExportLayer } from "./export/export";
 
 export type { ExportContents } from "./export/export";
@@ -219,4 +406,72 @@ export type { ExportArchive } from "./export/archive";
 
 export { EXPORT_TABLES, IMPORT_FILES_FOLDER } from "./export/tables";
 
+export {
+  RuleConditionsRefused,
+  RuleEffectRefused,
+  RuleJobUnavailable,
+  RuleNotFound,
+  TooManyRules,
+} from "./rules/errors";
+
+export {
+  MAX_RULES,
+  RuleJobInput,
+  RuleJobs,
+  applyRuleToPast,
+  createRule,
+  deleteRule,
+  editRule,
+  listRules,
+  moveRule,
+  previewRule,
+  showRule,
+  startApplyToPast,
+} from "./rules/rules";
+
+export type {
+  RuleAccount,
+  RuleApplied,
+  RuleCategory,
+  RuleDetail,
+  RuleEdit,
+  RuleEffect,
+  RuleInput,
+  RuleJobOutcome,
+  RuleList,
+  RuleOrigin,
+  RuleReach,
+  RuleSummary,
+} from "./rules/rules";
+
 export type { ExportTable } from "./export/tables";
+
+export {
+  MIN_CHARGES,
+  TOLERANCE_DAYS,
+  calendarDays,
+  detectSubscriptions,
+  subscriptionsOfMonth,
+} from "./subscriptions/detection";
+
+export type {
+  Cadence,
+  CalendarItem,
+  Charge,
+  MonthSubscriptions,
+  Subscription,
+} from "./subscriptions/detection";
+
+export {
+  CHARGE_YEARS,
+  Subscriptions,
+  monthSubscriptions,
+  subscriptionCalendar,
+  subscriptionsLayer,
+} from "./subscriptions/subscriptions";
+
+export type {
+  ExpiringCredit,
+  MonthSubscriptionsRead,
+  SubscriptionCalendar,
+} from "./subscriptions/subscriptions";

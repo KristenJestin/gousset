@@ -5,10 +5,13 @@ import { describe, expect, test } from "vite-plus/test";
 import type { Touched } from "@/jobs/view";
 
 import { accountKeys } from "./account-keys";
-import { invalidateTouched } from "./invalidate";
+import { categoryKeys } from "./category-keys";
+import { invalidateMerchantEntries, invalidateTouched } from "./invalidate";
 import { lineKeys } from "./line-keys";
+import { merchantKeys } from "./merchant-keys";
 import { monthKeys } from "./month-keys";
 import { reviewKeys } from "./review-keys";
+import { ruleKeys } from "./rule-keys";
 
 const isInvalidated = (client: QueryClient, queryKey: QueryKey) =>
   client.getQueryState(queryKey)?.isInvalidated;
@@ -28,6 +31,8 @@ const SEARCH = lineKeys.search({ text: "greenmarket" });
 const DETAIL = lineKeys.detail("6f1c2a4e-0d5b-4c3e-9a7f-2b8d1e4c5a60");
 const ACCOUNTS = accountKeys.list();
 const COUNTS = reviewKeys.startingPoints();
+const MERCHANTS = merchantKeys.list("");
+const MERCHANT = merchantKeys.detail("0b6e3f9a-4c2d-4e8b-9f1a-7d5c3b2e1a90");
 
 describe("invalidateTouched", () => {
   test("reads the operations, the accounts and the review's counts again, after an import or its undo", async () => {
@@ -45,6 +50,37 @@ describe("invalidateTouched", () => {
     }
   });
 
+  test("reads the merchants again: an import recognises those of its lines, an undo leaves them", async () => {
+    const client = clientWith([MERCHANTS, MERCHANT]);
+
+    await invalidateTouched(client, { months: ["2026-10"] });
+
+    expect(isInvalidated(client, MERCHANTS)).toBe(true);
+    expect(isInvalidated(client, MERCHANT)).toBe(true);
+  });
+
+  test("reads the rules again: an import's rules and a rule applied to the past count their lines", async () => {
+    const touchedOnes: ReadonlyArray<Touched> = [{ months: ["2026-10"] }, { everyMonth: true }];
+    const rule = ruleKeys.detail("3d2b1c4e-5f6a-4b7c-8d9e-0f1a2b3c4d5e");
+
+    for (const touched of touchedOnes) {
+      const client = clientWith([ruleKeys.list(), rule]);
+
+      await invalidateTouched(client, touched);
+
+      expect(isInvalidated(client, ruleKeys.list())).toBe(true);
+      expect(isInvalidated(client, rule)).toBe(true);
+    }
+  });
+
+  test("a rule applied to the past reads the categories' figures again: its lines moved", async () => {
+    const client = clientWith([categoryKeys.list()]);
+
+    await invalidateTouched(client, { everyMonth: true });
+
+    expect(isInvalidated(client, categoryKeys.list())).toBe(true);
+  });
+
   test("reads again the months a job touched, and only those", async () => {
     const october = [...monthKeys.of("2026-10"), "e2e-touched"];
     const november = [...monthKeys.of("2026-11"), "e2e-touched"];
@@ -54,5 +90,19 @@ describe("invalidateTouched", () => {
 
     expect(isInvalidated(client, october)).toBe(true);
     expect(isInvalidated(client, november)).toBe(false);
+  });
+});
+
+describe("invalidateMerchantEntries", () => {
+  test("reads the merchants, the operations, the months and the categories again: the entries moved", async () => {
+    const october = [...monthKeys.of("2026-10"), "e2e-touched"];
+    const categories = categoryKeys.list();
+    const client = clientWith([MERCHANTS, MERCHANT, SEARCH, DETAIL, october, categories]);
+
+    await invalidateMerchantEntries(client);
+
+    for (const queryKey of [MERCHANTS, MERCHANT, SEARCH, DETAIL, october, categories]) {
+      expect(isInvalidated(client, queryKey), JSON.stringify(queryKey)).toBe(true);
+    }
   });
 });

@@ -13,6 +13,11 @@
       "matchPackageNames": ["drizzle-orm", "drizzle-kit", "nitro"],
       "ignoreUnstable": false,
       "respectLatest": false
+    },
+    {
+      "description": "axe-core moves with @axe-core/playwright: the e2e harness scans with its own axe-core source",
+      "matchPackageNames": ["axe-core", "@axe-core/playwright"],
+      "groupName": "axe"
     }
   ]
 }

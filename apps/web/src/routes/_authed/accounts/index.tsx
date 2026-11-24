@@ -1,3 +1,4 @@
+import { DEFAULT_TOP_UP_DAYS } from "@gousset/core/account-values";
 import { m } from "@gousset/i18n/messages";
 import {
   AccountGroup,
@@ -30,16 +31,19 @@ export const Route = createFileRoute("/_authed/accounts/")({
   component: AccountsPage,
 });
 
-const NEW_ACCOUNT: AccountFormValues = {
+/** A new account's values but its currency, which starts from the user's own. */
+const NEW_ACCOUNT: Omit<AccountFormValues, "currency"> = {
   name: "",
   choice: "current",
   institution: "",
-  currency: "EUR",
   mode: "lines",
   openingBalanceMinor: 0,
   openedOn: null,
   settlesIntoAccountId: null,
   creditOrder: "oldest_first",
+  balanceCategoryId: null,
+  topUpDays: DEFAULT_TOP_UP_DAYS,
+  topUpCapMinor: null,
 };
 
 function AccountsPage() {
@@ -58,6 +62,7 @@ function AccountsPage() {
 
 function Overview() {
   const { data } = useSuspenseQuery(accountQueries.list());
+  const { user } = Route.useRouteContext();
   const queryClient = useQueryClient();
   const locale = usePageLanguage();
   const [formOpen, setFormOpen] = useState(false);
@@ -98,7 +103,7 @@ function Overview() {
       onOpenChange={setFormOpen}
       title={m.accountFormCreateTitle()}
       submitLabel={m.accountFormCreateSubmit()}
-      initial={NEW_ACCOUNT}
+      initial={{ ...NEW_ACCOUNT, currency: user.currency }}
       settlesIntoChoices={openCurrentAccounts}
       onSubmit={handleCreate}
       onSaved={setJustCreatedId}

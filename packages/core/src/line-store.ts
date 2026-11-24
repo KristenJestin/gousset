@@ -2,6 +2,7 @@ import type { QueryFailed } from "@gousset/db/user-data";
 import { Context } from "effect";
 import type { Effect } from "effect";
 
+import type { LineCategory } from "./category-store";
 import type { ImportFormat } from "./imports/summary";
 
 /**
@@ -23,8 +24,16 @@ export type LineQuery = {
   readonly to: string;
   /** The amount's bounds in each currency; null for none. */
   readonly amount: ((currency: string) => AmountBounds | null) | null;
-  /** `held` lines only (to review), or `counted` only; never `discarded`. */
+  /**
+   * `held` lines (to review), or `counted` only; never `discarded`. With `held`, the counted lines
+   * whose entry is still where the import put it (`classified_by = default`, #23) match too, but a
+   * noted balance's movement in its account's own category (#31): the user chose it there.
+   */
   readonly state: "counted" | "held";
+  /** With `held`: these counted lines match too (a transfer's side to choose, #26). */
+  readonly alsoLineIds: ReadonlyArray<string>;
+  /** These lines only, when given: whether one line is among those a search gives (#35). */
+  readonly onlyLineIds?: ReadonlyArray<string>;
   /** Lines strictly older than this one in the order (booked on, then id). */
   readonly after: { readonly bookedOn: string; readonly id: string } | null;
   /** How many lines to give at most. */
@@ -47,6 +56,10 @@ export type FoundLine = {
     readonly institution: string | null;
     readonly currency: string;
   };
+  /** The category of its one entry; null for a line with none (held, of no amount) or split. */
+  readonly category: LineCategory | null;
+  /** The movement a noted balance makes (#31): it has no label, the interface names it. */
+  readonly fromBalance: boolean;
 };
 
 /** A line with all that its detail shows. */
@@ -103,5 +116,13 @@ export class LineStore extends Context.Service<
       lineId: string,
       day: string,
     ) => Effect.Effect<FoundLineDetail | undefined, QueryFailed>;
+    /**
+     * The counted lines booked on or before `day`, still to review and no side of a transfer, that
+     * have several lines that may be their transfer's other side (#26): they wait for the user.
+     */
+    readonly severalCandidates: (
+      owner: string,
+      day: string,
+    ) => Effect.Effect<ReadonlyArray<string>, QueryFailed>;
   }
 >()("@gousset/core/LineStore") {}

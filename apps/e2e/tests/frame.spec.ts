@@ -200,7 +200,8 @@ test("the sidebar names every screen, the current one marked", async ({ userPage
 
   await userPage.getByRole("link", { name: "Rules" }).click();
   await expect(userPage).toHaveURL(/\/settings\/rules$/);
-  await expect(userPage.getByText("No rule yet")).toBeVisible();
+  // The rules screen, with or without rules: the worker's user has one once a test seeded it.
+  await expect(userPage.getByRole("button", { name: "Add a rule" })).toBeVisible();
   // The screen reached fades in: axe checks it once drawn.
   await animationsDone(userPage);
 });

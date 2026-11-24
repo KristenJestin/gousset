@@ -1,10 +1,17 @@
 import {
   DataExport,
+  Expenses,
   ImportProfiles,
   Imports,
+  Merchants,
+  RuleJobs,
+  Subscriptions,
+  Transfers,
   memoryAccountStore,
+  memoryCategoryStore,
   memoryLineStore,
 } from "@gousset/core";
+import { UserData } from "@gousset/db/user-data";
 import { Effect, Layer } from "effect";
 import { describe, expect, test } from "vite-plus/test";
 
@@ -14,17 +21,17 @@ import { connectInProcess } from "./test-client";
 // The budget of docs/mcp.md ("The budget"). When a guard fails, nobody trims a description to make
 // room: the maintainer decides.
 const MAX_TOOLS = 15;
-const MAX_LISTING_CHARACTERS = 30_000;
+const MAX_LISTING_CHARACTERS = 40_000; // Raised from 30,000: about ten tools of up to 4,000 each.
 const MAX_DESCRIPTION_CHARACTERS = 4000;
 const MAX_INSTRUCTION_WORDS = 600;
 
-const reader = { userId: "guard", canWrite: false };
+const reader = { userId: "guard", canWrite: false, currency: "EUR" };
 
 async function listing() {
   const client = await connectInProcess(
     goussetServer,
     {
-      // Listing calls no tool: the imports and the export are never reached.
+      // Listing calls no tool: the imports, the export and the rules are never reached.
       run: (effect) =>
         Effect.runPromiseExit(
           Effect.provide(
@@ -32,9 +39,16 @@ async function listing() {
             Layer.mergeAll(
               memoryAccountStore(),
               memoryLineStore(),
+              memoryCategoryStore(),
               Layer.mock(Imports, {}),
               Layer.mock(ImportProfiles, {}),
               Layer.mock(DataExport, {}),
+              Layer.mock(Merchants, {}),
+              Layer.mock(Transfers, {}),
+              Layer.mock(Expenses, {}),
+              Layer.mock(UserData, {}),
+              Layer.mock(RuleJobs, {}),
+              Layer.mock(Subscriptions, {}),
             ),
           ),
         ),

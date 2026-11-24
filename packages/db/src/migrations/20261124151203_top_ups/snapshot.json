@@ -1,0 +1,131 @@
+{
+  "type": "diff",
+  "version": "10",
+  "dialect": "postgres",
+  "id": "e5b039f3-6b13-4a67-b387-6efe7b8c67ad",
+  "prevIds": ["80df7a71-9532-4687-a1b9-4970bf93d794"],
+  "footprints": [
+    {
+      "statementType": "add_column",
+      "statementTarget": ["column", "public", "account", "top_up_days"],
+      "writes": [
+        "s|col|public.account.top_up_days",
+        "n|col|public.account.top_up_days",
+        "e|col|public.account.top_up_days"
+      ],
+      "reads": ["n|tbl|public.account", "n|sch|public"]
+    },
+    {
+      "statementType": "add_column",
+      "statementTarget": ["column", "public", "account", "top_up_cap_minor"],
+      "writes": [
+        "s|col|public.account.top_up_cap_minor",
+        "n|col|public.account.top_up_cap_minor",
+        "e|col|public.account.top_up_cap_minor"
+      ],
+      "reads": ["n|tbl|public.account", "n|sch|public"]
+    },
+    {
+      "statementType": "add_column",
+      "statementTarget": ["column", "public", "statement_line", "link_refused"],
+      "writes": [
+        "s|col|public.statement_line.link_refused",
+        "n|col|public.statement_line.link_refused",
+        "e|col|public.statement_line.link_refused"
+      ],
+      "reads": ["n|tbl|public.statement_line", "n|sch|public"]
+    },
+    {
+      "statementType": "add_check",
+      "statementTarget": ["table", "public", "account"],
+      "writes": [
+        "s|ck|public.account.account_top_up_days_range",
+        "n|ck|public.account.account_top_up_days_range",
+        "e|ck|public.account.account_top_up_days_range",
+        "n|con|public.account.account_top_up_days_range"
+      ],
+      "reads": ["n|tbl|public.account", "n|sch|public", "n|col|public.account.top_up_days"]
+    },
+    {
+      "statementType": "add_check",
+      "statementTarget": ["table", "public", "account"],
+      "writes": [
+        "s|ck|public.account.account_top_up_cap_positive",
+        "n|ck|public.account.account_top_up_cap_positive",
+        "e|ck|public.account.account_top_up_cap_positive",
+        "n|con|public.account.account_top_up_cap_positive"
+      ],
+      "reads": ["n|tbl|public.account", "n|sch|public", "n|col|public.account.top_up_cap_minor"]
+    }
+  ],
+  "deltas": [
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "account",
+        "name": "top_up_days",
+        "type": "integer",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "3",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "account",
+        "name": "top_up_cap_minor",
+        "type": "bigint",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "statement_line",
+        "name": "link_refused",
+        "type": "boolean",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "false",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "account",
+        "name": "account_top_up_days_range",
+        "value": "\"top_up_days\" between 0 and 7",
+        "entityType": "checks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "account",
+        "name": "account_top_up_cap_positive",
+        "value": "\"top_up_cap_minor\" > 0",
+        "entityType": "checks"
+      }
+    }
+  ]
+}

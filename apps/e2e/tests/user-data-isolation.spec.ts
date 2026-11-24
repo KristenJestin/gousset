@@ -1,4 +1,11 @@
-import { account, statementImport, statementLine } from "@gousset/db/schema/ledger";
+import {
+  account,
+  merchant,
+  merchantAlias,
+  rule,
+  statementImport,
+  statementLine,
+} from "@gousset/db/schema/ledger";
 import { sql } from "drizzle-orm";
 
 import { expect, test } from "../src/test";
@@ -250,6 +257,39 @@ test("a user never attaches a row to another user's row", async () => {
         fileName: "theirs.ofx",
         fileSha256: "0".repeat(64),
         format: "ofx",
+      }),
+    ),
+  ).toBe("23503");
+
+  const [samsMerchant] = await data.asUser(sam, (transaction) =>
+    transaction.select({ id: merchant.id }).from(merchant).limit(1),
+  );
+
+  expect(samsMerchant).toBeDefined();
+
+  // A cleaned label of one's own, naming the other user's merchant.
+  expect(
+    await data.refusal(alex, (transaction) =>
+      transaction.insert(merchantAlias).values({
+        userId: alex,
+        merchantId: samsMerchant?.id ?? "",
+        alias: "NOT THEIR SHOP",
+      }),
+    ),
+  ).toBe("23503");
+
+  // A rule of one's own that sets the other user's merchant (#25).
+  expect(
+    await data.refusal(alex, (transaction) =>
+      transaction.insert(rule).values({
+        userId: alex,
+        conditions: {
+          kind: "group",
+          combinator: "and",
+          children: [{ kind: "rule", field: "label", operator: "contains", value: "THEIRS" }],
+        },
+        setMerchantId: samsMerchant?.id ?? "",
+        createdFrom: "user",
       }),
     ),
   ).toBe("23503");

@@ -129,7 +129,11 @@ export function register<Input, Encoded>(definition: JobDefinition<Input, Encode
 /** What pg-boss keeps of an attempt's end: the output Gousset decodes, never a message. */
 function resultOf(id: string, outcome: AttemptOutcome): JobResult {
   if ("touched" in outcome) {
-    return { id, status: "completed", output: { touched: outcome.touched } };
+    return {
+      id,
+      status: "completed",
+      output: { touched: outcome.touched, done: outcome.done ?? null },
+    };
   }
 
   // A failure not worth another attempt fails the job at once (no dead letter queue is set).
@@ -296,7 +300,9 @@ export class JobQueue extends Context.Service<
             yield* show(claimed.id, owner, view, true);
             yield* annotate({ "gousset.job.outcome": outcomeName(view, false) });
 
-            return outcome;
+            // A completed job keeps on its row the count its last step reported, so that a page
+            // that reads it once the live view is forgotten still says it.
+            return "touched" in outcome ? { ...outcome, done: view.done } : outcome;
           }).pipe(
             withSpan("job", {
               "gousset.job.name": job.name,

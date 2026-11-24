@@ -7,8 +7,10 @@
     ".": "./src/index.ts",
     "./values": "./src/values.ts",
     "./account-values": "./src/account-values.ts",
+    "./default-categories": "./src/default-categories.ts",
     "./imports": "./src/imports/summary.ts",
-    "./read": "./src/imports/read.ts"
+    "./read": "./src/imports/read.ts",
+    "./rule-values": "./src/rules/conditions.ts"
   },
   "scripts": {
     "check-types": "tsc --noEmit"
@@ -18,6 +20,7 @@
     "@gousset/db": "workspace:*",
     "@gousset/fixture": "workspace:*",
     "@gousset/import": "workspace:*",
+    "@qnot/core": "0.1.0",
     "drizzle-orm": "catalog:",
     "effect": "catalog:",
     "fflate": "0.8.3"

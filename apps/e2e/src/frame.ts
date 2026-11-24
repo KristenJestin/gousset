@@ -8,6 +8,14 @@ export function onPhone(page: Page): boolean {
   return (page.viewportSize()?.width ?? SIDEBAR_FROM) < SIDEBAR_FROM;
 }
 
+/**
+ * A line's open detail on the operations page, named by its label: a panel beside the list on a
+ * wide screen, a sheet (a dialog) over it on a phone (#128).
+ */
+export function lineDetail(page: Page, label: string): Locator {
+  return page.getByRole(onPhone(page) ? "dialog" : "region", { name: label });
+}
+
 /** What the eye gets of a text: whether it is drawn on top, and its contrast with what is under. */
 export type TextSight = { onTop: boolean; contrast: number };
 

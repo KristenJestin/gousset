@@ -215,6 +215,8 @@ export type Grant = {
    * narrowed), to the millisecond: a token minted no later than that is refused.
    */
   revokedUntil: Date | undefined;
+  /** The user's currency (`auth_user.currency`), read in the same query: the MCP caller's. */
+  currency: string;
 };
 
 /**
@@ -236,6 +238,7 @@ export async function currentGrant(
       banned: authUser.banned,
       banExpires: authUser.banExpires,
       mustChangePassword: authUser.mustChangePassword,
+      currency: authUser.currency,
     })
     .from(authOauthConsent)
     .innerJoin(authUser, eq(authUser.id, authOauthConsent.userId))
@@ -278,6 +281,7 @@ export async function currentGrant(
       revocations.length === 0
         ? undefined
         : new Date(Math.max(...revocations.map((last) => last.getTime()))),
+    currency: row.currency,
   };
 }
 

@@ -37,6 +37,7 @@ const SHOTS: ReadonlyArray<Shot> = [
   // The list over a block: a floating surface stands out from the card (#104).
   { id: "forms-select--in-a-card", open: "click" },
   { id: "forms-combobox--chosen" },
+  { id: "forms-namefield--typed" },
   { id: "forms-checkbox--checked" },
   { id: "forms-switch--on" },
   { id: "forms-datepicker--chosen" },
@@ -86,6 +87,7 @@ const SHOTS: ReadonlyArray<Shot> = [
   { id: "layout-card--with-description" },
   { id: "layout-screen--sign-in" },
   { id: "data-list--loading-beside-loaded" },
+  { id: "data-list--links" },
   { id: "data-categoryicon--in-rows" },
   { id: "data-merchantlogo--in-rows" },
   { id: "data-accountchip--kinds" },
@@ -104,6 +106,11 @@ const SHOTS: ReadonlyArray<Shot> = [
   { id: "money-movement-list--default" },
   { id: "money-investment-list--loss" },
   { id: "money-review-lines--default" },
+  // The recurring payments' calendar (#34): the month and the agenda, on a desktop and a phone.
+  { id: "money-recurringcalendar--default" },
+  { id: "money-recurringcalendar--agenda-view" },
+  { id: "money-recurringcalendar--phone", width: 390 },
+  { id: "money-recurringcalendar--phone-agenda", width: 390 },
   { id: "data-flag-list--default" },
   { id: "layout-folded--default" },
   { id: "layout-review-layout--desktop" },
@@ -150,6 +157,36 @@ const SHOTS: ReadonlyArray<Shot> = [
   // A line's detail beside the list in French, and a sheet over it on a phone (#128).
   { id: "operations-operationslayout--line-open-french" },
   { id: "operations-operationslayout--phone", width: 390 },
+  { id: "categories-categorytree--default" },
+  { id: "categories-categorypicker--chosen" },
+  { id: "operations-linedetail--with-category" },
+  { id: "operations-lineexpense--linked" },
+  // A works council refund and the expense it funds, each on its side's detail (#29).
+  { id: "operations-linefunding--funds" },
+  { id: "operations-linefunding--funded-by" },
+  { id: "rules-ruleslist--default" },
+  { id: "rules-ruleeditor--default" },
+  { id: "rules-ruleproposal--default" },
+  { id: "rules-ruleproposal--merchant" },
+  // An intermediary's line that asks who was paid: its notice stands out in the detail (#30).
+  { id: "operations-linemerchant--asks" },
+  { id: "operations-linemerchant--assigned" },
+  // The dialog the Change button opens, over the page.
+  {
+    id: "operations-linemerchant--choosing",
+    open: "click",
+    trigger: "Change the merchant",
+  },
+  { id: "operations-linedetail--with-merchant" },
+  // What Gousset proposes for a line to review, at the top of its detail, and Correct's dialog (#35).
+  { id: "operations-reviewproposal--in-detail" },
+  { id: "operations-reviewproposal--duplicate" },
+  {
+    id: "operations-reviewproposal--category",
+    open: "click",
+    trigger: "Correct CB GREENMARKET 2110 RIVERTON",
+    name: "operations-reviewproposal--correcting",
+  },
 ];
 
 async function openPopup(page: Page, open: Shot["open"], name: Shot["trigger"]) {

@@ -96,6 +96,9 @@ export const lineSource = pgEnum("line_source", ["import", "manual", "balance", 
 
 export const lineState = pgEnum("line_state", ["counted", "held", "discarded"]);
 
+/** Whether the monthly review still lists a line (v0.3): until the user, or a sure rule, says. */
+export const reviewState = pgEnum("review_state", ["to_review", "done"]);
+
 export const importFormat = pgEnum("import_format", [
   "ofx",
   "qfx",
@@ -116,6 +119,21 @@ export const importStatus = pgEnum("import_status", [
 ]);
 
 export const importProfileKind = pgEnum("import_profile_kind", ["statement", "operations"]);
+
+// v0.3, Classify (#23): what happened, outside the line. A category's kind is the entry's own enum,
+// since a foreign key compares the two.
+export const entryKind = pgEnum("entry_kind", ["expense", "income"]);
+
+export const benchmarkMode = pgEnum("benchmark_mode", ["automatic", "fixed", "none"]);
+
+// `default`: put in its kind's fallback category by the import, the backfill or sign-up, nothing
+// decided yet; `rule`: by a rule (#25); `user`: by the user, which no rule overwrites unasked.
+export const classifiedBy = pgEnum("classified_by", ["default", "rule", "user"]);
+
+export const entryPartRole = pgEnum("entry_part_role", ["payment", "refund"]);
+
+/** Where a rule comes from (#25): proposed by a correction of a line, or written from its screen. */
+export const ruleOrigin = pgEnum("rule_origin", ["correction", "user"]);
 
 /** One account the user follows, of every kind. */
 export const account = pgTable.withRLS(
@@ -145,9 +163,21 @@ export const account = pgTable.withRLS(
     creditOrder: creditOrder("credit_order").default("oldest_first").notNull(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
+    // Added by v0.3 (#31), after the others: the category a balance-mode account's movement goes
+    // to. Its key (`on delete set null (balance_category_id)`, which Drizzle cannot write) is in the
+    // custom migration `*_balance_lines_keys`.
+    balanceCategoryId: uuid("balance_category_id"),
+    // Read for a benefit account only (#28): how many days after its own line the issuer charges
+    // the rest of a purchase to a linked bank card, and the most the card pays a day, when known.
+    topUpDays: integer("top_up_days").default(3).notNull(),
+    topUpCapMinor: minor("top_up_cap_minor"),
   },
   (table) => [
     unique("account_user_id_id_key").on(table.userId, table.id),
+    check("account_top_up_days_range", sql`${table.topUpDays} between 0 and 7`),
+    check("account_top_up_cap_positive", sql`${table.topUpCapMinor} > 0`),
+    // A merge of categories moves it, and a deleted category clears it.
+    index("account_balance_category_id_idx").on(table.balanceCategoryId),
     unique("account_user_id_iban_key").on(table.userId, table.iban),
     check("account_currency_iso_4217", sql`${table.currency} ~ '^[A-Z]{3}$'`),
     // One written form, so that the unique key compares like with like.
@@ -312,6 +342,8 @@ export const accountBalance = pgTable.withRLS(
     importId: uuid("import_id"),
   },
   (table) => [
+    // What a line made from a noted balance points to (v0.3, #31).
+    unique("account_balance_user_id_id_key").on(table.userId, table.id),
     foreignKey({
       name: "account_balance_account_fk",
       columns: [table.userId, table.accountId],
@@ -367,6 +399,16 @@ export const statementLine = pgTable.withRLS(
     expiresOn: day("expires_on"),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
+    // Added by v0.3 (#26), after the others: every line of v0.2 starts to review, which it is.
+    reviewState: reviewState("review_state").default("to_review").notNull(),
+    // The user said this line is no transfer (unpaired it): the automatic pairing leaves it alone
+    // until the user pairs it by hand (#26).
+    transferRefused: boolean("transfer_refused").default(false).notNull(),
+    // A line made from a noted balance (#31): the balance it was made from, which it goes with.
+    balanceId: uuid("balance_id"),
+    // The user took this line out of an expense of several lines (#28): the automatic matching of
+    // top-ups leaves it alone until the user links it by hand.
+    linkRefused: boolean("link_refused").default(false).notNull(),
   },
   (table) => [
     unique("statement_line_user_id_id_key").on(table.userId, table.id),
@@ -382,6 +424,17 @@ export const statementLine = pgTable.withRLS(
       columns: [table.userId, table.importId],
       foreignColumns: [statementImport.userId, statementImport.id],
     }).onDelete("cascade"),
+    // One line per noted balance, deleted with it.
+    unique("statement_line_balance_id_key").on(table.balanceId),
+    foreignKey({
+      name: "statement_line_balance_fk",
+      columns: [table.userId, table.balanceId],
+      foreignColumns: [accountBalance.userId, accountBalance.id],
+    }).onDelete("cascade"),
+    check(
+      "statement_line_balance_has_balance",
+      sql`(${table.source} = 'balance') = (${table.balanceId} is not null)`,
+    ),
     // Lines are ordered by booking date, then by id.
     index("statement_line_account_id_booked_on_id_idx").on(
       table.accountId,
@@ -410,5 +463,208 @@ export const statementLine = pgTable.withRLS(
       sql`${table.originalCurrency} ~ '^[A-Z]{3}$'`,
     ),
     ownRowsOnly("statement_line"),
+  ],
+);
+
+/** Who was paid, cleaned from the raw labels (#24); each user's own. */
+export const merchant = pgTable.withRLS(
+  "merchant",
+  {
+    id: id(),
+    userId: owner(),
+    // Unique per user: a rule, a merge and the MCP door name a merchant by it.
+    name: text("name").notNull(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+    // Added with the categories (#23), after the others: the category its entries go in by default.
+    // Its key (`on delete set null (default_category_id)`, which Drizzle cannot write) is in the
+    // custom migration `*_merchant_default_category_key`.
+    defaultCategoryId: uuid("default_category_id"),
+    // Added with the payment intermediaries (#30): a label naming it hides who was paid, which the
+    // user sets on the line's entry (`entry.merchant_id`).
+    isIntermediary: boolean("is_intermediary").default(false).notNull(),
+    // Added with the subscriptions (#34): the user said its payments are no subscription, so that
+    // none of its series is proposed again until the user takes it back. Subscriptions themselves
+    // are computed on read, never stored (docs/data-model.md, v0.4).
+    subscriptionDismissed: boolean("subscription_dismissed").default(false).notNull(),
+  },
+  (table) => [
+    unique("merchant_user_id_id_key").on(table.userId, table.id),
+    unique("merchant_user_id_name_key").on(table.userId, table.name),
+    // A merge of categories moves the defaults, and a deleted category clears them.
+    index("merchant_default_category_id_idx").on(table.defaultCategoryId),
+    ownRowsOnly("merchant"),
+  ],
+);
+
+/**
+ * A cleaned label that names a merchant (packages/core, `merchantKey`): a line whose label cleans
+ * to it is that merchant's. One cleaned label names one merchant.
+ */
+export const merchantAlias = pgTable.withRLS(
+  "merchant_alias",
+  {
+    id: id(),
+    userId: owner(),
+    merchantId: uuid("merchant_id").notNull(),
+    alias: text("alias").notNull(),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    unique("merchant_alias_user_id_alias_key").on(table.userId, table.alias),
+    foreignKey({
+      name: "merchant_alias_merchant_fk",
+      columns: [table.userId, table.merchantId],
+      foreignColumns: [merchant.userId, merchant.id],
+    }).onDelete("cascade"),
+    // A merchant's aliases, for its page, a merge and the cascade.
+    index("merchant_alias_merchant_id_idx").on(table.merchantId),
+    ownRowsOnly("merchant_alias"),
+  ],
+);
+
+/**
+ * An expense or income category, on two levels (#23). Its parent, and an entry's category, are
+ * kept references (`on delete no action deferrable initially deferred`, which Drizzle cannot
+ * write): they are in the custom migration `*_categories_isolation`.
+ */
+export const category = pgTable.withRLS(
+  "category",
+  {
+    id: id(),
+    userId: owner(),
+    // Null for a top-level category. A third level is refused by packages/core.
+    parentId: uuid("parent_id"),
+    kind: entryKind("kind").notNull(),
+    name: text("name").notNull(),
+    // A key of the icons shipped with packages/ui.
+    icon: text("icon"),
+    // Siblings are ordered by (position, id); not unique, so a move writes the moved row only.
+    position: integer("position").default(0).notNull(),
+    archivedAt: timestamp("archived_at", { withTimezone: true }),
+    benchmarkMode: benchmarkMode("benchmark_mode").default("automatic").notNull(),
+    // A fixed benchmark, in minor units of the user's currency.
+    benchmarkMinor: minor("benchmark_minor"),
+    // Where an entry goes until it is classified: one per kind, never archived nor merged away.
+    isFallback: boolean("is_fallback").default(false).notNull(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    unique("category_user_id_id_key").on(table.userId, table.id),
+    // What the kept references point to: a child shares its parent's kind, an entry its category's.
+    unique("category_user_id_id_kind_key").on(table.userId, table.id, table.kind),
+    // Two top-level categories of a kind cannot share a name either.
+    unique("category_user_id_kind_parent_id_name_key")
+      .on(table.userId, table.kind, table.parentId, table.name)
+      .nullsNotDistinct(),
+    uniqueIndex("category_one_fallback_per_kind")
+      .on(table.userId, table.kind)
+      .where(sql`${table.isFallback}`),
+    check(
+      "category_fixed_benchmark_has_amount",
+      sql`(${table.benchmarkMode} = 'fixed') = (${table.benchmarkMinor} is not null)`,
+    ),
+    ownRowsOnly("category"),
+  ],
+);
+
+/**
+ * What happened: an expense or an income, with one category, made of parts of lines. Its merchant
+ * and rule come with #25, its subscription with v0.4; an intermediary is read from its line's label
+ * (#30).
+ */
+export const entry = pgTable.withRLS(
+  "entry",
+  {
+    id: id(),
+    userId: owner(),
+    kind: entryKind("kind").notNull(),
+    // The day it happened: its first payment's booking date, until moved.
+    happenedOn: day("happened_on").notNull(),
+    categoryId: uuid("category_id").notNull(),
+    note: text("note"),
+    classifiedBy: classifiedBy("classified_by").notNull(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+    // Added with the rules (#25), after the others: the merchant a rule set (or the user, behind an
+    // intermediary, #30), and the rule that classified it. Their keys (`on delete set null
+    // (<column>)`, which Drizzle cannot write) are in the custom migration `*_rules_isolation`.
+    merchantId: uuid("merchant_id"),
+    ruleId: uuid("rule_id"),
+  },
+  (table) => [
+    unique("entry_user_id_id_key").on(table.userId, table.id),
+    // The month, by the day the expense happened.
+    index("entry_user_id_happened_on_idx").on(table.userId, table.happenedOn),
+    // The breakdowns and the merges.
+    index("entry_category_id_idx").on(table.categoryId),
+    index("entry_merchant_id_idx").on(table.merchantId),
+    // A rule deleted clears its entries' `rule_id`.
+    index("entry_rule_id_idx").on(table.ruleId),
+    ownRowsOnly("entry"),
+  ],
+);
+
+/** A part of a line paying an entry, or refunding it; positive, the role says which way. */
+export const entryPart = pgTable.withRLS(
+  "entry_part",
+  {
+    id: id(),
+    userId: owner(),
+    entryId: uuid("entry_id").notNull(),
+    lineId: uuid("line_id").notNull(),
+    role: entryPartRole("role").notNull(),
+    amountMinor: minor("amount_minor").notNull(),
+  },
+  (table) => [
+    unique("entry_part_entry_id_line_id_role_key").on(table.entryId, table.lineId, table.role),
+    foreignKey({
+      name: "entry_part_entry_fk",
+      columns: [table.userId, table.entryId],
+      foreignColumns: [entry.userId, entry.id],
+    }).onDelete("cascade"),
+    foreignKey({
+      name: "entry_part_line_fk",
+      columns: [table.userId, table.lineId],
+      foreignColumns: [statementLine.userId, statementLine.id],
+    }).onDelete("cascade"),
+    index("entry_part_line_id_idx").on(table.lineId),
+    check("entry_part_amount_positive", sql`${table.amountMinor} > 0`),
+    ownRowsOnly("entry_part"),
+  ],
+);
+
+/**
+ * A rule (#25): when a line matches its conditions, its entry gets the merchant and the category the
+ * rule sets. The conditions are a query of qnot's shape, decoded by packages/core (`rules`); what it
+ * sets are columns, so that a merge moves them and a deletion clears them. Their keys
+ * (`on delete set null (<column>)`, which Drizzle cannot write) are in the custom migration
+ * `*_rules_isolation`.
+ */
+export const rule = pgTable.withRLS(
+  "rule",
+  {
+    id: id(),
+    userId: owner(),
+    // Rules are tried in (position, id) order, the first that matches wins. Not unique, so a move
+    // writes the moved row only.
+    position: integer("position").default(0).notNull(),
+    enabled: boolean("enabled").default(true).notNull(),
+    conditions: jsonb("conditions").notNull(),
+    setMerchantId: uuid("set_merchant_id"),
+    setCategoryId: uuid("set_category_id"),
+    // How many lines it classified, at import and applied to the past.
+    appliedCount: integer("applied_count").default(0).notNull(),
+    createdFrom: ruleOrigin("created_from").notNull(),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    unique("rule_user_id_id_key").on(table.userId, table.id),
+    // A merge of merchants or categories moves them, and a deletion clears them.
+    index("rule_set_merchant_id_idx").on(table.setMerchantId),
+    index("rule_set_category_id_idx").on(table.setCategoryId),
+    ownRowsOnly("rule"),
   ],
 );

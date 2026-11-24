@@ -1,5 +1,6 @@
+import type { BalanceCategory, CategoryTree, EntryKind } from "@gousset/core";
 import type { AccountChoice, AccountMode, CreditOrder } from "@gousset/core/account-values";
-import { ACCOUNT_CHOICES } from "@gousset/core/account-values";
+import { ACCOUNT_CHOICES, MAX_TOP_UP_DAYS } from "@gousset/core/account-values";
 import { m } from "@gousset/i18n/messages";
 import { Button } from "@gousset/ui/components/button";
 import { Combobox } from "@gousset/ui/components/combobox";
@@ -12,12 +13,15 @@ import { Sheet } from "@gousset/ui/components/sheet";
 import { TextField } from "@gousset/ui/components/text-field";
 import { useUiMessages } from "@gousset/ui/hooks/use-ui-messages";
 import { CURRENCY_CODES } from "@gousset/ui/lib/money";
+import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 
 import { accountRefusalMessage } from "@/i18n/messages";
 import { accountChoiceLabel } from "@/lib/account-labels";
 import { creditOrderLabel } from "@/lib/benefit-credits";
+import { categoryPath, choicesOf, shownPath } from "@/lib/categories";
 import { whileBusy } from "@/lib/while-busy";
+import { categoryQueries } from "@/queries/categories";
 
 /** What the create and edit forms send: `AccountInput`'s shape, with `institution` never `undefined`. */
 export type AccountFormValues = {
@@ -34,6 +38,16 @@ export type AccountFormValues = {
    * balance), which leaves it as it is.
    */
   creditOrder: CreditOrder | null;
+  /**
+   * An account kept by its balance: the category its movements go to (#31); `null` for none, each
+   * movement then going to its kind's fallback. Not sent for an account kept by its lines, which
+   * keeps it.
+   */
+  balanceCategoryId: string | null;
+  /** A benefit account: the days its issuer may take to book a top-up on the bank card (#28). */
+  topUpDays: number;
+  /** A benefit account: the most the card pays a day; `null` when unknown. */
+  topUpCapMinor: number | null;
 };
 
 /** What a submit answers: the id of the account written (new, or the one edited), or a refusal. */
@@ -83,7 +97,75 @@ export function accountFormInput(values: AccountFormValues) {
     openedOn: values.openedOn ?? undefined,
     settlesIntoAccountId: values.settlesIntoAccountId ?? undefined,
     creditOrder: values.choice === "benefit" ? (values.creditOrder ?? undefined) : undefined,
+    // None is sent as `null`, which clears it; left out, an edit keeps the account's own.
+    balanceCategoryId: values.mode === "balance" ? values.balanceCategoryId : undefined,
+    // Read for a benefit account only; left out for another kind, which keeps them.
+    topUpDays: values.choice === "benefit" ? values.topUpDays : undefined,
+    topUpCapMinor: values.choice === "benefit" ? values.topUpCapMinor : undefined,
   };
+}
+
+function topUpDaysLabel(count: number): string {
+  if (count === 0) {
+    return m.topUpDaysSame();
+  }
+
+  return count === 1 ? m.topUpDaysOne() : m.topUpDaysCount({ count: String(count) });
+}
+
+const TOP_UP_DAY_ITEMS: ReadonlyArray<ChoiceItem> = Array.from(
+  { length: MAX_TOP_UP_DAYS + 1 },
+  (_, count) => ({
+    value: String(count),
+    label: topUpDaysLabel(count),
+  }),
+);
+
+/** The category field's value for none: a category's id is a UUID, never this word. */
+const NO_CATEGORY = "none";
+
+/** A category's path with its kind, so that two of the same name stay apart: "Other (income)". */
+function withKind(kind: EntryKind, path: string): string {
+  return kind === "expense"
+    ? m.accountFormCategoryExpense({ name: path })
+    : m.accountFormCategoryIncome({ name: path });
+}
+
+/**
+ * The categories an account kept by its balance can send its movements to: none, then the user's
+ * expense and income categories in use, each top-level one before its children; and the account's
+ * own when it is archived, which it keeps.
+ */
+function balanceCategoryItems(
+  tree: CategoryTree | undefined,
+  current: BalanceCategory | null,
+): ReadonlyArray<ChoiceItem> {
+  const inUse = (["expense", "income"] as const).flatMap((kind) =>
+    (tree === undefined ? [] : choicesOf(tree, kind)).flatMap((top) => [
+      { value: top.id, label: withKind(kind, top.name) },
+      ...top.children.map((child) => ({
+        value: child.id,
+        label: withKind(kind, categoryPath({ name: child.name, parentName: top.name })),
+      })),
+    ]),
+  );
+
+  const kept =
+    current === null || inUse.some((item) => item.value === current.id)
+      ? []
+      : [
+          {
+            value: current.id,
+            label: withKind(
+              current.kind,
+              current.archived
+                ? m.accountBalanceCategoryArchived({ name: shownPath(current.name) })
+                : shownPath(current.name),
+            ),
+          },
+        ];
+
+  return [{ value: NO_CATEGORY, label: m.accountBalanceCategoryNone() }, ...inUse, ...kept];
 }
 
 export type AccountFormProps = {
@@ -94,6 +176,11 @@ export type AccountFormProps = {
   initial: AccountFormValues;
   /** The user's open current accounts, for a card's "settles into"; by id and name. */
   settlesIntoChoices: ReadonlyArray<{ id: string; name: string }>;
+  /**
+   * The account's category as it is, for an account kept by its balance: still offered when it is
+   * archived, which no other account may choose.
+   */
+  balanceCategory?: BalanceCategory | null;
   onSubmit: (values: AccountFormValues) => Promise<AccountFormResult>;
   /** Called once a write succeeds, before the sheet closes, with the account's id when given. */
   onSaved?: (accountId: string | undefined) => void;
@@ -103,10 +190,13 @@ export type AccountFormProps = {
  * The account create and edit form, a long form in a side `Sheet` (docs/design.md, "Actions and
  * forms"; a sheet along the bottom edge on a phone) composed of `packages/ui` fields: name, kind,
  * institution, currency, tracking, opening balance, opened on and, for a card, the current account
- * it settles into; for a benefit account, the order its credits are used in. `key`d by the
- * account's id (or "new") at the call site so that editing another account starts from its own
- * values. Motion: the shared `Sheet`'s, sliding in from its edge over the backdrop; cut under
- * reduced motion.
+ * it settles into; for a benefit account, the order its credits are used in and, kept by its lines,
+ * the days its issuer takes to book a top-up and its daily cap (#28); for an account kept by
+ * its balance, the category its movements go to, among the categories it reads itself (the page's
+ * loader reads them first). `key`d by the account's id (or "new") at the call site so that editing
+ * another account starts from its own values. Motion: the shared `Sheet`'s, sliding in from its
+ * edge over the backdrop, cut under reduced motion; the category field appears with no motion of
+ * its own.
  */
 export function AccountForm({
   open,
@@ -115,10 +205,12 @@ export function AccountForm({
   submitLabel,
   initial,
   settlesIntoChoices,
+  balanceCategory = null,
   onSubmit,
   onSaved,
 }: AccountFormProps) {
   const messages = useUiMessages();
+  const { data: categories } = useQuery(categoryQueries.list());
   const [name, setName] = useState(initial.name);
   const [choice, setChoice] = useState<AccountChoice>(initial.choice);
   const [institution, setInstitution] = useState(initial.institution);
@@ -133,6 +225,13 @@ export function AccountForm({
   );
 
   const [creditOrder, setCreditOrder] = useState<CreditOrder | null>(initial.creditOrder);
+
+  const [balanceCategoryId, setBalanceCategoryId] = useState<string | null>(
+    initial.balanceCategoryId,
+  );
+
+  const [topUpDays, setTopUpDays] = useState(initial.topUpDays);
+  const [topUpCapMinor, setTopUpCapMinor] = useState<number | null>(initial.topUpCapMinor);
   const [error, setError] = useState<string>();
   const [busy, setBusy] = useState(false);
 
@@ -175,7 +274,11 @@ export function AccountForm({
   }
 
   async function submit() {
-    if (openingBalanceInvalid) {
+    // Only while the field is shown: a cap typed then hidden by another kind or mode blocks nothing.
+    const capInvalid =
+      choice === "benefit" && mode === "lines" && topUpCapMinor !== null && topUpCapMinor <= 0;
+
+    if (openingBalanceInvalid || capInvalid) {
       return;
     }
 
@@ -190,6 +293,13 @@ export function AccountForm({
         openedOn,
         settlesIntoAccountId: choice === "card" ? settlesIntoAccountId : null,
         creditOrder: choice === "benefit" ? creditOrder : null,
+        balanceCategoryId: mode === "balance" ? balanceCategoryId : null,
+        topUpDays,
+        // A cap hidden by the mode, or left invalid there, is not sent: the account keeps its own.
+        topUpCapMinor:
+          mode === "lines" && (topUpCapMinor === null || topUpCapMinor > 0)
+            ? topUpCapMinor
+            : initial.topUpCapMinor,
       }),
     );
 
@@ -256,6 +366,18 @@ export function AccountForm({
         onValueChange={onModeChange}
         required
       />
+      {mode === "balance" ? (
+        <Combobox
+          label={m.fieldBalanceCategory()}
+          description={m.fieldBalanceCategoryDescription()}
+          placeholder={m.categoriesSearch()}
+          items={balanceCategoryItems(categories, balanceCategory)}
+          value={balanceCategoryId ?? NO_CATEGORY}
+          onValueChange={(value) =>
+            setBalanceCategoryId(value === null || value === NO_CATEGORY ? null : value)
+          }
+        />
+      ) : null}
       <MoneyField
         label={m.fieldOpeningBalance()}
         currency={currency}
@@ -286,6 +408,27 @@ export function AccountForm({
           value={creditOrder}
           onValueChange={onCreditOrderChange}
         />
+      ) : null}
+      {choice === "benefit" && mode === "lines" ? (
+        <>
+          <Select
+            label={m.fieldTopUpDays()}
+            description={m.fieldTopUpDaysDescription()}
+            items={TOP_UP_DAY_ITEMS}
+            value={String(topUpDays)}
+            onValueChange={(value) => setTopUpDays(value === null ? topUpDays : Number(value))}
+          />
+          <MoneyField
+            label={m.fieldTopUpCap()}
+            description={m.fieldTopUpCapDescription()}
+            currency={currency}
+            value={topUpCapMinor}
+            error={
+              topUpCapMinor !== null && topUpCapMinor <= 0 ? m.fieldTopUpCapInvalid() : undefined
+            }
+            onValueChange={setTopUpCapMinor}
+          />
+        </>
       ) : null}
       <FormMessage message={error} />
     </Sheet>

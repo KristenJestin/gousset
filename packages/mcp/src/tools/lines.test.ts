@@ -1,12 +1,33 @@
 import {
   DataExport,
+  Expenses,
+  FundRefused,
   ImportProfiles,
   Imports,
+  LinkRefused,
+  Merchants,
+  NotLinked,
+  RuleJobs,
+  Subscriptions,
+  TransferRefused,
+  Transfers,
   memoryAccountStore,
+  memoryCategory,
+  memoryCategoryStore,
   memoryId,
   memoryLineStore,
 } from "@gousset/core";
-import type { AccountRecord, MemoryLineDetail, MemoryLineRows } from "@gousset/core";
+import type {
+  AccountRecord,
+  CategoryRecord,
+  Expense,
+  FundedExpense,
+  LineTransfer,
+  MemoryCategoryRows,
+  MemoryLineDetail,
+  MemoryLineRows,
+} from "@gousset/core";
+import { UserData } from "@gousset/db/user-data";
 import { Effect, Layer, Schema } from "effect";
 import { TestClock } from "effect/testing";
 import { describe, expect, test } from "vite-plus/test";
@@ -21,7 +42,26 @@ import type { Runner } from "../tool";
 // allowed to read only.
 
 const TODAY = "2026-11-23";
-const reader = { userId: "ada", canWrite: false };
+const reader = { userId: "ada", canWrite: false, currency: "EUR" };
+const writer = { userId: "ada", canWrite: true, currency: "EUR" };
+
+const transport = memoryCategory("expense", "Transport");
+const fuelCategory = memoryCategory("expense", "Fuel", { parentId: transport.id });
+const otherExpense = memoryCategory("expense", "Other", { position: 1, fallback: true });
+
+const family = memoryCategory("expense", "Family", {
+  position: 2,
+  archivedAt: "2026-11-01T10:00:00.000Z",
+});
+
+const otherIncome = memoryCategory("income", "Other", { fallback: true });
+
+const lineCategory = (category: CategoryRecord) => ({
+  id: category.id,
+  name: category.name,
+  parentName: null,
+  kind: category.kind,
+});
 
 function account(name: string, change: Partial<AccountRecord> = {}): AccountRecord {
   return {
@@ -37,6 +77,9 @@ function account(name: string, change: Partial<AccountRecord> = {}): AccountReco
     closedOn: null,
     settlesIntoAccountId: null,
     creditOrder: "oldest_first",
+    balanceCategoryId: null,
+    topUpDays: 3,
+    topUpCapMinor: null,
     ...change,
   };
 }
@@ -80,12 +123,14 @@ const OCTOBER = {
 const salary = line(current.id, "2026-10-01", 250_000, "SALARY EXAMPLE CORP", {
   importId: OCTOBER.id,
   counterpartyName: "Example Corp",
+  category: lineCategory(otherIncome),
 });
 
 const fuel = line(current.id, "2026-10-12", -4290, "CB FUELSTOP 0412 RIVERTON", {
   importId: OCTOBER.id,
   valueOn: "2026-10-13",
   memo: "Pump 4",
+  category: lineCategory(otherExpense),
 });
 
 const cafe = line(current.id, "2026-11-03", -2380, "CB CORNER CAFE", {
@@ -108,16 +153,87 @@ const ROWS: MemoryLineRows = {
   imports: [OCTOBER],
 };
 
-function onToday(rows: MemoryLineRows): Runner<GoussetServices> {
+/** A line's one entry, in `category`, as an import leaves it. */
+const entry = (of: MemoryLineDetail, category: CategoryRecord) => ({
+  id: memoryId(),
+  kind: category.kind,
+  happenedOn: of.bookedOn,
+  categoryId: category.id,
+  classifiedBy: "default" as const,
+  parts: [
+    {
+      lineId: of.id,
+      role: "payment" as const,
+      amountMinor: Math.abs(of.amountMinor),
+      currency: "EUR",
+    },
+  ],
+});
+
+/** The entries of the lines above, each in its kind's fallback. */
+function categoryRows(): MemoryCategoryRows {
+  return {
+    categories: [transport, fuelCategory, otherExpense, family, otherIncome],
+    entries: [entry(fuel, otherExpense), entry(salary, otherIncome)],
+    lines: [fuel, salary, heldCafe].map((each) => ({ id: each.id, amountMinor: each.amountMinor })),
+  };
+}
+
+/** No line of these is a transfer; transfers are tried end to end (#26, lines-transfers.spec). */
+const NO_TRANSFER = Layer.mock(Transfers, {
+  ofLine: () => Effect.succeed({ paired: null, candidates: [] }),
+});
+
+// A line paid through an intermediary (#30), apart from `ROWS` so that their searches stay as they
+// are; who was paid behind it is tried end to end (intermediaries-mcp.spec).
+const paypal = line(current.id, "2026-11-05", -1999, "CB PAYPAL *PIXELPLAY 05/11");
+const PAYPAL = { id: memoryId(), name: "PayPal" };
+
+const WITH_PAYPAL: MemoryLineRows = {
+  ...ROWS,
+  lines: [salary, fuel, cafe, heldCafe, interest, deposit, future, paypal],
+};
+
+/** Every line pays no one known but `paypal`, whose merchant is asked of the user. */
+const PAID = Layer.mock(Merchants, {
+  ofLine: (_owner, lineId) =>
+    Effect.succeed(
+      lineId === paypal.id
+        ? { merchant: null, intermediary: PAYPAL, asks: true }
+        : { merchant: null, intermediary: null, asks: false },
+    ),
+});
+
+/**
+ * No line of these is part of an expense of several lines; those are tried end to end (#27,
+ * expenses-mcp.spec).
+ */
+const NO_EXPENSE = Layer.mock(Expenses, {
+  ofLine: () => Effect.succeed({ expenses: [], role: null, proposals: [], funding: null }),
+});
+
+function onToday(
+  rows: MemoryLineRows,
+  categories: Map<string, MemoryCategoryRows> = new Map(),
+  transfers = NO_TRANSFER,
+  expenses = NO_EXPENSE,
+): Runner<GoussetServices> {
   const byOwner = new Map([[reader.userId, rows]]);
 
   const layer = Layer.mergeAll(
     memoryAccountStore(byOwner),
     memoryLineStore(byOwner),
+    memoryCategoryStore(categories),
     // lines never reaches the imports.
     Layer.mock(Imports, {}),
     Layer.mock(ImportProfiles, {}),
     Layer.mock(DataExport, {}),
+    PAID,
+    Layer.mock(UserData, {}),
+    Layer.mock(RuleJobs, {}),
+    Layer.mock(Subscriptions, {}),
+    transfers,
+    expenses,
     TestClock.layer(),
   );
 
@@ -133,11 +249,16 @@ function onToday(rows: MemoryLineRows): Runner<GoussetServices> {
 
 type Arguments = { readonly [key: string]: string | number | boolean };
 
-async function lines(args: Arguments, rows: MemoryLineRows = ROWS) {
+async function lines(
+  args: Arguments,
+  rows: MemoryLineRows = ROWS,
+  caller = reader,
+  categories: Map<string, MemoryCategoryRows> = new Map([[reader.userId, categoryRows()]]),
+) {
   const client = await connectInProcess(
     goussetServer,
-    { run: onToday(rows) },
-    reader,
+    { run: onToday(rows, categories) },
+    caller,
     "2025-11-25",
   );
 
@@ -187,7 +308,7 @@ describe("lines search", () => {
 
     expect(isError).toBe(false);
     expect(text).toContain(
-      "5 line(s) match: every line counted (add to_review: true for the lines held for review).",
+      "5 line(s) match: every line counted (add to_review: true for the lines to review).",
     );
     expect(text).toContain(
       `- 2026-11-03, Current account (Riverside Bank): -23.80 EUR, "CB CORNER CAFE"; line: ${cafe.id}`,
@@ -195,6 +316,8 @@ describe("lines search", () => {
     expect(text).toContain(
       `- 2026-10-05, US brokerage (Harbor Securities): 1,000.00 USD, "DEPOSIT"; line: ${deposit.id}`,
     );
+    // Each line's category, as a person names it.
+    expect(text).toContain(`"CB FUELSTOP 0412 RIVERTON", in Other; line: ${fuel.id}`);
     expect(handlesOf(text)).toEqual([cafe.id, interest.id, fuel.id, deposit.id, salary.id]);
     // Held and future lines are not counted ones; accounts are named, never by id.
     expect(text).not.toContain(heldCafe.id);
@@ -214,7 +337,7 @@ describe("lines search", () => {
 
     expect(isError).toBe(false);
     expect(text).toContain(
-      '1 line(s) match: lines counted (add to_review: true for the lines held for review), containing "fuelstop", in Current account (Riverside Bank), booked from 2026-10-01, booked until 2026-10-31.',
+      '1 line(s) match: lines counted (add to_review: true for the lines to review), containing "fuelstop", in Current account (Riverside Bank), booked from 2026-10-01, booked until 2026-10-31.',
     );
     expect(handlesOf(text)).toEqual([fuel.id]);
   });
@@ -237,12 +360,12 @@ describe("lines search", () => {
     expect(handlesOf(text)).toEqual([fuel.id]);
   });
 
-  test("lists the lines held for review when asked, marked so", async () => {
+  test("lists the lines to review when asked, marked so", async () => {
     const { text, isError } = await lines({ action: "search", to_review: true });
 
     expect(isError).toBe(false);
     expect(text).toContain(
-      "1 line(s) match: every line held for review (near duplicates waiting for the user).",
+      "1 line(s) match: every line to review (near duplicates held, transfers whose other side the user chooses, and counted lines still classified by default: not classified yet).",
     );
     expect(text).toContain(
       `- 2026-11-04, Current account (Riverside Bank): -23.80 EUR, "CB CORNER CAFE", to review; line: ${heldCafe.id}`,
@@ -398,6 +521,7 @@ describe("lines show", () => {
         "Amount: -42.90 EUR.",
         'Label: "CB FUELSTOP 0412 RIVERTON"',
         "Memo: Pump 4",
+        "Category: Other (expense)",
         'Imported from "october-statement.xml" (CAMT.053) on 2026-11-02, covering 2026-10-01 to 2026-10-31.',
       ].join("\n"),
     );
@@ -455,10 +579,509 @@ describe("lines show", () => {
     expect(text).toContain("show needs the line's handle");
     await expectValidExample(text);
   });
+
+  test("an intermediary's line says through whom it was paid, and the call that sets who", async () => {
+    const { text, isError } = await lines({ action: "show", line: paypal.id }, WITH_PAYPAL);
+
+    expect(isError, text).toBe(false);
+    expect(text).toContain("Paid through PayPal, a payment intermediary: who was paid is not set.");
+    expect(text).toContain(
+      `merchants {"action":"assign","line":"${paypal.id}","merchant":"<who was paid>"}`,
+    );
+  });
+});
+
+/** A classify call on rows of its own, and those rows after it. */
+async function classify(line: string, category: string, caller = writer) {
+  const categories = new Map([[writer.userId, categoryRows()]]);
+  const answer = await lines({ action: "classify", line, category }, ROWS, caller, categories);
+
+  return { ...answer, categories: categories.get(writer.userId) };
+}
+
+const entryOf = (rows: MemoryCategoryRows | undefined, of: MemoryLineDetail) =>
+  rows?.entries.find((each) => each.parts.some((part) => part.lineId === of.id));
+
+describe("lines classify", () => {
+  test("puts a line in a category named by its path, as the user's choice, and proposes a rule", async () => {
+    const { text, isError, categories } = await classify(fuel.id, "transport > fuel");
+
+    expect(isError, text).toBe(false);
+    expect(text).toBe(
+      [
+        'The line of 2026-10-12, -42.90 EUR, "CB FUELSTOP 0412 RIVERTON", is now in Transport > Fuel (expense). Kept as the user\'s choice: no rule changes it unasked.',
+        'To classify lines like it this way from now on, propose this rule to the user: rules {"action":"create","conditions":[{"field":"label","operator":"contains","value":"FUELSTOP"}],"category":"Transport > Fuel","from_correction":true}',
+      ].join("\n"),
+    );
+    expect(entryOf(categories, fuel)).toMatchObject({
+      categoryId: fuelCategory.id,
+      classifiedBy: "user",
+    });
+  });
+
+  test("an intermediary's line proposes a rule on who was paid, never on the intermediary", async () => {
+    const rows = categoryRows();
+
+    rows.entries.push(entry(paypal, otherExpense));
+    rows.lines.push({ id: paypal.id, amountMinor: paypal.amountMinor });
+
+    const { text, isError } = await lines(
+      { action: "classify", line: paypal.id, category: "Transport" },
+      WITH_PAYPAL,
+      writer,
+      new Map([[writer.userId, rows]]),
+    );
+
+    expect(isError, text).toBe(false);
+    expect(text).toContain(
+      '"conditions":[{"field":"label","operator":"contains","value":"PAYPAL *PIXELPLAY"}]',
+    );
+  });
+
+  test("reads a shared name in the line's own kind", async () => {
+    const { text, isError, categories } = await classify(salary.id, "Other");
+
+    expect(isError, text).toBe(false);
+    expect(entryOf(categories, salary)?.categoryId).toBe(otherIncome.id);
+  });
+
+  test("a name alone is the top-level category of that name, the child's is its path", async () => {
+    const rows = categoryRows();
+    const travel = memoryCategory("expense", "Travel", { position: 3 });
+    const leisure = memoryCategory("expense", "Leisure", { position: 4 });
+    const leisureTravel = memoryCategory("expense", "Travel", { parentId: leisure.id });
+
+    rows.categories.push(travel, leisure, leisureTravel);
+
+    const categories = new Map([[writer.userId, rows]]);
+
+    const top = await lines(
+      { action: "classify", line: fuel.id, category: "Travel" },
+      ROWS,
+      writer,
+      categories,
+    );
+
+    expect(top.isError, top.text).toBe(false);
+    expect(top.text).toContain("is now in Travel (expense).");
+    expect(entryOf(categories.get(writer.userId), fuel)?.categoryId).toBe(travel.id);
+
+    const child = await lines(
+      { action: "classify", line: fuel.id, category: "Leisure > Travel" },
+      ROWS,
+      writer,
+      categories,
+    );
+
+    expect(child.text).toContain("is now in Leisure > Travel (expense).");
+  });
+
+  test("refuses an unknown or archived category, and a held line, saying what to do", async () => {
+    const unknown = await classify(fuel.id, "Salary");
+
+    expect(unknown.isError).toBe(true);
+    expect(unknown.text).toContain('No expense category of the user\'s is named "Salary"');
+    expect(unknown.text).toContain('A valid call: categories {"action":"list"}');
+
+    const archived = await classify(fuel.id, "Family");
+
+    expect(archived.isError).toBe(true);
+    expect(archived.text).toContain('"Family" is archived');
+    expect(archived.text.length).toBeLessThan(ERROR_LIMIT);
+    expect(entryOf(archived.categories, fuel)?.categoryId).toBe(otherExpense.id);
+
+    const held = await classify(heldCafe.id, "Transport");
+
+    expect(held.isError).toBe(true);
+    expect(held.text).toContain("no category to change: it is held for review");
+    await expectValidExample(held.text);
+
+    const gone = await classify("not-a-line", "Transport");
+
+    expect(gone.isError).toBe(true);
+    expect(gone.text).toContain("Handles come from search");
+    await expectValidExample(gone.text);
+  });
+
+  test("refuses a read-only token, saying how to get write", async () => {
+    const { text, isError, categories } = await classify(fuel.id, "Transport > Fuel", reader);
+
+    expect(isError).toBe(true);
+    expect(text).toContain("choose Read and write on Gousset's consent page");
+    expect(entryOf(categories, fuel)?.categoryId).toBe(otherExpense.id);
+  });
+
+  test("classifies a line as an expense, in the category named of that kind", async () => {
+    const categories = new Map([[writer.userId, categoryRows()]]);
+
+    const { text, isError } = await lines(
+      { action: "classify", line: fuel.id, kind: "expense", category: "Fuel" },
+      ROWS,
+      writer,
+      categories,
+    );
+
+    expect(isError, text).toBe(false);
+    expect(text).toContain("is now in Transport > Fuel (expense).");
+    expect(entryOf(categories.get(writer.userId), fuel)).toMatchObject({
+      categoryId: fuelCategory.id,
+      classifiedBy: "user",
+    });
+  });
+
+  test("with a kind and no category, puts the line in that kind's fallback, as the user's choice", async () => {
+    const categories = new Map([[writer.userId, categoryRows()]]);
+
+    const { text, isError } = await lines(
+      { action: "classify", line: salary.id, kind: "income" },
+      ROWS,
+      writer,
+      categories,
+    );
+
+    expect(isError, text).toBe(false);
+    expect(text).toContain("is now in Other (income).");
+    expect(entryOf(categories.get(writer.userId), salary)).toMatchObject({
+      categoryId: otherIncome.id,
+      classifiedBy: "user",
+    });
+
+    // Money in is no expense: the kind says what the line is, and must be its own.
+    const wrong = await lines(
+      { action: "classify", line: salary.id, kind: "expense" },
+      ROWS,
+      writer,
+      categories,
+    );
+
+    expect(wrong.isError).toBe(true);
+    expect(wrong.text).toContain(
+      "This line is an income (money in), not an expense: give kind income",
+    );
+  });
+
+  test("refuses a category for a transfer: it has none", async () => {
+    const { text, isError } = await lines(
+      { action: "classify", line: fuel.id, kind: "transfer", category: "Fuel" },
+      ROWS,
+      writer,
+    );
+
+    expect(isError).toBe(true);
+    expect(text).toContain("it has no category");
+  });
+
+  test("asks for the line and the category", async () => {
+    const { text, isError } = await lines({ action: "classify", line: fuel.id }, ROWS, writer);
+
+    expect(isError).toBe(true);
+    expect(text).toContain("classify needs the line's handle");
+    await expectValidExample(text);
+  });
+});
+
+const giftCard = account("Gift card", {
+  kind: "benefit",
+  mode: "balance",
+  institution: "Northbank",
+});
+
+/** The movement Gousset made of a balance noted on the gift card: no label of its own. */
+const movement = line(giftCard.id, "2026-10-31", -9000, "", {
+  source: "balance",
+  category: { id: memoryId(), name: "Meal vouchers", parentName: "Food", kind: "expense" },
+});
+
+const KEPT: MemoryLineRows = {
+  ...ROWS,
+  accounts: [current, livret, otherLivret, brokerage, giftCard],
+  lines: [salary, fuel, movement],
+};
+
+/** The gift card's side of the fuel line, as Gousset makes it. */
+const madeSide: LineTransfer = {
+  paired: {
+    direction: "out",
+    other: {
+      id: memoryId(),
+      bookedOn: fuel.bookedOn,
+      label: fuel.label,
+      amount: { minor: 4290, currency: "EUR" },
+      account: { id: giftCard.id, name: giftCard.name, institution: giftCard.institution },
+      madeByApp: true,
+    },
+    setAside: false,
+    pairedBy: "user",
+  },
+  candidates: [],
+};
+
+/** A pair call on `KEPT` as a writer, the transfers answering each pairing with an account. */
+async function pairWithAccount(args: Arguments) {
+  const pairings: Array<{ lineId: string; accountId: string }> = [];
+
+  const transfers = Layer.mock(Transfers, {
+    ofLine: () => Effect.succeed({ paired: null, candidates: [] }),
+    pairWithAccount: (_owner, lineId, accountId) => {
+      pairings.push({ lineId, accountId });
+
+      return accountId === giftCard.id
+        ? Effect.succeed(madeSide)
+        : Effect.fail(new TransferRefused({ reason: "account_kept_by_lines", lineId }));
+    },
+  });
+
+  const client = await connectInProcess(
+    goussetServer,
+    { run: onToday(KEPT, new Map(), transfers) },
+    writer,
+    "2025-11-25",
+  );
+
+  const result = await client.callTool({ name: "lines", arguments: args });
+  const [first] = result.content ?? [];
+
+  return {
+    text: first?.type === "text" ? first.text : "",
+    isError: result.isError === true,
+    pairings,
+  };
+}
+
+describe("lines and the accounts kept by their balance", () => {
+  test("search and show name a movement of a noted balance, which has no label", async () => {
+    const found = await lines({ action: "search", account: "gift card" }, KEPT);
+
+    expect(found.isError, found.text).toBe(false);
+    expect(found.text).toContain(
+      `- 2026-10-31, Gift card (Northbank): -90.00 EUR, (movement of the noted balance), in Food > Meal vouchers; line: ${movement.id}`,
+    );
+
+    const shown = await lines({ action: "show", line: movement.id }, KEPT);
+
+    expect(shown.isError, shown.text).toBe(false);
+    expect(shown.text).toContain("Label: (movement of the noted balance)");
+    expect(shown.text).toContain("Made by Gousset from a balance the user noted.");
+    expect(shown.text).not.toContain("(no label)");
+  });
+
+  test("pairs a line with an account kept by its balance, whose side Gousset makes", async () => {
+    const { text, isError, pairings } = await pairWithAccount({
+      action: "pair",
+      line: fuel.id,
+      account: "gift card",
+      institution: "Northbank",
+    });
+
+    expect(isError, text).toBe(false);
+    expect(pairings).toEqual([{ lineId: fuel.id, accountId: giftCard.id }]);
+    expect(text).toContain("Paired as a transfer.");
+    expect(text).toContain(
+      "Transfer to Gift card (Northbank), paired by the user: never counted as spending.",
+    );
+    expect(text).toContain("made by Gousset as that account's statement does not show it");
+    expect(text).toContain(
+      "The movements of Gift card (Northbank)'s noted balances leave it out from now on.",
+    );
+    expect(text).not.toContain(giftCard.id);
+  });
+
+  test("refuses an account kept by its lines, saying to pair with its line", async () => {
+    const { text, isError } = await pairWithAccount({
+      action: "pair",
+      line: fuel.id,
+      account: "Livret A",
+      institution: "Riverside Bank",
+    });
+
+    expect(isError).toBe(true);
+    expect(text).toContain("That account is kept by its lines");
+    expect(text.length).toBeLessThan(ERROR_LIMIT);
+  });
+
+  test("refuses an unknown account, other and account together, and account without a line", async () => {
+    const unknown = await pairWithAccount({ action: "pair", line: fuel.id, account: "Joint card" });
+
+    expect(unknown.isError).toBe(true);
+    expect(unknown.text).toContain('No account of the user\'s is named "Joint card"');
+    expect(unknown.text).toContain('A valid call: accounts {"action":"list"}');
+    expect(unknown.pairings).toEqual([]);
+
+    const wrong: ReadonlyArray<Arguments> = [
+      { action: "pair", line: fuel.id, other: salary.id, account: "Gift card" },
+      { action: "pair", account: "Gift card" },
+    ];
+
+    for (const args of wrong) {
+      const refused = await pairWithAccount(args);
+
+      expect(refused.isError).toBe(true);
+      expect(refused.text).toContain("account names the other side of one line's transfer");
+      expect(refused.text).toContain('"account":"Gift card"}');
+      expect(refused.pairings).toEqual([]);
+    }
+  });
+});
+
+// A works council refund (#29): PerksHub, a benefit account, refunds 80.00 of the fuel line's
+// expense to the current account. What the database does is tried end to end
+// (works-council-refunds.spec); here, what `lines` says and which of the logic's calls it makes.
+const perksHub = account("PerksHub", { kind: "benefit", institution: "PerksHub" });
+const perksOut = line(perksHub.id, "2026-10-20", -3000, "PERKSHUB REFUND 0042");
+
+const PERKS: MemoryLineRows = {
+  ...ROWS,
+  accounts: [current, livret, otherLivret, brokerage, perksHub],
+  lines: [salary, fuel, perksOut],
+};
+
+const fuelPart = {
+  lineId: fuel.id,
+  bookedOn: fuel.bookedOn,
+  label: fuel.label,
+  account: { id: current.id, name: current.name, institution: current.institution },
+  amount: { minor: 4290, currency: "EUR" },
+};
+
+const fuelExpense: FundedExpense = {
+  id: memoryId(),
+  happenedOn: fuel.bookedOn,
+  category: lineCategory(otherExpense),
+  net: { minor: 4290, currency: "EUR" },
+  line: fuelPart,
+};
+
+const fundedFuel: Expense = {
+  id: fuelExpense.id,
+  kind: "expense",
+  happenedOn: fuel.bookedOn,
+  category: lineCategory(otherExpense),
+  classifiedBy: "default",
+  payments: [fuelPart],
+  refunds: [],
+  net: { minor: 4290, currency: "EUR" },
+  fundings: [
+    {
+      outLineId: perksOut.id,
+      inLineId: memoryId(),
+      bookedOn: perksOut.bookedOn,
+      label: perksOut.label,
+      amount: { minor: 3000, currency: "EUR" },
+      account: { id: perksHub.id, name: perksHub.name, institution: perksHub.institution },
+    },
+  ],
+  funded: { minor: 3000, currency: "EUR" },
+};
+
+/** A call on `PERKS` as a writer, the logic answering as a works council refund's side would. */
+async function refundCall(args: Arguments, funded = false) {
+  const calls: Array<string> = [];
+
+  const expenses = Layer.mock(Expenses, {
+    ofLine: (_owner, lineId) =>
+      Effect.succeed({
+        expenses: [],
+        role: null,
+        proposals: [],
+        funding:
+          lineId === perksOut.id
+            ? { funds: funded ? fuelExpense : null, candidates: funded ? [] : [fuelExpense] }
+            : null,
+      }),
+    link: (_owner, lineId) => Effect.fail(new LinkRefused({ reason: "transfer", lineId })),
+    fund: (_owner, transferLineId, expenseLineId) => {
+      calls.push(`fund ${transferLineId} ${expenseLineId}`);
+
+      return expenseLineId === fuel.id
+        ? Effect.succeed(fundedFuel)
+        : Effect.fail(new FundRefused({ reason: "over_cost", lineId: expenseLineId }));
+    },
+    unlink: (_owner, lineId) => Effect.fail(new NotLinked({ lineId })),
+    unfund: (_owner, transferLineId) => {
+      calls.push(`unfund ${transferLineId}`);
+
+      return Effect.succeed({ expenses: [], role: null, proposals: [], funding: null });
+    },
+  });
+
+  const client = await connectInProcess(
+    goussetServer,
+    { run: onToday(PERKS, new Map(), NO_TRANSFER, expenses) },
+    writer,
+    "2025-11-25",
+  );
+
+  const result = await client.callTool({ name: "lines", arguments: args });
+  const [first] = result.content ?? [];
+
+  return {
+    text: first?.type === "text" ? first.text : "",
+    isError: result.isError === true,
+    calls,
+  };
+}
+
+describe("lines and works council refunds", () => {
+  test("show offers a refund's side the expenses it may fund, with the call that funds one", async () => {
+    const { text, isError } = await refundCall({ action: "show", line: perksOut.id });
+
+    expect(isError, text).toBe(false);
+    expect(text).toContain("A works council refund (a transfer from a benefit account)");
+    expect(text).toContain(
+      `- the expense of 2026-10-12 in Other, costing 42.90 EUR, paid by 42.90 EUR on 2026-10-12, Current account (Riverside Bank), "CB FUELSTOP 0412 RIVERTON"; line: ${fuel.id}`,
+    );
+    expect(writtenCall(text, "Fund one with: ")).toEqual({
+      action: "link",
+      line: perksOut.id,
+      into: fuel.id,
+    });
+
+    const funding = await refundCall({ action: "show", line: perksOut.id }, true);
+
+    expect(funding.text).toContain("A works council refund: it funds the expense of 2026-10-12");
+    expect(writtenCall(funding.text, "To unfund it: ")).toEqual({
+      action: "unlink",
+      line: perksOut.id,
+    });
+  });
+
+  test("link with a refund's side funds the expense, which keeps its cost; unlink unfunds", async () => {
+    const funded = await refundCall({ action: "link", line: perksOut.id, into: fuel.id });
+
+    expect(funded.isError, funded.text).toBe(false);
+    expect(funded.calls).toEqual([`fund ${perksOut.id} ${fuel.id}`]);
+    expect(funded.text).toContain("which keeps its cost of 42.90 EUR");
+    expect(funded.text).toContain(
+      `- 30.00 EUR on 2026-10-20 from PerksHub (PerksHub), "PERKSHUB REFUND 0042"; line: ${perksOut.id}`,
+    );
+
+    const unfunded = await refundCall({ action: "unlink", line: perksOut.id });
+
+    expect(unfunded.isError, unfunded.text).toBe(false);
+    expect(unfunded.calls).toEqual([`unfund ${perksOut.id}`]);
+    expect(unfunded.text).toContain("Unfunded: the line stays a side of its transfer");
+  });
+
+  test("refuses a funding past the expense's cost, with a valid call", async () => {
+    const refused = await refundCall({ action: "link", line: perksOut.id, into: salary.id });
+
+    expect(refused.isError).toBe(true);
+    expect(refused.text).toContain("would fund more than the expense");
+    await expectValidExample(refused.text, PERKS);
+  });
 });
 
 describe("the lines tool", () => {
-  test("only reads, and says so, last in the fixed order", async () => {
+  test("pairs, classifies and unpairs only with the write scope, and says how to get it", async () => {
+    for (const action of ["pair", "classify", "unpair"]) {
+      const { text, isError } = await lines({ action, line: salary.id, kind: "transfer" });
+
+      expect(isError, action).toBe(true);
+      expect(text, action).toContain("choose Read and write on Gousset's consent page");
+    }
+  });
+
+  test("writes categories and transfers, and says so, in the fixed order", async () => {
     const client = await connectInProcess(
       goussetServer,
       { run: onToday(ROWS) },
@@ -475,11 +1098,36 @@ describe("the lines tool", () => {
       "accounts",
       "data",
       "lines",
+      "merchants",
+      "categories",
+      "rules",
+      "review",
     ]);
     expect(tool?.title).toBe("Lines");
+
+    // classify and to_review, as they are: what a caller needs to call them right.
+    const description = tool?.description ?? "";
+
+    for (const said of [
+      '"transfer", "expense" or "income"',
+      'its one child; "Parent > Child" names a child',
+      "Without `category`, the kind's fallback",
+      "every counted line still classified by default",
+      "held, discarded or of no amount",
+      "unpair it first",
+      "split across several",
+      "an archived category",
+      "an unknown or ambiguous category name",
+      '{"action":"classify","line":"<a handle search gave>","kind":"expense","category":"Groceries > Bakery"}',
+      '{"action":"pair","line":"<a handle search gave>","account":"Gift card"}',
+    ]) {
+      expect(description, said).toContain(said);
+    }
+
+    expect(description).not.toContain("(Other)");
     expect(tool?.annotations).toEqual({
-      readOnlyHint: true,
-      destructiveHint: false,
+      readOnlyHint: false,
+      destructiveHint: true,
       idempotentHint: true,
       openWorldHint: false,
     });

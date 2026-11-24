@@ -8,11 +8,15 @@ import { AccountNotFound, BalanceAlreadyNoted, LineNotFound } from "./errors";
 // An in-memory `AccountStore`, for tests: the same reads and writes as the database's, on arrays,
 // one user's rows apart from another's. A restart forgets them.
 
-/** A line of the memory store: counted unless said otherwise, with no expiry unless given. */
-export type MemoryLine = Omit<StoredLine, "expiresOn"> & {
+/**
+ * A line of the memory store: counted unless said otherwise, with no expiry unless given, imported
+ * unless its source is given.
+ */
+export type MemoryLine = Omit<StoredLine, "expiresOn" | "source"> & {
   readonly accountId: string;
   readonly state?: "counted" | "held" | "discarded";
   readonly expiresOn?: string | null;
+  readonly source?: StoredLine["source"];
 };
 
 type HeldLine = StoredLine & {
@@ -78,6 +82,7 @@ export function memoryAccountStore(rows: ReadonlyMap<string, MemoryRows> = new M
           ...line,
           state: line.state ?? "counted",
           expiresOn: line.expiresOn ?? null,
+          source: line.source ?? "import",
         })),
         balances: [...(given.balances ?? [])],
         imports: [...(given.imports ?? [])],
@@ -132,8 +137,10 @@ export function memoryAccountStore(rows: ReadonlyMap<string, MemoryRows> = new M
           null,
         );
 
+      // The memory store holds no category: an account's names none.
       return {
         account,
+        balanceCategory: null,
         countedMinor: sum(lines.filter((line) => line.bookedOn <= day)),
         noted: balances
           .filter((balance) => balance.source === "noted")
@@ -221,7 +228,8 @@ export function memoryAccountStore(rows: ReadonlyMap<string, MemoryRows> = new M
       create: (owner, decide) =>
         Effect.gen(function* () {
           const own = of(owner);
-          const created = { id: memoryId(), ...(yield* Effect.fromResult(decide(own.accounts))) };
+          const decided = yield* Effect.fromResult(decide(own.accounts, []));
+          const created = { id: memoryId(), ...decided };
 
           own.accounts.push(created);
 
@@ -242,7 +250,7 @@ export function memoryAccountStore(rows: ReadonlyMap<string, MemoryRows> = new M
             own.balances.some((balance) => balance.accountId === accountId);
 
           const change = yield* Effect.fromResult(
-            decide({ account, accounts: own.accounts, hasEntries }),
+            decide({ account, accounts: own.accounts, hasEntries, categories: [] }),
           );
 
           const changed = { ...account, ...change };
