@@ -488,6 +488,9 @@ importers:
 
   packages/core:
     dependencies:
+      '@gousset/currency':
+        specifier: workspace:*
+        version: link:../currency
       '@gousset/db':
         specifier: workspace:*
         version: link:../db

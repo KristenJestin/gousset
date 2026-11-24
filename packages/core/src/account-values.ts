@@ -1,3 +1,4 @@
+import { isKnownCurrency } from "@gousset/currency";
 import { Schema } from "effect";
 
 // The accounts' values the interface sends and checks, without the logic: the browser may import
@@ -141,6 +142,19 @@ export const Day = Schema.String.check(
 export const Currency = Schema.String.check(
   Schema.isPattern(/^[A-Z]{3}$/, {
     message: "A currency is its ISO 4217 code, three capital letters, as EUR.",
+  }),
+);
+
+/**
+ * A currency someone picks for an account: one of the ISO 4217 codes an account is opened in
+ * (`CURRENCY_CODES`), the list the web form offers, so that the MCP door refuses what the form
+ * never offers. Only a currency being chosen is held to it: `AccountInput` takes any code, so that an
+ * account stored with a code off the list can still be renamed.
+ */
+export const AccountCurrency = Currency.check(
+  Schema.makeFilter((currency: string) => isKnownCurrency(currency), {
+    message:
+      "This is not a currency an account is opened in: give its ISO 4217 code, as EUR, USD or JPY.",
   }),
 );
 
