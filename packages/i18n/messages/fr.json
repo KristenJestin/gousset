@@ -593,6 +593,7 @@
   "uiDeltaSteady": "À peu près comme {reference}",
   "uiOverBenchmark": "Au-dessus du repère",
   "uiBenchmark": "repère {amount}",
+  "uiBenchmarkSet": "repère {amount}, fixé",
   "uiMoreRows": "+ {count} de plus",
   "uiShowOtherRows": "Afficher les {count} autres",
   "uiMoneyEmpty": "Rien à afficher ce mois-ci.",

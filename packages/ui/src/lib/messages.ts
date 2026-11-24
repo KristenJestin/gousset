@@ -100,6 +100,8 @@ function uiMessages(locale: Locale) {
       deltaSteady: (reference: string) => m.uiDeltaSteady({ reference }, options),
       overBenchmark: m.uiOverBenchmark({}, options),
       benchmark: (amount: string) => m.uiBenchmark({ amount }, options),
+      /** A benchmark the user set, rather than the average. */
+      benchmarkSet: (amount: string) => m.uiBenchmarkSet({ amount }, options),
       moreRows: (count: number) => m.uiMoreRows({ count }, options),
       /** The button that shows the rows a list leaves out: never "more", the frame's own menu. */
       showOtherRows: (count: number) => m.uiShowOtherRows({ count }, options),

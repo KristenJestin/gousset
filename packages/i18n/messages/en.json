@@ -593,6 +593,7 @@
   "uiDeltaSteady": "About the same as {reference}",
   "uiOverBenchmark": "Above the benchmark",
   "uiBenchmark": "benchmark {amount}",
+  "uiBenchmarkSet": "benchmark {amount}, set",
   "uiMoreRows": "+ {count} more",
   "uiShowOtherRows": "Show the other {count}",
   "uiMoneyEmpty": "Nothing to show this month.",
