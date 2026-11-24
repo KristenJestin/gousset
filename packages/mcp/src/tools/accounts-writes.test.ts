@@ -46,6 +46,8 @@ function account(name: string, change: Partial<AccountRecord> = {}): AccountReco
     settlesIntoAccountId: null,
     creditOrder: "oldest_first",
     balanceCategoryId: null,
+    topUpDays: 3,
+    topUpCapMinor: null,
     ...change,
   };
 }
@@ -339,6 +341,37 @@ describe("accounts edit", () => {
 
     expect(edited.isError, edited.text).toBe(false);
     expect(edited.text).toContain("Credits are used soonest expiry first, as the issuer does.");
+  });
+
+  test('sets a benefit account\'s top-up days and daily cap, "" for no cap (#28)', async () => {
+    const call = await connect();
+
+    const edited = await call({
+      action: "edit",
+      name: "MealCard",
+      top_up_days: 1,
+      top_up_cap: "25.00",
+    });
+
+    expect(edited.isError, edited.text).toBe(false);
+    expect(edited.text).toContain("within 1 day joins the purchase; a daily cap of 25.00 EUR.");
+
+    const cleared = await call({ action: "edit", name: "MealCard", top_up_cap: "" });
+
+    expect(cleared.text).toContain("within 1 day joins the purchase; no daily cap known.");
+  });
+
+  test("refuses a daily cap of nothing, or no amount", async () => {
+    const call = await connect();
+
+    expectRefusal(
+      await call({ action: "edit", name: "MealCard", top_up_cap: "0" }),
+      "A daily cap is more than nothing.",
+    );
+    expectRefusal(
+      await call({ action: "edit", name: "MealCard", top_up_cap: "lots" }),
+      "top_up_cap",
+    );
   });
 
   test("changes the currency of an account without a line yet", async () => {

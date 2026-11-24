@@ -72,6 +72,8 @@ function account(name: string, change: Partial<AccountRecord> = {}): AccountReco
     settlesIntoAccountId: null,
     creditOrder: "oldest_first",
     balanceCategoryId: null,
+    topUpDays: 3,
+    topUpCapMinor: null,
     ...change,
   };
 }

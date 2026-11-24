@@ -28,6 +28,7 @@ import { remakeBalanceLines } from "../balance-lines";
 import { balanceAt, looksEmpty } from "../balances";
 import { takeCategoryTurn } from "../category-turn";
 import { entriesForLines } from "../entries";
+import { matchTopUpsIn } from "../expenses/top-ups";
 import { recogniseIn } from "../merchants/merchants";
 import { applyRulesToImport } from "../rules/rules";
 import { ImportFailed } from "./errors";
@@ -557,6 +558,10 @@ export function runImport(
 
       // The user's rules classify the lines it added (#25), after their merchants' defaults.
       await applyRulesToImport(transaction, importId);
+
+      // A benefit card's line and the bank line its issuer charged the rest to are one expense
+      // (#28), once the rules have classified each.
+      await matchTopUpsIn(transaction, owner);
 
       const of = (state: string) => states.find((row) => row.state === state)?.lines ?? 0;
       const added = of("counted");

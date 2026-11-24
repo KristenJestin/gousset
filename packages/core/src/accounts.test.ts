@@ -53,6 +53,8 @@ function accountOf(
     settlesIntoAccountId: null,
     creditOrder: "oldest_first",
     balanceCategoryId: null,
+    topUpDays: 3,
+    topUpCapMinor: null,
     ...change,
   };
 }
@@ -636,6 +638,43 @@ describe("benefit accounts", () => {
     expect(outcome.issuer.creditOrder).toBe("expiring_first");
     expect(outcome.kept.creditOrder).toBe("expiring_first");
     expect(outcome.changed.creditOrder).toBe("oldest_first");
+  });
+
+  test("a top-up's days are 3 and its cap unknown unless given, and an edit that leaves them out keeps them", async () => {
+    const outcome = await inOrder(
+      {},
+      Effect.gen(function* () {
+        const plain = yield* createAccount(ADA, input("benefit"));
+
+        const capped = yield* createAccount(
+          ADA,
+          input("benefit", { topUpDays: 1, topUpCapMinor: 2500 }),
+        );
+
+        const kept = yield* editAccount(ADA, capped.id, input("benefit", { name: "Renamed" }));
+        const detail = yield* showAccount(ADA, kept.id);
+
+        const cleared = yield* editAccount(
+          ADA,
+          capped.id,
+          input("benefit", { topUpDays: 0, topUpCapMinor: null }),
+        );
+
+        return { plain, capped, kept, cleared, detail };
+      }),
+    );
+
+    expect(outcome.plain).toMatchObject({ topUpDays: 3, topUpCapMinor: null });
+    expect(outcome.capped).toMatchObject({ topUpDays: 1, topUpCapMinor: 2500 });
+    expect(outcome.kept).toMatchObject({ topUpDays: 1, topUpCapMinor: 2500 });
+    expect(outcome.cleared).toMatchObject({ topUpDays: 0, topUpCapMinor: null });
+    expect(outcome.detail.account.topUpCap).toEqual({ minor: 2500, currency: "EUR" });
+  });
+
+  test("a top-up's days run 0 to 7, and a cap is more than nothing", () => {
+    expect(() => input("benefit", { topUpDays: 8 })).toThrow();
+    expect(() => input("benefit", { topUpDays: -1 })).toThrow();
+    expect(() => input("benefit", { topUpCapMinor: 0 })).toThrow();
   });
 
   test("an edit that leaves out the category keeps it, and null clears it", async () => {

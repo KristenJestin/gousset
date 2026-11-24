@@ -203,7 +203,7 @@ async function readLine(
  * unlink holding the expense would wait for a link holding that line, which waits for the expense,
  * and Postgres would end one of them as a deadlock.
  */
-async function lockLines(
+export async function lockLines(
   transaction: UserTransaction,
   lineIds: ReadonlyArray<string>,
 ): Promise<void> {
@@ -539,12 +539,18 @@ function lineRefusal(
 const linkRefused = (reason: LinkRefused["reason"], lineId: string) =>
   Result.fail(new LinkRefused({ reason, lineId }));
 
-async function linkIn(
+/**
+ * Links `lineId` into the expense of `toLineId` in `transaction`: the user's link (`by: "user"`),
+ * which lifts a refusal of either line's (`link_refused`), or the matching of a top-up's (#28,
+ * `./top-ups`), which runs on lines no one refused.
+ */
+export async function linkIn(
   transaction: UserTransaction,
   owner: string,
   lineId: string,
   toLineId: string,
   day: string,
+  by: "user" | "match",
 ): Promise<Result.Result<Linked, LineNotFound | LinkRefused>> {
   await lockLines(transaction, [lineId, toLineId]);
 
@@ -643,6 +649,13 @@ async function linkIn(
       .where(eq(entry.id, expense.id));
   }
 
+  if (by === "user") {
+    await transaction
+      .update(statementLine)
+      .set({ linkRefused: false })
+      .where(inArray(statementLine.id, [line.id, target.id]));
+  }
+
   const [linked] = await readExpenses(transaction, [expense.id]);
 
   return linked === undefined
@@ -678,6 +691,12 @@ async function unlinkIn(
   await transaction
     .delete(entryPart)
     .where(and(eq(entryPart.entryId, expense.id), eq(entryPart.lineId, line.id)));
+
+  // The user's "not one expense" holds: the matching of top-ups never links the line again (#28).
+  await transaction
+    .update(statementLine)
+    .set({ linkRefused: true })
+    .where(eq(statementLine.id, line.id));
 
   // The expense loses this line: with refunds past its payments, it loses them; with no payment
   // left, it goes; either way, those refunds are each their own again. When its day came from
@@ -863,7 +882,9 @@ export const expensesLayer = Layer.effect(
           const day = yield* today;
 
           return yield* userData
-            .transaction(owner, (transaction) => linkIn(transaction, owner, lineId, toLineId, day))
+            .transaction(owner, (transaction) =>
+              linkIn(transaction, owner, lineId, toLineId, day, "user"),
+            )
             .pipe(Effect.flatMap(Effect.fromResult));
         }),
 

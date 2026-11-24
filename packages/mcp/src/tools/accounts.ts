@@ -37,8 +37,10 @@ import {
   AccountInput,
   AccountMode,
   CreditOrder,
+  DEFAULT_TOP_UP_DAYS,
   Day,
   LineId,
+  MAX_TOP_UP_DAYS,
   choiceOf,
 } from "@gousset/core/account-values";
 import type { AccountGroup } from "@gousset/core/account-values";
@@ -134,6 +136,17 @@ const AccountsInput = Schema.Struct({
     CreditOrder.annotate({
       description:
         "create, edit, a benefit account: which credits are used first; oldest_first unless the issuer uses the soonest to expire first.",
+    }),
+  ),
+  top_up_days: Schema.optional(
+    Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: MAX_TOP_UP_DAYS })).annotate({
+      description: `create, edit, a benefit account: the days, 0 to ${MAX_TOP_UP_DAYS}, its issuer takes to charge a purchase's rest to a bank card, matched into one expense; ${DEFAULT_TOP_UP_DAYS} by default.`,
+    }),
+  ),
+  top_up_cap: Schema.optional(
+    Schema.String.annotate({
+      description:
+        'create, edit, a benefit account: the most it pays a day, a decimal; "" when unknown.',
     }),
   ),
   category: Schema.optional(
@@ -427,6 +440,14 @@ const ORDER_TEXT = {
   expiring_first: "Credits are used soonest expiry first, as the issuer does.",
 } as const satisfies { readonly [Order in AccountCredits["order"]]: string };
 
+/** A benefit account's top-ups (#28): within how many days, and its daily cap. */
+function topUpText(days: number, cap: Money | null): string {
+  const within = days === 0 ? "the same day" : `within ${days} day${days === 1 ? "" : "s"}`;
+  const most = cap === null ? "no daily cap known" : `a daily cap of ${amount(cap)}`;
+
+  return `Top-ups: the rest charged by its issuer to a bank card ${within} joins the purchase; ${most}.`;
+}
+
 /** A credit's expiry as of `today`: an expired credit still counts until a line takes it out. */
 function expiryText(expiresOn: string, today: string): string {
   return expiresOn < today
@@ -671,6 +692,17 @@ const minorOf = (field: string, written: string, currency: string, example: Enco
     ),
   );
 
+/** A benefit account's daily cap: left out, unchanged; "", unknown; otherwise its minor units. */
+const topUpCapOf = (input: AccountsInput, currency: string, retry: Encoded) =>
+  input.top_up_cap === undefined
+    ? Effect.succeed(undefined)
+    : input.top_up_cap.trim() === ""
+      ? Effect.succeed(null)
+      : minorOf("top_up_cap", input.top_up_cap, currency, {
+          ...retry,
+          top_up_cap: minorDigits(currency) === 0 ? "2,500" : "25.00",
+        });
+
 /** An amount a currency can hold, for the example of a refusal: JPY has no decimals. */
 const sampleAmount = (currency: string) => (minorDigits(currency) === 0 ? "-1,234" : "-1,234.56");
 
@@ -780,7 +812,9 @@ function settingsText(detail: AccountDetail): string {
     ...(account.settlesInto === null
       ? []
       : [`Debited each month from: ${account.settlesInto.name}.`]),
-    ...(account.kind === "benefit" ? [ORDER_TEXT[account.creditOrder]] : []),
+    ...(account.kind === "benefit"
+      ? [ORDER_TEXT[account.creditOrder], topUpText(account.topUpDays, account.topUpCap)]
+      : []),
     ...(account.mode === "balance" ? [movementsText(account.balanceCategory)] : []),
     `Balance at the end of ${detail.day}: ${amount(detail.balance)}; ${statementsText(account.statementsUntil)}.`,
   ].join("\n");
@@ -871,6 +905,8 @@ const create = (owner: string, input: AccountsInput) =>
         settlesIntoAccountId: yield* settlesIntoOf(owner, input, retry),
         creditOrder: input.credit_order,
         balanceCategoryId: yield* balanceCategoryOf(owner, input, retry),
+        topUpDays: input.top_up_days,
+        topUpCapMinor: yield* topUpCapOf(input, currency, retry),
       },
       retry,
     );
@@ -901,6 +937,8 @@ const changesSomething = (input: AccountsInput) =>
     input.opened_on,
     input.settles_into,
     input.credit_order,
+    input.top_up_days,
+    input.top_up_cap,
     input.category,
     input.new_name,
     input.new_institution,
@@ -913,7 +951,7 @@ const edit = (owner: string, input: AccountsInput) =>
 
     if (name === undefined || !changesSomething(input)) {
       return yield* refuse(
-        "edit needs the account's name, as list writes it, and what to change: kind, currency, mode, opening_balance, opened_on, settles_into, credit_order, category, new_name or new_institution.",
+        "edit needs the account's name, as list writes it, and what to change: kind, currency, mode, opening_balance, opened_on, settles_into, credit_order, top_up_days, top_up_cap, category, new_name or new_institution.",
         { action: "edit", name: name ?? "Current account", new_name: "Everyday account" },
       );
     }
@@ -966,8 +1004,10 @@ const edit = (owner: string, input: AccountsInput) =>
         openedOn: input.opened_on ?? found.openedOn ?? undefined,
         settlesIntoAccountId: settlesInto,
         creditOrder: input.credit_order,
-        // Left out, the account keeps its category (#31).
+        // Left out, the account keeps its category (#31), its top-up days and cap (#28).
         balanceCategoryId: yield* balanceCategoryOf(owner, input, retry),
+        topUpDays: input.top_up_days,
+        topUpCapMinor: yield* topUpCapOf(input, currency, retry),
       },
       retry,
     );
