@@ -5,7 +5,7 @@ import { describe, expect, test } from "vite-plus/test";
 import type { Touched } from "@/jobs/view";
 
 import { accountKeys } from "./account-keys";
-import { invalidateApproval, invalidateTouched } from "./invalidate";
+import { invalidateTouched } from "./invalidate";
 import { lineKeys } from "./line-keys";
 import { monthKeys } from "./month-keys";
 
@@ -41,31 +41,15 @@ describe("invalidateTouched", () => {
       expect(isInvalidated(client, ACCOUNTS)).toBe(true);
     }
   });
-});
 
-describe("invalidateApproval", () => {
-  test("reads the month again, and the next month's day-by-day spending, which it is compared with", async () => {
-    const october = monthKeys.summary("2026-10");
-    const novemberDays = monthKeys.spendingDays("2026-11", "category", "Groceries");
-    const novemberSummary = monthKeys.summary("2026-11");
-    const decemberDays = monthKeys.spendingDays("2026-12", "category", "Groceries");
-    const client = clientWith([october, novemberDays, novemberSummary, decemberDays]);
+  test("reads again the months a job touched, and only those", async () => {
+    const october = [...monthKeys.of("2026-10"), "e2e-touched"];
+    const november = [...monthKeys.of("2026-11"), "e2e-touched"];
+    const client = clientWith([october, november]);
 
-    await invalidateApproval(client, "2026-10");
+    await invalidateTouched(client, { months: ["2026-10"] });
 
     expect(isInvalidated(client, october)).toBe(true);
-    expect(isInvalidated(client, novemberDays)).toBe(true);
-    // The rest of the next month counts every expense, approved or not: it stays as it was.
-    expect(isInvalidated(client, novemberSummary)).toBe(false);
-    expect(isInvalidated(client, decemberDays)).toBe(false);
-  });
-
-  test("reads the operations again: an approved line is no longer to review", async () => {
-    const client = clientWith([SEARCH, DETAIL]);
-
-    await invalidateApproval(client, "2026-10");
-
-    expect(isInvalidated(client, SEARCH)).toBe(true);
-    expect(isInvalidated(client, DETAIL)).toBe(true);
+    expect(isInvalidated(client, november)).toBe(false);
   });
 });

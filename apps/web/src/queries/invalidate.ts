@@ -1,4 +1,3 @@
-import { addMonths } from "@gousset/core/values";
 import type { QueryClient } from "@tanstack/react-query";
 
 import type { Touched } from "@/jobs/view";
@@ -32,18 +31,5 @@ export async function invalidateTouched(queryClient: QueryClient, touched: Touch
       queryClient.invalidateQueries({ queryKey: monthKeys.of(month) }),
     ),
     ...linesAndAccounts,
-  ]);
-}
-
-/**
- * Invalidates what approving a line of `month` changes: the month, its lines, and the next month's
- * day-by-day spending, whose previous curve counts this month's approved expenses only.
- */
-export async function invalidateApproval(queryClient: QueryClient, month: string): Promise<void> {
-  await Promise.all([
-    invalidateTouched(queryClient, { months: [month] }),
-    queryClient.invalidateQueries({
-      queryKey: monthKeys.everySpendingDays(addMonths(month, 1)),
-    }),
   ]);
 }
