@@ -1,4 +1,4 @@
-import { Effect } from "effect";
+import { Effect, Layer } from "effect";
 import { describe, expect, test } from "vite-plus/test";
 
 import { memoryId } from "./account-store-memory";
@@ -7,6 +7,7 @@ import type { CategoryInMonth } from "./benchmarks";
 import type { CategoryRecord } from "./category-store";
 import { memoryCategory, memoryCategoryStore } from "./category-store-memory";
 import type { MemoryCategoryRows, MemoryPart } from "./category-store-memory";
+import { Today } from "./today";
 
 const ADA = "ada";
 const MONTH = "2026-10";
@@ -53,10 +54,21 @@ function spend(
   });
 }
 
-async function benchmarks(rows: MemoryCategoryRows, month = MONTH, currency = "EUR") {
+/** Read on `today`, 2026-10-20 by default: October is the month under way. */
+async function benchmarks(
+  rows: MemoryCategoryRows,
+  month = MONTH,
+  currency = "EUR",
+  today = "2026-10-20",
+) {
   return Effect.runPromise(
     monthBenchmarks(ADA, month, currency).pipe(
-      Effect.provide(memoryCategoryStore(new Map([[ADA, rows]]))),
+      Effect.provide(
+        Layer.mergeAll(
+          memoryCategoryStore(new Map([[ADA, rows]])),
+          Layer.succeed(Today, { day: Effect.succeed(today) }),
+        ),
+      ),
     ),
   );
 }
@@ -122,6 +134,45 @@ describe("automatic benchmarks", () => {
       amount: null,
     });
     expect(result.drifting).toEqual([]);
+  });
+
+  test("a month to come averages only the full months before today's", async () => {
+    const { rows, groceries } = startingRows();
+
+    for (const month of ["2026-05", "2026-06", "2026-07", "2026-08", "2026-09"]) {
+      spend(rows, groceries, `${month}-10`, 30_000);
+    }
+
+    // October is under way: December's benchmark reads June to September, not October nor November.
+    spend(rows, groceries, "2026-10-05", 1000);
+
+    const result = await benchmarks(rows, "2026-12");
+
+    expect(result.averageFrom).toBe("2026-06");
+    expect(result.averageTo).toBe("2026-09");
+    expect(result.monthsAveraged).toBe(4);
+    expect(find(result.categories, "Groceries")?.benchmark).toEqual({
+      mode: "automatic",
+      amount: { minor: 30_000, currency: "EUR" },
+    });
+  });
+
+  test("a category whose months net to nothing, all refunded, has none yet", async () => {
+    const { rows, groceries } = startingRows();
+    const travel = memoryCategory("expense", "Travel", { position: 4 });
+
+    rows.categories.push(travel);
+    spend(rows, groceries, "2026-09-02", 5000);
+    spend(rows, travel, "2026-09-03", 0, [
+      { lineId: memoryId(), role: "payment", amountMinor: 12_000, currency: "EUR" },
+      { lineId: memoryId(), role: "refund", amountMinor: 12_000, currency: "EUR" },
+    ]);
+    spend(rows, travel, "2026-10-04", 1);
+
+    expect(find((await benchmarks(rows)).categories, "Travel")).toMatchObject({
+      benchmark: { mode: "automatic", amount: null },
+      drifts: false,
+    });
   });
 
   test("a category with nothing spent in the months before has none yet, and does not drift", async () => {

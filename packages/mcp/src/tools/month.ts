@@ -20,7 +20,7 @@ type MonthInput = typeof MonthInput.Type;
 
 const DESCRIPTION = `The monthly review. \`benchmarks\` gives, for a month (the current one by default), every expense category's spending against its benchmark, and lists first the categories that drift above it. Use it for "am I spending more than usual?", "which categories went over?", or what a category's benchmark is worth in a month.
 
-Each category: what its expenses cost in the month, each at its net cost (payments less refunds; a split line counts its share in each category; transfers are no spending), a top-level category with its children's; then its benchmark: the monthly average of the six months before (automatic), an amount the user set (set), or none. An automatic benchmark counts only the months from the user's first entry on, so a new user's is the average of fewer months; there is none yet for a category with nothing spent in those months. A category drifts when it cost more than its benchmark, by any amount; one without a benchmark never drifts. Amounts are in the user's currency; spending on accounts of another currency is shown apart, never converted nor compared. Archived categories show only when they had spending that month. To change a benchmark, use categories edit.
+Each category: what its expenses cost in the month, each at its net cost (payments less refunds; a split line counts its share in each category; transfers are no spending), a top-level category with its children's; then its benchmark: the monthly average of the six months before (automatic), an amount the user set (set), or none. An automatic benchmark counts only the full months from the user's first entry on, so a new user's is the average of fewer months; there is none yet for a category with nothing spent, net, in those months. A category drifts when it cost more than its benchmark, by any amount; one without a benchmark never drifts. Amounts are in the user's currency; spending on accounts of another currency is shown apart, never converted nor compared. Archived categories show only when they had spending that month. To change a benchmark, use categories edit.
 
 summary, review and days are not available yet: they come with the rest of the review, and answer so, with no figure. Until then, read balances with accounts and lines with lines.
 
@@ -78,7 +78,7 @@ const pathOf = (row: CategoryInMonth, all: ReadonlyArray<CategoryInMonth>) => {
 function benchmarksText(result: MonthBenchmarks): string {
   const averaged =
     result.monthsAveraged === 0
-      ? `the user's data starts after ${result.averageTo}, so no automatic benchmark can be read yet`
+      ? `no automatic benchmark can be read yet: no full month from ${result.averageFrom} to ${result.averageTo} holds the user's data`
       : `automatic benchmarks average ${result.monthsAveraged} month(s) of ${result.averageFrom} to ${result.averageTo}, from the user's first entry on`;
 
   const drifting =

@@ -1,6 +1,7 @@
 import { Effect } from "effect";
 
 import { CategoryStore } from "./category-store";
+import { currentMonth } from "./today";
 import type { CategoryRecord, MonthlySpending } from "./category-store";
 import type { Money } from "./month";
 import { addMonths } from "./values";
@@ -52,7 +53,10 @@ export type MonthBenchmarks = {
   readonly month: string;
   /** The user's currency: the one spending is held against benchmarks in. */
   readonly currency: string;
-  /** The months automatic benchmarks average, `YYYY-MM`: the six before `month`. */
+  /**
+   * The months automatic benchmarks average, `YYYY-MM`: the six before `month`, up to the last
+   * full month before today's (`averageTo` may then come before `averageFrom`: none).
+   */
   readonly averageFrom: string;
   readonly averageTo: string;
   /**
@@ -128,16 +132,20 @@ function totals(rows: ReadonlyArray<MonthlySpending>, currency: string) {
 /**
  * Every expense category's spending in `month` (`YYYY-MM`) against its benchmark, in the user's
  * `currency`. An automatic benchmark is the monthly average of the six months before, counting
- * only the months from the user's first entry on (a month with nothing spent in the category
- * counts as 0; none when it had nothing in any of them); a fixed one is the user's amount; none is none. A category drifts when it cost more
- * than its benchmark, by any amount. A top-level category counts its children's expenses with its
+ * only the months from the user's first entry on and before today's month (a month with nothing
+ * spent in the category counts as 0; none when it spent nothing, net, in them); a fixed one is
+ * the user's amount; none is none. A category drifts when it cost more than its benchmark, by
+ * any amount. A top-level category counts its children's expenses with its
  * own, against its own benchmark; each child against its own.
  */
 export const monthBenchmarks = (owner: string, month: string, currency: string) =>
   Effect.gen(function* () {
     const store = yield* CategoryStore;
     const averageFrom = addMonths(month, -BENCHMARK_WINDOW);
-    const averageTo = addMonths(month, -1);
+    const lastFull = addMonths(yield* currentMonth, -1);
+    const previous = addMonths(month, -1);
+    // A month to come, or the one under way, is no month to average.
+    const averageTo = previous < lastFull ? previous : lastFull;
     const categories = yield* store.list(owner);
 
     const history = yield* store.spending(owner, {
@@ -163,19 +171,17 @@ export const monthBenchmarks = (owner: string, month: string, currency: string) 
     ): MonthBenchmark => {
       switch (category.benchmark.mode) {
         case "automatic": {
-          const own = before.filter((row) => row.currency === currency);
+          const net = before
+            .filter((row) => row.currency === currency)
+            .reduce((sum, row) => sum + row.minor, 0);
 
+          // Nothing spent, net (no expense, or all refunded): nothing to average.
           return {
             mode: "automatic",
             amount:
-              monthsAveraged === 0 || own.length === 0
+              monthsAveraged === 0 || net <= 0
                 ? null
-                : {
-                    minor: Math.round(
-                      own.reduce((sum, row) => sum + row.minor, 0) / monthsAveraged,
-                    ),
-                    currency,
-                  },
+                : { minor: Math.round(net / monthsAveraged), currency },
           };
         }
 
@@ -202,7 +208,7 @@ export const monthBenchmarks = (owner: string, month: string, currency: string) 
 
       const benchmark = benchmarkOf(
         category,
-        rows.filter((row) => row.month < month),
+        rows.filter((row) => row.month >= averageFrom && row.month <= averageTo),
       );
 
       const mark = benchmark.mode === "none" ? null : benchmark.amount;

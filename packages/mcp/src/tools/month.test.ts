@@ -143,7 +143,7 @@ describe("month benchmarks", () => {
 
     const { text: none } = await month({ action: "benchmarks", month: "2026-10" }, rows);
 
-    expect(none).toContain("the user's data starts after 2026-09");
+    expect(none).toContain("no full month from 2026-04 to 2026-09 holds the user's data");
 
     spend(rows, groceries, "2026-09-12", 30_000);
 

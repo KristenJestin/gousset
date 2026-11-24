@@ -170,7 +170,7 @@ test("month benchmarks of a user with no data yet has no automatic benchmark", a
   const { text, isError } = await benchmarks(client);
 
   expect(isError, text).toBe(false);
-  expect(text).toContain("the user's data starts after 2026-09");
+  expect(text).toContain("no full month from 2026-04 to 2026-09 holds the user's data");
   expect(text).toContain("Nothing drifts above its benchmark.");
   expect(text).toContain(
     "\n- Groceries: spent 0.00 EUR; benchmark: none yet (automatic, nothing spent in it in those months)",
