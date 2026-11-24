@@ -50,7 +50,8 @@ export function OperationsLayout({
         <p
           data-slot="operations-count"
           aria-live="polite"
-          className="flex items-center text-sm text-muted-foreground"
+          // The line's own box, whatever it holds (a skeleton, the count): loading moves nothing.
+          className="flex h-5 min-w-0 flex-1 items-center text-sm text-muted-foreground"
         >
           {count === undefined ? (
             <Skeleton className="h-3.5 w-20" />
