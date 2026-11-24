@@ -18,6 +18,7 @@ export {
   CurrencyLocked,
   DayRangeRefused,
   ExpiryBeforeCredit,
+  FundRefused,
   LineAlreadyReviewed,
   LineNotClassifiable,
   LineNotFound,
@@ -26,6 +27,7 @@ export {
   MonthOutOfRange,
   NotACredit,
   NotATransfer,
+  NotFunding,
   NotLinked,
   SettlementRefused,
   SplitRefused,
@@ -35,20 +37,27 @@ export {
 export {
   Expenses,
   expensesLayer,
+  fundExpense,
   lineExpensesOf,
   linkLine,
   splitLine,
+  unfundExpense,
   unlinkLine,
 } from "./expenses/expenses";
 
 export type {
   Expense,
   ExpensePart,
+  FundedExpense,
+  Funding,
   LineExpenses,
   Linked,
   RefundProposal,
   Share,
+  TransferFunding,
 } from "./expenses/expenses";
+
+export { FUND_CANDIDATES, FUND_DAYS } from "./expenses/funding";
 
 export { MAX_SHARES, PROPOSALS_SHOWN, REFUND_DAYS } from "./expenses/parts";
 

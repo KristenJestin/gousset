@@ -17,13 +17,23 @@ import { Context, Effect, Layer, Result } from "effect";
 import type { LineCategory } from "../category-store";
 import { takeCategoryTurn } from "../category-turn";
 import { entriesForLines, settleEntries } from "../entries";
-import { CategoryNotFound, LineNotFound, LinkRefused, NotLinked, SplitRefused } from "../errors";
+import {
+  CategoryNotFound,
+  FundRefused,
+  LineNotFound,
+  LinkRefused,
+  NotFunding,
+  NotLinked,
+  SplitRefused,
+} from "../errors";
 import { isId } from "../imports/rows";
 import type { LineAccount } from "../lines";
 import { merchantKey } from "../merchants/labels";
 import type { Money } from "../month";
 import { today } from "../today";
 import { shiftDay } from "../transfers/pairing";
+import { FUND_DAYS, fundDecision, fundingCandidates, fundsFromBenefit } from "./funding";
+import type { FundingTarget, FundingTransfer } from "./funding";
 import { REFUND_DAYS, netOf, refundProposals, roleOf, sharesOf } from "./parts";
 import type { EntryKind, PartRole, ProposalLine } from "./parts";
 
@@ -45,6 +55,25 @@ export type ExpensePart = {
 };
 
 /**
+ * A transfer out of a benefit account that funds an expense (#29), a works council refund: the
+ * restricted money made available. The expense keeps its cost.
+ */
+export type Funding = {
+  /** Its side out, on the benefit account. */
+  readonly outLineId: string;
+  /** Its side in, on the account the money came to. */
+  readonly inLineId: string;
+  /** The day its side out was booked. */
+  readonly bookedOn: string;
+  /** Its side out's label. */
+  readonly label: string;
+  /** What it moved, positive. */
+  readonly amount: Money;
+  /** The benefit account it came from. */
+  readonly account: LineAccount;
+};
+
+/**
  * What happened (an entry): an expense, or an income, with one category, made of payments, on one
  * or more accounts, and of refunds. Counted once, at its net cost, wherever it was paid from.
  */
@@ -60,6 +89,30 @@ export type Expense = {
   readonly refunds: ReadonlyArray<ExpensePart>;
   /** Its payments less its refunds, positive the kind's way (spent, or received). */
   readonly net: Money;
+  /** The transfers funding it, oldest first (#29): what it costs stays `net`. */
+  readonly fundings: ReadonlyArray<Funding>;
+  /** What they fund together; nothing when none does. */
+  readonly funded: Money;
+};
+
+/** An expense a transfer funds, or may fund: its day, category and cost, and its first payment. */
+export type FundedExpense = {
+  readonly id: string;
+  readonly happenedOn: string;
+  readonly category: LineCategory;
+  /** What it costs, which the funding leaves as it is. */
+  readonly net: Money;
+  /** Its first payment: the line that names it. */
+  readonly line: ExpensePart;
+};
+
+/**
+ * A side of a transfer out of a benefit account (#29): the expense it funds, or, funding none, the
+ * expenses it may fund, the nearest day first, for the user to choose. Never applied unasked.
+ */
+export type TransferFunding = {
+  readonly funds: FundedExpense | null;
+  readonly candidates: ReadonlyArray<FundedExpense>;
 };
 
 /** An expense a line coming back may cancel: one of its lines, its category and its net cost. */
@@ -85,6 +138,8 @@ export type LineExpenses = {
    * unasked: the user confirms one by linking the line to it.
    */
   readonly proposals: ReadonlyArray<RefundProposal>;
+  /** A side of a transfer out of a benefit account: what it funds, or may; null for any other. */
+  readonly funding: TransferFunding | null;
 };
 
 /** A line linked to an expense: its part there, and the expense as it is now. */
@@ -131,8 +186,28 @@ export class Expenses extends Context.Service<
       lineId: string,
       shares: ReadonlyArray<Share>,
     ) => Effect.Effect<LineExpenses, LineNotFound | SplitRefused | CategoryNotFound | Failure>;
+    /**
+     * Makes the transfer `transferLineId` is a side of fund the expense `expenseLineId` is part of
+     * (#29): a works council refund, from a benefit account to an account of another kind, of an
+     * expense of its currency happened by its day, never past what the expense costs with its other
+     * fundings. The expense keeps its cost; it is answered as it is now. Funding it again changes
+     * nothing.
+     */
+    readonly fund: (
+      owner: string,
+      transferLineId: string,
+      expenseLineId: string,
+    ) => Effect.Effect<Expense, LineNotFound | FundRefused | Failure>;
+    /** The transfer `transferLineId` is a side of funds nothing any more; it stays a transfer. */
+    readonly unfund: (
+      owner: string,
+      transferLineId: string,
+    ) => Effect.Effect<LineExpenses, LineNotFound | NotFunding | Failure>;
   }
 >()("@gousset/core/Expenses") {}
+
+/** How many expenses of a transfer's days are read for the ones it may fund, the nearest first. */
+const FUND_POOL = 100;
 
 /**
  * How many lines before a line coming back are read for its proposals, those of its exact amount
@@ -258,6 +333,51 @@ async function entryIdsOf(
   return rows.map((row) => row.entryId);
 }
 
+/** The transfers funding each of the entries `entryIds`, oldest first (#29). */
+async function fundingsOf(
+  transaction: UserTransaction,
+  entryIds: ReadonlyArray<string>,
+): Promise<ReadonlyMap<string, ReadonlyArray<Funding>>> {
+  const rows = await transaction
+    .select({
+      entryId: transfer.fundsEntryId,
+      outLineId: transfer.outLineId,
+      inLineId: transfer.inLineId,
+      bookedOn: statementLine.bookedOn,
+      label: statementLine.label,
+      amountMinor: statementLine.amountMinor,
+      accountId: account.id,
+      accountName: account.name,
+      institution: account.institution,
+      currency: account.currency,
+    })
+    .from(transfer)
+    .innerJoin(statementLine, eq(statementLine.id, transfer.outLineId))
+    .innerJoin(account, eq(account.id, statementLine.accountId))
+    .where(inArray(transfer.fundsEntryId, [...entryIds]))
+    .orderBy(asc(statementLine.bookedOn), asc(transfer.outLineId));
+
+  const byEntry = new Map<string, Array<Funding>>();
+
+  for (const row of rows) {
+    if (row.entryId !== null) {
+      byEntry.set(row.entryId, [
+        ...(byEntry.get(row.entryId) ?? []),
+        {
+          outLineId: row.outLineId,
+          inLineId: row.inLineId,
+          bookedOn: row.bookedOn,
+          label: row.label,
+          amount: { minor: Math.abs(row.amountMinor), currency: row.currency },
+          account: { id: row.accountId, name: row.accountName, institution: row.institution },
+        },
+      ]);
+    }
+  }
+
+  return byEntry;
+}
+
 /** The entries `entryIds` name, each with its category and every part, in that order. */
 async function readExpenses(
   transaction: UserTransaction,
@@ -296,6 +416,8 @@ async function readExpenses(
     .where(inArray(entry.id, [...entryIds]))
     .orderBy(asc(statementLine.bookedOn), asc(statementLine.id), asc(entryPart.role));
 
+  const fundings = await fundingsOf(transaction, entryIds);
+
   return entryIds.flatMap((entryId) => {
     const own = rows.filter((row) => row.entryId === entryId);
     const [head] = own;
@@ -312,6 +434,8 @@ async function readExpenses(
       amount: { minor: row.partMinor, currency: row.currency },
     });
 
+    const funding = fundings.get(entryId) ?? [];
+
     const expense: Expense = {
       id: entryId,
       kind: head.kind,
@@ -327,6 +451,11 @@ async function readExpenses(
       refunds: own.flatMap((row) => (row.role === "refund" ? [partOf(row)] : [])),
       net: {
         minor: netOf(own.map((row) => ({ role: row.role, amountMinor: row.partMinor }))),
+        currency: head.currency,
+      },
+      fundings: funding,
+      funded: {
+        minor: funding.reduce((sum, each) => sum + each.amount.minor, 0),
         currency: head.currency,
       },
     };
@@ -485,6 +614,138 @@ async function proposalsFor(
   });
 }
 
+const outLine = alias(statementLine, "out_line");
+const outAccount = alias(account, "out_account");
+const inLine = alias(statementLine, "in_line");
+const inAccount = alias(account, "in_account");
+
+/** The transfer `lineId` is a side of, with what funding reads of its two sides; if any. */
+async function transferOfSide(transaction: UserTransaction, lineId: string) {
+  const [found] = await transaction
+    .select({
+      id: transfer.id,
+      outLineId: transfer.outLineId,
+      inLineId: transfer.inLineId,
+      fundsEntryId: transfer.fundsEntryId,
+      bookedOn: outLine.bookedOn,
+      outAmountMinor: outLine.amountMinor,
+      outKind: outAccount.kind,
+      currency: outAccount.currency,
+      inKind: inAccount.kind,
+    })
+    .from(transfer)
+    .innerJoin(outLine, eq(outLine.id, transfer.outLineId))
+    .innerJoin(outAccount, eq(outAccount.id, outLine.accountId))
+    .innerJoin(inLine, eq(inLine.id, transfer.inLineId))
+    .innerJoin(inAccount, eq(inAccount.id, inLine.accountId))
+    .where(or(eq(transfer.outLineId, lineId), eq(transfer.inLineId, lineId)));
+
+  return found;
+}
+
+type SideRead = NonNullable<Awaited<ReturnType<typeof transferOfSide>>>;
+
+const fundingTransferOf = (found: SideRead): FundingTransfer => ({
+  outKind: found.outKind,
+  inKind: found.inKind,
+  bookedOn: found.bookedOn,
+  amountMinor: Math.abs(found.outAmountMinor),
+  currency: found.currency,
+  fundsEntryId: found.fundsEntryId,
+});
+
+/** An expense as funding weighs it: its cost, and what transfers but `outLineId`'s fund of it. */
+const targetOf = (expense: Expense, outLineId: string | null): FundingTarget => ({
+  id: expense.id,
+  kind: expense.kind,
+  happenedOn: expense.happenedOn,
+  currency: expense.net.currency,
+  netMinor: expense.net.minor,
+  fundedByOthersMinor: expense.fundings.reduce(
+    (sum, each) => (each.outLineId === outLineId ? sum : sum + each.amount.minor),
+    0,
+  ),
+});
+
+/** An expense, as a transfer funds it: none without a payment, which never happens. */
+function fundedOf(expense: Expense): ReadonlyArray<FundedExpense> {
+  const [first] = expense.payments;
+
+  return first === undefined
+    ? []
+    : [
+        {
+          id: expense.id,
+          happenedOn: expense.happenedOn,
+          category: expense.category,
+          net: expense.net,
+          line: first,
+        },
+      ];
+}
+
+/**
+ * The expenses a transfer funding none may fund (`fundingCandidates`): the expenses of its days,
+ * the nearest first, of its currency, of a line split in none, costing at least its amount, read
+ * with their fundings.
+ */
+async function candidatesToFund(
+  transaction: UserTransaction,
+  read: FundingTransfer,
+): Promise<ReadonlyArray<FundedExpense>> {
+  const pool = await transaction
+    .select({ id: entry.id })
+    .from(entry)
+    .where(
+      and(
+        eq(entry.kind, "expense"),
+        gte(entry.happenedOn, shiftDay(read.bookedOn, -FUND_DAYS)),
+        lte(entry.happenedOn, read.bookedOn),
+        sql`(select coalesce(sum(case when p.role = 'payment' then p.amount_minor else -p.amount_minor end), 0) from entry_part p where p.entry_id = ${entry.id}) >= ${read.amountMinor}`,
+        sql`exists (select 1 from entry_part p join statement_line l on l.id = p.line_id join account a on a.id = l.account_id where p.entry_id = ${entry.id} and a.currency = ${read.currency})`,
+        sql`not exists (select 1 from entry_part p join entry_part q on q.line_id = p.line_id and q.entry_id <> p.entry_id where p.entry_id = ${entry.id})`,
+      ),
+    )
+    .orderBy(desc(entry.happenedOn), desc(entry.id))
+    .limit(FUND_POOL);
+
+  const expenses = await readExpenses(
+    transaction,
+    pool.map((each) => each.id),
+  );
+
+  return fundingCandidates(
+    read,
+    expenses.map((expense) => ({ ...targetOf(expense, null), expense })),
+  ).flatMap((each) => fundedOf(each.expense));
+}
+
+/** What a side of a transfer out of a benefit account funds, or may; null for any other line. */
+async function transferFunding(
+  transaction: UserTransaction,
+  lineId: string,
+): Promise<TransferFunding | null> {
+  const found = await transferOfSide(transaction, lineId);
+
+  if (found === undefined) {
+    return null;
+  }
+
+  const read = fundingTransferOf(found);
+
+  if (!fundsFromBenefit(read)) {
+    return null;
+  }
+
+  if (found.fundsEntryId === null) {
+    return { funds: null, candidates: await candidatesToFund(transaction, read) };
+  }
+
+  const [funded] = (await readExpenses(transaction, [found.fundsEntryId])).flatMap(fundedOf);
+
+  return { funds: funded ?? null, candidates: [] };
+}
+
 /** What `line` is to the expenses, read in `transaction`. */
 async function lineExpenses(
   transaction: UserTransaction,
@@ -495,7 +756,10 @@ async function lineExpenses(
   const [only, ...others] = expenses;
 
   if (only === undefined || others.length > 0) {
-    return { expenses, role: null, proposals: [] };
+    // A line of no expense may be a works council refund's side (#29).
+    const funding = only === undefined ? await transferFunding(transaction, line.id) : null;
+
+    return { expenses, role: null, proposals: [], funding };
   }
 
   const role = only.refunds.some((part) => part.lineId === line.id) ? "refund" : "payment";
@@ -513,7 +777,7 @@ async function lineExpenses(
       ? await proposalsFor(transaction, line, day)
       : [];
 
-  return { expenses, role, proposals };
+  return { expenses, role, proposals, funding: null };
 }
 
 /** Why the line cannot be part of an expense with another line, or undefined when it can. */
@@ -618,14 +882,19 @@ async function linkIn(
     return linkRefused("exceeds", line.id);
   }
 
-  // The line's own entry goes, its part with it: the line is now the expense's.
+  // The line's own entry goes, its part with it: the line is now the expense's. The transfers that
+  // funded it fund that expense now (#29); an income is funded by none, and they fund nothing.
   if (own.length > 0) {
-    await transaction.delete(entry).where(
-      inArray(
-        entry.id,
-        own.map((each) => each.id),
-      ),
-    );
+    const ownIds = own.map((each) => each.id);
+
+    if (expense.kind === "expense") {
+      await transaction
+        .update(transfer)
+        .set({ fundsEntryId: expense.id })
+        .where(inArray(transfer.fundsEntryId, ownIds));
+    }
+
+    await transaction.delete(entry).where(inArray(entry.id, ownIds));
   }
 
   await transaction.insert(entryPart).values({
@@ -727,6 +996,11 @@ async function splitIn(
     return splitRefused("linked");
   }
 
+  // A transfer funds this expense (#29): which share it would fund, the user says by unfunding first.
+  if (expenses.some((each) => each.fundings.length > 0)) {
+    return splitRefused("funded");
+  }
+
   const amounts = sharesOf(
     line.amountMinor,
     minorDigits(line.currency),
@@ -806,6 +1080,128 @@ async function splitIn(
   return Result.succeed(await lineExpenses(transaction, line, day));
 }
 
+/** The lines the entries `entryIds` have a part of. */
+async function linesOfEntries(
+  transaction: UserTransaction,
+  entryIds: ReadonlyArray<string>,
+): Promise<ReadonlyArray<string>> {
+  if (entryIds.length === 0) {
+    return [];
+  }
+
+  const rows = await transaction
+    .selectDistinct({ lineId: entryPart.lineId })
+    .from(entryPart)
+    .where(inArray(entryPart.entryId, [...entryIds]));
+
+  return rows.map((row) => row.lineId);
+}
+
+const fundRefused = (reason: FundRefused["reason"], lineId: string) =>
+  Result.fail(new FundRefused({ reason, lineId }));
+
+async function fundIn(
+  transaction: UserTransaction,
+  owner: string,
+  transferLineId: string,
+  expenseLineId: string,
+  day: string,
+): Promise<Result.Result<Expense, LineNotFound | FundRefused>> {
+  // Its turn among the changes that unpair, split or fund lines, before any row lock: the transfer
+  // stays paired, and the expense's line unsplit, until it commits.
+  await takeCategoryTurn(transaction, owner);
+
+  const side = await readLine(transaction, transferLineId, day);
+
+  if (side === undefined) {
+    return Result.fail(new LineNotFound({ lineId: transferLineId }));
+  }
+
+  const target = await readLine(transaction, expenseLineId, day);
+
+  if (target === undefined) {
+    return Result.fail(new LineNotFound({ lineId: expenseLineId }));
+  }
+
+  const paired = await transferOfSide(transaction, side.id);
+
+  if (paired === undefined) {
+    return fundRefused("not_a_transfer", side.id);
+  }
+
+  // The transfer's lines and the expense's, in one order, then the expense, as a link locks them:
+  // a link or an unlink of that expense waits, and reads the fundings this one leaves.
+  await lockLines(transaction, [
+    paired.outLineId,
+    paired.inLineId,
+    target.id,
+    ...(await linesOfEntries(transaction, await entryIdsOf(transaction, target.id))),
+  ]);
+
+  const entryIds = await entryIdsOf(transaction, target.id);
+
+  await lockEntries(transaction, entryIds);
+
+  const found = (await transferOfSide(transaction, side.id)) ?? paired;
+  const [only, ...others] = await readExpenses(transaction, entryIds);
+
+  const decided = fundDecision(
+    fundingTransferOf(found),
+    only === undefined ? "none" : others.length > 0 ? "split" : targetOf(only, found.outLineId),
+  );
+
+  if (decided !== "fund" && decided !== "same") {
+    return fundRefused(decided.reason, decided.about === "transfer" ? side.id : target.id);
+  }
+
+  // Decided on an expense: there is one.
+  if (only === undefined) {
+    throw new Error("A funding was decided with no expense.");
+  }
+
+  if (decided === "fund") {
+    await transaction
+      .update(transfer)
+      .set({ fundsEntryId: only.id })
+      .where(eq(transfer.id, found.id));
+  }
+
+  const [funded] = await readExpenses(transaction, [only.id]);
+
+  return funded === undefined
+    ? Result.fail(new LineNotFound({ lineId: expenseLineId }))
+    : Result.succeed(funded);
+}
+
+async function unfundIn(
+  transaction: UserTransaction,
+  owner: string,
+  transferLineId: string,
+  day: string,
+): Promise<Result.Result<LineExpenses, LineNotFound | NotFunding>> {
+  // Its turn, as `fundIn` takes it: the two never meet on one transfer.
+  await takeCategoryTurn(transaction, owner);
+
+  const side = await readLine(transaction, transferLineId, day);
+
+  if (side === undefined) {
+    return Result.fail(new LineNotFound({ lineId: transferLineId }));
+  }
+
+  const found = await transferOfSide(transaction, side.id);
+
+  if (found === undefined || found.fundsEntryId === null) {
+    return Result.fail(new NotFunding({ lineId: side.id }));
+  }
+
+  await lockLines(transaction, [found.outLineId, found.inLineId]);
+
+  // The transfer stays; the expense it funded keeps its cost, as it always did.
+  await transaction.update(transfer).set({ fundsEntryId: null }).where(eq(transfer.id, found.id));
+
+  return Result.succeed(await lineExpenses(transaction, side, day));
+}
+
 /** What a line is to the expenses (`Expenses.ofLine`). */
 export const lineExpensesOf = (owner: string, lineId: string) =>
   Effect.gen(function* () {
@@ -836,6 +1232,22 @@ export const splitLine = (owner: string, lineId: string, shares: ReadonlyArray<S
     const expenses = yield* Expenses;
 
     return yield* expenses.split(owner, lineId, shares);
+  });
+
+/** Makes a transfer out of a benefit account fund an expense (`Expenses.fund`). */
+export const fundExpense = (owner: string, transferLineId: string, expenseLineId: string) =>
+  Effect.gen(function* () {
+    const expenses = yield* Expenses;
+
+    return yield* expenses.fund(owner, transferLineId, expenseLineId);
+  });
+
+/** The transfer a line is a side of funds nothing any more (`Expenses.unfund`). */
+export const unfundExpense = (owner: string, transferLineId: string) =>
+  Effect.gen(function* () {
+    const expenses = yield* Expenses;
+
+    return yield* expenses.unfund(owner, transferLineId);
   });
 
 /** `Expenses` on the database (`UserData`). */
@@ -882,6 +1294,26 @@ export const expensesLayer = Layer.effect(
 
           return yield* userData
             .transaction(owner, (transaction) => splitIn(transaction, owner, lineId, shares, day))
+            .pipe(Effect.flatMap(Effect.fromResult));
+        }),
+
+      fund: (owner, transferLineId, expenseLineId) =>
+        Effect.gen(function* () {
+          const day = yield* today;
+
+          return yield* userData
+            .transaction(owner, (transaction) =>
+              fundIn(transaction, owner, transferLineId, expenseLineId, day),
+            )
+            .pipe(Effect.flatMap(Effect.fromResult));
+        }),
+
+      unfund: (owner, transferLineId) =>
+        Effect.gen(function* () {
+          const day = yield* today;
+
+          return yield* userData
+            .transaction(owner, (transaction) => unfundIn(transaction, owner, transferLineId, day))
             .pipe(Effect.flatMap(Effect.fromResult));
         }),
     };
