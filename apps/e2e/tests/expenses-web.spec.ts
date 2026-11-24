@@ -171,10 +171,11 @@ test("the operations page proposes a cancellation as a refund, links it once con
 
   // Saved, the sheet closes: what counts is that the split's sheet does not stay open (ui-sdk takes
   // `data-open` off as its exit starts), and that the page still answers below. On a phone the
-  // line's detail is itself a sheet, which stays open under it.
+  // line's detail is itself a sheet, which stays open under it and holds the split's.
   const openSheet = page
     .locator('[data-slot="dialog-content"][data-open]')
-    .filter({ has: page.locator('[data-slot="split-left"]') });
+    .filter({ has: page.locator('[data-slot="split-left"]') })
+    .filter({ hasNot: page.locator('[data-slot="line-detail"]') });
 
   await expect(openSheet).toHaveCount(0);
 
