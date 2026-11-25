@@ -418,7 +418,9 @@ the `image` job and runs `tools/check-upgrade.sh` on it, which, on a fresh proje
    line once: the boot makes them from a release older than 0.3.0, and from 0.3.0 the release's
    own import made them, so only the boot's making no second line is checked; the merchants a
    release before #194 made from an operation prefix, which the user never touched, are forgotten,
-   the shop's merchant is there, and the fee's entry is in Bank fees; once every boot job
+   the shop's merchant is there, and the fee's entry is in Bank fees; the merchants a release
+   before #193 made one per town of a shop's card labels (from 0.3.0: Pizza Nova and Freshmart,
+   each in two towns), which the user never touched, are one per shop; once every boot job
    has ended, **her transfers kept before v0.3 are paired** (#192: a clear pair and one across her
    savings account's fortnight, never paired by the release, are transfers; an ambiguous one waits
    in the review; from 0.3.0, two whose side she classified, by hand and by a rule of hers, stay
@@ -431,7 +433,7 @@ the `image` job and runs `tools/check-upgrade.sh` on it, which, on a fresh proje
    (`source = balance`) that the release did not hold, which the boot made, left out of the
    export's side;
 8. uploads the statement of step 2 again, through the updated app: **it adds nothing**, every line
-   found as a duplicate under the key the update gave it (`done 0 8`: nothing added, 8 found);
+   found as a duplicate under the key the update gave it (`done 0 12`: nothing added, 12 found);
 9. migrates an empty database beside it with the same image: **the updated schema is a fresh
    installation's**, to the column order and the grant.
 

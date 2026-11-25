@@ -90,7 +90,9 @@ A key is upper-case ASCII words separated by one space, made only of `A`–`Z`, 
 12. Nothing left is no key: a label of only references gives none.
 
 The steps run in this order, one after the other (`keyOf`, then `labelKey` and `merchantKey` for
-rules 1 to 3): a step added later (#193's town) goes in its place in that order, and its rule here.
+rules 1 to 3): a step added later goes in its place in that order, and its rule here. A card
+label's town (#193) is no step of the key: one label alone cannot tell it from a name's last word,
+so the key keeps it, and the matching drops it (`towns.ts`, below).
 
 ### Adding a bank's prefixes
 
@@ -103,7 +105,8 @@ same letters left untouched.
 ### Known limits of the key
 
 - **A town with no separator stays**: `CONTACTLESS CORNER CAFE RIVERTON` → `CORNER CAFE RIVERTON`.
-  The matching below joins it to `CORNER CAFE` when that is known.
+  The matching below joins it to `CORNER CAFE` when that is known, or when the user's card labels
+  show `RIVERTON` is a town ("A card label's town").
 - **The free text of a direct debit, or of a transfer another bank's way, stays**: `PRLV SEPA
   STREAMFLIX ABONNEMENT` → `STREAMFLIX ABONNEMENT`, `SEPA TRF ACME CONSULTING SALARY` → `ACME
   CONSULTING SALARY`. Nothing tells a name's last word from a motive's first; the matching joins
@@ -170,6 +173,58 @@ cleaned label's merchant is, so a prefix match would make it ask who was paid.
 Keys are taken **shortest first** (fewest words, then alphabetically), and each key assigned is
 known for the next ones. So in one import `CORNER CAFE` and `CORNER CAFE RIVERTON` become one
 merchant named "Corner Cafe", and the result is the same whatever the order of the keys.
+
+## A card label's town (`towns.ts`, #193)
+
+A card payment's label often ends with the town where the card was used, so one shop's labels
+differ by their last words: `CARTE X1234 03/10 PIZZA NOVA RIVERTON` and `CARTE X1234 17/10 PIZZA NOVA
+LAKESIDE`. No list of towns can ship, and a bank may cut the town short at a fixed width (`CODEHUB
+INC SAN FRANCI`). The user's own card labels tell the towns. `shopsOf` takes the keys of the card
+payments' labels (`isCardPayment`: a label that starts with `CB`, `CARTE`, `ANN CARTE`, `PAIEMENT PAR
+CARTE`, `CARD`, `CONTACTLESS`, `POS`, `VISA`, `KARTENZAHLUNG`…, as whole words) and gives each key
+whose last words are a town its **shop**, the key without them:
+
+1. **A key cut before its last words** can be a shop and its town when the words before have at
+   least 4 letters or digits once their end is trimmed (rule 11, so `CODEHUB INC` is `CODEHUB`) and
+   end on no small word, before the trim or after (an article, `LE`, `THE`; a preposition or a
+   conjunction, `DU`, `DE`, `OF`, `ET`, `&`), and the last words start with no preposition and have
+   at least 3 letters or digits, one a letter. So `CAFE DU PORT` is never `CAFE` in the town `PORT`.
+2. **A town is known** when two shops were each paid in the same two places: `PIZZA NOVA RIVERTON`,
+   `PIZZA NOVA LAKESIDE`, `FRESHMART RIVERTON`, `FRESHMART LAKESIDE` make `RIVERTON` and
+   `LAKESIDE` towns. Or when a key ends with words doubled (`FRESHMART RIVERTON RIVERTON`), as some
+   banks print it.
+3. **A known town ends any card key** that can be a shop before it, the most words that can be:
+   `PIZZA NOVA HILLCREST` stays whole until Hillcrest is known, `CORNER CAFE RIVERTON` is
+   `CORNER CAFE` once Riverton is. A doubled town goes with both its copies.
+4. **A town cut short** (`RIVERT`, `SAN FRANCI`), at least 4 letters or digits that start a known
+   town, ends a key only after a shop another key shows in a whole town: `PIZZA NOVA RIVERT` is
+   `PIZZA NOVA` when `PIZZA NOVA LAKESIDE` is one, `GREEN RIVER` is never `GREEN`.
+
+The key keeps its town: it is the cleaned label that finds a line's merchant, so the aliases made
+before still name their lines. `assignMerchants` takes the shops (`shopOf`): a key with a shop goes
+first to the merchant whose key or shop is that shop, **compared whole** (letters and digits
+only), then as any key; a new merchant is named after the shop ("Pizza Nova"). A shop is never a
+prefix of another key: `BOULANGERIE` of `BOULANGERIE RIVERTON` never takes `BOULANGERIE DUPONT`. A
+merchant's name that is the shop of its own cleaned labels compares whole as well (`whole`), so
+that the merchant "Boulangerie" a town made does not take it either.
+
+The merchants a release made one per town, which the user never touched, are merged at boot
+(`town-merge.ts`; docs/data-model.md, v0.3, "The merchants made one per town are merged").
+
+### Known limits of the town
+
+- **A town nothing else shows stays**: one shop paid in two towns, with no other shop paid in both,
+  keeps them (`PIZZA NOVA RIVERTON` and `PIZZA NOVA LAKESIDE` are two merchants): nothing tells
+  them from two shops whose names share their first words. The user merges; a merchant named
+  after the shop then takes the shop's labels in every town.
+- **Two shops whose names differ in their last word**, each paid with another such pair
+  (`CORNER CAFE`, `CORNER BAKERY`, `GRAND CAFE`, `GRAND BAKERY`), make `CAFE` and `BAKERY` towns. The
+  user splits.
+- **A doubled last word** is a town (`CAFE BORA BORA` is `CAFE` in `BORA`), and then ends any card
+  key.
+- **A town cut short** is found only after a shop seen in the whole town.
+- **Only card payments' labels** show towns: a key only a transfer or a direct debit gives never
+  loses its last words to one (`JEAN MARTIN`, a person paid, is never `JEAN`).
 
 ### Known limits of the matching, and how the user fixes them
 

@@ -224,14 +224,23 @@ statement=$root/tools/check-upgrade.ofx
 first_import=$(upload camille "$statement")
 if [ -n "$first_import" ]; then
   ended=$(settled "$first_import")
-  [ "$ended" = "done 8 0" ] ||
-    fail "$from did not import $(basename "$statement") whole: $ended, not \"done 8 0\"."
+  [ "$ended" = "done 12 0" ] ||
+    fail "$from did not import $(basename "$statement") whole: $ended, not \"done 12 0\"."
   say "Camille imported $(basename "$statement") through $from's own route."
   # A release before #194 named merchants from a label's operation prefix: the update reads them
   # again at boot, below.
   prefixed=$(sql "select count(*) from merchant where user_id = '$camille'
     and name in ('Ann Carte Cafe Exemple', 'F Cotisation')")
   say "$from made $prefixed merchant(s) of an operation prefix."
+  # A release before #193 made a merchant per town of a shop's card labels: the update merges them
+  # at boot, below. Pizza Nova and Freshmart, each paid in Riverton and in Lakeside, show the towns.
+  per_town=$(sql "select count(*) from merchant where user_id = '$camille' and name in
+    ('Pizza Nova Riverton', 'Pizza Nova Lakeside', 'Freshmart Riverton', 'Freshmart Lakeside')")
+  case $from in
+    0.1.* | 0.2.*) ;;
+    *) [ "$per_town" = 4 ] || fail "$from made $per_town merchant(s) of a shop in a town, not 4." ;;
+  esac
+  say "$from made $per_town merchant(s) of a shop in a town."
 else
   say "$from has no import route: $(basename "$statement") is not imported."
 fi
@@ -431,6 +440,21 @@ if [ -n "$first_import" ]; then
   [ -n "$reread" ] ||
     fail "the merchants $from made from an operation prefix were not read again, or its fee not put in Bank fees, within a minute of the app's start."
   say "the $prefixed merchant(s) $from made from an operation prefix were read again at boot, and its fee went to Bank fees."
+
+  # The merchants the release made one per town (#193), which Camille never touched, are one per
+  # shop after the boot, named after it, each with both its cleaned labels.
+  one_per_shop="Freshmart:FRESHMART LAKESIDE,Freshmart:FRESHMART RIVERTON,Pizza Nova:PIZZA NOVA LAKESIDE,Pizza Nova:PIZZA NOVA RIVERTON"
+  shops=
+  for _ in $(seq 60); do
+    shops=$(sql "select coalesce(string_agg(m.name || ':' || a.alias, ',' order by m.name, a.alias), '')
+      from merchant m join merchant_alias a on a.merchant_id = m.id
+      where m.user_id = '$camille' and (m.name like 'Pizza Nova%' or m.name like 'Freshmart%')")
+    [ "$shops" != "$one_per_shop" ] || break
+    sleep 1
+  done
+  [ "$shops" = "$one_per_shop" ] ||
+    fail "Camille's merchants of a shop in two towns are \"$shops\" a minute after the app's start, not \"$one_per_shop\"."
+  say "the $per_town merchant(s) $from made per town are one per shop after the boot: Pizza Nova and Freshmart."
 fi
 
 # The boot jobs of <n> starts of the app, for every user, ended: none waits or runs any more, and
@@ -576,9 +600,9 @@ if [ -n "$first_import" ]; then
   second_import=$(upload camille-after "$statement")
   [ -n "$second_import" ] || fail "$tag has no import route."
   ended=$(settled "$second_import")
-  [ "$ended" = "done 0 8" ] ||
-    fail "$(basename "$statement") imported again after the update: $ended, not \"done 0 8\" (nothing added, 8 found)."
-  say "$(basename "$statement"), imported again on $tag, adds nothing: its 8 lines are found."
+  [ "$ended" = "done 0 12" ] ||
+    fail "$(basename "$statement") imported again after the update: $ended, not \"done 0 12\" (nothing added, 12 found)."
+  say "$(basename "$statement"), imported again on $tag, adds nothing: its 12 lines are found."
 fi
 
 # 12. The upgraded schema is a fresh installation's.

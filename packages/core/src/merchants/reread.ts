@@ -8,6 +8,7 @@ import { takeCategoryTurn } from "../category-turn";
 import { formerMerchantKey, merchantKey, merchantName } from "./labels";
 import { recogniseIn } from "./merchants";
 import type { Recognised } from "./merchants";
+import { mergeTownMerchantsIn } from "./town-merge";
 
 // The merchants made before the operation prefixes (#194; docs/data-model.md, v0.3, "Operation
 // prefixes"), read again once at every boot: a merchant recognition made from a label's prefix
@@ -15,8 +16,11 @@ import type { Recognised } from "./merchants";
 // user never touched it; its lines then get their merchant again, or none. Whatever the user
 // changed stays as it is.
 
-/** What a re-read did: the merchants it forgot, then what the recognition added. */
-export type Reread = Recognised & { readonly forgotten: number };
+/**
+ * What a re-read did: the merchants it forgot, those it merged into another of the same shop in
+ * another town (#193), then what the recognition added.
+ */
+export type Reread = Recognised & { readonly forgotten: number; readonly merged: number };
 
 /** How many ids or cleaned labels one query names. */
 const CHUNK = 500;
@@ -169,7 +173,8 @@ export async function forgetOperationMerchantsIn(transaction: UserTransaction): 
 
 /**
  * Reads `owner`'s merchants again (#194), what the app does once at every boot: forgets those made
- * from an operation prefix that the user never touched (`forgetOperationMerchantsIn`), then
+ * from an operation prefix that the user never touched (`forgetOperationMerchantsIn`), merges those
+ * made one per town of a shop that the user never touched (#193, `mergeTownMerchantsIn`), then
  * recognises the merchant of every line whose cleaned label names none yet, in one transaction.
  */
 export const rereadMerchants = (owner: string) =>
@@ -180,8 +185,9 @@ export const rereadMerchants = (owner: string) =>
       await takeCategoryTurn(transaction, owner);
 
       const forgotten = await forgetOperationMerchantsIn(transaction);
+      const merged = await mergeTownMerchantsIn(transaction);
       const recognised = await recogniseIn(transaction, owner);
 
-      return { ...recognised, forgotten };
+      return { ...recognised, forgotten, merged };
     });
   });

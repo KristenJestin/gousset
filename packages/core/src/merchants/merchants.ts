@@ -32,8 +32,9 @@ import {
   MerchantNameUnknown,
   MerchantNotFound,
 } from "./errors";
-import { MAX_KEY_LENGTH, assignMerchants, merchantKey, nameKey } from "./labels";
+import { MAX_KEY_LENGTH, assignMerchants, compactOf, merchantKey, nameKey } from "./labels";
 import type { KnownKey } from "./labels";
+import { shopsOfLines } from "./towns";
 
 // The merchants (#24): who was paid, recognised from the lines' raw labels (`./labels`), each
 // user's own, renamed, merged and split by the user. A line is a merchant's when its label cleans
@@ -299,15 +300,38 @@ export async function recogniseIn(
     intermediary: marked.has(row.merchantId),
   }));
 
+  // A card label's town is no part of its merchant (#193, `./towns`): each merchant's shops, its
+  // cleaned labels without their town.
+  const shops = shopsOfLines(labels);
+  const shopsOfMerchant = new Map<string, Set<string>>();
+
+  for (const row of aliases) {
+    const shop = shops.get(row.alias);
+
+    if (shop !== undefined) {
+      const own = shopsOfMerchant.get(row.merchantId) ?? new Set<string>();
+
+      own.add(compactOf(shop));
+      shopsOfMerchant.set(row.merchantId, own);
+    }
+  }
+
   for (const row of merchants) {
     const key = nameKey(row.name);
 
     if (key !== "") {
-      known.push({ key, merchantId: row.id, intermediary: row.intermediary });
+      known.push({
+        key,
+        merchantId: row.id,
+        intermediary: row.intermediary,
+        // A name that is the shop of its own labels compares only whole: "Boulangerie", of
+        // `BOULANGERIE RIVERTON`, takes no `BOULANGERIE DUPONT`.
+        whole: shopsOfMerchant.get(row.id)?.has(compactOf(key)) === true,
+      });
     }
   }
 
-  const assigned = assignMerchants([...keys], known, isKnownIntermediary);
+  const assigned = assignMerchants([...keys], known, isKnownIntermediary, (key) => shops.get(key));
   const names = new Set<string>();
   // A merchant made from a known intermediary's cleaned label is one (#30).
   const intermediaries = new Set<string>();
