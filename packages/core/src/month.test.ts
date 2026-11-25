@@ -759,6 +759,7 @@ describe("monthFlags", () => {
     });
     expect(flags).toContainEqual({
       kind: "price-rise",
+      subscriptionId: expect.any(String),
       merchant: "Streamly",
       from: { minor: 949, currency: "EUR" },
       to: { minor: 1099, currency: "EUR" },
@@ -777,6 +778,43 @@ describe("monthFlags", () => {
       account: "Savings book",
       reached: "2026-10-15",
     });
+  });
+
+  // Issue #234: a merchant keeps up to three subscriptions; each is its own flag, told apart.
+  test("two plans of one merchant are two flags, each with its subscription's id", async () => {
+    const { rows } = household();
+
+    const plan = (merchantName: string, days: ReadonlyArray<string>, amountMinor: number) =>
+      days.map((day) => charge(merchantName, day, amountMinor));
+
+    rows.charges.push(
+      // Two plans of Streamly due on the 5th and the 20th of October: neither came.
+      ...plan("Streamly", ["2026-06-05", "2026-07-05", "2026-08-05", "2026-09-05"], 999),
+      ...plan("Streamly", ["2026-06-20", "2026-07-20", "2026-08-20", "2026-09-20"], 499),
+      // Two plans of Fitclub whose prices both rose in October.
+      ...plan("Fitclub", ["2026-07-03", "2026-08-03", "2026-09-03"], 2900),
+      charge("Fitclub", "2026-10-03", 3200),
+      ...plan("Fitclub", ["2026-07-17", "2026-08-17", "2026-09-17"], 1500),
+      charge("Fitclub", "2026-10-17", 1700),
+    );
+
+    const keys = async () => {
+      const { flags } = await run(monthFlags("ada", "2026-10", "EUR"), rows, TODAY, []);
+
+      return flags.flatMap((flag) =>
+        flag.kind === "stopped" || flag.kind === "price-rise"
+          ? [`${flag.kind}:${flag.merchant}:${flag.subscriptionId}`]
+          : [],
+      );
+    };
+
+    const first = await keys();
+
+    expect(first.filter((key) => key.startsWith("stopped:Streamly:"))).toHaveLength(2);
+    expect(first.filter((key) => key.startsWith("price-rise:Fitclub:"))).toHaveLength(2);
+    expect(new Set(first).size).toBe(4);
+    // The same rows read again give the same ids.
+    expect(await keys()).toEqual(first);
   });
 });
 
