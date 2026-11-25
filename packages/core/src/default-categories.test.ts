@@ -213,14 +213,29 @@ describe("the untouched defaults, in the user's language", () => {
     // A first page in English, the set's language: nothing to rename, nothing renamed back.
     expect(renamesInto(rows, "en")).toEqual([]);
 
-    // In French: the untouched ones are renamed; the user's two kept, with the children of theirs.
+    // In French: the user's two kept; the untouched ones renamed, the children of the top-level
+    // category the user named in French among them.
     const renames = renamed(rows, "fr");
 
     expect(renames.has("expense/Groceries")).toBe(false);
-    expect(renames.has("expense/Groceries/Supermarket")).toBe(false);
+    expect(renames.get("expense/Groceries/Supermarket")).toBe("Supermarché");
     expect(renames.has("expense/Health/Pharmacy")).toBe(false);
     expect(renames.get("expense/Health")).toBe("Santé");
     expect(renames.get("expense/Health/Doctor")).toBe("Médecin");
+  });
+
+  test("the untouched children of a top-level category the user translated are translated", () => {
+    // The English set; the user named Groceries in French before their first page, in French.
+    const rows = heldSet("en").map((row) =>
+      row.id === "expense/Groceries" ? { ...row, name: "Courses" } : row,
+    );
+
+    const renames = renamed(rows, "fr");
+
+    expect(renames.has("expense/Groceries")).toBe(false);
+    expect(renames.get("expense/Groceries/Supermarket")).toBe("Supermarché");
+    expect(renames.get("expense/Groceries/Market")).toBe("Marché");
+    expect(renames.get("expense/Groceries/Bakery")).toBe("Boulangerie");
   });
 
   test("in a set made in French, a name given in English stays", () => {

@@ -268,15 +268,15 @@ export type DefaultRename = { readonly id: string; readonly name: string };
 
 const LANGUAGES: ReadonlyArray<SetLanguage> = ["en", "fr"];
 
+const named = (slot: DefaultName, name: string) =>
+  LANGUAGES.some((language) => slot[language] === name);
+
 /**
- * The live categories that sit where the set put them with a name `named` accepts, each with its
- * place in the set: a top-level category at the top of its kind (a fallback only as its kind's
- * fallback), a child under such a top-level category.
+ * The live categories that sit where the set put them, named as the set names them in one of its
+ * languages, each with its place in the set: a top-level category at the top of its kind (a
+ * fallback only as its kind's fallback), a child under such a top-level category.
  */
-function placed(
-  live: ReadonlyArray<HeldCategory>,
-  named: (slot: DefaultName, name: string) => boolean,
-) {
+function placed(live: ReadonlyArray<HeldCategory>) {
   const tops = live.flatMap((row) => {
     const slot =
       row.parentId === null
@@ -307,10 +307,8 @@ function placed(
  * one more of the defaults where the set put them are named in, a name both languages share telling
  * nothing. None when as many are named in each: what the user renamed cannot be told then.
  */
-function languageOfSet(live: ReadonlyArray<HeldCategory>): SetLanguage | undefined {
-  const inPlace = placed(live, (slot, name) => LANGUAGES.some((each) => slot[each] === name));
-
-  const named = LANGUAGES.map((language) => ({
+function languageOfSet(inPlace: ReturnType<typeof placed>): SetLanguage | undefined {
+  const counted = LANGUAGES.map((language) => ({
     language,
     count: inPlace.filter(
       ({ row, slot }) =>
@@ -319,7 +317,7 @@ function languageOfSet(live: ReadonlyArray<HeldCategory>): SetLanguage | undefin
     ).length,
   })).toSorted((a, b) => b.count - a.count);
 
-  const [first, second] = named;
+  const [first, second] = counted;
 
   return first === undefined || first.count === (second?.count ?? 0) ? undefined : first.language;
 }
@@ -328,23 +326,24 @@ function languageOfSet(live: ReadonlyArray<HeldCategory>): SetLanguage | undefin
  * What renames a user's untouched defaults into `language`. A default is untouched while it sits
  * where the set put it, not archived, with the name the set gave it in the language it was written
  * in (`languageOfSet`): a top-level category at the top of its kind (a fallback only as its kind's
- * fallback), a child under an untouched top-level category of the set. What the user renamed (to
- * the other language's name too), moved or archived is theirs, and so are the children of a
- * top-level category they renamed. A name a sibling already holds (letter case aside) is left as
- * it is.
+ * fallback), a child under a top-level category of the set, named in either language. What the user
+ * renamed (to the other language's name too), moved or archived is theirs, and so are the children
+ * of a top-level category they gave a name of their own. A name a sibling already holds (letter
+ * case aside) is left as it is.
  */
 export function renamesInto(
   rows: ReadonlyArray<HeldCategory>,
   language: SetLanguage,
 ): ReadonlyArray<DefaultRename> {
-  const live = rows.filter((row) => !row.archived);
-  const written = languageOfSet(live);
+  const inPlace = placed(rows.filter((row) => !row.archived));
+  const written = languageOfSet(inPlace);
 
   if (written === undefined) {
     return [];
   }
 
-  const untouched = placed(live, (slot, name) => slot[written] === name);
+  // A child under a top-level category the user named in the other language is still the set's.
+  const untouched = inPlace.filter(({ row, slot }) => slot[written] === row.name);
 
   // The names each set of siblings holds, as the renames change them.
   const siblingsOf = (row: HeldCategory) => `${row.kind}/${row.parentId ?? ""}`;
