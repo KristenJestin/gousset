@@ -130,6 +130,125 @@ test.describe("CategoryPicker", () => {
   });
 });
 
+const formsStory = (component: string, name: string) =>
+  `/iframe.html?id=forms-${component}--${name}&viewMode=story`;
+
+test.describe("ColorSwatches (#205)", () => {
+  test("chooses a colour by its name, with the arrow keys too", async ({ page }) => {
+    await page.goto(formsStory("colorswatches", "default"));
+
+    const group = page.getByRole("radiogroup", { name: "Colour" });
+
+    await expect(group.getByRole("radio")).toHaveCount(12);
+    await expect(group.getByRole("radio", { name: "Green" })).toBeChecked();
+    await group.getByRole("radio", { name: "Blue" }).click();
+    await expect(page.getByTestId("chosen")).toHaveText("Chosen: blue");
+    await page.keyboard.press("ArrowRight");
+    await expect(page.getByTestId("chosen")).toHaveText("Chosen: indigo");
+  });
+
+  test("offers no colour first, standing for the parent's", async ({ page }) => {
+    await page.goto(formsStory("colorswatches", "parentscolour"));
+
+    const none = page.getByRole("radio", { name: "As Housing" });
+
+    await expect(page.getByRole("radiogroup", { name: "Colour" }).getByRole("radio")).toHaveCount(
+      13,
+    );
+    await expect(none).toBeChecked();
+    await page.getByRole("radio", { name: "Pink" }).click();
+    await none.click();
+    await expect(page.getByTestId("chosen")).toHaveText("Chosen: none");
+  });
+
+  test("names its colours in French", async ({ page }) => {
+    await page.goto(formsStory("colorswatches", "french"));
+    await expect(page.getByRole("radio", { name: "Bleu canard" })).toBeChecked();
+  });
+
+  test("the chosen swatch's ring fades in 150 ms, and not under reduced motion", async ({
+    page,
+  }) => {
+    await page.goto(formsStory("colorswatches", "default"));
+
+    const chosen = page.getByRole("radio", { name: "Green" });
+
+    await expect(chosen).toHaveCSS("transition-duration", "0.15s");
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await expect(chosen).toHaveCSS("transition-duration", "0s");
+  });
+});
+
+test.describe("CategoryIconChoice (#205)", () => {
+  test("chooses an icon by what it means, drawn in the category's colour", async ({ page }) => {
+    await page.goto(formsStory("categoryiconchoice", "default"));
+
+    const group = page.getByRole("radiogroup", { name: "Icon" });
+
+    await expect(group.getByRole("radio", { name: "Groceries" })).toBeChecked();
+    await group.getByRole("radio", { name: "Bakery" }).click();
+    await expect(page.getByTestId("chosen")).toHaveText("Chosen: bakery");
+    await expect(group.getByRole("radio", { name: "Bakery" })).toHaveClass(
+      /data-checked:text-palette-green/,
+    );
+  });
+
+  test("its tiles' colours change in 150 ms, and not under reduced motion", async ({ page }) => {
+    await page.goto(formsStory("categoryiconchoice", "default"));
+
+    const tile = page.getByRole("radio", { name: "Bakery" });
+
+    await expect(tile).toHaveCSS("transition-duration", "0.15s");
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await expect(tile).toHaveCSS("transition-duration", "0s");
+  });
+});
+
+test.describe("A category's colour where it is named (#205)", () => {
+  test("tints its tile in the settings' tree; a child takes its parent's", async ({ page }) => {
+    await page.goto(story("categorytree", "default"));
+
+    const tile = (name: string) =>
+      page
+        .locator('[data-slot="category-row"]')
+        .filter({ hasText: new RegExp(`^${name}`) })
+        .locator('[data-slot="category-icon"]');
+
+    await expect(tile("Housing")).toHaveAttribute("data-color", "blue");
+    await expect(tile("Rent")).toHaveAttribute("data-color", "blue");
+    await expect(tile("Energy")).toHaveAttribute("data-color", "amber");
+    // None: a neutral tile, `other`'s drawing.
+    await expect(tile("Other")).not.toHaveAttribute("data-color");
+    await expect(tile("Other")).toHaveAttribute("data-icon", "other");
+  });
+
+  test("draws the picker's choices and the chosen one in their colours", async ({ page }) => {
+    await page.goto(story("categorypicker", "chosen"));
+
+    // The chosen one's icon, before the input, in its colour.
+    await expect(page.locator('[data-icon="bakery"][data-color="green"]').first()).toBeVisible();
+    await page.getByRole("button", { name: "Show the options" }).click();
+    await expect(
+      page.getByRole("option", { name: "Housing › Energy" }).locator('[data-color="amber"]'),
+    ).toBeVisible();
+  });
+
+  test("draws a breakdown row's icon and bar in its colour", async ({ page }) => {
+    await page.goto("/iframe.html?id=money-breakdown--default&viewMode=story");
+
+    const housing = page.locator("li").filter({ hasText: "Housing" });
+
+    await expect(housing.locator('[data-slot="breakdown-icon"]')).toHaveAttribute(
+      "data-color",
+      "blue",
+    );
+    await expect(housing.locator('[data-slot="breakdown-fill"]')).toHaveAttribute(
+      "data-color",
+      "blue",
+    );
+  });
+});
+
 test.describe("LineDetail with its category", () => {
   test("shows the picker first, with the line's category", async ({ page }) => {
     await page.goto("/iframe.html?id=operations-linedetail--with-category&viewMode=story");

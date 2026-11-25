@@ -18,6 +18,7 @@ import { controlClasses, groupFocusRing, itemClasses, popupClasses } from "../li
 import type { UiMessages } from "../lib/messages";
 import { cn } from "../lib/utils";
 import { Icon } from "./icon";
+import { ChoiceIcon } from "./select";
 import type { ChoiceItem } from "./select";
 import { FormField } from "./text-field";
 import type { FieldProps } from "./text-field";
@@ -136,7 +137,7 @@ function ChoiceRow({ item }: { item: ChoiceItem }) {
     >
       {item.icon === undefined ? null : (
         <ComboboxItemIcon className="flex text-muted-foreground">
-          <Icon name={item.icon} />
+          <ChoiceIcon item={{ ...item, icon: item.icon }} />
         </ComboboxItemIcon>
       )}
       <span className="flex-1 truncate">{item.label}</span>

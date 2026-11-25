@@ -8,6 +8,8 @@ import { usePageLanguage } from "../hooks/use-page-language";
 import { breakdownBars, formatMoney } from "../lib/money";
 import type { BreakdownBar, Money } from "../lib/money";
 import { transition } from "../lib/motion";
+import { paletteFill, paletteText } from "../lib/palette";
+import type { PaletteColor } from "../lib/palette";
 import { cn } from "../lib/utils";
 import { Amount } from "./amount";
 import { Delta } from "./delta";
@@ -21,6 +23,11 @@ export type BreakdownRow = {
   /** The user's name for it: a category, a merchant, a subject. */
   name: string;
   icon?: IconName;
+  /**
+   * Its colour (a category's, #205): its icon and its bar are drawn in it. Without one, the icon
+   * is muted and the bar is spent's colour.
+   */
+  color?: PaletteColor | null;
   amount: Money;
   /**
    * The benchmark this month is held against (its 6-month average, or an amount the user set):
@@ -61,7 +68,25 @@ export type BreakdownProps = {
   footnote?: string;
 };
 
-function RowBar({ bar }: { bar: BreakdownBar }) {
+/** A row's icon, in its colour when it has one. */
+function RowIcon({ row }: { row: BreakdownRow }) {
+  return (
+    <span
+      data-slot="breakdown-icon"
+      data-color={row.color ?? undefined}
+      className={cn(
+        "flex size-4 shrink-0",
+        row.color === undefined || row.color === null
+          ? "text-muted-foreground"
+          : paletteText[row.color],
+      )}
+    >
+      {row.icon === undefined ? null : <Icon name={row.icon} />}
+    </span>
+  );
+}
+
+function RowBar({ bar, color }: { bar: BreakdownBar; color: PaletteColor | null }) {
   const width = useAnimatedPercent(bar.width);
 
   return (
@@ -77,7 +102,8 @@ function RowBar({ bar }: { bar: BreakdownBar }) {
         height="8"
         rx="4"
         width={width}
-        className="fill-money-spent"
+        data-color={color ?? undefined}
+        className={color === null ? "fill-money-spent" : paletteFill[color]}
       />
       {bar.mark === null ? null : (
         <motion.rect
@@ -108,9 +134,7 @@ function RowContent({
 
   return (
     <>
-      <span className="flex size-4 shrink-0 text-muted-foreground">
-        {row.icon === undefined ? null : <Icon name={row.icon} />}
-      </span>
+      <RowIcon row={row} />
       <span className="flex w-28 shrink-0 items-center gap-1 text-sm">
         <span className="truncate">{row.name}</span>
         {bar.over ? (
@@ -119,7 +143,7 @@ function RowContent({
           </span>
         ) : null}
       </span>
-      <RowBar bar={bar} />
+      <RowBar bar={bar} color={row.color ?? null} />
       <span className="flex w-20 shrink-0 justify-end">
         <Amount value={row.amount} whole size="sm" locale={locale} />
       </span>
@@ -180,9 +204,7 @@ function DetailPanel({
       onKeyDown={onKeyDown}
     >
       <div className="flex h-8 items-center gap-3">
-        <span className="flex size-4 shrink-0 text-muted-foreground">
-          {row.icon === undefined ? null : <Icon name={row.icon} />}
-        </span>
+        <RowIcon row={row} />
         <span className="min-w-0 flex-1 truncate text-sm font-semibold">{row.name}</span>
         {row.benchmark === undefined || benchmarkLabel === undefined ? null : (
           <Delta
@@ -228,7 +250,8 @@ function More({ count, onMore }: { count: number; onMore: (() => void) | undefin
 
 /**
  * Where the money goes (docs/wireframes, screen 1, block 2): one row per category, merchant or
- * subject, each with its icon, its name, a bar on a scale shared by every row, and its amount.
+ * subject, each with its icon, its name, a bar on a scale shared by every row, and its amount. A
+ * row with a colour (a category's, #205) draws its icon and its bar in it; spent's colour else.
  * A dark mark on the bar is its benchmark (the 6-month average, or an amount the user set, read as
  * such); ⚠ once it is passed by any amount; no mark without one. Cut after
  * `limit` rows with "+ N more"; a sentence when there is nothing.
