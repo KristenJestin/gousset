@@ -9,7 +9,8 @@ import type { IconName } from "./icon";
 
 // The app's frame (docs/wireframes, every screen; `mobile` for the phone). From 768 px a sidebar:
 // narrow (icons) up to 1024 px, then wide (labels, the wordmark beside the mark). Below 768 px a
-// tab bar at the bottom. The links are plain anchors here; the app makes them router links with
+// tab bar at the bottom, reaching the screen's edge, its tabs above an installed app's home
+// indicator (`pb-safe`). The links are plain anchors here; the app makes them router links with
 // TanStack Router's `createLink`, which marks the current one `aria-current="page"`.
 
 export type AppShellProps = {
@@ -51,10 +52,10 @@ export function AppShell({
         </nav>
         <div className="flex flex-col gap-1">{footer}</div>
       </aside>
-      <div className="flex min-w-0 flex-1 flex-col pb-16 md:pb-0">{children}</div>
+      <div className="flex min-w-0 flex-1 flex-col pb-safe-16 md:pb-0">{children}</div>
       <nav
         aria-label={navigationLabel}
-        className="fixed inset-x-0 bottom-0 z-10 flex h-16 items-stretch justify-around border-t bg-sidebar px-2 md:hidden"
+        className="fixed inset-x-0 bottom-0 z-10 box-content flex h-16 items-stretch justify-around border-t bg-sidebar px-2 pb-safe md:hidden"
       >
         {tabBar}
       </nav>
@@ -232,8 +233,13 @@ export type PageProps = {
   title: string;
   /** A sentence under the title, about the whole screen ("Made-up data…"). */
   description?: string;
-  /** Beside the title: the month switcher of a month's screen, a screen's main action. */
+  /** Beside the title: a screen's main action. */
   actions?: ReactNode;
+  /**
+   * The month switcher of a month's screen: beside the title on a wide screen; on a phone across
+   * the screen under it, a line of its own (the `mobile` wireframe).
+   */
+  month?: ReactNode;
   children: ReactNode;
 };
 
@@ -241,7 +247,7 @@ export type PageProps = {
  * A screen of the app: its title and the sentence under it, what sits beside them, then its
  * blocks one under the other.
  */
-export function Page({ title, description, actions, children }: PageProps) {
+export function Page({ title, description, actions, month, children }: PageProps) {
   return (
     <main className="mx-auto flex w-full max-w-6xl flex-1 flex-col gap-6 p-4 md:p-8">
       <header className="flex min-h-9 flex-wrap items-center justify-between gap-3">
@@ -251,6 +257,7 @@ export function Page({ title, description, actions, children }: PageProps) {
             <p className="text-sm text-muted-foreground">{description}</p>
           )}
         </div>
+        {month === undefined ? null : <div className="flex max-md:w-full">{month}</div>}
         {actions === undefined ? null : <div className="flex items-center gap-2">{actions}</div>}
       </header>
       {children}

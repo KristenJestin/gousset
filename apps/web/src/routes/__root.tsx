@@ -13,6 +13,7 @@ import { m } from "@gousset/i18n/messages";
 import { getLocale } from "@gousset/i18n/runtime";
 import { Toaster } from "@gousset/ui/components/toaster";
 import { ThemeProvider } from "@gousset/ui/components/theme-provider";
+import { THEME_COLORS, themeColorMetas } from "@gousset/ui/lib/theme-color";
 
 import { getViewer } from "@/functions/viewer";
 
@@ -44,32 +45,49 @@ export const Route = createRootRouteWithContext<RouterContext>()({
 
     return { viewer };
   },
-  head: () => ({
-    meta: [
-      {
-        // oxlint-disable-next-line unicorn/text-encoding-identifier-case -- HTML names it "utf-8".
-        charSet: "utf-8",
-      },
-      {
-        name: "viewport",
-        content: "width=device-width, initial-scale=1",
-      },
-      {
-        title: m.appName(),
-      },
-    ],
-    links: [
-      {
-        rel: "stylesheet",
-        href: appCss,
-      },
-      // The brand (brand/README.md): the tab, the iOS home screen and the installed app.
-      { rel: "icon", href: "/favicon.ico", sizes: "32x32" },
-      { rel: "icon", href: "/favicon.svg", type: "image/svg+xml" },
-      { rel: "apple-touch-icon", href: "/apple-touch-icon.png" },
-      { rel: "manifest", href: "/manifest.webmanifest" },
-    ],
-  }),
+  head: ({ match }) => {
+    const chosen = match.context.viewer.user?.colorScheme;
+
+    return {
+      meta: [
+        {
+          // oxlint-disable-next-line unicorn/text-encoding-identifier-case -- HTML names it "utf-8".
+          charSet: "utf-8",
+        },
+        {
+          // The page reaches the screen's edges, under an installed app's home indicator: what
+          // runs along an edge keeps clear of it (`pb-safe` and the like, globals.css).
+          name: "viewport",
+          content: "width=device-width, initial-scale=1, viewport-fit=cover",
+        },
+        {
+          title: m.appName(),
+        },
+        // The browser's bars take the page's background: the system's scheme's, or the scheme
+        // the account keeps from the first paint (`followThemeColor` keeps them in step after).
+        ...themeColorMetas().map((meta) =>
+          chosen === undefined || chosen === "system"
+            ? meta
+            : { ...meta, content: THEME_COLORS[chosen] },
+        ),
+        // Installed on a phone's home screen (the manifest, below): its own window and its name.
+        { name: "mobile-web-app-capable", content: "yes" },
+        { name: "apple-mobile-web-app-capable", content: "yes" },
+        { name: "apple-mobile-web-app-title", content: m.appName() },
+      ],
+      links: [
+        {
+          rel: "stylesheet",
+          href: appCss,
+        },
+        // The brand (brand/README.md): the tab, the iOS home screen and the installed app.
+        { rel: "icon", href: "/favicon.ico", sizes: "32x32" },
+        { rel: "icon", href: "/favicon.svg", type: "image/svg+xml" },
+        { rel: "apple-touch-icon", href: "/apple-touch-icon.png" },
+        { rel: "manifest", href: "/manifest.webmanifest" },
+      ],
+    };
+  },
 
   component: RootDocument,
 });

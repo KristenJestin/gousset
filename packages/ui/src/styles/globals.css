@@ -329,6 +329,23 @@
   grid-template-columns: minmax(0, 1fr) 5.5rem 7rem 11rem;
 }
 
+/* A phone's own edges (#36). The page reaches under them (`viewport-fit=cover`): an installed
+   app's home indicator along the bottom, a notch at a side in landscape. What runs along the
+   bottom edge keeps its content above the indicator, its surface under it: the tab bar, a sheet,
+   a dialog rising there, and the page's end, which scrolls clear of the tab bar. Each inset is 0
+   in a browser's tab and on a screen without them. */
+@utility pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+@utility pb-safe-6 {
+  padding-bottom: calc(var(--spacing) * 6 + env(safe-area-inset-bottom, 0px));
+}
+
+@utility pb-safe-16 {
+  padding-bottom: calc(var(--spacing) * 16 + env(safe-area-inset-bottom, 0px));
+}
+
 @layer base {
   * {
     @apply border-border outline-ring;
@@ -345,6 +362,9 @@
 
   body {
     @apply bg-background text-foreground;
+
+    /* A phone held sideways: its notch on either side. */
+    padding-inline: env(safe-area-inset-left, 0px) env(safe-area-inset-right, 0px);
   }
 
   ::selection {

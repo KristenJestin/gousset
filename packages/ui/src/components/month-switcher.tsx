@@ -35,7 +35,9 @@ const slide = {
  * ‹ October 2026 ›: the month on screen, with the previous and next months a press away. The
  * month is written in the page's language (`<html lang>`). Next is disabled on the latest month,
  * Previous on the earliest one when it is given.
- * With the focus on either button, the Left and Right arrows move too.
+ * With the focus on either button, the Left and Right arrows move too. On a phone it spans the
+ * row it sits in, its arrows at the row's ends and the month between them (the `mobile`
+ * wireframe), as a `Page`'s `month` gives it a line of its own.
  *
  * Motion: the label slides out and the new one slides in from the side it comes from, 200 ms,
  * easing out; cut under reduced motion.
@@ -91,7 +93,7 @@ export function MonthSwitcher({
       role="group"
       aria-label={name ?? messages.pieces.month}
       data-slot="month-switcher"
-      className="inline-flex items-center gap-1"
+      className="inline-flex items-center gap-1 max-md:flex-1 max-md:justify-between"
       onKeyDown={onKeyDown}
     >
       <IconButton

@@ -32,7 +32,8 @@ export const popupClasses = cn(
  * ease-out, and leaving the same way in 150 ms, ease-in. On a phone (below Tailwind's `md`, where
  * the app's tab bar shows) a sheet: along the bottom edge, its whole width, its top corners
  * rounded, rising from that edge in 300 ms, ease-out, and going back down in 200 ms, ease-in; its
- * edge then shows only on the side facing the page. It scrolls as a whole, its padding inside the
+ * edge then shows only on the side facing the page, its content above an installed app's home
+ * indicator. It scrolls as a whole, its padding inside the
  * scroller, and keeps 4 px around a field scrolled into view, so a focused field's ring (2 px,
  * 2 px away) is never clipped (#122).
  */
@@ -49,6 +50,7 @@ export const dialogClasses = cn(
   "max-md:duration-300 max-md:data-ending-style:duration-200",
   "max-md:inset-x-0 max-md:top-auto max-md:bottom-0 max-md:mx-0 max-md:mb-0",
   "max-md:max-h-11/12 max-md:max-w-none max-md:rounded-b-none max-md:border-x-0 max-md:border-b-0",
+  "max-md:pb-safe-6",
   "max-md:data-starting-style:translate-y-full max-md:data-ending-style:translate-y-full",
 );
 
@@ -56,7 +58,8 @@ export const dialogClasses = cn(
  * A side sheet: along the right edge, its whole height, 440 px wide, its edge on the side facing
  * the page; it slides in from beyond that edge in 300 ms, ease-out, and back out in 200 ms,
  * ease-in. On a phone a bottom sheet, as a dialog is there: its whole width, its top corners
- * rounded, rising from the bottom edge the same way. Under reduced motion it never stands off its
+ * rounded, rising from the bottom edge the same way, its content above an installed app's home
+ * indicator. Under reduced motion it never stands off its
  * edge, not even for the first frame: it is there, or not. Its parts (`Sheet`) carry their own
  * padding, the scrolling body's inside the scroller.
  */
@@ -68,7 +71,7 @@ export const sheetClasses = cn(
   "md:w-110 md:max-w-full md:rounded-l-lg md:border-y-0 md:border-r-0",
   "md:motion-safe:data-starting-style:translate-x-full md:motion-safe:data-ending-style:translate-x-full",
   // A phone: from the bottom edge.
-  "max-md:top-auto max-md:left-0 max-md:max-h-11/12 max-md:rounded-t-xl max-md:border-x-0 max-md:border-b-0",
+  "max-md:top-auto max-md:left-0 max-md:max-h-11/12 max-md:rounded-t-xl max-md:border-x-0 max-md:border-b-0 max-md:pb-safe",
   "max-md:motion-safe:data-starting-style:translate-y-full max-md:motion-safe:data-ending-style:translate-y-full",
 );
 
