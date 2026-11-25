@@ -482,6 +482,65 @@ describe("monthSummary", () => {
     expect(overspent.restricted.minor).toBe(0);
   });
 
+  test("a maybe refund on a benefit card is no more restricted than it is received", async () => {
+    const { rows, current, salary, groceries } = household();
+    const meals = account(rows, "Meal card", "benefit");
+
+    entry(rows, {
+      kind: "income",
+      category: salary,
+      account: current,
+      day: "2026-10-01",
+      minor: 100_000,
+    });
+    entry(rows, {
+      kind: "income",
+      category: salary,
+      account: meals,
+      day: "2026-10-02",
+      minor: 10_000,
+    });
+    entry(rows, {
+      category: groceries,
+      account: meals,
+      day: "2026-10-03",
+      minor: 3000,
+      label: "CARD BISTRO EXEMPLE",
+    });
+
+    const back = entry(rows, {
+      kind: "income",
+      category: salary,
+      account: meals,
+      day: "2026-10-04",
+      minor: 3000,
+      label: "CARD BISTRO EXEMPLE",
+    });
+
+    rows.maybeRefunds.push(back);
+
+    for (const [id, bookedOn, amountMinor] of [
+      ["credit", "2026-10-02", 10_000],
+      ["meal", "2026-10-03", -3000],
+      [back, "2026-10-04", 3000],
+    ] as const) {
+      rows.benefitLines.push({
+        accountId: meals.id,
+        id,
+        bookedOn,
+        amountMinor,
+        label: "MEALS",
+        expiresOn: null,
+      });
+    }
+
+    const summary = await run(monthSummary("ada", "2026-10", "EUR"), rows);
+
+    // Left counts 107,000, of which 7,000 sits on the card: the 30.00 back waits apart.
+    expect(summary.left.minor).toBe(107_000);
+    expect(summary.restricted.minor).toBe(7000);
+  });
+
   test("a month to come is refused", async () => {
     const error = await run(Effect.flip(monthSummary("ada", "2026-12", "EUR")), draft());
 

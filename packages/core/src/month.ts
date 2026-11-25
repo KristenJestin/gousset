@@ -671,9 +671,12 @@ function summaryOf(reading: Reading): MonthSummary {
   const own = (sums: ReadonlyMap<string, number>) => sums.get(currency) ?? 0;
   const left = own(received) - own(spent) - own(setAside);
   let onBenefit = 0;
+  // A line that may be a refund is not in left (#208): nor is it in its restricted part.
+  const waitingLines = new Set(reading.rows.maybeRefunds);
 
   for (const line of reading.rows.benefitLines) {
     if (
+      !waitingLines.has(line.id) &&
       line.bookedOn.slice(0, 7) === month &&
       reading.accounts.get(line.accountId)?.currency === currency
     ) {
