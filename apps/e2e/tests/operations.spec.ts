@@ -726,11 +726,17 @@ async function sampleBoxes(page: Page, selector: string, text = "") {
 }
 
 /**
- * Samples, each animation frame until `window.__e2eStop`, the detail beside the list: its
- * column's width from the column's first frame, its content's opacity (`null` while the content is
- * not there yet: the column can open around the detail's skeleton first, and Firefox was seen to have
- * it halfway open by the content's first frame), and whether the panel or its content carries a
- * scale. Install before the press that opens it.
+ * Samples the detail beside the list. As each of the column and its content comes into the page,
+ * before any frame draws it: its width (opacity), and its width's (opacity's) transition, `null`
+ * when none. Then, each animation frame until `window.__e2eStop`: the column's width, its content's
+ * opacity (`null` while there is none) and whether the panel or its content carries a scale.
+ * Install before the press that opens it.
+ *
+ * Why the start is read on insertion, not on a frame: a transition's time runs from the frame that
+ * starts it, whether or not a later frame comes in time. Firefox backdates its start to the frame
+ * that first drew the new column; when the column comes in after that frame's callbacks and the next
+ * frame comes late (the page busy mounting the detail), the first frame a callback sees already has
+ * it halfway open (run 45575520646). Read on insertion, the start cannot be missed.
  */
 async function sampleColumn(page: Page) {
   await page.evaluate(`(() => {
@@ -766,8 +772,69 @@ async function sampleColumn(page: Page) {
       }
     };
 
+    // The element's transition of that property: its first and last values, duration and delay.
+    const transitionOf = (element, property) => {
+      const found = element.getAnimations().find((each) => each.transitionProperty === property);
+
+      if (found === undefined) {
+        return null;
+      }
+
+      const keyframes = found.effect.getKeyframes();
+      const timing = found.effect.getComputedTiming();
+
+      return {
+        from: String(keyframes[0][property]),
+        to: String(keyframes.at(-1)[property]),
+        duration: Number(timing.duration),
+        delay: Number(timing.delay),
+      };
+    };
+
+    window.__e2eOpened = { column: null, content: null };
+
+    // Called once the mutations' task is done, before the next frame: what it reads is what that
+    // frame starts from.
+    const opened = new MutationObserver(() => {
+      const column = document.querySelector('[data-slot="operations-detail"]');
+      const content = document.querySelector('[data-slot="line-detail-content"]');
+
+      if (column !== null && window.__e2eOpened.column === null) {
+        window.__e2eOpened.column = {
+          width: Math.round(column.getBoundingClientRect().width),
+          transition: transitionOf(column, "width"),
+        };
+      }
+
+      if (content !== null && window.__e2eOpened.content === null) {
+        window.__e2eOpened.content = {
+          opacity: Number(getComputedStyle(content).opacity),
+          transition: transitionOf(content, "opacity"),
+        };
+      }
+
+      if (window.__e2eOpened.column !== null && window.__e2eOpened.content !== null) {
+        opened.disconnect();
+      }
+    });
+
+    opened.observe(document.body, { childList: true, subtree: true });
     requestAnimationFrame(sample);
   })()`);
+
+  const Transition = Schema.NullOr(
+    Schema.Struct({
+      from: Schema.String,
+      to: Schema.String,
+      duration: Schema.Number,
+      delay: Schema.Number,
+    }),
+  );
+
+  const Opened = Schema.Struct({
+    column: Schema.NullOr(Schema.Struct({ width: Schema.Number, transition: Transition })),
+    content: Schema.NullOr(Schema.Struct({ opacity: Schema.Number, transition: Transition })),
+  });
 
   const Frames = Schema.Array(
     Schema.Struct({
@@ -779,6 +846,7 @@ async function sampleColumn(page: Page) {
 
   return {
     read: async () => Schema.decodeUnknownSync(Frames)(await page.evaluate("window.__e2eColumn")),
+    opened: async () => Schema.decodeUnknownSync(Opened)(await page.evaluate("window.__e2eOpened")),
     stop: () => page.evaluate("window.__e2eStop = true"),
   };
 }
@@ -821,7 +889,11 @@ for (const reduced of [false, true]) {
     expect(seen.filter((frame) => frame.scaled)).toEqual([]);
 
     if (reduced) {
-      // There at once, whole: the column at its width, the content opaque from its first frame.
+      // There at once, whole: the column at its width, the content opaque, neither moving.
+      expect(await frames.opened()).toEqual({
+        column: { width: COLUMN_WIDTH, transition: null },
+        content: { opacity: 1, transition: null },
+      });
       expect(
         seen.filter(
           (frame) =>
@@ -829,11 +901,18 @@ for (const reduced of [false, true]) {
         ),
       ).toEqual([]);
     } else {
-      // The column widened from far narrower, and the content faded in.
-      expect(Math.min(...seen.map((frame) => frame.width))).toBeLessThan(COLUMN_WIDTH / 2);
-      expect(
-        seen.some((frame) => frame.opacity !== null && frame.opacity > 0 && frame.opacity < 1),
-      ).toBe(true);
+      // The column widens from nothing in 300 ms; the content, hidden, fades in after 120 ms of it,
+      // in 180 ms (`OperationsLayout`, `LineDetail`).
+      expect(await frames.opened()).toEqual({
+        column: {
+          width: 0,
+          transition: { from: "0px", to: `${COLUMN_WIDTH}px`, duration: 300, delay: 0 },
+        },
+        content: {
+          opacity: 0,
+          transition: { from: "0", to: "1", duration: 180, delay: 120 },
+        },
+      });
     }
 
     await animationsDone(page);
