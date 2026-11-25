@@ -71,6 +71,7 @@ import { dayRange, longDay, shortDay, shortDays } from "@/lib/account-day";
 import { categoryPath, choicesOf } from "@/lib/categories";
 import { aDialogIsOpen } from "@/lib/dialog-open";
 import { loadBlocks } from "@/lib/load-blocks";
+import { merchantAvatar } from "@/lib/merchant-logo";
 import {
   OperationsSearch,
   filtersKey,
@@ -479,6 +480,7 @@ function Operations() {
               label={m.operationsTitle()}
               emptyText={m.operationsNoMatch()}
               locale={locale}
+              withAvatars
               withCategory
               foldingId={foldingId}
             />
@@ -586,6 +588,7 @@ function toRow(
     amount: line.amount,
     toReview: line.toReview,
     category: line.category === null ? undefined : categoryPath(line.category),
+    avatar: line.merchant === null ? undefined : merchantAvatar(line.merchant),
   };
 }
 
@@ -760,6 +763,7 @@ function LineMerchantOf({ line, onRuleJob }: { line: Line; onRuleJob: (jobId: st
     <>
       <LineMerchant
         merchant={merchant?.name ?? null}
+        avatar={merchant === null || asks ? undefined : merchantAvatar(merchant)}
         intermediary={intermediary?.name ?? null}
         asks={asks}
         // An intermediary is never who was paid: the server refuses it.

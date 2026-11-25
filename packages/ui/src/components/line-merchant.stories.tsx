@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import { useState } from "react";
 
 import { InFrench } from "../stories/in-french";
+import { MADE_UP_LOGO } from "../stories/made-up";
 import { LineMerchant } from "./line-merchant";
 import type { LineMerchantProps } from "./line-merchant";
 
@@ -90,6 +91,21 @@ export const Plain: Story = {
 /** Paid through PayPal to Pixelplay, as the user said: "Change" opens the dialog again. */
 export const Assigned: Story = {
   args: { merchant: "Pixelplay", asks: false },
+};
+
+/** A direct payment to a merchant with a logo (#204): its logo before its name. */
+export const WithLogo: Story = {
+  args: {
+    merchant: "Greenmarket",
+    avatar: { name: "Greenmarket", src: MADE_UP_LOGO },
+    intermediary: null,
+    asks: false,
+  },
+};
+
+/** Paid through PayPal to a merchant without a logo: its initials on the colour picked. */
+export const WithInitials: Story = {
+  args: { merchant: "Pixelplay", avatar: { name: "Pixelplay", color: "violet" }, asks: false },
 };
 
 /**

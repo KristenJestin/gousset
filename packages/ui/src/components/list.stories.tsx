@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 
+import { MADE_UP_LOGO } from "../stories/made-up";
 import { Button } from "./button";
 import { Card } from "./card";
 import { EmptyState } from "./empty-state";
@@ -117,6 +118,43 @@ export const Links: Story = {
       </List>
     </Card>
   ),
+};
+
+/**
+ * Rows that name someone with a face (a merchant, #204): its logo, or its initials on its colour,
+ * 32 px before its name. The avatar is hidden from screen readers: the name says it.
+ */
+export const LinksWithAvatars: Story = {
+  render: () => (
+    <Card title="Merchants">
+      <List label="Merchants">
+        <ListLinkItem
+          href="#greenmarket"
+          title="Greenmarket"
+          description="3 labels"
+          avatar={{ name: "Greenmarket", src: MADE_UP_LOGO }}
+        />
+        <ListLinkItem
+          href="#harbor-books"
+          title="Harbor Books"
+          description="1 label"
+          avatar={{ name: "Harbor Books", color: "teal" }}
+        />
+        <ListLinkItem
+          href="#paylink"
+          title="Paylink"
+          description="2 labels · payment intermediary"
+          avatar={{ name: "Paylink" }}
+        />
+      </List>
+    </Card>
+  ),
+};
+
+/** The same rows on a phone: a long name gives way, never the avatar. */
+export const LinksWithAvatarsOnPhone: Story = {
+  ...LinksWithAvatars,
+  globals: { viewport: { value: "mobile1", isRotated: false } },
 };
 
 /**

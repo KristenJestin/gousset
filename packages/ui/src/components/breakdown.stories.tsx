@@ -3,7 +3,13 @@ import { useState } from "react";
 
 import { useHydrated } from "../hooks/use-hydrated";
 import { InFrench } from "../stories/in-french";
-import { CATEGORIES, DAILY_SPENDING, MERCHANTS, PREVIOUS_CATEGORIES } from "../stories/made-up";
+import {
+  CATEGORIES,
+  DAILY_SPENDING,
+  MADE_UP_LOGO,
+  MERCHANTS,
+  PREVIOUS_CATEGORIES,
+} from "../stories/made-up";
 import type { MadeUpCategory } from "../stories/made-up";
 import { Breakdown, BreakdownFigures, BreakdownSkeleton } from "./breakdown";
 import type { BreakdownRow } from "./breakdown";
@@ -173,6 +179,33 @@ export const Merchants: Story = {
       icon: "merchant",
       amount: merchant.spent,
     })),
+  },
+};
+
+/**
+ * Merchants with their faces (#204): a logo, or initials on their colour, in place of the icon; the
+ * row of the expenses with no merchant keeps its icon, in the same room.
+ */
+export const MerchantsWithAvatars: Story = {
+  args: {
+    rows: [
+      ...MERCHANTS.map((merchant): BreakdownRow => ({
+        id: merchant.id,
+        name: merchant.name,
+        avatar: {
+          name: merchant.name,
+          src: merchant.id === "greenmarket" ? MADE_UP_LOGO : undefined,
+          color: merchant.id === "streamly" ? "red" : null,
+        },
+        amount: merchant.spent,
+      })),
+      {
+        id: "no-merchant",
+        name: "No merchant",
+        icon: "merchant",
+        amount: { minor: 2350, currency: "EUR" },
+      },
+    ],
   },
 };
 

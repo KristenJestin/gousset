@@ -20,7 +20,7 @@ import { openUserData } from "../src/user-data";
 // Issue #30's screens, one test per scenario of "How to verify": a line paid through a payment
 // intermediary asks, on the operations page, who was really paid; the merchant chosen proposes a
 // rule, which gives the next such line its merchant; and a merchant the user marks as an
-// intermediary on its page makes its lines ask. The MCP scenarios are intermediaries-mcp.spec.ts.
+// intermediary in its sheet, on its page (#204), makes its lines ask. The MCP scenarios are intermediaries-mcp.spec.ts.
 // Statements are imported as the app's import job runs them, recognising their merchants. Each test
 // has a user of its own. Every line and shop here is invented but PayPal's name, which Gousset
 // knows.
@@ -241,19 +241,30 @@ test("a merchant marked as an intermediary makes its lines ask", async ({ page, 
   await expect(lineMerchant(page)).toContainText("Paylink");
   await expect(lineMerchant(page).getByRole("button")).toHaveCount(0);
 
-  // Marked on its page: the switch applies at once, and stays so.
+  // Marked on its page, in its sheet (#204): saved, and so it stays.
   const paylink = await merchantId(owner, "Paylink");
 
   await visit(page, `/settings/merchants/${paylink}`);
+  await page.getByRole("button", { name: "Edit", exact: true }).click();
 
-  const marked = page.getByRole("switch", { name: "Payment intermediary" });
+  const sheet = page.getByRole("dialog", { name: "Edit Paylink" });
+  const marked = sheet.getByRole("switch", { name: "Payment intermediary" });
 
   await expect(marked).not.toBeChecked();
-  await expect(page.getByText("Its labels hide who was paid")).toBeVisible();
+  await expect(sheet.getByText("Its labels hide who was paid")).toBeVisible();
   await marked.click();
   await expect(marked).toBeChecked();
+  await sheet.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(sheet).toBeHidden();
+  await expect(page.getByText("1 label · payment intermediary")).toBeVisible();
   await page.reload();
-  await expect(page.getByRole("switch", { name: "Payment intermediary" })).toBeChecked();
+  await page.getByRole("button", { name: "Edit", exact: true }).click();
+  await expect(
+    page
+      .getByRole("dialog", { name: "Edit Paylink" })
+      .getByRole("switch", { name: "Payment intermediary" }),
+  ).toBeChecked();
+  await page.keyboard.press("Escape");
 
   // The merchants' list says so under its name.
   await visit(page, "/settings/merchants");

@@ -22,6 +22,12 @@ export type AvatarProps = {
 };
 
 /**
+ * What a component that names something draws its avatar from, beside the name it shows: the name
+ * the initials come from, the logo and the colour picked.
+ */
+export type AvatarFace = Pick<AvatarProps, "name" | "src" | "color">;
+
+/**
  * A logo, or the name's initials in a colour of the palette on its tint (the palette's tile): the
  * one picked, else the name's automatic one (stable, never random). Decorative: the name sits beside it, so it is hidden from
  * screen readers and the image's `alt` is empty. The image loads lazily; if it fails, the

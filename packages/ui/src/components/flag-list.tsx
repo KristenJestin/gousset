@@ -1,3 +1,5 @@
+import { Avatar } from "./avatar";
+import type { AvatarFace } from "./avatar";
 import { Icon } from "./icon";
 import type { IconName } from "./icons";
 import { Skeleton, SkeletonFrame } from "./skeleton";
@@ -8,6 +10,8 @@ export type FlagRow = {
   icon: IconName;
   /** The sentence, in the page's words: "Streamly goes from €8.99 to €9.49". */
   text: string;
+  /** Who it is about, by logo or initials (a subscription's merchant, #204), after the icon. */
+  avatar?: AvatarFace;
 };
 
 export type FlagListProps = {
@@ -21,7 +25,8 @@ export type FlagListProps = {
 /**
  * What the review points out (docs/wireframes, screen 1, block 6): subscriptions whose price
  * changes or that stop, credits that expire, accounts not imported. One sentence each, after an
- * icon that says its kind; the page writes the sentences. No motion of its own.
+ * icon that says its kind, and the merchant's avatar (24 px, hidden from screen readers) when it is
+ * about one; the page writes the sentences. No motion of its own.
  */
 export function FlagList({ flags, label, emptyText }: FlagListProps) {
   if (flags.length === 0) {
@@ -35,6 +40,14 @@ export function FlagList({ flags, label, emptyText }: FlagListProps) {
           <span className="flex shrink-0 text-muted-foreground">
             <Icon name={flag.icon} size="sm" />
           </span>
+          {flag.avatar === undefined ? null : (
+            <Avatar
+              name={flag.avatar.name}
+              src={flag.avatar.src}
+              color={flag.avatar.color}
+              size="sm"
+            />
+          )}
           <span className="min-w-0">{flag.text}</span>
         </li>
       ))}

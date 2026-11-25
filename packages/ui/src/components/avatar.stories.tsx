@@ -4,13 +4,8 @@ import { hydrateRoot } from "react-dom/client";
 import { renderToString } from "react-dom/server";
 
 import { PALETTE_COLORS } from "../lib/palette";
-import { MERCHANTS } from "../stories/made-up";
+import { MADE_UP_LOGO, MERCHANTS } from "../stories/made-up";
 import { Avatar } from "./avatar";
-
-// A made-up logo, drawn here: no image of a real brand, no request to anyone.
-const MADE_UP_LOGO = `data:image/svg+xml,${encodeURIComponent(
-  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"><rect width="40" height="40" fill="#2f6b4f"/><path d="M12 26c4-10 12-10 16 0" stroke="#fff" stroke-width="3" fill="none" stroke-linecap="round"/></svg>',
-)}`;
 
 const BROKEN = "/made-up-logos/fuelstop.png";
 

@@ -13,6 +13,8 @@ import { transition } from "../lib/motion";
 import { asksNextPage, rowsMark } from "../lib/next-page";
 import { cn } from "../lib/utils";
 import { Amount, AmountSkeleton } from "./amount";
+import { Avatar } from "./avatar";
+import type { AvatarFace } from "./avatar";
 import { Chip } from "./chip";
 import { EmptyState } from "./empty-state";
 import { Loader } from "./loader";
@@ -31,6 +33,8 @@ export type OperationRow = {
   toReview?: boolean;
   /** Its category's name, already worded ("Food › Groceries"); shown with `withCategory`. */
   category?: string;
+  /** Who it paid (#204), by logo or initials before its label; shown with `withAvatars`. */
+  avatar?: AvatarFace;
 };
 
 export type OperationsListProps = {
@@ -53,6 +57,11 @@ export type OperationsListProps = {
   locale?: string;
   /** A "Category" column, on a wide screen, with each row's `category`. */
   withCategory?: boolean;
+  /**
+   * Each row's `avatar` (24 px) before its label; a row with none keeps the room empty, so that the
+   * labels line up.
+   */
+  withAvatars?: boolean;
   /**
    * The line that leaves the rows because it was just reviewed (#35): as it goes, it folds away
    * (its height to 0) rather than fade. Give it before, or with, the rows without it.
@@ -185,6 +194,9 @@ const COLUMN = {
  * under it slide up. Cut under reduced motion. When nothing matches, the rows that were there fade
  * out over the empty state.
  *
+ * With `withAvatars`, who each line paid shows before its label: its logo or initials, 24 px, hidden
+ * from screen readers (the label names it); it does not move but with its row.
+ *
  * The account column shows while the list is at least 576 px wide, the category column while it
  * is at least 768 px wide (container queries): a narrower list gives them up, never the amounts.
  * An open line's detail is a sheet over the list (#182), which keeps its width.
@@ -200,6 +212,7 @@ export function OperationsList({
   emptyText,
   locale,
   withCategory = false,
+  withAvatars = false,
   foldingId,
 }: OperationsListProps) {
   const messages = useUiMessages().operations;
@@ -261,6 +274,7 @@ export function OperationsList({
       row={row}
       open={row.id === openId}
       withCategory={withCategory}
+      withAvatars={withAvatars}
       locale={writtenIn}
       onOpen={onOpen}
       onFocusChange={(focused) => shown.focus(focused ? row.id : null)}
@@ -421,6 +435,7 @@ function RowButton({
   row,
   open,
   withCategory,
+  withAvatars,
   locale,
   onOpen,
   onFocusChange,
@@ -429,6 +444,7 @@ function RowButton({
   row: OperationRow;
   open: boolean;
   withCategory: boolean;
+  withAvatars: boolean;
   locale: string;
   onOpen: (id: string) => void;
   onFocusChange: (focused: boolean) => void;
@@ -453,6 +469,18 @@ function RowButton({
     >
       <span className={cn(COLUMN.day, "text-muted-foreground tabular-nums")}>{row.day}</span>
       <span className={COLUMN.line}>
+        {withAvatars ? (
+          <span className="flex size-6 shrink-0" data-slot="operation-avatar">
+            {row.avatar === undefined ? null : (
+              <Avatar
+                name={row.avatar.name}
+                src={row.avatar.src}
+                color={row.avatar.color}
+                size="sm"
+              />
+            )}
+          </span>
+        ) : null}
         <span className="truncate">{row.label}</span>
         {row.toReview === true ? (
           // The label gives way, never the chip: a narrow row truncates the label alone.

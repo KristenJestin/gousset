@@ -5,8 +5,6 @@ import {
   assignLineMerchant as assignCoreLineMerchant,
   lineMerchant,
   listMerchants,
-  markIntermediary,
-  setMerchantDefaultCategory,
   showMerchant,
 } from "@gousset/core";
 import type { LineMerchantRefused } from "@gousset/core";
@@ -199,30 +197,6 @@ export const editMerchant = createServerFn({ method: "POST" })
   );
 
 /**
- * Renames a merchant. Refused with a code: a blank name, one too long, or one another merchant has
- * (any case), which comes back with that merchant's name: the two are merged instead.
- */
-export const renameMerchant = createServerFn({ method: "POST" })
-  .middleware([signedIn, slowedInDevelopment])
-  .validator(Schema.toStandardSchemaV1(Schema.Struct({ merchantId: MerchantId, name: Typed })))
-  .handler(({ data, context }) =>
-    runCore(
-      Effect.gen(function* () {
-        const merchants = yield* Merchants;
-
-        return yield* merchants.rename(context.owner, data.merchantId, data.name);
-      }).pipe(
-        Effect.map((merchant) => ({ ok: true as const, merchant })),
-        Effect.catchTags({
-          MerchantNotFound: () => refused("MERCHANT_NOT_FOUND"),
-          MerchantNameRefused: (refusal) => refused(NAME_CODES[refusal.reason]),
-          MerchantNameTaken: (refusal) => refused("NAME_TAKEN", refusal.name),
-        }),
-      ),
-    ),
-  );
-
-/**
  * Moves one of a merchant's cleaned labels to the merchant named `to` (any case), made when none
  * has that name: how a merchant that joined two shops is split. Refused with a code: a merchant the
  * user does not have, a label that is not that merchant's, a blank name or one too long.
@@ -245,50 +219,6 @@ export const moveMerchantLabel = createServerFn({ method: "POST" })
           MerchantAliasNotFound: () => refused("LABEL_NOT_FOUND"),
           MerchantNameRefused: (refusal) => refused(NAME_CODES[refusal.reason]),
         }),
-      ),
-    ),
-  );
-
-/**
- * Sets the category a merchant's entries go in by default, of either kind, or clears it (`null`).
- * Refused with a code: a merchant the user does not have, a category gone, or one archived.
- */
-export const setMerchantCategory = createServerFn({ method: "POST" })
-  .middleware([signedIn, slowedInDevelopment])
-  .validator(
-    Schema.toStandardSchemaV1(
-      Schema.Struct({ merchantId: MerchantId, categoryId: Schema.NullOr(MerchantId) }),
-    ),
-  )
-  .handler(({ data, context }) =>
-    runCore(
-      setMerchantDefaultCategory(context.owner, data.merchantId, data.categoryId).pipe(
-        Effect.map((category) => ({ ok: true as const, category })),
-        Effect.catchTags({
-          MerchantNotFound: () => refused("MERCHANT_NOT_FOUND"),
-          CategoryNotFound: () => refused("CATEGORY_NOT_FOUND"),
-          CategoryRefused: () => refused("CATEGORY_ARCHIVED"),
-        }),
-      ),
-    ),
-  );
-
-/**
- * Marks a merchant a payment intermediary (#30), or not: its lines' labels hide who was paid, and
- * each of them asks for its merchant. A merchant the user does not have comes back as a code.
- */
-export const setMerchantIntermediary = createServerFn({ method: "POST" })
-  .middleware([signedIn, slowedInDevelopment])
-  .validator(
-    Schema.toStandardSchemaV1(
-      Schema.Struct({ merchantId: MerchantId, intermediary: Schema.Boolean }),
-    ),
-  )
-  .handler(({ data, context }) =>
-    runCore(
-      markIntermediary(context.owner, data.merchantId, data.intermediary).pipe(
-        Effect.map((merchant) => ({ ok: true as const, merchant })),
-        Effect.catchTags({ MerchantNotFound: () => refused("MERCHANT_NOT_FOUND") }),
       ),
     ),
   );

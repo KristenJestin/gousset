@@ -3,7 +3,7 @@ import { useState } from "react";
 import type { ReactNode } from "react";
 
 import { InFrench } from "../stories/in-french";
-import { madeUpOperations } from "../stories/made-up";
+import { MADE_UP_LOGO, MERCHANTS, madeUpOperations } from "../stories/made-up";
 import { Button } from "./button";
 import { OperationsList, OperationsListSkeleton } from "./operations-list";
 import type { OperationRow } from "./operations-list";
@@ -171,6 +171,38 @@ export const WithCategory: Story = {
       category: ["Groceries › Supermarket", "Housing › Rent", "Other"][index % 3],
     })),
   },
+};
+
+/**
+ * Who each line paid (#204), before its label: a logo, or initials on a colour; a line with no
+ * merchant keeps the room empty, so that the labels line up.
+ */
+export const WithAvatars: Story = {
+  args: {
+    withAvatars: true,
+    withCategory: true,
+    rows: ROWS.map((row, index) => {
+      const merchant = MERCHANTS[index % (MERCHANTS.length + 1)];
+
+      return {
+        ...row,
+        category: ["Groceries › Supermarket", "Housing › Rent", "Other"][index % 3],
+        avatar:
+          merchant === undefined
+            ? undefined
+            : {
+                name: merchant.name,
+                src: merchant.id === "greenmarket" ? MADE_UP_LOGO : undefined,
+              },
+      };
+    }),
+  },
+};
+
+/** The same, on a phone: the label gives way, never the avatar nor the amount. */
+export const WithAvatarsOnPhone: Story = {
+  ...WithAvatars,
+  globals: { viewport: { value: "mobile1", isRotated: false } },
 };
 
 /** A line open: its row is marked and kept in the page wherever the list is scrolled. */

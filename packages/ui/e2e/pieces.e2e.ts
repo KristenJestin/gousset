@@ -164,6 +164,91 @@ test.describe("Avatar", () => {
   }
 });
 
+// #204: the components that name a merchant draw its avatar beside the name, hidden from screen
+// readers, the name alone naming the row.
+test.describe("Avatars beside a name", () => {
+  test("a list row's link is named by its title, its avatar before it", async ({ page }) => {
+    await page.goto(story("data-list--links-with-avatars"));
+
+    const row = page.getByRole("link", { name: /^Greenmarket 3 labels/ });
+
+    await expect(row.locator('[data-slot="avatar"] img')).toBeVisible();
+    await expect(
+      page.getByRole("link", { name: /^Harbor Books/ }).locator('[data-slot="avatar"]'),
+    ).toHaveAttribute("data-color", "teal");
+  });
+
+  test("a block's avatar stands before its heading, which keeps its name", async ({ page }) => {
+    await page.goto(story("layout-app-shell--block-with-avatar"));
+
+    const section = page
+      .locator("section")
+      .filter({ has: page.getByRole("heading", { level: 2, name: "Greenmarket", exact: true }) });
+
+    await expect(section.locator('[data-slot="avatar"] img')).toBeVisible();
+  });
+
+  test("each operation row keeps room for an avatar, so that the labels line up", async ({
+    page,
+  }) => {
+    await page.goto(story("operations-operationslist--with-avatars"));
+
+    const slots = page.locator('[data-slot="operation-avatar"]');
+
+    await expect(slots.first().locator('[data-slot="avatar"] img')).toBeVisible();
+
+    // The sixth line has no merchant: its room is there, empty, as wide as the others'.
+    const empty = slots.nth(5);
+
+    await expect(empty.locator('[data-slot="avatar"]')).toHaveCount(0);
+    expect(await empty.evaluate((node) => node.getBoundingClientRect().width)).toBe(
+      await slots.first().evaluate((node) => node.getBoundingClientRect().width),
+    );
+  });
+
+  test("a line's merchant shows its logo before its name", async ({ page }) => {
+    await page.goto(story("operations-linemerchant--with-logo"));
+
+    const said = page.locator('[data-slot="line-merchant"]');
+
+    await expect(said).toContainText("Greenmarket");
+    await expect(said.locator('[data-slot="avatar"] img')).toBeVisible();
+  });
+
+  test("a breakdown's merchants show their faces, the row of none its icon", async ({ page }) => {
+    await page.goto(story("money-breakdown--merchants-with-avatars"));
+
+    const rows = page.locator('[data-slot="breakdown"] > li');
+
+    await expect(rows.locator('[data-slot="avatar"]')).toHaveCount(5);
+    await expect(rows.last().locator('[data-slot="avatar"]')).toHaveCount(0);
+    await expect(rows.last().locator("svg").first()).toBeVisible();
+  });
+
+  test("a flag about a merchant shows its face; one about an account none", async ({ page }) => {
+    await page.goto(story("data-flag-list--with-avatars"));
+
+    const flags = page.getByRole("list", { name: "Flagged" }).getByRole("listitem");
+
+    await expect(flags.nth(0).locator('[data-slot="avatar"]')).toHaveAttribute("data-color", "red");
+    await expect(flags.nth(2).locator('[data-slot="avatar"]')).toHaveCount(0);
+  });
+
+  test("the agenda shows each merchant's face, and still says each kind", async ({ page }) => {
+    await page.goto(story("money-recurringcalendar--agenda-with-avatars"));
+
+    const agenda = page.locator('[data-slot="recurring-agenda"]');
+    const paid = agenda.locator('[data-slot="recurring-item"][data-kind="paid"]').first();
+
+    await expect(paid.locator('[data-slot="avatar"]')).toBeVisible();
+    await expect(paid).toContainText("Paid");
+    // The expiring credit is an account's: its kind's tile, no face.
+    await expect(
+      agenda.locator('[data-slot="recurring-item"][data-kind="expiring"] [data-slot="avatar"]'),
+    ).toHaveCount(0);
+  });
+});
+
 /** The month as it is announced. */
 const month = (page: Page) => page.locator('[data-slot="month-switcher"] [aria-live]');
 
