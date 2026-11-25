@@ -241,3 +241,75 @@ export function seedReviewMonths(data: ReturnType<typeof openUserData>, owner: s
     });
   });
 }
+
+/**
+ * Two monthly plans of one merchant, Streamly, both stopped in October 2026 (issue #234): €9.99 paid
+ * on the 5th and €4.99 on the 20th from June to September, neither paid in October. Every name and
+ * amount is invented.
+ */
+export function seedTwoStoppedPlans(data: ReturnType<typeof openUserData>, owner: string) {
+  return data.asUser(owner, async (transaction) => {
+    const [everyday] = await transaction
+      .insert(account)
+      .values({ userId: owner, name: "Everyday account", kind: "current", currency: "EUR" })
+      .returning({ id: account.id });
+
+    const [streamly] = await transaction
+      .insert(merchant)
+      .values({ userId: owner, name: "Streamly" })
+      .returning({ id: merchant.id });
+
+    if (everyday === undefined || streamly === undefined) {
+      throw new Error("The account or the merchant was not made.");
+    }
+
+    const leisure = await categoryNamed(transaction, "expense", "Leisure");
+
+    const plans = [
+      { day: "05", amountMinor: 999 },
+      { day: "20", amountMinor: 499 },
+    ];
+
+    for (const month of ["06", "07", "08", "09"]) {
+      for (const plan of plans) {
+        const bookedOn = `2026-${month}-${plan.day}`;
+
+        const [line] = await transaction
+          .insert(statementLine)
+          .values({
+            userId: owner,
+            accountId: everyday.id,
+            source: "manual",
+            bookedOn,
+            amountMinor: -plan.amountMinor,
+            label: "STREAMLY",
+          })
+          .returning({ id: statementLine.id });
+
+        const [made] = await transaction
+          .insert(entry)
+          .values({
+            userId: owner,
+            kind: "expense",
+            happenedOn: bookedOn,
+            categoryId: leisure,
+            merchantId: streamly.id,
+            classifiedBy: "user",
+          })
+          .returning({ id: entry.id });
+
+        if (line === undefined || made === undefined) {
+          throw new Error("The line or its entry was not made.");
+        }
+
+        await transaction.insert(entryPart).values({
+          userId: owner,
+          entryId: made.id,
+          lineId: line.id,
+          role: "payment",
+          amountMinor: plan.amountMinor,
+        });
+      }
+    }
+  });
+}
