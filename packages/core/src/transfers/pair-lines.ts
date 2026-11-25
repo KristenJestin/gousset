@@ -1,4 +1,4 @@
-import { account, statementLine } from "@gousset/db/schema/ledger";
+import { account, entry, entryPart, statementLine } from "@gousset/db/schema/ledger";
 import { transfer } from "@gousset/db/schema/transfers";
 import type { UserTransaction } from "@gousset/db/user-data";
 import { and, eq, gte, inArray, lt, lte, ne, notInArray, or, sql } from "drizzle-orm";
@@ -12,6 +12,9 @@ import {
   candidateFinder,
   cardDebits,
   clearPairs,
+  decidedLines,
+  keptPairs,
+  keptReplacements,
   replacedCounterparts,
   shiftDay,
 } from "./pairing";
@@ -91,8 +94,13 @@ export function pairableLines(
 const bookedBetween = (from: string, to: string) =>
   and(gte(statementLine.bookedOn, from), lte(statementLine.bookedOn, to));
 
-/** Which lines a pairing looks at: one import's, or every line of the user's. */
+/**
+ * Which lines a pairing looks at: one import's, or every line of the user's; `kept`, every line too,
+ * for the pairing at boot of the lines kept before v0.3 (#192), which also leaves alone a line whose
+ * entry the user, or a rule of the user's, classified, or which the user split.
+ */
 export type PairingScope =
+  | { readonly kind: "kept" }
   | {
       readonly kind: "import";
       readonly importId: string;
@@ -149,14 +157,21 @@ function madeSides(transaction: UserTransaction, where: SQL | undefined) {
     .where(and(eq(statementLine.source, "counterpart"), where));
 }
 
+/** The lines of the user's that the user decided (`decidedLines`), from every entry's parts. */
+async function linesDecided(transaction: UserTransaction): Promise<ReadonlySet<string>> {
+  return decidedLines(
+    await transaction
+      .select({ lineId: entryPart.lineId, classifiedBy: entry.classifiedBy })
+      .from(entryPart)
+      .innerJoin(entry, eq(entry.id, entryPart.entryId)),
+  );
+}
+
 /** Moves each transfer from the side the app made to the file's line, then deletes the made one. */
 async function replaceMadeSides(
   transaction: UserTransaction,
-  fresh: ReadonlyArray<PoolLine>,
-  made: ReadonlyArray<PairableLine>,
+  replacements: ReadonlyArray<{ readonly counterpartId: string; readonly lineId: string }>,
 ): Promise<ReadonlySet<string>> {
-  const replacements = replacedCounterparts(fresh, made);
-
   for (const { counterpartId, lineId } of replacements) {
     await transaction
       .update(transfer)
@@ -337,7 +352,8 @@ async function pairCardDebits(
  * other's only candidate are paired; a line out of an account a deferred card settles into, with
  * no candidate, that pays what the card owed, is paired with a side the app makes on the card. A
  * line with several candidates is left as it is, for the user. A line paired loses its entry (#23):
- * it is the transfer. Safe to run again: a paired line is no candidate any more.
+ * it is the transfer. Safe to run again: a paired line is no candidate any more. The scope `kept`
+ * never pairs, nor replaces a made side by, a line the user decided (`keptPairs`).
  */
 export async function pairTransfers(
   transaction: UserTransaction,
@@ -361,8 +377,15 @@ export async function pairTransfers(
       : undefined,
   );
 
+  const decided = scope.kind === "kept" ? await linesDecided(transaction) : new Set<string>();
+
   // Made sides are paired, so never among the fresh lines.
-  const replaced = await replaceMadeSides(transaction, fresh, made);
+  const replaced = await replaceMadeSides(
+    transaction,
+    scope.kind === "kept"
+      ? keptReplacements(fresh, made, decided)
+      : replacedCounterparts(fresh, made),
+  );
 
   // A card's file may make a debit of its current account payable, booked up to a month after.
   const cardOf = imported
@@ -386,7 +409,10 @@ export async function pairTransfers(
 
   const left = fresh.filter((line) => !replaced.has(line.id));
   const available = pool.filter((line) => !replaced.has(line.id));
-  const pairs = clearPairs(left, available);
+
+  const pairs =
+    scope.kind === "kept" ? keptPairs(left, available, decided) : clearPairs(left, available);
+
   const paired = await insertPairs(transaction, owner, pairs, "import");
   const taken = new Set(pairs.flatMap((pair) => [pair.outLineId, pair.inLineId]));
 
@@ -398,7 +424,7 @@ export async function pairTransfers(
             line.bookedOn >= scope.from &&
             line.bookedOn <= shiftDay(scope.to, CARD_DAYS),
         )
-      : left;
+      : left.filter((line) => !decided.has(line.id));
 
   const candidates = candidateFinder(available);
 

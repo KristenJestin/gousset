@@ -389,9 +389,10 @@ the `image` job and runs `tools/check-upgrade.sh` on it, which, on a fresh proje
    one still on her temporary password, one banned; and **through the tables' owner
    (`tools/check-upgrade.sql`) for what the release offers no route for**: 0.1.1 has neither an
    accounts screen nor an import route, so two users' accounts of every kind, balances, an import
-   with its file and its lines (a held duplicate, a foreign currency, a discarded line), with each
-   counted line's entry where the release has entries (from 0.3.0, #23), a CSV profile, and an MCP
-   client with its consent and tokens are written as the app would write them;
+   with its file and its lines (a held duplicate, a foreign currency, a discarded line), the
+   transfers between two accounts as 0.2 kept them (never paired, #192), with each counted line's
+   entry where the release has entries (from 0.3.0, #23), a CSV profile, and an MCP client with its
+   consent and tokens are written as the app would write them;
    and, where the release has its import route (from 0.2.0), a user uploads an invented statement
    (`tools/check-upgrade.ofx`, whose bank encodes entities twice, #132), read as that release
    reads it;
@@ -414,12 +415,18 @@ the `image` job and runs `tools/check-upgrade.sh` on it, which, on a fresh proje
 6. starts the app: `/health` answers 200; once the boot's merchants and balances jobs have
    completed, the user's merchants (#24) and her noted balance's movement line (#31) are there, the
    line once: the boot makes them from a release older than 0.3.0, and from 0.3.0 the release's
-   own import made them, so only the boot's making no second line is checked; **the administrator and both users sign in with the same
-   passwords**, the temporary one still has to be replaced, the banned one is still refused, and a
-   session made before the update still works;
+   own import made them, so only the boot's making no second line is checked; once every boot job
+   has ended, **her transfers kept before v0.3 are paired** (#192: a clear pair and one across her
+   savings account's fortnight, never paired by the release, are transfers; an ambiguous one waits
+   in the review; from 0.3.0, two whose side she classified, by hand and by a rule of hers, stay
+   unpaired, their expenses unchanged); **started again, the app changes no row**; **the
+   administrator and both users sign in with the same passwords**, the temporary one still has to
+   be replaced, the banned one is still refused, and a session made before the update still works;
 7. downloads the user's **export** (#22, `/api/export`), which the last release may not have: each
    of its tables holds that user's rows exactly as the release held them, with the declared
-   changes, and each imported file its bytes;
+   changes, and each imported file its bytes; but a line made from a noted balance
+   (`source = balance`) that the release did not hold, which the boot made, left out of the
+   export's side;
 8. uploads the statement of step 2 again, through the updated app: **it adds nothing**, every line
    found as a duplicate under the key the update gave it;
 9. migrates an empty database beside it with the same image: **the updated schema is a fresh
