@@ -838,7 +838,12 @@ describe("monthReview", () => {
 
     const other = { id: "other", name: "Other", parentName: null, kind: "expense" as const };
 
-    const line = (id: string, bookedOn: string, classifiedBy: "default" | "rule") => ({
+    const line = (
+      id: string,
+      bookedOn: string,
+      classifiedBy: "default" | "rule",
+      maybeRefund = false,
+    ) => ({
       id,
       accountId: current.id,
       bookedOn,
@@ -849,12 +854,14 @@ describe("monthReview", () => {
       counterpartyName: null,
       classifiedBy,
       category: other,
+      maybeRefund,
     });
 
     const lines: MemoryLineRows = {
       accounts: [record],
       lines: [
-        line("early", "2026-10-02", "default"),
+        // Maybe a refund (#208): the review says so.
+        line("early", "2026-10-02", "default", true),
         line("late", "2026-10-20", "default"),
         // A rule's choice is the user's: never to review.
         line("ruled", "2026-10-21", "rule"),
@@ -874,8 +881,9 @@ describe("monthReview", () => {
         category: other,
         account: expect.objectContaining({ name: "Current account" }),
         amount: { minor: -1500, currency: "EUR" },
+        maybeRefund: false,
       },
-      expect.objectContaining({ id: "early", day: "2026-10-02" }),
+      expect.objectContaining({ id: "early", day: "2026-10-02", maybeRefund: true }),
     ]);
   });
 });

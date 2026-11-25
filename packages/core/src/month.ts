@@ -303,6 +303,8 @@ export type LineToReview = {
   readonly category: LineCategory | null;
   readonly account: LineAccount;
   readonly amount: Money;
+  /** Maybe a refund (#208): no income until the user answers. */
+  readonly maybeRefund: boolean;
 };
 
 /** The lines to review (#35's queue), booked in the month. */
@@ -1221,6 +1223,7 @@ export const monthLinesToReview = (owner: string, month: string) =>
         category: line.category,
         account: line.account,
         amount: line.amount,
+        maybeRefund: line.maybeRefund,
       })),
     };
 
