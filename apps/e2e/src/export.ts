@@ -15,6 +15,7 @@ const Rows = Schema.Array(Schema.Struct({ id: Schema.String, user_id: Schema.Str
 const Manifest = Schema.Struct({
   format: Schema.String,
   version: Schema.Number,
+  about: Schema.String,
   files: Schema.Array(
     Schema.Struct({
       path: Schema.String,

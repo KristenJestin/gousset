@@ -128,9 +128,9 @@ export function reviewRefusalMessage(code: string): string {
 /**
  * A merchant write or read's refusal (`MerchantRefusalCode`), by its code; `name` is the merchant
  * it is about, when the refusal names one (the one that has the name already, the intermediary
- * chosen as who was paid).
+ * chosen as who was paid, the one a label names already); `label` the label refused (#204).
  */
-export function merchantRefusalMessage(code: string, name?: string): string {
+export function merchantRefusalMessage(code: string, name?: string, label?: string): string {
   switch (code) {
     case "MERCHANT_NOT_FOUND":
       return m.merchantRefusalNotFound();
@@ -158,6 +158,18 @@ export function merchantRefusalMessage(code: string, name?: string): string {
       return m.merchantRefusalNotOneEntry();
     case "INTERMEDIARY_CHOSEN":
       return name === undefined ? m.errorUnknown() : m.merchantRefusalIntermediaryChosen({ name });
+    case "LABEL_NO_KEY":
+      return label === undefined ? m.errorUnknown() : m.merchantRefusalLabelNoKey({ label });
+    case "LABEL_TAKEN":
+      return name === undefined || label === undefined
+        ? m.errorUnknown()
+        : m.merchantRefusalLabelTaken({ name, label });
+    case "LOGO_TOO_LARGE":
+      return m.merchantRefusalLogoTooLarge();
+    case "LOGO_TYPE":
+      return m.merchantRefusalLogoType();
+    case "LOGO_EMPTY":
+      return m.merchantRefusalLogoEmpty();
     default:
       return m.errorUnknown();
   }

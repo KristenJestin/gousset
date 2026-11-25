@@ -50,6 +50,7 @@ function charge(merchant: string, day: string, amountMinor: number): Charge {
     id: `00000000-0000-4000-8000-${String(made).padStart(12, "0")}`,
     merchantId: `merchant-${merchant}`,
     merchant,
+    look: { color: null, logo: null },
     day,
     amountMinor,
     currency: "EUR",
@@ -275,7 +276,7 @@ function category(rows: Month, kind: "expense" | "income", name: string, change 
 }
 
 function merchant(rows: Month, name: string, intermediary = false) {
-  const known = { id: memoryId(), name, intermediary };
+  const known = { id: memoryId(), name, intermediary, look: { color: null, logo: null } };
 
   rows.merchants.push(known);
   rows.aliases.push({ alias: merchantKey(name.toUpperCase(), null) ?? name, merchantId: known.id });

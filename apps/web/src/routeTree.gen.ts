@@ -40,6 +40,7 @@ import { Route as ApiImportUploadsTokenRouteImport } from './routes/api/import-u
 import { Route as AuthedSettingsMerchantsIndexRouteImport } from './routes/_authed/settings/merchants/index'
 import { Route as AuthedSettingsMerchantsMerchantIdRouteImport } from './routes/_authed/settings/merchants/$merchantId'
 import { Route as ApiJobsJobIdEventsRouteImport } from './routes/api/jobs/$jobId/events'
+import { Route as ApiMerchantsMerchantIdLogoRouteImport } from './routes/api/merchants/$merchantId/logo'
 
 const AuthedRoute = AuthedRouteImport.update({
   id: '/_authed',
@@ -198,6 +199,12 @@ const ApiJobsJobIdEventsRoute = ApiJobsJobIdEventsRouteImport.update({
   path: '/api/jobs/$jobId/events',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiMerchantsMerchantIdLogoRoute =
+  ApiMerchantsMerchantIdLogoRouteImport.update({
+    id: '/api/merchants/$merchantId/logo',
+    path: '/api/merchants/$merchantId/logo',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AuthedIndexRoute
@@ -229,6 +236,7 @@ export interface FileRoutesByFullPath {
   '/settings/': typeof AuthedSettingsIndexRoute
   '/settings/merchants/$merchantId': typeof AuthedSettingsMerchantsMerchantIdRoute
   '/api/jobs/$jobId/events': typeof ApiJobsJobIdEventsRoute
+  '/api/merchants/$merchantId/logo': typeof ApiMerchantsMerchantIdLogoRoute
   '/settings/merchants/': typeof AuthedSettingsMerchantsIndexRoute
 }
 export interface FileRoutesByTo {
@@ -260,6 +268,7 @@ export interface FileRoutesByTo {
   '/settings': typeof AuthedSettingsIndexRoute
   '/settings/merchants/$merchantId': typeof AuthedSettingsMerchantsMerchantIdRoute
   '/api/jobs/$jobId/events': typeof ApiJobsJobIdEventsRoute
+  '/api/merchants/$merchantId/logo': typeof ApiMerchantsMerchantIdLogoRoute
   '/settings/merchants': typeof AuthedSettingsMerchantsIndexRoute
 }
 export interface FileRoutesById {
@@ -294,6 +303,7 @@ export interface FileRoutesById {
   '/_authed/settings/': typeof AuthedSettingsIndexRoute
   '/_authed/settings/merchants/$merchantId': typeof AuthedSettingsMerchantsMerchantIdRoute
   '/api/jobs/$jobId/events': typeof ApiJobsJobIdEventsRoute
+  '/api/merchants/$merchantId/logo': typeof ApiMerchantsMerchantIdLogoRoute
   '/_authed/settings/merchants/': typeof AuthedSettingsMerchantsIndexRoute
 }
 export interface FileRouteTypes {
@@ -328,6 +338,7 @@ export interface FileRouteTypes {
     | '/settings/'
     | '/settings/merchants/$merchantId'
     | '/api/jobs/$jobId/events'
+    | '/api/merchants/$merchantId/logo'
     | '/settings/merchants/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -359,6 +370,7 @@ export interface FileRouteTypes {
     | '/settings'
     | '/settings/merchants/$merchantId'
     | '/api/jobs/$jobId/events'
+    | '/api/merchants/$merchantId/logo'
     | '/settings/merchants'
   id:
     | '__root__'
@@ -392,6 +404,7 @@ export interface FileRouteTypes {
     | '/_authed/settings/'
     | '/_authed/settings/merchants/$merchantId'
     | '/api/jobs/$jobId/events'
+    | '/api/merchants/$merchantId/logo'
     | '/_authed/settings/merchants/'
   fileRoutesById: FileRoutesById
 }
@@ -408,6 +421,7 @@ export interface RootRouteChildren {
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ApiImportUploadsTokenRoute: typeof ApiImportUploadsTokenRoute
   ApiJobsJobIdEventsRoute: typeof ApiJobsJobIdEventsRoute
+  ApiMerchantsMerchantIdLogoRoute: typeof ApiMerchantsMerchantIdLogoRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -629,6 +643,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiJobsJobIdEventsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/merchants/$merchantId/logo': {
+      id: '/api/merchants/$merchantId/logo'
+      path: '/api/merchants/$merchantId/logo'
+      fullPath: '/api/merchants/$merchantId/logo'
+      preLoaderRoute: typeof ApiMerchantsMerchantIdLogoRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -702,6 +723,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiImportUploadsTokenRoute: ApiImportUploadsTokenRoute,
   ApiJobsJobIdEventsRoute: ApiJobsJobIdEventsRoute,
+  ApiMerchantsMerchantIdLogoRoute: ApiMerchantsMerchantIdLogoRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

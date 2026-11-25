@@ -9,6 +9,7 @@ import { Expenses } from "./expenses/expenses";
 import type { LineStore } from "./line-store";
 import { memoryLineStore } from "./line-store-memory";
 import type { MemoryLineRows } from "./line-store-memory";
+import type { Look } from "./look";
 import { merchantKey } from "./merchants/labels";
 import { Merchants } from "./merchants/merchants";
 import {
@@ -113,8 +114,14 @@ function category(
   return created;
 }
 
-function merchant(rows: Draft, name: string, label: string, intermediary = false) {
-  const known: MonthMerchant = { id: nextId("merchant"), name, intermediary };
+function merchant(
+  rows: Draft,
+  name: string,
+  label: string,
+  intermediary = false,
+  look: Look = { color: null, logo: null },
+) {
+  const known: MonthMerchant = { id: nextId("merchant"), name, intermediary, look };
 
   rows.merchants.push(known);
   rows.aliases.push({ alias: merchantKey(label, null) ?? label, merchantId: known.id });
@@ -495,6 +502,28 @@ describe("monthSpending", () => {
 
     expect(read.rows.at(0)?.id).toBe(market.id);
   });
+
+  test("by merchant: each row with its merchant's look, none for the row of none (#204)", async () => {
+    const { rows, current, groceries } = household();
+    const look: Look = { color: "teal", logo: "0123456789abcdef" };
+
+    merchant(rows, "Greenmarket", "GREENMARKET", false, look);
+    entry(rows, { category: groceries, account: current, day: "2026-10-02", minor: 1500 });
+    entry(rows, {
+      category: groceries,
+      account: current,
+      day: "2026-10-03",
+      minor: 2000,
+      label: "GREENMARKET",
+    });
+
+    const read = await run(monthSpending("ada", "2026-10", "EUR", "merchant"), rows);
+
+    expect(read.by === "merchant" ? read.rows.map((row) => [row.name, row.look]) : []).toEqual([
+      ["Greenmarket", look],
+      [null, null],
+    ]);
+  });
 });
 
 describe("spendingDays", () => {
@@ -643,6 +672,7 @@ function charge(merchantName: string, day: string, amountMinor: number): Charge 
     id: nextId("charge"),
     merchantId: `merchant-${merchantName}`,
     merchant: merchantName,
+    look: { color: null, logo: null },
     day,
     amountMinor,
     currency: "EUR",
@@ -713,6 +743,8 @@ describe("monthFlags", () => {
     expect(flags).toContainEqual({
       kind: "price-rise",
       merchant: "Streamly",
+      merchantId: "merchant-Streamly",
+      look: { color: null, logo: null },
       from: { minor: 949, currency: "EUR" },
       to: { minor: 1099, currency: "EUR" },
     });

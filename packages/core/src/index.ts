@@ -352,8 +352,27 @@ export { ImportJobInput, markFailed, runImport } from "./imports/run";
 export type { ImportProgress, ImportRun } from "./imports/run";
 
 export {
+  LOGO_MAX_BYTES,
+  LOGO_VERSION_LENGTH,
+  LOOK_COLORS,
+  LogoMediaType,
+  LookColor,
+  checkLogo,
+  logoExtension,
+  logoMediaTypeOf,
+  logoVersion,
+  lookOf,
+} from "./look";
+
+export type { Look, LogoRefusal } from "./look";
+
+export {
   LineMerchantRefused,
   MerchantAliasNotFound,
+  MerchantLabelRefused,
+  MerchantLabelTaken,
+  MerchantLogoNotFound,
+  MerchantLogoRefused,
   MerchantMergeRefused,
   MerchantNameRefused,
   MerchantNameTaken,
@@ -390,10 +409,14 @@ export type {
   AliasMoved,
   MerchantDefaultCategory,
   MerchantDetail,
+  MerchantEdit,
+  MerchantInput,
   MerchantLine,
+  MerchantLogo,
   MerchantPage,
   MerchantSearch,
   MerchantSummary,
+  MerchantWriteRefusal,
   Merged,
   Recognised,
 } from "./merchants/merchants";
@@ -420,7 +443,7 @@ export { EXPORT_FORMAT, EXPORT_VERSION, MANIFEST } from "./export/archive";
 
 export type { ExportArchive } from "./export/archive";
 
-export { EXPORT_TABLES, IMPORT_FILES_FOLDER } from "./export/tables";
+export { EXPORT_TABLES, IMPORT_FILES_FOLDER, MERCHANT_LOGOS_FOLDER } from "./export/tables";
 
 export {
   RuleConditionsRefused,

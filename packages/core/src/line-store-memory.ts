@@ -5,6 +5,7 @@ import type { LineCategory } from "./category-store";
 import type { ImportFormat } from "./imports/summary";
 import { LineStore } from "./line-store";
 import type { FoundLine, FoundLineDetail, LineQuery } from "./line-store";
+import type { NamedMerchant } from "./merchants/line-merchant";
 import { candidateFinder } from "./transfers/pairing";
 
 // An in-memory `LineStore`, for tests: the same reads as the database's, on the rows an in-memory
@@ -21,6 +22,8 @@ export type MemoryLineDetail = MemoryLine & {
   readonly expiresOn?: string;
   /** The category of its one entry. */
   readonly category?: LineCategory;
+  /** Who it paid, as the database reads it (#204). */
+  readonly merchant?: NamedMerchant;
   /** Who put its entry in its category; `default`, the import, waits for the user. */
   readonly classifiedBy?: "default" | "rule" | "user";
   /** Its part in its entry: `refund` when linked to an expense, whose entry it then follows. */
@@ -104,6 +107,7 @@ function withAccount(own: MemoryLineRows, line: MemoryLineDetail): FoundLine | u
       currency: owned.currency,
     },
     category: line.category ?? null,
+    merchant: line.merchant ?? null,
     fromBalance: sourceOf(line) === "balance",
   };
 }

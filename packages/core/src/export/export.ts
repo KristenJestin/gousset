@@ -1,11 +1,12 @@
-import { importFile, statementImport } from "@gousset/db/schema/ledger";
+import { importFile, merchantLogo, statementImport } from "@gousset/db/schema/ledger";
 import { UserData } from "@gousset/db/user-data";
 import type { QueryFailed, UserTransaction } from "@gousset/db/user-data";
 import { asc, eq, sql } from "drizzle-orm";
 import { Clock, Context, Effect, Layer, Schema } from "effect";
 
+import { LogoMediaType } from "../look";
 import { exportArchive } from "./archive";
-import type { ExportArchive, ExportData, ExportedTable } from "./archive";
+import type { ExportArchive, ExportData, ExportedLogo, ExportedTable } from "./archive";
 import { EXPORT_TABLES } from "./tables";
 import type { ExportTable } from "./tables";
 
@@ -13,10 +14,14 @@ import type { ExportTable } from "./tables";
 // Every table is read whole by one query, in one snapshot, through `UserData`: row-level security
 // keeps the export to the user's own rows (docs/data-model.md, "Ownership and isolation").
 
-/** How many rows each file of an export holds, and how many files imported it carries. */
+/**
+ * How many rows each file of an export holds, how many files imported it carries, and how many
+ * merchants' logos (#204).
+ */
 export type ExportContents = {
   readonly tables: ReadonlyArray<{ readonly table: ExportTable; readonly rows: number }>;
   readonly files: number;
+  readonly logos: number;
 };
 
 /** Exporting the data of the user `owner` of each call. */
@@ -75,8 +80,26 @@ async function readAll(transaction: UserTransaction): Promise<ExportData> {
     .innerJoin(statementImport, eq(statementImport.id, importFile.importId))
     .orderBy(asc(importFile.importId));
 
-  return { tables, files };
+  const logoRows = await transaction
+    .select({
+      merchantId: merchantLogo.merchantId,
+      mediaType: merchantLogo.mediaType,
+      content: merchantLogo.content,
+    })
+    .from(merchantLogo)
+    .orderBy(asc(merchantLogo.merchantId));
+
+  // The database checks the type is one of the three.
+  const logos = logoRows.flatMap((row): ReadonlyArray<ExportedLogo> =>
+    isLogoMediaType(row.mediaType)
+      ? [{ merchantId: row.merchantId, mediaType: row.mediaType, content: row.content }]
+      : [],
+  );
+
+  return { tables, files, logos };
 }
+
+const isLogoMediaType = Schema.is(LogoMediaType);
 
 async function countAll(transaction: UserTransaction): Promise<ExportContents> {
   const tables: Array<{ table: ExportTable; rows: number }> = [];
@@ -85,7 +108,11 @@ async function countAll(transaction: UserTransaction): Promise<ExportContents> {
     tables.push({ table, rows: await countOf(transaction, table.table) });
   }
 
-  return { tables, files: await countOf(transaction, "import_file") };
+  return {
+    tables,
+    files: await countOf(transaction, "import_file"),
+    logos: await countOf(transaction, "merchant_logo"),
+  };
 }
 
 /** `DataExport` on the database (`UserData`). */

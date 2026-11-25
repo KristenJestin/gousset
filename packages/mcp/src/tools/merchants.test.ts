@@ -1,4 +1,8 @@
+import { createHash } from "node:crypto";
+
 import {
+  CategoryNotFound,
+  CategoryRefused,
   CategoryStore,
   DataExport,
   Expenses,
@@ -8,6 +12,10 @@ import {
   LineNotFound,
   MAX_MERCHANT_NAME,
   MerchantAliasNotFound,
+  MerchantLabelRefused,
+  MerchantLabelTaken,
+  MerchantLogoNotFound,
+  MerchantLogoRefused,
   MerchantMergeRefused,
   MerchantNameRefused,
   MerchantNameTaken,
@@ -18,22 +26,27 @@ import {
   RuleJobs,
   Subscriptions,
   Transfers,
+  checkLogo,
   memoryAccountStore,
   memoryCategory,
   memoryCategoryStore,
   memoryId,
   memoryLineStore,
+  merchantKey,
 } from "@gousset/core";
 import type {
+  Look,
+  LookColor,
   MemoryCategoryRows,
   MemoryLineDetail,
   MemoryLineRows,
   MerchantDefaultCategory,
   MerchantLine,
+  MerchantLogo,
   MerchantSummary,
 } from "@gousset/core";
 import { UserData } from "@gousset/db/user-data";
-import { Effect, Layer, Schema } from "effect";
+import { Effect, Layer, Result, Schema } from "effect";
 import { describe, expect, test } from "vite-plus/test";
 
 import { goussetServer } from "../gousset";
@@ -54,6 +67,10 @@ type StoredMerchant = {
   aliases: Array<string>;
   intermediary?: boolean;
   subscriptionDismissed?: boolean;
+  /** Its colour (#204); automatic when left out. */
+  color?: LookColor | null;
+  /** Its logo (#204), as core keeps it. */
+  logo?: MerchantLogo;
 };
 
 /** A line paid through an intermediary (#30), as core reads it: its intermediary and who was paid. */
@@ -144,12 +161,37 @@ function store(): Store {
   };
 }
 
+const lookOf = (stored: StoredMerchant): Look => ({
+  color: stored.color ?? null,
+  logo: stored.logo?.version ?? null,
+});
+
 const summaryOf = (stored: StoredMerchant): MerchantSummary => ({
   id: stored.id,
   name: stored.name,
   aliases: stored.aliases.length,
   intermediary: stored.intermediary === true,
+  look: lookOf(stored),
 });
+
+/** Labels cleaned as core cleans them, once each; the first that cleans to nothing is refused. */
+function keysOf(labels: ReadonlyArray<string>) {
+  const keys: Array<string> = [];
+
+  for (const label of labels) {
+    const key = merchantKey(label, null);
+
+    if (key === null) {
+      return Effect.fail(new MerchantLabelRefused({ label }));
+    }
+
+    if (!keys.includes(key)) {
+      keys.push(key);
+    }
+  }
+
+  return Effect.succeed(keys);
+}
 
 const nameOf = (name: string) => {
   const trimmed = name.trim();
@@ -203,7 +245,48 @@ function merchantsOf(state: Store) {
   const named = (name: string | null) => {
     const stored = name === null ? undefined : byName(name);
 
-    return stored === undefined ? null : { id: stored.id, name: stored.name };
+    return stored === undefined ? null : { id: stored.id, name: stored.name, look: lookOf(stored) };
+  };
+
+  /** The first of `keys` another merchant than `merchantId` has, as core refuses it. */
+  const takenLabel = (keys: ReadonlyArray<string>, merchantId: string | null) => {
+    for (const key of keys) {
+      const other = state.merchants.find((each) => each.aliases.includes(key));
+
+      if (other !== undefined && other.id !== merchantId) {
+        return Effect.fail(new MerchantLabelTaken({ label: key, alias: key, name: other.name }));
+      }
+    }
+
+    return Effect.void;
+  };
+
+  /** A default category chosen: one of Ada's, not archived. */
+  const chosenDefault = (categoryId: string) => {
+    const rows = state.categories?.get(writer.userId);
+    const found = rows?.categories.find((each) => each.id === categoryId);
+
+    if (found === undefined) {
+      return Effect.fail(new CategoryNotFound({ categoryId }));
+    }
+
+    return found.archivedAt === null
+      ? Effect.succeed(found.id)
+      : Effect.fail(new CategoryRefused({ reason: "archived" }));
+  };
+
+  const setDefault = (merchantId: string, categoryId: string | null) => {
+    const rows = state.categories?.get(writer.userId);
+
+    if (rows !== undefined) {
+      state.categories?.set(writer.userId, {
+        ...rows,
+        merchants: [
+          ...(rows.merchants ?? []).filter((each) => each.id !== merchantId),
+          { id: merchantId, defaultCategoryId: categoryId },
+        ],
+      });
+    }
   };
 
   return Layer.succeed(Merchants, {
@@ -234,6 +317,7 @@ function merchantsOf(state: Store) {
         id: found.id,
         name: found.name,
         intermediary: found.intermediary === true,
+        look: lookOf(found),
         subscriptionDismissed: found.subscriptionDismissed === true,
         defaultCategory: defaultOf(state, found.id),
         aliases: found.aliases.toSorted(),
@@ -317,6 +401,80 @@ function merchantsOf(state: Store) {
         return { into: summaryOf(into), merged: from.name, aliasesMoved: from.aliases.length };
       }),
     recognise: () => Effect.succeed({ merchants: 0, aliases: 0 }),
+    create: (_owner, input) =>
+      Effect.gen(function* () {
+        const wanted = yield* nameOf(input.name);
+        const keys = yield* keysOf(input.aliases);
+        const other = byName(wanted);
+
+        if (other !== undefined) {
+          return yield* new MerchantNameTaken({ name: other.name });
+        }
+
+        if (input.defaultCategoryId !== null) {
+          yield* chosenDefault(input.defaultCategoryId);
+        }
+
+        yield* takenLabel(keys, null);
+
+        const made: StoredMerchant = {
+          ...merchant(wanted, keys),
+          intermediary: input.intermediary,
+          color: input.color,
+        };
+
+        state.merchants.push(made);
+        setDefault(made.id, input.defaultCategoryId);
+
+        return summaryOf(made);
+      }),
+    edit: (_owner, merchantId, edit) =>
+      Effect.gen(function* () {
+        const wanted = edit.name === undefined ? undefined : yield* nameOf(edit.name);
+        const keys = yield* keysOf(edit.addAliases ?? []);
+        const found = yield* byId(merchantId);
+        const other = wanted === undefined ? undefined : byName(wanted);
+
+        if (other !== undefined && other.id !== found.id) {
+          return yield* new MerchantNameTaken({ name: other.name });
+        }
+
+        yield* takenLabel(keys, found.id);
+
+        found.name = wanted ?? found.name;
+        found.intermediary = edit.intermediary ?? found.intermediary;
+        found.color = edit.color === undefined ? found.color : edit.color;
+        found.aliases.push(...keys.filter((key) => !found.aliases.includes(key)));
+
+        return summaryOf(found);
+      }),
+    setLogo: (_owner, merchantId, content) =>
+      Effect.gen(function* () {
+        const checked = checkLogo(content);
+
+        if (Result.isFailure(checked)) {
+          return yield* new MerchantLogoRefused({ reason: checked.failure });
+        }
+
+        const found = yield* byId(merchantId);
+        const version = createHash("sha256").update(content).digest("hex").slice(0, 16);
+
+        found.logo = { mediaType: checked.success, content: new Uint8Array(content), version };
+
+        return lookOf(found);
+      }),
+    removeLogo: (_owner, merchantId) =>
+      Effect.map(byId(merchantId), (found) => {
+        found.logo = undefined;
+
+        return lookOf(found);
+      }),
+    logo: (_owner, merchantId) =>
+      Effect.flatMap(byId(merchantId), (found) =>
+        found.logo === undefined
+          ? Effect.fail(new MerchantLogoNotFound({ merchantId }))
+          : Effect.succeed(found.logo),
+      ),
     markIntermediary: (_owner, merchantId, intermediary) =>
       Effect.map(byId(merchantId), (found) => {
         found.intermediary = intermediary;
@@ -376,7 +534,7 @@ function merchantsOf(state: Store) {
         found.merchant = paid.name;
 
         return {
-          merchant: { id: paid.id, name: paid.name },
+          merchant: { id: paid.id, name: paid.name, look: lookOf(paid) },
           created: existing === undefined,
           category: null,
         };
@@ -453,7 +611,23 @@ function runnerOf(state: Store): Runner<GoussetServices> {
   return (effect) => Effect.runPromiseExit(Effect.provide(effect, layer));
 }
 
-type Arguments = { readonly [key: string]: string | number | boolean };
+type Arguments = {
+  readonly [key: string]: string | number | boolean | ReadonlyArray<string>;
+};
+
+/** A PNG's first bytes, made here: no real picture. */
+const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0x0d]);
+
+/** A PNG one byte over 256 KiB. */
+function largePng() {
+  const bytes = new Uint8Array(256 * 1024 + 1);
+
+  bytes.set(PNG);
+
+  return bytes;
+}
+
+const base64 = (bytes: Uint8Array) => Buffer.from(bytes).toString("base64");
 
 async function merchants(state: Store, args: Arguments, caller: Caller = writer) {
   const client = await connectInProcess(
@@ -471,7 +645,7 @@ async function merchants(state: Store, args: Arguments, caller: Caller = writer)
 
 const Written = Schema.Record(
   Schema.String,
-  Schema.Union([Schema.String, Schema.Number, Schema.Boolean]),
+  Schema.Union([Schema.String, Schema.Number, Schema.Boolean, Schema.Array(Schema.String)]),
 );
 
 /** The arguments of a call a result writes after `before` (`merchants {…}`), read back. */
@@ -1345,6 +1519,223 @@ describe("merchants and subscriptions", () => {
   });
 });
 
+describe("merchants create (#204)", () => {
+  test("makes a merchant by hand with its labels, default category, mark and colour", async () => {
+    const state = store();
+
+    const { text, isError } = await merchants(state, {
+      action: "create",
+      name: "Riverside Bakery",
+      // Two spellings of one shop: one cleaned label.
+      labels: ["CB RIVERSIDE BAKERY 2110 RIVERTON", "riverside bakery"],
+      category: "Groceries > Bakery",
+      color: "amber",
+    });
+
+    expect(isError, text).toBe(false);
+    expect(text).toContain("Made the merchant Riverside Bakery.");
+    expect(text).toContain("1 cleaned label name the lines");
+
+    const made = state.merchants.find((each) => each.name === "Riverside Bakery");
+
+    expect(made?.aliases).toEqual(["RIVERSIDE BAKERY"]);
+    expect(made?.color).toBe("amber");
+
+    const shown = await merchants(state, { action: "show", merchant: "riverside bakery" });
+
+    expect(shown.text).toContain("Default category: Groceries > Bakery (expense).");
+    expect(shown.text).toContain("Shown as its initials on amber; no logo");
+    expect(shown.text).toContain("- RIVERSIDE BAKERY");
+
+    const listed = await merchants(state, { action: "search", text: "riverside" });
+
+    expect(listed.text).toContain("- Riverside Bakery: 1 cleaned label, colour amber");
+  });
+
+  test("makes one with its name alone, automatic and no label", async () => {
+    const state = store();
+
+    const { text, isError } = await merchants(state, {
+      action: "create",
+      name: "Corner Bookshop",
+      intermediary: false,
+      color: "automatic",
+    });
+
+    expect(isError, text).toBe(false);
+    expect(text).toContain("No cleaned label names it yet");
+    expect(state.merchants.find((each) => each.name === "Corner Bookshop")?.color).toBeNull();
+  });
+
+  test.each([
+    ["no name", { action: "create" }, "create needs name"],
+    ["a blank name", { action: "create", name: "  " }, "create needs name"],
+    ["a name taken", { action: "create", name: "greenmarket" }, 'named "Greenmarket" already'],
+    [
+      "a label that names no one",
+      { action: "create", name: "Cash", labels: ["RETRAIT DAB 21/10"] },
+      "names no one once cleaned",
+    ],
+  ] as const)("refuses %s, with a valid call", async (_, args, says) => {
+    const state = store();
+    const { text, isError } = await merchants(state, args);
+
+    expect(isError).toBe(true);
+    expect(text).toContain(says);
+    expect(state.merchants).toHaveLength(4);
+    await expectValidExample(text);
+  });
+
+  test("refuses an archived category, with a call that reads the categories", async () => {
+    const state = store();
+
+    const { text, isError } = await merchants(state, {
+      action: "create",
+      name: "Toy Shop",
+      category: "Family",
+    });
+
+    expect(isError).toBe(true);
+    expect(text).toContain('"Family" is archived');
+    expect(text).toContain('A valid call: categories {"action":"list"}');
+    expect(state.merchants).toHaveLength(4);
+  });
+
+  test("refuses a label another merchant has, with the call that moves it", async () => {
+    const state = store();
+
+    const { text, isError } = await merchants(state, {
+      action: "create",
+      name: "Greenmarket Fuel",
+      labels: ["CB GREENMARKET RIVERTON 2110"],
+    });
+
+    expect(isError).toBe(true);
+    expect(text).toContain('The label "GREENMARKET RIVERTON" names Greenmarket already');
+    expect(state.merchants).toHaveLength(4);
+    expect(await expectValidExample(text, state)).toEqual({
+      action: "edit",
+      merchant: "Greenmarket",
+      alias: "GREENMARKET RIVERTON",
+      to: "Greenmarket Fuel",
+    });
+  });
+});
+
+describe("merchants edit with color, labels and logo (#204)", () => {
+  test("sets a colour, then the automatic one again", async () => {
+    const state = store();
+    const set = await merchants(state, { action: "edit", merchant: "Fuelstop", color: "teal" });
+
+    expect(set.isError, set.text).toBe(false);
+    expect(set.text).toContain("Fuelstop's avatar is now drawn on teal.");
+
+    const automatic = await merchants(state, {
+      action: "edit",
+      merchant: "Fuelstop",
+      color: "automatic",
+    });
+
+    expect(automatic.text).toContain("an automatic colour");
+    expect(state.merchants.find((each) => each.name === "Fuelstop")?.color).toBeNull();
+  });
+
+  test("adds labels, and refuses one another merchant has", async () => {
+    const state = store();
+
+    const added = await merchants(state, {
+      action: "edit",
+      merchant: "Fuelstop",
+      labels: ["FUELSTOP", "PRLV SEPA FUELSTOP CARD"],
+    });
+
+    expect(added.isError, added.text).toBe(false);
+    expect(added.text).toContain("Fuelstop now has 1 cleaned label");
+
+    const taken = await merchants(state, {
+      action: "edit",
+      merchant: "Fuelstop",
+      labels: ["CORNER CAFE"],
+    });
+
+    expect(taken.isError).toBe(true);
+    expect(taken.text).toContain("names Corner Cafe already");
+    expect(await expectValidExample(taken.text, state)).toEqual({
+      action: "edit",
+      merchant: "Corner Cafe",
+      alias: "CORNER CAFE",
+      to: "Fuelstop",
+    });
+  });
+
+  test("sets a logo from its base64, which show and list then say, and clears it", async () => {
+    const state = store();
+
+    const set = await merchants(state, {
+      action: "edit",
+      merchant: "Greenmarket",
+      logo: base64(PNG),
+    });
+
+    expect(set.isError, set.text).toBe(false);
+    expect(set.text).toContain("Greenmarket's logo is set");
+    expect(state.merchants.find((each) => each.name === "Greenmarket")?.logo?.mediaType).toBe(
+      "image/png",
+    );
+
+    const shown = await merchants(state, { action: "show", merchant: "Greenmarket" });
+
+    expect(shown.text).toContain("Shown with its logo");
+    expect((await merchants(state, { action: "list" })).text).toContain(
+      "- Greenmarket: 2 cleaned labels, a logo",
+    );
+
+    const cleared = await merchants(state, {
+      action: "edit",
+      merchant: "Greenmarket",
+      clear_logo: true,
+    });
+
+    expect(cleared.text).toContain("Greenmarket has no logo any more");
+    expect(state.merchants.find((each) => each.name === "Greenmarket")?.logo).toBeUndefined();
+  });
+
+  test.each([
+    ["not base64", "%%%", "not valid base64"],
+    [
+      "an SVG",
+      base64(new TextEncoder().encode("<svg xmlns='http://www.w3.org/2000/svg'/>")),
+      "neither PNG, JPEG nor WebP",
+    ],
+    ["over 256 KiB", base64(largePng()), "over 256 KiB"],
+  ])("refuses a logo %s, with a valid call", async (_, logo, says) => {
+    const state = store();
+
+    const { text, isError } = await merchants(state, {
+      action: "edit",
+      merchant: "Greenmarket",
+      logo,
+    });
+
+    expect(isError).toBe(true);
+    expect(text).toContain(says);
+    expect(state.merchants.some((each) => each.logo !== undefined)).toBe(false);
+    await expectValidExample(text, state);
+  });
+
+  test("each goes alone", async () => {
+    const both = await merchants(store(), {
+      action: "edit",
+      merchant: "Greenmarket",
+      color: "teal",
+      clear_logo: true,
+    });
+
+    expect(both.isError).toBe(true);
+    expect(both.text).toContain("edit does one thing at a time");
+  });
+});
+
 describe("the merchants tool", () => {
   test("refuses its writes to a token allowed to read only, and says how to get the write scope", async () => {
     const state = store();
@@ -1353,6 +1744,10 @@ describe("the merchants tool", () => {
       { action: "edit", merchant: "Greenmarket", name: "Green Market" },
       { action: "merge", merchant: "Green Grocer", into: "Greenmarket" },
       { action: "edit", merchant: "Greenmarket", subscription: false },
+      { action: "create", name: "Riverside Bakery" },
+      { action: "edit", merchant: "Greenmarket", color: "teal" },
+      { action: "edit", merchant: "Greenmarket", logo: base64(PNG) },
+      { action: "edit", merchant: "Greenmarket", clear_logo: true },
     ];
 
     for (const args of writes) {
@@ -1371,6 +1766,9 @@ describe("the merchants tool", () => {
     ]);
 
     expect(state.merchants.some((each) => each.subscriptionDismissed === true)).toBe(false);
+    expect(
+      state.merchants.some((each) => each.color !== undefined || each.logo !== undefined),
+    ).toBe(false);
 
     const read = await merchants(state, { action: "show", merchant: "Greenmarket" }, reader);
 

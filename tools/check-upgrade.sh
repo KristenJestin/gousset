@@ -8,7 +8,8 @@
 # the one a fresh installation gets; that the app answers, that every user signs in with the same
 # password (a banned one still cannot), that a session made before still works, that a user's
 # export holds their rows as they were, and that a statement the release imported adds nothing
-# when imported again. Removes everything it started, whatever happened.
+# when imported again, and that a merchant's colour and logo (#204) set after the update survive
+# migrate run again and come out in the export. Removes everything it started, whatever happened.
 #   tools/check-upgrade.sh <tag>                   from the last release (the highest tag vX.Y.Z)
 #   tools/check-upgrade.sh --from 0.1.1 <tag>
 #   docker build -t ghcr.io/kristenjestin/gousset:local . && tools/check-upgrade.sh local
@@ -436,6 +437,40 @@ if [ -n "$first_import" ]; then
     fail "$(basename "$statement") imported again after the update: $ended, not \"done 0 6\" (nothing added, 6 found)."
   say "$(basename "$statement"), imported again on $tag, adds nothing: its 6 lines are found."
 fi
+
+# 11b. A merchant's look (#204), which no release before 0.4 had: Camille gives one of her merchants
+# a logo through the app's own route, and a colour as the tables' owner (no plain HTTP route sets
+# it: a server function does); both survive migrate run again, the app serves the logo byte for
+# byte, and her export carries both.
+look_merchant=$(sql "select id from merchant where user_id = '$camille' order by id limit 1")
+[ -n "$look_merchant" ] || fail "Camille has no merchant to give a look to."
+printf '\x89PNG\r\n\x1a\n\0\0\0\r' > "$work/logo.png"
+logo_answer=$(curl --silent --show-error --max-time 20 --cookie "$work/camille-after" \
+  --cookie-jar "$work/camille-after" --header "Origin: $origin" \
+  --header 'Content-Type: application/octet-stream' --data-binary "@$work/logo.png" \
+  --write-out '\n%{http_code}' "$base/api/merchants/$look_merchant/logo") ||
+  fail "the upload of Camille's logo did not answer."
+[ "${logo_answer##*$'\n'}" = 200 ] ||
+  fail "the upload of Camille's logo answered ${logo_answer##*$'\n'}: ${logo_answer%$'\n'*}"
+logo_version=$(printf '%s\n' "${logo_answer%$'\n'*}" | jq -r .version)
+sql "update merchant set color = 'teal' where id = '$look_merchant'" > /dev/null
+migrate "$work/migrate-3"
+[ "$(sql "select coalesce(color, '') from merchant where id = '$look_merchant'")" = teal ] ||
+  fail "Camille's merchant lost its colour when migrate ran again."
+[ "$(sql "select left(sha256, 16) from merchant_logo where merchant_id = '$look_merchant'")" = "$logo_version" ] ||
+  fail "Camille's merchant lost its logo when migrate ran again."
+logo_bytes=$(od -An -tx1 -v "$work/logo.png" | tr -d ' \n')
+served=$(curl --silent --show-error --fail --max-time 20 --cookie "$work/camille-after" \
+  "$base/api/merchants/$look_merchant/logo?v=$logo_version" | od -An -tx1 -v | tr -d ' \n') ||
+  fail "Camille's logo is not served."
+[ "$served" = "$logo_bytes" ] || fail "Camille's logo is not served as she uploaded it."
+curl --silent --show-error --fail --max-time 30 --cookie "$work/camille-after" \
+  --output "$work/export-look.zip" "$base/api/export" || fail "Camille's export failed."
+exported_logo=$(unzip -p "$work/export-look.zip" "merchant-logos/$look_merchant.png" | od -An -tx1 -v | tr -d ' \n')
+[ "$exported_logo" = "$logo_bytes" ] || fail "Camille's export does not carry her merchant's logo."
+[ "$(unzip -p "$work/export-look.zip" merchants.json | jq -r --arg id "$look_merchant" '.[] | select(.id == $id) | .color')" = teal ] ||
+  fail "Camille's export does not carry her merchant's colour."
+say "Camille's merchant keeps its colour and logo when migrate runs again, and her export carries them."
 
 # 12. The upgraded schema is a fresh installation's.
 sql "create database gousset_fresh" > /dev/null

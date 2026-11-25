@@ -9,7 +9,10 @@ import {
 import type { UserTransaction } from "@gousset/db/user-data";
 import { and, eq, gte, lte } from "drizzle-orm";
 
+import { lookOf } from "../look";
+import type { Look } from "../look";
 import { merchantKey } from "../merchants/labels";
+import { logoShaOf } from "../merchants/look-columns";
 import type { Charge } from "./detection";
 
 // What subscriptions are detected from (#34; docs/data-model.md, v0.4): the user's expenses, read
@@ -36,6 +39,8 @@ export type ChargeMerchant = {
   readonly name: string;
   readonly intermediary: boolean;
   readonly dismissed: boolean;
+  /** How it is shown (#204). */
+  readonly look: Look;
 };
 
 /** An expense made a charge, with the lines it was paid by. */
@@ -191,6 +196,7 @@ export function chargesOf(
               id: entryId,
               merchantId,
               merchant: chosen.name,
+              look: chosen.look,
               day: first.happenedOn,
               amountMinor,
               currency,
@@ -250,12 +256,19 @@ export async function chargesIn(
       name: merchant.name,
       intermediary: merchant.isIntermediary,
       dismissed: merchant.subscriptionDismissed,
+      color: merchant.color,
+      logoSha: logoShaOf(merchant.id),
     })
     .from(merchant);
 
   return chargesOf(
     parts,
     new Map(aliases.map((row) => [row.alias, row.merchantId])),
-    new Map(merchants.map(({ id, ...row }) => [id, row])),
+    new Map(
+      merchants.map(({ id, color, logoSha, ...row }) => [
+        id,
+        { ...row, look: lookOf(color, logoSha) },
+      ]),
+    ),
   );
 }

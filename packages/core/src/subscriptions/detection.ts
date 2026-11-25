@@ -1,4 +1,5 @@
 import { addDays } from "../balances";
+import type { Look } from "../look";
 import type { Money } from "../month";
 import { addMonths } from "../values";
 
@@ -48,6 +49,8 @@ export type Charge = {
   readonly id: string;
   readonly merchantId: string;
   readonly merchant: string;
+  /** How the merchant is shown (#204). */
+  readonly look: Look;
   /** `YYYY-MM-DD`. */
   readonly day: string;
   /** Positive, in minor units of `currency`. */
@@ -58,6 +61,8 @@ export type Charge = {
 export type Subscription = {
   readonly merchantId: string;
   readonly merchant: string;
+  /** How the merchant is shown (#204), as its last charge says it. */
+  readonly look: Look;
   readonly currency: string;
   readonly cadence: Cadence;
   /** The series, oldest first. */
@@ -91,6 +96,8 @@ export type CalendarItem = {
   /** The merchant's name. */
   readonly name: string;
   readonly merchantId: string;
+  /** How the merchant is shown (#204). */
+  readonly look: Look;
   readonly amount: Money;
   readonly priceRise: { readonly beforeMinor: number } | null;
 };
@@ -502,6 +509,7 @@ function subscriptionOf(
   return {
     merchantId: last.merchantId,
     merchant: last.merchant,
+    look: last.look,
     currency: last.currency,
     cadence: found.cadence,
     charges,
@@ -662,7 +670,7 @@ export function calendarDays(
   const items: Array<CalendarItem> = [];
 
   for (const subscription of subscriptions) {
-    const { merchant, merchantId, currency, cadence, charges, priceRise } = subscription;
+    const { merchant, merchantId, look, currency, cadence, charges, priceRise } = subscription;
     const last = charges.at(-1);
     const series = `${merchantId}:${currency}:${cadence}:${charges[0]?.id ?? ""}`;
 
@@ -672,6 +680,7 @@ export function calendarDays(
       kind,
       name: merchant,
       merchantId,
+      look,
       amount: { minor, currency },
       priceRise:
         kind === "paid" && id === last?.id && priceRise !== null

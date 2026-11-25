@@ -60,7 +60,7 @@ const facts = (change: Partial<ProposalFacts> = {}): ProposalFacts => ({
 
 describe("proposalOf", () => {
   test("a counted line still classified by default keeps its category, with its merchant", () => {
-    const merchant = { id: "m-corner", name: "Corner Shop" };
+    const merchant = { id: "m-corner", name: "Corner Shop", look: { color: null, logo: null } };
 
     expect(proposalOf(facts({ merchant }))).toEqual({
       kind: "category",

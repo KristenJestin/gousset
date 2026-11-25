@@ -13,6 +13,8 @@ import { alias } from "drizzle-orm/pg-core";
 import { Effect, Layer } from "effect";
 
 import { categoriesOfLines } from "./category-store-database";
+import { merchantsOfLines } from "./merchants/line-merchant";
+import type { NamedMerchant } from "./merchants/line-merchant";
 import type { LineCategory } from "./category-store";
 import { LineStore } from "./line-store";
 import { linesWithSeveralCandidates } from "./transfers/pair-lines";
@@ -140,8 +142,12 @@ type LineColumns = {
   readonly source: "import" | "manual" | "balance" | "counterpart";
 };
 
-/** A row of `lineColumns`, with its category; a discarded one is never asked for. */
-function found(row: LineColumns, category: LineCategory | null): FoundLine {
+/** A row of `lineColumns`, with its category and merchant; a discarded one is never asked for. */
+function found(
+  row: LineColumns,
+  category: LineCategory | null,
+  merchant: NamedMerchant | null,
+): FoundLine {
   return {
     id: row.id,
     bookedOn: row.bookedOn,
@@ -158,6 +164,7 @@ function found(row: LineColumns, category: LineCategory | null): FoundLine {
       currency: row.currency,
     },
     category,
+    merchant,
     fromBalance: row.source === "balance",
   };
 }
@@ -216,6 +223,8 @@ async function search(transaction: UserTransaction, query: LineQuery) {
     rows.map((row) => row.id),
   );
 
+  const merchants = await merchantsOfLines(transaction, rows);
+
   // Every line's account is the user's (a composite foreign key) and so among those just read.
   const lines = rows.flatMap((row) => {
     const owned = accountOf.get(row.accountId);
@@ -231,6 +240,7 @@ async function search(transaction: UserTransaction, query: LineQuery) {
               currency: owned.currency,
             },
             categories.get(row.id) ?? null,
+            merchants.get(row.id) ?? null,
           ),
         ];
   });
@@ -287,9 +297,10 @@ async function show(
   }
 
   const categories = await categoriesOfLines(transaction, [row.id]);
+  const merchants = await merchantsOfLines(transaction, [row]);
 
   return {
-    ...found(row, categories.get(row.id) ?? null),
+    ...found(row, categories.get(row.id) ?? null, merchants.get(row.id) ?? null),
     source: row.source,
     originalAmountMinor: row.originalAmountMinor,
     originalCurrency: row.originalCurrency,

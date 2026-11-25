@@ -7,7 +7,7 @@ import {
   statementLine,
 } from "@gousset/db/schema/ledger";
 import type { UserTransaction } from "@gousset/db/user-data";
-import { eq, sql } from "drizzle-orm";
+import { eq, inArray, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { Result } from "effect";
 
@@ -15,9 +15,12 @@ import type { LineCategory } from "../category-store";
 import { takeCategoryTurn } from "../category-turn";
 import { LineNotFound } from "../errors";
 import { isId } from "../imports/rows";
+import { lookOf } from "../look";
+import type { Look } from "../look";
 import { targetOf } from "../rules/effect";
 import { LineMerchantRefused } from "./errors";
 import { merchantKey } from "./labels";
+import { logoShaOf } from "./look-columns";
 
 // A line's merchant, and who was paid behind an intermediary (#30; docs/data-model.md, v0.3). The
 // intermediary is read from the label as a line's merchant is (its cleaned label's merchant, marked
@@ -25,8 +28,10 @@ import { merchantKey } from "./labels";
 // `merchant_id`, which a rule or the user sets. An intermediary is never who was paid: an entry's
 // merchant that is one (a mark or a merge after it was set) counts as none, and the line asks.
 
-/** A merchant as a line names it. */
-export type NamedMerchant = { readonly id: string; readonly name: string };
+/** A merchant as a line names it, with how it is shown (#204). */
+export type NamedMerchant = { readonly id: string; readonly name: string; readonly look: Look };
+
+const lookColumns = { color: merchant.color, logoSha: logoShaOf(merchant.id) };
 
 /** Who a line paid, and through whom. */
 export type LineMerchant = {
@@ -77,6 +82,11 @@ type LineFacts = {
 
 const entryMerchant = alias(merchant, "entry_merchant");
 
+const entryLook = {
+  merchantColor: entryMerchant.color,
+  merchantLogoSha: logoShaOf(entryMerchant.id),
+};
+
 /** What a line's merchant is read from; undefined for no line of the user's. */
 async function factsOf(
   transaction: UserTransaction,
@@ -103,14 +113,29 @@ async function factsOf(
 
   const key = merchantKey(line.label, line.counterpartyName);
 
-  const [named] =
+  const [found] =
     key === null
       ? []
       : await transaction
-          .select({ id: merchant.id, name: merchant.name, intermediary: merchant.isIntermediary })
+          .select({
+            id: merchant.id,
+            name: merchant.name,
+            intermediary: merchant.isIntermediary,
+            ...lookColumns,
+          })
           .from(merchantAlias)
           .innerJoin(merchant, eq(merchant.id, merchantAlias.merchantId))
           .where(eq(merchantAlias.alias, key));
+
+  const named =
+    found === undefined
+      ? undefined
+      : {
+          id: found.id,
+          name: found.name,
+          intermediary: found.intermediary,
+          look: lookOf(found.color, found.logoSha),
+        };
 
   const query = transaction
     .select({
@@ -120,6 +145,7 @@ async function factsOf(
       merchantId: entry.merchantId,
       merchantName: entryMerchant.name,
       merchantIntermediary: entryMerchant.isIntermediary,
+      ...entryLook,
       classifiedBy: entry.classifiedBy,
       ruleId: entry.ruleId,
       role: entryPart.role,
@@ -145,7 +171,11 @@ async function factsOf(
       one.merchantName === null ||
       one.merchantIntermediary !== false
         ? null
-        : { id: one.merchantId, name: one.merchantName },
+        : {
+            id: one.merchantId,
+            name: one.merchantName,
+            look: lookOf(one.merchantColor, one.merchantLogoSha),
+          },
     whole:
       line.state === "counted" && one !== undefined && one.parts === 1 && one.role === "payment"
         ? one
@@ -155,17 +185,130 @@ async function factsOf(
 
 function merchantOf(facts: LineFacts): LineMerchant {
   const named = facts.labelMerchant;
-  const intermediary = named?.intermediary === true ? { id: named.id, name: named.name } : null;
+
+  const intermediary =
+    named?.intermediary === true ? { id: named.id, name: named.name, look: named.look } : null;
 
   const paid =
     facts.entryMerchant ??
-    (named === undefined || named.intermediary ? null : { id: named.id, name: named.name });
+    (named === undefined || named.intermediary
+      ? null
+      : { id: named.id, name: named.name, look: named.look });
 
   return {
     merchant: paid,
     intermediary,
     asks: intermediary !== null && paid === null && facts.whole !== undefined,
   };
+}
+
+/** A line as `merchantsOfLines` reads it. */
+type NamingLine = {
+  readonly id: string;
+  readonly label: string;
+  readonly counterpartyName: string | null;
+};
+
+/**
+ * Who each line paid, as `LineMerchant.merchant` says it, with its look (#204): for a page of the
+ * operations list, in two queries whatever its length. A line whose merchant is none known is left
+ * out.
+ */
+export async function merchantsOfLines(
+  transaction: UserTransaction,
+  lines: ReadonlyArray<NamingLine>,
+): Promise<ReadonlyMap<string, NamedMerchant>> {
+  if (lines.length === 0) {
+    return new Map();
+  }
+
+  const keyOf = new Map(
+    lines.map((line) => [line.id, merchantKey(line.label, line.counterpartyName)]),
+  );
+
+  const keys = [...new Set([...keyOf.values()].flatMap((key) => (key === null ? [] : [key])))];
+
+  const named =
+    keys.length === 0
+      ? []
+      : await transaction
+          .select({
+            alias: merchantAlias.alias,
+            id: merchant.id,
+            name: merchant.name,
+            intermediary: merchant.isIntermediary,
+            ...lookColumns,
+          })
+          .from(merchantAlias)
+          .innerJoin(merchant, eq(merchant.id, merchantAlias.merchantId))
+          .where(inArray(merchantAlias.alias, keys));
+
+  const byAlias = new Map(named.map((row) => [row.alias, row]));
+
+  const parts = await transaction
+    .selectDistinct({
+      lineId: entryPart.lineId,
+      entryId: entry.id,
+      merchantId: entryMerchant.id,
+      merchantName: entryMerchant.name,
+      merchantIntermediary: entryMerchant.isIntermediary,
+      ...entryLook,
+    })
+    .from(entryPart)
+    .innerJoin(entry, eq(entry.id, entryPart.entryId))
+    .leftJoin(entryMerchant, eq(entryMerchant.id, entry.merchantId))
+    .where(
+      inArray(
+        entryPart.lineId,
+        lines.map((line) => line.id),
+      ),
+    );
+
+  const entriesOf = new Map<string, Array<(typeof parts)[number]>>();
+
+  for (const part of parts) {
+    const known = entriesOf.get(part.lineId);
+
+    if (known === undefined) {
+      entriesOf.set(part.lineId, [part]);
+    } else {
+      known.push(part);
+    }
+  }
+
+  const merchants = new Map<string, NamedMerchant>();
+
+  for (const line of lines) {
+    const [only, ...others] = entriesOf.get(line.id) ?? [];
+    const key = keyOf.get(line.id);
+    const label = key === null || key === undefined ? undefined : byAlias.get(key);
+
+    // Its one entry's merchant, when it is no intermediary, as `factsOf` reads it.
+    const own =
+      only === undefined ||
+      others.length > 0 ||
+      only.merchantId === null ||
+      only.merchantName === null ||
+      only.merchantIntermediary !== false
+        ? undefined
+        : {
+            id: only.merchantId,
+            name: only.merchantName,
+            look: lookOf(only.merchantColor, only.merchantLogoSha),
+          };
+
+    const paid =
+      own ??
+      (label === undefined || label.intermediary
+        ? undefined
+        : { id: label.id, name: label.name, look: lookOf(label.color, label.logoSha) });
+
+    if (paid !== undefined) {
+      merchants.set(line.id, paid);
+    }
+  }
+
+  return merchants;
 }
 
 /** The line's merchant and intermediary, in `owner`'s transaction; undefined for no such line. */
@@ -248,7 +391,12 @@ export async function assignLineMerchantIn(
 
   const byName = () =>
     transaction
-      .select({ id: merchant.id, name: merchant.name, intermediary: merchant.isIntermediary })
+      .select({
+        id: merchant.id,
+        name: merchant.name,
+        intermediary: merchant.isIntermediary,
+        ...lookColumns,
+      })
       .from(merchant)
       .where(sql`lower(${merchant.name}) = lower(${name})`)
       .limit(1);
@@ -265,7 +413,7 @@ export async function assignLineMerchantIn(
           .insert(merchant)
           .values({ userId: owner, name })
           .onConflictDoNothing({ target: [merchant.userId, merchant.name] })
-          .returning({ id: merchant.id, name: merchant.name })
+          .returning({ id: merchant.id, name: merchant.name, ...lookColumns })
       : [];
 
   // A merchant of that name another transaction made meanwhile is found again.
@@ -290,7 +438,7 @@ export async function assignLineMerchantIn(
     .where(eq(entry.id, whole.id));
 
   return Result.succeed({
-    merchant: { id: paid.id, name: paid.name },
+    merchant: { id: paid.id, name: paid.name, look: lookOf(paid.color, paid.logoSha) },
     created: made !== undefined,
     category: moved,
   });

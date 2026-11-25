@@ -1,0 +1,282 @@
+{
+  "type": "diff",
+  "version": "10",
+  "dialect": "postgres",
+  "id": "280a75fe-e38b-4442-b582-4fe54a89565e",
+  "prevIds": ["d6bd10e9-3ae0-46af-bfa5-da8beb31ec49"],
+  "footprints": [
+    {
+      "statementType": "create_table",
+      "statementTarget": ["table", "public", "merchant_logo"],
+      "writes": [
+        "s|tbl|public.merchant_logo",
+        "n|tbl|public.merchant_logo",
+        "e|tbl|public.merchant_logo",
+        "n|rel|public.merchant_logo",
+        "n|type|public.merchant_logo",
+        "n|rel|public.merchant_logo_pkey"
+      ],
+      "reads": ["n|sch|public"]
+    },
+    {
+      "statementType": "add_column",
+      "statementTarget": ["column", "public", "merchant", "color"],
+      "writes": [
+        "s|col|public.merchant.color",
+        "n|col|public.merchant.color",
+        "e|col|public.merchant.color"
+      ],
+      "reads": ["n|tbl|public.merchant", "n|sch|public"]
+    },
+    {
+      "statementType": "create_fk",
+      "statementTarget": ["table", "public", "merchant_logo"],
+      "writes": [
+        "s|fk|public.merchant_logo.merchant_logo_user_id_auth_user_id_fkey",
+        "n|fk|public.merchant_logo.merchant_logo_user_id_auth_user_id_fkey",
+        "e|fk|public.merchant_logo.merchant_logo_user_id_auth_user_id_fkey",
+        "n|con|public.merchant_logo.merchant_logo_user_id_auth_user_id_fkey"
+      ],
+      "reads": [
+        "n|tbl|public.merchant_logo",
+        "n|sch|public",
+        "n|tbl|public.auth_user",
+        "n|sch|public",
+        "n|col|public.merchant_logo.user_id",
+        "n|col|public.auth_user.id",
+        "e|uniqueness|public.auth_user.id"
+      ]
+    },
+    {
+      "statementType": "create_fk",
+      "statementTarget": ["table", "public", "merchant_logo"],
+      "writes": [
+        "s|fk|public.merchant_logo.merchant_logo_merchant_fk",
+        "n|fk|public.merchant_logo.merchant_logo_merchant_fk",
+        "e|fk|public.merchant_logo.merchant_logo_merchant_fk",
+        "n|con|public.merchant_logo.merchant_logo_merchant_fk"
+      ],
+      "reads": [
+        "n|tbl|public.merchant_logo",
+        "n|sch|public",
+        "n|tbl|public.merchant",
+        "n|sch|public",
+        "n|col|public.merchant_logo.user_id",
+        "n|col|public.merchant_logo.merchant_id",
+        "n|col|public.merchant.user_id",
+        "n|col|public.merchant.id",
+        "e|uniqueness|public.merchant.id.user_id"
+      ]
+    },
+    {
+      "statementType": "create_policy",
+      "statementTarget": ["table", "public", "merchant_logo"],
+      "writes": [
+        "s|pol|public.merchant_logo.merchant_logo_own_rows_only",
+        "n|pol|public.merchant_logo.merchant_logo_own_rows_only",
+        "e|pol|public.merchant_logo.merchant_logo_own_rows_only"
+      ],
+      "reads": ["n|tbl|public.merchant_logo", "n|sch|public", "e|rls|public.merchant_logo"]
+    }
+  ],
+  "deltas": [
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "name": "merchant_logo",
+        "isRlsEnabled": true,
+        "entityType": "tables"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "merchant",
+        "name": "color",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "merchant_logo",
+        "name": "merchant_id",
+        "type": "uuid",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "merchant_logo",
+        "name": "user_id",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "merchant_logo",
+        "name": "media_type",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "merchant_logo",
+        "name": "content",
+        "type": "bytea",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "merchant_logo",
+        "name": "sha256",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "merchant_logo",
+        "name": "created_at",
+        "type": "timestamp with time zone",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "now()",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "merchant_logo",
+        "name": "merchant_logo_user_id_auth_user_id_fkey",
+        "nameExplicit": false,
+        "columns": ["user_id"],
+        "schemaTo": "public",
+        "tableTo": "auth_user",
+        "columnsTo": ["id"],
+        "onUpdate": "NO ACTION",
+        "onDelete": "CASCADE",
+        "entityType": "fks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "merchant_logo",
+        "name": "merchant_logo_merchant_fk",
+        "nameExplicit": true,
+        "columns": ["user_id", "merchant_id"],
+        "schemaTo": "public",
+        "tableTo": "merchant",
+        "columnsTo": ["user_id", "id"],
+        "onUpdate": "NO ACTION",
+        "onDelete": "CASCADE",
+        "entityType": "fks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "merchant_logo",
+        "name": "merchant_logo_pkey",
+        "columns": ["merchant_id"],
+        "nameExplicit": false,
+        "entityType": "pks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "merchant_logo",
+        "name": "merchant_logo_media_type",
+        "value": "\"media_type\" in ('image/png', 'image/jpeg', 'image/webp')",
+        "entityType": "checks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "merchant_logo",
+        "name": "merchant_logo_size",
+        "value": "octet_length(\"content\") between 1 and 262144",
+        "entityType": "checks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "merchant_logo",
+        "name": "merchant_logo_own_rows_only",
+        "as": "PERMISSIVE",
+        "for": "ALL",
+        "roles": ["public"],
+        "using": "\"user_id\" = current_setting('gousset.user_id', true)",
+        "withCheck": "\"user_id\" = current_setting('gousset.user_id', true)",
+        "entityType": "policies"
+      }
+    }
+  ]
+}

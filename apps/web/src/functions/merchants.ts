@@ -1,4 +1,5 @@
 import {
+  LookColor,
   MAX_MERCHANTS_LISTED,
   Merchants,
   assignLineMerchant as assignCoreLineMerchant,
@@ -34,11 +35,19 @@ export type MerchantRefusalCode =
   | "LINE_NOT_FOUND"
   | "NOT_INTERMEDIARY"
   | "NOT_ONE_ENTRY"
-  | "INTERMEDIARY_CHOSEN";
+  | "INTERMEDIARY_CHOSEN"
+  | "LABEL_NO_KEY"
+  | "LABEL_TAKEN"
+  | "LOGO_TOO_LARGE"
+  | "LOGO_TYPE"
+  | "LOGO_EMPTY";
 
-/** A refusal, with the merchant's name it is about when there is one (the one taken, say). */
-const refused = (code: MerchantRefusalCode, name?: string) =>
-  Effect.succeed({ ok: false as const, code, name });
+/**
+ * A refusal, with the merchant's name it is about when there is one (the one taken, say), and the
+ * label it is about when a label is refused (#204).
+ */
+const refused = (code: MerchantRefusalCode, name?: string, label?: string) =>
+  Effect.succeed({ ok: false as const, code, name, label });
 
 const NAME_CODES = { blank: "NAME_BLANK", too_long: "NAME_TOO_LONG" } as const;
 
@@ -88,6 +97,101 @@ export const getMerchant = createServerFn({ method: "GET" })
       showMerchant(context.owner, data.merchantId).pipe(
         Effect.map((merchant) => ({ ok: true as const, merchant })),
         Effect.catchTags({
+          MerchantNotFound: () => refused("MERCHANT_NOT_FOUND"),
+        }),
+      ),
+    ),
+  );
+
+/** The labels a form sends: as many as a person types, and no more. */
+const Labels = Schema.Array(Typed).check(Schema.isMaxLength(100));
+
+/** What a merchant made by hand is (#204): its colour null for the automatic one. */
+const MerchantInput = Schema.Struct({
+  name: Typed,
+  defaultCategoryId: Schema.NullOr(MerchantId),
+  intermediary: Schema.Boolean,
+  color: Schema.NullOr(LookColor),
+  labels: Labels,
+});
+
+/** What an edit changes (#204): a field left out stays as it is; null clears a category or colour. */
+const MerchantEditInput = Schema.Struct({
+  merchantId: MerchantId,
+  name: Schema.optional(Typed),
+  defaultCategoryId: Schema.optional(Schema.NullOr(MerchantId)),
+  intermediary: Schema.optional(Schema.Boolean),
+  color: Schema.optional(Schema.NullOr(LookColor)),
+  /** Labels added; one comes off by moving it (`moveMerchantLabel`). */
+  labels: Schema.optional(Labels),
+});
+
+/** The refusals of a merchant made or edited by hand, as codes. */
+const writeRefusals = {
+  MerchantNameRefused: (refusal: { readonly reason: "blank" | "too_long" }) =>
+    refused(NAME_CODES[refusal.reason]),
+  MerchantNameTaken: (refusal: { readonly name: string }) => refused("NAME_TAKEN", refusal.name),
+  MerchantLabelRefused: (refusal: { readonly label: string }) =>
+    refused("LABEL_NO_KEY", undefined, refusal.label),
+  MerchantLabelTaken: (refusal: { readonly label: string; readonly name: string }) =>
+    refused("LABEL_TAKEN", refusal.name, refusal.label),
+  CategoryNotFound: () => refused("CATEGORY_NOT_FOUND"),
+  CategoryRefused: () => refused("CATEGORY_ARCHIVED"),
+};
+
+/**
+ * Makes a merchant by hand (#204): its name, default category, mark, colour and the labels that
+ * name it, at once; the next imported lines whose labels clean as one of them are its. Refused
+ * with a code: a name blank, too long or taken (with the merchant that has it), a label that cleans
+ * to nothing (`LABEL_NO_KEY`, with the label) or names another merchant (`LABEL_TAKEN`, with the
+ * label and that merchant's name), a category gone or archived.
+ */
+export const createMerchant = createServerFn({ method: "POST" })
+  .middleware([signedIn, slowedInDevelopment])
+  .validator(Schema.toStandardSchemaV1(MerchantInput))
+  .handler(({ data, context }) =>
+    runCore(
+      Effect.gen(function* () {
+        const merchants = yield* Merchants;
+
+        return yield* merchants.create(context.owner, {
+          name: data.name,
+          defaultCategoryId: data.defaultCategoryId,
+          intermediary: data.intermediary,
+          color: data.color,
+          aliases: data.labels,
+        });
+      }).pipe(
+        Effect.map((merchant) => ({ ok: true as const, merchant })),
+        Effect.catchTags(writeRefusals),
+      ),
+    ),
+  );
+
+/**
+ * Edits a merchant in one place (#204): what is given of its name, default category, mark and
+ * colour, and labels added, at once. Refused as `createMerchant` is, and for a merchant the user
+ * does not have. Its logo is the logo route's (`/api/merchants/$merchantId/logo`).
+ */
+export const editMerchant = createServerFn({ method: "POST" })
+  .middleware([signedIn, slowedInDevelopment])
+  .validator(Schema.toStandardSchemaV1(MerchantEditInput))
+  .handler(({ data, context }) =>
+    runCore(
+      Effect.gen(function* () {
+        const merchants = yield* Merchants;
+
+        return yield* merchants.edit(context.owner, data.merchantId, {
+          name: data.name,
+          defaultCategoryId: data.defaultCategoryId,
+          intermediary: data.intermediary,
+          color: data.color,
+          addAliases: data.labels,
+        });
+      }).pipe(
+        Effect.map((merchant) => ({ ok: true as const, merchant })),
+        Effect.catchTags({
+          ...writeRefusals,
           MerchantNotFound: () => refused("MERCHANT_NOT_FOUND"),
         }),
       ),

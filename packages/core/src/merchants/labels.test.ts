@@ -463,6 +463,23 @@ describe("assigning keys to merchants", () => {
     ]);
   });
 
+  test("a label the user gives a merchant made by hand names the next lines of that shop (#204)", () => {
+    // Made by hand from a label the user typed: its cleaned label is the merchant's alias.
+    const alias = merchantKey("CB JUNIPER HARDWARE 0910", null);
+    const known: Array<KnownKey> = [{ key: alias ?? "", merchantId: "made-by-hand" }];
+
+    expect(alias).toBe("JUNIPER HARDWARE");
+
+    // A later line spelled the same way cleans to that alias: it is the merchant's, and
+    // recognition makes nothing for it, as it never moves a known alias.
+    expect(merchantKey("CB JUNIPER HARDWARE 2310", null)).toBe(alias);
+
+    // One that adds the town joins it by its start, as an imported one would.
+    expect(assignMerchants([merchantKey("JUNIPER HARDWARE RIVERTON", null) ?? ""], known)).toEqual([
+      { alias: "JUNIPER HARDWARE RIVERTON", merchant: { id: "made-by-hand" } },
+    ]);
+  });
+
   test("a key starting a merchant's that is no intermediary still joins it", () => {
     const known: Array<KnownKey> = [
       { key: "GREENMARKET", merchantId: "m1", intermediary: false },
