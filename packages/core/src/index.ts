@@ -356,6 +356,7 @@ export {
   Transfers,
   lineTransferOf,
   pairEveryLine,
+  pairKeptLines,
   pairLineWithAccount,
   pairLines,
   transfersLayer,

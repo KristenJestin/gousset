@@ -310,6 +310,16 @@ count=$(unclassified)
 [ "$count" = 0 ] || fail "$count counted lines have no entry of their own, or more than one, or are a transfer's side with one, after the update."
 say "every counted line with an amount has its one entry."
 
+# One of Camille's old transfer lines, classified by hand where the release could (from 0.3.0,
+# tools/check-upgrade.sql): its expense before the app starts, which the boot must leave as it is.
+line() { printf '019a0000-0000-7000-8000-000000000%s' "$1"; }
+by_hand() {
+  sql "select coalesce(string_agg(to_jsonb(e)::text, ' '), '') from entry e
+    join entry_part p on p.entry_id = e.id
+    where p.line_id = '$(line 414)' and e.classified_by = 'user'"
+}
+hand=$(by_hand)
+
 # 8. The installation as `docker compose up` brings it back: migrate, then the app.
 "${compose[@]}" up --detach --no-build --pull never --wait --wait-timeout 180 > "$work/up" 2>&1 ||
   fail "$tag did not come up over $from's data: $(tail -n 5 "$work/up")"
@@ -362,13 +372,20 @@ booted() { # <starts>
 # before v0.3, never paired (tools/check-upgrade.sql), are paired where each is the other's only
 # candidate, a day apart and across her savings account's fortnight (#131), and lose their entries;
 # the money out with two candidates, and those two, are left to the review, each an expense or an
-# income of its own.
+# income of its own. A clear pair whose side she classified by hand is left as it is, its expense
+# unchanged; from a release with no entries she could not have, and it is paired.
 booted 1
-line() { printf '019a0000-0000-7000-8000-000000000%s' "$1"; }
+expected="$(line 411)>$(line 421) $(line 413)>$(line 424)"
+[ -n "$hand" ] || expected="$expected $(line 414)>$(line 425)"
 pairs=$(sql "select string_agg(t.out_line_id::text || '>' || t.in_line_id::text, ' ' order by t.out_line_id)
   from transfer t where t.user_id = '$camille'")
-[ "$pairs" = "$(line 411)>$(line 421) $(line 413)>$(line 424)" ] ||
-  fail "Camille's transfers after boot are \"$pairs\", not her clear pair and her fortnight's."
+[ "$pairs" = "$expected" ] ||
+  fail "Camille's transfers after boot are \"$pairs\", not \"$expected\"."
+if [ -n "$hand" ]; then
+  [ "$(by_hand)" = "$hand" ] ||
+    fail "the expense of the line Camille classified by hand changed at boot: $(by_hand), not $hand."
+  say "the old transfer line Camille classified by hand stays unpaired, its expense unchanged."
+fi
 waiting=$(sql "select count(*) from statement_line l where l.id in ('$(line 412)', '$(line 422)', '$(line 423)')
   and l.review_state = 'to_review' and l.transfer_refused = false
   and (select count(*) from entry_part p where p.line_id = l.id) = 1")

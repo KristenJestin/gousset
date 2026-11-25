@@ -413,7 +413,8 @@ the `image` job and runs `tools/check-upgrade.sh` on it, which, on a fresh proje
 6. starts the app: `/health` answers 200; the boot jobs do what was kept before them: the user's
    merchants, the movement line of her noted balance, and **her transfers kept before v0.3 paired**
    (#192: a clear pair and one across her savings account's fortnight, never paired by the release,
-   are transfers; an ambiguous one waits in the review); **started again, the app changes no row**;
+   are transfers; an ambiguous one waits in the review; from 0.3.0, one whose side she classified
+   by hand stays unpaired, its expense unchanged); **started again, the app changes no row**;
    **the administrator and both users sign in with the same passwords**, the temporary one still
    has to be replaced, the banned one is still refused, and a session made before the update still
    works;

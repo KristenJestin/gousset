@@ -109,6 +109,11 @@ export class Transfers extends Context.Service<
     ) => Effect.Effect<Unpaired, LineNotFound | NotATransfer | Failure>;
     /** Runs the import's pairing over every line of the user's. */
     readonly pairAll: (owner: string) => Effect.Effect<PairingSummary, Failure>;
+    /**
+     * `pairAll` for the lines kept before v0.3 (#192), at boot: the same rules, but a line whose
+     * entry the user classified or split is never paired, for the user to pair by hand.
+     */
+    readonly pairKept: (owner: string) => Effect.Effect<PairingSummary, Failure>;
   }
 >()("@gousset/core/Transfers") {}
 
@@ -590,6 +595,33 @@ export const pairEveryLine = (owner: string) =>
     return yield* transfers.pairAll(owner);
   });
 
+/** Pairs the lines kept before v0.3, at boot (`Transfers.pairKept`). */
+export const pairKeptLines = (owner: string) =>
+  Effect.gen(function* () {
+    const transfers = yield* Transfers;
+
+    return yield* transfers.pairKept(owner);
+  });
+
+/** The pairing of every line of the user's, in its own transaction: on demand, or at boot. */
+const pairEvery = async (
+  transaction: UserTransaction,
+  owner: string,
+  scope: "all" | "kept",
+): Promise<PairingSummary> => {
+  // A card's side made or replaced may be on an account kept by its balance (#31).
+  await takeCategoryTurn(transaction, owner);
+
+  const written = await pairTransfers(transaction, owner, { kind: scope });
+
+  await remakeBalanceLines(transaction, owner);
+
+  return {
+    ...written,
+    toReview: (await linesWithSeveralCandidates(transaction)).length,
+  };
+};
+
 /** `Transfers` on the database (`UserData`). */
 export const transfersLayer = Layer.effect(
   Transfers,
@@ -672,19 +704,10 @@ export const transfersLayer = Layer.effect(
         }),
 
       pairAll: (owner) =>
-        userData.transaction(owner, async (transaction) => {
-          // A card's side made or replaced may be on an account kept by its balance (#31).
-          await takeCategoryTurn(transaction, owner);
+        userData.transaction(owner, (transaction) => pairEvery(transaction, owner, "all")),
 
-          const written = await pairTransfers(transaction, owner, { kind: "all" });
-
-          await remakeBalanceLines(transaction, owner);
-
-          return {
-            ...written,
-            toReview: (await linesWithSeveralCandidates(transaction)).length,
-          };
-        }),
+      pairKept: (owner) =>
+        userData.transaction(owner, (transaction) => pairEvery(transaction, owner, "kept")),
     };
   }),
 );

@@ -33,15 +33,15 @@ insert into import (id, user_id, account_id, file_name, file_sha256, format, pro
 values
   ('019a0000-0000-7000-8000-000000000301', :'camille', '019a0000-0000-7000-8000-000000000101', 'releve-octobre.csv', '5d41402abc4b2a76b9719d911017c592aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'csv', '019a0000-0000-7000-8000-000000000001', null, 'done', '2026-10-01', '2026-10-31', 4, 3, 0, 1, null, '2026-11-01 10:00:00+00', '2026-11-01 10:00:04+00', null),
   ('019a0000-0000-7000-8000-000000000302', :'camille', '019a0000-0000-7000-8000-000000000101', 'releve-septembre.ofx', 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', 'ofx', null, null, 'failed', null, null, 0, 0, 0, 0, 'unreadable', '2026-11-01 10:05:00+00', '2026-11-01 10:05:01+00', null),
-  ('019a0000-0000-7000-8000-000000000303', :'camille', '019a0000-0000-7000-8000-000000000101', 'courant-septembre.csv', 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb', 'csv', '019a0000-0000-7000-8000-000000000001', null, 'done', '2026-09-01', '2026-09-30', 3, 3, 0, 0, null, '2026-10-02 09:00:00+00', '2026-10-02 09:00:02+00', null),
-  ('019a0000-0000-7000-8000-000000000304', :'camille', '019a0000-0000-7000-8000-000000000106', 'livret-septembre.csv', 'cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc', 'csv', '019a0000-0000-7000-8000-000000000001', null, 'done', '2026-09-01', '2026-10-01', 4, 4, 0, 0, null, '2026-10-02 09:01:00+00', '2026-10-02 09:01:02+00', null);
+  ('019a0000-0000-7000-8000-000000000303', :'camille', '019a0000-0000-7000-8000-000000000101', 'courant-septembre.csv', 'bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb', 'csv', '019a0000-0000-7000-8000-000000000001', null, 'done', '2026-09-01', '2026-09-30', 4, 4, 0, 0, null, '2026-10-02 09:00:00+00', '2026-10-02 09:00:02+00', null),
+  ('019a0000-0000-7000-8000-000000000304', :'camille', '019a0000-0000-7000-8000-000000000106', 'livret-septembre.csv', 'cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc', 'csv', '019a0000-0000-7000-8000-000000000001', null, 'done', '2026-09-01', '2026-10-01', 5, 5, 0, 0, null, '2026-10-02 09:01:00+00', '2026-10-02 09:01:02+00', null);
 
 insert into import_file (import_id, user_id, content)
 values
   ('019a0000-0000-7000-8000-000000000301', :'camille', convert_to(E'Date;Libelle;Montant\n02/10/2026;CARTE BOULANGERIE EXEMPLE;-4,20\n05/10/2026;VIR SALAIRE EXEMPLE SA;2 150,00\n', 'UTF8')),
   ('019a0000-0000-7000-8000-000000000302', :'camille', '\x00ff10fe'::bytea),
-  ('019a0000-0000-7000-8000-000000000303', :'camille', convert_to(E'Date;Libelle;Montant\n03/09/2026;VIR VERS LIVRET EXEMPLE;-200,00\n08/09/2026;VIR VERS LIVRET EXEMPLE;-75,00\n17/09/2026;VIR VERS LIVRET EXEMPLE;-150,00\n', 'UTF8')),
-  ('019a0000-0000-7000-8000-000000000304', :'camille', convert_to(E'Date;Libelle;Montant\n04/09/2026;VIR DEPUIS COMPTE COURANT;200,00\n09/09/2026;VIR DEPUIS COMPTE COURANT;75,00\n10/09/2026;VIR DEPUIS COMPTE COURANT;75,00\n01/10/2026;VIR DEPUIS COMPTE COURANT;150,00\n', 'UTF8'));
+  ('019a0000-0000-7000-8000-000000000303', :'camille', convert_to(E'Date;Libelle;Montant\n03/09/2026;VIR VERS LIVRET EXEMPLE;-200,00\n08/09/2026;VIR VERS LIVRET EXEMPLE;-75,00\n17/09/2026;VIR VERS LIVRET EXEMPLE;-150,00\n22/09/2026;VIR VERS LIVRET EXEMPLE;-40,00\n', 'UTF8')),
+  ('019a0000-0000-7000-8000-000000000304', :'camille', convert_to(E'Date;Libelle;Montant\n04/09/2026;VIR DEPUIS COMPTE COURANT;200,00\n09/09/2026;VIR DEPUIS COMPTE COURANT;75,00\n10/09/2026;VIR DEPUIS COMPTE COURANT;75,00\n23/09/2026;VIR DEPUIS COMPTE COURANT;40,00\n01/10/2026;VIR DEPUIS COMPTE COURANT;150,00\n', 'UTF8'));
 
 insert into statement_line (id, user_id, account_id, import_id, source, state, booked_on, value_on, amount_minor, original_amount_minor, original_currency, label, memo, counterparty_name, counterparty_iban, bank_id, dedup_key, duplicate_of_line_id, expires_on, created_at, updated_at)
 values
@@ -55,14 +55,17 @@ two', null, null, null, 'k-2026-10-12--1999-1', null, null, '2026-11-01 10:00:03
   ('019a0000-0000-7000-8000-000000000407', :'admin', '019a0000-0000-7000-8000-000000000201', null, 'manual', 'counted', '2026-10-03', null, -5000, null, null, 'Ligne d''un autre utilisateur', null, null, null, null, null, null, null, '2026-11-02 18:02:00+00', '2026-11-02 18:02:00+00'),
   -- Transfers between Camille's current account and her savings account, as 0.2 kept them: never
   -- paired, each line an expense or an income (#192). A clear pair, a day apart, each the other's
-  -- only candidate; an ambiguous one, the money out with two candidates in; and one across the
-  -- savings account's fortnight (#131): out on the 17th, in at the next fortnight's start.
+  -- only candidate; an ambiguous one, the money out with two candidates in; one across the
+  -- savings account's fortnight (#131): out on the 17th, in at the next fortnight's start; and a
+  -- clear pair whose money out Camille classified by hand from 0.3.0 on (below).
   ('019a0000-0000-7000-8000-000000000411', :'camille', '019a0000-0000-7000-8000-000000000101', '019a0000-0000-7000-8000-000000000303', 'import', 'counted', '2026-09-03', null, -20000, null, null, 'VIR VERS LIVRET EXEMPLE', null, null, null, null, 'k-2026-09-03--20000-1', null, null, '2026-10-02 09:00:01+00', '2026-10-02 09:00:01+00'),
   ('019a0000-0000-7000-8000-000000000412', :'camille', '019a0000-0000-7000-8000-000000000101', '019a0000-0000-7000-8000-000000000303', 'import', 'counted', '2026-09-08', null, -7500, null, null, 'VIR VERS LIVRET EXEMPLE', null, null, null, null, 'k-2026-09-08--7500-1', null, null, '2026-10-02 09:00:01+00', '2026-10-02 09:00:01+00'),
   ('019a0000-0000-7000-8000-000000000413', :'camille', '019a0000-0000-7000-8000-000000000101', '019a0000-0000-7000-8000-000000000303', 'import', 'counted', '2026-09-17', null, -15000, null, null, 'VIR VERS LIVRET EXEMPLE', null, null, null, null, 'k-2026-09-17--15000-1', null, null, '2026-10-02 09:00:01+00', '2026-10-02 09:00:01+00'),
+  ('019a0000-0000-7000-8000-000000000414', :'camille', '019a0000-0000-7000-8000-000000000101', '019a0000-0000-7000-8000-000000000303', 'import', 'counted', '2026-09-22', null, -4000, null, null, 'VIR VERS LIVRET EXEMPLE', null, null, null, null, 'k-2026-09-22--4000-1', null, null, '2026-10-02 09:00:01+00', '2026-10-02 09:00:01+00'),
   ('019a0000-0000-7000-8000-000000000421', :'camille', '019a0000-0000-7000-8000-000000000106', '019a0000-0000-7000-8000-000000000304', 'import', 'counted', '2026-09-04', null, 20000, null, null, 'VIR DEPUIS COMPTE COURANT', null, null, null, null, 'k-2026-09-04-20000-1', null, null, '2026-10-02 09:01:01+00', '2026-10-02 09:01:01+00'),
   ('019a0000-0000-7000-8000-000000000422', :'camille', '019a0000-0000-7000-8000-000000000106', '019a0000-0000-7000-8000-000000000304', 'import', 'counted', '2026-09-09', null, 7500, null, null, 'VIR DEPUIS COMPTE COURANT', null, null, null, null, 'k-2026-09-09-7500-1', null, null, '2026-10-02 09:01:01+00', '2026-10-02 09:01:01+00'),
   ('019a0000-0000-7000-8000-000000000423', :'camille', '019a0000-0000-7000-8000-000000000106', '019a0000-0000-7000-8000-000000000304', 'import', 'counted', '2026-09-10', null, 7500, null, null, 'VIR DEPUIS COMPTE COURANT', null, null, null, null, 'k-2026-09-10-7500-1', null, null, '2026-10-02 09:01:01+00', '2026-10-02 09:01:01+00'),
+  ('019a0000-0000-7000-8000-000000000425', :'camille', '019a0000-0000-7000-8000-000000000106', '019a0000-0000-7000-8000-000000000304', 'import', 'counted', '2026-09-23', null, 4000, null, null, 'VIR DEPUIS COMPTE COURANT', null, null, null, null, 'k-2026-09-23-4000-1', null, null, '2026-10-02 09:01:01+00', '2026-10-02 09:01:01+00'),
   ('019a0000-0000-7000-8000-000000000424', :'camille', '019a0000-0000-7000-8000-000000000106', '019a0000-0000-7000-8000-000000000304', 'import', 'counted', '2026-10-01', null, 15000, null, null, 'VIR DEPUIS COMPTE COURANT', null, null, null, null, 'k-2026-10-01-15000-1', null, null, '2026-10-02 09:01:01+00', '2026-10-02 09:01:01+00');
 
 insert into account_balance (id, user_id, account_id, day, balance_minor, source, import_id)
@@ -88,8 +91,10 @@ values ('mcp-access-1', 'invented-access-token-hash', 'https://agent.example.com
 -- 0.3.0's migration gave them to the lines 0.2 kept (`*_categories_isolation`): an expense or an
 -- income in its kind's fallback, by default, with one payment part of the whole line. So a release
 -- from 0.3.0 holds them as an installation updated from 0.2 holds its own: classified, and never
--- paired as transfers. A release before has no entry: the update's migration gives them. The
--- tables' owner is a superuser here, which row-level security does not bind.
+-- paired as transfers. A release before has no entry: the update's migration gives them. Then
+-- Camille classifies one of her old transfer lines by hand, as 0.3.0 lets her: its expense goes to
+-- the first top-level expense category of hers that is no fallback, by her (#192). The tables'
+-- owner is a superuser here, which row-level security does not bind.
 do $$
 begin
   if to_regclass('public.entry') is not null then
@@ -111,6 +116,15 @@ begin
       insert into entry_part (user_id, entry_id, line_id, role, amount_minor)
       select p.user_id, p.entry_id, p.line_id, 'payment', p.amount from pending p
     $entries$;
+    execute $by_hand$
+      update entry e set classified_by = 'user', category_id = (
+        select c.id from category c
+        where c.user_id = e.user_id and c.kind = 'expense' and c.parent_id is null
+          and not c.is_fallback
+        order by c.position, c.id limit 1)
+      from entry_part p
+      where p.entry_id = e.id and p.line_id = '019a0000-0000-7000-8000-000000000414'
+    $by_hand$;
   end if;
 end
 $$;

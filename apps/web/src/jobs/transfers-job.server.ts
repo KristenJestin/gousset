@@ -1,4 +1,4 @@
-import { pairEveryLine, transfersLayer } from "@gousset/core";
+import { pairKeptLines, transfersLayer } from "@gousset/core";
 import { Effect, Layer, Schema } from "effect";
 
 import { userData } from "../database.server";
@@ -12,8 +12,9 @@ export const PAIR_TRANSFERS_STEPS = ["pair"] as const;
  * lines already there, in the transaction that ends it, but the lines kept before v0.3 never went
  * through one. This job runs the import's automatic pairing once at every boot for every user, over
  * every line, in one transaction: a line and its only candidate are paired, a line with several
- * waits in the review, and a line the user said is no transfer, or linked to an expense, is left
- * alone. It finds nothing to do once the clear pairs are paired, and a run again adds nothing.
+ * waits in the review, and a line the user said is no transfer, linked to an expense, classified by
+ * hand or split, is left alone (`Transfers.pairKept`): the user pairs it by hand. It finds nothing
+ * to do once the clear pairs are paired, and a run again adds nothing.
  */
 export const transfersJob = defineJob({
   name: "pair-transfers",
@@ -27,7 +28,7 @@ export const transfersJob = defineJob({
 
       yield* progress.step("pair");
 
-      const written = yield* pairEveryLine(owner).pipe(
+      const written = yield* pairKeptLines(owner).pipe(
         Effect.provide(transfersLayer.pipe(Layer.provide(userData))),
         Effect.mapError(
           (failed) => new JobFailed({ code: `QUERY_FAILED_${failed.code}`, retry: true }),
