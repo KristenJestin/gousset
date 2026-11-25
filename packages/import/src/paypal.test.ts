@@ -261,6 +261,28 @@ describe("PayPal's activity", () => {
     });
   });
 
+  test("reads a conversion whose payment in another currency has a Net it cannot read, named by its type", () => {
+    // The dollar payment is another balance's: its unreadable Net fails nothing in euros.
+    const unreadable = utf8.encode(
+      [
+        HEADER_EN,
+        "05/10/2026,19:41:02,CEST,Example Travel Ltd,Express Checkout Payment,Completed,USD,-30.00,0.00,n/a,,,0PPEXAMPLE0000051,,,Debit",
+        "05/10/2026,19:41:02,CEST,,General Currency Conversion,Completed,USD,30.00,0.00,30.00,,,0PPEXAMPLE0000052,0PPEXAMPLE0000051,,Credit",
+        "05/10/2026,19:41:02,CEST,,General Currency Conversion,Completed,EUR,-27.60,0.00,-27.60,,,0PPEXAMPLE0000053,0PPEXAMPLE0000051,,Debit",
+      ].join("\n"),
+    );
+
+    expect(read(unreadable)).toEqual([
+      line({
+        bookedOn: "2026-10-05",
+        amountMinor: -2760,
+        label: "General Currency Conversion",
+        memo: null,
+        bankId: "0PPEXAMPLE0000053",
+      }),
+    ]);
+  });
+
   test("into an account in dollars, reads the dollar rows: the purchase and its conversion", () => {
     expect(
       read(paypalActivity.english.bytes, "USD").map(({ amountMinor, label }) => ({

@@ -1,4 +1,4 @@
-import { Effect } from "effect";
+import { Effect, Option } from "effect";
 
 import { invalidField, readAmount } from "./amount";
 import type { AmountSyntax, FieldText } from "./amount";
@@ -286,7 +286,7 @@ type Reading = {
 };
 
 /** A movement's net amount, in minor units of its own currency. */
-const netOf = (movement: Movement, syntax: AmountSyntax) => {
+const netOf = (movement: Movement, syntax: AmountSyntax): Effect.Effect<number, ReadError> => {
   const written = fieldOf("amount", movement.net);
 
   return written.text === ""
@@ -312,19 +312,23 @@ const lineOf = (movement: Movement, at: Columns["at"], reading: Reading) =>
     const paid = reading.byId.get(movement.reference);
 
     // A conversion of the account's currency for a payment in another, moving money the same way:
-    // the payment's name and amount are what it was.
-    const converted =
+    // the payment's name and amount are what it was. The payment moves another balance, left out
+    // of this account: a Net of its that cannot be read leaves the conversion without them, rather
+    // than failing the account's lines.
+    const paidMinor =
       paid !== undefined && paid.currency !== movement.currency
-        ? { paid, amountMinor: yield* netOf(paid, reading.syntax) }
-        : undefined;
+        ? yield* Effect.option(netOf(paid, reading.syntax))
+        : Option.none();
 
     const original: OriginalAmount | undefined =
-      converted !== undefined && Math.sign(converted.amountMinor) === Math.sign(amountMinor)
-        ? { amountMinor: converted.amountMinor, currency: converted.paid.currency }
+      paid !== undefined &&
+      Option.isSome(paidMinor) &&
+      Math.sign(paidMinor.value) === Math.sign(amountMinor)
+        ? { amountMinor: paidMinor.value, currency: paid.currency }
         : undefined;
 
     const name =
-      movement.name === "" && original !== undefined ? (converted?.paid.name ?? "") : movement.name;
+      movement.name === "" && original !== undefined ? (paid?.name ?? "") : movement.name;
 
     const label = name === "" ? movement.type : name;
 

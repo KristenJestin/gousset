@@ -244,8 +244,10 @@ account's country writes them (`MM/DD/YYYY` for the US).
   in another currency is taken from this one by its conversion, a row in the account's currency
   that names nobody and refers to the payment (`Reference Txn ID`): when the payment it refers to is
   in another currency and moves money the same way, the conversion is the line, labelled with the
-  payment's `Name`, and the payment's amount is its `original`. With no account chosen (a test
-  read), every row is read, in its own currency.
+  payment's `Name`, and the payment's amount is its `original`. The payment is another balance's:
+  when its `Net` cannot be read, the conversion is still read, labelled with its `Type` and without
+  an `original`, rather than failing the file. With no account chosen (a test read), every row is
+  read, in its own currency.
 - **A line** is booked on `Date` (the day PayPal completed it; its time is read past, its zone
   only for the order of the day's numbers, below),
   its amount the `Net` (`Gross` less PayPal's fee: the fee is folded, as the balance moved), its
