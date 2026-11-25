@@ -353,6 +353,38 @@ test.describe("MonthBar", () => {
       (total?.y ?? Number.POSITIVE_INFINITY) + (total?.height ?? 0),
     );
     expect((comparison?.y ?? 0) + (comparison?.height ?? 0)).toBeLessThanOrEqual(bar?.y ?? 0);
+
+    // It says what it compares, in words as on a wide screen, and stays within the bar's width:
+    // a bare "+5%" under the money received would read as more income.
+    const said = page.locator('[data-slot="month-bar-comparison"]');
+
+    for (const words of ["spending", "vs. average", "vs. September"]) {
+      await expect(said.getByText(words, { exact: true })).toBeVisible();
+    }
+
+    expect((comparison?.x ?? 0) + (comparison?.width ?? 0)).toBeLessThanOrEqual(
+      (bar?.x ?? 0) + (bar?.width ?? 0) + 1,
+    );
+
+    // The rules between the rows: plain and identical, square at their ends, no shadow.
+    const rules = await group.evaluate((legend) =>
+      [...legend.children].slice(1).map((row) => {
+        const style = getComputedStyle(row);
+
+        return [
+          style.borderTopWidth,
+          style.borderTopStyle,
+          style.borderTopColor,
+          style.borderTopLeftRadius,
+          style.borderTopRightRadius,
+          style.boxShadow,
+        ].join(" ");
+      }),
+    );
+
+    expect(rules).toHaveLength(2);
+    expect(rules[0]).toMatch(/^1px solid \S+.* 0px 0px none$/);
+    expect(rules[1]).toBe(rules[0]);
   });
 
   test("its skeleton has the loaded bar's height on a phone too", async ({ page }) => {

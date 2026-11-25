@@ -238,6 +238,14 @@ test("on a phone, the month bar lists spent, set aside and left under it, one ro
   }
 
   await expect(monthBarKey(page, "saved")).toContainText("set aside");
+
+  // The comparison, on its own line, says what it compares, as on a wide screen.
+  const comparison = block(page, "The month").locator('[data-slot="month-bar-comparison"]');
+
+  for (const words of ["spending", "vs. average", "vs. September"]) {
+    await expect(comparison.getByText(words, { exact: true })).toBeVisible();
+  }
+
   await animationsDone(page);
 });
 

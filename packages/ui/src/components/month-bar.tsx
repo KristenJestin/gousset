@@ -31,7 +31,11 @@ export type MonthBarProps = {
   restricted?: Money;
   /** Where the money came from, in the page's words: "salary and meal vouchers". */
   note?: string;
-  /** At the end of the first line, usually a `Delta` against the 6-month average. */
+  /**
+   * At the end of the first line, on a line of its own on a phone: a `DeltaList` that says what it
+   * compares ("spending +5% vs. average"), never a bare change, which under the money received
+   * would read as more income.
+   */
   comparison?: ReactNode;
   /**
    * Quiet lines under the legend, one each: the month in each other currency, never converted
@@ -199,14 +203,15 @@ function PartContent({
 }
 
 // A wide screen: the keys side by side. A phone, where the width does not allow it: a list, one
-// row a key under a rule.
+// row a key under a rule, the same plain rule each (the rows are square there: a rounded corner
+// would bend the rule's ends).
 const LEGEND_CLASSES = "flex flex-col divide-y md:flex-row md:gap-6 md:divide-y-0";
 
 // A wide screen: the dot and the amount, the name under them. Only the last key gives way there:
 // its name is the one that grows ("left, €153 restricted"), and the amounts before it are never
 // cut. A phone: the dot and the name, whole, then the amount at the row's end.
 const PART_CLASSES =
-  "-mx-1 flex rounded-md px-1 text-left transition-colors duration-150 max-md:items-center max-md:gap-2 max-md:py-1.5 md:shrink-0 md:flex-col md:items-start md:last:min-w-0 md:last:shrink";
+  "-mx-1 flex px-1 text-left md:rounded-md transition-colors duration-150 max-md:items-center max-md:gap-2 max-md:py-1.5 md:shrink-0 md:flex-col md:items-start md:last:min-w-0 md:last:shrink";
 
 /**
  * The month in one bar (docs/wireframes, screen 1, block 1): the money received, cut into spent,
@@ -216,7 +221,8 @@ const PART_CLASSES =
  * while the keys stay side by side from the bar's start, their amounts rolling. On one line on a
  * wide screen, a long name cut short, so the block's height never changes. On a phone (below
  * 768 px, screen 11) the keys are a list under the bar, one row each, the name whole and the
- * amount at the row's end, and the comparison has a line of its own under the total. Each key is
+ * amount at the row's end, and the comparison has lines of its own under the total, one a change
+ * with what it is held against. Each key is
  * a button when `onSelect` is given. When more went out than came in, the bar stretches to what went out, a dark mark shows
  * where the money received ended, and the part left says by how much the month is overspent, in
  * red; the month is overspent only when `left` is below zero. Set aside below zero (taken back
@@ -262,7 +268,7 @@ export function MonthBar({
         {comparison === undefined ? null : (
           <span
             data-slot="month-bar-comparison"
-            className="flex h-5 shrink-0 items-center md:ml-auto md:h-7"
+            className="flex min-h-5 shrink-0 items-center md:ml-auto md:h-7"
           >
             {comparison}
           </span>
@@ -327,8 +333,9 @@ function PartSkeleton() {
 }
 
 /**
- * `MonthBar` on its way: the same lines, the same heights; on a phone, the comparison's line, which
- * a month has from the user's second on, and the legend's rows.
+ * `MonthBar` on its way: the same lines, the same heights; on a phone, the comparison's two lines
+ * (against the average, against the month before), which a month has from the user's second on,
+ * and the legend's rows.
  */
 export function MonthBarSkeleton() {
   return (
@@ -341,6 +348,9 @@ export function MonthBarSkeleton() {
           </div>
           <span className="flex h-5 items-center md:hidden">
             <Skeleton className="h-3 w-40" />
+          </span>
+          <span className="flex h-5 items-center md:hidden">
+            <Skeleton className="h-3 w-28" />
           </span>
         </div>
         <Skeleton className="h-6" />

@@ -118,7 +118,7 @@ export const French: Story = {
 
 /**
  * One figure against two references, on one line (`DeltaList`): spending against its average and
- * against the month before. On a phone the short labels give way.
+ * against the month before, each followed by its label. On a phone they wrap between the changes.
  */
 export const Several: Story = {
   render: () => (

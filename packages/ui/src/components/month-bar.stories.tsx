@@ -5,7 +5,7 @@ import { InFrench } from "../stories/in-french";
 import { MONTH_FIGURES, OVERSPENT_FIGURES } from "../stories/made-up";
 import { Button } from "./button";
 import { Block } from "./data-block";
-import { Delta } from "./delta";
+import { DeltaList } from "./delta";
 import { MonthBar, MonthBarSkeleton } from "./month-bar";
 import type { MoneyRole } from "./month-bar";
 
@@ -20,6 +20,29 @@ const october = {
 
 const september = MONTH_FIGURES.previous;
 
+/** What the review compares the month's spending with: its average and the month before. */
+const comparison = (
+  <DeltaList
+    lead="spending"
+    items={[
+      {
+        id: "average",
+        label: "vs. average",
+        value: october.spent,
+        reference: average,
+        referenceLabel: "your 6-month average",
+      },
+      {
+        id: "previous",
+        label: "vs. September",
+        value: october.spent,
+        reference: september.spent,
+        referenceLabel: "September",
+      },
+    ]}
+  />
+);
+
 /** The bar, with what a click chose written under it. */
 function Choosing() {
   const [chosen, setChosen] = useState<MoneyRole | null>(null);
@@ -29,9 +52,7 @@ function Choosing() {
       <MonthBar
         {...october}
         note="salary and meal vouchers"
-        comparison={
-          <Delta value={october.spent} reference={average} referenceLabel="your 6-month average" />
-        }
+        comparison={comparison}
         onSelect={setChosen}
       />
       <p className="text-sm text-muted-foreground" data-testid="chosen">
@@ -64,7 +85,9 @@ function SwitchingMonths() {
  * above and a legend under it: each part's dot, amount and name, side by side from the bar's
  * start, so that a narrow part still has its key. On a phone (below 768 px, screen 11) the width
  * does not allow it: the keys are a list under the bar, one row each, the name whole and the amount
- * at the row's end, and the comparison has a line of its own under the total. With `onSelect`, each key is a button (Tab,
+ * at the row's end, and the comparison has lines of its own under the total, each change with what it
+ * is held against (a bare "+5%" under the money received would read as more income). With
+ * `onSelect`, each key is a button (Tab,
  * Enter) that opens the operations behind it. When more went out than came in, the bar stretches to
  * what went out, a dark mark shows where the money received ended, and the last part says by how
  * much the month is overspent, in red.
@@ -167,7 +190,8 @@ export const Loading: Story = { render: () => <MonthBarSkeleton /> };
 
 /**
  * On the narrowest phone, in its block as the review shows it, with the part left's longest name:
- * the legend is a list, one row a part, every name whole, and the comparison under the total.
+ * the legend is a list, one row a part, every name whole, and the comparison under the total, one
+ * line a change, each saying what it is held against; the rules between the rows plain and alike.
  */
 export const Phone: Story = {
   globals: { viewport: { value: "mobile1", isRotated: false } },
@@ -177,9 +201,7 @@ export const Phone: Story = {
         {...october}
         restricted={{ minor: 15_300, currency: "EUR" }}
         note="salary and meal vouchers"
-        comparison={
-          <Delta value={october.spent} reference={average} referenceLabel="your 6-month average" />
-        }
+        comparison={comparison}
         onSelect={() => undefined}
       />
     </Block>
