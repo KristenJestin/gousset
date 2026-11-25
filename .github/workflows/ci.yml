@@ -203,7 +203,7 @@ jobs:
       - name: End-to-end tests, shard ${{ matrix.shard }}
         # The configuration's two workers: four on a runner's four cores made no shard faster, and
         # broke the tests that time a motion or a scroll in Firefox and at a phone's width.
-        run: pnpm e2e --shard=$SHARD $E2E_PROJECTS --repeat-each=10 mcp password-reset
+        run: pnpm e2e --shard=$SHARD $E2E_PROJECTS
       - name: Keep the trace, video and screenshots
         if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
