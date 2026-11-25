@@ -70,8 +70,11 @@ export type SheetProps = {
   trigger?: ReactElement;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
-  /** Its width on a wide screen: `md` 440 px, `lg` 512 px for a form of rows (a rule). */
-  size?: "md" | "lg";
+  /**
+   * Its width on a wide screen: `md` 440 px, `lg` 512 px for a form of rows (a rule), `xl` 768 px
+   * for a form around a table of columns side by side (a CSV file's first lines).
+   */
+  size?: "md" | "lg" | "xl";
   /**
    * False: a sheet mounted open shows in its place at once, its backdrop too, instead of sliding
    * in; it still leaves by sliding out. For a sheet the server's page already meant to show (a
@@ -202,6 +205,7 @@ export function SheetFrame({
         className={cn(
           sheetClasses,
           size === "lg" && "md:w-lg",
+          size === "xl" && "md:w-3xl",
           !appear && "data-starting-style:translate-none!",
         )}
       >

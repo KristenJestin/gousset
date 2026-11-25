@@ -654,6 +654,25 @@ test.describe("Sheet", () => {
       .toBe(wide ? viewport?.width : viewport?.height);
   });
 
+  test("a wide sheet, for a table of columns, is 768 px from the right; the whole width on a phone", async ({
+    page,
+  }) => {
+    await page.goto(story("overlays-sheet", "wide"));
+    await page.getByRole("button", { name: "Map the columns" }).click();
+
+    const sheet = page.getByRole("dialog", { name: "The columns of export.csv" });
+    const width = page.viewportSize()?.width ?? 0;
+
+    await expect(sheet).toBeVisible();
+    await expect
+      .poll(async () => {
+        const box = await sheet.boundingBox();
+
+        return { right: Math.round((box?.x ?? 0) + (box?.width ?? 0)), width: box?.width };
+      })
+      .toEqual({ right: width, width: width >= 768 ? Math.min(768, width) : width });
+  });
+
   test("it traps focus, Escape closes it and focus returns", async ({ page }) => {
     await page.goto(story("overlays-sheet", "default"));
 

@@ -15,7 +15,9 @@ import { CsvTestRead } from "@gousset/ui/components/csv-test-read";
 import type { CsvTestResult } from "@gousset/ui/components/csv-test-read";
 import { FileButton } from "@gousset/ui/components/file-button";
 import { FormMessage } from "@gousset/ui/components/form-message";
+import { ImportPrompt } from "@gousset/ui/components/import-prompt";
 import { Select } from "@gousset/ui/components/select";
+import { Sheet } from "@gousset/ui/components/sheet";
 import { StatusMessage } from "@gousset/ui/components/status-message";
 import { TextField } from "@gousset/ui/components/text-field";
 import type { CsvField } from "@gousset/ui/lib/csv-fields";
@@ -43,11 +45,12 @@ import {
 } from "@/lib/csv-mapping";
 import type { CsvFileSettings } from "@/lib/csv-mapping";
 import { downloadText } from "@/lib/download";
+import { whileBusy } from "@/lib/while-busy";
 import { importKeys, importQueries } from "@/queries/imports";
 
-// A CSV file the app could not read on its own (#19, #20): under its row, a preview of its first
-// lines where the user chooses a profile that reads it or maps each column, adjusts the file's
-// settings, sees a test read, saves the mapping as a profile, and imports. One flow with the import.
+// A CSV file the app could not read on its own (#19, #20): its card says so, with an action that
+// opens the side sheet (#210) where the user chooses a profile that reads it or maps each column,
+// adjusts the file's settings, sees a test read, saves the mapping as a profile, and imports.
 
 /** Where a file detection could not read at all starts: the usual settings, nothing mapped. */
 const BLANK: CsvFileSettings = {
@@ -144,9 +147,49 @@ function testResult(preview: Preview | null | undefined): CsvTestResult | null {
   };
 }
 
-/** A CSV file detection could not read whole: its preview, from what detection proposed. */
-export function ConfirmColumns({ summary }: { summary: Import }) {
-  const { data: questions, isPending } = useQuery(importQueries.csv(summary.id));
+/**
+ * A CSV file detection could not read whole, on its card: what it waits for, and the action that
+ * opens its columns in the side sheet (`ColumnsSheet`, which the page holds).
+ */
+export function ConfirmColumns({ summary, onOpen }: { summary: Import; onOpen: () => void }) {
+  // Read now, so that the sheet opens filled.
+  useQuery(importQueries.csv(summary.id));
+
+  return (
+    <ImportPrompt
+      message={m.importCsvQuestion()}
+      actions={
+        <Button size="sm" onClick={onOpen}>
+          {m.importCsvOpen()}
+        </Button>
+      }
+    />
+  );
+}
+
+export type ColumnsSheetProps = {
+  /** The import waiting for its columns, as it was when the sheet opened. */
+  summary: Import;
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+};
+
+/**
+ * A CSV file's columns in the shared side sheet (docs/design.md, "Actions and forms"; along the
+ * bottom edge on a phone), wide enough for the file's columns side by side: its preview, from what
+ * detection proposed, whose form is the sheet's. Confirming saves the profile when it is named,
+ * closes the sheet and runs the import on; Cancel, Escape or the backdrop close it, the file still
+ * waiting. It opens once the file's questions are read, so that it opens filled; closed, it reads
+ * nothing more, the import having moved on.
+ *
+ * Motion: the shared `Sheet`'s: it slides in from the right edge (from the bottom on a phone) in
+ * 300 ms and back out in 200 ms, over the backdrop fading in 200 ms; cut under reduced motion.
+ */
+export function ColumnsSheet({ summary, open, onOpenChange }: ColumnsSheetProps) {
+  const { data: questions, isPending } = useQuery({
+    ...importQueries.csv(summary.id),
+    enabled: open,
+  });
 
   if (isPending) {
     return null;
@@ -155,21 +198,23 @@ export function ConfirmColumns({ summary }: { summary: Import }) {
   const proposal = questions?.profile;
 
   return (
-    <ColumnsPreview
-      key={summary.id}
+    <ColumnsForm
       summary={summary}
+      open={open}
+      onOpenChange={onOpenChange}
       initialSettings={proposal === undefined ? BLANK : settingsOf(proposal)}
       initialMapping={proposal === undefined ? [] : mappingOf(proposal, 0)}
     />
   );
 }
 
-function ColumnsPreview({
+function ColumnsForm({
   summary,
+  open,
+  onOpenChange,
   initialSettings,
   initialMapping,
-}: {
-  summary: Import;
+}: ColumnsSheetProps & {
   /** What detection proposed, kept as the start: the user changes it from there. */
   initialSettings: CsvFileSettings;
   initialMapping: ReadonlyArray<CsvField>;
@@ -182,12 +227,16 @@ function ColumnsPreview({
   const [name, setName] = useState("");
   const [notice, setNotice] = useState<string>();
   const [profileRefused, setProfileRefused] = useState<string>();
+  const [busy, setBusy] = useState(false);
+  const [saving, setSaving] = useState(false);
   const { resume, refused } = useResume(summary);
 
   const draft = profileOf(settings, mapping);
   const read = "profile" in draft ? draft.profile : splittingProfile(settings);
-  const { data: preview } = useQuery(importQueries.preview(summary.id, read));
-  const { data: fitting } = useQuery(importQueries.profilesFor(summary.id));
+
+  // Closed, it reads nothing more: the import may have moved on.
+  const { data: preview } = useQuery({ ...importQueries.preview(summary.id, read), enabled: open });
+  const { data: fitting } = useQuery({ ...importQueries.profilesFor(summary.id), enabled: open });
   const { data: profiles = [] } = useQuery(importQueries.profiles());
 
   const rows = preview?.rows ?? [];
@@ -223,9 +272,14 @@ function ColumnsPreview({
 
   const refreshProfiles = () => queryClient.invalidateQueries({ queryKey: importKeys.profiles() });
 
-  const save = async () => {
+  /**
+   * Saves the mapping under the name typed, and reads the file with it from then on: the profile
+   * saved, or `null` when refused (said under the name). The name is cleared, so that it is not
+   * saved twice.
+   */
+  const saveProfile = async (): Promise<ProfileChoice | null> => {
     if (!("profile" in draft)) {
-      return;
+      return null;
     }
 
     const answer = await saveImportProfile({
@@ -240,13 +294,41 @@ function ColumnsPreview({
     if ("refused" in answer) {
       setProfileRefused(profileRefusalMessage(answer));
 
+      return null;
+    }
+
+    const saved = choiceOf(answer.saved);
+
+    setProfileRefused(undefined);
+    setChosen(saved);
+    setName("");
+    setNotice(m.importCsvSaved({ name: answer.saved.name }));
+    await refreshProfiles();
+
+    return saved;
+  };
+
+  /**
+   * Imports the file read this way: with the profile chosen, or else the mapping, saved first as a
+   * profile when it is named. Accepted, the sheet closes and the import goes on.
+   */
+  const confirm = async () => {
+    if (!("profile" in draft)) {
       return;
     }
 
-    setProfileRefused(undefined);
-    setChosen(choiceOf(answer.saved));
-    setNotice(m.importCsvSaved({ name: answer.saved.name }));
-    await refreshProfiles();
+    const naming = chosen === null && name.trim() !== "";
+    const saved = naming ? await saveProfile() : null;
+
+    if (naming && saved === null) {
+      return;
+    }
+
+    const profile = saved ?? chosen;
+
+    if (await resume(null, profile === null ? draft.profile : null, profile)) {
+      onOpenChange(false);
+    }
   };
 
   const exportProfile = async () => {
@@ -297,135 +379,152 @@ function ColumnsPreview({
   const dateFormats = offered ? [...DATE_FORMATS] : [...DATE_FORMATS, settings.dateFormat];
 
   return (
-    <CsvPreview
-      intro={<StatusMessage message={m.importCsvIntro()} />}
-      profile={
-        <>
-          <Select
-            label={m.importCsvProfile()}
-            size="sm"
-            value={chosen === null ? BY_HAND : valueOf(chosen)}
-            items={[
-              { value: BY_HAND, label: m.importCsvProfileByHand() },
-              ...fits.map((entry) => ({
-                value: valueOf(choiceOf(entry)),
-                label: m.importCsvProfileFits({ name: entry.name }),
-              })),
-              ...others.map((entry) => ({ value: valueOf(choiceOf(entry)), label: entry.name })),
-            ]}
-            onValueChange={(value) => {
-              const entry = listed.find((each) => valueOf(choiceOf(each)) === value);
-
-              if (entry === undefined) {
-                setChosen(null);
-              } else {
-                startFrom(entry);
-              }
-            }}
-          />
-          <Button variant="secondary" size="sm" disabled={chosen === null} onClick={exportProfile}>
-            {m.importCsvExport()}
-          </Button>
-          <FileButton size="sm" icon="import" accept=".json,application/json" onFile={importFile}>
-            {m.importCsvImportFile()}
-          </FileButton>
-        </>
-      }
-      mapping={
-        preview !== undefined && width === 0 ? (
-          <StatusMessage message={m.importCsvNoRows()} />
-        ) : (
-          <CsvMapping
-            label={m.importCsvPreviewLabel({ file: summary.fileName })}
-            columns={columns}
-            rows={lines}
-            fields={csvFieldNames()}
-            mapping={mapping}
-            onMappingChange={(column, field) => {
-              setMapping(remap(mapping, column, field));
-              setChosen(null);
-            }}
-            chooseLabel={(column) => m.importCsvColumnHolds({ column })}
-          />
-        )
-      }
-      settings={
-        <CsvSettings
-          labels={{
-            separator: m.importCsvSeparator(),
-            encoding: m.importCsvEncoding(),
-            skipRows: m.importCsvSkipRows(),
-            headerRow: m.importCsvHeaderRow(),
-            dateFormat: m.importCsvDateFormat(),
-            decimalMark: m.importCsvDecimal(),
-          }}
-          choices={{
-            separator: [
-              { value: ";", label: m.importCsvSemicolon() },
-              { value: ",", label: m.importCsvCommaSeparator() },
-              { value: "\t", label: m.importCsvTab() },
-              { value: "|", label: m.importCsvPipe() },
-            ],
-            encoding: [
-              { value: "utf8", label: m.importCsvUnicode() },
-              { value: "windows-1252", label: m.importCsvWestern() },
-            ],
-            dateFormat: dateFormats.map((format) => ({
-              value: format,
-              label: m.importCsvDateChoice({ format, example: dateExample(format) }),
-            })),
-            decimalMark: [
-              { value: ",", label: m.importCsvComma() },
-              { value: ".", label: m.importCsvPoint() },
-            ],
-          }}
-          value={settings}
-          onChange={(value) => {
-            setSettings(withSettings(settings, value));
-            setChosen(null);
-          }}
-        />
-      }
-      testReadTitle={m.importCsvTestRead()}
-      testRead={
-        "missing" in draft ? (
-          <StatusMessage message={missingMessage(draft.missing)} />
-        ) : (
-          <CsvTestRead label={m.importCsvTestRead()} result={result} />
-        )
-      }
-      save={
-        <>
-          <TextField
-            label={m.importCsvSaveName()}
-            size="sm"
-            maxLength={MAX_PROFILE_NAME}
-            value={name}
-            onChange={(event) => setName(event.currentTarget.value)}
-          />
-          <Button variant="secondary" size="sm" disabled={!readable} onClick={save}>
-            {m.importCsvSave()}
-          </Button>
-        </>
-      }
-      messages={
-        <>
-          <StatusMessage message={notice} />
-          <FormMessage message={profileRefused ?? refused} />
-        </>
-      }
+    <Sheet
+      title={m.importCsvSheetTitle({ file: summary.fileName })}
+      description={m.importCsvIntro()}
+      size="xl"
+      open={open}
+      onOpenChange={onOpenChange}
+      // While it is sent it stays open: its answer lands on the form that sent it.
+      sending={busy || saving}
+      onSubmit={(event) => {
+        event.preventDefault();
+        void whileBusy(setBusy, confirm);
+      }}
       actions={
-        <Button
-          disabled={!readable}
-          onClick={async () => {
-            if ("profile" in draft) {
-              await resume(null, chosen === null ? draft.profile : null, chosen);
-            }
-          }}
-        >
+        <Button type="submit" disabled={!readable || saving} loading={busy}>
           {m.importCsvGo()}
         </Button>
       }
-    />
+    >
+      <CsvPreview
+        profile={
+          <>
+            <Select
+              label={m.importCsvProfile()}
+              size="sm"
+              value={chosen === null ? BY_HAND : valueOf(chosen)}
+              items={[
+                { value: BY_HAND, label: m.importCsvProfileByHand() },
+                ...fits.map((entry) => ({
+                  value: valueOf(choiceOf(entry)),
+                  label: m.importCsvProfileFits({ name: entry.name }),
+                })),
+                ...others.map((entry) => ({ value: valueOf(choiceOf(entry)), label: entry.name })),
+              ]}
+              onValueChange={(value) => {
+                const entry = listed.find((each) => valueOf(choiceOf(each)) === value);
+
+                if (entry === undefined) {
+                  setChosen(null);
+                } else {
+                  startFrom(entry);
+                }
+              }}
+            />
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={chosen === null}
+              onClick={exportProfile}
+            >
+              {m.importCsvExport()}
+            </Button>
+            <FileButton size="sm" icon="import" accept=".json,application/json" onFile={importFile}>
+              {m.importCsvImportFile()}
+            </FileButton>
+          </>
+        }
+        mapping={
+          preview !== undefined && width === 0 ? (
+            <StatusMessage message={m.importCsvNoRows()} />
+          ) : (
+            <CsvMapping
+              label={m.importCsvPreviewLabel({ file: summary.fileName })}
+              columns={columns}
+              rows={lines}
+              fields={csvFieldNames()}
+              mapping={mapping}
+              onMappingChange={(column, field) => {
+                setMapping(remap(mapping, column, field));
+                setChosen(null);
+              }}
+              chooseLabel={(column) => m.importCsvColumnHolds({ column })}
+            />
+          )
+        }
+        settings={
+          <CsvSettings
+            labels={{
+              separator: m.importCsvSeparator(),
+              encoding: m.importCsvEncoding(),
+              skipRows: m.importCsvSkipRows(),
+              headerRow: m.importCsvHeaderRow(),
+              dateFormat: m.importCsvDateFormat(),
+              decimalMark: m.importCsvDecimal(),
+            }}
+            choices={{
+              separator: [
+                { value: ";", label: m.importCsvSemicolon() },
+                { value: ",", label: m.importCsvCommaSeparator() },
+                { value: "\t", label: m.importCsvTab() },
+                { value: "|", label: m.importCsvPipe() },
+              ],
+              encoding: [
+                { value: "utf8", label: m.importCsvUnicode() },
+                { value: "windows-1252", label: m.importCsvWestern() },
+              ],
+              dateFormat: dateFormats.map((format) => ({
+                value: format,
+                label: m.importCsvDateChoice({ format, example: dateExample(format) }),
+              })),
+              decimalMark: [
+                { value: ",", label: m.importCsvComma() },
+                { value: ".", label: m.importCsvPoint() },
+              ],
+            }}
+            value={settings}
+            onChange={(value) => {
+              setSettings(withSettings(settings, value));
+              setChosen(null);
+            }}
+          />
+        }
+        testReadTitle={m.importCsvTestRead()}
+        testRead={
+          "missing" in draft ? (
+            <StatusMessage message={missingMessage(draft.missing)} />
+          ) : (
+            <CsvTestRead label={m.importCsvTestRead()} result={result} />
+          )
+        }
+        save={
+          <>
+            <TextField
+              label={m.importCsvSaveName()}
+              size="sm"
+              maxLength={MAX_PROFILE_NAME}
+              value={name}
+              onChange={(event) => setName(event.currentTarget.value)}
+            />
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={!readable || busy}
+              loading={saving}
+              onClick={() => void whileBusy(setSaving, saveProfile)}
+            >
+              {m.importCsvSave()}
+            </Button>
+          </>
+        }
+        messages={
+          <>
+            <StatusMessage message={notice} />
+            <FormMessage message={profileRefused ?? refused} />
+          </>
+        }
+      />
+    </Sheet>
   );
 }
