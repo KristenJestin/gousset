@@ -219,6 +219,9 @@ catalogs:
 overrides:
   vite@*: npm:@voidzero-dev/vite-plus-core@8.3.8000
 
+patchedDependencies:
+  motion-dom@14.14.0: acc06f4f655afb276c67f1fe09e0581b9136a7e4db5607ec94f3e4c79b8b14c5
+
 importers:
 
   .:
@@ -10007,7 +10010,7 @@ snapshots:
 
   framer-motion@14.14.0(react-dom@19.3.1(react@19.3.1))(react@19.3.1):
     dependencies:
-      motion-dom: 14.14.0
+      motion-dom: 14.14.0(patch_hash=acc06f4f655afb276c67f1fe09e0581b9136a7e4db5607ec94f3e4c79b8b14c5)
       motion-utils: 14.7.0
       tslib: 2.9.1
     optionalDependencies:
@@ -10345,7 +10348,7 @@ snapshots:
 
   module-details-from-path@1.0.4: {}
 
-  motion-dom@14.14.0:
+  motion-dom@14.14.0(patch_hash=acc06f4f655afb276c67f1fe09e0581b9136a7e4db5607ec94f3e4c79b8b14c5):
     dependencies:
       motion-utils: 14.7.0
 
