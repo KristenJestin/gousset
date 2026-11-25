@@ -175,12 +175,22 @@ export type {
 
 export {
   DEFAULT_CATEGORIES,
+  LANGUAGE_COOKIE,
   copyDefaultCategories,
   defaultRows,
+  renamesInto,
   setLanguageOf,
+  setLanguageOfRequest,
+  settleDefaultNames,
 } from "./default-categories";
 
-export type { DefaultCategory, DefaultName, SetLanguage } from "./default-categories";
+export type {
+  DefaultCategory,
+  DefaultName,
+  DefaultRename,
+  HeldCategory,
+  SetLanguage,
+} from "./default-categories";
 
 export { DEFAULT_SEARCH_LINES, MAX_SEARCH_LINES, searchLines, showLine } from "./lines";
 
