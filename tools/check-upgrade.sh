@@ -224,9 +224,14 @@ statement=$root/tools/check-upgrade.ofx
 first_import=$(upload camille "$statement")
 if [ -n "$first_import" ]; then
   ended=$(settled "$first_import")
-  [ "$ended" = "done 6 0" ] ||
-    fail "$from did not import $(basename "$statement") whole: $ended, not \"done 6 0\"."
+  [ "$ended" = "done 8 0" ] ||
+    fail "$from did not import $(basename "$statement") whole: $ended, not \"done 8 0\"."
   say "Camille imported $(basename "$statement") through $from's own route."
+  # A release before #194 named merchants from a label's operation prefix: the update reads them
+  # again at boot, below.
+  prefixed=$(sql "select count(*) from merchant where user_id = '$camille'
+    and name in ('Ann Carte Cafe Exemple', 'F Cotisation')")
+  say "$from made $prefixed merchant(s) of an operation prefix."
 else
   say "$from has no import route: $(basename "$statement") is not imported."
 fi
@@ -306,6 +311,14 @@ unclassified=$(sql "select count(*) from statement_line l where l.state = 'count
 [ "$unclassified" = 0 ] || fail "$unclassified counted lines have no entry of their own, or more than one, after the update."
 say "every counted line with an amount has its one entry."
 
+# The categories that take an operation's lines (#194): Camille's untouched defaults are marked,
+# Bank fees for the fees and Interest for the interest, by the update's migration.
+marked=$(sql "select string_agg(name || ':' || operation, ',' order by name) from category
+  where user_id = '$camille' and operation is not null")
+[ "$marked" = "Bank fees:fee,Interest:interest" ] ||
+  fail "Camille's categories marked with an operation are \"$marked\", not Bank fees and Interest."
+say "Camille's Bank fees and Interest take the fees and the interest."
+
 # 8. The installation as `docker compose up` brings it back: migrate, then the app.
 "${compose[@]}" up --detach --no-build --pull never --wait --wait-timeout 180 > "$work/up" 2>&1 ||
   fail "$tag did not come up over $from's data: $(tail -n 5 "$work/up")"
@@ -338,6 +351,28 @@ for _ in $(seq 60); do
 done
 [ "$moved" = 1 ] || fail "Camille's noted balance got no movement line with its entry within a minute of the app's start."
 say "Camille's noted balance got its movement line at boot."
+
+# The merchants the release made from an operation prefix (#194), which Camille never touched, are
+# forgotten at boot, and her card's cancellation names its shop.
+if [ -n "$first_import" ]; then
+  reread=
+  for _ in $(seq 60); do
+    left=$(sql "select count(*) from merchant where user_id = '$camille'
+      and name in ('Ann Carte Cafe Exemple', 'F Cotisation')")
+    shop=$(sql "select count(*) from merchant_alias where user_id = '$camille' and alias = 'CAFE EXEMPLE'")
+    fee=$(sql "select c.operation from statement_line l join entry_part p on p.line_id = l.id
+      join entry e on e.id = p.entry_id join category c on c.id = e.category_id
+      where l.user_id = '$camille' and l.label = 'F COTISATION CARTE'")
+    if [ "$left" = 0 ] && [ "$shop" = 1 ] && [ "$fee" = fee ]; then
+      reread=yes
+      break
+    fi
+    sleep 1
+  done
+  [ -n "$reread" ] ||
+    fail "the merchants $from made from an operation prefix were not read again, or its fee not put in Bank fees, within a minute of the app's start."
+  say "the $prefixed merchant(s) $from made from an operation prefix were read again at boot, and its fee went to Bank fees."
+fi
 
 # 9. Everyone signs in as before; the session made before still works.
 signin() { call "$1" POST /api/auth/sign-in/email "$4" "{\"email\":\"$2\",\"password\":\"$3\"}"; }
@@ -385,9 +420,9 @@ if [ -n "$first_import" ]; then
   second_import=$(upload camille-after "$statement")
   [ -n "$second_import" ] || fail "$tag has no import route."
   ended=$(settled "$second_import")
-  [ "$ended" = "done 0 6" ] ||
-    fail "$(basename "$statement") imported again after the update: $ended, not \"done 0 6\" (nothing added, 6 found)."
-  say "$(basename "$statement"), imported again on $tag, adds nothing: its 6 lines are found."
+  [ "$ended" = "done 0 8" ] ||
+    fail "$(basename "$statement") imported again after the update: $ended, not \"done 0 8\" (nothing added, 8 found)."
+  say "$(basename "$statement"), imported again on $tag, adds nothing: its 8 lines are found."
 fi
 
 # 12. The upgraded schema is a fresh installation's.
