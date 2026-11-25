@@ -389,8 +389,10 @@ the `image` job and runs `tools/check-upgrade.sh` on it, which, on a fresh proje
    one still on her temporary password, one banned; and **through the tables' owner
    (`tools/check-upgrade.sql`) for what the release offers no route for**: 0.1.1 has neither an
    accounts screen nor an import route, so two users' accounts of every kind, balances, an import
-   with its file and its lines (a held duplicate, a foreign currency, a discarded line), a CSV
-   profile, and an MCP client with its consent and tokens are written as the app would write them;
+   with its file and its lines (a held duplicate, a foreign currency, a discarded line), the
+   transfers between two accounts as 0.2 kept them (never paired), a CSV profile, and an MCP client
+   with its consent and tokens are written as the app would write them; from 0.3.0 on, each counted
+   line gets the entry 0.3.0's migration gave the lines of 0.2;
    and, where the release has its import route (from 0.2.0), a user uploads an invented statement
    (`tools/check-upgrade.ofx`, whose bank encodes entities twice, #132), read as that release
    reads it;
@@ -408,9 +410,13 @@ the `image` job and runs `tools/check-upgrade.sh` on it, which, on a fresh proje
    declaration must find a row of the release once its statement was imported, the rows after the
    update must be exactly the rows before with the declared changes, and no other row may change:
    a declaration says what changes, it never lets a table or a column change freely;
-6. starts the app: `/health` answers 200; **the administrator and both users sign in with the same
-   passwords**, the temporary one still has to be replaced, the banned one is still refused, and a
-   session made before the update still works;
+6. starts the app: `/health` answers 200; the boot jobs do what was kept before them: the user's
+   merchants, the movement line of her noted balance, and **her transfers kept before v0.3 paired**
+   (#192: a clear pair and one across her savings account's fortnight, never paired by the release,
+   are transfers; an ambiguous one waits in the review); **started again, the app changes no row**;
+   **the administrator and both users sign in with the same passwords**, the temporary one still
+   has to be replaced, the banned one is still refused, and a session made before the update still
+   works;
 7. downloads the user's **export** (#22, `/api/export`), which the last release may not have: each
    of its tables holds that user's rows exactly as the release held them, with the declared
    changes, and each imported file its bytes;

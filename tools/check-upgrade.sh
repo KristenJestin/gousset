@@ -296,14 +296,18 @@ dump "$work/columns-before" "$work/added" "$work/again"
 diff -q "$work/after" "$work/again" > /dev/null || fail "migrate run again changed rows."
 
 # Every counted line with an amount has its one entry, paid by the whole line (v0.3, #23), but a
-# side of a transfer (#26): the update gives one to each line the release held, once, however
-# often migrate runs.
-unclassified=$(sql "select count(*) from statement_line l where l.state = 'counted' and l.amount_minor <> 0
-  and not exists (select 1 from transfer t where l.id in (t.out_line_id, t.in_line_id))
-  and ((select count(*) from entry_part p where p.line_id = l.id) <> 1
-    or exists (select 1 from entry_part p where p.line_id = l.id
-      and (p.role <> 'payment' or p.amount_minor <> abs(l.amount_minor))))")
-[ "$unclassified" = 0 ] || fail "$unclassified counted lines have no entry of their own, or more than one, after the update."
+# side of a transfer (#26), which has none: the update gives one to each line the release held,
+# once, however often migrate runs.
+unclassified() {
+  sql "select count(*) from statement_line l where l.state = 'counted' and l.amount_minor <> 0
+    and case when exists (select 1 from transfer t where l.id in (t.out_line_id, t.in_line_id))
+      then exists (select 1 from entry_part p where p.line_id = l.id)
+      else (select count(*) from entry_part p where p.line_id = l.id) <> 1
+        or exists (select 1 from entry_part p where p.line_id = l.id
+          and (p.role <> 'payment' or p.amount_minor <> abs(l.amount_minor))) end"
+}
+count=$(unclassified)
+[ "$count" = 0 ] || fail "$count counted lines have no entry of their own, or more than one, or are a transfer's side with one, after the update."
 say "every counted line with an amount has its one entry."
 
 # 8. The installation as `docker compose up` brings it back: migrate, then the app.
@@ -339,6 +343,55 @@ done
 [ "$moved" = 1 ] || fail "Camille's noted balance got no movement line with its entry within a minute of the app's start."
 say "Camille's noted balance got its movement line at boot."
 
+# The boot jobs of <n> starts of the app, for every user, ended: none waits or runs any more, and
+# the pairing's, sent last for each user, completed once per user and start.
+booted() { # <starts>
+  local users left completed
+  users=$(sql "select count(*) from auth_user")
+  for _ in $(seq 120); do
+    left=$(sql "select count(*) from pgboss.job where state in ('created', 'retry', 'active')
+      and name in ('recognise-merchants', 'remake-balance-lines', 'pair-transfers')")
+    completed=$(sql "select count(*) from pgboss.job where name = 'pair-transfers' and state = 'completed'")
+    [ "$left" != 0 ] || [ "$completed" != $((users * $1)) ] || return 0
+    sleep 1
+  done
+  fail "the boot jobs of $1 start(s) did not all end within two minutes: $left left, $completed of $((users * $1)) pairings completed."
+}
+
+# The app pairs every user's transfers at boot (#192), with the import's rules: Camille's lines kept
+# before v0.3, never paired (tools/check-upgrade.sql), are paired where each is the other's only
+# candidate, a day apart and across her savings account's fortnight (#131), and lose their entries;
+# the money out with two candidates, and those two, are left to the review, each an expense or an
+# income of its own.
+booted 1
+line() { printf '019a0000-0000-7000-8000-000000000%s' "$1"; }
+pairs=$(sql "select string_agg(t.out_line_id::text || '>' || t.in_line_id::text, ' ' order by t.out_line_id)
+  from transfer t where t.user_id = '$camille'")
+[ "$pairs" = "$(line 411)>$(line 421) $(line 413)>$(line 424)" ] ||
+  fail "Camille's transfers after boot are \"$pairs\", not her clear pair and her fortnight's."
+waiting=$(sql "select count(*) from statement_line l where l.id in ('$(line 412)', '$(line 422)', '$(line 423)')
+  and l.review_state = 'to_review' and l.transfer_refused = false
+  and (select count(*) from entry_part p where p.line_id = l.id) = 1")
+[ "$waiting" = 3 ] || fail "Camille's ambiguous transfer is not left to the review: $waiting of its 3 lines are."
+count=$(unclassified)
+[ "$count" = 0 ] || fail "$count counted lines have no entry of their own, or more than one, or are a transfer's side with one, after the boot."
+say "Camille's transfers kept before v0.3 are paired at boot: the clear pair and the fortnight's;"
+say "  the ambiguous one waits in the review."
+
+# A second start of the app changes no row: every boot job finds nothing left to do.
+dump "$work/columns-after" "$work/none" "$work/booted"
+"${compose[@]}" restart web > "$work/restart" 2>&1 || fail "$tag did not start again: $(tail -n 5 "$work/restart")"
+code=$(health)
+[ "$code" = 200 ] || fail "/health of $tag answered $code once started again."
+booted 2
+dump "$work/columns-after" "$work/none" "$work/booted-again"
+if ! diff "$work/booted" "$work/booted-again" > "$work/boot.diff"; then
+  echo "check-upgrade.sh: rows changed at the second start (< after the first, > after the second), the first lines:" >&2
+  head -n 20 "$work/boot.diff" | cut -c 1-300 >&2
+  fail "the second start of the app changed rows."
+fi
+say "a second start of $tag changes no row."
+
 # 9. Everyone signs in as before; the session made before still works.
 signin() { call "$1" POST /api/auth/sign-in/email "$4" "{\"email\":\"$2\",\"password\":\"$3\"}"; }
 signin admin-after admin@example.com "$admin_password" 200 > /dev/null
@@ -354,7 +407,8 @@ say "the administrator, Camille and Dominique sign in with their passwords, Eden
 say "and Camille's session made on $from still works."
 
 # 10. Camille's export (#22): her rows of each table as they were, and her files; the movement line
-# the app made at boot from her noted balance (#31, above) is the update's, not the release's.
+# of her noted balance (#31, above), which the app makes again whenever it changes, is left out of
+# both: the app made it at boot from a release before 0.3.0, at her import from 0.3.0 on.
 curl --silent --show-error --fail --max-time 30 --cookie "$work/camille-after" \
   --output "$work/export.zip" "$base/api/export" || fail "Camille's export failed."
 for pair in accounts:account account-balances:account_balance statement-lines:statement_line \
@@ -365,7 +419,7 @@ for pair in accounts:account account-balances:account_balance statement-lines:st
   jq -c -S --argjson drop "$drop" '.[] | select(.source != "balance") | reduce $drop[] as $c (.; del(.[$c]))' "$work/export.json" |
     LC_ALL=C sort > "$work/exported"
   awk -F '\t' -v t="$table" '$1 == t { print $2 }' "$work/expected" |
-    jq -c -S --arg u "$camille" 'select(.user_id == $u)' | LC_ALL=C sort > "$work/held"
+    jq -c -S --arg u "$camille" 'select(.user_id == $u and .source != "balance")' | LC_ALL=C sort > "$work/held"
   [ -s "$work/held" ] || fail "Camille had no row of $table to export: tools/check-upgrade.sql fills one."
   diff -q "$work/held" "$work/exported" > /dev/null ||
     fail "Camille's export of $table is not her rows as $from held them."
