@@ -1,6 +1,35 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
+import { useState } from "react";
 
 import { Switch } from "./switch";
+
+/**
+ * Saved for as long as asked from each change, as a page saves it: the new value at once, pending
+ * until the save ends. The loader shows only once the save has lasted 300 ms.
+ */
+function SavedIn({ milliseconds }: { milliseconds: number }) {
+  const [kept, setKept] = useState(false);
+  const [saving, setSaving] = useState<boolean>();
+
+  return (
+    <Switch
+      label="Hide amounts on screen"
+      checked={saving ?? kept}
+      pending={saving !== undefined}
+      onCheckedChange={(next) => {
+        if (saving !== undefined) {
+          return;
+        }
+
+        setSaving(next);
+        setTimeout(() => {
+          setKept(next);
+          setSaving(undefined);
+        }, milliseconds);
+      }}
+    />
+  );
+}
 
 /**
  * A setting that takes effect as soon as it changes, on ui-sdk's `Switch` (the `switch` role). The
@@ -48,6 +77,12 @@ export const Pending: Story = { args: { checked: true, pending: true } };
 
 /** Turned off, its save still running. */
 export const PendingOff: Story = { args: { checked: false, pending: true } };
+
+/** A save of 1.5 s from each change: pending throughout, the loader from 300 ms. */
+export const SlowSave: Story = { render: () => <SavedIn milliseconds={1500} /> };
+
+/** A save of 100 ms: pending, but too short for the loader to show. */
+export const FastSave: Story = { render: () => <SavedIn milliseconds={100} /> };
 
 export const Phone: Story = {
   globals: { viewport: { value: "mobile1", isRotated: false } },
