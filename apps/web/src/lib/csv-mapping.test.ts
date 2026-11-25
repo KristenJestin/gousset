@@ -45,6 +45,30 @@ describe("a CSV profile as the preview maps its columns", () => {
     expect(profileOf(settingsOf(profile), mappingOf(profile, 5))).toEqual({ profile });
   });
 
+  test("keeps a profile's layout: PayPal's activity is read by its columns' names, whatever is changed", () => {
+    const paypal: CsvProfile = { ...profile, separator: ",", layout: "paypal-activity" };
+    const settings = settingsOf(paypal);
+
+    expect(profileOf(settings, mappingOf(paypal, 5))).toEqual({ profile: paypal });
+
+    // The file saved by a spreadsheet with semicolons: the separator changes, the layout stays.
+    const semicolons = withSettings(settings, {
+      separator: ";",
+      encoding: "utf8",
+      skipRows: 3,
+      headerRow: true,
+      dateFormat: "DD/MM/YYYY",
+      decimalMark: ",",
+    });
+
+    expect(profileOf(semicolons, mappingOf(paypal, 5))).toEqual({
+      profile: { ...paypal, separator: ";", encoding: "utf8" },
+    });
+
+    // A plain profile has none, and gains none.
+    expect("layout" in settingsOf(profile)).toBe(false);
+  });
+
   test("a field is held by one column: mapping it again moves it", () => {
     expect(remap(["bookedOn", "valueOn", "label"], 2, "bookedOn")).toEqual([
       "ignored",

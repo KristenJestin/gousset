@@ -4,11 +4,12 @@ import type { CsvField } from "@gousset/ui/lib/csv-fields";
 // The import screen's CSV preview (#19): a profile as the user makes it there, a list of what each
 // column holds (`CsvMapping`) and the file's settings (`CsvSettings`), and back.
 
-/** A profile's settings that its columns do not say. */
-export type CsvFileSettings = Pick<
-  CsvProfile,
-  "separator" | "encoding" | "skipRows" | "headerRow" | "dateFormat" | "decimalMark"
->;
+/**
+ * A profile's settings that its columns do not say, its `layout` among them: PayPal's activity,
+ * chosen from the list, still reads its columns by their names once a setting is changed or the
+ * profile is saved.
+ */
+export type CsvFileSettings = Omit<CsvProfile, "version" | "columns">;
 
 /** The settings as the form sends them, each picked from its list or typed. */
 export type CsvSettingsForm = {
@@ -75,10 +76,12 @@ export function splittingProfile(settings: CsvFileSettings): CsvProfile {
   };
 }
 
-export function settingsOf(profile: CsvProfile): CsvFileSettings {
-  const { separator, encoding, skipRows, headerRow, dateFormat, decimalMark } = profile;
-
-  return { separator, encoding, skipRows, headerRow, dateFormat, decimalMark };
+export function settingsOf({
+  version: _version,
+  columns: _columns,
+  ...settings
+}: CsvProfile): CsvFileSettings {
+  return settings;
 }
 
 /**
@@ -87,6 +90,7 @@ export function settingsOf(profile: CsvProfile): CsvFileSettings {
  */
 export function withSettings(settings: CsvFileSettings, form: CsvSettingsForm): CsvFileSettings {
   return {
+    ...settings,
     separator: SEPARATORS.find((separator) => separator === form.separator) ?? settings.separator,
     encoding: ENCODINGS.find((encoding) => encoding === form.encoding) ?? settings.encoding,
     skipRows: Math.min(Math.max(Math.trunc(form.skipRows), 0), MAX_SKIP_ROWS),
