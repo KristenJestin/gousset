@@ -146,6 +146,8 @@ const SHOTS: ReadonlyArray<Shot> = [
   { id: "accounts-benefitcredits--uncovered" },
   { id: "operations-operationslist--default" },
   { id: "operations-linedetail--to-review" },
+  // "To review only" off, then pressed with the others set (#184).
+  { id: "operations-operationsfilters--default" },
   { id: "operations-operationsfilters--set" },
   { id: "operations-operationsfilters--french" },
   // A phone: the search and the Filters button, then the sheet it opens (#127).

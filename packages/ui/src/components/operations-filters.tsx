@@ -1,10 +1,11 @@
 import { Input } from "@ui-sdk/react/input";
+import { Toggle } from "@ui-sdk/react/toggle";
 import { useEffect, useId, useRef, useState } from "react";
 
 import { usePageLanguage } from "../hooks/use-page-language";
 import { useUiMessages } from "../hooks/use-ui-messages";
 import { formatCount } from "../lib/count";
-import { controlClasses, groupFocusRing } from "../lib/form-classes";
+import { controlClasses, focusRing, groupFocusRing } from "../lib/form-classes";
 import {
   foldedFiltersCount,
   hasOperationsFilters,
@@ -53,12 +54,13 @@ const ALL_ACCOUNTS = "*";
  *
  * Where the bar has 1,024 px (a container query: the screen less the sidebar), every filter sits on
  * one 32 px row, none with a label above it: each says what it is by its placeholder or its value,
- * and keeps its name for screen readers. Narrower (a phone, a tablet, a laptop's half screen), the
- * search stays and the other filters fold behind a Filters button, which says how many are set and
- * opens them in a sheet, labelled one under the other; they apply as they change, and the sheet's
+ * and keeps its name for screen readers; "To review only" is a toggle button, violet once pressed.
+ * Narrower (a phone, a tablet, a laptop's half screen), the search stays and the other filters fold
+ * behind a Filters button, which says how many are set and opens them in a sheet, labelled one
+ * under the other ("To review only" a checkbox there); they apply as they change, and the sheet's
  * button shows the lines. A bound the page cannot read is said under the bar, whichever is shown.
  *
- * Motion: none of its own; its fields' (a select's list, a calendar) and the sheet's (it slides in
+ * Motion: the toggle's colours move in 150 ms (ease-out), cut under reduced motion; its fields' (a select's list, a calendar) and the sheet's (it slides in
  * from its edge) as theirs.
  */
 export function OperationsFilters({
@@ -144,19 +146,20 @@ export function OperationsFilters({
             invalid={{ min: minError !== undefined, max: maxError !== undefined }}
             describedBy={errors.length === 0 ? undefined : errorId}
           />
-          <div
+          {/* One toggle button, as the prototype draws it: a box inside a bordered pill doubled
+              the pressed state, two violet edges whose corners did not match (#184). */}
+          <Toggle
+            pressed={values.toReview}
+            onPressedChange={(toReview) => set({ toReview })}
             className={cn(
-              "flex h-8 shrink-0 items-center rounded-md border border-input bg-card px-3 whitespace-nowrap",
+              "flex h-8 shrink-0 cursor-pointer items-center rounded-md border border-input bg-card px-3 text-sm font-medium whitespace-nowrap text-soft-foreground",
               "transition-colors duration-150 ease-out",
-              values.toReview && "border-primary bg-primary/10",
+              "data-pressed:border-primary/45 data-pressed:bg-primary/10 data-pressed:text-primary",
+              focusRing,
             )}
           >
-            <Checkbox
-              label={words.onlyToReview}
-              checked={values.toReview}
-              onCheckedChange={(toReview) => set({ toReview })}
-            />
-          </div>
+            {words.onlyToReview}
+          </Toggle>
         </div>
         <FiltersSheet
           values={values}

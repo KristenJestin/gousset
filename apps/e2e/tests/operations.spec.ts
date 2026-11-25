@@ -509,7 +509,11 @@ test("the to-review filter shows the lines held for review, marked so", async ({
   await hydrated(page);
 
   await inFilters(page, async (fields) => {
-    await fields.getByRole("checkbox", { name: "To review only" }).click();
+    // A toggle button in the row, a checkbox in the phone's sheet (#184).
+    await fields
+      .getByRole("button", { name: "To review only" })
+      .or(fields.getByRole("checkbox", { name: "To review only" }))
+      .click();
   });
 
   await expect(count(page)).toHaveText("1 line");
