@@ -112,6 +112,14 @@ function uiMessages(locale: Locale) {
       bought: (name: string) => m.uiMoneyBought({ name }, options),
       /** What an investment's gain is measured against: its net contributions. */
       putIn: m.uiMoneyPutIn({}, options),
+      /**
+       * Under what was received, the lines that may be refunds (#208), left out of it until the user
+       * answers: "Not in received: €30 that may be a refund (1 line)", the amount and count written.
+       */
+      maybeRefunds: (count: number, written: string, amount: string) =>
+        pluralRules[locale].select(count) === "one"
+          ? m.uiMoneyMaybeRefundsOne({ amount }, options)
+          : m.uiMoneyMaybeRefundsOther({ count: written, amount }, options),
     },
     accounts: {
       /** The "Tracking" column and the settings' value: how the account is followed. */
@@ -286,6 +294,9 @@ function uiMessages(locale: Locale) {
       splitAcross: (count: number) => m.uiOperationsSplitAcross({ count }, options),
       maybeRefund: m.uiOperationsMaybeRefund({}, options),
       maybeRefundDescription: m.uiOperationsMaybeRefundDescription({}, options),
+      /** A line that counts as no income until the user answers (#208). */
+      maybeRefundWaiting: m.uiOperationsMaybeRefundWaiting({}, options),
+      notARefund: m.uiOperationsNotARefund({}, options),
       /** Under a proposed expense: "Eating out · costs €56.00". */
       proposalCosts: (category: string, amount: string) =>
         m.uiOperationsProposalCosts({ category, amount }, options),
