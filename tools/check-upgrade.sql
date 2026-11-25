@@ -1,7 +1,7 @@
 -- The rows tools/check-upgrade.sh puts into the last release, through the tables' owner, for what
 -- that release offers no route to (0.1.1 has neither an accounts screen nor an import route): two
--- users' accounts, balances, an import with its file and lines, a CSV profile, and an MCP client
--- with its consent and tokens. The users themselves, their passwords and sessions come through the
+-- users' accounts, balances, an import with its file and lines (with their entries, from 0.3.0), a
+-- CSV profile, and an MCP client with its consent and tokens. The users themselves, their passwords and sessions come through the
 -- app's own API. Every value is invented. Written for 0.1.1's schema: a release that changes these
 -- tables, or offers a route for them, changes this file (docs/releases.md, "Every release is an
 -- upgrade").
@@ -47,6 +47,40 @@ two', null, null, null, 'k-2026-10-12--1999-1', null, null, '2026-11-01 10:00:03
   ('019a0000-0000-7000-8000-000000000405', :'camille', '019a0000-0000-7000-8000-000000000101', null, 'manual', 'discarded', '2026-10-20', null, -123456789012, null, null, 'Ligne saisie à la main', null, null, null, null, null, null, null, '2026-11-02 18:00:00+00', '2026-11-03 07:15:00.123456+00'),
   ('019a0000-0000-7000-8000-000000000406', :'camille', '019a0000-0000-7000-8000-000000000104', null, 'manual', 'counted', '2026-10-01', null, 18000, null, null, 'Crédit de titres-restaurant', null, null, null, null, null, null, '2027-12-31', '2026-11-02 18:01:00+00', '2026-11-02 18:01:00+00'),
   ('019a0000-0000-7000-8000-000000000407', :'admin', '019a0000-0000-7000-8000-000000000201', null, 'manual', 'counted', '2026-10-03', null, -5000, null, null, 'Ligne d''un autre utilisateur', null, null, null, null, null, null, null, '2026-11-02 18:02:00+00', '2026-11-02 18:02:00+00');
+
+-- From 0.3.0 on, packages/core writes a counted line with an amount together with its entry (#23;
+-- docs/data-model.md, "Every counted line with an amount has exactly one entry"): an expense when
+-- money leaves, an income when it comes in, the day it was booked, in its kind's fallback category,
+-- `classified_by = default`, with one payment part of the whole line. Before 0.3.0 there is no
+-- entry, and the update's migration gives each line its own.
+DO $$
+BEGIN
+  IF to_regclass('public.entry_part') IS NOT NULL THEN
+    WITH given (entry_id, part_id, line_id) AS (
+      VALUES
+        ('019a0000-0000-7000-8000-000000000601'::uuid, '019a0000-0000-7000-8000-000000000701'::uuid, '019a0000-0000-7000-8000-000000000401'::uuid),
+        ('019a0000-0000-7000-8000-000000000602', '019a0000-0000-7000-8000-000000000702', '019a0000-0000-7000-8000-000000000402'),
+        ('019a0000-0000-7000-8000-000000000603', '019a0000-0000-7000-8000-000000000703', '019a0000-0000-7000-8000-000000000403'),
+        ('019a0000-0000-7000-8000-000000000606', '019a0000-0000-7000-8000-000000000706', '019a0000-0000-7000-8000-000000000406'),
+        ('019a0000-0000-7000-8000-000000000607', '019a0000-0000-7000-8000-000000000707', '019a0000-0000-7000-8000-000000000407')
+    ), pending AS MATERIALIZED (
+      SELECT g.entry_id, g.part_id, l.id AS line_id, l.user_id, l.booked_on, abs(l.amount_minor) AS amount,
+        l.created_at, c.id AS category_id, c.kind
+      FROM given g
+      JOIN statement_line l ON l.id = g.line_id
+      JOIN category c ON c.user_id = l.user_id AND c.is_fallback
+        AND c.kind = (CASE WHEN l.amount_minor < 0 THEN 'expense' ELSE 'income' END)::entry_kind
+    ), made AS (
+      INSERT INTO entry (id, user_id, kind, happened_on, category_id, classified_by, created_at, updated_at)
+      SELECT p.entry_id, p.user_id, p.kind, p.booked_on, p.category_id, 'default', p.created_at, p.created_at
+      FROM pending p
+      RETURNING id
+    )
+    INSERT INTO entry_part (id, user_id, entry_id, line_id, role, amount_minor)
+    SELECT p.part_id, p.user_id, p.entry_id, p.line_id, 'payment', p.amount FROM pending p;
+  END IF;
+END
+$$;
 
 insert into account_balance (id, user_id, account_id, day, balance_minor, source, import_id)
 values
