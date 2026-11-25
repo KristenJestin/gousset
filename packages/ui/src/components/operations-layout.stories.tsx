@@ -152,7 +152,7 @@ export const Loading: Story = {
           />
         }
         list={<OperationsListSkeleton />}
-        detail={<LineDetailSkeleton />}
+        detail={<LineDetailSkeleton onClose={() => undefined} />}
       />
     </div>
   ),

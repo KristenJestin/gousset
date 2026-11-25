@@ -158,8 +158,8 @@ function rowWindow(first: Followed) {
 const COLUMN = {
   day: "w-16 shrink-0",
   line: "flex min-w-0 flex-1 items-center gap-2",
-  // Shown while the list has room for them: a detail open beside a narrow list takes them, the
-  // category first, never the amounts.
+  // Shown while the list has room for them: a narrow list (a phone, a small window) gives them up,
+  // the category first, never the amounts.
   account: "hidden w-40 shrink-0 truncate @xl:block",
   category: "hidden w-40 shrink-0 truncate @3xl:block",
   amount: "flex w-28 shrink-0 justify-end",
@@ -186,8 +186,8 @@ const COLUMN = {
  * out over the empty state.
  *
  * The account column shows while the list is at least 576 px wide, the category column while it
- * is at least 768 px wide (container queries): a list narrowed by an open detail gives them up,
- * never the amounts.
+ * is at least 768 px wide (container queries): a narrower list gives them up, never the amounts.
+ * An open line's detail is a sheet over the list (#182), which keeps its width.
  */
 export function OperationsList({
   rows,

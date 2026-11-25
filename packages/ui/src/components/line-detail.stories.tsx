@@ -216,7 +216,7 @@ export const BalanceMovement: Story = {
 };
 
 export const Loading: Story = {
-  render: () => <LineDetailSkeleton />,
+  render: () => <LineDetailSkeleton onClose={() => undefined} />,
 };
 
 export const French: Story = {

@@ -292,9 +292,16 @@ function RowSkeleton() {
 /**
  * `LineDetail` on its way, in its sheet: its title and amount in the sheet's head, and three groups
  * of rows, at the same heights. In `OperationsLayout`'s sheet, or in one of its own elsewhere.
+ * `onClose`: what the close button, Escape or a press on the backdrop does, as `LineDetail`'s.
  */
-export function LineDetailSkeleton() {
-  const inLayout = use(DetailSheetClose) !== undefined;
+export function LineDetailSkeleton({ onClose }: { onClose: () => void }) {
+  const sheetClose = use(DetailSheetClose);
+  const inLayout = sheetClose !== undefined;
+
+  // Before the sheet can be closed: closing it closes the line on its way.
+  useLayoutEffect(() => {
+    sheetClose?.({ onClose });
+  }, [sheetClose, onClose]);
 
   const drawn = (
     <>
@@ -325,5 +332,18 @@ export function LineDetailSkeleton() {
     </>
   );
 
-  return inLayout ? drawn : <SheetFrame open>{drawn}</SheetFrame>;
+  return inLayout ? (
+    drawn
+  ) : (
+    <SheetFrame
+      open
+      onOpenChange={(open) => {
+        if (!open) {
+          onClose();
+        }
+      }}
+    >
+      {drawn}
+    </SheetFrame>
+  );
 }

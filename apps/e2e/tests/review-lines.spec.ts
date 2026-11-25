@@ -185,8 +185,10 @@ test("A accepts the proposal, the line leaves the list and the next line opens",
 
   await page.keyboard.press("a");
 
-  // The line below opens, its proposal focused; the count goes down.
+  // The line below opens, its proposal focused, in the same sheet on every width (#164, #182);
+  // the count goes down.
   await expect(proposalOf(page, STREAMING_AGAIN.label)).toBeVisible();
+  await expect(page.getByRole("dialog")).toHaveCount(1);
   await expect(row(page, GYM.label)).toHaveCount(0);
   await expect(count(page)).toHaveText("4 lines");
 
@@ -202,6 +204,7 @@ test("A accepts the proposal, the line leaves the list and the next line opens",
     .getByRole("button", { name: `Accept the proposal for ${STREAMING_AGAIN.label}` })
     .click();
   await expect(proposalOf(page, STREAMING.label)).toBeVisible();
+  await expect(page.getByRole("dialog")).toHaveCount(1);
   await expect(count(page)).toHaveText("3 lines");
   expect(await reviewStateOf(owner, STREAMING_AGAIN.label)).toMatchObject({ state: "discarded" });
 
@@ -506,7 +509,10 @@ test("on a phone, the month's lines are reviewed from the home, one press each, 
   app,
   user,
 }) => {
-  test.skip(!onPhone(page), "On a wide screen the detail opens beside the list");
+  test.skip(
+    !onPhone(page),
+    "A phone's press and reach; one sheet from line to line on every width is A's test above",
+  );
 
   const { owner } = await reviewer(page, app, user, "albin");
 
