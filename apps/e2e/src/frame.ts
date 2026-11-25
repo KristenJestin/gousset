@@ -1,3 +1,4 @@
+import { expect } from "@playwright/test";
 import type { Locator, Page } from "@playwright/test";
 
 /** Below this width the frame shows the tab bar instead of the sidebar (`AppShell`). */
@@ -49,6 +50,17 @@ export async function detailSight(detail: Locator): Promise<DetailSight> {
 
       return { opacity, moving };
     });
+}
+
+/**
+ * Waits until a line's open detail stands still: its column no longer widens, its content no longer
+ * slides in, its sheet no longer rises (`detailSight`'s `moving`). Playwright presses a button where
+ * it stood when found stable, which Firefox may judge before the opening has begun to move; the
+ * button moving on, the release lands beside it and the click is lost (#223). Click in a detail
+ * once it rests.
+ */
+export async function detailAtRest(detail: Locator): Promise<void> {
+  await expect.poll(async () => (await detailSight(detail)).moving).toBe(0);
 }
 
 /** What the eye gets of a text: whether it is drawn on top, and its contrast with what is under. */
