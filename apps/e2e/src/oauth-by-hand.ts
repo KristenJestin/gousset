@@ -5,6 +5,7 @@ import { request } from "@playwright/test";
 import type { Page } from "@playwright/test";
 import { Schema } from "effect";
 
+import { untilConsentWorks } from "./mcp";
 import { TEST_CLIENT_ID, TEST_REDIRECT_URL } from "./oauth-client";
 
 /** What the token endpoint answers. */
@@ -69,6 +70,7 @@ export async function authorizeByHand(flow: ByHand): Promise<Tokens> {
   });
 
   await flow.page.goto(authorize.toString());
+  await untilConsentWorks(flow.page);
   await flow.consent(flow.page);
 
   const code = (await callback).searchParams.get("code");
