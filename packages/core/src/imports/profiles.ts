@@ -5,6 +5,7 @@ import {
   CsvProfile,
   SHIPPED_PROFILES,
   csvFile,
+  headerMatches,
   matchCsvHeader,
   readCsvHeader,
   shippedProfile,
@@ -561,7 +562,9 @@ const fits = (
       Effect.match({
         onFailure: () => undefined,
         onSuccess: (header) =>
-          header === entry.header ? { profile: entry, by: "header" } : undefined,
+          headerMatches({ header: entry.header, profile: definition }, header)
+            ? { profile: entry, by: "header" }
+            : undefined,
       }),
     );
   }

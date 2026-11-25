@@ -1,4 +1,4 @@
-import { matchTopUps, recogniseMerchants } from "@gousset/core";
+import { matchTopUps, rereadMerchants } from "@gousset/core";
 import type { QueryFailed } from "@gousset/db/user-data";
 import { Effect, Schema } from "effect";
 
@@ -14,10 +14,11 @@ const failed = (query: QueryFailed) =>
 /**
  * Recognising a user's merchants (#24): the merchant of every line whose cleaned label names none
  * yet. Each import does it at its end; this job does it once at every boot for every user, so that
- * the lines kept before merchants existed (v0.2) get theirs without waiting for an import. Then the
- * meal-voucher top-ups are matched (#28), once their lines are classified by their merchants, so
- * that the lines kept before v0.3 are matched too. It finds nothing to do once they have them, and a
- * run again adds nothing twice.
+ * the lines kept before merchants existed (v0.2) get theirs without waiting for an import; first,
+ * it forgets the merchants made from a label's operation prefix that the user never touched (#194),
+ * whose lines then get theirs again. Then the meal-voucher top-ups are matched (#28), once their
+ * lines are classified by their merchants, so that the lines kept before v0.3 are matched too. It
+ * finds nothing to do once they have them, and a run again adds nothing twice.
  */
 export const merchantsJob = defineJob({
   name: "recognise-merchants",
@@ -31,7 +32,7 @@ export const merchantsJob = defineJob({
 
       yield* progress.step("recognise");
 
-      yield* recogniseMerchants(owner).pipe(Effect.provide(userData), Effect.mapError(failed));
+      yield* rereadMerchants(owner).pipe(Effect.provide(userData), Effect.mapError(failed));
 
       yield* progress.step("top-ups");
 

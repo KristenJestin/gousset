@@ -1,7 +1,7 @@
 import { cimd } from "@better-auth/cimd";
 import { drizzleAdapter } from "@better-auth/drizzle-adapter/relations-v2";
 import { mcp } from "@better-auth/mcp";
-import { copyDefaultCategories, setLanguageOf } from "@gousset/core/default-categories";
+import { copyDefaultCategories, setLanguageOfRequest } from "@gousset/core/default-categories";
 import type { Database } from "@gousset/db";
 import { tables } from "@gousset/db/schema/index";
 import { userDataLayer } from "@gousset/db/user-data";
@@ -184,6 +184,16 @@ export function createAuth(env: AuthConfig, database: Database) {
         // account's by default. The settings change it through the app's own server function
         // (apps/web, functions/currency.ts).
         currency: { type: "string", required: false, defaultValue: "EUR", input: false },
+        // Whether the default categories are in the user's language (#195): true from sign-up;
+        // for a user the administrator creates, set by their own first signed-in page, which
+        // renames the defaults (packages/core, `settleDefaultNames`); the session carries it so
+        // that the pages ask only while it is false.
+        defaultCategoriesSettled: {
+          type: "boolean",
+          required: false,
+          defaultValue: false,
+          input: false,
+        },
       },
     },
     session: {
@@ -373,18 +383,25 @@ export function createAuth(env: AuthConfig, database: Database) {
               return;
             }
 
-            return { data: { ...user, role: "admin", isFirstUser: true } };
+            // Its categories are made in its own language below: nothing to rename later.
+            return {
+              data: { ...user, role: "admin", isFirstUser: true, defaultCategoriesSettled: true },
+            };
           },
-          // Every user starts with the default categories, in the language the request's browser
-          // prefers (French or English): at sign-up the user's own; for a user the administrator
-          // creates, the administrator's. From then on the names are the user's. Runs once the
-          // user's row is committed, as `gousset_user` for that user, as `UserData` does.
+          // Every user starts with the default categories, in the language of the request's
+          // interface (the language chosen, else the browser's; French or English): at sign-up the
+          // user's own; for a user the administrator creates, the administrator's, until the user's
+          // own first page renames them (`defaultCategoriesSettled`). From then on the names are
+          // the user's. Runs once the user's row is committed, as `gousset_user` for that user, as
+          // `UserData` does.
           after: async (user, ctx) => {
-            const header =
-              ctx?.headers?.get("accept-language") ?? ctx?.request?.headers.get("accept-language");
+            const header = (name: string) =>
+              ctx?.headers?.get(name) ?? ctx?.request?.headers.get(name);
+
+            const language = setLanguageOfRequest(header("cookie"), header("accept-language"));
 
             await Effect.runPromise(
-              copyDefaultCategories(user.id, setLanguageOf(header)).pipe(
+              copyDefaultCategories(user.id, language).pipe(
                 Effect.provide(userDataLayer(database)),
               ),
             );

@@ -135,6 +135,12 @@ export const entryPartRole = pgEnum("entry_part_role", ["payment", "refund"]);
 /** Where a rule comes from (#25): proposed by a correction of a line, or written from its screen. */
 export const ruleOrigin = pgEnum("rule_origin", ["correction", "user"]);
 
+/**
+ * The operation a category takes the lines of (#194): a loan's instalment, a fee, interest, read
+ * from a label's prefix (packages/core, `merchants/operations.ts`), whose lines name no merchant.
+ */
+export const categoryOperation = pgEnum("category_operation", ["loan", "fee", "interest"]);
+
 /** One account the user follows, of every kind. */
 export const account = pgTable.withRLS(
   "account",
@@ -549,9 +555,16 @@ export const category = pgTable.withRLS(
     isFallback: boolean("is_fallback").default(false).notNull(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
+    // Added with the operation prefixes (#194), after the others: the lines of this operation, which
+    // name no merchant, go in it by default, when it is of their entry's kind.
+    operation: categoryOperation("operation"),
   },
   (table) => [
     unique("category_user_id_id_key").on(table.userId, table.id),
+    // One category of each operation per kind.
+    uniqueIndex("category_one_per_operation")
+      .on(table.userId, table.kind, table.operation)
+      .where(sql`${table.operation} is not null`),
     // What the kept references point to: a child shares its parent's kind, an entry its category's.
     unique("category_user_id_id_kind_key").on(table.userId, table.id, table.kind),
     // Two top-level categories of a kind cannot share a name either.

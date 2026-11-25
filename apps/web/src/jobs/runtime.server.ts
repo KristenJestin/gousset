@@ -11,6 +11,7 @@ import { merchantsJob } from "./merchants-job.server";
 import { JobQueue, register } from "./queue.server";
 import { ruleJob } from "./rule-job.server";
 import { E2E_JOBS_VARIABLE, testJob } from "./test-job";
+import { transfersJob } from "./transfers-job.server";
 import { uploadSweepJob } from "./upload-sweep.server";
 
 /** Present only when the harness started the app; any value but `on` fails loudly. */
@@ -26,6 +27,7 @@ const queue = Layer.unwrap(
       register(uploadSweepJob),
       register(merchantsJob),
       register(balancesJob),
+      register(transfersJob),
       register(ruleJob),
     ];
 
@@ -44,11 +46,12 @@ const queue = Layer.unwrap(
 export const jobs = ManagedRuntime.make(queue);
 
 /**
- * Every user's merchants recognised once at boot (#24), and the movement lines of their accounts
- * kept by their balance made (#31): what was kept before merchants and movement lines existed gets
- * them after the update, without waiting for an import or a balance noted. The app's role reads the
- * users, never their lines: each user's jobs read their own through `UserData`, and find nothing to
- * do once every line has its merchant and every noted balance its line.
+ * Every user's merchants recognised once at boot (#24), the movement lines of their accounts kept by
+ * their balance made (#31), and their transfers paired (#192): what was kept before merchants,
+ * movement lines and transfers existed gets them after the update, without waiting for an import or
+ * a balance noted. The app's role reads the users, never their lines: each user's jobs read their
+ * own through `UserData`, and find nothing to do once every line has its merchant, every noted
+ * balance its line and every clear transfer its pair.
  */
 const recogniseEveryone = Effect.gen(function* () {
   const queued = yield* JobQueue;
@@ -57,6 +60,7 @@ const recogniseEveryone = Effect.gen(function* () {
   for (const user of users) {
     yield* queued.send(merchantsJob, user.id, {});
     yield* queued.send(balancesJob, user.id, {});
+    yield* queued.send(transfersJob, user.id, {});
   }
 });
 
