@@ -3,6 +3,8 @@ import { expect } from "@playwright/test";
 import type { Page } from "@playwright/test";
 import axe from "axe-core";
 
+import { transformsMoving } from "./moving";
+
 /** WCAG 2.2 A and AA, the level Gousset holds (docs/architecture.md, "Quality"). */
 const WCAG_TAGS = ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa", "wcag22aa"];
 
@@ -64,7 +66,7 @@ const ENTRANCES_DONE = `new Promise((frame) => requestAnimationFrame(() => reque
   .then(() => undefined)`;
 
 /**
- * Runs axe on the screen once its entrance animations ended; any violation fails the test, listed
+ * Runs axe on the screen once its entrance animations and Motion's layout animations ended; any violation fails the test, listed
  * by rule, then each element it found with what axe says of it: a CI log is enough to find and
  * fix it.
  */
@@ -73,6 +75,9 @@ export async function expectAccessible(page: Page): Promise<void> {
   // then every entrance listed by then.
   await expect.poll(async () => Number(await page.evaluate(POPUPS_MOVING))).toBe(0);
   await page.evaluate(ENTRANCES_DONE);
+  // Then every layout animation of Motion's, which the page does not list: a row still growing into
+  // its panel or shrinking back covers the rows under it (#167).
+  await expect.poll(async () => transformsMoving(page)).toEqual([]);
 
   const firefox = page.context().browser()?.browserType().name() === "firefox";
 

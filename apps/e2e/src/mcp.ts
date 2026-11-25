@@ -10,6 +10,7 @@ import type {
   StoredOAuthClientInformation,
   StoredOAuthTokens,
 } from "@modelcontextprotocol/client";
+import { expect } from "@playwright/test";
 import type { Page } from "@playwright/test";
 
 import { TEST_CLIENT_ID, TEST_REDIRECT_URL } from "./oauth-client";
@@ -85,6 +86,16 @@ class BrowserOAuthClient implements OAuthClientProvider {
   discoveryState() {
     return this.#discovery;
   }
+}
+
+/**
+ * Waits until the consent page the browser was sent to works. The authorization's redirect loads
+ * it, and `goto` returns at its load event, which can come before the page hydrates: a click until
+ * then does nothing and is lost (#97), and the code never comes back (#179). Every button of the
+ * page hydrates at once, so Deny, on every consent, says it for all of them.
+ */
+export async function untilConsentWorks(page: Page): Promise<void> {
+  await expect(page.getByRole("button", { name: "Deny" })).toHaveAttribute("data-hydrated");
 }
 
 /** The two protocol revisions Gousset serves (docs/mcp.md, "The door"). */
@@ -174,6 +185,7 @@ export async function connectMcp(connection: McpConnection): Promise<McpSession>
   });
 
   await connection.page.goto(provider.authorizationUrl.toString());
+  await untilConsentWorks(connection.page);
   await connection.consent(connection.page);
 
   const returned = (await callback).searchParams;
