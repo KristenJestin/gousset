@@ -180,6 +180,8 @@ function ColumnsPreview({
   const [mapping, setMapping] = useState(initialMapping);
   // The profile chosen from the list, until the user changes a column or a setting.
   const [chosen, setChosen] = useState<ProfileChoice | null>(null);
+  // The profile last chosen from the list: while its layout still reads the file, the list names it.
+  const [startedFrom, setStartedFrom] = useState<ProfileChoice | null>(null);
   const [name, setName] = useState("");
   const [notice, setNotice] = useState<string>();
   const [profileRefused, setProfileRefused] = useState<string>();
@@ -220,6 +222,7 @@ function ColumnsPreview({
     }
 
     setChosen(choiceOf(entry));
+    setStartedFrom(choiceOf(entry));
   };
 
   const refreshProfiles = () => queryClient.invalidateQueries({ queryKey: importKeys.profiles() });
@@ -292,6 +295,7 @@ function ColumnsPreview({
     await refreshProfiles();
   };
 
+  const readWith = chosen ?? (settings.layout === undefined ? null : startedFrom);
   const result = "profile" in draft ? testResult(preview) : null;
   const readable = result !== null && result.kind === "lines";
   const offered = DATE_FORMATS.some((format) => format === settings.dateFormat);
@@ -305,7 +309,7 @@ function ColumnsPreview({
           <Select
             label={m.importCsvProfile()}
             size="sm"
-            value={chosen === null ? BY_HAND : valueOf(chosen)}
+            value={readWith === null ? BY_HAND : valueOf(readWith)}
             items={[
               { value: BY_HAND, label: m.importCsvProfileByHand() },
               ...fits.map((entry) => ({

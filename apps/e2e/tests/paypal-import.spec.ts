@@ -321,20 +321,25 @@ test("choose PayPal activity on the import screen for an export saved with semic
   // Read as the plain table its columns say, the dollar purchase is a line in another currency.
   const plainRead = () => expect(testRead).toContainText("Line 4, column 7");
 
+  // The list names what reads the file: PayPal activity, though a setting changed since.
+  const readWith = page.getByRole("combobox", { name: "Read with" });
+
   await paypalRead();
+  await expect(readWith).toContainText("PayPal activity");
 
   // The columns as mapped below, or one of them mapped again: the mapping shown is what reads.
-  await choose(page, "Read with", /^PayPal activity/);
   await choose(page, "Read with", "The columns as mapped below");
-  await choose(page, "Separator", "Semicolon (;)");
   await plainRead();
+  await expect(readWith).toContainText("The columns as mapped below");
 
   await choose(page, "Read with", /^PayPal activity/);
   await choose(page, "Separator", "Semicolon (;)");
   await paypalRead();
+  await expect(readWith).toContainText("PayPal activity");
 
   await choose(page, "What Gross holds", "Amount (signed)");
   await plainRead();
+  await expect(readWith).toContainText("The columns as mapped below");
 
   await choose(page, "Read with", /^PayPal activity/);
   await choose(page, "Separator", "Semicolon (;)");
