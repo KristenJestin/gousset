@@ -6,6 +6,8 @@ import { m } from "@gousset/i18n/messages";
 import { getLocale } from "@gousset/i18n/runtime";
 import type { Locale } from "@gousset/i18n/runtime";
 
+import type { PaletteColor } from "./palette";
+
 /** Which plural form a count takes, in each language: built once. */
 const pluralRules = {
   en: new Intl.PluralRules("en"),
@@ -28,6 +30,35 @@ function uiMessages(locale: Locale) {
       previousMonth: m.uiPreviousMonth({}, options),
       nextMonth: m.uiNextMonth({}, options),
       remove: (name: string) => m.uiRemove({ name }, options),
+    },
+    /** `ColorSwatches`: each colour's name for screen readers, and the automatic choice. */
+    palette: {
+      automatic: m.uiPaletteAutomatic({}, options),
+      colors: {
+        gray: m.uiPaletteGray({}, options),
+        red: m.uiPaletteRed({}, options),
+        orange: m.uiPaletteOrange({}, options),
+        amber: m.uiPaletteAmber({}, options),
+        lime: m.uiPaletteLime({}, options),
+        green: m.uiPaletteGreen({}, options),
+        teal: m.uiPaletteTeal({}, options),
+        cyan: m.uiPaletteCyan({}, options),
+        blue: m.uiPaletteBlue({}, options),
+        indigo: m.uiPaletteIndigo({}, options),
+        violet: m.uiPaletteViolet({}, options),
+        pink: m.uiPalettePink({}, options),
+      } satisfies { [Color in PaletteColor]: string },
+    },
+    /** `LogoField`'s buttons. */
+    logo: {
+      choose: m.uiLogoChoose({}, options),
+      replace: m.uiLogoReplace({}, options),
+      remove: m.uiLogoRemove({}, options),
+    },
+    /** `TextListField`'s button. */
+    list: {
+      add: m.uiListAdd({}, options),
+      remove: (value: string) => m.uiRemove({ name: value }, options),
     },
     forms: {
       noMatch: m.uiNoMatch({}, options),

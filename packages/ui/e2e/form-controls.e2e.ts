@@ -354,3 +354,243 @@ test.describe("DatePicker", () => {
     await expectPopupMotion(page, page.locator('[data-slot="date-picker-content"]'));
   });
 });
+
+test.describe("ColorSwatches", () => {
+  test("a radio group of the palette, Automatic first and chosen until a colour is", async ({
+    page,
+  }) => {
+    await page.goto(story("colorswatches", "default"));
+
+    const group = page.getByRole("radiogroup", { name: "Colour" });
+
+    await expect(group.getByRole("radio")).toHaveCount(13);
+    await expect(group.getByRole("radio").first()).toHaveAccessibleName("Automatic");
+    await expect(group.getByRole("radio", { name: "Automatic" })).toBeChecked();
+    await expect(group.getByRole("radio", { name: "Teal" })).toBeVisible();
+  });
+
+  test("a swatch is chosen with the keyboard, and Automatic gives the colour back", async ({
+    page,
+  }) => {
+    await page.goto(story("colorswatches", "default"));
+
+    const group = page.getByRole("radiogroup", { name: "Colour" });
+
+    await group.getByRole("radio", { name: "Automatic" }).focus();
+    await page.keyboard.press("ArrowRight");
+    await page.keyboard.press("ArrowRight");
+    await expect(group.getByRole("radio", { name: "Red" })).toBeChecked();
+    await expect(group.getByRole("radio", { name: "Red" })).toBeFocused();
+    await expect(page.getByTestId("chosen")).toHaveText("red");
+    await expect(page.locator('[data-slot="avatar"]')).toHaveAttribute("data-color", "red");
+
+    await page.keyboard.press("ArrowLeft");
+    await page.keyboard.press("ArrowLeft");
+    await expect(group.getByRole("radio", { name: "Automatic" })).toBeChecked();
+    await expect(page.getByTestId("chosen")).toHaveText("automatic");
+  });
+
+  test("a swatch is chosen with a click, and only the chosen one shows its check", async ({
+    page,
+  }) => {
+    await page.goto(story("colorswatches", "chosen"));
+
+    const group = page.getByRole("radiogroup", { name: "Colour" });
+
+    await expect(group.getByRole("radio", { name: "Violet" })).toBeChecked();
+    await group.getByRole("radio", { name: "Teal" }).click();
+    await expect(page.getByTestId("chosen")).toHaveText("teal");
+    await expect(group.locator("svg")).toHaveCount(1);
+    await expect(group.getByRole("radio", { name: "Teal" }).locator("svg")).toHaveCount(1);
+  });
+
+  test("without the automatic choice, only the palette is offered", async ({ page }) => {
+    await page.goto(story("colorswatches", "without-automatic"));
+
+    const group = page.getByRole("radiogroup", { name: "Colour" });
+
+    await expect(group.getByRole("radio")).toHaveCount(12);
+    await expect(group.getByRole("radio", { name: "Teal" })).toBeChecked();
+  });
+
+  test("a disabled group cannot change", async ({ page }) => {
+    await page.goto(story("colorswatches", "disabled"));
+    await page.getByRole("radio", { name: "Red" }).click({ force: true });
+    await expect(page.getByRole("radio", { name: "Amber" })).toBeChecked();
+  });
+
+  test("the colours are named in French on a French page", async ({ page }) => {
+    await page.goto(story("colorswatches", "french"));
+
+    const group = page.getByRole("radiogroup", { name: "Couleur" });
+
+    await expect(group.getByRole("radio", { name: "Automatique" })).toBeChecked();
+    await expect(group.getByRole("radio", { name: "Bleu canard" })).toBeVisible();
+  });
+
+  test("on a phone, the swatches wrap and none goes past the edge", async ({ page }) => {
+    await page.setViewportSize({ width: 320, height: 568 });
+    await page.goto(story("colorswatches", "phone"));
+
+    const group = page.getByRole("radiogroup", { name: "Colour" });
+    const first = await group.getByRole("radio").first().boundingBox();
+    const last = await group.getByRole("radio").last().boundingBox();
+
+    expect(last?.y).toBeGreaterThan(first?.y ?? 0);
+    expect(await group.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(
+      true,
+    );
+  });
+});
+
+/** A made-up 1×1 PNG: a file the logo field takes. */
+const TINY_PNG = Buffer.from(
+  "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=",
+  "base64",
+);
+
+test.describe("LogoField", () => {
+  test("a picked file shows at once from a data: preview, and Remove gives the initials back", async ({
+    page,
+  }) => {
+    await page.goto(story("logofield", "default"));
+
+    const field = page.getByRole("group", { name: "Logo" });
+    const avatar = field.locator('[data-slot="avatar"]');
+
+    await expect(avatar).toHaveText("CB");
+    await expect(field.getByRole("button", { name: "Remove" })).toHaveCount(0);
+    await expect(field.locator('input[type="file"]')).toHaveAttribute(
+      "accept",
+      "image/png,image/jpeg,image/webp",
+    );
+
+    await field
+      .locator('input[type="file"]')
+      .setInputFiles({ name: "made-up-logo.png", mimeType: "image/png", buffer: TINY_PNG });
+    await expect(page.getByTestId("reported")).toHaveText("made-up-logo.png, data: preview");
+    await expect(avatar.locator("img")).toHaveAttribute("src", /^data:image\/png;base64,/);
+    await expect(field.getByRole("button", { name: "Replace" })).toBeVisible();
+
+    await field.getByRole("button", { name: "Remove" }).click();
+    await expect(page.getByTestId("reported")).toHaveText("removed");
+    await expect(avatar).toHaveText("CB");
+    await expect(field.getByRole("button", { name: "Choose a file" })).toBeVisible();
+  });
+
+  test("Choose a file opens the file picker", async ({ page }) => {
+    await page.goto(story("logofield", "default"));
+
+    const chooser = page.waitForEvent("filechooser");
+
+    await page.getByRole("button", { name: "Choose a file" }).click();
+    expect((await chooser).isMultiple()).toBe(false);
+  });
+
+  test("a refusal is said under the field and describes it", async ({ page }) => {
+    await page.goto(story("logofield", "refused"));
+    await expect(page.getByRole("group", { name: "Logo" })).toHaveAccessibleDescription(
+      /This file is larger than 256 KiB\. Choose a smaller image\./,
+    );
+  });
+
+  test("a disabled field cannot change", async ({ page }) => {
+    await page.goto(story("logofield", "disabled"));
+    await expect(page.getByRole("button", { name: "Replace" })).toBeDisabled();
+    await expect(page.getByRole("button", { name: "Remove" })).toBeDisabled();
+  });
+
+  test("its buttons are in French on a French page", async ({ page }) => {
+    await page.goto(story("logofield", "french"));
+    await expect(page.getByRole("button", { name: "Remplacer" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Retirer" })).toBeVisible();
+  });
+});
+
+test.describe("TextListField", () => {
+  test("Enter in its input adds the text and never sends the form", async ({ page }) => {
+    await page.goto(story("textlistfield", "default"));
+
+    const input = page.getByRole("textbox", { name: "Labels" });
+
+    await input.fill("  PAYLINK GREENMARKET  ");
+    await input.press("Enter");
+    await expect(
+      page.getByRole("list", { name: "Labels" }).getByRole("listitem").last(),
+    ).toHaveText("PAYLINK GREENMARKET");
+    await expect(input).toHaveValue("");
+    await expect(input).toBeFocused();
+    await expect(page.getByTestId("reported")).toHaveText(
+      "CB GREENMARKET | MEALCARD GREENMARKET | PAYLINK GREENMARKET · sent 0 times",
+    );
+  });
+
+  test("Add adds the text; an empty one is ignored and one already listed kept once", async ({
+    page,
+  }) => {
+    await page.goto(story("textlistfield", "empty"));
+
+    const input = page.getByRole("textbox", { name: "Labels" });
+    const add = page.getByRole("button", { name: "Add" });
+
+    await input.fill("   ");
+    await add.click();
+    await expect(page.getByRole("listitem")).toHaveCount(0);
+
+    await input.fill("CB FUELSTOP");
+    await add.click();
+    await input.fill("CB FUELSTOP");
+    await input.press("Enter");
+    await expect(page.getByRole("listitem")).toHaveCount(1);
+    await expect(page.getByTestId("reported")).toHaveText("CB FUELSTOP · sent 0 times");
+  });
+
+  test("a text is removed by its labelled cross, and the keyboard goes on from the input", async ({
+    page,
+  }) => {
+    await page.goto(story("textlistfield", "default"));
+    await page.getByRole("button", { name: "Remove CB GREENMARKET" }).focus();
+    await page.keyboard.press("Enter");
+    await expect(page.getByRole("listitem")).toHaveText(["MEALCARD GREENMARKET"]);
+    await expect(page.getByRole("textbox", { name: "Labels" })).toBeFocused();
+  });
+
+  test("a refusal is announced: the input is invalid and the message describes it", async ({
+    page,
+  }) => {
+    await page.goto(story("textlistfield", "refused"));
+
+    const input = page.getByRole("textbox", { name: "Labels" });
+
+    await expect(input).toHaveAttribute("aria-invalid", "true");
+    await expect(input).toHaveAccessibleDescription(/already names Fuelstop/);
+  });
+
+  test("a disabled field cannot change", async ({ page }) => {
+    await page.goto(story("textlistfield", "disabled"));
+    await expect(page.getByRole("textbox", { name: "Labels" })).toBeDisabled();
+    await expect(page.getByRole("button", { name: "Add" })).toBeDisabled();
+    await expect(page.getByRole("button", { name: "Remove CB GREENMARKET" })).toBeDisabled();
+  });
+
+  test("a long text is cut in its chip, which stays inside the field", async ({ page }) => {
+    await page.setViewportSize({ width: 320, height: 568 });
+    await page.goto(story("textlistfield", "long-text"));
+
+    const chip = page.getByRole("listitem");
+    const list = page.getByRole("list", { name: "Labels" });
+    const chipBox = await chip.boundingBox();
+    const listBox = await list.boundingBox();
+
+    expect((chipBox?.x ?? 0) + (chipBox?.width ?? 0)).toBeLessThanOrEqual(
+      (listBox?.x ?? 0) + (listBox?.width ?? 0) + 0.5,
+    );
+    await expect(chip.getByRole("button", { name: /^Remove PRLV SEPA/ })).toBeInViewport();
+  });
+
+  test("its words are in French on a French page", async ({ page }) => {
+    await page.goto(story("textlistfield", "french"));
+    await expect(page.getByRole("button", { name: "Ajouter" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Retirer CB GREENMARKET" })).toBeVisible();
+  });
+});

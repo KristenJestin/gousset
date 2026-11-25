@@ -3,44 +3,50 @@ import { useEffect, useRef } from "react";
 import { hydrateRoot } from "react-dom/client";
 import { renderToString } from "react-dom/server";
 
+import { PALETTE_COLORS } from "../lib/palette";
 import { MERCHANTS } from "../stories/made-up";
-import { MerchantLogo } from "./merchant-logo";
+import { Avatar } from "./avatar";
 
 // A made-up logo, drawn here: no image of a real brand, no request to anyone.
 const MADE_UP_LOGO = `data:image/svg+xml,${encodeURIComponent(
   '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"><rect width="40" height="40" fill="#2f6b4f"/><path d="M12 26c4-10 12-10 16 0" stroke="#fff" stroke-width="3" fill="none" stroke-linecap="round"/></svg>',
 )}`;
 
+const BROKEN = "/made-up-logos/fuelstop.png";
+
 /**
- * A merchant's logo beside its name. Without a logo, or when it fails to load, its initials on a
- * tile whose tone comes from the name (a hash, never random, theme tokens only): the same
- * merchant keeps the same tile everywhere. Decorative (`alt=""`): the name sits beside it. The
- * image loads lazily. Sizes match `CategoryIcon` (24, 32, 40 px).
+ * A logo beside a name (a merchant's; a bank's, later). Without a logo, or when it fails to load,
+ * the name's initials on a colour of the palette: the one the user picked, else the name's
+ * automatic one (a hash, never random), so the same name keeps the same tile everywhere. Every
+ * colour keeps its initials at 4.5:1 or more in light and in dark (`contrast.test.ts`, the
+ * "Theme/Tokens" story). Decorative (`aria-hidden`, `alt=""`): the name sits beside it. The image
+ * loads lazily. Sizes match `CategoryIcon` (24, 32, 40 px).
  *
- * Motion: none; it does not move.
+ * Motion: none of its own; it does not move.
  *
- * Don't: show it without the merchant's name beside it, fetch logos from a third party in the
- * browser, or pick its colour by hand.
+ * Don't: show it without the name beside it, fetch a logo from a third party in the browser,
+ * or colour it with anything but a palette key.
  */
 const meta = {
-  title: "Data/MerchantLogo",
-  component: MerchantLogo,
+  title: "Data/Avatar",
+  component: Avatar,
   args: { name: "Corner Bistro" },
-} satisfies Meta<typeof MerchantLogo>;
+} satisfies Meta<typeof Avatar>;
 
 export default meta;
 
 type Story = StoryObj<typeof meta>;
 
-/** No logo: the initials. */
+/** No logo, no colour picked: the initials on the name's automatic colour. */
 export const Initials: Story = {};
+
+/** A colour the user picked, in place of the automatic one. */
+export const PickedColor: Story = { args: { color: "violet" } };
 
 export const WithLogo: Story = { args: { name: "Greenmarket", src: MADE_UP_LOGO } };
 
 /** The logo's address answers nothing: the initials take its place. */
-export const BrokenLogo: Story = { args: { name: "Fuelstop", src: "/made-up-logos/fuelstop.png" } };
-
-const BROKEN = "/made-up-logos/fuelstop.png";
+export const BrokenLogo: Story = { args: { name: "Fuelstop", src: BROKEN } };
 
 /**
  * As a page rendered on the server meets it: the markup arrives, its image fails, and only then
@@ -56,15 +62,15 @@ function HydratedAfterTheFailure() {
       return;
     }
 
-    const logo = <MerchantLogo name="Fuelstop" src={BROKEN} />;
+    const avatar = <Avatar name="Fuelstop" src={BROKEN} />;
 
-    element.innerHTML = renderToString(logo);
+    element.innerHTML = renderToString(avatar);
 
     const image = element.querySelector("img");
     let root: ReturnType<typeof hydrateRoot> | undefined;
 
     const hydrate = () => {
-      root = hydrateRoot(element, logo);
+      root = hydrateRoot(element, avatar);
     };
 
     if (image === null || image.complete) {
@@ -90,22 +96,36 @@ export const Sizes: Story = {
   render: () => (
     <div className="flex items-center gap-3">
       {(["sm", "md", "lg"] as const).map((size) => (
-        <MerchantLogo key={size} name="Streamly" size={size} />
+        <Avatar key={size} name="Streamly" size={size} />
       ))}
       {(["sm", "md", "lg"] as const).map((size) => (
-        <MerchantLogo key={`logo-${size}`} name="Greenmarket" src={MADE_UP_LOGO} size={size} />
+        <Avatar key={`logo-${size}`} name="Greenmarket" src={MADE_UP_LOGO} size={size} />
       ))}
     </div>
   ),
 };
 
-/** Each merchant keeps its own tone, from its name. */
+/** Every colour of the palette, in the order it is offered. */
+export const Palette: Story = {
+  render: () => (
+    <ul className="grid max-w-md grid-cols-4 gap-3 sm:grid-cols-6">
+      {PALETTE_COLORS.map((color) => (
+        <li key={color} className="flex flex-col items-center gap-1 text-xs text-muted-foreground">
+          <Avatar name="Corner Bistro" color={color} size="lg" />
+          {color}
+        </li>
+      ))}
+    </ul>
+  ),
+};
+
+/** Each name keeps its own colour, from its name. */
 export const InRows: Story = {
   render: () => (
     <ul className="flex max-w-xs flex-col gap-2">
       {MERCHANTS.map((merchant) => (
         <li key={merchant.id} className="flex items-center gap-3 text-sm">
-          <MerchantLogo name={merchant.name} size="sm" />
+          <Avatar name={merchant.name} size="sm" />
           {merchant.name}
         </li>
       ))}
@@ -119,7 +139,7 @@ export const Phone: Story = {
     <ul className="flex flex-col gap-2">
       {MERCHANTS.map((merchant) => (
         <li key={merchant.id} className="flex items-center gap-3 text-sm">
-          <MerchantLogo name={merchant.name} />
+          <Avatar name={merchant.name} />
           {merchant.name}
         </li>
       ))}

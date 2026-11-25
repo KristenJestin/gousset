@@ -151,6 +151,36 @@
   --chart-scale-05: var(--chart-1);
   --chart-scale-pattern-color: var(--card);
 
+  /* The palette a user picks a colour from (an avatar's; `src/lib/palette.ts`), the same keys
+     as core stores. Each is a tile and the initials set on it: a light tint under a dark text in
+     light, a deep tone under a light text in dark, so both read on the page around them. Every
+     pair is 4.5:1 or more in both schemes and inside sRGB (`src/lib/contrast.test.ts`). A colour
+     for a name the user gave, never a money role nor a state. */
+  --palette-gray: light-dark(oklch(0.88 0.01 75), oklch(0.38 0.01 75));
+  --palette-gray-foreground: light-dark(oklch(0.4 0.01 75), oklch(0.9 0.01 75));
+  --palette-red: light-dark(oklch(0.88 0.06 25), oklch(0.38 0.1 25));
+  --palette-red-foreground: light-dark(oklch(0.4 0.12 25), oklch(0.9 0.04 25));
+  --palette-orange: light-dark(oklch(0.88 0.06 50), oklch(0.38 0.09 50));
+  --palette-orange-foreground: light-dark(oklch(0.4 0.1 50), oklch(0.9 0.05 50));
+  --palette-amber: light-dark(oklch(0.88 0.08 80), oklch(0.38 0.07 80));
+  --palette-amber-foreground: light-dark(oklch(0.4 0.08 80), oklch(0.9 0.07 80));
+  --palette-lime: light-dark(oklch(0.88 0.08 125), oklch(0.38 0.09 125));
+  --palette-lime-foreground: light-dark(oklch(0.4 0.09 125), oklch(0.9 0.07 125));
+  --palette-green: light-dark(oklch(0.88 0.08 150), oklch(0.38 0.1 150));
+  --palette-green-foreground: light-dark(oklch(0.4 0.1 150), oklch(0.9 0.07 150));
+  --palette-teal: light-dark(oklch(0.88 0.08 180), oklch(0.38 0.06 180));
+  --palette-teal-foreground: light-dark(oklch(0.4 0.07 180), oklch(0.9 0.07 180));
+  --palette-cyan: light-dark(oklch(0.88 0.08 220), oklch(0.38 0.06 220));
+  --palette-cyan-foreground: light-dark(oklch(0.4 0.07 220), oklch(0.9 0.06 220));
+  --palette-blue: light-dark(oklch(0.88 0.05 250), oklch(0.38 0.1 250));
+  --palette-blue-foreground: light-dark(oklch(0.4 0.11 250), oklch(0.9 0.04 250));
+  --palette-indigo: light-dark(oklch(0.88 0.05 280), oklch(0.38 0.1 280));
+  --palette-indigo-foreground: light-dark(oklch(0.4 0.12 280), oklch(0.9 0.04 280));
+  --palette-violet: light-dark(oklch(0.88 0.07 305), oklch(0.38 0.1 305));
+  --palette-violet-foreground: light-dark(oklch(0.4 0.12 305), oklch(0.9 0.05 305));
+  --palette-pink: light-dark(oklch(0.88 0.07 350), oklch(0.38 0.1 350));
+  --palette-pink-foreground: light-dark(oklch(0.4 0.12 350), oklch(0.9 0.05 350));
+
   /* Icons (Tabler, outline): one size and one stroke, set here. A size class still wins. */
   --icon-size: 1rem;
   --icon-stroke: 1.5;
@@ -231,6 +261,30 @@
   --color-chart-scale-04: var(--chart-scale-04);
   --color-chart-scale-05: var(--chart-scale-05);
   --color-chart-scale-pattern-color: var(--chart-scale-pattern-color);
+  --color-palette-gray: var(--palette-gray);
+  --color-palette-gray-foreground: var(--palette-gray-foreground);
+  --color-palette-red: var(--palette-red);
+  --color-palette-red-foreground: var(--palette-red-foreground);
+  --color-palette-orange: var(--palette-orange);
+  --color-palette-orange-foreground: var(--palette-orange-foreground);
+  --color-palette-amber: var(--palette-amber);
+  --color-palette-amber-foreground: var(--palette-amber-foreground);
+  --color-palette-lime: var(--palette-lime);
+  --color-palette-lime-foreground: var(--palette-lime-foreground);
+  --color-palette-green: var(--palette-green);
+  --color-palette-green-foreground: var(--palette-green-foreground);
+  --color-palette-teal: var(--palette-teal);
+  --color-palette-teal-foreground: var(--palette-teal-foreground);
+  --color-palette-cyan: var(--palette-cyan);
+  --color-palette-cyan-foreground: var(--palette-cyan-foreground);
+  --color-palette-blue: var(--palette-blue);
+  --color-palette-blue-foreground: var(--palette-blue-foreground);
+  --color-palette-indigo: var(--palette-indigo);
+  --color-palette-indigo-foreground: var(--palette-indigo-foreground);
+  --color-palette-violet: var(--palette-violet);
+  --color-palette-violet-foreground: var(--palette-violet-foreground);
+  --color-palette-pink: var(--palette-pink);
+  --color-palette-pink-foreground: var(--palette-pink-foreground);
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
   --radius-lg: var(--radius);

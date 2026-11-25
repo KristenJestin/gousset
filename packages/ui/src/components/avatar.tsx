@@ -1,48 +1,48 @@
 import { useState } from "react";
 
-import { initialsOf, toneIndexOf } from "../lib/merchant";
+import { initialsOf } from "../lib/initials";
+import { PALETTE_TILE_CLASSES, automaticColorOf } from "../lib/palette";
+import type { PaletteColor } from "../lib/palette";
 import { tileClasses } from "../lib/tile";
 import type { TileCorners, TileSize } from "../lib/tile";
 import { cn } from "../lib/utils";
 
-export type MerchantLogoProps = {
-  /** The merchant's name: its initials and its tile's tone come from it. */
+export type AvatarProps = {
+  /** The name it stands beside: its initials, and its colour until one is picked. */
   name: string;
   /** The logo's address, when there is one; the initials show if it is missing or fails. */
   src?: string;
+  /** The colour picked from the palette; `null` or left out: the name's automatic colour. */
+  color?: PaletteColor | null;
   /** The same sizes as `CategoryIcon`: 24, 32 (the default) or 40 px. */
   size?: TileSize;
   /** `rounded` (the default): a square with rounded corners; or `round`. */
   corners?: TileCorners;
 };
 
-// A few tones, all theme tokens; a name always lands on the same one. Spent's orange is left
-// out so a merchant's tile never reads as money spent or as an error.
-const TONES = [
-  "bg-muted text-foreground",
-  "bg-chart-2/15 text-chart-2",
-  "bg-chart-3/15 text-chart-3",
-  "bg-chart-4/15 text-chart-4",
-] as const;
-
 /**
- * A merchant's logo, or its initials on a tile whose tone comes from its name (stable, never
- * random). Decorative: the merchant's name sits beside it, so the image's `alt` is empty. The
- * image loads lazily; if it fails, the initials take its place, also when it failed before the
- * page hydrated (no `error` event comes then: the image is read when it mounts).
+ * A logo, or the name's initials on a colour of the palette: the one picked, else the name's
+ * automatic one (stable, never random). Decorative: the name sits beside it, so it is hidden from
+ * screen readers and the image's `alt` is empty. The image loads lazily; if it fails, the
+ * initials take its place, also when it failed before the page hydrated (no `error` event comes
+ * then: the image is read when it mounts).
+ *
+ * Motion: none of its own; it does not move.
  */
-export function MerchantLogo({ name, src, size = "md", corners = "rounded" }: MerchantLogoProps) {
+export function Avatar({ name, src, color, size = "md", corners = "rounded" }: AvatarProps) {
   const [failed, setFailed] = useState<string>();
   const showImage = src !== undefined && src !== failed;
+  const shown = color ?? automaticColorOf(name);
 
   return (
     <span
-      data-slot="merchant-logo"
+      data-slot="avatar"
+      data-color={shown}
       data-fallback={!showImage || undefined}
       aria-hidden="true"
       className={cn(
         tileClasses(size, corners),
-        showImage ? "bg-muted" : TONES[toneIndexOf(name, TONES.length)],
+        showImage ? "bg-muted" : PALETTE_TILE_CLASSES[shown],
         "font-medium",
       )}
     >

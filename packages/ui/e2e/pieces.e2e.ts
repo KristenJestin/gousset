@@ -1,6 +1,8 @@
 import type { Page } from "@playwright/test";
 import { expect, test } from "@playwright/test";
 
+import { automaticColorOf } from "../src/lib/palette";
+
 const story = (id: string) => `/iframe.html?id=${id}&viewMode=story`;
 
 test.describe("ErrorState", () => {
@@ -65,46 +67,77 @@ test.describe("CategoryIcon", () => {
   });
 });
 
-test.describe("MerchantLogo", () => {
-  test("shows the logo when it loads", async ({ page }) => {
-    await page.goto(story("data-merchantlogo--with-logo"));
+/** A palette token's colour on the page now, as the browser computes it. */
+async function tokenColor(page: Page, token: string) {
+  return page.evaluate((name) => {
+    const probe = document.createElement("span");
 
-    const logo = page.locator('[data-slot="merchant-logo"] img');
+    probe.style.color = `var(${name})`;
+    document.body.append(probe);
 
+    const color = getComputedStyle(probe).color;
+
+    probe.remove();
+
+    return color;
+  }, token);
+}
+
+test.describe("Avatar", () => {
+  test("shows the logo when it loads, hidden from screen readers", async ({ page }) => {
+    await page.goto(story("data-avatar--with-logo"));
+
+    const tile = page.locator('[data-slot="avatar"]');
+    const logo = tile.locator("img");
+
+    await expect(tile).toHaveAttribute("aria-hidden", "true");
     await expect(logo).toHaveAttribute("alt", "");
     await expect(logo).toHaveAttribute("loading", "lazy");
     await expect(logo).toBeVisible();
   });
 
   test("falls back to the initials when its image fails", async ({ page }) => {
-    await page.goto(story("data-merchantlogo--broken-logo"));
+    await page.goto(story("data-avatar--broken-logo"));
 
-    const tile = page.locator('[data-slot="merchant-logo"]');
+    const tile = page.locator('[data-slot="avatar"]');
 
     await expect(tile).toHaveText("F");
     await expect(tile.locator("img")).toHaveCount(0);
+    await expect(tile).toHaveAttribute("data-color", automaticColorOf("Fuelstop"));
   });
 
   test("falls back to the initials when its image failed before hydration", async ({ page }) => {
-    await page.goto(story("data-merchantlogo--broken-before-hydration"));
+    await page.goto(story("data-avatar--broken-before-hydration"));
 
-    const tile = page.getByTestId("hydrated-after-failure").locator('[data-slot="merchant-logo"]');
+    const tile = page.getByTestId("hydrated-after-failure").locator('[data-slot="avatar"]');
 
     await expect(tile).toHaveText("F");
     await expect(tile.locator("img")).toHaveCount(0);
   });
 
-  test("a name keeps the same tile", async ({ page }) => {
-    await page.goto(story("data-merchantlogo--in-rows"));
+  test("a name keeps its automatic colour, visit after visit", async ({ page }) => {
+    await page.goto(story("data-avatar--in-rows"));
 
-    const first = await page.locator('[data-slot="merchant-logo"]').first().getAttribute("class");
+    const first = page.locator('[data-slot="avatar"]').first();
 
+    await expect(first).toHaveAttribute("data-color", automaticColorOf("Greenmarket"));
     await page.reload();
-    await expect(page.locator('[data-slot="merchant-logo"]').first()).toHaveAttribute(
-      "class",
-      first ?? "",
-    );
+    await expect(first).toHaveAttribute("data-color", automaticColorOf("Greenmarket"));
   });
+
+  for (const scheme of ["light", "dark"] as const) {
+    test(`a picked colour is painted with its palette pair in ${scheme}`, async ({ page }) => {
+      await page.emulateMedia({ colorScheme: scheme });
+      await page.goto(story("data-avatar--picked-color"));
+
+      const tile = page.locator('[data-slot="avatar"]');
+
+      await expect(tile).toHaveText("CB");
+      await expect(tile).toHaveAttribute("data-color", "violet");
+      await expect(tile).toHaveCSS("background-color", await tokenColor(page, "--palette-violet"));
+      await expect(tile).toHaveCSS("color", await tokenColor(page, "--palette-violet-foreground"));
+    });
+  }
 });
 
 /** The month as it is announced. */

@@ -8,13 +8,17 @@ import {
   contrastRatio,
   hexToLinearRgb,
   hueDistance,
+  isInSrgb,
   measureEdgePairs,
+  measurePalettePairs,
   measureTextPairs,
+  PALETTE_PAIRS,
   readDeclarations,
   resolveColor,
   toLinearRgb,
   toOklch,
 } from "./contrast";
+import { PALETTE_COLORS } from "./palette";
 import { THEME_COLORS } from "./theme-color";
 
 const css = readFileSync(new URL("../styles/globals.css", import.meta.url), "utf8");
@@ -54,6 +58,35 @@ describe("the theme", () => {
   it.each(measureTextPairs(css))("sets $text on $surface at 4.5:1 or more", (pair) => {
     expect(pair.light).toBeGreaterThanOrEqual(4.5);
     expect(pair.dark).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it.each(measurePalettePairs(css))(
+    "sets an avatar's initials ($text) on its colour at 4.5:1 or more",
+    (pair) => {
+      expect(pair.light).toBeGreaterThanOrEqual(4.5);
+      expect(pair.dark).toBeGreaterThanOrEqual(4.5);
+    },
+  );
+
+  it("measures a pair for every colour of the palette", () => {
+    expect(PALETTE_PAIRS.map(([, surface]) => surface)).toEqual(
+      PALETTE_COLORS.map((color) => `--palette-${color}`),
+    );
+  });
+
+  it.each(PALETTE_PAIRS.flat())(
+    "declares %s inside sRGB in both schemes, so the browser draws what is measured",
+    (token) => {
+      const declarations = readDeclarations(css);
+
+      expect(isInSrgb(resolveColor(declarations, token, "light"))).toBe(true);
+      expect(isInSrgb(resolveColor(declarations, token, "dark"))).toBe(true);
+    },
+  );
+
+  it("tells a colour outside sRGB", () => {
+    expect(isInSrgb({ l: 0.5, c: 0.05, h: 250 })).toBe(true);
+    expect(isInSrgb({ l: 0.9, c: 0.3, h: 250 })).toBe(false);
   });
 
   it.each(measureEdgePairs(css))(

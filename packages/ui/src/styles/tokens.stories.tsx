@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import type { ReactNode } from "react";
 
 import { cn } from "@gousset/ui/lib/utils";
-import { measureEdgePairs, measureTextPairs } from "@gousset/ui/lib/contrast";
+import { measureEdgePairs, measurePalettePairs, measureTextPairs } from "@gousset/ui/lib/contrast";
 import type { MeasuredPair } from "@gousset/ui/lib/contrast";
 import { duration, easeOut } from "@gousset/ui/lib/motion";
 import { themeTokens } from "@gousset/ui/lib/tokens";
@@ -86,6 +86,30 @@ const SWATCHES = new Map(
     "--chart-scale-04": "bg-chart-scale-04",
     "--chart-scale-05": "bg-chart-scale-05",
     "--chart-scale-pattern-color": "bg-chart-scale-pattern-color",
+    "--palette-gray": "bg-palette-gray",
+    "--palette-gray-foreground": "bg-palette-gray-foreground",
+    "--palette-red": "bg-palette-red",
+    "--palette-red-foreground": "bg-palette-red-foreground",
+    "--palette-orange": "bg-palette-orange",
+    "--palette-orange-foreground": "bg-palette-orange-foreground",
+    "--palette-amber": "bg-palette-amber",
+    "--palette-amber-foreground": "bg-palette-amber-foreground",
+    "--palette-lime": "bg-palette-lime",
+    "--palette-lime-foreground": "bg-palette-lime-foreground",
+    "--palette-green": "bg-palette-green",
+    "--palette-green-foreground": "bg-palette-green-foreground",
+    "--palette-teal": "bg-palette-teal",
+    "--palette-teal-foreground": "bg-palette-teal-foreground",
+    "--palette-cyan": "bg-palette-cyan",
+    "--palette-cyan-foreground": "bg-palette-cyan-foreground",
+    "--palette-blue": "bg-palette-blue",
+    "--palette-blue-foreground": "bg-palette-blue-foreground",
+    "--palette-indigo": "bg-palette-indigo",
+    "--palette-indigo-foreground": "bg-palette-indigo-foreground",
+    "--palette-violet": "bg-palette-violet",
+    "--palette-violet-foreground": "bg-palette-violet-foreground",
+    "--palette-pink": "bg-palette-pink",
+    "--palette-pink-foreground": "bg-palette-pink-foreground",
   }),
 );
 
@@ -116,6 +140,10 @@ const GROUPS = [
   { title: "Brand", holds: (name: string) => name.startsWith("--brand-") },
   { title: "Money (Gousset's own)", holds: (name: string) => name.startsWith("--money-") },
   { title: "Charts (Bklit's names)", holds: (name: string) => name.startsWith("--chart-") },
+  {
+    title: "Palette (avatars: a tile and its initials)",
+    holds: (name: string) => name.startsWith("--palette-"),
+  },
   { title: "Sidebar (shadcn's names)", holds: (name: string) => name.startsWith("--sidebar") },
   {
     title: "Sizes",
@@ -235,6 +263,14 @@ function TokenSheet() {
           Contrast of the edge of a floating surface (1.7:1 or more, computed from globals.css)
         </h2>
         <ContrastTable label="Edge" pairs={measureEdgePairs(globals)} />
+      </section>
+
+      <section className="flex flex-col gap-2">
+        <h2 className="text-sm font-medium text-muted-foreground">
+          Contrast of the initials on each colour of the palette (4.5:1 or more, computed from
+          globals.css)
+        </h2>
+        <ContrastTable label="Initials" pairs={measurePalettePairs(globals)} />
       </section>
     </div>
   );

@@ -44,6 +44,10 @@ const SHOTS: ReadonlyArray<Shot> = [
   { id: "forms-statusmessage--shown" },
   { id: "forms-formmessage--shown" },
   { id: "forms-file-button--default" },
+  // A merchant's look and labels, in its form (#204).
+  { id: "forms-colorswatches--chosen" },
+  { id: "forms-logofield--with-logo" },
+  { id: "forms-textlistfield--default" },
   { id: "navigation-tabs--with-icons" },
   { id: "overlays-tooltip--default", open: "focus" },
   { id: "overlays-menu--default", open: "click" },
@@ -87,7 +91,9 @@ const SHOTS: ReadonlyArray<Shot> = [
   { id: "data-list--loading-beside-loaded" },
   { id: "data-list--links" },
   { id: "data-categoryicon--in-rows" },
-  { id: "data-merchantlogo--in-rows" },
+  { id: "data-avatar--in-rows" },
+  // Every colour of the palette, initials on their tile, in both schemes (#204).
+  { id: "data-avatar--palette" },
   { id: "data-accountchip--kinds" },
   { id: "data-monthswitcher--default" },
   { id: "help-shortcutlist--default" },

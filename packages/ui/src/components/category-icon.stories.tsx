@@ -8,7 +8,7 @@ import { CATEGORY_ICON_NAMES } from "./icons";
  * A category's icon on a small neutral tile, beside the category's name in a row, a breakdown or
  * a detail. The icon is chosen in `icons.ts`; the user picks among those. `null` is the
  * uncategorised form: a dashed, empty tile that says "Uncategorised" to screen readers. Sizes
- * match `MerchantLogo` (24, 32, 40 px), so both line up in the same rows.
+ * match `Avatar` (24, 32, 40 px), so both line up in the same rows.
  *
  * Motion: none; it does not move.
  *
