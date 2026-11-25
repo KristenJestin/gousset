@@ -1,4 +1,7 @@
-import type { Page } from "@playwright/test";
+import { randomUUID } from "node:crypto";
+import { setTimeout as sleep } from "node:timers/promises";
+
+import type { Locator, Page, Route } from "@playwright/test";
 import { merchant, statementLine } from "@gousset/db/schema/ledger";
 import { exampleStatement } from "@gousset/fixture";
 import type { StatementLine } from "@gousset/fixture";
@@ -12,9 +15,11 @@ import {
   expectAccessible,
   fixDay,
   personOfItsOwn,
+  slowServerFunctions,
   test,
   visit,
 } from "../src/test";
+import { SERVER_FUNCTIONS } from "../src/latency";
 import { openUserData } from "../src/user-data";
 
 // Issue #30's screens, one test per scenario of "How to verify": a line paid through a payment
@@ -131,6 +136,35 @@ const notifications = (page: Page) => page.getByRole("region", { name: "Notifica
 
 const FIRST = "CB PAYPAL *PIXELPLAY 21/10";
 
+const intermediarySwitch = (page: Page) =>
+  page.getByRole("switch", { name: "Payment intermediary" });
+
+/** The switch shows its value saved: no save of it is pending any more (#224). */
+async function expectSaved(control: Locator, checked: boolean) {
+  await expect(control).not.toHaveAttribute("aria-busy", "true");
+  await expect(control).toBeChecked({ checked });
+}
+
+/** A user of the test's own with the merchant Paylink, made from an imported line, on its page. */
+async function onPaylinkPage(
+  page: Page,
+  app: { baseURL: string },
+  admin: TestUser,
+  local: string,
+): Promise<{ owner: string; paylink: string }> {
+  const { person, owner, accountId } = await personFor(app, admin, local);
+
+  await importLines(owner, accountId, "2026-11", [
+    line("2026-11-03", -640, "CB PAYLINK *CORNER BAKERY 03/11", "PL0311"),
+  ]);
+
+  const paylink = await merchantId(owner, "Paylink");
+
+  await as(page, person, `/settings/merchants/${paylink}`);
+
+  return { owner, paylink };
+}
+
 test("an intermediary's line asks for its merchant", async ({ page, app, user }) => {
   const { person, owner, accountId } = await personFor(app, user, "intermediary-asks");
 
@@ -246,28 +280,14 @@ test("a merchant marked as an intermediary makes its lines ask", async ({ page, 
 
   await visit(page, `/settings/merchants/${paylink}`);
 
-  const marked = page.getByRole("switch", { name: "Payment intermediary" });
+  const marked = intermediarySwitch(page);
 
   await expect(marked).not.toBeChecked();
   await expect(page.getByText("Its labels hide who was paid")).toBeVisible();
   await marked.click();
-  await expect(marked).toBeChecked();
-
-  // The switch shows the mark before its save ends: a reload before that would read it unsaved.
-  await expect
-    .poll(async () => {
-      const [row] = await data.asUser(owner, (transaction) =>
-        transaction
-          .select({ intermediary: merchant.isIntermediary })
-          .from(merchant)
-          .where(eq(merchant.id, paylink)),
-      );
-
-      return row?.intermediary;
-    })
-    .toBe(true);
+  await expectSaved(marked, true);
   await page.reload();
-  await expect(page.getByRole("switch", { name: "Payment intermediary" })).toBeChecked();
+  await expect(intermediarySwitch(page)).toBeChecked();
 
   // The merchants' list says so under its name.
   await visit(page, "/settings/merchants");
@@ -282,4 +302,78 @@ test("a merchant marked as an intermediary makes its lines ask", async ({ page, 
   await expect(
     lineMerchant(page).getByRole("button", { name: "Choose the merchant" }),
   ).toBeVisible();
+});
+
+// Issue #224: the switch showed the mark saved as soon as it was clicked; a reload before the save
+// ended lost it.
+test("the intermediary switch keeps its mark through a reload as soon as it shows saved", async ({
+  page,
+  app,
+  user,
+}) => {
+  const { owner, paylink } = await onPaylinkPage(page, app, user, "intermediary-reload");
+  const marked = intermediarySwitch(page);
+
+  // A slow save: the browser holds it a while before it leaves.
+  const unslow = await slowServerFunctions(page, 1500);
+
+  await marked.click();
+
+  // It moves at once; a reload once it shows the mark saved keeps it.
+  await expect(marked).toBeChecked();
+  await expectSaved(marked, true);
+  await unslow();
+  await page.reload();
+  await expectSaved(intermediarySwitch(page), true);
+
+  const [row] = await data.asUser(owner, (transaction) =>
+    transaction
+      .select({ intermediary: merchant.isIntermediary })
+      .from(merchant)
+      .where(eq(merchant.id, paylink)),
+  );
+
+  expect(row?.intermediary).toBe(true);
+});
+
+test("a failed save puts the intermediary switch back with its message", async ({
+  page,
+  app,
+  user,
+}) => {
+  const { paylink } = await onPaylinkPage(page, app, user, "intermediary-fails");
+  const marked = intermediarySwitch(page);
+
+  // The save names a merchant the user does not have, invented here: the server refuses it.
+  const invented = randomUUID();
+
+  const elsewhere = async (route: Route) => {
+    const sent = route.request();
+    const body = sent.postData() ?? "";
+
+    if (sent.method() !== "POST" || !body.includes(paylink)) {
+      await route.fallback();
+
+      return;
+    }
+
+    await sleep(1000);
+    await route.fallback({ postData: body.replaceAll(paylink, invented) });
+  };
+
+  await page.route(SERVER_FUNCTIONS, elsewhere);
+  await marked.click();
+
+  // Pending while it is sent, then back off, with what went wrong.
+  await expect(marked).toBeChecked();
+  await expect(marked).toHaveAttribute("aria-busy", "true");
+  await expectSaved(marked, false);
+  await expect(
+    notifications(page).getByText("This merchant no longer exists: it may have been merged."),
+  ).toBeVisible();
+  await page.unroute(SERVER_FUNCTIONS, elsewhere);
+
+  // Nothing was saved.
+  await page.reload();
+  await expectSaved(intermediarySwitch(page), false);
 });
