@@ -366,17 +366,18 @@ test.describe("MonthBar", () => {
       (bar?.x ?? 0) + (bar?.width ?? 0) + 1,
     );
 
-    // The rules between the rows: plain and identical, square at their ends, no shadow.
+    // The rules between the rows (each row's bottom border but the last's): plain and identical,
+    // square at their ends, no shadow.
     const rules = await group.evaluate((legend) =>
-      [...legend.children].slice(1).map((row) => {
+      [...legend.children].slice(0, -1).map((row) => {
         const style = getComputedStyle(row);
 
         return [
-          style.borderTopWidth,
-          style.borderTopStyle,
-          style.borderTopColor,
-          style.borderTopLeftRadius,
-          style.borderTopRightRadius,
+          style.borderBottomWidth,
+          style.borderBottomStyle,
+          style.borderBottomColor,
+          style.borderBottomLeftRadius,
+          style.borderBottomRightRadius,
           style.boxShadow,
         ].join(" ");
       }),

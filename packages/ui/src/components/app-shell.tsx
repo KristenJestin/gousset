@@ -257,7 +257,10 @@ export function Page({ title, description, actions, month, children }: PageProps
             <p className="text-sm text-muted-foreground">{description}</p>
           )}
         </div>
-        {month === undefined ? null : <div className="flex max-md:w-full">{month}</div>}
+        {month === undefined ? null : (
+          // A phone: the switcher spans its line, its arrows at the ends (the `mobile` wireframe).
+          <div className="flex max-md:w-full max-md:*:flex-1 max-md:*:justify-between">{month}</div>
+        )}
         {actions === undefined ? null : <div className="flex items-center gap-2">{actions}</div>}
       </header>
       {children}
