@@ -12,20 +12,12 @@ export const THEME_COLORS = {
 
 const SCHEMES = ["light", "dark"] as const satisfies ReadonlyArray<ColorScheme>;
 
-/** The system's scheme each theme colour is for. */
-const mediaOf = (scheme: ColorScheme) => `(prefers-color-scheme: ${scheme})`;
-
-/** The scheme of the system a theme colour's `media` names; light for any other. */
-export const schemeOfMedia = (media: string): ColorScheme =>
-  media === mediaOf("dark") ? "dark" : "light";
-
 /**
- * The page's theme colours, as the server writes them in its `<head>`: one per scheme of the
- * system, each that scheme's colour, or every one the colour of the scheme the account chose.
- * `followThemeColor` keeps them on the scheme shown once the page runs.
+ * The page's theme colours: one per scheme of the system (its `media`), each that scheme's colour
+ * while the system's scheme shows, or every one the colour of the scheme shown by choice.
  */
-export const themeColorMetas = (chosen: ColorScheme | "system" | undefined) =>
+export const themeColorMetas = (shown: ColorScheme | "system") =>
   SCHEMES.map((scheme) => ({
-    content: THEME_COLORS[chosen === undefined || chosen === "system" ? scheme : chosen],
-    media: mediaOf(scheme),
+    content: THEME_COLORS[shown === "system" ? scheme : shown],
+    media: `(prefers-color-scheme: ${scheme})`,
   }));

@@ -3,13 +3,12 @@ import { Schema } from "effect";
 
 import type { TestUser } from "../src/auth";
 import { colorSchemeOf } from "../src/database";
-import { onPhone } from "../src/frame";
+import { onPhone, openAccountMenu } from "../src/frame";
 import { block, monthBarKey, monthSwitcher, openBlock, seedReviewMonths } from "../src/review";
 import { addUser, animationsDone, expect, fixDay, personOfItsOwn, test, visit } from "../src/test";
 import { openUserData } from "../src/user-data";
 
-// The scenarios of issue #36 (the review on a phone), "How to verify", with the wireframe
-// `mobile`: the app installs on a phone's home screen, its bars take the page's colour, what runs
+// Issue #36 (the review on a phone), as the wireframe `mobile` draws it: the app installs on a phone's home screen, its bars take the page's colour, what runs
 // along the screen's bottom edge keeps clear of the phone's own, the month sits across the top and
 // the month bar's amounts are listed under it.
 // The review's blocks folded on a phone are review.spec.ts's; the lines reviewed on a phone are
@@ -56,6 +55,15 @@ async function signedInWithMonths(page: Page, baseURL: string, admin: TestUser, 
   await fixDay(page, TODAY);
 
   return person;
+}
+
+/** The colours of the theme-color metas in the HTML the server sends for `path`, in order. */
+async function serverThemeColors(page: Page, path: string) {
+  const html = await (await page.request.get(path)).text();
+
+  return [...html.matchAll(/<meta name="theme-color" media="[^"]*" content="([^"]*)"/g)].map(
+    (found) => found[1],
+  );
 }
 
 /** The colour each `<meta name="theme-color">` gives, with the media it is for. */
@@ -149,17 +157,40 @@ test("the browser's bars follow the colour scheme the user picked, not the syste
     .poll(async () => (await themeColors(page)).map((meta) => meta.content))
     .toEqual([THEME.dark, THEME.dark]);
 
-  // And again from the server, on the next visit.
-  await page.reload();
-  await expect
-    .poll(async () => (await themeColors(page)).map((meta) => meta.content))
-    .toEqual([THEME.dark, THEME.dark]);
+  // And from the server, in the page it sends, before any script of the page runs.
+  expect(await serverThemeColors(page, "/settings")).toEqual([THEME.dark, THEME.dark]);
 
   // Back to the system's: each scheme its own again.
   await page.getByRole("radio", { name: "System" }).click();
   await expect
     .poll(async () => (await themeColors(page)).map((meta) => meta.content))
     .toEqual([THEME.light, THEME.dark]);
+});
+
+test("after a sign-out without a reload, the browser's bars keep the scheme the page shows", async ({
+  page,
+  app,
+  user,
+}) => {
+  const person = await addUser(app.baseURL, user, personOfItsOwn("amandine"));
+
+  await page.context().addCookies([...person.cookies]);
+  await page.emulateMedia({ colorScheme: "light" });
+  await visit(page, "/settings");
+  await page.getByRole("radio", { name: "Dark" }).click();
+  await expect.poll(() => colorSchemeOf(app.database, person.email)).toBe("dark");
+
+  const menu = await openAccountMenu(page, person.name);
+
+  await menu.getByRole("menuitem", { name: "Sign out" }).click();
+  await expect(page).toHaveURL(/\/sign-in$/);
+
+  // The sign-in page is still dark, the choice this browser keeps: so are the bars, though nobody's
+  // account is read any more.
+  await expect(page.locator("html")).toHaveAttribute("data-color-scheme", "dark");
+  await expect
+    .poll(async () => (await themeColors(page)).map((meta) => meta.content))
+    .toEqual([THEME.dark, THEME.dark]);
 });
 
 test("on a phone, the tab bar and the sheets keep clear of the home indicator", async ({
@@ -204,6 +235,35 @@ test("on a phone, the tab bar and the sheets keep clear of the home indicator", 
   await expect(movements).toHaveCSS("padding-bottom", `${String(HOME_INDICATOR)}px`);
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog")).toHaveCount(0);
+  await animationsDone(page);
+});
+
+test("a phone held sideways keeps the side sheet's content clear of its notch", async ({
+  userPage: page,
+  browserName,
+}) => {
+  test.skip(browserName !== "chromium", "Chromium alone emulates a phone's safe area");
+
+  // A notched phone on its side, wide enough for the wide layout, its notch on the right.
+  const notch = 47;
+
+  await page.setViewportSize({ width: 844, height: 390 });
+
+  const cdp = await page.context().newCDPSession(page);
+
+  await cdp.send("Emulation.setSafeAreaInsetsOverride", {
+    insets: { right: notch, rightMax: notch },
+  });
+  await visit(page, "/accounts");
+  await page.getByRole("button", { name: "Add an account", exact: true }).click();
+
+  // The sheet's surface reaches the right edge, its content stops at the notch.
+  const sheet = page.getByRole("dialog", { name: "Add an account" });
+
+  await expect(sheet).toHaveAttribute("data-side", "right");
+  await expect(sheet).toHaveCSS("padding-right", `${String(notch)}px`);
+  await page.keyboard.press("Escape");
+  await expect(sheet).toBeHidden();
   await animationsDone(page);
 });
 

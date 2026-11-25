@@ -3,12 +3,7 @@ import { Preferences } from "@ui-sdk/react/preferences";
 import { useEffect, useLayoutEffect, useRef, useSyncExternalStore } from "react";
 import type { ReactNode } from "react";
 
-import {
-  accountSchemeScript,
-  colorScheme,
-  followDarkClass,
-  followThemeColor,
-} from "@gousset/ui/lib/color-scheme";
+import { accountSchemeScript, colorScheme, followDarkClass } from "@gousset/ui/lib/color-scheme";
 import { followReducedMotion } from "@gousset/ui/lib/reduced-motion";
 
 const noSubscribe = () => () => {};
@@ -34,8 +29,7 @@ export type ThemeProviderProps = {
 
 /**
  * The theme around the whole app, at the top of `<body>`: the colour scheme on `<html>` (before
- * the first paint, from the saved choice), `.dark` and the browser's bars (`theme-color`) kept in
- * step with it, and every Motion
+ * the first paint, from the saved choice), `.dark` kept in step with it, and every Motion
  * animation skipped while the system asks for reduced motion. `<html>` needs
  * `suppressHydrationWarning`, since the saved choice lands on it before hydration.
  *
@@ -58,7 +52,6 @@ export function ThemeProvider({
 
   useLayoutEffect(() => followReducedMotion(document.documentElement), []);
   useEffect(() => followDarkClass(document.documentElement), []);
-  useEffect(() => followThemeColor(document.head), []);
   useEffect(() => {
     if (appliedFor.current === accountOwner) {
       return;

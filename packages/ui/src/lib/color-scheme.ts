@@ -1,8 +1,6 @@
 import { createColorScheme, createLocalStorage } from "@ui-sdk/core";
 import type { ColorSchemeValue } from "@ui-sdk/core";
 
-import { THEME_COLORS, schemeOfMedia } from "./theme-color";
-
 /** Where this browser keeps the choice: the one used before anyone signs in. */
 const STORAGE_KEY = "gousset-color-scheme";
 
@@ -34,29 +32,6 @@ export function accountSchemeScript(scheme: ColorSchemeValue): string {
 export function followDarkClass(root: HTMLElement): () => void {
   const apply = () => {
     root.classList.toggle("dark", colorScheme.get().resolved === "dark");
-  };
-
-  apply();
-
-  return colorScheme.subscribe(apply);
-}
-
-/**
- * Keeps the browser's bars on the scheme shown. The server's page gives one theme colour per scheme
- * of the system (`media`); a scheme the user chose wins over the system's, so each then takes that
- * scheme's colour, and following the system again gives each its own back. Returns the function
- * that stops it.
- */
-export function followThemeColor(head: HTMLHeadElement): () => void {
-  const apply = () => {
-    const { value, resolved } = colorScheme.get();
-
-    for (const meta of head.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]')) {
-      meta.content =
-        value === "system" || resolved === "unknown"
-          ? THEME_COLORS[schemeOfMedia(meta.media)]
-          : THEME_COLORS[resolved];
-    }
   };
 
   apply();

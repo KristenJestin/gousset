@@ -13,7 +13,7 @@ import { m } from "@gousset/i18n/messages";
 import { getLocale } from "@gousset/i18n/runtime";
 import { Toaster } from "@gousset/ui/components/toaster";
 import { ThemeProvider } from "@gousset/ui/components/theme-provider";
-import { themeColorMetas } from "@gousset/ui/lib/theme-color";
+import { ThemeColor } from "@gousset/ui/components/theme-color";
 
 import { getViewer } from "@/functions/viewer";
 
@@ -45,40 +45,38 @@ export const Route = createRootRouteWithContext<RouterContext>()({
 
     return { viewer };
   },
-  head: () => {
-    return {
-      meta: [
-        {
-          // oxlint-disable-next-line unicorn/text-encoding-identifier-case -- HTML names it "utf-8".
-          charSet: "utf-8",
-        },
-        {
-          // The page reaches the screen's edges, under an installed app's home indicator: what
-          // runs along an edge keeps clear of it (`pb-safe` and the like, globals.css).
-          name: "viewport",
-          content: "width=device-width, initial-scale=1, viewport-fit=cover",
-        },
-        {
-          title: m.appName(),
-        },
-        // Installed on a phone's home screen (the manifest, below): its own window and its name.
-        { name: "mobile-web-app-capable", content: "yes" },
-        { name: "apple-mobile-web-app-capable", content: "yes" },
-        { name: "apple-mobile-web-app-title", content: m.appName() },
-      ],
-      links: [
-        {
-          rel: "stylesheet",
-          href: appCss,
-        },
-        // The brand (brand/README.md): the tab, the iOS home screen and the installed app.
-        { rel: "icon", href: "/favicon.ico", sizes: "32x32" },
-        { rel: "icon", href: "/favicon.svg", type: "image/svg+xml" },
-        { rel: "apple-touch-icon", href: "/apple-touch-icon.png" },
-        { rel: "manifest", href: "/manifest.webmanifest" },
-      ],
-    };
-  },
+  head: () => ({
+    meta: [
+      {
+        // oxlint-disable-next-line unicorn/text-encoding-identifier-case -- HTML names it "utf-8".
+        charSet: "utf-8",
+      },
+      {
+        // The page reaches the screen's edges, under an installed app's home indicator: what runs
+        // along an edge keeps clear of it (`pb-safe` and the like, globals.css).
+        name: "viewport",
+        content: "width=device-width, initial-scale=1, viewport-fit=cover",
+      },
+      {
+        title: m.appName(),
+      },
+      // Installed on a phone's home screen (the manifest, below): its own window and its name.
+      { name: "mobile-web-app-capable", content: "yes" },
+      { name: "apple-mobile-web-app-capable", content: "yes" },
+      { name: "apple-mobile-web-app-title", content: m.appName() },
+    ],
+    links: [
+      {
+        rel: "stylesheet",
+        href: appCss,
+      },
+      // The brand (brand/README.md): the tab, the iOS home screen and the installed app.
+      { rel: "icon", href: "/favicon.ico", sizes: "32x32" },
+      { rel: "icon", href: "/favicon.svg", type: "image/svg+xml" },
+      { rel: "apple-touch-icon", href: "/apple-touch-icon.png" },
+      { rel: "manifest", href: "/manifest.webmanifest" },
+    ],
+  }),
 
   component: RootDocument,
 });
@@ -95,12 +93,8 @@ function RootDocument() {
     <html lang={getLocale()} suppressHydrationWarning>
       <head>
         <HeadContent />
-        {/* The browser's bars take the page's background: the system's scheme's, or the scheme the
-            account keeps, from the first paint (`followThemeColor` keeps them in step after).
-            Written here: `head` keeps one meta of a name, and there is one per scheme. */}
-        {themeColorMetas(viewer.user?.colorScheme).map(({ media, content }) => (
-          <meta key={media} name="theme-color" media={media} content={content} />
-        ))}
+        {/* Written here: `head` keeps one meta of a name, and there is one per scheme. */}
+        <ThemeColor accountScheme={viewer.user?.colorScheme} />
       </head>
       <body>
         <ThemeProvider
