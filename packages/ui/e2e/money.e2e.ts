@@ -258,20 +258,12 @@ test.describe("MonthBar", () => {
     await expect(page.getByTestId("chosen")).toHaveText("Chosen: left");
   });
 
-  // Under its parts, the legend sat at fixed thirds that matched none of them (#83): it is a
-  // compact one, its keys side by side from the bar's start, whatever the parts' widths.
-  // The phone story at the narrowest phone it is drawn for (Storybook's `mobile1`), in its block:
-  // Storybook's padding stands for the page's, which leaves the legend the app's width there.
-  for (const { name, width } of [
-    { name: "default", width: null },
-    { name: "narrow-part", width: null },
-    { name: "phone", width: 320 },
-  ]) {
+  // Under its parts, the legend sat at fixed thirds that matched none of them (#83): on a wide
+  // screen it is a compact one, its keys side by side from the bar's start, whatever the parts'
+  // widths. On every project, the phone's too, at a desktop's width.
+  for (const name of ["default", "narrow-part"]) {
     test(`its legend sits side by side from the bar's start (${name})`, async ({ page }) => {
-      if (width !== null) {
-        await page.setViewportSize({ width, height: 568 });
-      }
-
+      await page.setViewportSize({ width: 1280, height: 720 });
       await page.goto(story("month-bar", name));
 
       const bar = await page.locator('[data-slot="month-bar-drawing"]').boundingBox();
@@ -311,6 +303,104 @@ test.describe("MonthBar", () => {
       expect(keys.at(-1)?.right ?? 0).toBeLessThanOrEqual(barLeft + (bar?.width ?? 0));
     });
   }
+
+  // On a phone the width does not allow them side by side (the wireframe `mobile`, #36): a list,
+  // one row a key, at the narrowest phone it is drawn for (Storybook's `mobile1`), in its block.
+  test("on a phone its legend is a list under the bar, every name whole", async ({ page }) => {
+    await page.setViewportSize({ width: 320, height: 568 });
+    await page.goto(story("month-bar", "phone"));
+
+    const bar = await page.locator('[data-slot="month-bar-drawing"]').boundingBox();
+    const group = page.getByRole("group", { name: "What came in, by part" });
+
+    // Each row: its box, where its name and its amount are drawn, and whether its name is cut.
+    const rows = await group.evaluate((legend) =>
+      [...legend.children].map((row) => {
+        const name = row.querySelector('[data-slot="month-bar-key-name"]');
+        const amount = row.querySelector('[data-slot="amount"]');
+
+        const box = row.getBoundingClientRect();
+
+        return {
+          box: { top: box.top, bottom: box.bottom, width: box.width },
+          nameRight: name?.getBoundingClientRect().right ?? 0,
+          amountLeft: amount?.getBoundingClientRect().left ?? 0,
+          nameCut: name === null || name.scrollWidth > name.clientWidth,
+        };
+      }),
+    );
+
+    expect(bar).not.toBeNull();
+    expect(rows).toHaveLength(3);
+    await expect(group.getByRole("button", { name: /restricted$/ })).toBeVisible();
+
+    for (const [index, row] of rows.entries()) {
+      // One under the other, each as wide as the bar, give or take its 4 px of hover band.
+      expect(row.box.top).toBeGreaterThanOrEqual(rows[index - 1]?.box.bottom ?? 0);
+      expect(Math.abs(row.box.width - (bar?.width ?? 0))).toBeLessThanOrEqual(8);
+      // The name first and whole, the amount after it.
+      expect(row.nameCut).toBe(false);
+      expect(row.amountLeft).toBeGreaterThan(row.nameRight);
+    }
+
+    // The comparison on a line of its own, between the total (the bar's first amount) and the bar.
+    const [comparison, total] = await Promise.all([
+      page.locator('[data-slot="month-bar-comparison"]').boundingBox(),
+      page.locator('[data-slot="month-bar"] [data-slot="amount"]').first().boundingBox(),
+    ]);
+
+    expect(comparison?.y ?? 0).toBeGreaterThanOrEqual(
+      (total?.y ?? Number.POSITIVE_INFINITY) + (total?.height ?? 0),
+    );
+    expect((comparison?.y ?? 0) + (comparison?.height ?? 0)).toBeLessThanOrEqual(bar?.y ?? 0);
+
+    // It says what it compares, in words as on a wide screen, and stays within the bar's width:
+    // a bare "+5%" under the money received would read as more income.
+    const said = page.locator('[data-slot="month-bar-comparison"]');
+
+    for (const words of ["spending", "vs. average", "vs. September"]) {
+      await expect(said.getByText(words, { exact: true })).toBeVisible();
+    }
+
+    expect((comparison?.x ?? 0) + (comparison?.width ?? 0)).toBeLessThanOrEqual(
+      (bar?.x ?? 0) + (bar?.width ?? 0) + 1,
+    );
+
+    // The rules between the rows (each row's bottom border but the last's): plain and identical,
+    // square at their ends, no shadow.
+    const rules = await group.evaluate((legend) =>
+      [...legend.children].slice(0, -1).map((row) => {
+        const style = getComputedStyle(row);
+
+        return [
+          style.borderBottomWidth,
+          style.borderBottomStyle,
+          style.borderBottomColor,
+          style.borderBottomLeftRadius,
+          style.borderBottomRightRadius,
+          style.boxShadow,
+        ].join(" ");
+      }),
+    );
+
+    expect(rules).toHaveLength(2);
+    expect(rules[0]).toMatch(/^1px solid \S+.* 0px 0px none$/);
+    expect(rules[1]).toBe(rules[0]);
+  });
+
+  test("its skeleton has the loaded bar's height on a phone too", async ({ page }) => {
+    await page.setViewportSize({ width: 320, height: 568 });
+
+    const loaded = await heightOf(page, story("month-bar", "default"), '[data-slot="month-bar"]');
+
+    const loading = await heightOf(
+      page,
+      story("month-bar", "loading"),
+      '[data-slot="skeleton-frame"]',
+    );
+
+    expect(loading).toBe(loaded);
+  });
 
   test("an overspent month says by how much, and marks where the money received ended", async ({
     page,

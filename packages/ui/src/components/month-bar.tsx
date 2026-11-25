@@ -31,7 +31,11 @@ export type MonthBarProps = {
   restricted?: Money;
   /** Where the money came from, in the page's words: "salary and meal vouchers". */
   note?: string;
-  /** At the end of the first line, usually a `Delta` against the 6-month average. */
+  /**
+   * At the end of the first line, on a line of its own on a phone: a `DeltaList` that says what it
+   * compares ("spending +5% vs. average"), never a bare change, which under the money received
+   * would read as more income.
+   */
   comparison?: ReactNode;
   /**
    * Quiet lines under the legend, one each: the month in each other currency, never converted
@@ -152,31 +156,43 @@ function PartContent({
           formatMoney(restricted, { locale: locale ?? language, whole: true }),
         );
 
+  // Read in this order (the amount, then its name: "€2,030 spent"). On a phone the first line
+  // gives way (`contents`): its dot leads the row, its amount ends it.
   return (
     <>
-      <span className={cn("flex h-5 items-center gap-1.5", over && "text-destructive")}>
-        {over ? (
-          <Icon name="warning" size="sm" />
-        ) : (
-          <span
-            className={cn(
-              "size-2 shrink-0 rounded-full",
-              role === "spent" && "bg-money-spent",
-              role === "saved" && "bg-money-saved",
-              role === "left" && "bg-money-left",
-            )}
-          />
-        )}
-        <Amount
-          value={over || takenBack ? { ...amount, minor: Math.abs(amount.minor) } : amount}
-          whole
-          size="sm"
-          locale={locale}
-        />
-      </span>
       <span
         className={cn(
-          "h-4 max-w-full truncate text-xs",
+          "max-md:contents md:flex md:h-5 md:items-center md:gap-1.5",
+          over && "text-destructive",
+        )}
+      >
+        <span className="flex h-5 shrink-0 items-center">
+          {over ? (
+            <Icon name="warning" size="sm" />
+          ) : (
+            <span
+              className={cn(
+                "size-2 rounded-full",
+                role === "spent" && "bg-money-spent",
+                role === "saved" && "bg-money-saved",
+                role === "left" && "bg-money-left",
+              )}
+            />
+          )}
+        </span>
+        <span className="flex h-5 shrink-0 items-center max-md:order-last">
+          <Amount
+            value={over || takenBack ? { ...amount, minor: Math.abs(amount.minor) } : amount}
+            whole
+            size="sm"
+            locale={locale}
+          />
+        </span>
+      </span>
+      <span
+        data-slot="month-bar-key-name"
+        className={cn(
+          "max-md:flex-1 max-md:text-sm md:h-4 md:max-w-full md:truncate md:text-xs",
           over ? "text-destructive" : "text-muted-foreground",
         )}
       >
@@ -186,22 +202,28 @@ function PartContent({
   );
 }
 
-// Tighter on a phone, where the block leaves the legend about 250 px.
-const LEGEND_CLASSES = "flex gap-4 sm:gap-6";
+// A wide screen: the keys side by side. A phone, where the width does not allow it: a list, one
+// row a key under a rule, the same plain rule each (the rows are square there: a rounded corner
+// would bend the rule's ends).
+const LEGEND_CLASSES = "flex flex-col divide-y md:flex-row md:gap-6 md:divide-y-0";
 
-// Only the last key gives way on a narrow screen: its name is the one that grows ("left, €153
-// restricted"), and the amounts before it are never cut.
+// A wide screen: the dot and the amount, the name under them. Only the last key gives way there:
+// its name is the one that grows ("left, €153 restricted"), and the amounts before it are never
+// cut. A phone: the dot and the name, whole, then the amount at the row's end.
 const PART_CLASSES =
-  "-mx-1 flex shrink-0 flex-col items-start rounded-md px-1 text-left transition-colors duration-150 last:min-w-0 last:shrink";
+  "-mx-1 flex px-1 text-left md:rounded-md transition-colors duration-150 max-md:items-center max-md:gap-2 max-md:py-1.5 md:shrink-0 md:flex-col md:items-start md:last:min-w-0 md:last:shrink";
 
 /**
  * The month in one bar (docs/wireframes, screen 1, block 1): the money received, cut into spent,
  * set aside and left, each in its role's colour, the total above and a legend under it. The
  * legend's keys (dot, amount, name) sit side by side from the bar's start rather than under their
  * parts: a part can be a sliver too narrow for its key, and when the month changes the parts move
- * while the keys stay side by side from the bar's start, their amounts rolling. On one line on every width, a long
- * name cut short, so the block's height never changes. Each key is a button when `onSelect` is
- * given. When more went out than came in, the bar stretches to what went out, a dark mark shows
+ * while the keys stay side by side from the bar's start, their amounts rolling. On one line on a
+ * wide screen, a long name cut short, so the block's height never changes. On a phone (below
+ * 768 px, screen 11) the keys are a list under the bar, one row each, the name whole and the
+ * amount at the row's end, and the comparison has lines of its own under the total, one a change
+ * with what it is held against. Each key is
+ * a button when `onSelect` is given. When more went out than came in, the bar stretches to what went out, a dark mark shows
  * where the money received ended, and the part left says by how much the month is overspent, in
  * red; the month is overspent only when `left` is below zero. Set aside below zero (taken back
  * from savings) draws no part, and its key says "taken from savings" with the amount. With
@@ -233,15 +255,24 @@ export function MonthBar({
 
   return (
     <div data-slot="month-bar" className="flex flex-col gap-2">
-      <div className="flex h-7 min-w-0 items-center gap-2">
-        <span className="flex shrink-0 items-center gap-1.5 text-base font-semibold">
-          <Amount value={received} whole locale={locale} />
-          {messages.received}
-        </span>
-        {note === undefined ? null : (
-          <span className="min-w-0 truncate text-sm text-muted-foreground">{note}</span>
+      <div className="flex flex-col md:flex-row md:items-center md:gap-2">
+        <div className="flex h-7 min-w-0 items-center gap-2 md:flex-1">
+          <span className="flex shrink-0 items-center gap-1.5 text-base font-semibold">
+            <Amount value={received} whole locale={locale} />
+            {messages.received}
+          </span>
+          {note === undefined ? null : (
+            <span className="min-w-0 truncate text-sm text-muted-foreground">{note}</span>
+          )}
+        </div>
+        {comparison === undefined ? null : (
+          <span
+            data-slot="month-bar-comparison"
+            className="flex min-h-5 shrink-0 items-center md:ml-auto md:h-7"
+          >
+            {comparison}
+          </span>
         )}
-        {comparison === undefined ? null : <span className="ml-auto shrink-0">{comparison}</span>}
       </div>
       <Bar layout={layout} />
       <div role="group" aria-label={messages.parts} className={LEGEND_CLASSES}>
@@ -290,25 +321,37 @@ export function MonthBar({
 
 function PartSkeleton() {
   return (
-    <div className="flex flex-col">
-      <span className="flex h-5 items-center">
+    <div className="flex items-center justify-between max-md:py-1.5 md:flex-col md:items-start">
+      <span className="flex h-5 items-center max-md:order-last">
         <Skeleton className="h-4 w-16" />
       </span>
-      <span className="flex h-4 items-center">
+      <span className="flex h-5 items-center md:h-4">
         <Skeleton className="h-3 w-12" />
       </span>
     </div>
   );
 }
 
-/** `MonthBar` on its way: the same three lines, the same heights. */
+/**
+ * `MonthBar` on its way: the same lines, the same heights; on a phone, the comparison's two lines
+ * (against the average, against the month before), which a month has from the user's second on,
+ * and the legend's rows.
+ */
 export function MonthBarSkeleton() {
   return (
     <SkeletonFrame>
       <div className="flex flex-col gap-2">
-        <div className="flex h-7 items-center gap-2">
-          <AmountSkeleton />
-          <Skeleton className="h-4 w-32" />
+        <div className="flex flex-col">
+          <div className="flex h-7 items-center gap-2">
+            <AmountSkeleton />
+            <Skeleton className="h-4 w-32" />
+          </div>
+          <span className="flex h-5 items-center md:hidden">
+            <Skeleton className="h-3 w-40" />
+          </span>
+          <span className="flex h-5 items-center md:hidden">
+            <Skeleton className="h-3 w-28" />
+          </span>
         </div>
         <Skeleton className="h-6" />
         <div className={LEGEND_CLASSES}>
