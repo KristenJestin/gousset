@@ -35,7 +35,8 @@ const slide = {
  * ‹ October 2026 ›: the month on screen, with the previous and next months a press away. The
  * month is written in the page's language (`<html lang>`). Next is disabled on the latest month,
  * Previous on the earliest one when it is given.
- * With the focus on either button, the Left and Right arrows move too.
+ * With the focus on either button, the Left and Right arrows move too. In a `Page`'s `month`, on a
+ * phone, it spans its own line, its arrows at the line's ends (the `mobile` wireframe).
  *
  * Motion: the label slides out and the new one slides in from the side it comes from, 200 ms,
  * easing out; cut under reduced motion.

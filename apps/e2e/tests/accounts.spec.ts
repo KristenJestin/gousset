@@ -1,7 +1,7 @@
 import { account, accountBalance, statementImport, statementLine } from "@gousset/db/schema/ledger";
 
 import { onPhone } from "../src/frame";
-import { expect, expectAccessible, fixDay, test, visit } from "../src/test";
+import { animationsDone, expect, expectAccessible, fixDay, test, visit } from "../src/test";
 import { openUserData } from "../src/user-data";
 
 // Issue #15's pages: the accounts overview and an account's own page, and the MCP tool's e2e
@@ -94,6 +94,21 @@ for (const { choice, group } of KINDS) {
     await expect(region.locator("header")).toContainText("€");
   });
 }
+
+// #181: the groups' and rows' entrances keep their last frame (`fill-mode-both`), so the page
+// still lists them once finished. A finished animation moves nothing: the wait ends all the same.
+test("the motion wait ends on the accounts overview once its entrances have finished", async ({
+  userPage: page,
+}) => {
+  await visit(page, "/accounts");
+  await animationsDone(page);
+
+  const finished = await page.evaluate(
+    () => document.getAnimations().filter((animation) => animation.playState === "finished").length,
+  );
+
+  expect(finished).toBeGreaterThan(0);
+});
 
 test("the account form, a long one, opens in a side sheet, along the bottom on a phone", async ({
   userPage: page,

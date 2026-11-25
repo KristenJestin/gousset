@@ -8,13 +8,15 @@ import { Schema } from "effect";
 import type { TestUser } from "../src/auth";
 import { onPhone } from "../src/frame";
 import { importsOn, statementFile } from "../src/imports";
+import { openBlock } from "../src/review";
 import { addUser, animationsDone, expect, fixDay, personOfItsOwn, test, visit } from "../src/test";
 import type { WorkerEnvironment } from "../src/app-server";
 import { openUserData } from "../src/user-data";
 
 // Issue #35's web half, "How to verify", one test each: the operations page's review mode ("To
 // review only"), its proposals, accepted or corrected by a button or a key, one line after the
-// other; its shortcuts and their setting, its motion, and a phone. The MCP half is
+// other; its shortcuts and their setting, its motion, and a phone, there from the home (#36). The
+// MCP half is
 // review-mcp.spec.ts. Each test has a user of its own, whose lines to review come from statements
 // imported as the import job runs them: three lines classified by default, then two of them read
 // again from a CSV, held as near duplicates. Every amount and label is invented.
@@ -496,5 +498,52 @@ test("on a phone, the line opens in a sheet and Correct's dialog rises from the 
   await expect(dialog).toHaveCSS("transition-duration", "0.3s");
   await dialog.getByRole("button", { name: "Cancel" }).click();
   await expect(dialog).toBeHidden();
+  await animationsDone(page);
+});
+
+test("on a phone, the month's lines are reviewed from the home, one press each, in one sheet", async ({
+  page,
+  app,
+  user,
+}) => {
+  test.skip(!onPhone(page), "On a wide screen the detail opens beside the list");
+
+  const { owner } = await reviewer(page, app, user, "albin");
+
+  // The home's folded block, opened in its sheet, leads into the review mode, on the month.
+  await visit(page, "/?month=2026-10");
+
+  const toReview = await openBlock(page, "To review");
+
+  await toReview.getByRole("link", { name: "Review the month's lines" }).click();
+  await expect(page).toHaveURL(/\/operations\?.*review=true/);
+  await expect(count(page)).toHaveText("5 lines");
+
+  // A press opens the line in a sheet; a press accepts it, and the next line takes its place in
+  // the same sheet, open all along.
+  await row(page, GYM.label).getByRole("button").click();
+  await proposalOf(page, GYM.label)
+    .getByRole("button", { name: `Accept the proposal for ${GYM.label}` })
+    .click();
+  await expect(proposalOf(page, STREAMING_AGAIN.label)).toBeVisible();
+  await expect(page.getByRole("dialog")).toHaveCount(1);
+  await expect(count(page)).toHaveText("4 lines");
+  expect(await reviewStateOf(owner, GYM.label)).toMatchObject({ reviewState: "done" });
+
+  await proposalOf(page, STREAMING_AGAIN.label)
+    .getByRole("button", { name: `Accept the proposal for ${STREAMING_AGAIN.label}` })
+    .click();
+  await expect(proposalOf(page, STREAMING.label)).toBeVisible();
+  await expect(page.getByRole("dialog")).toHaveCount(1);
+  await expect(count(page)).toHaveText("3 lines");
+
+  // In reach without scrolling: the line's actions sit inside the screen.
+  const accept = await proposalOf(page, STREAMING.label)
+    .getByRole("button", { name: `Accept the proposal for ${STREAMING.label}` })
+    .boundingBox();
+
+  expect((accept?.y ?? Number.POSITIVE_INFINITY) + (accept?.height ?? 0)).toBeLessThanOrEqual(
+    page.viewportSize()?.height ?? 0,
+  );
   await animationsDone(page);
 });
