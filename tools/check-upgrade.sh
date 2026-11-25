@@ -394,6 +394,40 @@ signin eden eden@example.com "$eden_password" 403 > /dev/null
 say "the administrator, Camille and Dominique sign in with their passwords, Eden is still banned,"
 say "and Camille's session made on $from still works."
 
+# 9b. The default categories in the user's language (#195): the update leaves Camille's in English,
+# as her account got them, and unmarked. She renamed one; her first page in French renames those
+# she never touched, once, and keeps hers; a second page changes nothing.
+sql "update category set name = 'Home' where user_id = '$camille' and kind = 'expense'
+  and parent_id is null and name = 'Housing'" > /dev/null
+[ "$(sql "select default_categories_settled from auth_user where id = '$camille'")" = f ] ||
+  fail "Camille's default categories are marked as in her language before any page of hers."
+categories_page() {
+  curl --silent --show-error --fail --max-time 30 --cookie "$work/camille-after" \
+    --header 'Accept-Language: fr-FR,fr;q=0.9' --output /dev/null "$base/settings/categories" ||
+    fail "Camille's page of categories did not open."
+}
+category_names() {
+  sql "select c.kind || ':' || coalesce(p.name || ' > ', '') || c.name from category c
+    left join category p on p.id = c.parent_id where c.user_id = '$camille'" | LC_ALL=C sort > "$1"
+}
+categories_page
+category_names "$work/categories-french"
+for name in 'expense:Courses' 'expense:Courses > Supermarché' 'expense:Autre' 'income:Autre' \
+  'income:Salaire > Paie' 'expense:Home' 'expense:Home > Rent'; do
+  grep -qxF "$name" "$work/categories-french" ||
+    fail "Camille's categories hold no \"$name\" after her first page in French."
+done
+! grep -qxF 'expense:Groceries' "$work/categories-french" ||
+  fail "Camille's untouched \"Groceries\" is still in English after her first page in French."
+[ "$(sql "select default_categories_settled from auth_user where id = '$camille'")" = t ] ||
+  fail "Camille's default categories are not marked as in her language after her first page."
+categories_page
+category_names "$work/categories-again"
+diff -q "$work/categories-french" "$work/categories-again" > /dev/null ||
+  fail "Camille's second page renamed her categories again."
+say "Camille's untouched default categories took her language at her first page, the one she"
+say "  renamed kept; a second page changed nothing."
+
 # 10. Camille's export (#22): her rows of each table as they were, and her files; a movement line
 # the app made at boot from her noted balance (#31, above) is the update's, not the release's, but
 # one the release made already (from 0.3.0) is among her rows.

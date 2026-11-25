@@ -1,7 +1,8 @@
-import { sql } from "drizzle-orm";
+import { and, eq, sql } from "drizzle-orm";
 import { Context, Effect, Layer, Option, Schema } from "effect";
 
 import type { Database } from "./index";
+import { authUser } from "./schema/auth";
 
 /**
  * The role a user's transaction acts as, which row-level security restricts, and the setting its
@@ -53,12 +54,42 @@ export class UserData extends Context.Service<
       owner: string,
       work: (transaction: UserTransaction) => Promise<A>,
     ) => Effect.Effect<A, QueryFailed>;
+    /**
+     * The same, once per user: it marks the user's default categories as named
+     * (`auth_user.default_categories_settled`, as the app's role) before acting as the user, and
+     * runs `work` only when the mark was not set yet; none otherwise. Two at once: the second waits
+     * for the first's row, then finds it marked and runs nothing.
+     */
+    readonly settlingDefaultNames: <A>(
+      owner: string,
+      work: (transaction: UserTransaction) => Promise<A>,
+    ) => Effect.Effect<Option.Option<A>, QueryFailed>;
   }
 >()("@gousset/db/UserData") {}
 
 type TransactionConfig = Parameters<Database["transaction"]>[1];
 
 const SNAPSHOT: TransactionConfig = { isolationLevel: "repeatable read", accessMode: "read only" };
+
+/** From here on, the transaction acts as `gousset_user` for `owner`. */
+async function actAs(transaction: UserTransaction, owner: string): Promise<void> {
+  await transaction.execute(sql`set local role ${sql.identifier(USER_ROLE)}`);
+  await transaction.execute(sql`select set_config(${USER_SETTING}, ${owner}, true)`);
+}
+
+/** A transaction's failure, as Postgres's code alone. */
+function attempt<A>(work: () => Promise<A>): Effect.Effect<A, QueryFailed> {
+  return Effect.tryPromise({
+    try: work,
+    catch: (error) =>
+      new QueryFailed({
+        code: sqlState(error).pipe(
+          Option.orElse(() => Option.map(wrappedSqlState(error), (wrapped) => wrapped.cause)),
+          Option.match({ onNone: () => "UNKNOWN", onSome: (state) => state.code }),
+        ),
+      }),
+  });
+}
 
 /** `UserData` on the app's database. */
 export function userDataLayer(db: Database): Layer.Layer<UserData> {
@@ -67,25 +98,34 @@ export function userDataLayer(db: Database): Layer.Layer<UserData> {
     work: (transaction: UserTransaction) => Promise<A>,
     config?: TransactionConfig,
   ) =>
-    Effect.tryPromise({
-      try: () =>
-        db.transaction(async (transaction) => {
-          await transaction.execute(sql`set local role ${sql.identifier(USER_ROLE)}`);
-          await transaction.execute(sql`select set_config(${USER_SETTING}, ${owner}, true)`);
+    attempt(() =>
+      db.transaction(async (transaction) => {
+        await actAs(transaction, owner);
 
-          return work(transaction);
-        }, config),
-      catch: (error) =>
-        new QueryFailed({
-          code: sqlState(error).pipe(
-            Option.orElse(() => Option.map(wrappedSqlState(error), (wrapped) => wrapped.cause)),
-            Option.match({ onNone: () => "UNKNOWN", onSome: (state) => state.code }),
-          ),
-        }),
-    });
+        return work(transaction);
+      }, config),
+    );
 
   return Layer.succeed(UserData, {
     transaction: (owner, work) => run(owner, work),
     snapshot: (owner, work) => run(owner, work, SNAPSHOT),
+    settlingDefaultNames: (owner, work) =>
+      attempt(() =>
+        db.transaction(async (transaction) => {
+          const marked = await transaction
+            .update(authUser)
+            .set({ defaultCategoriesSettled: true })
+            .where(and(eq(authUser.id, owner), eq(authUser.defaultCategoriesSettled, false)))
+            .returning({ id: authUser.id });
+
+          if (marked.length === 0) {
+            return Option.none();
+          }
+
+          await actAs(transaction, owner);
+
+          return Option.some(await work(transaction));
+        }),
+      ),
   });
 }
