@@ -422,7 +422,12 @@ the `image` job and runs `tools/check-upgrade.sh` on it, which, on a fresh proje
    changes, and each imported file its bytes;
 8. uploads the statement of step 2 again, through the updated app: **it adds nothing**, every line
    found as a duplicate under the key the update gave it;
-9. migrates an empty database beside it with the same image: **the updated schema is a fresh
+9. gives one of the user's merchants **a look** (#204), which no release before 0.4 had: a logo
+   uploaded through the updated app's own route (`/api/merchants/<id>/logo`) and a colour set
+   through the tables' owner (no plain HTTP route sets it: a server function does); runs
+   `migrate` a third time: the merchant keeps both, **the app serves the logo byte for byte**, and
+   the user's export carries the logo and the colour;
+10. migrates an empty database beside it with the same image: **the updated schema is a fresh
    installation's**, to the column order and the grant.
 
 It removes everything it started, whatever happened. To run it on a clone, with the release's tag

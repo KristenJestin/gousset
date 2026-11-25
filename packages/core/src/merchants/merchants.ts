@@ -1119,7 +1119,7 @@ export const merchantsLayer = Layer.effect(
 
               // The merchant kept keeps its default category, and takes the merged one's when it
               // has none; it is an intermediary when either was (#30). Its look the same way
-              // (#204): its colour, else the merged one's; its logo, else the merged one's, moved
+              // (#204): its colour, else the merged one's; its logo, else the merged one's, copied
               // before the merged one's deletion takes it away.
               await transaction
                 .update(merchant)
@@ -1130,12 +1130,26 @@ export const merchantsLayer = Layer.effect(
                 })
                 .where(eq(merchant.id, into.id));
 
-              if (into.look.logo === null && from.look.logo !== null) {
-                await transaction
-                  .update(merchantLogo)
-                  .set({ merchantId: into.id })
-                  .where(eq(merchantLogo.merchantId, from.id));
-              }
+              // Decided as it is written, not from what was read above: a logo is set without the
+              // user's turn (an upload waits for no import), so the kept one may have gained one
+              // meanwhile, and moving the merged one's onto it would break the one logo per
+              // merchant. The conflict waits for such an upload and, once it is in, keeps it.
+              await transaction
+                .insert(merchantLogo)
+                .select(
+                  transaction
+                    .select({
+                      merchantId: sql<string>`${into.id}::uuid`.as("merchant_id"),
+                      userId: merchantLogo.userId,
+                      mediaType: merchantLogo.mediaType,
+                      content: merchantLogo.content,
+                      sha256: merchantLogo.sha256,
+                      createdAt: merchantLogo.createdAt,
+                    })
+                    .from(merchantLogo)
+                    .where(eq(merchantLogo.merchantId, from.id)),
+                )
+                .onConflictDoNothing({ target: merchantLogo.merchantId });
 
               const kept = await summaryById(transaction, into.id);
 

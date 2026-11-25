@@ -9,6 +9,7 @@ import {
   listMerchants,
   markIntermediary,
   markSubscription,
+  merchantKey,
   ruleWords,
   setMerchantDefaultCategory,
   showLine,
@@ -580,6 +581,8 @@ const gone = (merchant: string) =>
     action: "list",
   });
 
+type TakenLabel = { readonly alias: string; readonly name: string };
+
 /** A label refused (#204): it cleans to nothing, or names another merchant already. */
 const labelRefusals = (retry: Encoded) => ({
   MerchantLabelRefused: (refused: { readonly label: string }) =>
@@ -587,7 +590,7 @@ const labelRefusals = (retry: Encoded) => ({
       `The label "${clip(refused.label)}" names no one once cleaned (only a date, a reference or a withdrawal): give the words of the bank's label that name the shop.`,
       { ...retry, labels: ["CB RIVERSIDE BAKERY"] },
     ),
-  MerchantLabelTaken: (taken: { readonly alias: string; readonly name: string }) =>
+  MerchantLabelTaken: (taken: TakenLabel) =>
     refuse(
       `The label "${clip(taken.alias)}" names ${taken.name} already: a cleaned label names one merchant. Move it with the call below, or merge the two merchants.`,
       {
@@ -598,6 +601,30 @@ const labelRefusals = (retry: Encoded) => ({
       },
     ),
 });
+
+/**
+ * A label refused to `create` because another merchant has it (#204). Moving it first would make a
+ * bare merchant, and the create retried after would find the name taken: so the merchant is made
+ * first, as asked but for the labels cleaned as that one, and the label moved to it after.
+ */
+function takenOnCreate(input: MerchantsInput, name: string, taken: TakenLabel) {
+  const rest = (input.labels ?? []).filter((label) => merchantKey(label, null) !== taken.alias);
+
+  const move: Encoded = { action: "edit", merchant: taken.name, alias: taken.alias, to: name };
+
+  return refuse(
+    `The label "${clip(taken.alias)}" names ${taken.name} already: a cleaned label names one merchant. Make the merchant without it with the call below, then move the label to it: ${call(move)}\nOr merge the two merchants once it is made.`,
+    {
+      action: "create",
+      name,
+      labels: rest.length === 0 ? undefined : rest,
+      category: input.category,
+      kind: input.kind,
+      intermediary: input.intermediary,
+      color: input.color,
+    },
+  );
+}
 
 function createdText(made: MerchantSummary, input: MerchantsInput): string {
   const named =
@@ -655,6 +682,7 @@ function create(owner: string, input: MerchantsInput) {
           { action: "show", merchant: taken.name },
         ),
       ...labelRefusals(retry),
+      MerchantLabelTaken: (taken) => takenOnCreate(input, name, taken),
       CategoryRefused: () =>
         refuseWithCategories(
           `"${clip(category?.trim() ?? "")}" is archived: it can no longer be chosen. Choose a category in use.`,
@@ -702,6 +730,9 @@ function editLook(
 
 const decodeBase64 = Schema.decodeUnknownExit(Schema.Uint8ArrayFromBase64);
 
+/** What a refused logo is retried with: another picture, never clear_logo, which deletes its own. */
+const LOGO_RETRY = `<base64 of a PNG, JPEG or WebP, ${LOGO_KIB} KiB at most>`;
+
 const LOGO_REFUSALS = {
   empty: "logo holds no byte: give the picture's bytes in base64.",
   too_large: `logo is over ${LOGO_KIB} KiB: give a smaller picture (the user can shrink it).`,
@@ -710,7 +741,7 @@ const LOGO_REFUSALS = {
 
 /** Sets a merchant's logo from its base64, or removes it (#204). */
 function setLogo(owner: string, merchant: string, logo: string | null) {
-  const example: Encoded = { action: "edit", merchant, clear_logo: true };
+  const example: Encoded = { action: "edit", merchant, logo: LOGO_RETRY };
   const decoded = logo === null ? undefined : decodeBase64(logo.replaceAll(/\s/g, ""));
 
   if (decoded !== undefined && Exit.isFailure(decoded)) {

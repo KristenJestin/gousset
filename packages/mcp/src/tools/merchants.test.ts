@@ -1601,24 +1601,52 @@ describe("merchants create (#204)", () => {
     expect(state.merchants).toHaveLength(4);
   });
 
-  test("refuses a label another merchant has, with the call that moves it", async () => {
+  test("refuses a label another merchant has, with the create that leaves it out, then the move", async () => {
     const state = store();
 
     const { text, isError } = await merchants(state, {
       action: "create",
       name: "Greenmarket Fuel",
-      labels: ["CB GREENMARKET RIVERTON 2110"],
+      labels: ["CB GREENMARKET RIVERTON 2110", "greenmarket riverton", "GREENMARKET FUEL 2110"],
+      category: "Transport",
+      intermediary: false,
+      color: "teal",
     });
 
     expect(isError).toBe(true);
     expect(text).toContain('The label "GREENMARKET RIVERTON" names Greenmarket already');
     expect(state.merchants).toHaveLength(4);
+
+    // The same create without the labels cleaned as the one taken: it makes what was asked.
     expect(await expectValidExample(text, state)).toEqual({
+      action: "create",
+      name: "Greenmarket Fuel",
+      labels: ["GREENMARKET FUEL 2110"],
+      category: "Transport",
+      intermediary: false,
+      color: "teal",
+    });
+
+    const move = writtenCall(text, "then move the label to it: ");
+
+    expect(move).toEqual({
       action: "edit",
       merchant: "Greenmarket",
       alias: "GREENMARKET RIVERTON",
       to: "Greenmarket Fuel",
     });
+
+    const moved = await merchants(state, move ?? {});
+
+    expect(moved.isError, moved.text).toBe(false);
+
+    const made = state.merchants.find((each) => each.name === "Greenmarket Fuel");
+
+    expect(made?.aliases).toEqual(["GREENMARKET FUEL", "GREENMARKET RIVERTON"]);
+    expect(made?.color).toBe("teal");
+    expect(
+      (await merchants(state, { action: "show", merchant: "Greenmarket Fuel" })).text,
+    ).toContain("Default category: Transport (expense).");
   });
 });
 
@@ -1719,8 +1747,21 @@ describe("merchants edit with color, labels and logo (#204)", () => {
 
     expect(isError).toBe(true);
     expect(text).toContain(says);
+    expect(text.length).toBeLessThan(ERROR_LIMIT);
     expect(state.merchants.some((each) => each.logo !== undefined)).toBe(false);
-    await expectValidExample(text, state);
+
+    // Another picture, never clear_logo: that would delete the logo the merchant has.
+    const example = writtenCall(text, "A valid call: ");
+
+    expect(example).toEqual({
+      action: "edit",
+      merchant: "Greenmarket",
+      logo: "<base64 of a PNG, JPEG or WebP, 256 KiB at most>",
+    });
+
+    const retried = await merchants(state, { ...example, logo: base64(PNG) });
+
+    expect(retried.isError, retried.text).toBe(false);
   });
 
   test("each goes alone", async () => {
