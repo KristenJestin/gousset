@@ -202,6 +202,48 @@ export function clearPairs(
   return pairs;
 }
 
+/** A line's part of an entry, and who classified that entry. */
+export type LinePart = {
+  readonly lineId: string;
+  readonly classifiedBy: "default" | "rule" | "user";
+};
+
+/**
+ * The lines the user decided (#192): a line whose entry the user classified, or a rule of the user's
+ * did (at an import, or applied to the past), or which the user split across several entries. The
+ * pairing at boot never pairs them; the user may, by hand.
+ */
+export function decidedLines(parts: ReadonlyArray<LinePart>): ReadonlySet<string> {
+  const seen = new Set<string>();
+  const decided = new Set<string>();
+
+  for (const part of parts) {
+    if (part.classifiedBy !== "default" || seen.has(part.lineId)) {
+      decided.add(part.lineId);
+    }
+
+    seen.add(part.lineId);
+  }
+
+  return decided;
+}
+
+/**
+ * The pairs the pairing at boot makes (#192): `clearPairs`, but never with a line the user decided.
+ * Such a line stays in `pool`, a candidate as any other, so that a line it makes ambiguous is never
+ * paired with its other candidate by a guess.
+ */
+export function keptPairs(
+  fresh: ReadonlyArray<PairableLine>,
+  pool: ReadonlyArray<PairableLine>,
+  decided: ReadonlySet<string>,
+): ReadonlyArray<Pair> {
+  return clearPairs(
+    fresh.filter((line) => !decided.has(line.id)),
+    pool,
+  ).filter((pair) => !decided.has(pair.outLineId) && !decided.has(pair.inLineId));
+}
+
 /** A deferred-debit card's lines around its debits, to tell what it owed on each day. */
 export type CardLedger = {
   readonly accountId: string;
@@ -296,6 +338,20 @@ export function cardDebits(
       ? []
       : [{ lineId: line.id, cardAccountId: card.accountId }];
   });
+}
+
+/**
+ * The sides the app made that the pairing at boot replaces (#192): `replacedCounterparts`, weighed
+ * among every line, but never by a line the user decided.
+ */
+export function keptReplacements(
+  fresh: ReadonlyArray<PairableLine>,
+  counterparts: ReadonlyArray<PairableLine>,
+  decided: ReadonlySet<string>,
+): ReadonlyArray<Replacement> {
+  return replacedCounterparts(fresh, counterparts).filter(
+    (replacement) => !decided.has(replacement.lineId),
+  );
 }
 
 /** A line the app made for a transfer's side, and the line of the account's own file that is it. */
