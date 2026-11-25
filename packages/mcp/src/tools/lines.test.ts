@@ -62,6 +62,8 @@ const lineCategory = (category: CategoryRecord) => ({
   name: category.name,
   parentName: null,
   kind: category.kind,
+  icon: null,
+  color: null,
 });
 
 function account(name: string, change: Partial<AccountRecord> = {}): AccountRecord {
@@ -791,7 +793,14 @@ const giftCard = account("Gift card", {
 /** The movement Gousset made of a balance noted on the gift card: no label of its own. */
 const movement = line(giftCard.id, "2026-10-31", -9000, "", {
   source: "balance",
-  category: { id: memoryId(), name: "Meal vouchers", parentName: "Food", kind: "expense" },
+  category: {
+    id: memoryId(),
+    name: "Meal vouchers",
+    parentName: "Food",
+    kind: "expense",
+    icon: null,
+    color: null,
+  },
 });
 
 const KEPT: MemoryLineRows = {

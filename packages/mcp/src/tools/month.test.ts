@@ -381,7 +381,14 @@ function toReview(current: MonthAccount): MemoryLineRows {
         memo: null,
         counterpartyName: null,
         classifiedBy: "default",
-        category: { id: "other", name: "Other", parentName: null, kind: "expense" },
+        category: {
+          id: "other",
+          name: "Other",
+          parentName: null,
+          kind: "expense",
+          icon: null,
+          color: null,
+        },
       },
     ],
   };
