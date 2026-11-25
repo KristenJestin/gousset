@@ -120,7 +120,7 @@ const lineText = ({ line }: QueuedLine) =>
   `${line.bookedOn}, ${named(line.account)}: ${amount(line.amount)}, ${labelOf(line)}`;
 
 const queuedText = (queued: QueuedLine) =>
-  `- ${lineText(queued)}${queued.line.maybeRefund ? ` (${MAYBE_REFUND})` : ""}: ${proposalText(queued.proposal)}; line: ${queued.line.id}; proposal: ${proposalKey(queued.proposal)}`;
+  `- ${lineText(queued)}: ${proposalText(queued.proposal)}${queued.line.maybeRefund ? ` (${MAYBE_REFUND})` : ""}; line: ${queued.line.id}; proposal: ${proposalKey(queued.proposal)}`;
 
 /** The other answer to a line that may be a refund (#208): it is none. */
 const refuseText = (page: ReviewQueuePage) => {

@@ -298,7 +298,11 @@ describe("review list", () => {
 
     expect(isError, text).toBe(false);
     expect(rowOf(text, returned.id)).toContain(
-      '30.00 EUR, "CB CORNER SHOP RETOUR" (maybe a refund, not counted as income until the user answers): link it as a refund',
+      '30.00 EUR, "CB CORNER SHOP RETOUR": link it as a refund',
+    );
+    // After the proposal, so that a row still reads `"<label>": <proposal>`.
+    expect(rowOf(text, returned.id)).toContain(
+      "(maybe a refund, not counted as income until the user answers); line: ",
     );
     expect(rowOf(text, market.id)).not.toContain("maybe a refund");
     expect(text).toContain(
