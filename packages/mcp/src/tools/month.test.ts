@@ -84,6 +84,7 @@ type Month = {
   benefitLines: Array<MonthRows["benefitLines"][number]>;
   reach: Array<MonthRows["reach"][number]>;
   charges: Array<Charge>;
+  maybeRefunds: Array<string>;
 };
 
 const empty = (): Month => ({
@@ -97,6 +98,7 @@ const empty = (): Month => ({
   benefitLines: [],
   reach: [],
   charges: [],
+  maybeRefunds: [],
 });
 
 type Connection = {

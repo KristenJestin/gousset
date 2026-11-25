@@ -25,6 +25,8 @@ export type MemoryLineDetail = MemoryLine & {
   readonly classifiedBy?: "default" | "rule" | "user";
   /** Its part in its entry: `refund` when linked to an expense, whose entry it then follows. */
   readonly role?: "payment" | "refund";
+  /** Maybe a refund the user has not answered (#208): the database computes it on read. */
+  readonly maybeRefund?: boolean;
 };
 
 /** An import of the memory store, as a line's detail names it. */
@@ -105,6 +107,7 @@ function withAccount(own: MemoryLineRows, line: MemoryLineDetail): FoundLine | u
     },
     category: line.category ?? null,
     fromBalance: sourceOf(line) === "balance",
+    maybeRefund: line.maybeRefund ?? false,
   };
 }
 

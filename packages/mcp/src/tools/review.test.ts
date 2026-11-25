@@ -188,6 +188,7 @@ const EXPENSES = Layer.mock(Expenses, {
       expenses: [],
       role: null,
       proposals: lineId === returned.id ? [refund] : [],
+      maybeRefund: lineId === returned.id,
       funding: null,
     }),
 });

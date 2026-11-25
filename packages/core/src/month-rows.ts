@@ -14,6 +14,7 @@ import { and, asc, eq, gte, lte, min, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 
 import { readAll } from "./category-store-database";
+import { maybeRefundsAmong } from "./expenses/expenses";
 import type { MonthRows, MonthScope, StatementReach } from "./month";
 import { chargesIn } from "./subscriptions/charges";
 
@@ -134,6 +135,19 @@ export async function monthRowsIn(
     .where(and(eq(accountBalance.source, "statement"), lte(accountBalance.day, scope.statementsTo)))
     .groupBy(accountBalance.accountId);
 
+  // The month's incomes of one line each: those that may be refunds are no income until answered.
+  const maybeRefunds = await maybeRefundsAmong(
+    transaction,
+    parts.flatMap((part) =>
+      part.kind === "income" &&
+      part.role === "payment" &&
+      part.happenedOn >= scope.maybeRefunds.from &&
+      part.happenedOn <= scope.maybeRefunds.to
+        ? [part.lineId]
+        : [],
+    ),
+  );
+
   const importedOf = new Map(imported.map((row) => [row.accountId, row.to]));
   const statementOf = new Map(statements.map((row) => [row.accountId, row.to]));
 
@@ -154,5 +168,6 @@ export async function monthRowsIn(
     benefitLines,
     reach,
     charges: scope.charges === null ? [] : await chargesIn(transaction, scope.charges),
+    maybeRefunds: [...maybeRefunds],
   };
 }

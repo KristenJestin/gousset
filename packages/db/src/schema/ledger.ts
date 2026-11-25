@@ -409,6 +409,9 @@ export const statementLine = pgTable.withRLS(
     // The user took this line out of an expense of several lines (#28): the automatic matching of
     // top-ups leaves it alone until the user links it by hand.
     linkRefused: boolean("link_refused").default(false).notNull(),
+    // The user said this line coming back is no refund (#208): it is an ordinary income, never
+    // proposed as a refund again, until the user links it by hand.
+    refundRefused: boolean("refund_refused").default(false).notNull(),
   },
   (table) => [
     unique("statement_line_user_id_id_key").on(table.userId, table.id),

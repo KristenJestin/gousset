@@ -210,7 +210,14 @@ const PAID = Layer.mock(Merchants, {
  * expenses-mcp.spec).
  */
 const NO_EXPENSE = Layer.mock(Expenses, {
-  ofLine: () => Effect.succeed({ expenses: [], role: null, proposals: [], funding: null }),
+  ofLine: () =>
+    Effect.succeed({
+      expenses: [],
+      role: null,
+      proposals: [],
+      maybeRefund: false,
+      funding: null,
+    }),
 });
 
 function onToday(
@@ -985,6 +992,7 @@ async function refundCall(args: Arguments, funded = false) {
         expenses: [],
         role: null,
         proposals: [],
+        maybeRefund: false,
         funding:
           lineId === perksOut.id
             ? { funds: funded ? fuelExpense : null, candidates: funded ? [] : [fuelExpense] }
@@ -1002,7 +1010,13 @@ async function refundCall(args: Arguments, funded = false) {
     unfund: (_owner, transferLineId) => {
       calls.push(`unfund ${transferLineId}`);
 
-      return Effect.succeed({ expenses: [], role: null, proposals: [], funding: null });
+      return Effect.succeed({
+        expenses: [],
+        role: null,
+        proposals: [],
+        maybeRefund: false,
+        funding: null,
+      });
     },
   });
 
