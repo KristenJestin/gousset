@@ -2,7 +2,7 @@ import { expect } from "@playwright/test";
 import type { Page } from "@playwright/test";
 import { Schema } from "effect";
 
-import { animationsListed, transformsMoving } from "./moving";
+import { animationsMoving, transformsMoving } from "./moving";
 
 /** What a block shows while its data is coming: `BlockSkeleton` in packages/ui. */
 export const SKELETON = '[role="status"][aria-busy="true"]';
@@ -37,14 +37,15 @@ const Counts = Schema.Struct({
 });
 
 /**
- * Waits until nothing animates any more: no animation the page lists, and no transform Motion's
+ * Waits until nothing animates any more: no animation the page lists but finished ones, which
+ * move nothing even when they keep their last frame (#181), and no transform Motion's
  * layout animations still move (`transformsMoving`), which the page does not list. A block fading
  * in would fail axe's contrast check; a row still growing covers the ones under it. A failure names
  * what still moves.
  */
 export async function animationsDone(page: Page): Promise<void> {
   await expect
-    .poll(async () => [...(await animationsListed(page)), ...(await transformsMoving(page))])
+    .poll(async () => [...(await animationsMoving(page)), ...(await transformsMoving(page))])
     .toEqual([]);
 }
 
