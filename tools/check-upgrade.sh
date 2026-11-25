@@ -244,14 +244,15 @@ dump "$work/columns-before" "$work/none" "$work/before"
 say "$from holds $(wc -l < "$work/before") rows in $(cut -f 1 "$work/columns-before" | uniq | wc -l) tables:"
 say "  $(cut -f 1 "$work/before" | uniq -c | awk '{ printf "%s %s, ", $2, $1 }')"
 
-# The counted lines with an amount, not a side of a transfer (#26), that lack their one entry paid
-# by the whole line (v0.3, #23): none, from a release that has entries on.
+# The counted lines with an amount that lack their one entry paid by the whole line (v0.3, #23), or
+# that are a side of a transfer (#26) and have one: none, from a release that has entries on.
 unclassified() {
   sql "select count(*) from statement_line l where l.state = 'counted' and l.amount_minor <> 0
-    and not exists (select 1 from transfer t where l.id in (t.out_line_id, t.in_line_id))
-    and ((select count(*) from entry_part p where p.line_id = l.id) <> 1
-      or exists (select 1 from entry_part p where p.line_id = l.id
-        and (p.role <> 'payment' or p.amount_minor <> abs(l.amount_minor))))"
+    and case when exists (select 1 from transfer t where l.id in (t.out_line_id, t.in_line_id))
+      then exists (select 1 from entry_part p where p.line_id = l.id)
+      else (select count(*) from entry_part p where p.line_id = l.id) <> 1
+        or exists (select 1 from entry_part p where p.line_id = l.id
+          and (p.role <> 'payment' or p.amount_minor <> abs(l.amount_minor))) end"
 }
 
 # A release that has entries writes each with its line: invented data without them is data the
@@ -319,10 +320,10 @@ dump "$work/columns-before" "$work/added" "$work/again"
 diff -q "$work/after" "$work/again" > /dev/null || fail "migrate run again changed rows."
 
 # Every counted line with an amount has its one entry, paid by the whole line (v0.3, #23), but a
-# side of a transfer (#26): the update gives one to each line the release held, once, however
-# often migrate runs.
+# side of a transfer (#26), which has none: the update gives one to each line the release held,
+# once, however often migrate runs.
 unclassified=$(unclassified)
-[ "$unclassified" = 0 ] || fail "$unclassified counted lines have no entry of their own, or more than one, after the update."
+[ "$unclassified" = 0 ] || fail "$unclassified counted lines have no entry of their own, or more than one, or are a transfer's side with one, after the update."
 say "every counted line with an amount has its one entry."
 
 # The categories that take an operation's lines (#194): Camille's untouched defaults are marked,
@@ -332,6 +333,20 @@ marked=$(sql "select string_agg(name || ':' || operation, ',' order by name) fro
 [ "$marked" = "Bank fees:fee,Interest:interest" ] ||
   fail "Camille's categories marked with an operation are \"$marked\", not Bank fees and Interest."
 say "Camille's Bank fees and Interest take the fees and the interest."
+
+# Two of Camille's old transfer lines, classified where the release could (from 0.3.0,
+# tools/check-upgrade.sql), one by hand, one by a rule of hers: their expenses before the app
+# starts, which the boot must leave as they are.
+line() { printf '019a0000-0000-7000-8000-000000000%s' "$1"; }
+decided() {
+  sql "select coalesce(string_agg(to_jsonb(e)::text, ' ' order by p.line_id), '') from entry e
+    join entry_part p on p.entry_id = e.id
+    where (p.line_id = '$(line 414)' and e.classified_by = 'user')
+      or (p.line_id = '$(line 415)' and e.classified_by = 'rule' and e.rule_id is not null)"
+}
+hand=$(decided)
+[ -z "$hand" ] || [ "$(sql "select count(*) from entry where classified_by <> 'default' and user_id = '$camille'")" = 2 ] ||
+  fail "Camille's two old transfer lines are not classified, one by hand and one by a rule, before the boot."
 
 # 8. The installation as `docker compose up` brings it back: migrate, then the app.
 booted=$(sql "select now()")
@@ -415,6 +430,63 @@ if [ -n "$first_import" ]; then
     fail "the merchants $from made from an operation prefix were not read again, or its fee not put in Bank fees, within a minute of the app's start."
   say "the $prefixed merchant(s) $from made from an operation prefix were read again at boot, and its fee went to Bank fees."
 fi
+
+# The boot jobs of <n> starts of the app, for every user, ended: none waits or runs any more, and
+# the pairing's, sent last for each user, completed once per user and start.
+boot_ended() { # <starts>
+  local users left completed
+  users=$(sql "select count(*) from auth_user")
+  for _ in $(seq 120); do
+    left=$(sql "select count(*) from pgboss.job where state in ('created', 'retry', 'active')
+      and name in ('recognise-merchants', 'remake-balance-lines', 'pair-transfers')")
+    completed=$(sql "select count(*) from pgboss.job where name = 'pair-transfers' and state = 'completed'")
+    [ "$left" != 0 ] || [ "$completed" != $((users * $1)) ] || return 0
+    sleep 1
+  done
+  fail "the boot jobs of $1 start(s) did not all end within two minutes: $left left, $completed of $((users * $1)) pairings completed."
+}
+
+# The app pairs every user's transfers at boot (#192), with the import's rules: Camille's lines kept
+# before v0.3, never paired (tools/check-upgrade.sql), are paired where each is the other's only
+# candidate, a day apart and across her savings account's fortnight (#131), and lose their entries;
+# the money out with two candidates, and those two, are left to the review, each an expense or an
+# income of its own. The two clear pairs whose side she, or a rule of hers, classified are left as
+# they are, their expenses unchanged; from a release with no entries she could not have, and they
+# are paired.
+boot_ended 1
+expected="$(line 411)>$(line 421) $(line 413)>$(line 424)"
+[ -n "$hand" ] || expected="$expected $(line 414)>$(line 425) $(line 415)>$(line 426)"
+pairs=$(sql "select string_agg(t.out_line_id::text || '>' || t.in_line_id::text, ' ' order by t.out_line_id)
+  from transfer t where t.user_id = '$camille'")
+[ "$pairs" = "$expected" ] ||
+  fail "Camille's transfers after boot are \"$pairs\", not \"$expected\"."
+if [ -n "$hand" ]; then
+  [ "$(decided)" = "$hand" ] ||
+    fail "the expenses of the lines Camille and her rule classified changed at boot: $(decided), not $hand."
+  say "the old transfer lines Camille classified, by hand and by a rule, stay unpaired, their expenses unchanged."
+fi
+waiting=$(sql "select count(*) from statement_line l where l.id in ('$(line 412)', '$(line 422)', '$(line 423)')
+  and l.review_state = 'to_review' and l.transfer_refused = false
+  and (select count(*) from entry_part p where p.line_id = l.id) = 1")
+[ "$waiting" = 3 ] || fail "Camille's ambiguous transfer is not left to the review: $waiting of its 3 lines are."
+count=$(unclassified)
+[ "$count" = 0 ] || fail "$count counted lines have no entry of their own, or more than one, or are a transfer's side with one, after the boot."
+say "Camille's transfers kept before v0.3 are paired at boot: the clear pair and the fortnight's;"
+say "  the ambiguous one waits in the review."
+
+# A second start of the app changes no row: every boot job finds nothing left to do.
+dump "$work/columns-after" "$work/none" "$work/booted"
+"${compose[@]}" restart web > "$work/restart" 2>&1 || fail "$tag did not start again: $(tail -n 5 "$work/restart")"
+code=$(health)
+[ "$code" = 200 ] || fail "/health of $tag answered $code once started again."
+boot_ended 2
+dump "$work/columns-after" "$work/none" "$work/booted-again"
+if ! diff "$work/booted" "$work/booted-again" > "$work/boot.diff"; then
+  echo "check-upgrade.sh: rows changed at the second start (< after the first, > after the second), the first lines:" >&2
+  head -n 20 "$work/boot.diff" | cut -c 1-300 >&2
+  fail "the second start of the app changed rows."
+fi
+say "a second start of $tag changes no row."
 
 # 9. Everyone signs in as before; the session made before still works.
 signin() { call "$1" POST /api/auth/sign-in/email "$4" "{\"email\":\"$2\",\"password\":\"$3\"}"; }
