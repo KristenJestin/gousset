@@ -56,8 +56,8 @@ export const dialogClasses = cn(
 
 /**
  * A side sheet: along the right edge, its whole height, 440 px wide, its edge on the side facing
- * the page; it slides in from beyond that edge in 300 ms, ease-out, and back out in 200 ms,
- * ease-in. On a phone a bottom sheet, as a dialog is there: its whole width, its top corners
+ * the page, its content clear of a sideways phone's notch; it slides in from beyond that edge in
+ * 300 ms, ease-out, and back out in 200 ms, ease-in. On a phone a bottom sheet, as a dialog is there: its whole width, its top corners
  * rounded, rising from the bottom edge the same way, its content above an installed app's home
  * indicator. Under reduced motion it never stands off its
  * edge, not even for the first frame: it is there, or not. Its parts (`Sheet`) carry their own
@@ -68,7 +68,7 @@ export const sheetClasses = cn(
   floatingSurfaceClasses,
   "transition-transform duration-300 ease-out data-ending-style:duration-200 data-ending-style:ease-in",
   // A wide screen: from the right edge.
-  "md:w-110 md:max-w-full md:rounded-l-lg md:border-y-0 md:border-r-0",
+  "md:w-110 md:max-w-full md:rounded-l-lg md:border-y-0 md:border-r-0 md:pr-safe",
   "md:motion-safe:data-starting-style:translate-x-full md:motion-safe:data-ending-style:translate-x-full",
   // A phone: from the bottom edge.
   "max-md:top-auto max-md:left-0 max-md:max-h-11/12 max-md:rounded-t-xl max-md:border-x-0 max-md:border-b-0 max-md:pb-safe",

@@ -93,6 +93,8 @@ function SwitchingMonths() {
  * much the month is overspent, in red.
  *
  * Loading: `MonthBarSkeleton`, the same lines at the same heights, the phone's rows on a phone.
+ * It holds the comparison's lines a month has from the user's second on, both of them on a phone:
+ * a first month, with none, is that much shorter once loaded.
  *
  * Motion: when the month changes, the parts grow or shrink to their new widths in 200 ms
  * (ease-out) and the amounts roll; cut under reduced motion. Widths are SVG attributes, so the
