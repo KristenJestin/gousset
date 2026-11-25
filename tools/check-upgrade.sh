@@ -239,6 +239,24 @@ dump "$work/columns-before" "$work/none" "$work/before"
 say "$from holds $(wc -l < "$work/before") rows in $(cut -f 1 "$work/columns-before" | uniq | wc -l) tables:"
 say "  $(cut -f 1 "$work/before" | uniq -c | awk '{ printf "%s %s, ", $2, $1 }')"
 
+# The counted lines with an amount, not a side of a transfer (#26), that lack their one entry paid
+# by the whole line (v0.3, #23): none, from a release that has entries on.
+unclassified() {
+  sql "select count(*) from statement_line l where l.state = 'counted' and l.amount_minor <> 0
+    and not exists (select 1 from transfer t where l.id in (t.out_line_id, t.in_line_id))
+    and ((select count(*) from entry_part p where p.line_id = l.id) <> 1
+      or exists (select 1 from entry_part p where p.line_id = l.id
+        and (p.role <> 'payment' or p.amount_minor <> abs(l.amount_minor))))"
+}
+
+# A release that has entries writes each with its line: invented data without them is data the
+# release could not hold, and the update would be blamed for it.
+if [ "$(sql "select to_regclass('public.entry_part') is not null")" = t ]; then
+  held=$(unclassified)
+  [ "$held" = 0 ] ||
+    fail "$held counted lines of $from have no entry of their own, or more than one, before the update: tools/check-upgrade.sql writes them as $from does."
+fi
+
 # 5. The image under test in its place: `migrate` runs and ends, and has applied every migration.
 export GOUSSET_VERSION=$tag
 migrate "$work/migrate-1"
@@ -298,15 +316,12 @@ diff -q "$work/after" "$work/again" > /dev/null || fail "migrate run again chang
 # Every counted line with an amount has its one entry, paid by the whole line (v0.3, #23), but a
 # side of a transfer (#26): the update gives one to each line the release held, once, however
 # often migrate runs.
-unclassified=$(sql "select count(*) from statement_line l where l.state = 'counted' and l.amount_minor <> 0
-  and not exists (select 1 from transfer t where l.id in (t.out_line_id, t.in_line_id))
-  and ((select count(*) from entry_part p where p.line_id = l.id) <> 1
-    or exists (select 1 from entry_part p where p.line_id = l.id
-      and (p.role <> 'payment' or p.amount_minor <> abs(l.amount_minor))))")
+unclassified=$(unclassified)
 [ "$unclassified" = 0 ] || fail "$unclassified counted lines have no entry of their own, or more than one, after the update."
 say "every counted line with an amount has its one entry."
 
 # 8. The installation as `docker compose up` brings it back: migrate, then the app.
+booted=$(sql "select now()")
 "${compose[@]}" up --detach --no-build --pull never --wait --wait-timeout 180 > "$work/up" 2>&1 ||
   fail "$tag did not come up over $from's data: $(tail -n 5 "$work/up")"
 migrated=$("${compose[@]}" ps --all --format '{{.ExitCode}}' migrate)
@@ -315,29 +330,55 @@ code=$(health)
 [ "$code" = 200 ] || fail "/health of $tag answered $code."
 say "$tag serves: /health answers 200."
 
-# The app recognises every user's merchants at boot (#24): Camille's lines, kept before merchants
-# existed, get theirs without an import.
-recognised=0
+# Camille's rows of the release (the dump of step 4) that a table names, kept by a jq filter.
+held_rows() { # <table> <jq filter>
+  awk -F '\t' -v t="$1" '$1 == t { print $2 }' "$work/before" |
+    jq -s --arg u "$camille" "[.[] | select(.user_id == \$u) | select($2)] | length"
+}
+
+# At boot the app sends each user's merchants job and balances job (apps/web, jobs/runtime.server.ts):
+# the checks below read Camille's rows once both have completed, as pg-boss records them.
+boot_jobs=0
 for _ in $(seq 60); do
-  recognised=$(sql "select count(*) from merchant_alias where user_id = '$camille'")
-  [ "$recognised" = 0 ] || break
+  boot_jobs=$(sql "select count(distinct name) from pgboss.job
+    where name in ('recognise-merchants', 'remake-balance-lines') and data ->> 'owner' = '$camille'
+    and created_on >= '$booted' and state = 'completed'")
+  [ "$boot_jobs" != 2 ] || break
   sleep 1
 done
-[ "$recognised" != 0 ] || fail "Camille's lines got no merchant within a minute of the app's start."
-say "Camille's lines got their merchants at boot: $recognised cleaned label(s)."
+[ "$boot_jobs" = 2 ] || fail "Camille's merchants and balances jobs did not complete within a minute of the app's start."
+
+# The app recognises every user's merchants at boot (#24): Camille's lines, kept before merchants
+# existed, get theirs without an import. From 0.3.0 the release's own import recognised them
+# already (step 3b): the boot then loses none, and only an update from before merchants shows that
+# it makes them.
+held_aliases=$(held_rows merchant_alias true)
+recognised=$(sql "select count(*) from merchant_alias where user_id = '$camille'")
+[ "$recognised" != 0 ] || fail "Camille's lines got no merchant at the app's start."
+[ "$recognised" -ge "$held_aliases" ] ||
+  fail "Camille had $held_aliases cleaned label(s) on $from, $recognised once $tag started."
+if [ "$held_aliases" = 0 ]; then
+  say "Camille's lines got their merchants at boot: $recognised cleaned label(s)."
+else
+  say "Camille's merchants came from $from's import ($held_aliases cleaned label(s)); after the boot, $recognised."
+fi
 
 # The app makes the movement lines of the accounts kept by their balance at boot (#31): the balance
 # Camille noted on her Livret A before they existed gets its line, of the whole balance (the account
-# opened at zero, with no other line), and that line its one entry.
-moved=0
-for _ in $(seq 60); do
-  moved=$(sql "select count(*) from statement_line l where l.user_id = '$camille' and l.source = 'balance'
-    and l.amount_minor = 1230000 and (select count(*) from entry_part p where p.line_id = l.id) = 1")
-  [ "$moved" = 0 ] || break
-  sleep 1
-done
-[ "$moved" = 1 ] || fail "Camille's noted balance got no movement line with its entry within a minute of the app's start."
-say "Camille's noted balance got its movement line at boot."
+# opened at zero, with no other line), and that line its one entry. From 0.3.0 the release's own
+# import made that line already (step 3b): the boot then makes no second one, and only an update
+# from before movement lines shows that it makes them.
+held_moved=$(held_rows statement_line '.source == "balance" and .amount_minor == 1230000')
+moved=$(sql "select count(*) from statement_line l where l.user_id = '$camille' and l.source = 'balance'
+  and l.amount_minor = 1230000 and (select count(*) from entry_part p where p.line_id = l.id) = 1")
+lines=$(sql "select count(*) from statement_line where user_id = '$camille' and source = 'balance'")
+[ "$moved" = 1 ] && [ "$lines" = 1 ] ||
+  fail "Camille's noted balance has $lines movement line(s), $moved of the whole balance with its entry, not 1 once the boot's jobs completed."
+if [ "$held_moved" = 0 ]; then
+  say "Camille's noted balance got its movement line at boot."
+else
+  say "Camille's noted balance has the movement line $from's import made, and the boot made no second one."
+fi
 
 # 9. Everyone signs in as before; the session made before still works.
 signin() { call "$1" POST /api/auth/sign-in/email "$4" "{\"email\":\"$2\",\"password\":\"$3\"}"; }
@@ -387,8 +428,9 @@ diff -q "$work/categories-french" "$work/categories-again" > /dev/null ||
 say "Camille's untouched default categories took her language at her first page, the one she"
 say "  renamed kept; a second page changed nothing."
 
-# 10. Camille's export (#22): her rows of each table as they were, and her files; the movement line
-# the app made at boot from her noted balance (#31, above) is the update's, not the release's.
+# 10. Camille's export (#22): her rows of each table as they were, and her files; a movement line
+# the app made at boot from her noted balance (#31, above) is the update's, not the release's, but
+# one the release made already (from 0.3.0) is among her rows.
 curl --silent --show-error --fail --max-time 30 --cookie "$work/camille-after" \
   --output "$work/export.zip" "$base/api/export" || fail "Camille's export failed."
 for pair in accounts:account account-balances:account_balance statement-lines:statement_line \
@@ -396,13 +438,18 @@ for pair in accounts:account account-balances:account_balance statement-lines:st
   file=${pair%%:*} table=${pair#*:}
   drop=$(awk -F '\t' -v t="$table" '$1 == t { print $2 }' "$work/added" | jq -R . | jq -sc .)
   unzip -p "$work/export.zip" "$file.json" > "$work/export.json" || fail "the export has no $file.json."
-  jq -c -S --argjson drop "$drop" '.[] | select(.source != "balance") | reduce $drop[] as $c (.; del(.[$c]))' "$work/export.json" |
-    LC_ALL=C sort > "$work/exported"
   awk -F '\t' -v t="$table" '$1 == t { print $2 }' "$work/expected" |
     jq -c -S --arg u "$camille" 'select(.user_id == $u)' | LC_ALL=C sort > "$work/held"
   [ -s "$work/held" ] || fail "Camille had no row of $table to export: tools/check-upgrade.sql fills one."
-  diff -q "$work/held" "$work/exported" > /dev/null ||
+  jq -c -S --argjson drop "$drop" --slurpfile held "$work/held" '[$held[].id] as $ids
+    | .[] | select(.source != "balance" or (.id as $id | any($ids[]; . == $id)))
+    | reduce $drop[] as $c (.; del(.[$c]))' "$work/export.json" |
+    LC_ALL=C sort > "$work/exported"
+  if ! diff "$work/held" "$work/exported" > "$work/export.diff"; then
+    echo "check-upgrade.sh: Camille's $table (< as $from held them, > exported), the first lines:" >&2
+    head -n 20 "$work/export.diff" | cut -c 1-600 >&2
     fail "Camille's export of $table is not her rows as $from held them."
+  fi
 done
 awk -F '\t' '$1 == "import_file" { print $2 }' "$work/before" | jq -r --arg u "$camille" \
   'select(.user_id == $u) | [.import_id, (.content | ltrimstr("\\x"))] | @tsv' > "$work/files"
