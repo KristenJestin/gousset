@@ -1,83 +1,96 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { useState } from "react";
 
-import { automaticColorOf } from "../lib/palette";
 import type { PaletteColor } from "../lib/palette";
 import { InFrench } from "../stories/in-french";
-import { Avatar } from "./avatar";
 import { ColorSwatches } from "./color-swatches";
-import type { ColorSwatchesProps } from "./color-swatches";
 
-const NAME = "Corner Bistro";
-
-/** The swatches, the avatar they colour, and the choice written out, so a test can read it. */
-function Choosing({ props }: { props: ColorSwatchesProps }) {
-  const [color, setColor] = useState<PaletteColor | null>(props.value);
+/** The swatches, with the colour chosen written under them so it can be seen to change. */
+function Choosing({
+  initial,
+  noneLabel,
+  noneColor,
+  disabled,
+}: {
+  initial: PaletteColor | null;
+  noneLabel?: string;
+  noneColor?: PaletteColor | null;
+  disabled?: boolean;
+}) {
+  const [chosen, setChosen] = useState(initial);
 
   return (
-    <div className="flex max-w-md flex-col gap-4">
-      <ColorSwatches {...props} value={color} onChange={setColor} />
-      <div className="flex items-center gap-3 text-sm">
-        <Avatar name={NAME} color={color} size="lg" />
-        <span data-testid="chosen" className="text-muted-foreground">
-          {color ?? "automatic"}
-        </span>
-      </div>
+    <div className="flex max-w-sm flex-col gap-3 rounded-lg border bg-popover p-4">
+      <ColorSwatches
+        label="Colour"
+        value={chosen}
+        onChange={setChosen}
+        noneLabel={noneLabel}
+        noneColor={noneColor}
+        disabled={disabled}
+      />
+      <p className="text-sm text-muted-foreground" data-testid="chosen">
+        Chosen: {chosen ?? "none"}
+      </p>
     </div>
   );
 }
 
 /**
- * Picks a colour from the fixed palette, the same twelve keys core stores: for an avatar's
- * initials (a merchant's; a category's, later). A radio group: one tab stop, the arrow keys move
- * and choose, each swatch named for screen readers, the chosen one marked with a check. With
- * `automatic`, "Automatic" comes first, with a dot of the colour the name gets until one is
- * picked; choosing it gives `null`. Every colour keeps its initials at 4.5:1 or more in light and
- * in dark (`contrast.test.ts`). The swatches wrap on a narrow screen.
+ * One colour of the palette (`--palette-<key>`), the colours a user tints their own data with: a
+ * category's colour (#205), and whatever else the user colours (a merchant's avatar). Round
+ * swatches in a radio group: Tab reaches the group, the arrow keys move through it, each swatch is
+ * named by its colour's name. The chosen one is ringed and checked. With `noneLabel`, no colour
+ * comes first: a dashed swatch, or the colour it stands for (a child's parent's), faded. Every
+ * colour holds 4.5:1 or more on the page, the blocks, a muted band and its own tile, in both
+ * schemes ("Theme/Tokens" lists the figures).
  *
- * Motion: none of its own; a swatch's check shows at once.
+ * Motion: the ring and the check of the chosen swatch fade in 150 ms, ease-out. Cut under reduced
+ * motion.
  *
- * Don't: offer colours outside the palette, or use a colour for a money role or a state.
+ * Don't: build a colour picker of free colours, or tint with a colour outside the palette: the
+ * palette is what holds its contrast.
  */
 const meta = {
   title: "Forms/ColorSwatches",
-  component: ColorSwatches,
-  args: {
-    label: "Colour",
-    value: null,
-    automatic: automaticColorOf(NAME),
-    onChange: () => undefined,
-  },
-  render: (args) => <Choosing props={args} />,
-} satisfies Meta<typeof ColorSwatches>;
+  component: Choosing,
+  args: { initial: "green" },
+} satisfies Meta<typeof Choosing>;
 
 export default meta;
 
 type Story = StoryObj<typeof meta>;
 
-/** No colour picked yet: "Automatic" is chosen. */
 export const Default: Story = {};
 
-/** A colour picked. */
-export const Chosen: Story = { args: { value: "violet" } };
+/** No colour may be chosen: a dashed swatch first. */
+export const WithNone: Story = { args: { initial: null, noneLabel: "No colour" } };
 
-/** No automatic choice: a colour of the palette is always chosen. */
-export const WithoutAutomatic: Story = { args: { automatic: undefined, value: "teal" } };
+/** A child's choice: none stands for its parent's colour, shown faded. */
+export const ParentsColour: Story = {
+  args: { initial: null, noneLabel: "As Housing", noneColor: "blue" },
+};
 
-/** While the form is sent. */
-export const Disabled: Story = { args: { value: "amber", disabled: true } };
+export const Disabled: Story = { args: { disabled: true } };
+
+/** On dark whatever the page's scheme: every swatch, and its check, still reads. */
+export const OnDark: Story = {
+  render: (args) => (
+    <div data-color-scheme="dark" className="w-fit bg-background p-6">
+      <Choosing {...args} />
+    </div>
+  ),
+};
+
+export const French: Story = {
+  render: () => (
+    <InFrench>
+      <Choosing initial="teal" noneLabel="Sans couleur" />
+    </InFrench>
+  ),
+};
 
 export const Phone: Story = {
   globals: { viewport: { value: "mobile1", isRotated: false } },
-  args: { value: "green" },
-};
-
-/** On a French page: the automatic choice and the colours' names in French. */
-export const French: Story = {
-  args: { label: "Couleur" },
-  render: (args) => (
-    <InFrench>
-      <Choosing props={args} />
-    </InFrench>
-  ),
+  args: { noneLabel: "No colour" },
 };

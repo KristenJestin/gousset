@@ -2,8 +2,6 @@
 // token story measure the same declarations the browser gets, so the figures cannot drift from
 // the palette.
 
-import { PALETTE_COLORS } from "./palette";
-
 export type ColorScheme = "light" | "dark";
 
 /** A colour in linear sRGB, each channel clipped to 0..1. */
@@ -64,16 +62,18 @@ export const EDGE_PAIRS = [
   ["--popover-border", "--popover"],
 ] as const;
 
-/**
- * Each colour of the palette: the initials (`--palette-<colour>-foreground`) on the avatar's tile
- * (`--palette-<colour>`), 4.5:1 or more in both schemes like every text pair.
- */
-export const PALETTE_PAIRS = PALETTE_COLORS.map(
-  (color) => [`--palette-${color}-foreground`, `--palette-${color}`] as const,
-);
-
 /** The least contrast of a floating surface's edge, in both schemes. */
 export const EDGE_MINIMUM = 1.7;
+
+/**
+ * What a palette colour (`--palette-<key>`, a category's colour) is drawn on: the page, a block, a
+ * muted band (a hovered row), a floating surface (a list, a dialog); and its own tile, the colour
+ * at `PALETTE_TILE_ALPHA` over a block or a floating surface.
+ */
+export const PALETTE_SURFACES = ["--background", "--card", "--muted", "--popover"] as const;
+
+/** The opacity of a palette colour's tile (`bg-palette-<key>/15`). */
+export const PALETTE_TILE_ALPHA = 0.15;
 
 /** The colours of money, which the accent must never be read as. */
 export const MONEY_COLORS = [
@@ -158,8 +158,8 @@ function linearize(channel: string): number {
   return value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4;
 }
 
-/** OKLCH to linear sRGB (Björn Ottosson's matrices), each channel as it comes, unclipped. */
-function toUnclippedRgb(color: Oklch): LinearRgb {
+/** OKLCH to linear sRGB (Björn Ottosson's matrices), clipped to the sRGB gamut. */
+export function toLinearRgb(color: Oklch): LinearRgb {
   const radians = (color.h * Math.PI) / 180;
   const a = color.c * Math.cos(radians);
   const b = color.c * Math.sin(radians);
@@ -168,30 +168,10 @@ function toUnclippedRgb(color: Oklch): LinearRgb {
   const s = (color.l - 0.0894841775 * a - 1.291485548 * b) ** 3;
 
   return {
-    r: 4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s,
-    g: -1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s,
-    b: -0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s,
+    r: clip(4.0767416621 * l - 3.3077115913 * m + 0.2309699292 * s),
+    g: clip(-1.2684380046 * l + 2.6097574011 * m - 0.3413193965 * s),
+    b: clip(-0.0041960863 * l - 0.7034186147 * m + 1.707614701 * s),
   };
-}
-
-/** OKLCH to linear sRGB, clipped to the sRGB gamut. */
-export function toLinearRgb(color: Oklch): LinearRgb {
-  const rgb = toUnclippedRgb(color);
-
-  return { r: clip(rgb.r), g: clip(rgb.g), b: clip(rgb.b) };
-}
-
-/**
- * Whether a colour lies inside sRGB: outside, the browser maps it back by lowering its chroma
- * while the measure here clips each channel, and the two would not agree.
- */
-export function isInSrgb(color: Oklch): boolean {
-  const rgb = toUnclippedRgb(color);
-  const tolerance = 1e-4;
-
-  return [rgb.r, rgb.g, rgb.b].every(
-    (channel) => channel >= -tolerance && channel <= 1 + tolerance,
-  );
 }
 
 /** Linear sRGB to OKLCH, the inverse of `toLinearRgb`. */
@@ -218,6 +198,26 @@ export function hexToLinearRgb(hex: string): LinearRgb {
   }
 
   return { r: linearize(r), g: linearize(g), b: linearize(b) };
+}
+
+function encode(channel: number): number {
+  return channel <= 0.0031308 ? 12.92 * channel : 1.055 * channel ** (1 / 2.4) - 0.055;
+}
+
+function decode(channel: number): number {
+  return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+}
+
+/** `color` at `alpha` over `surface`, blended as the browser blends it: in encoded sRGB. */
+export function over(color: LinearRgb, surface: LinearRgb, alpha: number): LinearRgb {
+  const blend = (top: number, bottom: number) =>
+    decode(alpha * encode(top) + (1 - alpha) * encode(bottom));
+
+  return {
+    r: blend(color.r, surface.r),
+    g: blend(color.g, surface.g),
+    b: blend(color.b, surface.b),
+  };
 }
 
 /** WCAG relative luminance. */
@@ -251,14 +251,55 @@ export function measureTextPairs(css: string): ReadonlyArray<MeasuredPair> {
   return measurePairs(css, TEXT_PAIRS);
 }
 
-/** The contrast of each palette colour's initials on its tile, in both schemes. */
-export function measurePalettePairs(css: string): ReadonlyArray<MeasuredPair> {
-  return measurePairs(css, PALETTE_PAIRS);
-}
-
 /** The contrast of a floating surface's edge on every surface around it, in both schemes. */
 export function measureEdgePairs(css: string): ReadonlyArray<MeasuredPair> {
   return measurePairs(css, EDGE_PAIRS);
+}
+
+/** A palette colour's contrast on one surface, or on its tile there, in both schemes. */
+export type MeasuredSwatch = {
+  readonly color: string;
+  /** A surface's token, or "tile on" one. */
+  readonly on: string;
+  readonly light: number;
+  readonly dark: number;
+};
+
+/**
+ * The contrast of each palette colour `--palette-<key>` of `keys` on every surface it is drawn on,
+ * and on its own tile over a block and over a floating surface, in both schemes.
+ */
+export function measurePalette(
+  css: string,
+  keys: ReadonlyArray<string>,
+): ReadonlyArray<MeasuredSwatch> {
+  const declarations = readDeclarations(css);
+
+  const rgb = (token: string, scheme: ColorScheme) =>
+    toLinearRgb(resolveColor(declarations, token, scheme));
+
+  return keys.flatMap((key) => {
+    const color = `--palette-${key}`;
+
+    const plain = PALETTE_SURFACES.map((surface) => ({
+      color,
+      on: surface,
+      light: contrastRatio(rgb(color, "light"), rgb(surface, "light")),
+      dark: contrastRatio(rgb(color, "dark"), rgb(surface, "dark")),
+    }));
+
+    const tile = (["--card", "--popover"] as const).map((surface) => {
+      const ratio = (scheme: ColorScheme) =>
+        contrastRatio(
+          rgb(color, scheme),
+          over(rgb(color, scheme), rgb(surface, scheme), PALETTE_TILE_ALPHA),
+        );
+
+      return { color, on: `tile on ${surface}`, light: ratio("light"), dark: ratio("dark") };
+    });
+
+    return [...plain, ...tile];
+  });
 }
 
 function measurePairs(

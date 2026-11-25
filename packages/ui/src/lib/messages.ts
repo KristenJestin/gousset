@@ -2,11 +2,10 @@
 // the app's messages (`packages/i18n/messages`, keys `ui*`), written in English and translated
 // into French; this file only gathers them by component family, in one language. A text that
 // names the user's data is given by the page as a prop, never written here.
+import type { CategoryColorKey } from "@gousset/core/category-looks";
 import { m } from "@gousset/i18n/messages";
 import { getLocale } from "@gousset/i18n/runtime";
 import type { Locale } from "@gousset/i18n/runtime";
-
-import type { PaletteColor } from "./palette";
 
 /** Which plural form a count takes, in each language: built once. */
 const pluralRules = {
@@ -24,30 +23,27 @@ function uiMessages(locale: Locale) {
       errorMessage: m.uiErrorMessage({}, options),
       retry: m.uiRetry({}, options),
     },
+    /** Each palette colour's name, said for its swatch (#205). */
+    palette: {
+      red: m.uiColorRed({}, options),
+      orange: m.uiColorOrange({}, options),
+      amber: m.uiColorAmber({}, options),
+      olive: m.uiColorOlive({}, options),
+      green: m.uiColorGreen({}, options),
+      teal: m.uiColorTeal({}, options),
+      cyan: m.uiColorCyan({}, options),
+      blue: m.uiColorBlue({}, options),
+      indigo: m.uiColorIndigo({}, options),
+      violet: m.uiColorViolet({}, options),
+      pink: m.uiColorPink({}, options),
+      grey: m.uiColorGrey({}, options),
+    } satisfies { [Color in CategoryColorKey]: string },
     pieces: {
       uncategorised: m.uiUncategorised({}, options),
       month: m.uiMonth({}, options),
       previousMonth: m.uiPreviousMonth({}, options),
       nextMonth: m.uiNextMonth({}, options),
       remove: (name: string) => m.uiRemove({ name }, options),
-    },
-    /** `ColorSwatches`: each colour's name for screen readers, and the automatic choice. */
-    palette: {
-      automatic: m.uiPaletteAutomatic({}, options),
-      colors: {
-        gray: m.uiPaletteGray({}, options),
-        red: m.uiPaletteRed({}, options),
-        orange: m.uiPaletteOrange({}, options),
-        amber: m.uiPaletteAmber({}, options),
-        lime: m.uiPaletteLime({}, options),
-        green: m.uiPaletteGreen({}, options),
-        teal: m.uiPaletteTeal({}, options),
-        cyan: m.uiPaletteCyan({}, options),
-        blue: m.uiPaletteBlue({}, options),
-        indigo: m.uiPaletteIndigo({}, options),
-        violet: m.uiPaletteViolet({}, options),
-        pink: m.uiPalettePink({}, options),
-      } satisfies { [Color in PaletteColor]: string },
     },
     /** `LogoField`'s buttons. */
     logo: {

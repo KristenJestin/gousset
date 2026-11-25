@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 
+import { CATEGORY_COLORS } from "@gousset/core/category-looks";
 import { describe, expect, it } from "vite-plus/test";
 
 import {
@@ -8,17 +9,15 @@ import {
   contrastRatio,
   hexToLinearRgb,
   hueDistance,
-  isInSrgb,
   measureEdgePairs,
-  measurePalettePairs,
+  measurePalette,
   measureTextPairs,
-  PALETTE_PAIRS,
+  over,
   readDeclarations,
   resolveColor,
   toLinearRgb,
   toOklch,
 } from "./contrast";
-import { PALETTE_COLORS } from "./palette";
 import { THEME_COLORS } from "./theme-color";
 
 const css = readFileSync(new URL("../styles/globals.css", import.meta.url), "utf8");
@@ -34,6 +33,13 @@ describe("contrast", () => {
       6.41,
       2,
     );
+  });
+
+  it("blends a colour over a surface as the browser does, in encoded sRGB", () => {
+    // Black at half over white is #808080, not #bcbcbc, the mean of linear light.
+    const half = over(hexToLinearRgb("#000000"), hexToLinearRgb("#ffffff"), 0.5);
+
+    expect(half.r).toBeCloseTo(hexToLinearRgb("#808080").r, 2);
   });
 
   it("converts white and the brand violet to OKLCH and back", () => {
@@ -60,35 +66,6 @@ describe("the theme", () => {
     expect(pair.dark).toBeGreaterThanOrEqual(4.5);
   });
 
-  it.each(measurePalettePairs(css))(
-    "sets an avatar's initials ($text) on its colour at 4.5:1 or more",
-    (pair) => {
-      expect(pair.light).toBeGreaterThanOrEqual(4.5);
-      expect(pair.dark).toBeGreaterThanOrEqual(4.5);
-    },
-  );
-
-  it("measures a pair for every colour of the palette", () => {
-    expect(PALETTE_PAIRS.map(([, surface]) => surface)).toEqual(
-      PALETTE_COLORS.map((color) => `--palette-${color}`),
-    );
-  });
-
-  it.each(PALETTE_PAIRS.flat())(
-    "declares %s inside sRGB in both schemes, so the browser draws what is measured",
-    (token) => {
-      const declarations = readDeclarations(css);
-
-      expect(isInSrgb(resolveColor(declarations, token, "light"))).toBe(true);
-      expect(isInSrgb(resolveColor(declarations, token, "dark"))).toBe(true);
-    },
-  );
-
-  it("tells a colour outside sRGB", () => {
-    expect(isInSrgb({ l: 0.5, c: 0.05, h: 250 })).toBe(true);
-    expect(isInSrgb({ l: 0.9, c: 0.3, h: 250 })).toBe(false);
-  });
-
   it.each(measureEdgePairs(css))(
     "draws the edge of a floating surface ($text) on $surface at 1.7:1 or more",
     (pair) => {
@@ -96,6 +73,22 @@ describe("the theme", () => {
       expect(pair.dark).toBeGreaterThanOrEqual(EDGE_MINIMUM);
     },
   );
+
+  it.each(measurePalette(css, CATEGORY_COLORS))(
+    "draws the palette's $color on $on at 4.5:1 or more",
+    (swatch) => {
+      expect(swatch.light).toBeGreaterThanOrEqual(4.5);
+      expect(swatch.dark).toBeGreaterThanOrEqual(4.5);
+    },
+  );
+
+  it("declares one palette colour per key of the categories' palette, and no other", () => {
+    const declared = [...readDeclarations(css).keys()].flatMap((name) =>
+      name.startsWith("--palette-") ? [name.slice("--palette-".length)] : [],
+    );
+
+    expect(declared).toEqual([...CATEGORY_COLORS]);
+  });
 
   it("gives floating surfaces their own edge and shadow, not the blocks' border", () => {
     const declarations = readDeclarations(css);

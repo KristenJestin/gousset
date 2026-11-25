@@ -1,7 +1,8 @@
 import { useState } from "react";
 
+import { automaticColorOf } from "../lib/automatic-color";
 import { initialsOf } from "../lib/initials";
-import { PALETTE_TILE_CLASSES, automaticColorOf } from "../lib/palette";
+import { paletteTile } from "../lib/palette";
 import type { PaletteColor } from "../lib/palette";
 import { tileClasses } from "../lib/tile";
 import type { TileCorners, TileSize } from "../lib/tile";
@@ -21,8 +22,8 @@ export type AvatarProps = {
 };
 
 /**
- * A logo, or the name's initials on a colour of the palette: the one picked, else the name's
- * automatic one (stable, never random). Decorative: the name sits beside it, so it is hidden from
+ * A logo, or the name's initials in a colour of the palette on its tint (the palette's tile): the
+ * one picked, else the name's automatic one (stable, never random). Decorative: the name sits beside it, so it is hidden from
  * screen readers and the image's `alt` is empty. The image loads lazily; if it fails, the
  * initials take its place, also when it failed before the page hydrated (no `error` event comes
  * then: the image is read when it mounts).
@@ -42,7 +43,7 @@ export function Avatar({ name, src, color, size = "md", corners = "rounded" }: A
       aria-hidden="true"
       className={cn(
         tileClasses(size, corners),
-        showImage ? "bg-muted" : PALETTE_TILE_CLASSES[shown],
+        showImage ? "bg-muted" : paletteTile[shown],
         "font-medium",
       )}
     >

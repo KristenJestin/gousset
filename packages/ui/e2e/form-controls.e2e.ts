@@ -356,76 +356,68 @@ test.describe("DatePicker", () => {
 });
 
 test.describe("ColorSwatches", () => {
-  test("a radio group of the palette, Automatic first and chosen until a colour is", async ({
-    page,
-  }) => {
+  test("a radio group of the palette, each swatch named by its colour", async ({ page }) => {
     await page.goto(story("colorswatches", "default"));
+
+    const group = page.getByRole("radiogroup", { name: "Colour" });
+
+    await expect(group.getByRole("radio")).toHaveCount(12);
+    await expect(group.getByRole("radio").first()).toHaveAccessibleName("Red");
+    await expect(group.getByRole("radio").last()).toHaveAccessibleName("Grey");
+    await expect(group.getByRole("radio", { name: "Green" })).toBeChecked();
+  });
+
+  test("a swatch is chosen with the keyboard, and no colour gives none back", async ({ page }) => {
+    await page.goto(story("colorswatches", "with-none"));
 
     const group = page.getByRole("radiogroup", { name: "Colour" });
 
     await expect(group.getByRole("radio")).toHaveCount(13);
-    await expect(group.getByRole("radio").first()).toHaveAccessibleName("Automatic");
-    await expect(group.getByRole("radio", { name: "Automatic" })).toBeChecked();
-    await expect(group.getByRole("radio", { name: "Teal" })).toBeVisible();
-  });
+    await expect(group.getByRole("radio").first()).toHaveAccessibleName("No colour");
+    await expect(group.getByRole("radio", { name: "No colour" })).toBeChecked();
 
-  test("a swatch is chosen with the keyboard, and Automatic gives the colour back", async ({
-    page,
-  }) => {
-    await page.goto(story("colorswatches", "default"));
-
-    const group = page.getByRole("radiogroup", { name: "Colour" });
-
-    await group.getByRole("radio", { name: "Automatic" }).focus();
+    await group.getByRole("radio", { name: "No colour" }).focus();
     await page.keyboard.press("ArrowRight");
     await page.keyboard.press("ArrowRight");
-    await expect(group.getByRole("radio", { name: "Red" })).toBeChecked();
-    await expect(group.getByRole("radio", { name: "Red" })).toBeFocused();
-    await expect(page.getByTestId("chosen")).toHaveText("red");
-    await expect(page.locator('[data-slot="avatar"]')).toHaveAttribute("data-color", "red");
+    await expect(group.getByRole("radio", { name: "Orange" })).toBeChecked();
+    await expect(group.getByRole("radio", { name: "Orange" })).toBeFocused();
+    await expect(page.getByTestId("chosen")).toHaveText("Chosen: orange");
 
     await page.keyboard.press("ArrowLeft");
     await page.keyboard.press("ArrowLeft");
-    await expect(group.getByRole("radio", { name: "Automatic" })).toBeChecked();
-    await expect(page.getByTestId("chosen")).toHaveText("automatic");
+    await expect(group.getByRole("radio", { name: "No colour" })).toBeChecked();
+    await expect(page.getByTestId("chosen")).toHaveText("Chosen: none");
   });
 
   test("a swatch is chosen with a click, and only the chosen one shows its check", async ({
     page,
   }) => {
-    await page.goto(story("colorswatches", "chosen"));
+    await page.goto(story("colorswatches", "default"));
 
     const group = page.getByRole("radiogroup", { name: "Colour" });
 
-    await expect(group.getByRole("radio", { name: "Violet" })).toBeChecked();
+    const check = (name: string) => group.getByRole("radio", { name }).locator("span:has(> svg)");
+
     await group.getByRole("radio", { name: "Teal" }).click();
-    await expect(page.getByTestId("chosen")).toHaveText("teal");
-    await expect(group.locator("svg")).toHaveCount(1);
-    await expect(group.getByRole("radio", { name: "Teal" }).locator("svg")).toHaveCount(1);
-  });
-
-  test("without the automatic choice, only the palette is offered", async ({ page }) => {
-    await page.goto(story("colorswatches", "without-automatic"));
-
-    const group = page.getByRole("radiogroup", { name: "Colour" });
-
-    await expect(group.getByRole("radio")).toHaveCount(12);
-    await expect(group.getByRole("radio", { name: "Teal" })).toBeChecked();
+    await expect(page.getByTestId("chosen")).toHaveText("Chosen: teal");
+    await expect(group.getByRole("radio", { name: "Teal" })).toHaveAttribute("data-color", "teal");
+    await expect(check("Teal")).toHaveCSS("opacity", "1");
+    await expect(check("Green")).toHaveCSS("opacity", "0");
   });
 
   test("a disabled group cannot change", async ({ page }) => {
     await page.goto(story("colorswatches", "disabled"));
     await page.getByRole("radio", { name: "Red" }).click({ force: true });
-    await expect(page.getByRole("radio", { name: "Amber" })).toBeChecked();
+    await expect(page.getByRole("radio", { name: "Green" })).toBeChecked();
   });
 
   test("the colours are named in French on a French page", async ({ page }) => {
     await page.goto(story("colorswatches", "french"));
 
-    const group = page.getByRole("radiogroup", { name: "Couleur" });
+    const group = page.getByRole("radiogroup", { name: "Colour" });
 
-    await expect(group.getByRole("radio", { name: "Automatique" })).toBeChecked();
-    await expect(group.getByRole("radio", { name: "Bleu canard" })).toBeVisible();
+    await expect(group.getByRole("radio", { name: "Bleu canard" })).toBeChecked();
+    await expect(group.getByRole("radio", { name: "Sans couleur" })).toBeVisible();
   });
 
   test("on a phone, the swatches wrap and none goes past the edge", async ({ page }) => {

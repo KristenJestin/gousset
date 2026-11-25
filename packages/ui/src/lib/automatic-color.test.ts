@@ -1,25 +1,7 @@
 import { describe, expect, test } from "vite-plus/test";
 
-import { PALETTE_COLORS, automaticColorOf } from "./palette";
-
-describe("PALETTE_COLORS", () => {
-  test("holds the twelve colours core stores, in their order", () => {
-    expect(PALETTE_COLORS).toEqual([
-      "gray",
-      "red",
-      "orange",
-      "amber",
-      "lime",
-      "green",
-      "teal",
-      "cyan",
-      "blue",
-      "indigo",
-      "violet",
-      "pink",
-    ]);
-  });
-});
+import { automaticColorOf } from "./automatic-color";
+import { PALETTE_COLORS } from "./palette";
 
 describe("automaticColorOf", () => {
   test("is stable for a name, whatever its case and spaces", () => {

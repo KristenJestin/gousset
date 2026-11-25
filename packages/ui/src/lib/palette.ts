@@ -1,56 +1,78 @@
-// The fixed palette a user picks a colour from (a merchant's avatar; a category's, later): the
-// same keys, in the same order, as core stores (`packages/core/src/look.ts`). Each key is a pair
-// of theme tokens in `globals.css`, a tile's colour and the text set on it, `light-dark()` both,
-// 4.5:1 or more in each scheme (`contrast.test.ts`).
+import { CATEGORY_COLORS, isCategoryColor } from "@gousset/core/category-looks";
+import type { CategoryColorKey } from "@gousset/core/category-looks";
 
-export const PALETTE_COLORS = [
-  "gray",
-  "red",
-  "orange",
-  "amber",
-  "lime",
-  "green",
-  "teal",
-  "cyan",
-  "blue",
-  "indigo",
-  "violet",
-  "pink",
-] as const;
+// The palette a user tints their data with (a category's colour, #205), as Tailwind classes: one
+// literal class per key and use, so that Tailwind finds each one and no class is built at run
+// time. The colours are `--palette-<key>` in `globals.css`; their keys are packages/core's.
 
-export type PaletteColor = (typeof PALETTE_COLORS)[number];
+/** The palette's keys, in the order they are offered. */
+export const PALETTE_COLORS = CATEGORY_COLORS;
 
-/**
- * Each colour's tile and the text set on it, written out whole so that Tailwind sees every class
- * (a class built at run time would not exist).
- */
-export const PALETTE_TILE_CLASSES = {
-  gray: "bg-palette-gray text-palette-gray-foreground",
-  red: "bg-palette-red text-palette-red-foreground",
-  orange: "bg-palette-orange text-palette-orange-foreground",
-  amber: "bg-palette-amber text-palette-amber-foreground",
-  lime: "bg-palette-lime text-palette-lime-foreground",
-  green: "bg-palette-green text-palette-green-foreground",
-  teal: "bg-palette-teal text-palette-teal-foreground",
-  cyan: "bg-palette-cyan text-palette-cyan-foreground",
-  blue: "bg-palette-blue text-palette-blue-foreground",
-  indigo: "bg-palette-indigo text-palette-indigo-foreground",
-  violet: "bg-palette-violet text-palette-violet-foreground",
-  pink: "bg-palette-pink text-palette-pink-foreground",
+export type PaletteColor = CategoryColorKey;
+
+/** A small tile in the colour: its tint behind, the colour on it (an icon, initials). */
+export const paletteTile = {
+  red: "bg-palette-red/15 text-palette-red",
+  orange: "bg-palette-orange/15 text-palette-orange",
+  amber: "bg-palette-amber/15 text-palette-amber",
+  olive: "bg-palette-olive/15 text-palette-olive",
+  green: "bg-palette-green/15 text-palette-green",
+  teal: "bg-palette-teal/15 text-palette-teal",
+  cyan: "bg-palette-cyan/15 text-palette-cyan",
+  blue: "bg-palette-blue/15 text-palette-blue",
+  indigo: "bg-palette-indigo/15 text-palette-indigo",
+  violet: "bg-palette-violet/15 text-palette-violet",
+  pink: "bg-palette-pink/15 text-palette-pink",
+  grey: "bg-palette-grey/15 text-palette-grey",
 } as const satisfies { [Color in PaletteColor]: string };
 
-/**
- * The colour a name gets until the user picks one: a stable hash of the name (FNV-1a over its
- * code points, case and spaces ignored) over the palette, so the same name keeps the same colour
- * on every screen and every visit, without any randomness.
- */
-export function automaticColorOf(name: string): PaletteColor {
-  let hash = 0x81_1c_9d_c5;
+/** An icon drawn in the colour, on the page's own surface. */
+export const paletteText = {
+  red: "text-palette-red",
+  orange: "text-palette-orange",
+  amber: "text-palette-amber",
+  olive: "text-palette-olive",
+  green: "text-palette-green",
+  teal: "text-palette-teal",
+  cyan: "text-palette-cyan",
+  blue: "text-palette-blue",
+  indigo: "text-palette-indigo",
+  violet: "text-palette-violet",
+  pink: "text-palette-pink",
+  grey: "text-palette-grey",
+} as const satisfies { [Color in PaletteColor]: string };
 
-  for (const character of name.toLocaleLowerCase().replaceAll(/\s+/gu, "")) {
-    hash ^= character.codePointAt(0) ?? 0;
-    hash = Math.imul(hash, 0x01_00_01_93) >>> 0;
-  }
+/** An SVG shape filled with the colour: a bar, a part. */
+export const paletteFill = {
+  red: "fill-palette-red",
+  orange: "fill-palette-orange",
+  amber: "fill-palette-amber",
+  olive: "fill-palette-olive",
+  green: "fill-palette-green",
+  teal: "fill-palette-teal",
+  cyan: "fill-palette-cyan",
+  blue: "fill-palette-blue",
+  indigo: "fill-palette-indigo",
+  violet: "fill-palette-violet",
+  pink: "fill-palette-pink",
+  grey: "fill-palette-grey",
+} as const satisfies { [Color in PaletteColor]: string };
 
-  return PALETTE_COLORS[hash % PALETTE_COLORS.length] ?? "gray";
-}
+/** A box filled with the colour: a dot, a swatch. */
+export const paletteBackground = {
+  red: "bg-palette-red",
+  orange: "bg-palette-orange",
+  amber: "bg-palette-amber",
+  olive: "bg-palette-olive",
+  green: "bg-palette-green",
+  teal: "bg-palette-teal",
+  cyan: "bg-palette-cyan",
+  blue: "bg-palette-blue",
+  indigo: "bg-palette-indigo",
+  violet: "bg-palette-violet",
+  pink: "bg-palette-pink",
+  grey: "bg-palette-grey",
+} as const satisfies { [Color in PaletteColor]: string };
+
+/** Whether a stored key is one of the palette's. */
+export const isPaletteColor = isCategoryColor;

@@ -1,7 +1,7 @@
 import type { Page } from "@playwright/test";
 import { expect, test } from "@playwright/test";
 
-import { automaticColorOf } from "../src/lib/palette";
+import { automaticColorOf } from "../src/lib/automatic-color";
 
 const story = (id: string) => `/iframe.html?id=${id}&viewMode=story`;
 
@@ -83,6 +83,22 @@ async function tokenColor(page: Page, token: string) {
   }, token);
 }
 
+/** The background a class paints on the page now, as the browser computes it. */
+async function classBackground(page: Page, className: string) {
+  return page.evaluate((name) => {
+    const probe = document.createElement("span");
+
+    probe.className = name;
+    document.body.append(probe);
+
+    const color = getComputedStyle(probe).backgroundColor;
+
+    probe.remove();
+
+    return color;
+  }, className);
+}
+
 test.describe("Avatar", () => {
   test("shows the logo when it loads, hidden from screen readers", async ({ page }) => {
     await page.goto(story("data-avatar--with-logo"));
@@ -126,7 +142,7 @@ test.describe("Avatar", () => {
   });
 
   for (const scheme of ["light", "dark"] as const) {
-    test(`a picked colour is painted with its palette pair in ${scheme}`, async ({ page }) => {
+    test(`a picked colour is painted as the palette's tile in ${scheme}`, async ({ page }) => {
       await page.emulateMedia({ colorScheme: scheme });
       await page.goto(story("data-avatar--picked-color"));
 
@@ -134,8 +150,16 @@ test.describe("Avatar", () => {
 
       await expect(tile).toHaveText("CB");
       await expect(tile).toHaveAttribute("data-color", "violet");
-      await expect(tile).toHaveCSS("background-color", await tokenColor(page, "--palette-violet"));
-      await expect(tile).toHaveCSS("color", await tokenColor(page, "--palette-violet-foreground"));
+      // The initials in the colour itself, on its tint: not on the colour at full strength.
+      await expect(tile).toHaveCSS("color", await tokenColor(page, "--palette-violet"));
+      await expect(tile).toHaveCSS(
+        "background-color",
+        await classBackground(page, "bg-palette-violet/15"),
+      );
+      await expect(tile).not.toHaveCSS(
+        "background-color",
+        await tokenColor(page, "--palette-violet"),
+      );
     });
   }
 });

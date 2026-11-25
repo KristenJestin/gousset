@@ -38,14 +38,15 @@ const SHOTS: ReadonlyArray<Shot> = [
   { id: "forms-select--in-a-card", open: "click" },
   { id: "forms-combobox--chosen" },
   { id: "forms-namefield--typed" },
+  // The palette with its choice of none (#205).
+  { id: "forms-colorswatches--parents-colour" },
   { id: "forms-checkbox--checked" },
   { id: "forms-switch--on" },
   { id: "forms-datepicker--chosen" },
   { id: "forms-statusmessage--shown" },
   { id: "forms-formmessage--shown" },
   { id: "forms-file-button--default" },
-  // A merchant's look and labels, in its form (#204).
-  { id: "forms-colorswatches--chosen" },
+  // A merchant's logo and labels, in its form (#204).
   { id: "forms-logofield--with-logo" },
   { id: "forms-textlistfield--default" },
   { id: "navigation-tabs--with-icons" },

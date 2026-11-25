@@ -16,10 +16,10 @@ const BROKEN = "/made-up-logos/fuelstop.png";
 
 /**
  * A logo beside a name (a merchant's; a bank's, later). Without a logo, or when it fails to load,
- * the name's initials on a colour of the palette: the one the user picked, else the name's
- * automatic one (a hash, never random), so the same name keeps the same tile everywhere. Every
- * colour keeps its initials at 4.5:1 or more in light and in dark (`contrast.test.ts`, the
- * "Theme/Tokens" story). Decorative (`aria-hidden`, `alt=""`): the name sits beside it. The image
+ * the name's initials in a colour of the palette on its tint (the palette's tile): the one the user
+ * picked, else the name's automatic one (a hash, never random), so the same name keeps the same
+ * tile everywhere. Every colour holds 4.5:1 or more on its tile in light and in dark
+ * (`contrast.test.ts`, the "Theme/Tokens" story). Decorative (`aria-hidden`, `alt=""`): the name sits beside it. The image
  * loads lazily. Sizes match `CategoryIcon` (24, 32, 40 px).
  *
  * Motion: none of its own; it does not move.

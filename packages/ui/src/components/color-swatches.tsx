@@ -1,63 +1,90 @@
-import { Radio, RadioGroup, RadioIndicator } from "@ui-sdk/react/radio";
+import { Radio, RadioGroup } from "@ui-sdk/react/radio";
 import { useId } from "react";
 
 import { useUiMessages } from "../hooks/use-ui-messages";
 import { focusRing } from "../lib/form-classes";
-import { PALETTE_COLORS, PALETTE_TILE_CLASSES } from "../lib/palette";
+import { PALETTE_COLORS, paletteBackground } from "../lib/palette";
 import type { PaletteColor } from "../lib/palette";
 import { cn } from "../lib/utils";
 import { Icon } from "./icon";
 
-/** The radio of the automatic choice: no palette key is called that. */
-const AUTOMATIC = "automatic";
+/** The value of the choice of no colour. */
+const NONE = "none";
 
 export type ColorSwatchesProps = {
-  /** Names the group, shown above it, translated ("Colour"). */
+  /** What the colour is for, shown above the swatches and naming the group ("Colour"). */
   label: string;
-  /** The colour chosen; `null` is the automatic one, when it is offered. */
+  /** The colour chosen; null for none. */
   value: PaletteColor | null;
-  /** Called with the colour chosen, `null` for the automatic one. */
   onChange: (color: PaletteColor | null) => void;
   /**
-   * Offers "Automatic" first, with a dot of the colour it gives now (`automaticColorOf(name)`).
-   * Left out, there is no automatic choice: a colour of the palette is chosen.
+   * Offers no colour, first, with these words ("No colour", "As Housing" for a child that then
+   * takes its parent's). Left out: a colour must be chosen.
    */
-  automatic?: PaletteColor;
+  noneLabel?: string;
+  /** The colour the choice of none stands for (a child's parent's): its swatch shows it, faded. */
+  noneColor?: PaletteColor | null;
   disabled?: boolean;
 };
 
+const SWATCH = cn(
+  "group relative grid size-7 cursor-pointer place-items-center rounded-full",
+  "transition-shadow duration-150 ease-out",
+  "data-checked:ring-2 data-checked:ring-foreground data-checked:ring-offset-2 data-checked:ring-offset-popover",
+  "data-disabled:cursor-not-allowed data-disabled:opacity-50",
+  focusRing,
+);
+
 /**
- * Picks a colour from the fixed palette (`PALETTE_COLORS`): a radio group, one tab stop, the
- * arrow keys move and choose, each swatch named for screen readers ("Teal") and the chosen one
- * marked with a check, not by its colour alone. The swatches wrap on a narrow screen.
+ * The check on the chosen swatch: in the surface's colour on a colour (4.5:1 or more on every
+ * swatch), in the muted text's on the dashed swatch of no colour.
+ */
+function Check({ onColor }: { onColor: boolean }) {
+  return (
+    <span
+      className={cn(
+        "flex opacity-0 transition-opacity duration-150 group-data-checked:opacity-100",
+        onColor ? "text-card" : "text-muted-foreground",
+      )}
+    >
+      <Icon name="check" size="sm" />
+    </span>
+  );
+}
+
+/**
+ * One colour of the palette (`--palette-<key>`, docs/design.md, "Colour"), shown as round swatches
+ * in a radio group the arrow keys move through, each named for screen readers by its colour's
+ * name. The chosen one is ringed and checked. With `noneLabel`, no colour comes first: a dashed
+ * swatch, or `noneColor`'s, faded. Shared by whatever the user tints: a category's colour (#205),
+ * a merchant's avatar.
  *
- * Motion: none of its own; a swatch's check shows at once.
+ * Motion: the ring and the check of the chosen swatch fade in 150 ms (ease-out). Cut under reduced
+ * motion.
  */
 export function ColorSwatches({
   label,
   value,
   onChange,
-  automatic,
+  noneLabel,
+  noneColor = null,
   disabled = false,
 }: ColorSwatchesProps) {
-  const messages = useUiMessages().palette;
+  const names = useUiMessages().palette;
   const labelId = useId();
 
   return (
-    <div data-slot="color-swatches" className="flex flex-col gap-1.5">
-      <span
-        id={labelId}
-        className={cn("text-sm font-medium text-foreground", disabled && "opacity-50")}
-      >
+    <div className="flex flex-col gap-1.5" data-slot="color-swatches">
+      <span id={labelId} className="text-sm font-medium text-foreground">
         {label}
       </span>
       <RadioGroup
         aria-labelledby={labelId}
-        className="flex flex-wrap items-center gap-2"
-        value={value ?? (automatic === undefined ? null : AUTOMATIC)}
+        className="flex flex-wrap gap-2 p-1"
+        value={value ?? NONE}
         disabled={disabled}
         onValueChange={(next) => {
-          if (next === AUTOMATIC) {
+          if (next === NONE) {
             onChange(null);
 
             return;
@@ -70,44 +97,32 @@ export function ColorSwatches({
           }
         }}
       >
-        {automatic === undefined ? null : (
+        {noneLabel === undefined ? null : (
           <Radio
-            value={AUTOMATIC}
+            value={NONE}
+            aria-label={noneLabel}
+            title={noneLabel}
+            data-color="none"
             className={cn(
-              "inline-flex h-8 cursor-pointer items-center gap-2 rounded-full border border-input bg-card pr-3 pl-1.5 text-sm text-foreground",
-              "data-checked:border-foreground",
-              "data-disabled:cursor-not-allowed data-disabled:opacity-50",
-              focusRing,
+              SWATCH,
+              noneColor === null
+                ? "border border-dashed border-input"
+                : cn(paletteBackground[noneColor], "opacity-40 data-checked:opacity-100"),
             )}
           >
-            <span
-              className={cn(
-                "grid size-5 place-items-center rounded-full",
-                PALETTE_TILE_CLASSES[automatic],
-              )}
-            >
-              <RadioIndicator className="flex">
-                <Icon name="check" size="sm" />
-              </RadioIndicator>
-            </span>
-            {messages.automatic}
+            <Check onColor={noneColor !== null} />
           </Radio>
         )}
         {PALETTE_COLORS.map((color) => (
           <Radio
             key={color}
             value={color}
-            aria-label={messages.colors[color]}
-            className={cn(
-              "grid size-8 cursor-pointer place-items-center rounded-full",
-              PALETTE_TILE_CLASSES[color],
-              "data-disabled:cursor-not-allowed data-disabled:opacity-50",
-              focusRing,
-            )}
+            aria-label={names[color]}
+            title={names[color]}
+            data-color={color}
+            className={cn(SWATCH, paletteBackground[color])}
           >
-            <RadioIndicator className="flex">
-              <Icon name="check" size="md" />
-            </RadioIndicator>
+            <Check onColor />
           </Radio>
         ))}
       </RadioGroup>
