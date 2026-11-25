@@ -163,8 +163,29 @@ export const AccountId = Schema.String.check(
   Schema.isUUID(undefined, { message: "An account is named by its id, a UUID." }),
 );
 
+/** A category's id, as the database makes them. */
+export const CategoryId = Schema.String.check(
+  Schema.isUUID(undefined, { message: "A category is named by its id, a UUID." }),
+);
+
 /** An amount in minor units (cents for the euro): an integer, never a float. */
 export const MinorAmount = Schema.Int;
+
+/** The days a benefit card's issuer may take to book a top-up on the bank card (#28). */
+export const DEFAULT_TOP_UP_DAYS = 3;
+export const MAX_TOP_UP_DAYS = 7;
+
+export const TopUpDays = Schema.Int.check(
+  Schema.isBetween(
+    { minimum: 0, maximum: MAX_TOP_UP_DAYS },
+    { message: `A top-up's delay is a whole number of days, 0 to ${MAX_TOP_UP_DAYS}.` },
+  ),
+);
+
+/** A benefit card's daily cap, in minor units: more than nothing. */
+export const TopUpCap = Schema.Int.check(
+  Schema.isGreaterThan(0, { message: "A daily cap is more than nothing." }),
+);
 
 /**
  * An account's settings, as the create and edit forms send them. `settlesIntoAccountId` is a card's
@@ -181,6 +202,22 @@ export const AccountInput = Schema.Struct({
   settlesIntoAccountId: Schema.optional(AccountId),
   /** Read for a benefit account only. Left out: `oldest_first` on create, unchanged on edit. */
   creditOrder: Schema.optional(CreditOrder),
+  /**
+   * Read for an account kept by its balance only: the category its movement goes to (#31); `null`
+   * for none, each movement then going to its kind's fallback. Left out: none on create, unchanged
+   * on edit, so that an edit of other settings never clears it.
+   */
+  balanceCategoryId: Schema.optional(Schema.NullOr(CategoryId)),
+  /**
+   * Read for a benefit account only (#28): the days its issuer may take to book a top-up on the
+   * bank card. Left out: 3 on create, unchanged on edit.
+   */
+  topUpDays: Schema.optional(TopUpDays),
+  /**
+   * Read for a benefit account only: the most the card pays a day, in minor units; `null` when
+   * unknown. Left out: none on create, unchanged on edit.
+   */
+  topUpCapMinor: Schema.optional(Schema.NullOr(TopUpCap)),
 });
 
 export type AccountInput = typeof AccountInput.Type;

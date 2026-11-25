@@ -7,7 +7,8 @@ import { Button } from "./button";
 /**
  * An account's settings, read only (docs/wireframes, screen 7, block 4): its kind, tracking,
  * currency, when it was opened and its institution; a card also shows what it settles into, a
- * benefit account the order its credits are used in (`creditOrder`).
+ * benefit account the order its credits are used in (`creditOrder`), an account kept by its
+ * balance the category its movements go to (`balanceCategory`).
  * `action` holds the "Edit" button.
  *
  * Loading: `AccountSettingsSkeleton`, the same number of rows.
@@ -59,6 +60,18 @@ export const BenefitAccount: Story = {
     openedOn: "1 Sept. 2025",
     institution: "PerksHub",
     creditOrder: "Oldest first",
+  },
+};
+
+/** A benefit account kept by its balance: the category each noted balance's movement goes to. */
+export const KeptByBalance: Story = {
+  args: {
+    kind: "Benefit account",
+    tracking: "balance",
+    openedOn: "1 Sept. 2025",
+    institution: "PerksHub",
+    creditOrder: "Oldest first",
+    balanceCategory: "Leisure › Sport",
   },
 };
 

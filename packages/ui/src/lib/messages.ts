@@ -144,6 +144,8 @@ function uiMessages(locale: Locale) {
       settingsNotSet: m.uiAccountsSettingsNotSet({}, options),
       /** A benefit account's setting: the order its credits are used in. */
       settingsCreditOrder: m.uiAccountsSettingsCreditOrder({}, options),
+      /** An account kept by its balance: the category its movements go to. */
+      settingsBalanceCategory: m.uiAccountsSettingsBalanceCategory({}, options),
       /** `BenefitCredits`: a benefit account's credits and when they expire. */
       creditsTitle: m.uiAccountsCreditsTitle({}, options),
       creditsExpiring: m.uiAccountsCreditsExpiring({}, options),
@@ -186,6 +188,7 @@ function uiMessages(locale: Locale) {
         day: m.uiOperationsColumnDay({}, options),
         label: m.uiOperationsColumnLabel({}, options),
         account: m.uiOperationsColumnAccount({}, options),
+        category: m.uiOperationsColumnCategory({}, options),
         amount: m.uiOperationsColumnAmount({}, options),
       },
       /** How many lines match, the count already written: "1,234 lines". */
@@ -228,6 +231,243 @@ function uiMessages(locale: Locale) {
       importedOn: m.uiOperationsImportedOn({}, options),
       period: m.uiOperationsPeriod({}, options),
       enteredByHand: m.uiOperationsEnteredByHand({}, options),
+      /** `LineTransfer`: the transfer a line is a side of, or the lines that may be its other side. */
+      transferTo: (account: string) => m.uiOperationsTransferTo({ account }, options),
+      transferFrom: (account: string) => m.uiOperationsTransferFrom({ account }, options),
+      setAside: m.uiOperationsSetAside({}, options),
+      madeByApp: (account: string) => m.uiOperationsMadeByApp({ account }, options),
+      notATransfer: m.uiOperationsNotATransfer({}, options),
+      unpairTitle: m.uiOperationsUnpairTitle({}, options),
+      unpairDescription: m.uiOperationsUnpairDescription({}, options),
+      /** The other side was made by the app: unpairing deletes it. */
+      unpairDescriptionMade: (account: string) =>
+        m.uiOperationsUnpairDescriptionMade({ account }, options),
+      unpair: m.uiOperationsUnpair({}, options),
+      maybeTransfer: m.uiOperationsMaybeTransfer({}, options),
+      pairAsTransfer: m.uiOperationsPairAsTransfer({}, options),
+      pairDescription: m.uiOperationsPairDescription({}, options),
+      otherSide: m.uiOperationsOtherSide({}, options),
+      pair: m.uiOperationsPair({}, options),
+      /** `LineExpense`: an expense made of several lines, a split line, a refund proposed. */
+      oneExpense: m.uiOperationsOneExpense({}, options),
+      oneIncome: m.uiOperationsOneIncome({}, options),
+      payments: m.uiOperationsPayments({}, options),
+      refunds: m.uiOperationsRefunds({}, options),
+      netCost: m.uiOperationsNetCost({}, options),
+      netReceived: m.uiOperationsNetReceived({}, options),
+      /** The open line among its expense's parts: "This line: CB GREENMARKET". */
+      thisLine: (label: string) => m.uiOperationsThisLine({ label }, options),
+      separate: m.uiOperationsSeparate({}, options),
+      separateTitle: m.uiOperationsSeparateTitle({}, options),
+      separateDescription: m.uiOperationsSeparateDescription({}, options),
+      separateConfirm: m.uiOperationsSeparateConfirm({}, options),
+      splitAcross: (count: number) => m.uiOperationsSplitAcross({ count }, options),
+      maybeRefund: m.uiOperationsMaybeRefund({}, options),
+      maybeRefundDescription: m.uiOperationsMaybeRefundDescription({}, options),
+      /** Under a proposed expense: "Eating out · costs €56.00". */
+      proposalCosts: (category: string, amount: string) =>
+        m.uiOperationsProposalCosts({ category, amount }, options),
+      linkAsRefund: m.uiOperationsLinkAsRefund({}, options),
+      linkAsRefundTitle: m.uiOperationsLinkAsRefundTitle({}, options),
+      linkAsRefundDescription: (label: string) =>
+        m.uiOperationsLinkAsRefundDescription({ label }, options),
+      link: m.uiOperationsLink({}, options),
+      /** `LinkLine`: a line joins another line's expense. */
+      linkToExpense: m.uiOperationsLinkToExpense({}, options),
+      linkDescription: m.uiOperationsLinkDescription({}, options),
+      linkSearch: m.uiOperationsLinkSearch({}, options),
+      linkNone: m.uiOperationsLinkNone({}, options),
+      expenseLine: m.uiOperationsExpenseLine({}, options),
+      /** `LineFunds` and `LineFundedBy`: a works council refund and the expense it funds (#29). */
+      fundsExpense: m.uiOperationsFundsExpense({}, options),
+      fundsNone: m.uiOperationsFundsNone({}, options),
+      fundsKept: m.uiOperationsFundsKept({}, options),
+      fundExpense: m.uiOperationsFundExpense({}, options),
+      fundDescription: m.uiOperationsFundDescription({}, options),
+      fundNoCandidate: m.uiOperationsFundNoCandidate({}, options),
+      fundChoice: m.uiOperationsFundChoice({}, options),
+      fund: m.uiOperationsFund({}, options),
+      unfund: m.uiOperationsUnfund({}, options),
+      fundedBy: m.uiOperationsFundedBy({}, options),
+      fundedInAll: m.uiOperationsFundedInAll({}, options),
+      /** Under an expense's fundings: "It keeps its cost of €120.00." */
+      fundedCost: (amount: string) => m.uiOperationsFundedCost({ amount }, options),
+      /** `SplitLine`: a line split across categories. */
+      split: m.uiOperationsSplit({}, options),
+      splitTitle: m.uiOperationsSplitTitle({}, options),
+      splitDescription: (amount: string) => m.uiOperationsSplitDescription({ amount }, options),
+      shareCategory: (index: number) => m.uiOperationsShareCategory({ index }, options),
+      shareAmount: (index: number) => m.uiOperationsShareAmount({ index }, options),
+      shareRemove: (index: number) => m.uiOperationsShareRemove({ index }, options),
+      splitAdd: m.uiOperationsSplitAdd({}, options),
+      splitLeft: (amount: string) => m.uiOperationsSplitLeft({ amount }, options),
+      splitOver: (amount: string) => m.uiOperationsSplitOver({ amount }, options),
+      splitBalanced: m.uiOperationsSplitBalanced({}, options),
+      splitSave: m.uiOperationsSplitSave({}, options),
+      /** `LineTransferToAccount`: the line's other side is on an account kept by its balance. */
+      withBalanceAccount: m.uiOperationsWithBalanceAccount({}, options),
+      pairWithAccount: m.uiOperationsPairWithAccount({}, options),
+      pairWithAccountDescription: m.uiOperationsPairWithAccountDescription({}, options),
+      balanceAccount: m.uiOperationsBalanceAccount({}, options),
+      /** `LineMerchant`: who was paid, and the payment service it went through. */
+      merchant: m.uiOperationsMerchant({}, options),
+      merchantThrough: (intermediary: string) =>
+        m.uiOperationsMerchantThrough({ intermediary }, options),
+      merchantPaidThrough: (intermediary: string) =>
+        m.uiOperationsMerchantPaidThrough({ intermediary }, options),
+      merchantAsks: m.uiOperationsMerchantAsks({}, options),
+      merchantChoose: m.uiOperationsMerchantChoose({}, options),
+      merchantChange: m.uiOperationsMerchantChange({}, options),
+      /** The Change button's name, which says what it changes. */
+      merchantChangeLabel: m.uiOperationsMerchantChangeLabel({}, options),
+      merchantTitle: m.uiOperationsMerchantTitle({}, options),
+      merchantDescription: (intermediary: string) =>
+        m.uiOperationsMerchantDescription({ intermediary }, options),
+      merchantDescriptionPlain: m.uiOperationsMerchantDescriptionPlain({}, options),
+      merchantPlaceholder: m.uiOperationsMerchantPlaceholder({}, options),
+      merchantNew: m.uiOperationsMerchantNew({}, options),
+      merchantAssign: m.uiOperationsMerchantAssign({}, options),
+    },
+    categories: {
+      columns: {
+        category: m.uiCategoriesColumnCategory({}, options),
+        average: m.uiCategoriesColumnAverage({}, options),
+        benchmark: m.uiCategoriesColumnBenchmark({}, options),
+        lines: m.uiCategoriesColumnLines({}, options),
+      },
+      /** A row's ⋮ menu, unique on the page: "Actions on Groceries". */
+      actionsOf: (name: string) => m.uiCategoriesActionsOf({ name }, options),
+      /** In place of the average of a category with no line in six months. */
+      noAverage: m.uiCategoriesNoAverage({}, options),
+    },
+    rules: {
+      columns: {
+        if: m.uiRulesColumnIf({}, options),
+        then: m.uiRulesColumnThen({}, options),
+        used: m.uiRulesColumnUsed({}, options),
+      },
+      /** How many lines a rule classified, the count already written: "128 times". */
+      used: (count: number, written: string) =>
+        pluralRules[locale].select(count) === "one"
+          ? m.uiRulesUsedOne({ count: written }, options)
+          : m.uiRulesUsedOther({ count: written }, options),
+      off: m.uiRulesOff({}, options),
+      archived: m.uiRulesArchived({}, options),
+      moveUp: (place: number) => m.uiRulesMoveUp({ place }, options),
+      moveDown: (place: number) => m.uiRulesMoveDown({ place }, options),
+      /** Between two conditions of a sentence. */
+      and: m.uiRulesAnd({}, options),
+      /** A condition's field, as the editor offers it. */
+      fields: {
+        label: m.uiRulesFieldLabel({}, options),
+        account: m.uiRulesFieldAccount({}, options),
+        amount: m.uiRulesFieldAmount({}, options),
+        direction: m.uiRulesFieldDirection({}, options),
+        day: m.uiRulesFieldDay({}, options),
+        date: m.uiRulesFieldDate({}, options),
+      },
+      /** A condition's field, as a sentence says it ("label contains…"). */
+      says: {
+        label: m.uiRulesSaysLabel({}, options),
+        account: m.uiRulesSaysAccount({}, options),
+        amount: m.uiRulesSaysAmount({}, options),
+        day: m.uiRulesSaysDay({}, options),
+        date: m.uiRulesSaysDate({}, options),
+        out: m.uiRulesSaysOut({}, options),
+        in: m.uiRulesSaysIn({}, options),
+      },
+      operators: {
+        contains: m.uiRulesOpContains({}, options),
+        startsWith: m.uiRulesOpStartsWith({}, options),
+        endsWith: m.uiRulesOpEndsWith({}, options),
+        eq: m.uiRulesOpEq({}, options),
+        neq: m.uiRulesOpNeq({}, options),
+        notContains: m.uiRulesOpNotContains({}, options),
+        between: m.uiRulesOpBetween({}, options),
+        gte: m.uiRulesOpGte({}, options),
+        lte: m.uiRulesOpLte({}, options),
+        gt: m.uiRulesOpGt({}, options),
+        lt: m.uiRulesOpLt({}, options),
+        /** A date's: "on", "on or after", "on or before". */
+        on: m.uiRulesOpOn({}, options),
+        from: m.uiRulesOpFrom({}, options),
+        until: m.uiRulesOpUntil({}, options),
+      },
+      sentence: (field: string, operator: string, value: string) =>
+        m.uiRulesSentence({ field, operator, value }, options),
+      sentenceBetween: (field: string, from: string, to: string) =>
+        m.uiRulesSentenceBetween({ field, from, to }, options),
+      /** A piece of label, between quotes. */
+      quoted: (text: string) => m.uiRulesQuoted({ text }, options),
+      directionOut: m.uiRulesDirectionOut({}, options),
+      directionIn: m.uiRulesDirectionIn({}, options),
+      conditions: m.uiRulesConditions({}, options),
+      addCondition: m.uiRulesAddCondition({}, options),
+      addConditionLabel: m.uiRulesAddConditionLabel({}, options),
+      removeCondition: (index: number) => m.uiRulesRemoveCondition({ index }, options),
+      fieldOf: (index: number) => m.uiRulesFieldOf({ index }, options),
+      operatorOf: (index: number) => m.uiRulesOperatorOf({ index }, options),
+      valueOf: (index: number) => m.uiRulesValueOf({ index }, options),
+      fromOf: (index: number) => m.uiRulesFromOf({ index }, options),
+      toOf: (index: number) => m.uiRulesToOf({ index }, options),
+      chooseAccount: m.uiRulesChooseAccount({}, options),
+      maxConditions: (max: number) => m.uiRulesMaxConditions({ max }, options),
+      noCondition: m.uiRulesNoCondition({}, options),
+      if: m.uiRulesIf({}, options),
+      then: m.uiRulesThen({}, options),
+      merchant: m.uiRulesMerchant({}, options),
+      merchantPlaceholder: m.uiRulesMerchantPlaceholder({}, options),
+      merchantNone: m.uiRulesMerchantNone({}, options),
+      kind: m.uiRulesKind({}, options),
+      kindExpense: m.uiRulesKindExpense({}, options),
+      kindIncome: m.uiRulesKindIncome({}, options),
+      kindNone: m.uiRulesKindNone({}, options),
+      category: m.uiRulesCategory({}, options),
+      categoryPlaceholder: m.uiRulesCategoryPlaceholder({}, options),
+      categoryArchived: (category: string) => m.uiRulesCategoryArchived({ category }, options),
+      enabled: m.uiRulesEnabled({}, options),
+      enabledDescription: m.uiRulesEnabledDescription({}, options),
+      effect: m.uiRulesEffect({}, options),
+      /** What a rule would apply to, the counts already written. */
+      reach: (count: number, written: string) =>
+        pluralRules[locale].select(count) === "one"
+          ? m.uiRulesReachOne({ count: written }, options)
+          : m.uiRulesReachOther({ count: written }, options),
+      byHand: (count: number, written: string) =>
+        pluralRules[locale].select(count) === "one"
+          ? m.uiRulesByHandOne({ count: written }, options)
+          : m.uiRulesByHandOther({ count: written }, options),
+      reachIncomplete: m.uiRulesReachIncomplete({}, options),
+      reclassify: m.uiRulesReclassify({}, options),
+      apply: m.uiRulesApply({}, options),
+      applying: m.uiRulesApplying({}, options),
+      changed: (count: number, written: string) =>
+        pluralRules[locale].select(count) === "one"
+          ? m.uiRulesChangedOne({ count: written }, options)
+          : m.uiRulesChangedOther({ count: written }, options),
+      applyFailed: m.uiRulesApplyFailed({}, options),
+      saveFirst: m.uiRulesSaveFirst({}, options),
+      delete: m.uiRulesDelete({}, options),
+      deleteTitle: m.uiRulesDeleteTitle({}, options),
+      deleteDescription: m.uiRulesDeleteDescription({}, options),
+      save: m.uiRulesSave({}, options),
+      newTitle: m.uiRulesNewTitle({}, options),
+      titleOf: (place: number) => m.uiRulesTitleOf({ place }, options),
+      createdByCorrection: (day: string) => m.uiRulesCreatedByCorrection({ day }, options),
+      createdByHand: (day: string) => m.uiRulesCreatedByHand({ day }, options),
+      proposal: {
+        title: m.uiRulesProposalTitle({}, options),
+        description: (category: string) => m.uiRulesProposalDescription({ category }, options),
+        /** A rule that sets the merchant a line paid through an intermediary went to. */
+        descriptionMerchant: (merchant: string) =>
+          m.uiRulesProposalDescriptionMerchant({ merchant }, options),
+        label: m.uiRulesProposalLabel({}, options),
+        apply: (count: number, written: string) =>
+          pluralRules[locale].select(count) === "one"
+            ? m.uiRulesProposalApplyOne({ count: written }, options)
+            : m.uiRulesProposalApplyOther({ count: written }, options),
+        create: m.uiRulesProposalCreate({}, options),
+      },
     },
   };
 }

@@ -37,6 +37,8 @@ import { Route as AuthedSettingsRulesRouteImport } from './routes/_authed/settin
 import { Route as AuthedSettingsUsersRouteImport } from './routes/_authed/settings/users'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as ApiImportUploadsTokenRouteImport } from './routes/api/import-uploads/$token'
+import { Route as AuthedSettingsMerchantsIndexRouteImport } from './routes/_authed/settings/merchants/index'
+import { Route as AuthedSettingsMerchantsMerchantIdRouteImport } from './routes/_authed/settings/merchants/$merchantId'
 import { Route as ApiJobsJobIdEventsRouteImport } from './routes/api/jobs/$jobId/events'
 
 const AuthedRoute = AuthedRouteImport.update({
@@ -179,6 +181,18 @@ const ApiImportUploadsTokenRoute = ApiImportUploadsTokenRouteImport.update({
   path: '/api/import-uploads/$token',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthedSettingsMerchantsIndexRoute =
+  AuthedSettingsMerchantsIndexRouteImport.update({
+    id: '/merchants/',
+    path: '/merchants/',
+    getParentRoute: () => AuthedSettingsRouteRoute,
+  } as any)
+const AuthedSettingsMerchantsMerchantIdRoute =
+  AuthedSettingsMerchantsMerchantIdRouteImport.update({
+    id: '/merchants/$merchantId',
+    path: '/merchants/$merchantId',
+    getParentRoute: () => AuthedSettingsRouteRoute,
+  } as any)
 const ApiJobsJobIdEventsRoute = ApiJobsJobIdEventsRouteImport.update({
   id: '/api/jobs/$jobId/events',
   path: '/api/jobs/$jobId/events',
@@ -213,7 +227,9 @@ export interface FileRoutesByFullPath {
   '/api/import-uploads/$token': typeof ApiImportUploadsTokenRoute
   '/accounts/': typeof AuthedAccountsIndexRoute
   '/settings/': typeof AuthedSettingsIndexRoute
+  '/settings/merchants/$merchantId': typeof AuthedSettingsMerchantsMerchantIdRoute
   '/api/jobs/$jobId/events': typeof ApiJobsJobIdEventsRoute
+  '/settings/merchants/': typeof AuthedSettingsMerchantsIndexRoute
 }
 export interface FileRoutesByTo {
   '/health': typeof HealthRoute
@@ -242,7 +258,9 @@ export interface FileRoutesByTo {
   '/api/import-uploads/$token': typeof ApiImportUploadsTokenRoute
   '/accounts': typeof AuthedAccountsIndexRoute
   '/settings': typeof AuthedSettingsIndexRoute
+  '/settings/merchants/$merchantId': typeof AuthedSettingsMerchantsMerchantIdRoute
   '/api/jobs/$jobId/events': typeof ApiJobsJobIdEventsRoute
+  '/settings/merchants': typeof AuthedSettingsMerchantsIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -274,7 +292,9 @@ export interface FileRoutesById {
   '/api/import-uploads/$token': typeof ApiImportUploadsTokenRoute
   '/_authed/accounts/': typeof AuthedAccountsIndexRoute
   '/_authed/settings/': typeof AuthedSettingsIndexRoute
+  '/_authed/settings/merchants/$merchantId': typeof AuthedSettingsMerchantsMerchantIdRoute
   '/api/jobs/$jobId/events': typeof ApiJobsJobIdEventsRoute
+  '/_authed/settings/merchants/': typeof AuthedSettingsMerchantsIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -306,7 +326,9 @@ export interface FileRouteTypes {
     | '/api/import-uploads/$token'
     | '/accounts/'
     | '/settings/'
+    | '/settings/merchants/$merchantId'
     | '/api/jobs/$jobId/events'
+    | '/settings/merchants/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/health'
@@ -335,7 +357,9 @@ export interface FileRouteTypes {
     | '/api/import-uploads/$token'
     | '/accounts'
     | '/settings'
+    | '/settings/merchants/$merchantId'
     | '/api/jobs/$jobId/events'
+    | '/settings/merchants'
   id:
     | '__root__'
     | '/_authed'
@@ -366,7 +390,9 @@ export interface FileRouteTypes {
     | '/api/import-uploads/$token'
     | '/_authed/accounts/'
     | '/_authed/settings/'
+    | '/_authed/settings/merchants/$merchantId'
     | '/api/jobs/$jobId/events'
+    | '/_authed/settings/merchants/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -582,6 +608,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiImportUploadsTokenRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_authed/settings/merchants/': {
+      id: '/_authed/settings/merchants/'
+      path: '/merchants'
+      fullPath: '/settings/merchants/'
+      preLoaderRoute: typeof AuthedSettingsMerchantsIndexRouteImport
+      parentRoute: typeof AuthedSettingsRouteRoute
+    }
+    '/_authed/settings/merchants/$merchantId': {
+      id: '/_authed/settings/merchants/$merchantId'
+      path: '/merchants/$merchantId'
+      fullPath: '/settings/merchants/$merchantId'
+      preLoaderRoute: typeof AuthedSettingsMerchantsMerchantIdRouteImport
+      parentRoute: typeof AuthedSettingsRouteRoute
+    }
     '/api/jobs/$jobId/events': {
       id: '/api/jobs/$jobId/events'
       path: '/api/jobs/$jobId/events'
@@ -599,6 +639,8 @@ interface AuthedSettingsRouteRouteChildren {
   AuthedSettingsRulesRoute: typeof AuthedSettingsRulesRoute
   AuthedSettingsUsersRoute: typeof AuthedSettingsUsersRoute
   AuthedSettingsIndexRoute: typeof AuthedSettingsIndexRoute
+  AuthedSettingsMerchantsMerchantIdRoute: typeof AuthedSettingsMerchantsMerchantIdRoute
+  AuthedSettingsMerchantsIndexRoute: typeof AuthedSettingsMerchantsIndexRoute
 }
 
 const AuthedSettingsRouteRouteChildren: AuthedSettingsRouteRouteChildren = {
@@ -608,6 +650,9 @@ const AuthedSettingsRouteRouteChildren: AuthedSettingsRouteRouteChildren = {
   AuthedSettingsRulesRoute: AuthedSettingsRulesRoute,
   AuthedSettingsUsersRoute: AuthedSettingsUsersRoute,
   AuthedSettingsIndexRoute: AuthedSettingsIndexRoute,
+  AuthedSettingsMerchantsMerchantIdRoute:
+    AuthedSettingsMerchantsMerchantIdRoute,
+  AuthedSettingsMerchantsIndexRoute: AuthedSettingsMerchantsIndexRoute,
 }
 
 const AuthedSettingsRouteRouteWithChildren =

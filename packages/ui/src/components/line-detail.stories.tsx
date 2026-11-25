@@ -2,7 +2,10 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import type { ReactNode } from "react";
 
 import { InFrench } from "../stories/in-french";
+import { CategoryPicker } from "./category-picker";
 import { LineDetail, LineDetailSkeleton } from "./line-detail";
+import { LineMerchant } from "./line-merchant";
+import { LineTransfer } from "./line-transfer";
 
 const eur = (minor: number) => ({ minor, currency: "EUR" });
 
@@ -15,8 +18,11 @@ function Column({ children }: { children: ReactNode }) {
  * One line's detail (screen 2, block 3): its label and amount, its account, the day it was booked
  * and its value date, the bank's raw label (fixed-width) with its memo and counterparty, the
  * original amount of a line in another currency, its expiry, "To review: looks like …" on a held
- * line, and the import it came from or "Entered by hand". Every value comes worded from the page;
- * the close button or Escape closes it.
+ * line, and the import it came from, "Entered by hand" or where the app made it from (`origin`);
+ * first, a counted line's category, through
+ * the control the page gives (`category`, a `CategoryPicker`), and who it paid (`merchant`, a
+ * `LineMerchant`). Every value comes worded from the
+ * page; the close button or Escape closes it.
  *
  * Loading: `LineDetailSkeleton`, its title, amount and rows at the same heights.
  *
@@ -28,8 +34,8 @@ function Column({ children }: { children: ReactNode }) {
  * nothing in it scales. The sheet rises from its edge in 300 ms and goes back down in 200 ms.
  * Drawn by the server, it stays still. Cut under reduced motion.
  *
- * Don't: put it over the list on a wide screen (it hides the amounts), or edit the line in it:
- * v0.2's lines are read only.
+ * Don't: put it over the list on a wide screen (it hides the amounts), or edit the line's own
+ * figures in it: the bank's are read only; only its category and merchant are chosen.
  */
 const meta = {
   title: "Operations/LineDetail",
@@ -64,6 +70,83 @@ type Story = StoryObj<typeof meta>;
 /** A line from an imported statement. */
 export const Imported: Story = {};
 
+/** A counted line: its category first, chosen with a `CategoryPicker`. */
+export const WithCategory: Story = {
+  args: {
+    category: (
+      <CategoryPicker
+        label="Category"
+        placeholder="Search a category"
+        size="sm"
+        categories={[
+          {
+            id: "groceries",
+            name: "Groceries",
+            children: [{ id: "supermarket", name: "Supermarket" }],
+          },
+          { id: "other", name: "Other" },
+        ]}
+        value="supermarket"
+        onValueChange={() => undefined}
+      />
+    ),
+  },
+};
+
+const categories = [
+  { id: "leisure", name: "Leisure", children: [{ id: "games", name: "Games" }] },
+  { id: "other", name: "Other" },
+];
+
+/**
+ * Paid through PayPal, its merchant not known yet: under its category, the merchant row asks who
+ * was really paid (`LineMerchant`).
+ */
+export const WithMerchant: Story = {
+  args: {
+    label: "CB PAYPAL *PIXELPLAY 21/10",
+    rawLabel: "CB PAYPAL *PIXELPLAY 21/10 CARTE 4971",
+    amount: eur(-1499),
+    memo: undefined,
+    counterparty: undefined,
+    category: (
+      <CategoryPicker
+        label="Category"
+        placeholder="Search a category"
+        size="sm"
+        categories={categories}
+        value="games"
+        onValueChange={() => undefined}
+      />
+    ),
+    merchant: (
+      <LineMerchant
+        merchant={null}
+        intermediary="PayPal"
+        asks
+        merchants={["Greenmarket", "Pixelplay", "Streamly"]}
+        onAssign={() => Promise.resolve(true)}
+      />
+    ),
+  },
+};
+
+/** Its merchant assigned by hand: "Pixelplay, through PayPal", which can be changed. */
+export const WithAssignedMerchant: Story = {
+  args: {
+    ...WithMerchant.args,
+    merchant: (
+      <LineMerchant
+        merchant="Pixelplay"
+        intermediary="PayPal"
+        asks={false}
+        merchants={["Greenmarket", "Pixelplay", "Streamly"]}
+        onAssign={() => Promise.resolve(true)}
+      />
+    ),
+  },
+};
+
 /** A line held for review: the line it looks like comes first. */
 export const ToReview: Story = {
   args: { looksLike: "21 Oct., MEALCARD GREENMARKET RIVERTON, −€28.00" },
@@ -94,9 +177,54 @@ export const Expiring: Story = {
   },
 };
 
+/** A side of a transfer: its other side, one click away (`LineTransfer`). */
+export const Transfer: Story = {
+  args: {
+    label: "SEPA TRF TO LIVRET A",
+    rawLabel: "SEPA TRF TO LIVRET A REF 2026-10",
+    amount: eur(-25_000),
+    memo: undefined,
+    counterparty: undefined,
+    transfer: (
+      <LineTransfer
+        direction="out"
+        other={{
+          id: "line-1",
+          day: "Oct 10",
+          label: "SEPA TRF TO LIVRET A",
+          account: "Livret A",
+          amount: eur(25_000),
+        }}
+        setAside
+        onOpenOther={() => undefined}
+        onUnpair={() => Promise.resolve()}
+      />
+    ),
+  },
+};
+
 /** Entered by hand: no import, no value date. */
 export const ByHand: Story = {
   args: { importedFrom: undefined, valueOn: undefined, memo: undefined, counterparty: undefined },
+};
+
+/**
+ * The movement a noted balance makes on an account kept by its balance: named by the page, with no
+ * raw label, and made from the balance rather than entered by hand.
+ */
+export const BalanceMovement: Story = {
+  args: {
+    label: "Balance movement",
+    rawLabel: "",
+    account: "PerksHub",
+    amount: eur(-9000),
+    bookedOn: "31 October 2026",
+    valueOn: undefined,
+    memo: undefined,
+    counterparty: undefined,
+    importedFrom: undefined,
+    origin: "Made from a noted balance",
+  },
 };
 
 export const Loading: Story = {

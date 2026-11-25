@@ -197,6 +197,9 @@ test("both protocol revisions list the same tools in the same order", async ({
     "accounts",
     "data",
     "lines",
+    "merchants",
+    "categories",
+    "rules",
     "e2e_probe",
   ]);
   expect(modernTools).toEqual(legacyTools);

@@ -6,6 +6,7 @@ import { E2E_PROBE_VARIABLE, e2eProbeTool } from "@gousset/mcp/tools/e2e-probe";
 import { createFileRoute } from "@tanstack/react-router";
 import { Config, Effect, Option, Schema } from "effect";
 
+import { UserCurrency } from "../functions/currency";
 import { isDoorOpen, mcpAddress, mcpResource, notFound } from "../lib/mcp-door";
 import { mcpCallObserver } from "../lib/mcp-telemetry";
 import { auth, db, runCore } from "../services";
@@ -98,10 +99,14 @@ function protect(resource: string) {
 
       const token = (request.headers.get("authorization") ?? "").replace(/^Bearer /i, "");
 
+      // Read as the app's role with the grant above, never in the user's transaction: the user's
+      // role has no grant on auth_user. Euros if the column holds no code Gousset knows.
+      const currency = Schema.is(UserCurrency)(grant.currency) ? grant.currency : "EUR";
+
       return endpoint(
         request,
         authInfoOf(
-          { userId, canWrite, grantId: grant.id, origin: mcpAddress.origin },
+          { userId, canWrite, currency, grantId: grant.id, origin: mcpAddress.origin },
           token,
           clientId,
         ),

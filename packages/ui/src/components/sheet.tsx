@@ -70,6 +70,8 @@ export type SheetProps = {
   trigger?: ReactElement;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
+  /** Its width on a wide screen: `md` 440 px, `lg` 512 px for a form of rows (a rule). */
+  size?: "md" | "lg";
   /**
    * False: a sheet mounted open shows in its place at once, its backdrop too, instead of sliding
    * in; it still leaves by sliding out. For a sheet the server's page already meant to show (a
@@ -101,6 +103,7 @@ export function Sheet({
   trigger,
   open,
   onOpenChange,
+  size = "md",
   appear = true,
 }: SheetProps) {
   const wide = useWideScreen();
@@ -145,7 +148,11 @@ export function Sheet({
       <DialogContent
         initialFocus={onSubmit === undefined ? "content" : FIRST_FIELD}
         data-side={wide ? "right" : "bottom"}
-        className={cn(sheetClasses, !appear && "data-starting-style:translate-none!")}
+        className={cn(
+          sheetClasses,
+          size === "lg" && "md:w-lg",
+          !appear && "data-starting-style:translate-none!",
+        )}
       >
         <SheetHeader title={title} description={description} sending={sending} />
         {onSubmit === undefined ? (

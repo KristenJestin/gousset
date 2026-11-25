@@ -17,6 +17,7 @@
     "@playwright/test": "1.65.1",
     "@types/node": "^26.6.6",
     "@types/pg": "^8.23.1",
+    "axe-core": "4.14.1",
     "drizzle-kit": "1.0.0-rc.6",
     "drizzle-orm": "catalog:",
     "effect": "catalog:",

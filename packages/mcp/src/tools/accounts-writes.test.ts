@@ -1,12 +1,18 @@
 import {
   DataExport,
+  Expenses,
   ImportProfiles,
   Imports,
+  Merchants,
+  RuleJobs,
+  Transfers,
   memoryAccountStore,
+  memoryCategoryStore,
   memoryId,
   memoryLineStore,
 } from "@gousset/core";
 import type { AccountRecord, MemoryLine, MemoryRows } from "@gousset/core";
+import { UserData } from "@gousset/db/user-data";
 import { Effect, Layer, ManagedRuntime, Schema } from "effect";
 import { TestClock } from "effect/testing";
 import { afterEach, describe, expect, test } from "vite-plus/test";
@@ -20,8 +26,8 @@ import { accountsTool } from "./accounts";
 // made-up accounts that keeps what each call writes for the next one.
 
 const TODAY = "2026-11-23";
-const writer: Caller = { userId: "ada", canWrite: true };
-const reader: Caller = { userId: "ada", canWrite: false };
+const writer: Caller = { userId: "ada", canWrite: true, currency: "EUR" };
+const reader: Caller = { userId: "ada", canWrite: false, currency: "EUR" };
 
 type Arguments = { readonly [key: string]: string | number };
 
@@ -39,6 +45,9 @@ function account(name: string, change: Partial<AccountRecord> = {}): AccountReco
     closedOn: null,
     settlesIntoAccountId: null,
     creditOrder: "oldest_first",
+    balanceCategoryId: null,
+    topUpDays: 3,
+    topUpCapMinor: null,
     ...change,
   };
 }
@@ -82,11 +91,18 @@ async function connect(rows: MemoryRows = ROWS, caller: Caller = writer) {
   const runtime = ManagedRuntime.make(
     Layer.mergeAll(
       memoryAccountStore(new Map([[caller.userId, rows]])),
-      // accounts never reaches the imports, the export nor the line search.
+      // accounts never reaches the imports, the export, the merchants, the transfers nor the rules;
+      // it searches the lines for a noted balance's movement (#31), and reads the categories.
       memoryLineStore(),
+      memoryCategoryStore(),
       Layer.mock(Imports, {}),
       Layer.mock(ImportProfiles, {}),
       Layer.mock(DataExport, {}),
+      Layer.mock(Merchants, {}),
+      Layer.mock(Transfers, {}),
+      Layer.mock(Expenses, {}),
+      Layer.mock(UserData, {}),
+      Layer.mock(RuleJobs, {}),
       TestClock.layer(),
     ),
   );
@@ -327,6 +343,48 @@ describe("accounts edit", () => {
     expect(edited.text).toContain("Credits are used soonest expiry first, as the issuer does.");
   });
 
+  test('sets a benefit account\'s top-up days and daily cap, "" for no cap (#28)', async () => {
+    const call = await connect();
+
+    const edited = await call({
+      action: "edit",
+      name: "MealCard",
+      top_up_days: 1,
+      top_up_cap: "25.00",
+    });
+
+    expect(edited.isError, edited.text).toBe(false);
+    expect(edited.text).toContain("within 1 day joins the purchase; a daily cap of 25.00 EUR.");
+
+    const cleared = await call({ action: "edit", name: "MealCard", top_up_cap: "" });
+
+    expect(cleared.text).toContain("within 1 day joins the purchase; no daily cap known.");
+  });
+
+  test("asks for the daily cap again when a new currency has other decimals", async () => {
+    const call = await connect();
+
+    await call({ action: "edit", name: "MealCard", top_up_cap: "25.00" });
+
+    expectRefusal(
+      await call({ action: "edit", name: "MealCard", currency: "JPY" }),
+      "give top_up_cap in JPY with the new currency",
+    );
+  });
+
+  test("refuses a daily cap of nothing, or no amount", async () => {
+    const call = await connect();
+
+    expectRefusal(
+      await call({ action: "edit", name: "MealCard", top_up_cap: "0" }),
+      "A daily cap is more than nothing.",
+    );
+    expectRefusal(
+      await call({ action: "edit", name: "MealCard", top_up_cap: "lots" }),
+      "top_up_cap",
+    );
+  });
+
   test("changes the currency of an account without a line yet", async () => {
     const call = await connect();
     const edited = await call({ action: "edit", name: "Savings", currency: "CHF" });
@@ -420,6 +478,23 @@ describe("accounts edit", () => {
     );
   });
 
+  test('sets the category of an account kept by its balance by name, "" for none (#31)', async () => {
+    const call = await connect();
+    const cleared = await call({ action: "edit", name: "Mortgage", category: "" });
+
+    expect(cleared.isError, cleared.text).toBe(false);
+    expect(cleared.text).toContain(
+      "No category is chosen for them: each goes to its kind's fallback.",
+    );
+
+    // The categories tool lists the names an account's category is chosen from.
+    const refused = await call({ action: "edit", name: "Mortgage", category: "Nowhere" });
+
+    expect(refused.isError, refused.text).toBe(true);
+    expect(refused.text).toMatch(/A valid call: categories \{"action":"list"\}$/);
+    expect(refused.text.length).toBeLessThan(2000);
+  });
+
   test("refuses a name two accounts share, until the institution tells them apart", async () => {
     const call = await connect({
       accounts: [account("Livret A"), account("Livret A", { institution: "Northbank" })],
@@ -507,7 +582,7 @@ describe("accounts note_balance", () => {
 
     expect(noted.isError, noted.text).toBe(false);
     expect(noted.text).toContain(
-      "Noted -149,500.00 EUR as the balance of Mortgage (Riverside Bank) at the end of 2026-10-31.",
+      "Noted: Mortgage (Riverside Bank) held -149,500.00 EUR at the end of 2026-10-31.",
     );
     expect((await call({ action: "list" })).text).toContain(
       "- Mortgage (Riverside Bank), loan, kept by a noted balance: -149,500.00 EUR;",

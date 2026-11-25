@@ -1,10 +1,16 @@
 import {
   DataExport,
+  Expenses,
   ImportProfiles,
   Imports,
+  Merchants,
+  RuleJobs,
+  Transfers,
   memoryAccountStore,
+  memoryCategoryStore,
   memoryLineStore,
 } from "@gousset/core";
+import { UserData } from "@gousset/db/user-data";
 import { Effect, Layer } from "effect";
 import { describe, expect, test } from "vite-plus/test";
 
@@ -25,14 +31,20 @@ async function month(args: { [key: string]: string }) {
             Layer.mergeAll(
               memoryAccountStore(),
               memoryLineStore(),
+              memoryCategoryStore(),
               Layer.mock(Imports, {}),
               Layer.mock(ImportProfiles, {}),
               Layer.mock(DataExport, {}),
+              Layer.mock(Merchants, {}),
+              Layer.mock(Transfers, {}),
+              Layer.mock(Expenses, {}),
+              Layer.mock(UserData, {}),
+              Layer.mock(RuleJobs, {}),
             ),
           ),
         ),
     },
-    { userId: "ada", canWrite: false },
+    { userId: "ada", canWrite: false, currency: "EUR" },
     "2025-11-25",
   );
 

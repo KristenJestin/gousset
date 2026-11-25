@@ -1,12 +1,18 @@
 import {
   DataExport,
   EXPORT_TABLES,
+  Expenses,
   ImportProfiles,
   Imports,
+  Merchants,
+  RuleJobs,
+  Transfers,
   memoryAccountStore,
+  memoryCategoryStore,
   memoryLineStore,
 } from "@gousset/core";
 import type { ExportContents } from "@gousset/core";
+import { UserData } from "@gousset/db/user-data";
 import { Effect, Layer } from "effect";
 import { describe, expect, test } from "vite-plus/test";
 
@@ -14,7 +20,7 @@ import { goussetServer } from "../gousset";
 import { callText, connectInProcess } from "../test-client";
 import type { Caller } from "../tool";
 
-const reader: Caller = { userId: "ada", canWrite: false };
+const reader: Caller = { userId: "ada", canWrite: false, currency: "EUR" };
 
 /** What the user's export holds: a row count per table, and the files imported. */
 const CONTENTS: ExportContents = {
@@ -50,9 +56,15 @@ async function connect(contents: Effect.Effect<ExportContents> = Effect.succeed(
             Layer.mergeAll(
               memoryAccountStore(),
               memoryLineStore(),
+              memoryCategoryStore(),
               Layer.mock(Imports, {}),
               Layer.mock(ImportProfiles, {}),
               exportLayer,
+              Layer.mock(Merchants, {}),
+              Layer.mock(Transfers, {}),
+              Layer.mock(Expenses, {}),
+              Layer.mock(UserData, {}),
+              Layer.mock(RuleJobs, {}),
             ),
           ),
         ),

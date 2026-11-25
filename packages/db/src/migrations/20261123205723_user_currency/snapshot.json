@@ -1,0 +1,37 @@
+{
+  "type": "diff",
+  "version": "10",
+  "dialect": "postgres",
+  "id": "c692fa7d-765f-4a05-8292-bad8ecbdb214",
+  "prevIds": ["b84c8d6f-51ae-47b3-bf60-2947e3cba141"],
+  "footprints": [
+    {
+      "statementType": "add_column",
+      "statementTarget": ["column", "public", "auth_user", "currency"],
+      "writes": [
+        "s|col|public.auth_user.currency",
+        "n|col|public.auth_user.currency",
+        "e|col|public.auth_user.currency"
+      ],
+      "reads": ["n|tbl|public.auth_user", "n|sch|public"]
+    }
+  ],
+  "deltas": [
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "auth_user",
+        "name": "currency",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "'EUR'",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    }
+  ]
+}

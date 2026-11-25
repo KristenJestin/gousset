@@ -4,7 +4,7 @@ import { Button } from "./button";
 import { Card } from "./card";
 import { EmptyState } from "./empty-state";
 import { ErrorState } from "./error-state";
-import { List, ListItem, ListSkeleton } from "./list";
+import { List, ListItem, ListLinkItem, ListSkeleton } from "./list";
 
 /**
  * A list of people or things, one per row, with short tags (the users of an installation). It
@@ -97,6 +97,23 @@ export const Phone: Story = {
             </Button>
           }
         />
+      </List>
+    </Card>
+  ),
+};
+
+/**
+ * Rows that open what they name (a merchant's page): the whole row is the link, a chevron at its
+ * end. Its background shows on hover in 150 ms; cut under reduced motion. Not for a row that also
+ * has an action of its own.
+ */
+export const Links: Story = {
+  render: () => (
+    <Card title="Merchants">
+      <List label="Merchants">
+        <ListLinkItem href="#greenmarket" title="Greenmarket" description="3 labels" />
+        <ListLinkItem href="#harbor-books" title="Harbor Books" description="1 label" />
+        <ListLinkItem href="#streamly" title="Streamly" description="2 labels" />
       </List>
     </Card>
   ),

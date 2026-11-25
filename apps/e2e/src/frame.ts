@@ -8,6 +8,49 @@ export function onPhone(page: Page): boolean {
   return (page.viewportSize()?.width ?? SIDEBAR_FROM) < SIDEBAR_FROM;
 }
 
+/**
+ * A line's open detail on the operations page, named by its label: a panel beside the list on a
+ * wide screen, a sheet (a dialog) over it on a phone (#128).
+ */
+export function lineDetail(page: Page, label: string): Locator {
+  return page.getByRole(onPhone(page) ? "dialog" : "region", { name: label });
+}
+
+/**
+ * How much of a line's open detail the eye gets (#158): its content's opacity, its own times every
+ * parent's, and how many animations or transitions with an end are still under way on it or on a
+ * parent (a loop, like a loader's, never ends and is not counted).
+ */
+export type DetailSight = { opacity: number; moving: number };
+
+/**
+ * What `lineDetail` shows of its content: the panel's block that fades on a wide screen, the
+ * sheet's body on a phone.
+ */
+export async function detailSight(detail: Locator): Promise<DetailSight> {
+  return detail
+    .locator('[data-slot="line-detail-content"], [data-slot="line-detail"]')
+    .first()
+    .evaluate((content) => {
+      let opacity = 1;
+      let moving = 0;
+
+      for (let node: Element | null = content; node !== null; node = node.parentElement) {
+        opacity *= Number(getComputedStyle(node).opacity);
+        moving += node
+          .getAnimations()
+          .filter(
+            (animation) =>
+              Number.isFinite(animation.effect?.getComputedTiming().endTime) &&
+              animation.playState !== "finished" &&
+              animation.playState !== "idle",
+          ).length;
+      }
+
+      return { opacity, moving };
+    });
+}
+
 /** What the eye gets of a text: whether it is drawn on top, and its contrast with what is under. */
 export type TextSight = { onTop: boolean; contrast: number };
 

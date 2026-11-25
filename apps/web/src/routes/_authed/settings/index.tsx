@@ -4,12 +4,14 @@ import type { Locale } from "@gousset/i18n/runtime";
 import { Block } from "@gousset/ui/components/app-shell";
 import { Button } from "@gousset/ui/components/button";
 import { ColorSchemePicker } from "@gousset/ui/components/color-scheme-picker";
+import { Combobox } from "@gousset/ui/components/combobox";
 import { FormMessage } from "@gousset/ui/components/form-message";
 import { List, ListItem } from "@gousset/ui/components/list";
 import { Actions } from "@gousset/ui/components/screen";
 import { SegmentedChoice } from "@gousset/ui/components/segmented-choice";
 import { StatusMessage } from "@gousset/ui/components/status-message";
 import { Switch } from "@gousset/ui/components/switch";
+import { CURRENCY_CODES } from "@gousset/ui/lib/money";
 import { useFormatForDisplay } from "@tanstack/react-hotkeys";
 import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { useState } from "react";
@@ -20,6 +22,7 @@ import {
   revokeConnectedClient,
   setMcpDoor,
 } from "@/functions/mcp";
+import { setUserCurrency } from "@/functions/currency";
 import { setSingleKeyShortcuts } from "@/functions/shortcuts";
 import { errorMessage } from "@/i18n/messages";
 import { colorSchemeKept, keepColorScheme } from "@/lib/account-color-scheme";
@@ -69,6 +72,7 @@ function GeneralSettings() {
           onChange={(scheme) => void keepColorScheme(scheme)}
         />
       </Block>
+      <CurrencySettings />
       <ShortcutSettings />
       <McpSettings />
     </>
@@ -116,6 +120,58 @@ function ShortcutSettings() {
         onCheckedChange={(next) => void turn(next)}
       />
       <FormMessage message={error} />
+    </Block>
+  );
+}
+
+/** Every currency the user can keep, by its ISO 4217 code alone. */
+const CURRENCY_ITEMS = CURRENCY_CODES.map((code) => ({ value: code, label: code }));
+
+/**
+ * The user's currency, kept on the account: the one their set benchmarks are written in. As the
+ * shortcuts' switch, the choice shows at once and is saved without a button, one save at a time; a
+ * refusal puts back what the account holds, and says so.
+ */
+function CurrencySettings() {
+  const router = useRouter();
+  const { user } = Route.useRouteContext();
+  const [saving, setSaving] = useState<string>();
+  const [error, setError] = useState<string>();
+
+  async function choose(next: string) {
+    if (saving !== undefined || next === user.currency) {
+      return;
+    }
+
+    setSaving(next);
+
+    const refusal = await refusalOf(() => setUserCurrency({ data: { currency: next } }));
+
+    setError(refusal === undefined ? undefined : errorMessage(refusal));
+
+    if (refusal === undefined) {
+      // The root reads the account again: every page writes set benchmarks in the new currency.
+      await router.invalidate();
+    }
+
+    setSaving(undefined);
+  }
+
+  return (
+    <Block title={m.settingsCurrencyTitle()} description={m.settingsCurrencyDescription()}>
+      <Combobox
+        label={m.settingsCurrencyTitle()}
+        hideLabel
+        placeholder={m.fieldCurrencyPlaceholder()}
+        items={CURRENCY_ITEMS}
+        value={saving ?? user.currency}
+        onValueChange={(next) => {
+          if (next !== null) {
+            void choose(next);
+          }
+        }}
+        error={error}
+      />
     </Block>
   );
 }

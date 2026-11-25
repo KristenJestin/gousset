@@ -66,6 +66,9 @@ function accountOf(name: string, currency = "EUR"): AccountRecord {
     closedOn: null,
     settlesIntoAccountId: null,
     creditOrder: "oldest_first",
+    balanceCategoryId: null,
+    topUpDays: 3,
+    topUpCapMinor: null,
   };
 }
 
@@ -409,6 +412,9 @@ describe("showLine", () => {
       amount: { minor: -4200, currency: "EUR" },
       account: { id: euro.id, name: "Current account", institution: "Riverside Bank" },
       toReview: true,
+      // Held, it has no entry yet: no category.
+      category: null,
+      fromBalance: false,
       originalAmount: { minor: -4500, currency: "USD" },
       counterpartyIban: "FR7699999000010001234567809",
       expiresOn: null,
@@ -430,6 +436,18 @@ describe("showLine", () => {
     });
   });
 
+  test("gives the category of a line's one entry, with its parent's name", async () => {
+    const classified = line(euro.id, "2026-11-04", -380, "CB LE FOURNIL", {
+      category: { id: "bakery", name: "Bakery", parentName: "Groceries", kind: "expense" },
+    });
+
+    const page = await inOrder({ ...rows, lines: [classified] }, searchLines(ADA, {}));
+
+    expect(page.lines.map((each) => each.category)).toEqual([
+      { id: "bakery", name: "Bakery", parentName: "Groceries", kind: "expense" },
+    ]);
+  });
+
   const tagOf = (owner: string, lineId: string) =>
     inOrder(
       rows,
@@ -445,5 +463,64 @@ describe("showLine", () => {
     expect(await tagOf(ADA, discarded.id)).toBe("LineNotFound");
     expect(await tagOf(BOB, original.id)).toBe("LineNotFound");
     expect(await tagOf(ADA, "not-an-id")).toBe("LineNotFound");
+  });
+});
+
+describe("searchLines: to review", () => {
+  const current = accountOf("Current account");
+  const savings = accountOf("Savings");
+  const other = accountOf("Other savings");
+  const out = line(current.id, "2026-11-10", -5000, "SEPA TRF TO SAVINGS");
+  const held = line(current.id, "2026-11-12", -4200, "CB GREENMARKET", { state: "held" });
+  const cafe = line(current.id, "2026-11-13", -250);
+
+  const rows: MemoryLineRows = {
+    accounts: [current, savings, other],
+    lines: [
+      out,
+      line(savings.id, "2026-11-11", 5000, "SEPA TRF RECEIVED"),
+      line(other.id, "2026-11-09", 5000, "SEPA TRF RECEIVED"),
+      held,
+      cafe,
+    ],
+  };
+
+  test("lists the held lines and those whose transfer's other side waits for the user's choice", async () => {
+    const page = await search(rows, { toReview: true });
+
+    // The two lines in may each be out's other side: out has two candidates, each of them one.
+    expect(page.lines.map((each) => each.id)).toEqual([held.id, out.id]);
+    expect(page.lines.every((each) => each.toReview)).toBe(true);
+    expect(page.total).toBe(2);
+  });
+
+  test("leaves them among the counted lines too", async () => {
+    const page = await search(rows, {});
+
+    expect(page.lines.map((each) => each.id)).toContain(out.id);
+    expect(page.lines.find((each) => each.id === out.id)?.toReview).toBe(false);
+  });
+
+  test("lists a counted line its import left in its kind's fallback, not one the user classified", async () => {
+    const current = accountOf("Classified current");
+    const fallback = { id: memoryId(), name: "Other", parentName: null, kind: "expense" as const };
+
+    const unclassified = line(current.id, "2026-11-12", -3150, "CB HILLSIDE PHARMACY", {
+      category: fallback,
+      classifiedBy: "default",
+    });
+
+    const classified = line(current.id, "2026-11-13", -4200, "CB GREENMARKET", {
+      category: { ...fallback, id: memoryId(), name: "Groceries" },
+      classifiedBy: "user",
+    });
+
+    const page = await search(
+      { accounts: [current], lines: [unclassified, classified] },
+      { toReview: true },
+    );
+
+    expect(page.lines.map((each) => [each.id, each.toReview])).toEqual([[unclassified.id, true]]);
+    expect(page.total).toBe(1);
   });
 });

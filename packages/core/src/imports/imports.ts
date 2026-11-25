@@ -22,6 +22,9 @@ import type { CsvFile, CsvProfile, CsvUnsure } from "@gousset/import";
 import { and, asc, desc, eq, gt, inArray, isNull, lt, ne, or, sql } from "drizzle-orm";
 import { Context, Effect, Layer, Option } from "effect";
 
+import { remakeBalanceLines } from "../balance-lines";
+import { takeCategoryTurn } from "../category-turn";
+import { entriesForLines, paymentsOfLines, settleEntries } from "../entries";
 import type {
   FileUploadPartRefused,
   ImportUnavailable,
@@ -41,6 +44,7 @@ import {
   TooManyFileUploads,
   UnknownFormat,
 } from "./errors";
+import { unpairForUndo } from "../transfers/pair-lines";
 import { resolveProfile } from "./profiles";
 import { findSummary, isId, selectSummaries, summaryOf } from "./rows";
 import type { ImportJobInput } from "./run";
@@ -135,6 +139,8 @@ export type Undone = {
   readonly undone: ImportSummary;
   readonly linesRemoved: number;
   readonly linesGivenBack: number;
+  /** The transfers its lines were a side of, undone with them. */
+  readonly transfersRemoved: number;
   readonly laterOverlapping: number;
   readonly months: ReadonlyArray<string>;
 };
@@ -749,6 +755,10 @@ export const importsLayer = Layer.effect(
           const statuses = yield* statusesFor(owner, found, UNDOABLE);
 
           const counts = yield* inTransaction(owner, async (transaction) => {
+            // The user's turn before any row lock: the movements of the accounts kept by their
+            // balance are made again below, as an import's end makes them (`../balance-lines`).
+            await takeCategoryTurn(transaction, owner);
+
             // First, and under the row's lock: a job still writing waits, then finds it undone.
             const [claimed] = await transaction
               .update(statementImport)
@@ -776,15 +786,35 @@ export const importsLayer = Layer.effect(
                   or(isNull(statementLine.importId), ne(statementLine.importId, importId)),
                 ),
               )
-              .returning({ bookedOn: statementLine.bookedOn });
+              .returning({ id: statementLine.id, bookedOn: statementLine.bookedOn });
+
+            // Its lines' transfers go with them (#26), and the sides the app made for them.
+            const unpaired = await unpairForUndo(transaction, own);
+
+            // The lines' parts go with them (`on delete cascade`); an entry left with no payment
+            // goes too, and one whose refunds now pass its payments loses them, the lines of those
+            // refunds getting their own entry back (#27); and a line
+            // counted again, or no side of a transfer any more, gets its entry, in this same
+            // transaction. An expense whose day came from a payment undone happens on its next.
+            const gone = await paymentsOfLines(transaction, eq(statementLine.importId, importId));
 
             const removed = await transaction
               .delete(statementLine)
               .where(eq(statementLine.importId, importId))
               .returning({ bookedOn: statementLine.bookedOn });
 
+            await settleEntries(transaction, owner, gone);
+
+            await entriesForLines(transaction, owner, [
+              ...givenBack.map((line) => line.id),
+              ...unpaired.others,
+            ]);
+
             await transaction.delete(accountBalance).where(eq(accountBalance.importId, importId));
             await transaction.delete(importFile).where(eq(importFile.importId, importId));
+
+            // Its lines, and the sides the app made for them, counted in the movements (#31).
+            await remakeBalanceLines(transaction, owner);
 
             const overlapping =
               found.account === null || found.periodFrom === null || found.periodTo === null
@@ -809,6 +839,7 @@ export const importsLayer = Layer.effect(
             return {
               linesRemoved: removed.length,
               linesGivenBack: givenBack.length,
+              transfersRemoved: unpaired.removed,
               laterOverlapping: overlapping.length,
               months: [...months].toSorted(),
             };

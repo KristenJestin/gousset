@@ -51,6 +51,10 @@ export const authUser = pgTable("auth_user", {
   // The shortcuts made of one character, `?` among them: on by default, turned off in the settings
   // (WCAG 2.2, 2.1.4 Character Key Shortcuts).
   singleKeyShortcuts: boolean("single_key_shortcuts").default(true).notNull(),
+  // The user's currency, ISO 4217 (v0.3): the one fixed benchmarks are written in, and a new
+  // account's by default. Its check (three capital letters) lives in its migration
+  // (migrations/*_user_currency), since `pnpm auth:generate` rewrites this file.
+  currency: text("currency").default("EUR").notNull(),
 });
 
 export const authSession = pgTable(

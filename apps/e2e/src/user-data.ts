@@ -4,7 +4,8 @@ import { relations } from "@gousset/db/relations";
 import { randomUUID } from "node:crypto";
 
 import { authOauthClient, authOauthConsent, authUser } from "@gousset/db/schema/auth";
-import { importProfile, importUpload } from "@gousset/db/schema/ledger";
+import { importProfile, importUpload, merchant, rule } from "@gousset/db/schema/ledger";
+import { recogniseMerchants } from "@gousset/core";
 import { seedMadeUpData } from "@gousset/db/seed";
 import type { SeedSummary } from "@gousset/db/seed";
 import { UserData, userDataLayer } from "@gousset/db/user-data";
@@ -19,7 +20,7 @@ import { databaseUrl } from "./database";
 export type UserTable = { name: string; key: string; rows: string };
 
 /**
- * Every table holding a user's rows (docs/data-model.md, v0.2). A table added later must be listed
+ * Every table holding a user's rows (docs/data-model.md, v0.2 and v0.3). A table added later must be listed
  * here: the isolation spec fails until it is, then tries every rule on it.
  */
 export const ACCOUNTS: UserTable = { name: "account", key: "id", rows: "accounts" };
@@ -32,6 +33,13 @@ export const USER_TABLES: ReadonlyArray<UserTable> = [
   { name: "import_file", key: "import_id", rows: "imported files" },
   { name: "import_profile", key: "id", rows: "import profiles" },
   { name: "import_upload", key: "id", rows: "file uploads" },
+  { name: "category", key: "id", rows: "categories" },
+  { name: "entry", key: "id", rows: "entries" },
+  { name: "entry_part", key: "id", rows: "entry parts" },
+  { name: "transfer", key: "id", rows: "transfers" },
+  { name: "merchant", key: "id", rows: "merchants" },
+  { name: "merchant_alias", key: "id", rows: "merchants' cleaned labels" },
+  { name: "rule", key: "id", rows: "rules" },
 ];
 
 /**
@@ -242,8 +250,9 @@ export function openUserData(database: string) {
     },
 
     /**
-     * The made-up data of two months, and a CSV profile, as `owner`'s rows. A user who already has
-     * accounts is left as they are, profile included.
+     * The made-up data of two months, and a CSV profile, as `owner`'s rows, with the merchants of its
+     * lines recognised as the app does at boot (the seed writes lines, not merchants). A user who
+     * already has accounts is left as they are, profile included.
      */
     seed: (owner: string): Promise<SeedSummary> =>
       Effect.runPromise(
@@ -264,6 +273,27 @@ export function openUserData(database: string) {
                   definition: { version: 1 },
                 }),
               );
+
+              yield* recogniseMerchants(owner);
+
+              // A rule of the user's (#25), naming one of their merchants, so that every table
+              // holds a row of theirs.
+              yield* userData.transaction(owner, async (each) => {
+                const [shop] = await each.select({ id: merchant.id }).from(merchant).limit(1);
+
+                await each.insert(rule).values({
+                  userId: owner,
+                  conditions: {
+                    kind: "group",
+                    combinator: "and",
+                    children: [
+                      { kind: "rule", field: "label", operator: "contains", value: "MADE-UP" },
+                    ],
+                  },
+                  setMerchantId: shop?.id ?? null,
+                  createdFrom: "user",
+                });
+              });
             }),
           ),
           Effect.provide(layer),
@@ -423,6 +453,14 @@ export function openUserData(database: string) {
         order by ordinal_position`);
 
       return decodeKeys(result).rows.map((row) => row.key);
+    },
+
+    /**
+     * Deletes a user as the harness's own role, the tables' owner: Gousset has no route for it, and
+     * the deletion cascades into every table of theirs, as docs/data-model.md says it must.
+     */
+    async deleteUser(id: string): Promise<void> {
+      await catalog.delete(authUser).where(eq(authUser.id, id));
     },
 
     /** What `gousset_user` may do beyond its grants: nothing, or row-level security means nothing. */

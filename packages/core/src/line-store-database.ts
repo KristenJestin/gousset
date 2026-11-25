@@ -1,12 +1,21 @@
-import { account, statementImport, statementLine } from "@gousset/db/schema/ledger";
+import {
+  account,
+  entry,
+  entryPart,
+  statementImport,
+  statementLine,
+} from "@gousset/db/schema/ledger";
 import { UserData } from "@gousset/db/user-data";
 import type { UserTransaction } from "@gousset/db/user-data";
-import { and, desc, eq, gte, inArray, lte, or, sql } from "drizzle-orm";
+import { and, desc, eq, exists, gte, inArray, lte, or, sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { Effect, Layer } from "effect";
 
+import { categoriesOfLines } from "./category-store-database";
+import type { LineCategory } from "./category-store";
 import { LineStore } from "./line-store";
+import { linesWithSeveralCandidates } from "./transfers/pair-lines";
 import type { FoundLine, FoundLineDetail, LineQuery } from "./line-store";
 
 // Every line of the user's, through `UserData` only (docs/data-model.md, "Ownership and
@@ -61,9 +70,28 @@ function amountCondition(
   return or(...each) ?? sql`false`;
 }
 
+/**
+ * A line whose entry is still where the import put it, in its kind's fallback: to classify. A noted
+ * balance's movement in its account's own category is not (#31): the user chose that category.
+ */
+const byDefault = exists(
+  sql`(select 1 from ${entryPart} inner join ${entry} on ${entry.id} = ${entryPart.entryId} where ${entryPart.lineId} = ${statementLine.id} and ${entry.classifiedBy} = 'default' and not (${statementLine.source} = 'balance' and coalesce(${entry.categoryId} = (select ${account.balanceCategoryId} from ${account} where ${account.id} = ${statementLine.accountId}), false)))`,
+);
+
 function conditions(accounts: ReadonlyArray<AccountColumns>, query: LineQuery) {
+  const ofState = eq(statementLine.state, query.state);
+  const ids = query.alsoLineIds.filter(isId);
+
   return and(
-    eq(statementLine.state, query.state),
+    query.state === "held"
+      ? or(
+          ofState,
+          and(
+            eq(statementLine.state, "counted"),
+            ids.length > 0 ? or(inArray(statementLine.id, ids), byDefault) : byDefault,
+          ),
+        )
+      : ofState,
     lte(statementLine.bookedOn, query.to),
     query.from === null ? undefined : gte(statementLine.bookedOn, query.from),
     query.accountId === null ? undefined : eq(statementLine.accountId, query.accountId),
@@ -85,6 +113,7 @@ const lineColumns = {
   accountName: account.name,
   institution: account.institution,
   currency: account.currency,
+  source: statementLine.source,
 };
 
 type LineColumns = {
@@ -100,10 +129,11 @@ type LineColumns = {
   readonly accountName: string;
   readonly institution: string | null;
   readonly currency: string;
+  readonly source: "import" | "manual" | "balance" | "counterpart";
 };
 
-/** A row of `lineColumns`; a discarded one is never asked for. */
-function found(row: LineColumns): FoundLine {
+/** A row of `lineColumns`, with its category; a discarded one is never asked for. */
+function found(row: LineColumns, category: LineCategory | null): FoundLine {
   return {
     id: row.id,
     bookedOn: row.bookedOn,
@@ -119,6 +149,8 @@ function found(row: LineColumns): FoundLine {
       institution: row.institution,
       currency: row.currency,
     },
+    category,
+    fromBalance: row.source === "balance",
   };
 }
 
@@ -159,6 +191,7 @@ async function search(transaction: UserTransaction, query: LineQuery) {
       amountMinor: statementLine.amountMinor,
       state: statementLine.state,
       accountId: statementLine.accountId,
+      source: statementLine.source,
     })
     .from(statementLine)
     .where(and(where, older))
@@ -170,6 +203,11 @@ async function search(transaction: UserTransaction, query: LineQuery) {
     .from(statementLine)
     .where(where);
 
+  const categories = await categoriesOfLines(
+    transaction,
+    rows.map((row) => row.id),
+  );
+
   // Every line's account is the user's (a composite foreign key) and so among those just read.
   const lines = rows.flatMap((row) => {
     const owned = accountOf.get(row.accountId);
@@ -177,12 +215,15 @@ async function search(transaction: UserTransaction, query: LineQuery) {
     return owned === undefined
       ? []
       : [
-          found({
-            ...row,
-            accountName: owned.name,
-            institution: owned.institution,
-            currency: owned.currency,
-          }),
+          found(
+            {
+              ...row,
+              accountName: owned.name,
+              institution: owned.institution,
+              currency: owned.currency,
+            },
+            categories.get(row.id) ?? null,
+          ),
         ];
   });
 
@@ -204,7 +245,6 @@ async function show(
   const [row] = await transaction
     .select({
       ...lineColumns,
-      source: statementLine.source,
       originalAmountMinor: statementLine.originalAmountMinor,
       originalCurrency: statementLine.originalCurrency,
       counterpartyIban: statementLine.counterpartyIban,
@@ -238,8 +278,10 @@ async function show(
     return undefined;
   }
 
+  const categories = await categoriesOfLines(transaction, [row.id]);
+
   return {
-    ...found(row),
+    ...found(row, categories.get(row.id) ?? null),
     source: row.source,
     originalAmountMinor: row.originalAmountMinor,
     originalCurrency: row.originalCurrency,
@@ -288,6 +330,9 @@ export const DatabaseLineStore = Layer.effect(
 
       show: (owner, lineId, day) =>
         userData.transaction(owner, (transaction) => show(transaction, lineId, day)),
+
+      severalCandidates: (owner, day) =>
+        userData.transaction(owner, (transaction) => linesWithSeveralCandidates(transaction, day)),
     };
   }),
 );

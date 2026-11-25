@@ -744,11 +744,21 @@ function listText(page: ImportPage): string {
   return [`Imports, newest first:`, ...lines, "", next].join("\n");
 }
 
-function undoText({ undone, linesRemoved, linesGivenBack, laterOverlapping, months }: Undone) {
+function undoText({
+  undone,
+  linesRemoved,
+  linesGivenBack,
+  transfersRemoved,
+  laterOverlapping,
+  months,
+}: Undone) {
   return [
     `Undid the import of ${undone.fileName} (${accountName(undone)}, ${period(undone)}): ${linesRemoved} lines removed.`,
     linesGivenBack > 0
       ? `${linesGivenBack} lines of other imports count again: they were held as near duplicates of its lines.`
+      : "",
+    transfersRemoved > 0
+      ? `${transfersRemoved} transfers its lines were a side of are undone with them: their other sides are no transfer any more, until paired again.`
       : "",
     laterOverlapping > 0
       ? `${laterOverlapping} later imports of this account overlap its period and skipped some of its lines as duplicates: those lines are gone now. Importing its file again brings them back.`

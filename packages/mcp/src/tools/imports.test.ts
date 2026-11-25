@@ -1,6 +1,7 @@
 import {
   DataExport,
   EmptyFile,
+  Expenses,
   FileTooLarge,
   FileUploadExpired,
   FileUploadIncomplete,
@@ -11,9 +12,13 @@ import {
   ImportProfiles,
   ImportUnavailable,
   Imports,
+  Merchants,
+  RuleJobs,
   TooManyFileUploads,
+  Transfers,
   UnknownFormat,
   memoryAccountStore,
+  memoryCategoryStore,
   memoryLineStore,
 } from "@gousset/core";
 import type {
@@ -28,6 +33,7 @@ import type {
   Upload,
   UploadChoices,
 } from "@gousset/core";
+import { UserData } from "@gousset/db/user-data";
 import { Effect, Fiber, Layer, Schema } from "effect";
 import { TestClock } from "effect/testing";
 import { describe, expect, test } from "vite-plus/test";
@@ -41,8 +47,21 @@ import type { Caller, Runner } from "../tool";
 const ORIGIN = "https://gousset.example.com";
 const GRANT = "grant-1";
 
-const writer: Caller = { userId: "ada", canWrite: true, grantId: GRANT, origin: ORIGIN };
-const reader: Caller = { userId: "ada", canWrite: false, grantId: GRANT, origin: ORIGIN };
+const writer: Caller = {
+  userId: "ada",
+  canWrite: true,
+  currency: "EUR",
+  grantId: GRANT,
+  origin: ORIGIN,
+};
+
+const reader: Caller = {
+  userId: "ada",
+  canWrite: false,
+  currency: "EUR",
+  grantId: GRANT,
+  origin: ORIGIN,
+};
 
 const idOf = (n: number) => `00000000-0000-4000-8000-${String(n).padStart(12, "0")}`;
 
@@ -126,7 +145,13 @@ function fake(changes: Partial<Fake> = {}): Fake {
     settled: null,
     sameFile: null,
     startFailure: null,
-    undoCounts: { linesRemoved: 6, linesGivenBack: 0, laterOverlapping: 0, months: ["2026-10"] },
+    undoCounts: {
+      linesRemoved: 6,
+      linesGivenBack: 0,
+      transfersRemoved: 0,
+      laterOverlapping: 0,
+      months: ["2026-10"],
+    },
     profiles: [],
     profilesFor: {},
     fileUploads: [],
@@ -245,9 +270,15 @@ function runnerOf(state: Fake): Runner<GoussetServices> {
         Layer.mergeAll(
           memoryAccountStore(),
           memoryLineStore(),
+          memoryCategoryStore(),
           importsOf(state),
           profilesOf(state),
           Layer.mock(DataExport, {}),
+          Layer.mock(Merchants, {}),
+          Layer.mock(Transfers, {}),
+          Layer.mock(Expenses, {}),
+          Layer.mock(UserData, {}),
+          Layer.mock(RuleJobs, {}),
         ),
       ),
     );
@@ -270,9 +301,15 @@ function runnerWithTime(state: Fake): Runner<GoussetServices> {
           Layer.mergeAll(
             memoryAccountStore(),
             memoryLineStore(),
+            memoryCategoryStore(),
             importsOf(state),
             profilesOf(state),
             Layer.mock(DataExport, {}),
+            Layer.mock(Merchants, {}),
+            Layer.mock(Transfers, {}),
+            Layer.mock(Expenses, {}),
+            Layer.mock(UserData, {}),
+            Layer.mock(RuleJobs, {}),
             TestClock.layer(),
           ),
         ),
@@ -767,10 +804,16 @@ describe("imports list", () => {
 });
 
 describe("imports undo", () => {
-  test("says what was removed, what counts again, and the later imports that overlap", async () => {
+  test("says what was removed, what counts again, the transfers undone and the later imports that overlap", async () => {
     const state = fake({
       imports: [summary()],
-      undoCounts: { linesRemoved: 6, linesGivenBack: 2, laterOverlapping: 1, months: ["2026-10"] },
+      undoCounts: {
+        linesRemoved: 6,
+        linesGivenBack: 2,
+        transfersRemoved: 1,
+        laterOverlapping: 1,
+        months: ["2026-10"],
+      },
     });
 
     const { text, isError } = await imports(state, { action: "undo", import: idOf(1) });
@@ -780,6 +823,7 @@ describe("imports undo", () => {
       "Undid the import of october.xml (Current account, 2026-10-01 to 2026-10-31): 6 lines removed.",
     );
     expect(text).toContain("2 lines of other imports count again");
+    expect(text).toContain("1 transfers its lines were a side of are undone with them");
     expect(text).toContain("1 later imports of this account overlap its period");
     expect(text).toContain("Importing its file again brings them back.");
   });
@@ -791,6 +835,7 @@ describe("imports undo", () => {
     expect(text).toContain("6 lines removed.");
     expect(text).not.toContain("overlap");
     expect(text).not.toContain("count again");
+    expect(text).not.toContain("transfers");
   });
 
   test("refuses an import still running, and one already undone", async () => {

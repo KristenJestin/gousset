@@ -62,11 +62,12 @@ export const FAILURES = {
 } as const;
 
 /**
- * What a job's attempt leaves on its pg-boss row, and nothing else: what it touched, or the code
- * it failed with. Never a message or a stack, which pg-boss would keep in the database.
+ * What a job's attempt leaves on its pg-boss row, and nothing else: what it touched, with the count
+ * its last step reported (the lines a rule changed, #25), or the code it failed with. Never a
+ * message or a stack, which pg-boss would keep in the database.
  */
 export const JobOutput = Schema.Union([
-  Schema.Struct({ touched: Touched }),
+  Schema.Struct({ touched: Touched, done: Schema.optional(Schema.NullOr(Schema.Number)) }),
   Schema.Struct({ failure: Schema.String }),
 ]);
 
@@ -113,12 +114,14 @@ export function viewOfRecord(record: JobRecord): JobView {
     case "retry":
       return { ...base, phase: "retrying", attempt: record.retryCount + 2, failure };
     case "completed":
-      return {
-        ...base,
-        phase: "completed",
-        touched:
-          record.output !== null && "touched" in record.output ? record.output.touched : null,
-      };
+      return record.output !== null && "touched" in record.output
+        ? {
+            ...base,
+            phase: "completed",
+            touched: record.output.touched,
+            done: record.output.done ?? null,
+          }
+        : { ...base, phase: "completed" };
     case "cancelled":
     case "failed":
       return { ...base, phase: "failed", failure };
@@ -151,7 +154,7 @@ export function stepReported(view: JobView, step: string, counts?: StepCounts): 
  * says is worth another attempt (a broken file is not; a database that did not answer is).
  */
 export type AttemptOutcome =
-  | { readonly touched: Touched }
+  | { readonly touched: Touched; readonly done?: number | null }
   | { readonly failure: string; readonly retry: boolean };
 
 /**

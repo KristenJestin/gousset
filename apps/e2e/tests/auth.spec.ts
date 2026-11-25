@@ -288,7 +288,7 @@ test("the users page is a section of the settings, reached from the settings", a
   await visit(secondUserPage, "/settings");
   await expect(
     secondUserPage.getByRole("navigation", { name: "Settings" }).getByRole("link"),
-  ).toHaveText(["General", "Account", "Categories", "Rules", "Data"]);
+  ).toHaveText(["General", "Account", "Categories", "Merchants", "Rules", "Data"]);
 });
 
 test("a new password equal to the current one is refused", async ({ page, app, user }) => {

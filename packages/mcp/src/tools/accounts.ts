@@ -6,6 +6,7 @@ import {
   listAccounts,
   noteBalance,
   reopenAccount,
+  searchLines,
   setCreditExpiry,
   showAccount,
   today,
@@ -21,6 +22,10 @@ import type {
   AccountRecord,
   AccountStore,
   AccountSummary,
+  BalanceCategory,
+  CategoryStore,
+  LineRow,
+  LineStore,
   Money,
   StatementCheck,
   StatementsUntil,
@@ -32,8 +37,10 @@ import {
   AccountInput,
   AccountMode,
   CreditOrder,
+  DEFAULT_TOP_UP_DAYS,
   Day,
   LineId,
+  MAX_TOP_UP_DAYS,
   choiceOf,
 } from "@gousset/core/account-values";
 import type { AccountGroup } from "@gousset/core/account-values";
@@ -41,6 +48,7 @@ import { minorDigits, readAmount } from "@gousset/import";
 import { Cause, Effect, Exit, Schema } from "effect";
 
 import { ToolRefusal, defineTool } from "../tool";
+import { namedCategory, pathText } from "./categories";
 
 /** The lines `show` gives when none are asked for, and the most it gives. */
 const DEFAULT_LINES = 20;
@@ -130,6 +138,29 @@ const AccountsInput = Schema.Struct({
         "create, edit, a benefit account: which credits are used first; oldest_first unless the issuer uses the soonest to expire first.",
     }),
   ),
+  top_up_days: Schema.optional(
+    Schema.Int.check(Schema.isBetween({ minimum: 0, maximum: MAX_TOP_UP_DAYS })).annotate({
+      description: `create, edit, a benefit account: the days, 0 to ${MAX_TOP_UP_DAYS}, its issuer takes to charge a purchase's rest to a bank card: a bank line naming the issuer that soon after a card line that used up the card or its cap joins that purchase as one expense, the lines already there too; ${DEFAULT_TOP_UP_DAYS} by default.`,
+    }),
+  ),
+  top_up_cap: Schema.optional(
+    Schema.String.annotate({
+      description:
+        'create, edit, a benefit account: the most it pays a day, a decimal; "" when unknown.',
+    }),
+  ),
+  category: Schema.optional(
+    Schema.String.annotate({
+      description:
+        'create, edit, an account kept by its balance: the category its movements go to, as categories list writes it ("Parent > Child" for a child); "" for none.',
+    }),
+  ),
+  category_kind: Schema.optional(
+    Schema.Literals(["expense", "income"]).annotate({
+      description:
+        "create, edit: the category's kind, when an expense and an income one share its name.",
+    }),
+  ),
   new_name: Schema.optional(
     Schema.String.annotate({ description: "edit: the account's new name." }),
   ),
@@ -169,7 +200,7 @@ const DESCRIPTION = `The user's accounts: read them, and create and change them 
 
 Use \`list\` for "how much do I have, and where?", \`show\` for "does my balance match my bank's?" or "what expires when on my meal vouchers?", the writes to set the user's accounts up.
 
-Writes need a connection allowed to write. \`create\` needs \`name\` and \`kind\`, and is not idempotent: a repeat makes a second account, so list first. \`edit\` changes only what it is given. \`close\` keeps the lines and leaves the totals; \`reopen\` undoes it. \`note_balance\`: the balance of an account kept by a noted balance (\`mode\` balance), one a day. \`set_expiry\`: when a benefit credit expires, by its handle from the \`lines\` tool.
+Writes need a connection allowed to write. \`create\` needs \`name\` and \`kind\`, and is not idempotent: a repeat makes a second account, so list first. \`edit\` changes only what it is given. \`close\` keeps the lines and leaves the totals; \`reopen\` undoes it. \`note_balance\`: the balance of an account kept by a noted balance (\`mode\` balance), one a day; it makes the day's movement line, in its \`category\`. \`set_expiry\`: when a benefit credit expires, by its handle from the \`lines\` tool.
 
 Name an account by \`name\`, as \`list\` writes it (any case), with \`institution\` when two share it. Amounts are decimal strings in the account's currency. Refused, saying what to do: an unknown or ambiguous name, a currency off ISO 4217's list, a card without \`settles_into\` (its current account) or another kind with one, a new currency once the account has lines, closing a closed account, a balance on an account kept by its lines or twice on a day, an expiry before its credit.
 
@@ -316,12 +347,37 @@ function checkText(detail: AccountDetail): string {
   ].join("\n");
 }
 
+/** What a movement line is named: it has no label of its own (#31). */
+export const MOVEMENT = "movement of the noted balance";
+
+const OTHER_KIND = { expense: "income", income: "expense" } as const;
+
+/** Where the movements of an account kept by its balance go, as its page says. */
+function movementsText(category: BalanceCategory | null): string {
+  const made =
+    "Each noted balance makes one line, its movement: the noted balance less the one before and less the account's other lines booked between them.";
+
+  if (category === null) {
+    return `${made} No category is chosen for them: each goes to its kind's fallback.`;
+  }
+
+  if (category.archived) {
+    return `${made} Their category, ${category.name} (${category.kind}), is archived: a new one goes to its kind's fallback.`;
+  }
+
+  const other = OTHER_KIND[category.kind];
+
+  return `${made} One that is an ${category.kind} goes to ${category.name}; one that is an ${other} goes to the ${other} fallback.`;
+}
+
 /** One account's page, in Gousset's words: balance, check, then the last lines. */
 function showText(detail: AccountDetail, linesCount: number): string {
   const { account } = detail;
 
   const kept =
     account.mode === "balance" ? "kept by a balance noted each month" : "kept by its lines";
+
+  const movements = account.mode === "balance" ? [movementsText(account.balanceCategory)] : [];
 
   const closed = account.closedOn === null ? "" : ` Closed on ${account.closedOn}.`;
 
@@ -342,7 +398,13 @@ function showText(detail: AccountDetail, linesCount: number): string {
             const expiry =
               line.expiresOn === null ? "" : `, ${expiryText(line.expiresOn, detail.day)}`;
 
-            return `- ${line.bookedOn}: ${amount(line.amount)}${after}, ${line.label === "" ? "(no label)" : line.label}${expiry}`;
+            const label = line.fromBalance
+              ? MOVEMENT
+              : line.label === ""
+                ? "(no label)"
+                : line.label;
+
+            return `- ${line.bookedOn}: ${amount(line.amount)}${after}, ${label}${expiry}`;
           }),
         ];
 
@@ -365,6 +427,7 @@ function showText(detail: AccountDetail, linesCount: number): string {
       `Balance at the end of ${detail.day}: ${amount(detail.balance)}; ${statementsText(account.statementsUntil)}.`,
       `Money in this month so far: ${amount(detail.monthIn)}; out: ${amount(detail.monthOut)}.`,
       ...settles,
+      ...movements,
     ].join("\n"),
     checkText(detail),
     ...(credits === null ? [] : [credits]),
@@ -376,6 +439,14 @@ const ORDER_TEXT = {
   oldest_first: "Credits are used oldest first.",
   expiring_first: "Credits are used soonest expiry first, as the issuer does.",
 } as const satisfies { readonly [Order in AccountCredits["order"]]: string };
+
+/** A benefit account's top-ups (#28): within how many days, and its daily cap. */
+function topUpText(days: number, cap: Money | null): string {
+  const within = days === 0 ? "the same day" : `within ${days} day${days === 1 ? "" : "s"}`;
+  const most = cap === null ? "no daily cap known" : `a daily cap of ${amount(cap)}`;
+
+  return `Top-ups: the rest charged by its issuer to a bank card ${within} joins the purchase; ${most}.`;
+}
 
 /** A credit's expiry as of `today`: an expired credit still counts until a line takes it out. */
 function expiryText(expiresOn: string, today: string): string {
@@ -463,6 +534,71 @@ function creditsText(detail: AccountDetail): string | null {
 }
 
 const call = (input: typeof AccountsInput.Encoded) => `accounts ${JSON.stringify(input)}`;
+
+const LIST = call({ action: "list" });
+
+/**
+ * The account a write of another tool names (`lines pair`, #31), or the refusal to give: the user's
+ * accounts to choose from, or, when two share the name, `again`, the same call naming the first.
+ */
+export function accountToWrite(
+  owner: string,
+  name: string,
+  institution: string | undefined,
+  again: (account: { readonly name: string; readonly institution: string | null }) => string,
+) {
+  return accountNamed(owner, name, institution).pipe(
+    Effect.catchTags({
+      AccountNameUnknown: (unknown) =>
+        Effect.fail(
+          new ToolRefusal({
+            message:
+              unknown.accounts.length === 0
+                ? "The user has no account in Gousset yet."
+                : `No account of the user's is named "${unknown.name}"${institution === undefined ? "" : ` at "${institution}"`}. Their accounts: ${unknown.accounts.map(named).join(", ")}. Name one of these, as accounts list writes it, which also says which are kept by a noted balance.`,
+            example: LIST,
+          }),
+        ),
+      AccountNameAmbiguous: (ambiguous) => {
+        const [first] = ambiguous.matches;
+        const institutions = new Set(ambiguous.matches.map((match) => match.institution));
+
+        const apart =
+          institutions.size === ambiguous.matches.length
+            ? "Add institution to tell them apart."
+            : "Some share their institution too, so a name cannot tell them apart: ask the user to rename one in Gousset.";
+
+        return Effect.fail(
+          new ToolRefusal({
+            message: `Several accounts of the user's are named "${ambiguous.name}": ${ambiguous.matches.map(named).join(", ")}. ${apart}`,
+            example: again(first ?? { name: ambiguous.name, institution: null }),
+          }),
+        );
+      },
+    }),
+  );
+}
+
+/** The lines of one account and one day a search reads to find its movement among them. */
+const DAY_LINES = 100;
+
+/** The movement line a noted balance made, in Gousset's words; `search` reads it otherwise. */
+function movementText(movement: LineRow | undefined, search: string): string {
+  if (movement === undefined) {
+    return `Gousset makes its movement, a line of that day: read it with ${search}`;
+  }
+
+  if (movement.amount.minor === 0) {
+    return "No movement: the noted balance is the one before plus the account's other lines booked between them.";
+  }
+
+  const category =
+    movement.category === null
+      ? ""
+      : `, an ${movement.category.kind} in ${pathText(movement.category)}`;
+
+  return `Its movement, the line Gousset made of it: ${amount(movement.amount)}${category}. It is the noted balance less the one before (or the opening balance) and less the account's other lines booked between them, such as transfers.`;
+}
 
 type Encoded = typeof AccountsInput.Encoded;
 
@@ -556,6 +692,17 @@ const minorOf = (field: string, written: string, currency: string, example: Enco
     ),
   );
 
+/** A benefit account's daily cap: left out, unchanged; "", unknown; otherwise its minor units. */
+const topUpCapOf = (input: AccountsInput, currency: string, retry: Encoded) =>
+  input.top_up_cap === undefined
+    ? Effect.succeed(undefined)
+    : input.top_up_cap.trim() === ""
+      ? Effect.succeed(null)
+      : minorOf("top_up_cap", input.top_up_cap, currency, {
+          ...retry,
+          top_up_cap: minorDigits(currency) === 0 ? "2,500" : "25.00",
+        });
+
 /** An amount a currency can hold, for the example of a refusal: JPY has no decimals. */
 const sampleAmount = (currency: string) => (minorDigits(currency) === 0 ? "-1,234" : "-1,234.56");
 
@@ -601,6 +748,38 @@ const settlesIntoOf = (owner: string, input: AccountsInput, retry: Encoded) =>
         (account) => account.id,
       );
 
+/**
+ * The category an account kept by its balance sends its movements to, by the name `category` gives:
+ * undefined when it gives none (an edit keeps the account's), null for "" (none).
+ */
+const balanceCategoryOf = (owner: string, input: AccountsInput, retry: Encoded) => {
+  const written = input.category;
+
+  if (written === undefined) {
+    return Effect.succeed(undefined);
+  }
+
+  if (written.trim() === "") {
+    return Effect.succeed(null);
+  }
+
+  return Effect.map(
+    namedCategory(owner, written, input.category_kind, (name, kind) =>
+      call({ ...retry, category: name, category_kind: kind }),
+    ),
+    (found) => found.id,
+  );
+};
+
+/** A category `balanceCategoryOf` found, then gone or archived when the account was written. */
+const categoryRefused = (reason: "unknown" | "archived", retry: Encoded) =>
+  refuse(
+    reason === "archived"
+      ? `The category "${retry.category ?? ""}" is archived: choose another for the account's movements, or restore it with categories first.`
+      : `The category "${retry.category ?? ""}" is gone. List the categories again and name one of them.`,
+    { ...retry, category: "" },
+  );
+
 const SETTLEMENT_REFUSALS = {
   required:
     "A card needs settles_into: the name of the open current account it is debited from each month.",
@@ -633,7 +812,10 @@ function settingsText(detail: AccountDetail): string {
     ...(account.settlesInto === null
       ? []
       : [`Debited each month from: ${account.settlesInto.name}.`]),
-    ...(account.kind === "benefit" ? [ORDER_TEXT[account.creditOrder]] : []),
+    ...(account.kind === "benefit"
+      ? [ORDER_TEXT[account.creditOrder], topUpText(account.topUpDays, account.topUpCap)]
+      : []),
+    ...(account.mode === "balance" ? [movementsText(account.balanceCategory)] : []),
     `Balance at the end of ${detail.day}: ${amount(detail.balance)}; ${statementsText(account.statementsUntil)}.`,
   ].join("\n");
 }
@@ -722,6 +904,9 @@ const create = (owner: string, input: AccountsInput) =>
         openedOn: input.opened_on,
         settlesIntoAccountId: yield* settlesIntoOf(owner, input, retry),
         creditOrder: input.credit_order,
+        balanceCategoryId: yield* balanceCategoryOf(owner, input, retry),
+        topUpDays: input.top_up_days,
+        topUpCapMinor: yield* topUpCapOf(input, currency, retry),
       },
       retry,
     );
@@ -733,6 +918,8 @@ const create = (owner: string, input: AccountsInput) =>
             SETTLEMENT_REFUSALS[refusal.reason],
             refusal.reason === "only_a_card" ? retry : { ...CARD_EXAMPLE, name },
           ),
+        BalanceCategoryRefused: (refusal) =>
+          categoryRefused(refusal.reason, { ...retry, category: input.category }),
         QueryFailed: Effect.die,
       }),
     );
@@ -750,6 +937,9 @@ const changesSomething = (input: AccountsInput) =>
     input.opened_on,
     input.settles_into,
     input.credit_order,
+    input.top_up_days,
+    input.top_up_cap,
+    input.category,
     input.new_name,
     input.new_institution,
   ].some((value) => value !== undefined);
@@ -761,7 +951,7 @@ const edit = (owner: string, input: AccountsInput) =>
 
     if (name === undefined || !changesSomething(input)) {
       return yield* refuse(
-        "edit needs the account's name, as list writes it, and what to change: kind, currency, mode, opening_balance, opened_on, settles_into, credit_order, new_name or new_institution.",
+        "edit needs the account's name, as list writes it, and what to change: kind, currency, mode, opening_balance, opened_on, settles_into, credit_order, top_up_days, top_up_cap, category, new_name or new_institution.",
         { action: "edit", name: name ?? "Current account", new_name: "Everyday account" },
       );
     }
@@ -791,6 +981,18 @@ const edit = (owner: string, input: AccountsInput) =>
       );
     }
 
+    // The daily cap is minor units too (#28): the same holds for it.
+    if (
+      input.top_up_cap === undefined &&
+      found.topUpCapMinor !== null &&
+      minorDigits(currency) !== minorDigits(found.currency)
+    ) {
+      return yield* refuse(
+        `The daily cap of ${named(found)} is ${amount({ minor: found.topUpCapMinor, currency: found.currency })}, and ${currency} has other decimals: give top_up_cap in ${currency} with the new currency, or "" for none.`,
+        { ...retry, top_up_cap: minorDigits(currency) === 0 ? "2,500" : "25.00" },
+      );
+    }
+
     const openingBalanceMinor =
       input.opening_balance === undefined
         ? found.openingBalanceMinor
@@ -814,6 +1016,10 @@ const edit = (owner: string, input: AccountsInput) =>
         openedOn: input.opened_on ?? found.openedOn ?? undefined,
         settlesIntoAccountId: settlesInto,
         creditOrder: input.credit_order,
+        // Left out, the account keeps its category (#31), its top-up days and cap (#28).
+        balanceCategoryId: yield* balanceCategoryOf(owner, input, retry),
+        topUpDays: input.top_up_days,
+        topUpCapMinor: yield* topUpCapOf(input, currency, retry),
       },
       retry,
     );
@@ -833,6 +1039,7 @@ const edit = (owner: string, input: AccountsInput) =>
               ? { action: "edit", ...namedBy(found), kind: "card", settles_into: "Current account" }
               : { action: "edit", ...namedBy(found), settles_into: "Current account" },
           ),
+        BalanceCategoryRefused: (refusal) => categoryRefused(refusal.reason, retry),
         QueryFailed: Effect.die,
       }),
     );
@@ -947,10 +1154,32 @@ const note = (owner: string, input: AccountsInput) =>
       }),
     );
 
+    // The movement line Gousset made of it (#31), among that day's lines of the account.
+    const page = yield* searchLines(owner, {
+      accountId: found.id,
+      from: day,
+      to: day,
+      limit: DAY_LINES,
+    }).pipe(
+      Effect.catchTags({
+        // The search is of one valid day; a database failure is Gousset's.
+        LineSearchRefused: Effect.die,
+        QueryFailed: Effect.die,
+      }),
+    );
+
+    const search = `lines ${JSON.stringify({ action: "search", account: found.name, institution: found.institution ?? undefined, from: day, to: day })}`;
+
     return yield* writtenText(
       owner,
       found.id,
-      `Noted ${amount({ minor, currency: found.currency })} as the balance of ${named(found)} at the end of ${day}.`,
+      [
+        `Noted: ${named(found)} held ${amount({ minor, currency: found.currency })} at the end of ${day}.`,
+        movementText(
+          page.lines.find((line) => line.fromBalance),
+          search,
+        ),
+      ].join("\n"),
     );
   });
 
@@ -1059,7 +1288,11 @@ const setExpiry = (owner: string, input: AccountsInput) =>
   });
 
 /** The accounts family (docs/mcp.md, "Tools"): read, created and changed as the accounts page does. */
-export const accountsTool = defineTool<AccountsInput, Encoded, AccountStore>({
+export const accountsTool = defineTool<
+  AccountsInput,
+  Encoded,
+  AccountStore | LineStore | CategoryStore
+>({
   name: "accounts",
   title: "Accounts",
   description: DESCRIPTION,

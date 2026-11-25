@@ -1,9 +1,11 @@
 import { Effect, Layer } from "effect";
 
 import type { MemoryImport, MemoryLine, MemoryRows } from "./account-store-memory";
+import type { LineCategory } from "./category-store";
 import type { ImportFormat } from "./imports/summary";
 import { LineStore } from "./line-store";
 import type { FoundLine, FoundLineDetail, LineQuery } from "./line-store";
+import { candidateFinder } from "./transfers/pairing";
 
 // An in-memory `LineStore`, for tests: the same reads as the database's, on the rows an in-memory
 // `AccountStore` takes (`MemoryRows`), with what a line's detail adds. A restart forgets them.
@@ -17,6 +19,10 @@ export type MemoryLineDetail = MemoryLine & {
   readonly counterpartyIban?: string;
   readonly duplicateOfLineId?: string;
   readonly expiresOn?: string;
+  /** The category of its one entry. */
+  readonly category?: LineCategory;
+  /** Who put its entry in its category; `default`, the import, waits for the user. */
+  readonly classifiedBy?: "default" | "rule" | "user";
 };
 
 /** An import of the memory store, as a line's detail names it. */
@@ -48,8 +54,13 @@ function matches(line: MemoryLineDetail, currency: string, query: LineQuery): bo
   const absolute = Math.abs(line.amountMinor);
   const bounds = query.amount === null ? undefined : query.amount(currency);
 
+  const state = line.state ?? "counted";
+
   return (
-    (line.state ?? "counted") === query.state &&
+    (state === query.state ||
+      (query.state === "held" &&
+        state === "counted" &&
+        (query.alsoLineIds.includes(line.id) || line.classifiedBy === "default"))) &&
     line.bookedOn <= query.to &&
     (query.from === null || line.bookedOn >= query.from) &&
     (query.accountId === null || line.accountId === query.accountId) &&
@@ -88,7 +99,38 @@ function withAccount(own: MemoryLineRows, line: MemoryLineDetail): FoundLine | u
       institution: owned.institution,
       currency: owned.currency,
     },
+    category: line.category ?? null,
+    fromBalance: sourceOf(line) === "balance",
   };
+}
+
+function sourceOf(line: MemoryLineDetail): FoundLineDetail["source"] {
+  return line.source ?? (line.importId === undefined ? "manual" : "import");
+}
+
+/**
+ * The counted lines of `own` booked on or before `day` with several candidates for their transfer's
+ * other side, by the same rules as the database's. The memory store keeps no transfer: every line
+ * is still to review and no side of one.
+ */
+function severalCandidatesOf(own: MemoryLineRows, day: string): ReadonlyArray<string> {
+  const pool = (own.lines ?? []).flatMap((line) => {
+    const shown = withAccount(own, line);
+    const owned = own.accounts?.find((each) => each.id === line.accountId);
+
+    return shown === undefined ||
+      owned === undefined ||
+      shown.state !== "counted" ||
+      sourceOf(line) === "balance" ||
+      line.amountMinor === 0 ||
+      line.bookedOn > day
+      ? []
+      : [{ ...line, accountKind: owned.kind, currency: shown.account.currency }];
+  });
+
+  const candidates = candidateFinder(pool);
+
+  return pool.flatMap((line) => (candidates(line).length > 1 ? [line.id] : []));
 }
 
 /** A `LineStore` holding each user's rows in memory, `rows` by owner. */
@@ -137,7 +179,7 @@ export function memoryLineStore(rows: ReadonlyMap<string, MemoryLineRows> = new 
 
         return {
           ...shown,
-          source: line.source ?? (line.importId === undefined ? "manual" : "import"),
+          source: sourceOf(line),
           originalAmountMinor: line.originalAmountMinor ?? null,
           originalCurrency: line.originalCurrency ?? null,
           counterpartyIban: line.counterpartyIban ?? null,
@@ -165,5 +207,7 @@ export function memoryLineStore(rows: ReadonlyMap<string, MemoryLineRows> = new 
                 },
         };
       }),
+
+    severalCandidates: (owner, day) => Effect.sync(() => severalCandidatesOf(of(owner), day)),
   }));
 }

@@ -1,0 +1,1 @@
+ALTER TABLE "merchant" ADD COLUMN "is_intermediary" boolean DEFAULT false NOT NULL;

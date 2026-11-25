@@ -1,6 +1,7 @@
 import { minorDigits } from "@gousset/import";
 import { Effect, Result } from "effect";
 
+import type { LineCategory } from "./category-store";
 import { LineNotFound, LineSearchRefused } from "./errors";
 import { LineStore } from "./line-store";
 import type { AmountBounds, FoundLine, LineQuery } from "./line-store";
@@ -30,7 +31,12 @@ export type LineSearch = {
   readonly amountMin?: string;
   /** The greatest amount, the same way; rounded down. */
   readonly amountMax?: string;
-  /** True: the lines held for review only. Otherwise the counted ones. Discarded lines never. */
+  /**
+   * True: the lines to review only: held as near duplicates, counted lines that wait for the user to
+   * choose their transfer's other side among several (#26), and counted lines whose entry is still
+   * where the import put it, in its kind's fallback (#23). Otherwise the counted ones. Discarded
+   * lines never.
+   */
   readonly toReview?: boolean;
   /** The `next` of the page before. */
   readonly after?: string;
@@ -54,8 +60,18 @@ export type LineRow = {
   readonly counterpartyName: string | null;
   readonly amount: Money;
   readonly account: LineAccount;
-  /** Held as a near duplicate, waiting for the user. */
+  /**
+   * Held as a near duplicate; or, in a search of the lines to review, any line it gives (a
+   * transfer's side to choose among several, a line not classified yet): waiting for the user.
+   */
   readonly toReview: boolean;
+  /**
+   * The category of its one entry (with its parent's name, for a child); null for a line with none
+   * (held, of no amount) or split across several.
+   */
+  readonly category: LineCategory | null;
+  /** The movement a noted balance makes (#31): it has no label, the interface names it. */
+  readonly fromBalance: boolean;
 };
 
 export type LinePage = {
@@ -240,6 +256,7 @@ function queryOf(search: LineSearch, day: string): Result.Result<LineQuery, Line
     to: to === undefined || to > day ? day : to,
     amount: amount.success,
     state: search.toReview === true ? "held" : "counted",
+    alsoLineIds: [],
     after,
     limit: limitOf(search.limit),
   });
@@ -247,7 +264,8 @@ function queryOf(search: LineSearch, day: string): Result.Result<LineQuery, Line
 
 const money = (minor: number, currency: string): Money => ({ minor, currency });
 
-function rowOf(line: FoundLine): LineRow {
+/** A line as a search gives it: to review when it is held, or among the lines to review. */
+function rowOf(line: FoundLine, reviewing = false): LineRow {
   return {
     id: line.id,
     bookedOn: line.bookedOn,
@@ -261,7 +279,9 @@ function rowOf(line: FoundLine): LineRow {
       name: line.account.name,
       institution: line.account.institution,
     },
-    toReview: line.state === "held",
+    toReview: line.state === "held" || reviewing,
+    category: line.category,
+    fromBalance: line.fromBalance,
   };
 }
 
@@ -275,12 +295,23 @@ export const searchLines = (owner: string, search: LineSearch = {}) =>
     const store = yield* LineStore;
     const day = yield* today;
     const query = yield* Effect.fromResult(queryOf(search, day));
-    const found = yield* store.search(owner, { ...query, limit: query.limit + 1 });
+
+    // To review: the lines held, those whose transfer's other side the user must choose, and those
+    // not classified yet (the store's).
+    const reviewing = query.state === "held";
+    const toChoose = reviewing ? yield* store.severalCandidates(owner, day) : [];
+
+    const found = yield* store.search(owner, {
+      ...query,
+      alsoLineIds: toChoose,
+      limit: query.limit + 1,
+    });
+
     const lines = found.lines.slice(0, query.limit);
     const last = lines.at(-1);
 
     const page: LinePage = {
-      lines: lines.map(rowOf),
+      lines: lines.map((line) => rowOf(line, reviewing)),
       next: found.lines.length > query.limit && last !== undefined ? cursorOf(last) : null,
       total: found.total,
     };

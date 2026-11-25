@@ -44,6 +44,132 @@ export function accountRefusalMessage(code: string): string {
       return m.accountRefusalNotACredit();
     case "EXPIRY_BEFORE_CREDIT":
       return m.accountRefusalExpiryBeforeCredit();
+    case "BALANCE_CATEGORY_UNKNOWN":
+      return m.accountRefusalBalanceCategoryUnknown();
+    case "BALANCE_CATEGORY_ARCHIVED":
+      return m.accountRefusalBalanceCategoryArchived();
+    default:
+      return m.errorUnknown();
+  }
+}
+
+/**
+ * A refusal of a change of the categories (`CategoryRefusalCode`) or of a line's category
+ * (`LineRefusalCode`), by its code. An icon or a position the page never sends falls to the
+ * general message. `fallback` names the fallback a refusal is about, as the user called it.
+ */
+export function categoryRefusalMessage(code: string, fallback?: string | null): string {
+  switch (code) {
+    case "CATEGORY_NOT_FOUND":
+      return m.categoryRefusalNotFound();
+    case "CATEGORY_NAME_TAKEN":
+      return m.categoryRefusalNameTaken();
+    case "CATEGORY_THIRD_LEVEL":
+      return m.categoryRefusalThirdLevel();
+    case "CATEGORY_PARENT_KIND":
+      return m.categoryRefusalParentKind();
+    case "CATEGORY_ITSELF":
+      return m.categoryRefusalItself();
+    case "CATEGORY_ARCHIVED":
+      return m.categoryRefusalArchived();
+    case "CATEGORY_PARENT_ARCHIVED":
+      return m.categoryRefusalParentArchived();
+    case "CATEGORY_FALLBACK":
+      return m.categoryRefusalFallback({ name: fallback ?? "" });
+    case "CATEGORY_NAME":
+      return m.categoryRefusalName();
+    case "CATEGORY_TOO_MANY":
+      return m.categoryRefusalTooMany();
+    case "CATEGORY_BENCHMARK":
+      return m.categoryRefusalBenchmark();
+    case "CATEGORY_KIND_MISMATCH":
+      return m.categoryRefusalKindMismatch();
+    case "LINE_NOT_CLASSIFIABLE":
+      return m.categoryRefusalNotClassifiable();
+    case "LINE_NOT_FOUND":
+      return m.categoryRefusalLineNotFound();
+    default:
+      return m.errorUnknown();
+  }
+}
+
+/**
+ * A merchant write or read's refusal (`MerchantRefusalCode`), by its code; `name` is the merchant
+ * it is about, when the refusal names one (the one that has the name already, the intermediary
+ * chosen as who was paid).
+ */
+export function merchantRefusalMessage(code: string, name?: string): string {
+  switch (code) {
+    case "MERCHANT_NOT_FOUND":
+      return m.merchantRefusalNotFound();
+    case "NAME_BLANK":
+      return m.merchantRefusalNameBlank();
+    case "NAME_TOO_LONG":
+      return m.merchantRefusalNameTooLong();
+    case "NAME_TAKEN":
+      return name === undefined ? m.errorUnknown() : m.merchantRefusalNameTaken({ name });
+    case "LABEL_NOT_FOUND":
+      return m.merchantRefusalLabelNotFound();
+    case "MERGE_INTO_ITSELF":
+      return m.merchantRefusalMergeIntoItself();
+    case "MERGE_INTO_UNKNOWN":
+      return m.merchantRefusalMergeIntoUnknown();
+    case "CATEGORY_NOT_FOUND":
+      return m.merchantRefusalCategoryNotFound();
+    case "CATEGORY_ARCHIVED":
+      return m.merchantRefusalCategoryArchived();
+    case "LINE_NOT_FOUND":
+      return m.merchantRefusalLineNotFound();
+    case "NOT_INTERMEDIARY":
+      return m.merchantRefusalNotIntermediary();
+    case "NOT_ONE_ENTRY":
+      return m.merchantRefusalNotOneEntry();
+    case "INTERMEDIARY_CHOSEN":
+      return name === undefined ? m.errorUnknown() : m.merchantRefusalIntermediaryChosen({ name });
+    default:
+      return m.errorUnknown();
+  }
+}
+
+/**
+ * A refusal of a rule's read or change (`RuleRefusalCode`), by its code; `index` is the condition
+ * it is about (from 0), when one is the cause; `limit` the server's limit a refusal names (the most
+ * conditions, the most rules).
+ */
+export function ruleRefusalMessage(
+  code: string,
+  index: number | null = null,
+  limit: number | null = null,
+): string {
+  const condition = (index ?? 0) + 1;
+
+  switch (code) {
+    case "RULE_NOT_FOUND":
+      return m.ruleRefusalNotFound();
+    case "CONDITIONS_EMPTY":
+      return m.ruleRefusalConditionsEmpty();
+    case "CONDITIONS_TOO_MANY":
+      return m.ruleRefusalConditionsTooMany({ max: limit ?? 0 });
+    case "CONDITION_INVALID":
+      return m.ruleRefusalConditionInvalid({ index: condition });
+    case "CONDITION_UNKNOWN_ACCOUNT":
+      return m.ruleRefusalUnknownAccount({ index: condition });
+    case "NOTHING_SET":
+      return m.ruleRefusalNothingSet();
+    case "CATEGORY_ARCHIVED":
+      return m.ruleRefusalCategoryArchived();
+    case "CATEGORY_NOT_FOUND":
+      return m.ruleRefusalCategoryNotFound();
+    case "MERCHANT_NOT_FOUND":
+      return m.ruleRefusalMerchantNotFound();
+    case "MERCHANT_INTERMEDIARY":
+      return m.ruleRefusalMerchantIntermediary();
+    case "TOO_MANY_RULES":
+      return m.ruleRefusalTooMany({ max: limit ?? 0 });
+    case "JOB_UNAVAILABLE":
+      return m.ruleRefusalJobUnavailable();
+    case "LINE_NOT_FOUND":
+      return m.ruleRefusalLineNotFound();
     default:
       return m.errorUnknown();
   }

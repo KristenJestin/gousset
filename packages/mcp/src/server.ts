@@ -47,6 +47,7 @@ export function createServer<R>(
 const CallerExtra = Schema.Struct({
   userId: Schema.String,
   canWrite: Schema.Boolean,
+  currency: Schema.String,
   grantId: Schema.optional(Schema.String),
   origin: Schema.optional(Schema.String),
 });
@@ -62,6 +63,7 @@ export function authInfoOf(caller: Caller, token: string, clientId: string): Aut
     extra: {
       userId: caller.userId,
       canWrite: caller.canWrite,
+      currency: caller.currency,
       grantId: caller.grantId,
       origin: caller.origin,
     },
