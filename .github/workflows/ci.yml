@@ -196,14 +196,14 @@ jobs:
       # The runner's image holds what both browsers need: no system package from apt, whose mirrors
       # took up to five minutes (issue #115).
       - name: Playwright's browsers
-        run: pnpm --dir apps/e2e exec playwright install $E2E_BROWSERS
+        run: pnpm --dir apps/e2e exec playwright install chromium firefox
       # The suite runs the built app.
       - name: Build
         run: pnpm run build
       - name: End-to-end tests, shard ${{ matrix.shard }}
         # The configuration's two workers: four on a runner's four cores made no shard faster, and
         # broke the tests that time a motion or a scroll in Firefox and at a phone's width.
-        run: pnpm e2e --shard=$SHARD $E2E_PROJECTS
+        run: pnpm e2e --shard=$SHARD --project=firefox-desktop --repeat-each=40 -g "detail opens beside the list" tests/operations.spec.ts
       - name: Keep the trace, video and screenshots
         if: failure()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

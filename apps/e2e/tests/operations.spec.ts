@@ -723,7 +723,15 @@ async function sampleColumn(page: Page) {
       const content = document.querySelector('[data-slot="line-detail-content"]');
 
       if (column !== null) {
+        const widthTransition = column.getAnimations().find((each) => each.transitionProperty === "width");
+
         window.__e2eColumn.push({
+          debugNow: Math.round(performance.now()),
+          debugTimeline: Math.round(document.timeline.currentTime ?? -1),
+          debugInserted: window.__e2eInserted ?? null,
+          debugStart: widthTransition === undefined ? "none" : widthTransition.startTime === null ? "null" : Math.round(widthTransition.startTime),
+          debugCurrent: widthTransition === undefined ? "none" : widthTransition.currentTime === null ? "null" : Math.round(widthTransition.currentTime),
+          debugPending: widthTransition === undefined ? "none" : widthTransition.pending,
           width: Math.round(column.getBoundingClientRect().width),
           opacity: content === null ? null : Number(getComputedStyle(content).opacity),
           scaled: scaled(document.querySelector('[data-slot="line-detail"]')) || scaled(content),
@@ -734,6 +742,14 @@ async function sampleColumn(page: Page) {
         requestAnimationFrame(sample);
       }
     };
+
+    new MutationObserver(() => {
+      if (window.__e2eInserted === undefined && document.querySelector('[data-slot="operations-detail"]') !== null) {
+        window.__e2eInserted = Math.round(performance.now());
+      }
+    }).observe(document.body, { childList: true, subtree: true });
+    window.__e2eInserted = undefined;
+    document.addEventListener("pointerdown", () => { window.__e2ePressed = Math.round(performance.now()); }, { once: true, capture: true });
 
     requestAnimationFrame(sample);
   })()`);
@@ -748,6 +764,12 @@ async function sampleColumn(page: Page) {
 
   return {
     read: async () => Schema.decodeUnknownSync(Frames)(await page.evaluate("window.__e2eColumn")),
+    debug: async () =>
+      String(
+        await page.evaluate(
+          "JSON.stringify({ pressed: window.__e2ePressed, frames: window.__e2eColumn.slice(0, 12) })",
+        ),
+      ),
     stop: () => page.evaluate("window.__e2eStop = true"),
   };
 }
@@ -799,7 +821,10 @@ for (const reduced of [false, true]) {
       ).toEqual([]);
     } else {
       // The column widened from far narrower, and the content faded in.
-      expect(Math.min(...seen.map((frame) => frame.width))).toBeLessThan(COLUMN_WIDTH / 2);
+      const debug = await frames.debug();
+
+      console.log(`DEBUG-FRAMES ${debug}`);
+      expect(Math.min(...seen.map((frame) => frame.width)), debug).toBeLessThan(COLUMN_WIDTH / 2);
       expect(
         seen.some((frame) => frame.opacity !== null && frame.opacity > 0 && frame.opacity < 1),
       ).toBe(true);
