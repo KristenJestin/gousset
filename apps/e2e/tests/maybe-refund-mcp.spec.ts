@@ -179,6 +179,13 @@ test("before confirmation, the month's received excludes the likely refund and s
   expect(listed.isError, listed.text).toBe(false);
   expect(rowOf(listed.text, back)).toContain(`(${FLAG})`);
   expect(listed.text).toContain(`lines {"action":"refuse_refund","line":"${back}"}`);
+
+  // Not in "Other" as income either: the categories' monthly averages leave it out.
+  const categories = await callTool(client, "categories", { action: "list" });
+
+  expect(categories.isError, categories.text).toBe(false);
+  expect(categories.text).toContain("average 90.00 EUR a month");
+  expect(categories.text).not.toContain("30.00 EUR a month");
 });
 
 test("after confirmation, the purchase's net cost drops to 60.00", async ({
@@ -240,6 +247,11 @@ test("after refusal, it is an income: received includes it and nothing is propos
   expect(summary.text).toContain(`- ${BACK_DAY}, income: `);
   expect(summary.text).not.toContain("may be refunds");
   expect(summary.text).not.toContain(FLAG);
+
+  // An income in "Other" now: its category's monthly average counts it.
+  const categories = await callTool(client, "categories", { action: "list" });
+
+  expect(categories.text).toContain("average 30.00 EUR a month");
 
   // Nothing is proposed any more, wherever the line is read.
   const shown = await callTool(client, "lines", { action: "show", line: back });
