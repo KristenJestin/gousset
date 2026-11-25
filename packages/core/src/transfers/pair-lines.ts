@@ -97,7 +97,7 @@ const bookedBetween = (from: string, to: string) =>
 /**
  * Which lines a pairing looks at: one import's, or every line of the user's; `kept`, every line too,
  * for the pairing at boot of the lines kept before v0.3 (#192), which also leaves alone a line whose
- * entry the user classified or split.
+ * entry the user, or a rule of the user's, classified, or which the user split.
  */
 export type PairingScope =
   | { readonly kind: "kept" }

@@ -413,14 +413,17 @@ the `image` job and runs `tools/check-upgrade.sh` on it, which, on a fresh proje
 6. starts the app: `/health` answers 200; the boot jobs do what was kept before them: the user's
    merchants, the movement line of her noted balance, and **her transfers kept before v0.3 paired**
    (#192: a clear pair and one across her savings account's fortnight, never paired by the release,
-   are transfers; an ambiguous one waits in the review; from 0.3.0, one whose side she classified
-   by hand stays unpaired, its expense unchanged); **started again, the app changes no row**;
+   are transfers; an ambiguous one waits in the review; from 0.3.0, two whose side she classified,
+   by hand and by a rule of hers, stay unpaired, their expenses unchanged); **started again, the
+   app changes no row**;
    **the administrator and both users sign in with the same passwords**, the temporary one still
    has to be replaced, the banned one is still refused, and a session made before the update still
    works;
 7. downloads the user's **export** (#22, `/api/export`), which the last release may not have: each
    of its tables holds that user's rows exactly as the release held them, with the declared
-   changes, and each imported file its bytes;
+   changes, and each imported file its bytes; but the lines made from a noted balance
+   (`source = balance`), left out of both sides: the app makes them again whenever a balance
+   changes, at boot from a release before 0.3.0, at the import from 0.3.0 on;
 8. uploads the statement of step 2 again, through the updated app: **it adds nothing**, every line
    found as a duplicate under the key the update gave it;
 9. migrates an empty database beside it with the same image: **the updated schema is a fresh

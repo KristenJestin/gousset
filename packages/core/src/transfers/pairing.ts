@@ -209,15 +209,16 @@ export type LinePart = {
 };
 
 /**
- * The lines the user decided (#192): a line whose entry the user classified, or which the user split
- * across several entries. The pairing at boot never pairs them; the user may, by hand.
+ * The lines the user decided (#192): a line whose entry the user classified, or a rule of the user's
+ * did (at an import, or applied to the past), or which the user split across several entries. The
+ * pairing at boot never pairs them; the user may, by hand.
  */
 export function decidedLines(parts: ReadonlyArray<LinePart>): ReadonlySet<string> {
   const seen = new Set<string>();
   const decided = new Set<string>();
 
   for (const part of parts) {
-    if (part.classifiedBy === "user" || seen.has(part.lineId)) {
+    if (part.classifiedBy !== "default" || seen.has(part.lineId)) {
       decided.add(part.lineId);
     }
 

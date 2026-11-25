@@ -111,7 +111,8 @@ export class Transfers extends Context.Service<
     readonly pairAll: (owner: string) => Effect.Effect<PairingSummary, Failure>;
     /**
      * `pairAll` for the lines kept before v0.3 (#192), at boot: the same rules, but a line whose
-     * entry the user classified or split is never paired, for the user to pair by hand.
+     * entry the user, or a rule of the user's, classified, or which the user split, is never
+     * paired, for the user to pair by hand.
      */
     readonly pairKept: (owner: string) => Effect.Effect<PairingSummary, Failure>;
   }

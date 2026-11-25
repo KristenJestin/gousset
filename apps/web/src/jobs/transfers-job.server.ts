@@ -13,7 +13,7 @@ export const PAIR_TRANSFERS_STEPS = ["pair"] as const;
  * through one. This job runs the import's automatic pairing once at every boot for every user, over
  * every line, in one transaction: a line and its only candidate are paired, a line with several
  * waits in the review, and a line the user said is no transfer, linked to an expense, classified by
- * hand or split, is left alone (`Transfers.pairKept`): the user pairs it by hand. It finds nothing
+ * hand or by a rule, or split, is left alone (`Transfers.pairKept`): the user pairs it by hand. It finds nothing
  * to do once the clear pairs are paired, and a run again adds nothing.
  */
 export const transfersJob = defineJob({

@@ -4,7 +4,7 @@ import { decidedLines, keptPairs, keptReplacements } from "./pairing";
 import type { PairableLine } from "./pairing";
 
 // The pairing at boot of the lines kept before v0.3 (#192): the import's rules, but a line whose
-// entry the user classified or split is never paired by it. Every amount and account is invented.
+// entry the user or a rule of theirs classified, or which the user split, is never paired by it. Every amount and account is invented.
 
 const line = (
   id: string,
@@ -28,13 +28,17 @@ const intoSavings = line("in", "savings", "2026-09-04", 20_000, { accountKind: "
 const nobody = new Set<string>();
 
 describe("the lines the user decided", () => {
-  test("a line whose entry is classified by default or by a rule is not decided", () => {
+  test("a line whose entry is still classified by default is not decided", () => {
+    expect(decidedLines([{ lineId: "a", classifiedBy: "default" }])).toEqual(new Set());
+  });
+
+  test("a line whose entry a rule of the user's classified is decided", () => {
     expect(
       decidedLines([
-        { lineId: "a", classifiedBy: "default" },
-        { lineId: "b", classifiedBy: "rule" },
+        { lineId: "a", classifiedBy: "rule" },
+        { lineId: "b", classifiedBy: "default" },
       ]),
-    ).toEqual(new Set());
+    ).toEqual(new Set(["a"]));
   });
 
   test("a line whose entry the user classified is decided", () => {
