@@ -107,9 +107,9 @@ const row = (page: Page, label: string) =>
 
 const count = (page: Page) => page.locator('[data-slot="operations-count"]');
 
-// A line's detail: a panel beside the list on a wide screen, a sheet on a phone.
+// A line's detail: a sheet over the list on every screen (#182).
 const detail = (page: Page, label: string) =>
-  page.getByRole(onPhone(page) ? "dialog" : "region", { name: label, exact: true });
+  page.getByRole("dialog", { name: label, exact: true });
 
 const proposalOf = (page: Page, label: string) =>
   detail(page, label).locator('[data-slot="review-proposal"]');
@@ -152,12 +152,10 @@ test("the proposal shows for a line classified by default and for a held repeat"
   await expect(announcer(page)).toContainText(`To review: Oct 9, ${GROCER.label}`);
   await expect(announcer(page)).toContainText("Keep it in Other");
 
-  if (onPhone(page)) {
-    await page.keyboard.press("Escape");
-    // Closed, its line gone from the address, before the next row opens its own.
-    await expect(detail(page, GROCER.label)).toBeHidden();
-    await expect(page).not.toHaveURL(/[?&]line=/);
-  }
+  // The sheet is modal: closed, its line gone from the address, before the next row opens its own.
+  await page.keyboard.press("Escape");
+  await expect(detail(page, GROCER.label)).toBeHidden();
+  await expect(page).not.toHaveURL(/[?&]line=/);
 
   await row(page, GYM_AGAIN.label).getByRole("button").click();
 
@@ -190,11 +188,9 @@ test("A accepts the proposal, the line leaves the list and the next line opens",
   await expect(row(page, GYM.label)).toHaveCount(0);
   await expect(count(page)).toHaveText("4 lines");
 
-  if (!onPhone(page)) {
-    await expect(
-      detail(page, STREAMING_AGAIN.label).locator('[data-slot="line-review"]'),
-    ).toBeFocused();
-  }
+  await expect(
+    detail(page, STREAMING_AGAIN.label).locator('[data-slot="line-review"]'),
+  ).toBeFocused();
 
   await expect(page).toHaveURL(/[?&]review=true/);
   expect(await reviewStateOf(owner, GYM.label)).toMatchObject({ reviewState: "done" });
@@ -311,8 +307,10 @@ test("J and K move between the lines to review, the first opening when none is o
   await page.keyboard.press("Tab");
   await expect(page.getByRole("button", { name: `Correct ${IN_ORDER[1] ?? ""}` })).toBeFocused();
 
-  // A field that has the focus keeps its keys.
-  await page.getByRole("searchbox", { name: "Search" }).focus();
+  // A field that has the focus keeps its keys: the line's category, in its sheet.
+  await detail(page, IN_ORDER[1] ?? "")
+    .getByRole("combobox", { name: "Category" })
+    .focus();
   await page.keyboard.press("j");
   await expect(proposalOf(page, IN_ORDER[1] ?? "")).toBeVisible();
   await animationsDone(page);
@@ -481,7 +479,7 @@ test("on a phone, the line opens in a sheet and Correct's dialog rises from the 
   app,
   user,
 }) => {
-  test.skip(!onPhone(page), "On a wide screen the detail opens beside the list");
+  test.skip(!onPhone(page), "On a wide screen Correct's dialog is centred");
 
   await reviewer(page, app, user, "timeo");
   await openReview(page);
