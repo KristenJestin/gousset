@@ -310,7 +310,8 @@ test("a transfer to a person is not paid through an intermediary", async ({
   );
 
   const paidThrough = "CB LYDIA *CORNER BAKERY 03/11";
-  const transfer = "VIR SEPA LYDIA MARTIN 04/11";
+  // A transfer names its party through a marker (#194): its free text names no one.
+  const transfer = "VIR SEPA EMIS /BEN LYDIA MARTIN 04/11";
 
   // One statement: the intermediary's cleaned label and a person's that starts with it.
   await upload([

@@ -67,9 +67,19 @@ export const CsvProfile = Schema.Struct({
     /** The line's currency code, checked against the account's; a line in another is refused. */
     currency: Schema.NullOr(Column),
   }),
+  /**
+   * A table that is not one line per row, and how to read it, when its rows need more than columns
+   * (README, "PayPal's activity"): `paypal-activity` finds PayPal's columns by their names, keeps
+   * the rows that moved the balance in the account's currency, and reads its days and amounts as
+   * the file writes them. Left out for a plain table.
+   */
+  layout: Schema.optionalKey(Schema.Literal("paypal-activity")),
 });
 
 export type CsvProfile = typeof CsvProfile.Type;
+
+/** A table read otherwise than one line per row (`CsvProfile.layout`). */
+export type CsvLayout = NonNullable<CsvProfile["layout"]>;
 
 /** The highest column a profile reads: a header with fewer is another file's. */
 export function lastColumn(profile: CsvProfile): number {

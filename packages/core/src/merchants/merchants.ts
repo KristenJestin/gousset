@@ -290,7 +290,11 @@ export async function recogniseIn(
     }
   }
 
+  // With no new cleaned label the entries are still classified: an operation's mark (#194), set
+  // by a migration, moves an entry of no merchant.
   if (keys.size === 0) {
+    await classifyByMerchants(transaction, { every: true });
+
     return { merchants: 0, aliases: 0 };
   }
 

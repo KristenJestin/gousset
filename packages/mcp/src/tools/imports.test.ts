@@ -1041,6 +1041,29 @@ describe("imports profiles", () => {
     expect(text).not.toContain(idOf(500));
   });
 
+  test("says PayPal's activity is read by its columns' names, its completed rows only", async () => {
+    const paypal: ImportProfileEntry = {
+      source: "shipped",
+      key: "paypal-activity",
+      name: "PayPal activity",
+      institution: null,
+      kind: "statement",
+      header: "date;time;timezone;name",
+      definition: { ...DEBIT_CREDIT, separator: ",", layout: "paypal-activity" },
+    };
+
+    const { text, isError } = await imports(
+      fake({ profiles: [paypal] }),
+      { action: "profiles" },
+      reader,
+    );
+
+    expect(isError).toBe(false);
+    expect(text).toContain(
+      "- PayPal activity, shipped with Gousset: PayPal's activity export, its columns found by their names in English or French, the completed rows that moved the balance in the account's currency, a payment in another currency by its conversion; days and amounts read as the file writes them.",
+    );
+  });
+
   test("with an import, says which profiles read its file, and the one it used", async () => {
     const [french] = SHIPPED;
 

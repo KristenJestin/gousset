@@ -7,26 +7,33 @@ import {
   statementLine,
 } from "@gousset/db/schema/ledger";
 import type { UserTransaction } from "@gousset/db/user-data";
-import { and, eq, inArray, isNotNull } from "drizzle-orm";
+import { and, eq, inArray, isNotNull, isNull } from "drizzle-orm";
 
 import type { EntryKind } from "../category-store";
+import type { CategoryOperation } from "../default-categories";
 import { topUpsToBalanceCategories } from "../expenses/top-up-categories";
-import { merchantKey } from "./labels";
+import { merchantKey, operationOf } from "./labels";
 
 // A merchant's default category classifies its entries (#23, docs/data-model.md, v0.3): an entry
 // still classified by default (`classified_by = default`), of the category's kind, goes in it, and
 // stays classified by default, a guess the review still lists and a rule may overwrite. An entry the
 // user classified is never touched. The merchant is read from the entry's line, as #24 reads it: its
 // cleaned label, named by an alias. It applies at recognition (each import, and every boot) and
-// whenever a merchant's default is set, changed or cleared.
+// whenever a merchant's default is set, changed or cleared. A line of a loan, a fee or interest
+// names no merchant (#194): its entry goes, the same way, in the category marked with its
+// operation (`category.operation`), of its kind.
 
-/** An entry as the classification reads it: its line's merchant, or null for none or several. */
+/**
+ * An entry as the classification reads it: its line's merchant, or null for none or several; the
+ * operation its line's prefix says, when that is one a category takes (a loan, a fee, interest).
+ */
 export type DefaultEntry = {
   readonly id: string;
   readonly kind: EntryKind;
   readonly categoryId: string;
   readonly classifiedBy: "default" | "rule" | "user";
   readonly merchantId: string | null;
+  readonly operation: CategoryOperation | null;
 };
 
 /** A merchant's default category, with its kind, and whether it is archived. */
@@ -43,16 +50,28 @@ export type EntryMove = { readonly entryId: string; readonly categoryId: string 
  * The entries a merchant's default category moves: each one still classified by default, of a
  * merchant, goes to that merchant's default category when it is of the entry's kind, else back to
  * its kind's fallback. A default archived classifies nothing new and keeps what it has: its
- * merchant's entries stay where they are. An entry where it should be is left out.
+ * merchant's entries stay where they are. An entry of no merchant, of an operation a category
+ * takes, goes to the category `operations` gives for its kind and operation (`<kind>/<operation>`,
+ * none archived), and stays where it is when none is. An entry where it should be is left out.
  */
 export function defaultCategoryMoves(
   entries: ReadonlyArray<DefaultEntry>,
   defaults: ReadonlyMap<string, MerchantDefault>,
   fallbacks: ReadonlyMap<EntryKind, string>,
+  operations: ReadonlyMap<string, string> = new Map(),
 ): ReadonlyArray<EntryMove> {
   return entries.flatMap((each): ReadonlyArray<EntryMove> => {
-    if (each.classifiedBy !== "default" || each.merchantId === null) {
+    if (each.classifiedBy !== "default") {
       return [];
+    }
+
+    if (each.merchantId === null) {
+      const marked =
+        each.operation === null ? undefined : operations.get(`${each.kind}/${each.operation}`);
+
+      return marked === undefined || marked === each.categoryId
+        ? []
+        : [{ entryId: each.id, categoryId: marked }];
     }
 
     const chosen = defaults.get(each.merchantId);
@@ -118,9 +137,22 @@ async function classifyByDefaults(
     .innerJoin(category, eq(category.id, merchant.defaultCategoryId))
     .where(isNotNull(merchant.defaultCategoryId));
 
-  if (!("merchantId" in scope) && defaultRows.length === 0) {
+  // The categories marked with an operation, not archived: one merchant's scope needs none.
+  const operationRows =
+    "merchantId" in scope
+      ? []
+      : await transaction
+          .select({ id: category.id, kind: category.kind, operation: category.operation })
+          .from(category)
+          .where(and(isNotNull(category.operation), isNull(category.archivedAt)));
+
+  if (!("merchantId" in scope) && defaultRows.length === 0 && operationRows.length === 0) {
     return 0;
   }
+
+  const operations = new Map(
+    operationRows.map((row) => [`${row.kind}/${row.operation ?? ""}`, row.id]),
+  );
 
   const defaults = new Map(
     defaultRows.map((row) => [
@@ -169,6 +201,8 @@ async function classifyByDefaults(
   for (const part of parts) {
     const key = merchantKey(part.label, part.counterpartyName);
     const merchantId = key === null ? null : (merchantOf.get(key) ?? null);
+    const read = operationOf(part.label);
+    const operation = read === "loan" || read === "fee" || read === "interest" ? read : null;
     const known = byEntry.get(part.id);
 
     if (known === undefined) {
@@ -178,17 +212,19 @@ async function classifyByDefaults(
         categoryId: part.categoryId,
         classifiedBy: "default",
         merchantId,
+        operation,
       });
-    } else if (known.merchantId !== merchantId) {
+    } else if (known.merchantId !== merchantId || known.operation !== operation) {
       several.add(part.id);
     }
   }
 
+  // An entry paid by lines of several merchants or operations is none's.
   const entries = [...byEntry.values()].map((each) =>
-    several.has(each.id) ? { ...each, merchantId: null } : each,
+    several.has(each.id) ? { ...each, merchantId: null, operation: null } : each,
   );
 
-  const moves = defaultCategoryMoves(entries, defaults, fallbacks);
+  const moves = defaultCategoryMoves(entries, defaults, fallbacks, operations);
   const byTarget = new Map<string, Array<string>>();
 
   for (const move of moves) {

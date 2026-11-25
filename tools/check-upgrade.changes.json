@@ -44,7 +44,7 @@
       }
     }
   ],
-  "20261125192239_default_category_looks": [
+  "20261125210007_default_category_looks": [
     {
       "why": "#205: the default expense category Housing, left as it was, gets the set's icon (its colour is a new column)",
       "table": "category",

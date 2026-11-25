@@ -145,5 +145,7 @@ BEGIN
     FROM untouched u
     WHERE c.id = u.id AND (c.icon IS NULL OR (c.color IS NULL AND u.color IS NOT NULL));
   END LOOP;
+
+  PERFORM set_config('gousset.user_id', '', true);
 END
 $$;

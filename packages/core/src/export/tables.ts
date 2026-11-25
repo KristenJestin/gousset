@@ -221,7 +221,13 @@ export const CATEGORIES: ExportTable = {
     },
     CREATED_AT,
     UPDATED_AT,
-    // Added after the others (#205): the database keeps it last.
+    // Added after the others (#194): the database keeps it last.
+    {
+      name: "operation",
+      holds:
+        "loan, fee or interest: the lines of that operation, which name no merchant, go in it by default; empty for none",
+    },
+    // Added after the operation (#205).
     {
       name: "color",
       holds: "the key of the colour it is shown in; empty: its parent's, or none at the top",

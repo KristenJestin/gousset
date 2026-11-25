@@ -616,7 +616,7 @@ function flagRow(flag: MonthFlag, locale: Locale) {
 
     case "price-rise": {
       return {
-        id: `${flag.kind}-${flag.merchant}`,
+        id: `${flag.kind}-${flag.subscriptionId}`,
         icon: FLAG_ICONS[flag.kind],
         text: m.reviewFlagPriceRise({
           merchant: flag.merchant,
@@ -628,7 +628,7 @@ function flagRow(flag: MonthFlag, locale: Locale) {
 
     case "stopped": {
       return {
-        id: `${flag.kind}-${flag.merchant}`,
+        id: `${flag.kind}-${flag.subscriptionId}`,
         icon: FLAG_ICONS[flag.kind],
         text: m.reviewFlagStopped({
           merchant: flag.merchant,

@@ -223,12 +223,22 @@ export type {
 
 export {
   DEFAULT_CATEGORIES,
+  LANGUAGE_COOKIE,
   copyDefaultCategories,
   defaultRows,
+  renamesInto,
   setLanguageOf,
+  setLanguageOfRequest,
+  settleDefaultNames,
 } from "./default-categories";
 
-export type { DefaultCategory, DefaultName, SetLanguage } from "./default-categories";
+export type {
+  DefaultCategory,
+  DefaultName,
+  DefaultRename,
+  HeldCategory,
+  SetLanguage,
+} from "./default-categories";
 
 export { DEFAULT_SEARCH_LINES, MAX_SEARCH_LINES, searchLines, showLine } from "./lines";
 
@@ -372,7 +382,9 @@ export {
   MerchantNotFound,
 } from "./merchants/errors";
 
-export { merchantKey, merchantName } from "./merchants/labels";
+export { merchantKey, merchantName, operationOf } from "./merchants/labels";
+
+export type { Operation } from "./merchants/operations";
 
 export { KNOWN_INTERMEDIARIES, isKnownIntermediary } from "./merchants/intermediaries";
 
@@ -409,10 +421,15 @@ export type {
   Recognised,
 } from "./merchants/merchants";
 
+export { rereadMerchants } from "./merchants/reread";
+
+export type { Reread } from "./merchants/reread";
+
 export {
   Transfers,
   lineTransferOf,
   pairEveryLine,
+  pairKeptLines,
   pairLineWithAccount,
   pairLines,
   transfersLayer,

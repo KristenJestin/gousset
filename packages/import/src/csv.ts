@@ -9,6 +9,7 @@ import { decodeCsv, parseRows, skipLines } from "./csv-parse";
 import type { CsvCell, CsvEncoding, CsvRow, ParseLimit } from "./csv-parse";
 import { InvalidOption, MalformedFile, MissingField, UnsupportedContent } from "./errors";
 import type { InvalidField, ReadError } from "./errors";
+import { isPaypalHeader, readPaypalRows } from "./paypal";
 import type { Statement, StatementLine } from "./statement";
 import { cleanValue, excerpt, quote } from "./text";
 
@@ -294,10 +295,26 @@ const HEADER_SEARCH: ParseLimit = { rows: 1, lines: 100, characters: 64 * 1024 }
 export type CsvCandidate = { readonly header: string | null; readonly profile: CsvProfile };
 
 /**
- * The first of `candidates` whose `header` is the file's header row as its own profile reads it
- * (`readCsvHeader`): the profile that recognises the file. A candidate with no header, or whose
- * profile cannot read the file's top (another encoding), is passed over; `undefined` when none
- * matches. Only the top of the file is parsed (`HEADER_SEARCH`), once per candidate.
+ * Whether a file's header row, as the candidate's profile reads it (`readCsvHeader`), is the one
+ * the candidate recognises: its `header`, or, for PayPal's activity (`layout`), any header that
+ * names PayPal's columns, whichever its user selected, in English or in French.
+ */
+export function headerMatches(candidate: CsvCandidate, header: string | null): boolean {
+  if (candidate.header === null || header === null) {
+    return false;
+  }
+
+  return candidate.profile.layout === "paypal-activity"
+    ? isPaypalHeader(header)
+    : header === candidate.header;
+}
+
+/**
+ * The first of `candidates` whose header the file's header row matches (`headerMatches`), as its
+ * own profile reads it (`readCsvHeader`): the profile that recognises the file. A candidate with no
+ * header, or whose profile cannot read the file's top (another encoding), is passed over;
+ * `undefined` when none matches. Only the top of the file is parsed (`HEADER_SEARCH`), once per
+ * candidate.
  */
 export const matchCsvHeader = <Candidate extends CsvCandidate>(
   file: CsvFile,
@@ -313,7 +330,7 @@ export const matchCsvHeader = <Candidate extends CsvCandidate>(
         Effect.match({ onFailure: () => null, onSuccess: (read) => read }),
       );
 
-      if (header === candidate.header) {
+      if (headerMatches(candidate, header)) {
         return candidate;
       }
     }
@@ -412,6 +429,24 @@ const readTable = (
   Effect.gen(function* () {
     const { rows, line } = yield* readRows(file, profile, limit);
     const [header, ...data] = rows;
+
+    // PayPal's activity names its columns, which its user chooses: they are found by their names.
+    if (profile.layout === "paypal-activity") {
+      if (header === undefined) {
+        return yield* new MalformedFile({
+          line,
+          problem: "No header row: PayPal's activity starts with the names of its columns.",
+        });
+      }
+
+      return {
+        account: null,
+        currency: currency.code,
+        lines: yield* readPaypalRows(header, data, currency),
+        openingBalance: null,
+        balance: null,
+      };
+    }
 
     if (profile.headerRow) {
       if (header === undefined) {
