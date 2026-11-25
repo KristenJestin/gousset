@@ -1056,6 +1056,33 @@ describe("imports profiles", () => {
     expect(text).toContain(
       "- PayPal activity, shipped with Gousset: PayPal's activity export, its columns found by their names in English or French, the completed rows that moved the balance in the account's currency, a payment in another currency by its conversion; days and amounts read as the file writes them.",
     );
+
+    // Its user chooses the export's columns: a file is PayPal's by the names of those it always has.
+    expect(text).not.toContain("A CSV file whose header row is a profile's is read with it");
+    expect(text).toContain(
+      "or, for PayPal activity, whose header row names PayPal's mandatory columns among any others.",
+    );
+
+    const fitting = await imports(
+      fake({
+        profilesFor: {
+          [idOf(5)]: {
+            fileName: "Download.CSV",
+            status: "done",
+            used: paypal,
+            fitting: [{ profile: paypal, by: "header" }],
+          },
+        },
+      }),
+      { action: "profiles", import: idOf(5) },
+      reader,
+    );
+
+    expect(fitting.isError).toBe(false);
+    expect(fitting.text).toContain(
+      "- PayPal activity, shipped with Gousset: the file's header row names PayPal's mandatory columns.",
+    );
+    expect(fitting.text).not.toContain("its header row is the file's");
   });
 
   test("with an import, says which profiles read its file, and the one it used", async () => {

@@ -145,7 +145,10 @@ is the file a user exports to share a profile, decoded by the `CsvProfile` schem
 - `columns`, each counted from 1, as the preview and the errors number them: `bookedOn`, `label`
   and `amount`, required; `valueOn`, `memo`, `bankId` and `currency`, or `null`. `amount` is
   `{ kind: "signed", column }`, negative for money out, or
-  `{ kind: "debit-credit", debit, credit }`.
+  `{ kind: "debit-credit", debit, credit }`;
+- `layout`, left out for a plain table of one line per row: `"paypal-activity"` reads PayPal's
+  activity, its columns found by their names ([PayPal's activity](#paypals-activity)). A profile
+  made from it on the import screen, or saved there, keeps it.
 
 The name, the institution and the kind (`statement`, or a broker's `operations` from v0.6) are the
 table's columns, not the definition's. `normalizeHeader` and `readCsvHeader` give the header row as
