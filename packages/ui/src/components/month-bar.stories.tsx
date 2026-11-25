@@ -62,12 +62,14 @@ function SwitchingMonths() {
  * The month in one bar (screen 1, block 1): the money received, cut into spent, set aside and
  * left, each in its role's colour (`--money-spent`, `--money-saved`, `--money-left`), the total
  * above and a legend under it: each part's dot, amount and name, side by side from the bar's
- * start, so that a narrow part still has its key. With `onSelect`, each key is a button (Tab,
+ * start, so that a narrow part still has its key. On a phone (below 768 px, screen 11) the width
+ * does not allow it: the keys are a list under the bar, one row each, the name whole and the amount
+ * at the row's end, and the comparison has a line of its own under the total. With `onSelect`, each key is a button (Tab,
  * Enter) that opens the operations behind it. When more went out than came in, the bar stretches to
  * what went out, a dark mark shows where the money received ended, and the last part says by how
  * much the month is overspent, in red.
  *
- * Loading: `MonthBarSkeleton`, the same three lines at the same heights.
+ * Loading: `MonthBarSkeleton`, the same lines at the same heights, the phone's rows on a phone.
  *
  * Motion: when the month changes, the parts grow or shrink to their new widths in 200 ms
  * (ease-out) and the amounts roll; cut under reduced motion. Widths are SVG attributes, so the
@@ -94,7 +96,8 @@ export const ReadOnly: Story = { args: { note: "salary and meal vouchers" } };
 
 /**
  * A sliver set aside, and most of what is left on the meal voucher card (hatched): the legend
- * keeps its keys side by side, never squeezed under a part too narrow for them.
+ * keeps its keys side by side from the bar's start (a list on a phone), never squeezed under a part
+ * too narrow for them.
  */
 export const NarrowPart: Story = {
   args: {
@@ -164,7 +167,7 @@ export const Loading: Story = { render: () => <MonthBarSkeleton /> };
 
 /**
  * On the narrowest phone, in its block as the review shows it, with the part left's longest name:
- * the legend stays on one line, that name cut short.
+ * the legend is a list, one row a part, every name whole, and the comparison under the total.
  */
 export const Phone: Story = {
   globals: { viewport: { value: "mobile1", isRotated: false } },

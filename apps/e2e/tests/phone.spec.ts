@@ -4,13 +4,14 @@ import { Schema } from "effect";
 import type { TestUser } from "../src/auth";
 import { colorSchemeOf } from "../src/database";
 import { onPhone } from "../src/frame";
-import { monthSwitcher, openBlock, seedReviewMonths } from "../src/review";
+import { block, monthBarKey, monthSwitcher, openBlock, seedReviewMonths } from "../src/review";
 import { addUser, animationsDone, expect, fixDay, personOfItsOwn, test, visit } from "../src/test";
 import { openUserData } from "../src/user-data";
 
 // The scenarios of issue #36 (the review on a phone), "How to verify", with the wireframe
 // `mobile`: the app installs on a phone's home screen, its bars take the page's colour, what runs
-// along the screen's bottom edge keeps clear of the phone's own, and the month sits across the top.
+// along the screen's bottom edge keeps clear of the phone's own, the month sits across the top and
+// the month bar's amounts are listed under it.
 // The review's blocks folded on a phone are review.spec.ts's; the lines reviewed on a phone are
 // review-lines.spec.ts's. Every name and amount is invented.
 
@@ -203,6 +204,40 @@ test("on a phone, the tab bar and the sheets keep clear of the home indicator", 
   await expect(movements).toHaveCSS("padding-bottom", `${String(HOME_INDICATOR)}px`);
   await page.keyboard.press("Escape");
   await expect(page.getByRole("dialog")).toHaveCount(0);
+  await animationsDone(page);
+});
+
+test("on a phone, the month bar lists spent, set aside and left under it, one row each", async ({
+  page,
+  app,
+  user,
+}) => {
+  test.skip(!onPhone(page), "On a wide screen the keys sit side by side");
+
+  await signedInWithMonths(page, app.baseURL, user, "oriane");
+  await visit(page, OCTOBER);
+  await expect(monthBarKey(page, "left")).toContainText("€1,345");
+
+  const bar = await block(page, "The month")
+    .locator('[data-slot="month-bar-drawing"]')
+    .boundingBox();
+
+  const rows = await Promise.all(
+    (["spent", "saved", "left"] as const).map(async (role) =>
+      monthBarKey(page, role).boundingBox(),
+    ),
+  );
+
+  let above = (bar?.y ?? 0) + (bar?.height ?? 0);
+
+  for (const row of rows) {
+    // Under the bar and under the row before, as wide as the bar, give or take its hover band.
+    expect(row?.y ?? 0).toBeGreaterThanOrEqual(above);
+    expect(Math.abs((row?.width ?? 0) - (bar?.width ?? 0))).toBeLessThanOrEqual(8);
+    above = (row?.y ?? 0) + (row?.height ?? 0);
+  }
+
+  await expect(monthBarKey(page, "saved")).toContainText("set aside");
   await animationsDone(page);
 });
 
