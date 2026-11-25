@@ -63,11 +63,14 @@ controls):
   - `memo`: OFX `MEMO` (unless it stood in for the label), QIF `M`, CAMT.053 and MT940 below, or
     `null`;
   - `bankId`: the bank's own id, or `null`: OFX `FITID` and CAMT.053 `AcctSvcrRef`, unique within
-    the account; QIF `N`, a cheque number or a reference, and MT940's references (often `NONREF`),
-    which nothing makes unique;
+    the account, and PayPal's `Transaction ID` (below); QIF `N`, a cheque number or a reference,
+    MT940's references (often `NONREF`) and any other CSV's bank id, which nothing makes unique;
   - `counterparty`: `{ name, iban }`, who paid or was paid, when the file names either, or `null`
     (always for OFX, QIF and CSV). The IBAN is upper case without spaces, `null` when what the file gives
-    is not shaped as one (a domestic account number).
+    is not shaped as one (a domestic account number);
+  - `original`: `{ amountMinor, currency }`, what the line was in another currency, when the file
+    says so; left out otherwise. Only PayPal's activity gives it (below): its readers' formats
+    give none.
 - `openingBalance`: `{ amountMinor, on }`, the balance before the statement's first line, at the end
   of the day `on`, or `null`: CAMT.053 and MT940 only (below).
 - `balance`: `{ amountMinor, on }`, the closing balance, at the end of the day `on`, or `null`. OFX:
@@ -85,7 +88,8 @@ day is not is treated as not given, and the import's summary says so (`docs/data
 said how to read everything.
 
 CSV: `bookedOn`, `valueOn`, the amount, `label`, `memo` and `bankId` come from the columns the
-profile names; `bankId` is whatever the bank put there, which nothing makes unique. A CSV file
+profile names; `bankId` is whatever the bank put there, which nothing makes unique, but for
+PayPal's activity, whose `Transaction ID` is unique to each row (below). A CSV file
 gives no counterparty and no balance, opening or closing.
 
 **Entities are decoded until none is left** (#132). OFX, QFX and CAMT.053 write `&`, `<`, `>`, `"`
@@ -174,6 +178,7 @@ detection knows.
 | `de-signed`       | `;`, Windows-1252, `DD.MM.YYYY`, `,`, a value date, one signed amount, a currency                 | `Buchungstag;Wertstellung;Verwendungszweck;Betrag;Währung` |
 | `uk-paid-out-in`  | `,`, UTF-8, `DD/MM/YYYY`, `.`, paid out and paid in, a balance left aside                         | `Date,Type,Description,Paid out,Paid in,Balance`           |
 | `us-signed`       | `,`, UTF-8, `MM/DD/YYYY`, `.`, one signed amount, a running balance left aside                    | `Date,Description,Amount,Running Bal.`                     |
+| `paypal-activity` | PayPal's Activity Download, its columns found by name (below)                                     | its mandatory columns, `Date,Time,TimeZone,Name,Type,…`    |
 
 An ISO style (`YYYY-MM-DD`) is not shipped: its dates are never ambiguous, and detection reads it.
 `shippedProfile(key)` finds one; a key no longer shipped gives `undefined`.
@@ -203,6 +208,54 @@ the label is `NotAStatement`; the user then picks every column.
 Not handled yet: a currency symbol inside an amount (`12,34 €`), a trailing minus (`12,34-`), a
 column saying the direction (`D`/`C`) beside an unsigned amount, a balance column, a footer of
 totals (its date cannot be read: refused at its line).
+
+## PayPal's activity
+
+The CSV of PayPal's Activity Download report (#201), read as the statement of a PayPal account
+(`src/paypal.ts`). It is no table of one line per row, so its profile says so: `layout:
+"paypal-activity"`, the one value of `CsvProfile.layout` (left out for every other profile). What
+is known of the file comes from PayPal's public description of the report (its developer
+documentation, "Activity Download report"): UTF-8, commas (a tab-separated file exists too, not
+read), a header row naming the columns, which its user selects, the mandatory ones always there
+(`Date`, `Time`, `TimeZone`, `Name`, `Type`, `Status`, `Currency`, `Gross`, `Fee`, `Net`, `From
+Email Address`, `To Email Address`, `Transaction ID`, `Reference Txn ID`, `Receipt ID`), `Balance
+Impact` (`Debit`, `Credit` or `Memo`) selected by default; days and amounts written as the
+account's country writes them (`MM/DD/YYYY` for the US).
+
+- **Its columns are found by their names**, in English, or in French as an account in France names
+  them (`Nom`, `État`, `Devise`, `Numéro de transaction`, `Numéro de transaction de référence`,
+  `Impact sur le solde`): names compared trimmed, in any case, accents aside. PayPal does not
+  document its French names publicly: those are a guess, and the invented French export of the
+  tests is built on it. A header lacking one of `Date`, `Name`, `Type`, `Status`, `Currency`,
+  `Net` or `Transaction ID` is not PayPal's activity (`MalformedFile`, naming the column).
+  `headerMatches` and `matchCsvHeader` recognise a file by those names, never by its whole header:
+  the profile's `header` and `columns` describe the mandatory columns, in their order, for the
+  import screen and the MCP door to show.
+- **A row counts when it moved the balance**: its `Status` is `Completed` (`Terminé`), and its
+  `Balance Impact`, when the file has the column, is not `Memo` (an authorisation, a cart's item
+  rows). Pending, denied, reversed or voided rows are left out.
+- **In the account's currency**: a row in another moves another balance, and is left out. A payment
+  in another currency is taken from this one by its conversion, a row in the account's currency
+  that names nobody and refers to the payment (`Reference Txn ID`): when the payment it refers to is
+  in another currency and moves money the same way, the conversion is the line, labelled with the
+  payment's `Name`, and the payment's amount is its `original`. With no account chosen (a test
+  read), every row is read, in its own currency.
+- **A line** is booked on `Date` (the day PayPal completed it; its time is read past, its zone
+  only for the order of the day's numbers, below),
+  its amount the `Net` (`Gross` less PayPal's fee: the fee is folded, as the balance moved), its
+  `label` the `Name`, or the `Type` when it names nobody (the money PayPal takes from a bank or a
+  card, `Bank Deposit to PP Account`, `General Card Deposit`), its `memo` the `Type` when the label
+  is the name, its `bankId` the `Transaction ID`, which PayPal makes unique to each row: the import
+  keys the line by it (`bank:`), as OFX's `FITID`.
+- **Days and amounts as the file writes them**: the order of a day's two first numbers is the one
+  a number above 12 says; otherwise day first in French, and in English the one the rows'
+  `TimeZone` says: month first in the United States' and Canada's zones (`PDT`, `EST`,
+  `America/New_York`), day first in any other (`CEST`, `GMT`, `Europe/London`). An English export
+  with no day above the 12th and no zone is refused (`MalformedFile`): a guess would book its lines
+  on the wrong days, and the transaction id, their key, keeps a later import from mending them.
+  The decimal mark is the one an amount ends with before its cents, otherwise a
+  point in English and a comma in French. The profile's `dateFormat` and `decimalMark` are not read
+  with this layout.
 
 ## Errors
 

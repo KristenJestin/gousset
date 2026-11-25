@@ -781,6 +781,10 @@ const SEPARATORS = {
 
 /** How a profile reads a file, in a few words: what an agent needs to choose one. */
 function readsText(profile: CsvProfile): string {
+  if (profile.layout === "paypal-activity") {
+    return "PayPal's activity export, its columns found by their names in English or French, the completed rows that moved the balance in the account's currency, a payment in another currency by its conversion; days and amounts read as the file writes them";
+  }
+
   const { amount } = profile.columns;
   const header = profile.headerRow ? "a header row" : "no header row";
 
