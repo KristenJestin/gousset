@@ -23,18 +23,20 @@ import { openUserData } from "../src/user-data";
 
 const TODAY = "2026-11-15";
 
-const PIZZA_RIVERTON = "CARTE X1234 03/10 PIZZA NOVA RIVERTON";
-const PIZZA_LAKESIDE = "CARTE X1234 17/10 PIZZA NOVA LAKESIDE";
+// An OFX name holds 32 characters, which the statement's writer keeps: each label fits whole, so
+// that its town is not cut short.
+const PIZZA_RIVERTON = "CB 03/10 PIZZA NOVA RIVERTON";
+const PIZZA_LAKESIDE = "CB 17/10 PIZZA NOVA LAKESIDE";
 
 /** One shop in two towns, two other shops paid in both, and a café named after a place. */
 const LINES: ReadonlyArray<Omit<StatementLine, "reference">> = [
   { bookedOn: "2026-10-03", amountMinor: -2450, label: PIZZA_RIVERTON },
   { bookedOn: "2026-10-17", amountMinor: -1890, label: PIZZA_LAKESIDE },
-  { bookedOn: "2026-10-04", amountMinor: -6120, label: "CARTE X1234 04/10 FRESHMART RIVERTON" },
-  { bookedOn: "2026-10-18", amountMinor: -3375, label: "CARTE X1234 18/10 FRESHMART LAKESIDE" },
-  { bookedOn: "2026-10-06", amountMinor: -1500, label: "CARTE X1234 06/10 BOOKMILL RIVERTON" },
-  { bookedOn: "2026-10-19", amountMinor: -990, label: "CARTE X1234 19/10 BOOKMILL LAKESIDE" },
-  { bookedOn: "2026-10-09", amountMinor: -420, label: "CARTE X1234 09/10 CAFE DU PORT" },
+  { bookedOn: "2026-10-04", amountMinor: -6120, label: "CB 04/10 FRESHMART RIVERTON" },
+  { bookedOn: "2026-10-18", amountMinor: -3375, label: "CB 18/10 FRESHMART LAKESIDE" },
+  { bookedOn: "2026-10-06", amountMinor: -1500, label: "CB 06/10 BOOKMILL RIVERTON" },
+  { bookedOn: "2026-10-19", amountMinor: -990, label: "CB 19/10 BOOKMILL LAKESIDE" },
+  { bookedOn: "2026-10-09", amountMinor: -420, label: "CB 09/10 CAFE DU PORT" },
 ];
 
 let data: ReturnType<typeof openUserData>;
