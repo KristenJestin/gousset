@@ -2,6 +2,9 @@
 // cleaned into a key, the words that name who was paid, and keys are matched to the user's
 // merchants. Pure: no I/O. The README beside this file gives each rule, why, and its limits.
 
+import { OPERATION_MERCHANT, OPERATION_PREFIXES } from "./operations";
+import type { Operation } from "./operations";
+
 /** A cleaned label: upper-case ASCII words separated by one space. */
 export type MerchantKey = string;
 
@@ -24,7 +27,7 @@ export type Assignment = {
 const BREAK = " | ";
 
 /** Payment words a label starts with, in French, English, German, Belgian and Swiss styles. */
-const PREFIXES: ReadonlyArray<ReadonlyArray<string>> = [
+const PAYMENT_PHRASES: ReadonlyArray<string> = [
   // French
   "CB",
   "CARTE",
@@ -113,9 +116,28 @@ const PREFIXES: ReadonlyArray<ReadonlyArray<string>> = [
   "KAUF",
   "KAUF DIENSTLEISTUNG",
   "KARTENNUMMER",
-]
-  .map((phrase) => phrase.split(" "))
-  .toSorted((a, b) => b.length - a.length);
+];
+
+/** Phrases as words, the longest first. */
+const phrases = (list: ReadonlyArray<string>): ReadonlyArray<ReadonlyArray<string>> =>
+  list.map((phrase) => phrase.split(" ")).toSorted((a, b) => b.length - a.length);
+
+/**
+ * What is skipped before a name: the payment words, and the operation prefixes whose rest names the
+ * merchant (`./operations`): `ANN CARTE`, a card's cancellation, is skipped as `CARTE` is.
+ */
+const PREFIXES = phrases([
+  ...PAYMENT_PHRASES,
+  ...OPERATION_PREFIXES.flatMap(({ prefix, operation }) =>
+    OPERATION_MERCHANT[operation] === "rest" ? [prefix] : [],
+  ),
+]);
+
+/**
+ * The payment words alone: what a merchant's name skips (a name is the user's words, not a bank's
+ * operation), and what a label skipped before the operation prefixes (#194, `formerMerchantKey`).
+ */
+const PAYMENT_PREFIXES = phrases(PAYMENT_PHRASES);
 
 /** Small words that stand before a date ("LE 21/10", "ON 21 OCT", "VOM 21.10.2026"). */
 const CONNECTORS: ReadonlySet<string> = new Set(["ON", "LE", "DU", "AU", "AM", "VOM"]);
@@ -215,6 +237,14 @@ function normalized(text: string): string {
     .replaceAll("Þ", "TH");
 }
 
+/** Whether a label names its party with a marker (`/DE`, `DE:`, `POUR:`, `/FRM`, `/BEN`…). */
+function namesParty(label: string): boolean {
+  const text = normalized(label);
+  const field = FIELD.exec(text);
+
+  return PARTY.test(field === null ? text : text.slice(0, field.index));
+}
+
 /** A structured label keeps the named party, and loses the fields after it. */
 function structured(text: string): string {
   const field = FIELD.exec(text);
@@ -291,9 +321,13 @@ function isCash(tokens: ReadonlyArray<Token>): boolean {
   });
 }
 
-/** How many tokens a payment phrase takes at `start`, 0 when none starts there. */
-function prefixLength(tokens: ReadonlyArray<Token>, start: number): number {
-  const phrase = PREFIXES.find((words) =>
+/** How many tokens a phrase of `prefixes` takes at `start`, 0 when none starts there. */
+function prefixLength(
+  tokens: ReadonlyArray<Token>,
+  start: number,
+  prefixes: ReadonlyArray<ReadonlyArray<string>>,
+): number {
+  const phrase = prefixes.find((words) =>
     words.every((word, offset) => {
       const token = tokens[start + offset];
 
@@ -311,7 +345,27 @@ function prefixLength(tokens: ReadonlyArray<Token>, start: number): number {
  */
 export const MAX_KEY_LENGTH = 100;
 
-function keyOf(text: string): MerchantKey | null {
+/**
+ * What the label's prefix says the line is (`./operations`): `CB` a card payment, `ANN CARTE` its
+ * cancellation, `VIR` a transfer, `ECH PRET` a loan's instalment, `F` a fee…; null for none. The
+ * prefix is matched whole at the label's start, followed by a space or the label's end.
+ */
+export function operationOf(label: string): Operation | null {
+  const text = normalized(label).replaceAll(/\s+/g, " ").trim();
+
+  const found = OPERATION_PREFIXES.find(
+    ({ prefix }) => text === prefix || text.startsWith(`${prefix} `),
+  );
+
+  return found?.operation ?? null;
+}
+
+/**
+ * The steps of a label's cleaning, in order (the README's rules). Each reads the tokens the one
+ * before left: cash gives no key; what stands before the name is skipped; the name runs to the next
+ * break; what ends it is trimmed.
+ */
+function keyOf(text: string, prefixes = PREFIXES): MerchantKey | null {
   const tokens = tokensOf(text);
 
   if (isCash(tokens)) {
@@ -333,7 +387,7 @@ function keyOf(text: string): MerchantKey | null {
       /^\d+$/.test(token.text) ||
       (CONNECTORS.has(token.text) && tokens[start + 1]?.isBreak === true)
         ? 1
-        : prefixLength(tokens, start);
+        : prefixLength(tokens, start, prefixes);
 
     if (skipped === 0) {
       break;
@@ -372,18 +426,56 @@ function keyOf(text: string): MerchantKey | null {
 }
 
 /**
+ * The key of a label: for a transfer, only the party a marker names (`VIR SEPA RECU /DE ACME
+ * CONSEIL` → `ACME CONSEIL`; `VIR DE EPARGNE` gives none); else its key, whose operation prefix, a
+ * payment phrase, was skipped. A key that would start with a prefix naming no one (`CB F SHOPLY`)
+ * is none: read again, it would give none.
+ */
+function labelKey(text: string): MerchantKey | null {
+  const operation = operationOf(text);
+
+  if (operation !== null && OPERATION_MERCHANT[operation] === "party" && !namesParty(text)) {
+    return null;
+  }
+
+  const key = keyOf(text);
+
+  return key === null || operationOf(key) === null ? key : null;
+}
+
+/**
  * The key that names a statement line's merchant, or null when nothing names one (a cash
- * withdrawal, a label of only references). counterpartyName (CAMT.053/MT940 give it) is preferred
- * when it gives a key.
+ * withdrawal, a loan's instalment, a fee, a label of only references). counterpartyName
+ * (CAMT.053/MT940 give it) is preferred when it gives a key, but for an operation that names no one.
  */
 export function merchantKey(label: string, counterpartyName: string | null): MerchantKey | null {
-  if (isCash(tokensOf(label))) {
+  const operation = operationOf(label);
+
+  if (isCash(tokensOf(label)) || (operation !== null && OPERATION_MERCHANT[operation] === "none")) {
     return null;
   }
 
   const counterparty = counterpartyName === null ? null : keyOf(counterpartyName);
 
-  return counterparty ?? keyOf(label);
+  return counterparty ?? labelKey(label);
+}
+
+/**
+ * The key a line's label had before the operation prefixes (#194), which the merchants made before
+ * were named from: the boot job's re-read (`./reread`) finds by it the cleaned labels that no line
+ * gives any longer.
+ */
+export function formerMerchantKey(
+  label: string,
+  counterpartyName: string | null,
+): MerchantKey | null {
+  if (isCash(tokensOf(label))) {
+    return null;
+  }
+
+  const counterparty = counterpartyName === null ? null : keyOf(counterpartyName, PAYMENT_PREFIXES);
+
+  return counterparty ?? keyOf(label, PAYMENT_PREFIXES);
 }
 
 /**
@@ -428,7 +520,8 @@ export function merchantName(key: MerchantKey): string {
  * alone, or the name upper-cased and cleaned the same way.
  */
 export function nameKey(name: string): MerchantKey {
-  const key = merchantKey(name, null);
+  // A name is the user's words, not a bank's: no operation prefix is read in it.
+  const key = keyOf(name, PAYMENT_PREFIXES);
 
   if (key !== null) {
     return key;

@@ -18,17 +18,37 @@ A key is upper-case ASCII words separated by one space, made only of `A`–`Z`, 
    label. When that name gives a key, it is the key; otherwise the label is read.
 2. **Cash gives none.** `RETRAIT DAB`, `RETRAIT GAB`, `RETRAIT ESPECES`, `CASH WITHDRAWAL`, `ATM`,
    `BANCOMAT`, `GELDAUTOMAT`, `BARGELD…`: a withdrawal pays no one, so it has no merchant, whatever
-   the counterparty says. Bank fees do keep a key (`FRAIS TENUE DE COMPTE`): the bank was paid.
-3. **One alphabet.** Upper case, accents removed (`PÂTISSERIE` → `PATISSERIE`, `Bäckerei` →
+   the counterparty says.
+3. **The operation prefix says what the line is** (#194, `operations.ts`), never who was paid. A
+   prefix is matched whole at the label's start, followed by a space or the label's end, accents and
+   case aside: `F` in `F COTISATION CARTE`, never in `FERNWOOD`; `VIR` in `VIR SEPA …`, never in
+   `VIREMENT GRATUIT`. What each says of the merchant (`OPERATION_MERCHANT`):
+   - **the rest names it**: a card payment (`CB`, `CARTE`), a card's cancellation (`ANN CARTE`, a
+     refund at the same shop: `ANN CARTE SHOPLY 12/10` → `SHOPLY`, the key of the payment it
+     cancels, so #27 proposes the link), a direct debit (`PRLV`). These prefixes are payment phrases
+     too (rule 9), skipped before the name;
+   - **only a named party can**: a transfer (`VIR`, `VIR SEPA`) names a merchant only through a
+     party marker (rule 6: `VIR SEPA RECU /DE ACME CONSEIL` → `ACME CONSEIL`) or the counterparty's
+     name the format gives. Its free text names no one: `VIR DE EPARGNE`, a move between one's own
+     accounts, and `VIR SEPA ACME CONSEIL SALAIRE OCTOBRE` give none;
+   - **nothing names it**, whatever the counterparty says: a loan's instalment (`ECH PRET`), a fee
+     (`F`, `FRAIS`), interest (`INTERETS`), a cheque deposited (`REMISE CHEQUE`), a withdrawal
+     (`RETRAIT`).
+
+   A key that would start with a prefix naming no one (`CB F SHOPLY` → `F SHOPLY`) is none, so that
+   a key read again gives itself. A merchant's own name is the user's words: no operation prefix is
+   read in it (`nameKey`).
+
+4. **One alphabet.** Upper case, accents removed (`PÂTISSERIE` → `PATISSERIE`, `Bäckerei` →
    `BACKEREI`), typographic apostrophes made `'`, `Œ` and `Æ` spelled out.
-4. **Web addresses.** `WWW.` and `https://` go; a domain's ending (`.COM`, `.FR`, `.CO.UK`,
+5. **Web addresses.** `WWW.` and `https://` go; a domain's ending (`.COM`, `.FR`, `.CO.UK`,
    `.IO`…) and the path after it end the name: `PIXELPLAY.COM/BILL` → `PIXELPLAY`.
-5. **Structured transfers and direct debits.** The first field marker cuts the label: `/MOTIF`,
+6. **Structured transfers and direct debits.** The first field marker cuts the label: `/MOTIF`,
    `/REF`, `/LIB`, `ECH/`, `ID EMETTEUR/`, `MDT/`, `REF/`, `REF:`, `LIB:`, `MOTIF:`, and German
    `EREF+`, `MREF+`, `SVWZ+`… Before it, a party marker (`/DE`, `/FRM`, `/BEN`, `DE:`, `POUR:`,
    `FROM:`, `TO:`) says where the name starts: `VIR SEPA RECU /DE ACME CONSEIL /MOTIF SALAIRE` →
    `ACME CONSEIL`.
-6. **Breaks.** These never name anyone, and each ends a name:
+7. **Breaks.** These never name anyone, and each ends a name:
    - an amount with its currency (`23,40 EUR`, `EUR 23.40`), any decimal number;
    - a date (`21/10`, `21/10/26`, `21.10.2026`, `2026-10-21`, `21-10-2026`, `21 OCT`, `21OCT26`),
      a time (`10:15`);
@@ -37,7 +57,7 @@ A key is upper-case ASCII words separated by one space, made only of `A`–`Z`, 
    - any number of three digits or more (a `DDMM` date, a store number, a reference), and any word
      mixing letters and digits (`AB12CD34E`, `S386294`);
    - the separators `//`, `-` and `*`.
-7. **Card processors.** `SQ *`, `TST*` and `SP *` stand before the shop's own name, so they are
+8. **Card processors.** `SQ *`, `TST*` and `SP *` stand before the shop's own name, so they are
    dropped: `SQ *CORNER CAFE` → `CORNER CAFE`. A **payment intermediary** is not a processor: in
    `PAYLINK *PIXELPLAY` the `*` ends the name and the key is `PAYLINK`: the intermediary is the
    label's merchant, marked as one (#30). Recognition marks a merchant it makes from a key equal,
@@ -48,34 +68,46 @@ A key is upper-case ASCII words separated by one space, made only of `A`–`Z`, 
    *PIXELPLAY`, `ruleWords` in `rule-words.ts`), never the intermediary alone. When nothing after
    the intermediary's name names anyone (`CB PAYPAL`, `PAYPAL 21/10`), there are no words and no
    rule is proposed: any would match every line of the intermediary. Words after it that a key's
-   end drops (rule 10: a legal form, a country) are the intermediary's own company, not who was
+   end drops (rule 11: a legal form, a country) are the intermediary's own company, not who was
    paid: `PRLV SEPA PAYPAL EUROPE SARL` proposes none, and `PAYPAL EUROPE SARL *PIXELPLAY` looks
    past them to `PIXELPLAY`.
-8. **What comes before the name** is skipped: payment words (`CB`, `CARTE`, `PAIEMENT PAR CARTE`,
+9. **What comes before the name** is skipped: payment words (`CB`, `CARTE`, `PAIEMENT PAR CARTE`,
    `PRLV SEPA`, `PRELEVEMENT EUROPEEN`, `VIR`, `VIREMENT INSTANTANE EMIS`, `CARD PAYMENT TO`,
    `DIRECT DEBIT`, `POS`, `CONTACTLESS`, `VISA DEBIT`, `BANCONTACT`, `KARTENZAHLUNG`,
    `SEPA-LASTSCHRIFT`, `UEBERWEISUNG`, `KAUF/DIENSTLEISTUNG`, `DOMICILIATION`…, the full list is
-   `PREFIXES`), breaks, numbers, and a small word standing just before a break (`DU 211026`,
+   `PAYMENT_PHRASES`, with rule 3's prefixes that let the rest name the merchant), breaks, numbers, and a small word standing just before a break (`DU 211026`,
    `VOM 21.10.2026`, `ON 21-10-2026`). So when the date comes first, the name is after it:
    `CARTE 21/10/26 GREENMARKET` → `GREENMARKET`.
-9. **The name runs to the next break.** What follows a date, a store number or a card number is the
-   place, and is dropped: `CB GREENMARKET 2110 RIVERTON` → `GREENMARKET`. It stops at
-   `MAX_KEY_LENGTH` (100) characters too, on a whole word (a single longer word is cut): a key
-   becomes a new merchant's name, which is at most as long, and a label of any length never
-   makes a key too long for the unique indexes on names and cleaned labels.
-10. **What ends a name is trimmed**, one word at a time, while more than one word is left: a
+10. **The name runs to the next break.** What follows a date, a store number or a card number is the
+    place, and is dropped: `CB GREENMARKET 2110 RIVERTON` → `GREENMARKET`. It stops at
+    `MAX_KEY_LENGTH` (100) characters too, on a whole word (a single longer word is cut): a key
+    becomes a new merchant's name, which is at most as long, and a label of any length never
+    makes a key too long for the unique indexes on names and cleaned labels.
+11. **What ends a name is trimmed**, one word at a time, while more than one word is left: a
     country (`FR`, `GB`, `GBR`, `DE`, `US`…), a US state (`CA`, `NY`, `TX`…), a legal form (`SA`,
     `SAS`, `SARL`, `GMBH`, `& CO KG`, `LTD`, `LIMITED`, `INC`, `LLC`, `BV`, `SRL`, `& CIE`…), the
     small words before a date (`ON`, `LE`, `DU`…), and `CARD`, `CARTE`, `REF` left before a number.
-11. Nothing left is no key: a label of only references gives none.
+12. Nothing left is no key: a label of only references gives none.
+
+The steps run in this order, one after the other (`keyOf`, then `labelKey` and `merchantKey` for
+rules 1 to 3): a step added later (#193's town) goes in its place in that order, and its rule here.
+
+### Adding a bank's prefixes
+
+A bank's operation prefixes are one more list in `operations.ts` (as `FRENCH` is), joined into
+`OPERATION_PREFIXES`, each prefix with the operation it says. A new kind of operation is one more
+value of `Operation`, with what it says of the merchant in `OPERATION_MERCHANT`. Its invented
+labels go in `labels.test.ts`: each prefix with a label of its own, and a name that starts with the
+same letters left untouched.
 
 ### Known limits of the key
 
 - **A town with no separator stays**: `CONTACTLESS CORNER CAFE RIVERTON` → `CORNER CAFE RIVERTON`.
   The matching below joins it to `CORNER CAFE` when that is known.
-- **The free text of a transfer stays**: `VIR SEPA ACME CONSEIL SALAIRE OCTOBRE` → `ACME CONSEIL
-  SALAIRE OCTOBRE`, `PRLV SEPA STREAMFLIX ABONNEMENT` → `STREAMFLIX ABONNEMENT`. Nothing tells a
-  name's last word from a motive's first; the matching joins them when the short form is known.
+- **The free text of a direct debit, or of a transfer another bank's way, stays**: `PRLV SEPA
+  STREAMFLIX ABONNEMENT` → `STREAMFLIX ABONNEMENT`, `SEPA TRF ACME CONSULTING SALARY` → `ACME
+  CONSULTING SALARY`. Nothing tells a name's last word from a motive's first; the matching joins
+  them when the short form is known. A `VIR` transfer's free text gives no key at all (rule 3).
 - **Numbers inside a name are lost** when they have three digits or more, or are glued to letters
   (`7SEAS`, `CAFE 1928`), and a name that starts with a number loses it.
 - **A short word at the end may be taken for a country, a state or a legal form**: `PLUG CO` →
@@ -85,6 +117,10 @@ A key is upper-case ASCII words separated by one space, made only of `A`–`Z`, 
 - **A word that is a payment word** at a name's start is dropped (`VISA`, `ACHAT`, `RETOUR`): a
   shop named that way loses its first word.
 - **Any `ATM` or `BANCOMAT`** in a label makes it a withdrawal.
+- **A prefix glued to what follows is no operation** (`CB*4821 SHOPLY`): the label is read as
+  before, its key the same. **A shop whose name is a prefix naming no one** loses its key after a
+  card's prefix (`CB FRAIS DE PORT EXPRESS`): the line is read as a fee. Only the prefixes of
+  `operations.ts` are known: another bank's (`VIREMENT`, `PRELEVEMENT`) stay payment words (rule 9).
 
 ## A new merchant's name (`merchantName`)
 
