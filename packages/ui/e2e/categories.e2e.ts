@@ -148,7 +148,7 @@ test.describe("ColorSwatches (#205)", () => {
   });
 
   test("offers no colour first, standing for the parent's", async ({ page }) => {
-    await page.goto(formsStory("colorswatches", "parentscolour"));
+    await page.goto(formsStory("colorswatches", "parents-colour"));
 
     const none = page.getByRole("radio", { name: "As Housing" });
 
