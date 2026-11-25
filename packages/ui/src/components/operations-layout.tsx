@@ -71,7 +71,7 @@ function DetailColumn({
           ? cn(
               "flex min-h-0 w-94 shrink-0 overflow-hidden transition-width duration-300 ease-out",
               "max-lg:hidden",
-              widens && "starting:w-0",
+              widens && "",
               "data-closing:w-0 data-closing:delay-150 data-closing:duration-150 data-closing:ease-in",
             )
           : "contents"
