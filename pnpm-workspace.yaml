@@ -29,3 +29,9 @@ minimumReleaseAgeExclude:
   - "@tanstack/react-hotkeys@0.27.2"
   - "@tanstack/hotkeys-devtools@1.11.4"
   - "@tanstack/react-hotkeys-devtools@0.14.14"
+# Exact versions only. motion-dom@14.14.0: its WAAPI start times are put on the animation's
+# timeline, which in Firefox can trail performance.now() by seconds and delay every fade (#167).
+# A Renovate bump of motion or motion-dom must re-apply this patch to the new version, or drop it
+# once upstream fixes it; until then it applies to 14.14.0 alone.
+patchedDependencies:
+  motion-dom@14.14.0: patches/motion-dom@14.14.0.patch
