@@ -5,7 +5,7 @@ import { describe, expect, test } from "vite-plus/test";
 
 import { csvFile, matchCsvHeader, readCsv, testReadCsv } from "./csv";
 import { SHIPPED_PROFILES, shippedProfile } from "./csv-shipped";
-import { InvalidField, MalformedFile, MissingField } from "./errors";
+import { MalformedFile } from "./errors";
 
 // PayPal's activity read as an account's statement (#201, docs/data-model.md, "PayPal's
 // activity"), on invented exports (`@gousset/fixture`): the rows that moved the balance in the
@@ -45,12 +45,6 @@ const conversionFor = (currency: string) =>
       `05/10/2026,19:41:02,CEST,Example Travel Ltd,Express Checkout Payment,Completed,${currency},-30.00,0.00,-30.00,,,0PPEXAMPLE0000061,,,Debit`,
       "05/10/2026,19:41:02,CEST,,General Currency Conversion,Completed,EUR,-27.60,0.00,-27.60,,,0PPEXAMPLE0000062,0PPEXAMPLE0000061,,Debit",
     ].join("\n"),
-  );
-
-/** Why reading `conversionFor(currency)` into a euro account fails. */
-const failure = (currency: string) =>
-  Effect.runSync(
-    Effect.flip(readCsv(conversionFor(currency), paypal().profile, { currency: "EUR" })),
   );
 
 type Expected = {
@@ -299,19 +293,30 @@ describe("PayPal's activity", () => {
     ]);
   });
 
-  test("refuses a conversion whose payment's currency is no ISO 4217 code, naming its cell", () => {
-    // The payment is another balance's, but its currency would be the line's original one.
-    for (const written of ["US$", "€", "usd dollars"]) {
-      const failed = failure(written);
+  test("keeps a payment's currency as the conversion's original only when it is an ISO 4217 code", () => {
+    const conversion = line({
+      bookedOn: "2026-10-05",
+      amountMinor: -2760,
+      label: "General Currency Conversion",
+      memo: null,
+      bankId: "0PPEXAMPLE0000062",
+    });
 
-      expect(failed, written).toBeInstanceOf(InvalidField);
-      expect(failed, written).toMatchObject({ line: 2, column: 7, field: "currency" });
+    // A code: the conversion is the payment, named and in its currency.
+    expect(read(conversionFor("USD"))).toEqual([
+      {
+        ...conversion,
+        label: "Example Travel Ltd",
+        memo: "General Currency Conversion",
+        original: { amountMinor: -3000, currency: "USD" },
+      },
+    ]);
+
+    // Another text, or none: the payment is another balance's, and fails nothing. The conversion
+    // is read without it, as when its Net cannot be read.
+    for (const written of ["US$", "€", "usd dollars", ""]) {
+      expect(read(conversionFor(written)), written).toEqual([conversion]);
     }
-
-    const blank = failure("");
-
-    expect(blank).toBeInstanceOf(MissingField);
-    expect(blank).toMatchObject({ line: 2, column: 7, field: "currency" });
   });
 
   test("into an account in dollars, reads the dollar rows: the purchase and its conversion", () => {

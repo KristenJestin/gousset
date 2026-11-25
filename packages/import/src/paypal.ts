@@ -297,25 +297,6 @@ const netOf = (movement: Movement, syntax: AmountSyntax): Effect.Effect<number, 
     : readAmount(written, movement.currency, syntax);
 };
 
-/**
- * A payment's currency, as a line's `original` takes it: an ISO 4217 code. Another (`US$`, `€`,
- * nothing) is refused at its cell, for the user to see, rather than reaching the database's check.
- */
-const currencyOf = (movement: Movement, at: Columns["at"]): Effect.Effect<string, ReadError> => {
-  const cell = cellOf(movement.row, at.currency);
-  const written = fieldOf("currency", cell);
-
-  if (written.text === "") {
-    return Effect.fail(
-      new MissingField({ line: cell.line, column: cell.column, field: "currency" }),
-    );
-  }
-
-  return isKnownCurrency(movement.currency)
-    ? Effect.succeed(movement.currency)
-    : Effect.fail(invalidField(written, "a currency's ISO 4217 code, such as USD"));
-};
-
 const lineOf = (movement: Movement, at: Columns["at"], reading: Reading) =>
   Effect.gen(function* () {
     const { row } = movement;
@@ -334,18 +315,21 @@ const lineOf = (movement: Movement, at: Columns["at"], reading: Reading) =>
     // A conversion of the account's currency for a payment in another, moving money the same way:
     // the payment's name and amount are what it was. The payment moves another balance, left out
     // of this account: a Net of its that cannot be read leaves the conversion without them, rather
-    // than failing the account's lines. Its currency, which the line would keep, must be a code.
-    const foreign = paid !== undefined && paid.currency !== movement.currency ? paid : undefined;
-    const paidCurrency = foreign === undefined ? undefined : yield* currencyOf(foreign, at);
+    // than failing the account's lines. So does a currency that is no ISO 4217 code (`US$`, `€`,
+    // nothing), which the line could not keep.
+    const foreign =
+      paid !== undefined && paid.currency !== movement.currency && isKnownCurrency(paid.currency)
+        ? paid
+        : undefined;
 
     const paidMinor =
       foreign === undefined ? Option.none() : yield* Effect.option(netOf(foreign, reading.syntax));
 
     const original: OriginalAmount | undefined =
-      paidCurrency !== undefined &&
+      foreign !== undefined &&
       Option.isSome(paidMinor) &&
       Math.sign(paidMinor.value) === Math.sign(amountMinor)
-        ? { amountMinor: paidMinor.value, currency: paidCurrency }
+        ? { amountMinor: paidMinor.value, currency: foreign.currency }
         : undefined;
 
     const name =

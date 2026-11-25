@@ -249,9 +249,9 @@ account's country writes them (`MM/DD/YYYY` for the US).
   in another currency and moves money the same way, the conversion is the line, labelled with the
   payment's `Name`, and the payment's amount is its `original`. The payment is another balance's:
   when its `Net` cannot be read, the conversion is still read, labelled with its `Type` and without
-  an `original`, rather than failing the file. Its `Currency`, which the line would keep, must be an
-  ISO 4217 code: another (`US$`, `€`) is `InvalidField` at its cell, an empty one `MissingField`. With no account chosen (a test read), every row is
-  read, in its own currency.
+  an `original`, rather than failing the file. So is it when the payment's `Currency`, which the line
+  would keep, is no ISO 4217 code (`US$`, `€`, nothing). With no account chosen (a test read),
+  every row is read, in its own currency.
 - **A line** is booked on `Date` (the day PayPal completed it; its time is read past, its zone
   only for the order of the day's numbers, below),
   its amount the `Net` (`Gross` less PayPal's fee: the fee is folded, as the balance moved), its
