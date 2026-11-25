@@ -1,13 +1,17 @@
 import { category } from "@gousset/db/schema/ledger";
 import { UserData } from "@gousset/db/user-data";
 import type { QueryFailed, UserTransaction } from "@gousset/db/user-data";
+import { asc, eq } from "drizzle-orm";
 import { Effect } from "effect";
+import type { Option } from "effect";
 
 // The categories every user starts with (#23; docs/data-model.md, v0.3): two levels, expense and
 // income, each kind with its fallback, "Other", where an entry goes until it is classified. The set
-// is copied into a user's rows at sign-up, in the language their browser prefers; from then on the
+// is copied into a user's rows at sign-up, in the language of their interface; from then on the
 // names are theirs. The migration `*_categories_isolation` gives every user who existed before it
-// the English set: a unit test keeps its SQL equal to this constant.
+// the English set: a unit test keeps its SQL equal to this constant. A user made before #195, or
+// by the administrator, gets the defaults they never touched renamed once into their own language,
+// at their first signed-in page (`settleDefaultNames`).
 
 /** The languages the default set is written in. */
 export type SetLanguage = "en" | "fr";
@@ -212,6 +216,160 @@ export function setLanguageOf(acceptLanguage: string | null | undefined): SetLan
 
   return first === "fr" || first.startsWith("fr-") ? "fr" : "en";
 }
+
+/** The cookie the interface keeps the language the user chose in (Paraglide's, packages/i18n). */
+export const LANGUAGE_COOKIE = "PARAGLIDE_LOCALE";
+
+/**
+ * The language of the set for a request, as the interface decides its own (apps/web, server.ts):
+ * the language the user chose (its cookie), else the browser's `Accept-Language`, else English.
+ */
+export function setLanguageOfRequest(
+  cookieHeader: string | null | undefined,
+  acceptLanguage: string | null | undefined,
+): SetLanguage {
+  const chosen = (cookieHeader ?? "")
+    .split(";")
+    .map((pair) => pair.trim().split("="))
+    .find(([name]) => name === LANGUAGE_COOKIE)?.[1];
+
+  return chosen === "fr" || chosen === "en" ? chosen : setLanguageOf(acceptLanguage);
+}
+
+/** A category as the renaming of the defaults reads it. */
+export type HeldCategory = {
+  readonly id: string;
+  readonly kind: "expense" | "income";
+  readonly parentId: string | null;
+  readonly name: string;
+  readonly archived: boolean;
+  readonly fallback: boolean;
+};
+
+/** A category's new name. */
+export type DefaultRename = { readonly id: string; readonly name: string };
+
+const LANGUAGES: ReadonlyArray<SetLanguage> = ["en", "fr"];
+
+const isNameOf = (slot: DefaultName, name: string) =>
+  LANGUAGES.some((language) => slot[language] === name);
+
+/**
+ * What renames a user's untouched defaults into `language`. A default is untouched while it sits
+ * where the set put it, not archived, with a name the set gives it in one of its languages: a
+ * top-level category at the top of its kind (a fallback only as its kind's fallback), a child under
+ * an untouched top-level category of the set. What the user renamed, moved or archived is theirs,
+ * and so are the children of a top-level category they renamed. A name a sibling already holds
+ * (letter case aside) is left as it is.
+ */
+export function renamesInto(
+  rows: ReadonlyArray<HeldCategory>,
+  language: SetLanguage,
+): ReadonlyArray<DefaultRename> {
+  const live = rows.filter((row) => !row.archived);
+
+  const tops = live.flatMap((row) => {
+    const slot =
+      row.parentId === null
+        ? DEFAULT_CATEGORIES[row.kind].find(
+            (top) => isNameOf(top, row.name) && (top.fallback === true) === row.fallback,
+          )
+        : undefined;
+
+    return slot === undefined ? [] : [{ row, slot }];
+  });
+
+  const slotOfTop = new Map(tops.map((each) => [each.row.id, each.slot]));
+
+  const children = live.flatMap((row) => {
+    const parent = row.parentId === null ? undefined : slotOfTop.get(row.parentId);
+    const slot = parent?.children.find((child) => isNameOf(child, row.name));
+
+    return slot === undefined ? [] : [{ row, slot }];
+  });
+
+  // The names each set of siblings holds, as the renames change them.
+  const siblingsOf = (row: HeldCategory) => `${row.kind}/${row.parentId ?? ""}`;
+  const taken = new Map<string, Set<string>>();
+
+  for (const row of rows) {
+    const names = taken.get(siblingsOf(row)) ?? new Set<string>();
+
+    names.add(row.name.toLowerCase());
+    taken.set(siblingsOf(row), names);
+  }
+
+  return [...tops, ...children].flatMap(({ row, slot }) => {
+    const name = slot[language];
+    const names = taken.get(siblingsOf(row));
+
+    if (name === row.name || names === undefined) {
+      return [];
+    }
+
+    // Another sibling of that name: the user's, or a default they renamed so.
+    if (name.toLowerCase() !== row.name.toLowerCase() && names.has(name.toLowerCase())) {
+      return [];
+    }
+
+    names.delete(row.name.toLowerCase());
+    names.add(name.toLowerCase());
+
+    return [{ id: row.id, name }];
+  });
+}
+
+/**
+ * Renames `owner`'s untouched defaults into `language` (`renamesInto`), in a transaction of
+ * theirs. Their categories are locked first, so that two at once rename once.
+ */
+export async function renameDefaultsIn(
+  transaction: UserTransaction,
+  language: SetLanguage,
+): Promise<number> {
+  const rows = await transaction
+    .select({
+      id: category.id,
+      kind: category.kind,
+      parentId: category.parentId,
+      name: category.name,
+      archivedAt: category.archivedAt,
+      fallback: category.isFallback,
+    })
+    .from(category)
+    .orderBy(asc(category.id))
+    .for("update");
+
+  const renames = renamesInto(
+    rows.map((row) => ({ ...row, archived: row.archivedAt !== null })),
+    language,
+  );
+
+  for (const rename of renames) {
+    await transaction.update(category).set({ name: rename.name }).where(eq(category.id, rename.id));
+  }
+
+  return renames.length;
+}
+
+/**
+ * The first signed-in page of a user whose defaults were never put in their language (a user made
+ * before #195, or by the administrator): their untouched defaults are renamed into the language of
+ * that page, once. The user is marked in the same transaction, so a second page, at once or later,
+ * renames nothing; from then on the names are theirs. Gives how many were renamed, or none when
+ * the user was marked already.
+ */
+export const settleDefaultNames = (
+  owner: string,
+  language: SetLanguage,
+): Effect.Effect<Option.Option<number>, QueryFailed, UserData> =>
+  Effect.gen(function* () {
+    const userData = yield* UserData;
+
+    return yield* userData.settlingDefaultNames(owner, (transaction) =>
+      renameDefaultsIn(transaction, language),
+    );
+  });
 
 /**
  * Writes the default set in `language` as `owner`'s categories, in a transaction of theirs. A user
