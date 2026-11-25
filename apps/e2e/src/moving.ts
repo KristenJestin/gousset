@@ -53,15 +53,19 @@ const TRANSFORMS_MOVING = `(() => {
 })()`;
 
 /**
- * Every animation `document.getAnimations()` lists, described: its kind, what it animates, its
- * element, its state and its timing. A failure that waited on one says which, and why it is still
- * there (a loop, a paused one, one that restarts).
+ * Every animation `document.getAnimations()` lists but those finished, described: its kind, what it
+ * animates, its element, its state and its timing. A failure that waited on one says which, and why
+ * it is still there (a loop, a paused one, one that restarts). A finished one that keeps its last
+ * frame (`fill: both`, the accounts' entrances, #181) stays listed, yet moves nothing; one about to
+ * play again is pending, and still counts.
  */
-const ANIMATIONS_LISTED = `(() => {
+const ANIMATIONS_MOVING = `(() => {
   const named = ${NAMED};
   const meta = new Set(["offset", "computedOffset", "easing", "composite"]);
 
-  return document.getAnimations().map((animation) => {
+  return document.getAnimations().filter((animation) =>
+    animation.playState !== "finished" || animation.pending
+  ).map((animation) => {
     const effect = animation.effect;
     const timing = effect?.getComputedTiming();
     const what =
@@ -82,7 +86,7 @@ export async function transformsMoving(page: Page): Promise<ReadonlyArray<string
   return Schema.decodeUnknownSync(Descriptions)(await page.evaluate(TRANSFORMS_MOVING));
 }
 
-/** Every animation the page lists, one line each; empty when none is. */
-export async function animationsListed(page: Page): Promise<ReadonlyArray<string>> {
-  return Schema.decodeUnknownSync(Descriptions)(await page.evaluate(ANIMATIONS_LISTED));
+/** Every animation the page lists that has not finished, one line each; empty when none is. */
+export async function animationsMoving(page: Page): Promise<ReadonlyArray<string>> {
+  return Schema.decodeUnknownSync(Descriptions)(await page.evaluate(ANIMATIONS_MOVING));
 }
