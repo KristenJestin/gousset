@@ -411,7 +411,10 @@ the `image` job and runs `tools/check-upgrade.sh` on it, which, on a fresh proje
    declaration must find a row of the release once its statement was imported, the rows after the
    update must be exactly the rows before with the declared changes, and no other row may change:
    a declaration says what changes, it never lets a table or a column change freely;
-6. starts the app: `/health` answers 200; **the administrator and both users sign in with the same
+6. starts the app: `/health` answers 200; once the boot's merchants and balances jobs have
+   completed, the user's merchants (#24) and her noted balance's movement line (#31) are there, the
+   line once: the boot makes them from a release older than 0.3.0, and from 0.3.0 the release's
+   own import made them, so only the boot's making no second line is checked; **the administrator and both users sign in with the same
    passwords**, the temporary one still has to be replaced, the banned one is still refused, and a
    session made before the update still works;
 7. downloads the user's **export** (#22, `/api/export`), which the last release may not have: each
