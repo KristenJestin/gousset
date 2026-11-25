@@ -15,6 +15,7 @@ import {
   toLinearRgb,
   toOklch,
 } from "./contrast";
+import { THEME_COLORS } from "./theme-color";
 
 const css = readFileSync(new URL("../styles/globals.css", import.meta.url), "utf8");
 
@@ -104,4 +105,14 @@ describe("the theme", () => {
     expect(declarations.get("--primary")).toBe("light-dark(var(--brand-light), var(--brand-dark))");
     expect(declarations.get("--ring")).toBe("var(--primary)");
   });
+
+  it.each(["light", "dark"] as const)(
+    "gives the browser's bars the page's background in %s (theme-color)",
+    (scheme) => {
+      const background = toLinearRgb(resolveColor(readDeclarations(css), "--background", scheme));
+
+      // The hex is the token rounded to 8 bits a channel: no step the eye sees between the two.
+      expect(contrastRatio(hexToLinearRgb(THEME_COLORS[scheme]), background)).toBeLessThan(1.01);
+    },
+  );
 });

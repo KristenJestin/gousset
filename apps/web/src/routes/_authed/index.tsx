@@ -157,7 +157,7 @@ function Review() {
   return (
     <Page
       title={m.reviewTitle()}
-      actions={
+      month={
         <MonthSwitch
           month={shown}
           currentMonth={currentMonth}
