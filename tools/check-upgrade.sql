@@ -1,11 +1,10 @@
 -- The rows tools/check-upgrade.sh puts into the last release, through the tables' owner, for what
 -- that release offers no route to (0.1.1 has neither an accounts screen nor an import route): two
--- users' accounts, balances, an import with its file and lines, a CSV profile, and an MCP client
--- with its consent and tokens. The users themselves, their passwords and sessions come through the
+-- users' accounts, balances, an import with its file and lines (with their entries, from 0.3.0), a
+-- CSV profile, and an MCP client with its consent and tokens. The users themselves, their passwords and sessions come through the
 -- app's own API. Every value is invented. Written for 0.1.1's schema: a release that changes these
 -- tables, or offers a route for them, changes this file (docs/releases.md, "Every release is an
--- upgrade"). From 0.3.0 on, the counted lines are given their entries at the end, as 0.3.0's
--- migration gave them to the lines 0.2 kept.
+-- upgrade").
 --   psql -v camille=<user id> -v admin=<user id> -f tools/check-upgrade.sql
 \set ON_ERROR_STOP on
 
@@ -70,6 +69,51 @@ two', null, null, null, 'k-2026-10-12--1999-1', null, null, '2026-11-01 10:00:03
   ('019a0000-0000-7000-8000-000000000426', :'camille', '019a0000-0000-7000-8000-000000000106', '019a0000-0000-7000-8000-000000000304', 'import', 'counted', '2026-09-26', null, 3000, null, null, 'VIR DEPUIS COMPTE COURANT', null, null, null, null, 'k-2026-09-26-3000-1', null, null, '2026-10-02 09:01:01+00', '2026-10-02 09:01:01+00'),
   ('019a0000-0000-7000-8000-000000000424', :'camille', '019a0000-0000-7000-8000-000000000106', '019a0000-0000-7000-8000-000000000304', 'import', 'counted', '2026-10-01', null, 15000, null, null, 'VIR DEPUIS COMPTE COURANT', null, null, null, null, 'k-2026-10-01-15000-1', null, null, '2026-10-02 09:01:01+00', '2026-10-02 09:01:01+00');
 
+-- From 0.3.0 on, packages/core writes a counted line with an amount together with its entry (#23;
+-- docs/data-model.md, "Every counted line with an amount has exactly one entry"): an expense when
+-- money leaves, an income when it comes in, the day it was booked, in its kind's fallback category,
+-- `classified_by = default`, with one payment part of the whole line. Before 0.3.0 there is no
+-- entry, and the update's migration gives each line its own.
+DO $$
+BEGIN
+  IF to_regclass('public.entry_part') IS NOT NULL THEN
+    WITH given (entry_id, part_id, line_id) AS (
+      VALUES
+        ('019a0000-0000-7000-8000-000000000601'::uuid, '019a0000-0000-7000-8000-000000000701'::uuid, '019a0000-0000-7000-8000-000000000401'::uuid),
+        ('019a0000-0000-7000-8000-000000000602', '019a0000-0000-7000-8000-000000000702', '019a0000-0000-7000-8000-000000000402'),
+        ('019a0000-0000-7000-8000-000000000603', '019a0000-0000-7000-8000-000000000703', '019a0000-0000-7000-8000-000000000403'),
+        ('019a0000-0000-7000-8000-000000000606', '019a0000-0000-7000-8000-000000000706', '019a0000-0000-7000-8000-000000000406'),
+        ('019a0000-0000-7000-8000-000000000607', '019a0000-0000-7000-8000-000000000707', '019a0000-0000-7000-8000-000000000407'),
+        ('019a0000-0000-7000-8000-000000000611', '019a0000-0000-7000-8000-000000000711', '019a0000-0000-7000-8000-000000000411'),
+        ('019a0000-0000-7000-8000-000000000612', '019a0000-0000-7000-8000-000000000712', '019a0000-0000-7000-8000-000000000412'),
+        ('019a0000-0000-7000-8000-000000000613', '019a0000-0000-7000-8000-000000000713', '019a0000-0000-7000-8000-000000000413'),
+        ('019a0000-0000-7000-8000-000000000614', '019a0000-0000-7000-8000-000000000714', '019a0000-0000-7000-8000-000000000414'),
+        ('019a0000-0000-7000-8000-000000000615', '019a0000-0000-7000-8000-000000000715', '019a0000-0000-7000-8000-000000000415'),
+        ('019a0000-0000-7000-8000-000000000621', '019a0000-0000-7000-8000-000000000721', '019a0000-0000-7000-8000-000000000421'),
+        ('019a0000-0000-7000-8000-000000000622', '019a0000-0000-7000-8000-000000000722', '019a0000-0000-7000-8000-000000000422'),
+        ('019a0000-0000-7000-8000-000000000623', '019a0000-0000-7000-8000-000000000723', '019a0000-0000-7000-8000-000000000423'),
+        ('019a0000-0000-7000-8000-000000000624', '019a0000-0000-7000-8000-000000000724', '019a0000-0000-7000-8000-000000000424'),
+        ('019a0000-0000-7000-8000-000000000625', '019a0000-0000-7000-8000-000000000725', '019a0000-0000-7000-8000-000000000425'),
+        ('019a0000-0000-7000-8000-000000000626', '019a0000-0000-7000-8000-000000000726', '019a0000-0000-7000-8000-000000000426')
+    ), pending AS MATERIALIZED (
+      SELECT g.entry_id, g.part_id, l.id AS line_id, l.user_id, l.booked_on, abs(l.amount_minor) AS amount,
+        l.created_at, c.id AS category_id, c.kind
+      FROM given g
+      JOIN statement_line l ON l.id = g.line_id
+      JOIN category c ON c.user_id = l.user_id AND c.is_fallback
+        AND c.kind = (CASE WHEN l.amount_minor < 0 THEN 'expense' ELSE 'income' END)::entry_kind
+    ), made AS (
+      INSERT INTO entry (id, user_id, kind, happened_on, category_id, classified_by, created_at, updated_at)
+      SELECT p.entry_id, p.user_id, p.kind, p.booked_on, p.category_id, 'default', p.created_at, p.created_at
+      FROM pending p
+      RETURNING id
+    )
+    INSERT INTO entry_part (id, user_id, entry_id, line_id, role, amount_minor)
+    SELECT p.part_id, p.user_id, p.entry_id, p.line_id, 'payment', p.amount FROM pending p;
+  END IF;
+END
+$$;
+
 insert into account_balance (id, user_id, account_id, day, balance_minor, source, import_id)
 values
   ('019a0000-0000-7000-8000-000000000501', :'camille', '019a0000-0000-7000-8000-000000000101', '2026-09-30', 125043, 'statement', '019a0000-0000-7000-8000-000000000301'),
@@ -89,36 +133,14 @@ values ('mcp-refresh-1', 'invented-refresh-token-hash', 'https://agent.example.c
 insert into auth_oauth_access_token (id, token, client_id, user_id, resources, refresh_id, expires_at, created_at, scopes)
 values ('mcp-access-1', 'invented-access-token-hash', 'https://agent.example.com/oauth/client.json', :'camille', '{http://localhost/mcp}', 'mcp-refresh-1', '2026-11-04 10:00:05', '2026-11-04 09:00:05', '{gousset:read,gousset:write}');
 
--- From 0.3.0 on, every counted line with an amount has one entry (#23): the lines above get theirs as
--- 0.3.0's migration gave them to the lines 0.2 kept (`*_categories_isolation`): an expense or an
--- income in its kind's fallback, by default, with one payment part of the whole line. So a release
--- from 0.3.0 holds them as an installation updated from 0.2 holds its own: classified, and never
--- paired as transfers. A release before has no entry: the update's migration gives them. Then
--- Camille classifies two of her old transfer lines, as 0.3.0 lets her (#192): one by hand, the
--- other by a rule she wrote and applied to the past; each expense goes to the first top-level
--- expense category of hers that is no fallback. The tables' owner is a superuser here, which
--- row-level security does not bind.
+-- Camille's old transfer lines (#192) have their entries from 0.3.0 on (above): classified by
+-- default, never paired, as an installation updated from 0.2 holds them. Then she classifies two of
+-- them, as 0.3.0 lets her: one by hand, the other by a rule she wrote and applied to the past; each
+-- expense goes to the first top-level expense category of hers that is no fallback. Before 0.3.0
+-- she could not. The tables' owner is a superuser here, which row-level security does not bind.
 do $$
 begin
-  if to_regclass('public.entry') is not null then
-    execute $entries$
-      with pending as materialized (
-        select uuidv7() as entry_id, l.user_id, l.id as line_id, l.booked_on,
-          abs(l.amount_minor) as amount, c.id as category_id, c.kind
-        from statement_line l
-        join category c on c.user_id = l.user_id and c.is_fallback
-          and c.kind = (case when l.amount_minor < 0 then 'expense' else 'income' end)::entry_kind
-        where l.state = 'counted' and l.amount_minor <> 0
-          and not exists (select 1 from entry_part p where p.line_id = l.id)
-          and not exists (select 1 from transfer t where l.id in (t.out_line_id, t.in_line_id))
-      ), made as (
-        insert into entry (id, user_id, kind, happened_on, category_id, classified_by)
-        select p.entry_id, p.user_id, p.kind, p.booked_on, p.category_id, 'default' from pending p
-        returning id
-      )
-      insert into entry_part (user_id, entry_id, line_id, role, amount_minor)
-      select p.user_id, p.entry_id, p.line_id, 'payment', p.amount from pending p
-    $entries$;
+  if to_regclass('public.entry_part') is not null then
     execute $by_hand$
       update entry e set classified_by = 'user', category_id = (
         select c.id from category c
@@ -131,7 +153,7 @@ begin
     execute $by_rule$
       with written as (
         insert into rule (id, user_id, position, enabled, conditions, set_category_id, applied_count, created_from, created_at, updated_at)
-        select '019a0000-0000-7000-8000-000000000601', l.user_id, 0, true,
+        select '019a0000-0000-7000-8000-000000000801', l.user_id, 0, true,
           '{"kind": "group", "combinator": "and", "children": [{"kind": "rule", "field": "label", "operator": "contains", "value": "VIR EPARGNE"}]}',
           (select c.id from category c
             where c.user_id = l.user_id and c.kind = 'expense' and c.parent_id is null

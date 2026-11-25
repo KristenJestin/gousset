@@ -390,13 +390,15 @@ the `image` job and runs `tools/check-upgrade.sh` on it, which, on a fresh proje
    (`tools/check-upgrade.sql`) for what the release offers no route for**: 0.1.1 has neither an
    accounts screen nor an import route, so two users' accounts of every kind, balances, an import
    with its file and its lines (a held duplicate, a foreign currency, a discarded line), the
-   transfers between two accounts as 0.2 kept them (never paired), a CSV profile, and an MCP client
-   with its consent and tokens are written as the app would write them; from 0.3.0 on, each counted
-   line gets the entry 0.3.0's migration gave the lines of 0.2;
+   transfers between two accounts as 0.2 kept them (never paired, #192), with each counted line's
+   entry where the release has entries (from 0.3.0, #23), a CSV profile, and an MCP client with its
+   consent and tokens are written as the app would write them;
    and, where the release has its import route (from 0.2.0), a user uploads an invented statement
    (`tools/check-upgrade.ofx`, whose bank encodes entities twice, #132), read as that release
    reads it;
 3. stops the app, as an update does, and reads every row of every table of the `public` schema;
+   from a release that has entries, every counted line with an amount must already have its one
+   entry: invented data the release could not hold fails here, not as the update's fault;
 4. puts the image under test in its place, as the [update](#installing) does, the compose file
    unchanged: **`migrate` runs and ends**, and has recorded every migration of the commit; run
    again, it applies nothing and changes nothing;
@@ -410,20 +412,21 @@ the `image` job and runs `tools/check-upgrade.sh` on it, which, on a fresh proje
    declaration must find a row of the release once its statement was imported, the rows after the
    update must be exactly the rows before with the declared changes, and no other row may change:
    a declaration says what changes, it never lets a table or a column change freely;
-6. starts the app: `/health` answers 200; the boot jobs do what was kept before them: the user's
-   merchants, the movement line of her noted balance, and **her transfers kept before v0.3 paired**
-   (#192: a clear pair and one across her savings account's fortnight, never paired by the release,
-   are transfers; an ambiguous one waits in the review; from 0.3.0, two whose side she classified,
-   by hand and by a rule of hers, stay unpaired, their expenses unchanged); **started again, the
-   app changes no row**;
-   **the administrator and both users sign in with the same passwords**, the temporary one still
-   has to be replaced, the banned one is still refused, and a session made before the update still
-   works;
+6. starts the app: `/health` answers 200; once the boot's merchants and balances jobs have
+   completed, the user's merchants (#24) and her noted balance's movement line (#31) are there, the
+   line once: the boot makes them from a release older than 0.3.0, and from 0.3.0 the release's
+   own import made them, so only the boot's making no second line is checked; once every boot job
+   has ended, **her transfers kept before v0.3 are paired** (#192: a clear pair and one across her
+   savings account's fortnight, never paired by the release, are transfers; an ambiguous one waits
+   in the review; from 0.3.0, two whose side she classified, by hand and by a rule of hers, stay
+   unpaired, their expenses unchanged); **started again, the app changes no row**; **the
+   administrator and both users sign in with the same passwords**, the temporary one still has to
+   be replaced, the banned one is still refused, and a session made before the update still works;
 7. downloads the user's **export** (#22, `/api/export`), which the last release may not have: each
    of its tables holds that user's rows exactly as the release held them, with the declared
-   changes, and each imported file its bytes; but the lines made from a noted balance
-   (`source = balance`), left out of both sides: the app makes them again whenever a balance
-   changes, at boot from a release before 0.3.0, at the import from 0.3.0 on;
+   changes, and each imported file its bytes; but a line made from a noted balance
+   (`source = balance`) that the release did not hold, which the boot made, left out of the
+   export's side;
 8. uploads the statement of step 2 again, through the updated app: **it adds nothing**, every line
    found as a duplicate under the key the update gave it;
 9. migrates an empty database beside it with the same image: **the updated schema is a fresh
