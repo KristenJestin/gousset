@@ -134,6 +134,18 @@ describe("tools/commit-message.sh", () => {
     expect(checkMessage(`${prefix}${"a".repeat(72 - prefix.length)} (#12)\n`).status).toBe(0);
   });
 
+  test("a title ending with its issue's number gives a squashed subject that passes too", () => {
+    const title = `feat(web): ${"a".repeat(72 - "feat(web): ".length)} (#7)`;
+
+    expect(checkTitle(title).status).toBe(0);
+    expect(checkMessage(`${title} (#12)\n`).status).toBe(0);
+
+    const result = checkMessage(`feat(web): ${"a".repeat(73 - "feat(web): ".length)} (#7) (#12)\n`);
+
+    expect(result.status).toBe(1);
+    expect(result.stderr).toContain("the subject is 73 characters, 72 at most");
+  });
+
   test("a range fails on its bad commit and names it", () => {
     const repository = mkdtempSync(join(scratch, "repository-"));
 
