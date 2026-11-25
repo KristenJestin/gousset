@@ -25,6 +25,7 @@ import { Effect, Schema } from "effect";
 import { ToolRefusal, defineTool } from "../tool";
 import { MOVEMENT, amount, named } from "./accounts";
 import { namedCategory, pathText } from "./categories";
+import { MAYBE_REFUND } from "./lines";
 import { proposedRule } from "./rules";
 
 /** The lines `list` gives when none are asked for, and the most. */
@@ -66,6 +67,8 @@ type ReviewInput = typeof ReviewInput.Type;
 const DESCRIPTION = `The lines waiting for the user's review, one at a time, each with what Gousset proposes: the lines \`lines\` gives with to_review (near duplicates held, transfers with several possible other sides, lines still classified by default; never a line a rule classified, which is the user's decision). \`list\` gives a page, newest first: each line, its proposal in words, its handle and the proposal's, how many in all, and the next call.
 
 \`accept\` does the proposal: discards a held repeat, pairs the transfer with its first candidate, links the line as a refund of the expense proposed, or keeps its category as the user's choice. Refused when the line was reviewed meanwhile or its proposal changed since listed: list again. \`correct\` puts the line in \`category\` instead (named as \`lines\` classify takes it): a held line is kept and counted (category optional), a transfer's line becomes no transfer. Another candidate, another expense or a split: \`lines\`. accept and correct need the write scope.
+
+A line coming back flagged "maybe a refund" counts as no income until the user answers: accept links it as the refund proposed; if it is none, \`lines\` refuse_refund makes it an ordinary income, never proposed again.
 
 Examples: {"action":"list"} · {"action":"accept","line":"<handle>","proposal":"<its proposal's handle>"} · {"action":"correct","line":"<handle>","category":"Groceries > Bakery"}`;
 
@@ -117,7 +120,18 @@ const lineText = ({ line }: QueuedLine) =>
   `${line.bookedOn}, ${named(line.account)}: ${amount(line.amount)}, ${labelOf(line)}`;
 
 const queuedText = (queued: QueuedLine) =>
-  `- ${lineText(queued)}: ${proposalText(queued.proposal)}; line: ${queued.line.id}; proposal: ${proposalKey(queued.proposal)}`;
+  `- ${lineText(queued)}${queued.line.maybeRefund ? ` (${MAYBE_REFUND})` : ""}: ${proposalText(queued.proposal)}; line: ${queued.line.id}; proposal: ${proposalKey(queued.proposal)}`;
+
+/** The other answer to a line that may be a refund (#208): it is none. */
+const refuseText = (page: ReviewQueuePage) => {
+  const maybe = page.lines.find((queued) => queued.line.maybeRefund);
+
+  return maybe === undefined
+    ? []
+    : [
+        `A line that may be a refund and is none: lines ${JSON.stringify({ action: "refuse_refund", line: maybe.line.id })} makes it an ordinary income, never proposed again.`,
+      ];
+};
 
 function listText(page: ReviewQueuePage, input: ReviewInput): string {
   const header = `${page.total} line(s) to review.`;
@@ -142,7 +156,10 @@ function listText(page: ReviewQueuePage, input: ReviewInput): string {
       ...page.lines.map(queuedText),
       ...next,
     ].join("\n"),
-    `Accept one with ${call({ action: "accept", line: "<line>", proposal: "<proposal>" })}, or say what it is: ${call({ action: "correct", line: "<line>", category: "<a category>" })}.`,
+    [
+      `Accept one with ${call({ action: "accept", line: "<line>", proposal: "<proposal>" })}, or say what it is: ${call({ action: "correct", line: "<line>", category: "<a category>" })}.`,
+      ...refuseText(page),
+    ].join("\n"),
   ].join("\n\n");
 }
 
