@@ -252,6 +252,20 @@ test("a merchant marked as an intermediary makes its lines ask", async ({ page, 
   await expect(page.getByText("Its labels hide who was paid")).toBeVisible();
   await marked.click();
   await expect(marked).toBeChecked();
+
+  // The switch shows the mark before its save ends: a reload before that would read it unsaved.
+  await expect
+    .poll(async () => {
+      const [row] = await data.asUser(owner, (transaction) =>
+        transaction
+          .select({ intermediary: merchant.isIntermediary })
+          .from(merchant)
+          .where(eq(merchant.id, paylink)),
+      );
+
+      return row?.intermediary;
+    })
+    .toBe(true);
   await page.reload();
   await expect(page.getByRole("switch", { name: "Payment intermediary" })).toBeChecked();
 
