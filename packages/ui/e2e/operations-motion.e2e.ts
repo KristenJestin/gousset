@@ -122,6 +122,9 @@ const timesWhen = (frames: ReadonlyArray<Frame>, index: number, test: (value: st
 
 const ROW = '[data-slot="operation-row"]';
 
+/** How far the page's clock runs ahead of its animations' timeline, in a test that says so. */
+const CLOCK_LEAD_MS = 4000;
+
 test.describe("Operations list", () => {
   // Line 0 is not to review and leaves; line 3 is the first to review and slides to the top.
   const leaving = { selector: ROW, text: "CB GREENMARKET 2110" };
@@ -150,6 +153,54 @@ test.describe("Operations list", () => {
     expect(sliding.length).toBeGreaterThan(1);
     expect(Math.max(...sliding)).toBeLessThan(450);
     expect(moves(frames.at(-1)?.values[1])).toBe(false);
+  });
+
+  // Firefox's animation timeline can trail performance.now(), Motion's clock, by seconds (4.4 s
+  // after a reload in CI): a fade Motion started on its own clock waited that long, the row still
+  // whole over the list (#167). Here every browser's clock leads its timeline by 4 s; the row still
+  // fades out in its 200 ms, and leaves.
+  test("a row leaves on time when the page's clock leads the animations' timeline", async ({
+    page,
+  }) => {
+    await page.addInitScript({
+      content: `
+        const now = performance.now.bind(performance);
+
+        performance.now = () => now() + ${String(CLOCK_LEAD_MS)};
+      `,
+    });
+    await page.goto(story("operationslist", "changing-rows"));
+    await expect(page.locator(ROW).first()).toBeVisible();
+
+    // From the press to the moment the leaving row is out of the page: the clock leads, but runs
+    // at its pace.
+    const gone = page.evaluate(
+      ({ selector, text }) =>
+        new Promise<number>((resolve) => {
+          document.addEventListener(
+            "pointerdown",
+            () => {
+              const pressed = performance.now();
+
+              new MutationObserver((_, observer) => {
+                const left = [...document.querySelectorAll(selector)].every(
+                  (row) => !(row.textContent ?? "").includes(text),
+                );
+
+                if (left) {
+                  observer.disconnect();
+                  resolve(performance.now() - pressed);
+                }
+              }).observe(document.body, { subtree: true, childList: true });
+            },
+            { once: true, capture: true },
+          );
+        }),
+      leaving,
+    );
+
+    await page.getByRole("button", { name: "Only lines to review" }).click();
+    expect(await gone).toBeLessThan(1000);
   });
 
   test("under reduced motion, the rows change at once", async ({ page }) => {
