@@ -12,7 +12,11 @@ import type { LineAccount } from "./lines";
 import { merchantKey } from "./merchants/labels";
 import { monthRowsIn } from "./month-rows";
 import { reviewQueue } from "./review-queue";
-import { detectSubscriptions, subscriptionsOfMonth } from "./subscriptions/detection";
+import {
+  detectSubscriptions,
+  subscriptionId,
+  subscriptionsOfMonth,
+} from "./subscriptions/detection";
 import type { Charge } from "./subscriptions/detection";
 import {
   chargeRange,
@@ -328,12 +332,16 @@ export type MonthFlag =
     }
   | {
       readonly kind: "price-rise";
+      /** Its subscription's (`subscriptionId`): one merchant may have several. */
+      readonly subscriptionId: string;
       readonly merchant: string;
       readonly from: Money;
       readonly to: Money;
     }
   | {
       readonly kind: "stopped";
+      /** Its subscription's (`subscriptionId`): one merchant may have several. */
+      readonly subscriptionId: string;
       readonly merchant: string;
       /** The day it was due and did not come. */
       readonly expectedOn: string;
@@ -1037,6 +1045,7 @@ function flagsOf(
       : [
           {
             kind: "price-rise",
+            subscriptionId: subscriptionId(each),
             merchant: each.merchant,
             from: money(each.priceRise.fromMinor, each.currency),
             to: money(each.priceRise.toMinor, each.currency),
@@ -1046,6 +1055,7 @@ function flagsOf(
 
   const stopped = detected.stopped.map((each): MonthFlag => ({
     kind: "stopped",
+    subscriptionId: subscriptionId(each),
     merchant: each.merchant,
     expectedOn: each.stoppedOn ?? each.nextOn,
     lastOn: each.lastOn,

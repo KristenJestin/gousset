@@ -9,6 +9,7 @@ import {
   monthSwitcher,
   openBlock,
   seedReviewMonths,
+  seedTwoStoppedPlans,
 } from "../src/review";
 import {
   addUser,
@@ -345,6 +346,47 @@ test("what is flagged", async ({ page, app, user }) => {
   const calendar = await openBlock(page, "Recurring payments");
 
   await expect(calendar.locator('[data-slot="recurring-calendar"]')).toBeVisible();
+  await closeBlock(page);
+  await animationsDone(page);
+});
+
+// Issue #234: one merchant's subscriptions are flagged each on its own row, kept apart when the
+// list changes.
+test("two stopped plans of one merchant are two flags", async ({ page, app, user }) => {
+  const person = await signedInWithMonths(page, app, user, "leonie", true);
+
+  await seedTwoStoppedPlans(data, await data.ownerOf(person.email));
+  await visit(page, OCTOBER);
+
+  const stopped = async () => {
+    const flagged = await openBlock(page, "Flagged");
+
+    return flagged
+      .getByRole("list", { name: "Flagged" })
+      .getByRole("listitem")
+      .filter({ hasText: "Streamly was expected on" });
+  };
+
+  const october = await stopped();
+
+  await expect(october).toHaveCount(2);
+  await expect(october.filter({ hasText: "last paid €9.99" })).toHaveCount(1);
+  await expect(october.filter({ hasText: "last paid €4.99" })).toHaveCount(1);
+  await closeBlock(page);
+
+  // September flags none; back to October, both rows again, neither dropped nor repeated.
+  await monthSwitcher(page).getByRole("button", { name: "Previous month" }).click();
+  await expect(monthSwitcher(page)).toContainText("September 2026");
+  await expect(await stopped()).toHaveCount(0);
+  await closeBlock(page);
+  await monthSwitcher(page).getByRole("button", { name: "Next month" }).click();
+  await expect(monthSwitcher(page)).toContainText("October 2026");
+
+  const again = await stopped();
+
+  await expect(again).toHaveCount(2);
+  await expect(again.filter({ hasText: "last paid €9.99" })).toHaveCount(1);
+  await expect(again.filter({ hasText: "last paid €4.99" })).toHaveCount(1);
   await closeBlock(page);
   await animationsDone(page);
 });
