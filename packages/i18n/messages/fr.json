@@ -120,6 +120,7 @@
   "reviewAverageReference": "votre moyenne",
   "reviewMonthShort": "vs {month}",
   "reviewOtherCurrency": "En {currency} : {received} reçus, {spent} dépensés, {setAside} mis de côté, {left} restants",
+  "reviewOtherCurrencyWaiting": "En {currency} : {received} reçus, {spent} dépensés, {setAside} mis de côté, {left} restants ; hors reçus : {maybeRefunds} qui sont peut-être des remboursements",
   "reviewImportedOne": "{imported} compte importé sur {accounts}",
   "reviewImportedOther": "{imported} comptes importés sur {accounts}",
   "reviewImportedUpTo": "{account} jusqu'au {day}",

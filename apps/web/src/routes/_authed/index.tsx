@@ -50,6 +50,7 @@ import { shortDay } from "@/lib/account-day";
 import { categoryPath } from "@/lib/categories";
 import { loadBlocks } from "@/lib/load-blocks";
 import { monthSearch } from "@/lib/month";
+import { otherCurrencyNote } from "@/lib/other-currency";
 import { monthQueries } from "@/queries/month";
 import { reviewQueries } from "@/queries/review";
 
@@ -322,7 +323,6 @@ function ImportStatus({ month }: { month: string }) {
 function Summary({ month }: { month: string }) {
   const locale = getLocale();
   const { summary } = useMonthReview(month);
-  const whole = (money: Money) => formatMoney(money, { locale, whole: true });
   const comparisons: Array<DeltaListItem> = [];
 
   if (summary.averageSpent !== null) {
@@ -365,15 +365,7 @@ function Summary({ month }: { month: string }) {
           <DeltaList lead={m.reviewSpendingWord()} items={comparisons} />
         )
       }
-      notes={summary.elsewhere.map((other) =>
-        m.reviewOtherCurrency({
-          currency: other.currency,
-          received: whole(other.received),
-          spent: whole(other.spent),
-          setAside: whole(other.setAside),
-          left: whole(other.left),
-        }),
-      )}
+      notes={summary.elsewhere.map((other) => otherCurrencyNote(other, locale))}
       locale={locale}
     />
   );
