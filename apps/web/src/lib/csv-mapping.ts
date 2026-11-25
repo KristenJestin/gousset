@@ -101,6 +101,14 @@ export function withSettings(settings: CsvFileSettings, form: CsvSettingsForm): 
 }
 
 /**
+ * The settings once the user maps the columns by hand: without a `layout`, which would read the
+ * file its own way and leave the mapping shown unread.
+ */
+export function byHand({ layout: _layout, ...settings }: CsvFileSettings): CsvFileSettings {
+  return settings;
+}
+
+/**
  * What each column holds under `profile`, from the first: `width` columns at least, more when the
  * profile reads one further right.
  */

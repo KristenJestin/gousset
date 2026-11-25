@@ -312,9 +312,33 @@ test("choose PayPal activity on the import screen for an export saved with semic
 
   const testRead = page.getByRole("region", { name: "Test read" });
 
-  await expect(testRead).toContainText("Pixel Play Games");
-  await expect(testRead).toContainText("Example Travel Ltd");
-  await expect(testRead).toContainText("−€27.60");
+  const paypalRead = async () => {
+    await expect(testRead).toContainText("Pixel Play Games");
+    await expect(testRead).toContainText("Example Travel Ltd");
+    await expect(testRead).toContainText("−€27.60");
+  };
+
+  // Read as the plain table its columns say, the dollar purchase is a line in another currency.
+  const plainRead = () => expect(testRead).toContainText("Line 4, column 7");
+
+  await paypalRead();
+
+  // The columns as mapped below, or one of them mapped again: the mapping shown is what reads.
+  await choose(page, "Read with", /^PayPal activity/);
+  await choose(page, "Read with", "The columns as mapped below");
+  await choose(page, "Separator", "Semicolon (;)");
+  await plainRead();
+
+  await choose(page, "Read with", /^PayPal activity/);
+  await choose(page, "Separator", "Semicolon (;)");
+  await paypalRead();
+
+  await choose(page, "What Gross holds", "Amount (signed)");
+  await plainRead();
+
+  await choose(page, "Read with", /^PayPal activity/);
+  await choose(page, "Separator", "Semicolon (;)");
+  await paypalRead();
 
   await page.getByRole("textbox", { name: "Name of the profile" }).fill("PayPal, semicolons");
   await page.getByRole("button", { name: "Save as a profile" }).click();

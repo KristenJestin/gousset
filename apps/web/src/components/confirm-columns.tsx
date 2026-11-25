@@ -32,6 +32,7 @@ import {
 import { csvFieldNames, csvRefusalMessage, missingMessage } from "@/i18n/csv-preview";
 import { profileRefusalMessage } from "@/i18n/imports";
 import {
+  byHand,
   DATE_FORMATS,
   dateExample,
   mappingOf,
@@ -317,6 +318,7 @@ function ColumnsPreview({
               const entry = listed.find((each) => valueOf(choiceOf(each)) === value);
 
               if (entry === undefined) {
+                setSettings(byHand(settings));
                 setChosen(null);
               } else {
                 startFrom(entry);
@@ -343,6 +345,7 @@ function ColumnsPreview({
             mapping={mapping}
             onMappingChange={(column, field) => {
               setMapping(remap(mapping, column, field));
+              setSettings(byHand(settings));
               setChosen(null);
             }}
             chooseLabel={(column) => m.importCsvColumnHolds({ column })}

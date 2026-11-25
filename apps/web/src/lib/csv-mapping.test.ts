@@ -1,7 +1,7 @@
 import type { CsvProfile } from "@gousset/import";
 import { describe, expect, test } from "vite-plus/test";
 
-import { mappingOf, profileOf, remap, settingsOf, withSettings } from "./csv-mapping";
+import { byHand, mappingOf, profileOf, remap, settingsOf, withSettings } from "./csv-mapping";
 
 const profile: CsvProfile = {
   version: 1,
@@ -67,6 +67,18 @@ describe("a CSV profile as the preview maps its columns", () => {
 
     // A plain profile has none, and gains none.
     expect("layout" in settingsOf(profile)).toBe(false);
+  });
+
+  test("columns mapped by hand drop the layout: the profile reads the columns it shows", () => {
+    const paypal: CsvProfile = { ...profile, separator: ",", layout: "paypal-activity" };
+    const mapped = byHand(settingsOf(paypal));
+
+    expect("layout" in mapped).toBe(false);
+    expect(mapped).toEqual(settingsOf({ ...profile, separator: "," }));
+
+    expect(profileOf(mapped, mappingOf(paypal, 5))).toEqual({
+      profile: { ...profile, separator: "," },
+    });
   });
 
   test("a field is held by one column: mapping it again moves it", () => {
