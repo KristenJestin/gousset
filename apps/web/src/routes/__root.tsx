@@ -13,7 +13,7 @@ import { m } from "@gousset/i18n/messages";
 import { getLocale } from "@gousset/i18n/runtime";
 import { Toaster } from "@gousset/ui/components/toaster";
 import { ThemeProvider } from "@gousset/ui/components/theme-provider";
-import { THEME_COLORS, themeColorMetas } from "@gousset/ui/lib/theme-color";
+import { themeColorMetas } from "@gousset/ui/lib/theme-color";
 
 import { getViewer } from "@/functions/viewer";
 
@@ -45,9 +45,7 @@ export const Route = createRootRouteWithContext<RouterContext>()({
 
     return { viewer };
   },
-  head: ({ match }) => {
-    const chosen = match.context.viewer.user?.colorScheme;
-
+  head: () => {
     return {
       meta: [
         {
@@ -63,13 +61,6 @@ export const Route = createRootRouteWithContext<RouterContext>()({
         {
           title: m.appName(),
         },
-        // The browser's bars take the page's background: the system's scheme's, or the scheme
-        // the account keeps from the first paint (`followThemeColor` keeps them in step after).
-        ...themeColorMetas().map((meta) =>
-          chosen === undefined || chosen === "system"
-            ? meta
-            : { ...meta, content: THEME_COLORS[chosen] },
-        ),
         // Installed on a phone's home screen (the manifest, below): its own window and its name.
         { name: "mobile-web-app-capable", content: "yes" },
         { name: "apple-mobile-web-app-capable", content: "yes" },
@@ -104,6 +95,12 @@ function RootDocument() {
     <html lang={getLocale()} suppressHydrationWarning>
       <head>
         <HeadContent />
+        {/* The browser's bars take the page's background: the system's scheme's, or the scheme the
+            account keeps, from the first paint (`followThemeColor` keeps them in step after).
+            Written here: `head` keeps one meta of a name, and there is one per scheme. */}
+        {themeColorMetas(viewer.user?.colorScheme).map(({ media, content }) => (
+          <meta key={media} name="theme-color" media={media} content={content} />
+        ))}
       </head>
       <body>
         <ThemeProvider

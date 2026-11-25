@@ -21,11 +21,11 @@ export const schemeOfMedia = (media: string): ColorScheme =>
 
 /**
  * The page's theme colours, as the server writes them in its `<head>`: one per scheme of the
- * system. `followThemeColor` puts the user's own choice over them once the page runs.
+ * system, each that scheme's colour, or every one the colour of the scheme the account chose.
+ * `followThemeColor` keeps them on the scheme shown once the page runs.
  */
-export const themeColorMetas = () =>
+export const themeColorMetas = (chosen: ColorScheme | "system" | undefined) =>
   SCHEMES.map((scheme) => ({
-    name: "theme-color",
-    content: THEME_COLORS[scheme],
+    content: THEME_COLORS[chosen === undefined || chosen === "system" ? scheme : chosen],
     media: mediaOf(scheme),
   }));
