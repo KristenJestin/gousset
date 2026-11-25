@@ -5,7 +5,7 @@ import { describe, expect, test } from "vite-plus/test";
 
 import { csvFile, matchCsvHeader, readCsv, testReadCsv } from "./csv";
 import { SHIPPED_PROFILES, shippedProfile } from "./csv-shipped";
-import { MalformedFile } from "./errors";
+import { InvalidField, MalformedFile, MissingField } from "./errors";
 
 // PayPal's activity read as an account's statement (#201, docs/data-model.md, "PayPal's
 // activity"), on invented exports (`@gousset/fixture`): the rows that moved the balance in the
@@ -36,6 +36,22 @@ const read = (bytes: Uint8Array, currency = "EUR") =>
 
 const matched = (bytes: Uint8Array) =>
   Effect.runSync(matchCsvHeader(csvFile(bytes), SHIPPED_PROFILES))?.key;
+
+/** A euro conversion for a payment whose Currency cell (line 2, column 7) holds `currency`. */
+const conversionFor = (currency: string) =>
+  utf8.encode(
+    [
+      HEADER_EN,
+      `05/10/2026,19:41:02,CEST,Example Travel Ltd,Express Checkout Payment,Completed,${currency},-30.00,0.00,-30.00,,,0PPEXAMPLE0000061,,,Debit`,
+      "05/10/2026,19:41:02,CEST,,General Currency Conversion,Completed,EUR,-27.60,0.00,-27.60,,,0PPEXAMPLE0000062,0PPEXAMPLE0000061,,Debit",
+    ].join("\n"),
+  );
+
+/** Why reading `conversionFor(currency)` into a euro account fails. */
+const failure = (currency: string) =>
+  Effect.runSync(
+    Effect.flip(readCsv(conversionFor(currency), paypal().profile, { currency: "EUR" })),
+  );
 
 type Expected = {
   bookedOn: string;
@@ -281,6 +297,21 @@ describe("PayPal's activity", () => {
         bankId: "0PPEXAMPLE0000053",
       }),
     ]);
+  });
+
+  test("refuses a conversion whose payment's currency is no ISO 4217 code, naming its cell", () => {
+    // The payment is another balance's, but its currency would be the line's original one.
+    for (const written of ["US$", "€", "usd dollars"]) {
+      const failed = failure(written);
+
+      expect(failed, written).toBeInstanceOf(InvalidField);
+      expect(failed, written).toMatchObject({ line: 2, column: 7, field: "currency" });
+    }
+
+    const blank = failure("");
+
+    expect(blank).toBeInstanceOf(MissingField);
+    expect(blank).toMatchObject({ line: 2, column: 7, field: "currency" });
   });
 
   test("into an account in dollars, reads the dollar rows: the purchase and its conversion", () => {
