@@ -47,15 +47,17 @@ function Controlled({ start }: { start: OperationsFilterValues }) {
  *
  * From 1,024 px of bar, one 32 px row with no label above any field: each says what it is by its
  * placeholder or its value and keeps its name for screen readers; the amount is one pair, "Amount
- * min – max"; "To review only" is a box in the row, tinted once ticked. Narrower, the search and a
- * Filters button with how many filters are set, which opens them in a sheet, labelled one under
- * the other; its button shows the lines.
+ * min – max"; "To review only" is a toggle button, its border, tint and words violet once pressed.
+ * Narrower, the search and a Filters button with how many filters are set, which opens them in a
+ * sheet, labelled one under the other ("To review only" a checkbox there); its button shows the
+ * lines.
  *
- * Motion: its fields' own (a select's list and a calendar fade in 150 ms) and the sheet's (it
+ * Motion: the toggle's colours move in 150 ms; its fields' own (a select's list and a calendar fade in 150 ms) and the sheet's (it
  * slides in from its edge, about 300 ms); cut under reduced motion.
  *
  * Don't: filter in the browser what the server pages, send a request at each keystroke, or put a
- * label or a hint above or under a field of the row: it breaks the row's line.
+ * label or a hint above or under a field of the row: it breaks the row's line. Don't put a checkbox
+ * inside a bordered pill: the box and the pill's border double the pressed state.
  */
 const meta = {
   title: "Operations/OperationsFilters",
@@ -68,10 +70,10 @@ export default meta;
 
 type Story = StoryObj<typeof meta>;
 
-/** Nothing set: no "Clear filters". */
+/** Nothing set: no "Clear filters", and "To review only" not pressed. */
 export const Default: Story = {};
 
-/** Every filter set, and "Clear filters" to undo them. */
+/** Every filter set, "To review only" pressed, and "Clear filters" to undo them. */
 export const Set: Story = { args: { values: SET } };
 
 /** A bound the page could not read, said under the row. */
