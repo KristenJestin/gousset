@@ -32,9 +32,10 @@ const HOUR = 60 * MINUTE;
 
 /**
  * Authorization requests per client address: each may make the server fetch a client's metadata
- * document and write a client, before anyone signs in. A person connecting agents makes a few.
+ * document and write a client, before anyone signs in. A person connecting agents makes a few;
+ * MCP_AUTHORIZE_PER_MINUTE raises it where many clients share one address (the end-to-end tests).
  */
-const authorizeRequests = createRequestLimit(30, MINUTE);
+const authorizeRequests = createRequestLimit(ENV.MCP_AUTHORIZE_PER_MINUTE ?? 30, MINUTE);
 
 let lastClientCleanup = 0;
 
