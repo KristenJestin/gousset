@@ -208,9 +208,9 @@ function MerchantPage() {
 
 /**
  * Whether the merchant is a payment intermediary (#30): its labels hide who was paid, and each of
- * its lines asks for its merchant. As the settings' switches, it moves at once and shows the value
- * being saved, one save at a time, pending until the save ends (#224): a reload before then would
- * not find it; done, the merchants and the lines (which ask, or no longer ask) are read again;
+ * its lines asks for its merchant. As the single-key shortcuts' switch, it moves at once and shows
+ * the value being saved, one save at a time, pending until the save ends (#224): a reload before
+ * then would not find it; done, the merchants and the lines (which ask, or no longer ask) are read again;
  * refused, it goes back to what the merchant holds and a toast says why.
  */
 function IntermediarySwitch({ merchant }: { merchant: MerchantDetail }) {
