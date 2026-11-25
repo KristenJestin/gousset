@@ -119,7 +119,10 @@ same letters left untouched.
 - **Any `ATM` or `BANCOMAT`** in a label makes it a withdrawal.
 - **A prefix glued to what follows is no operation** (`CB*4821 SHOPLY`): the label is read as
   before, its key the same. **A shop whose name is a prefix naming no one** loses its key after a
-  card's prefix (`CB FRAIS DE PORT EXPRESS`): the line is read as a fee. Only the prefixes of
+  card's prefix (`CB FRAIS DE PORT EXPRESS`): the line gets no merchant, and its entry stays in
+  its fallback category (the whole label is a card payment, no fee). The same goes at boot for a
+  merchant a release before made that way and the user never touched (`PRLV SEPA FRAIS SCOLARITE
+  ECOLE X`): it is forgotten (`reread.ts`). Only the prefixes of
   `operations.ts` are known: another bank's (`VIREMENT`, `PRELEVEMENT`) stay payment words (rule 9).
 
 ## A new merchant's name (`merchantName`)

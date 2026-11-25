@@ -13,7 +13,7 @@ import {
 } from "@gousset/db/schema/ledger";
 import { exampleStatement } from "@gousset/fixture";
 import type { Statement, StatementLine } from "@gousset/fixture";
-import { asc, eq } from "drizzle-orm";
+import { and, asc, eq, isNull } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { Effect, Layer } from "effect";
 
@@ -302,4 +302,47 @@ test("the boot job forgets the merchants a release made from a prefix, unless th
 
   // Run again, it finds nothing to do.
   expect(await run(rereadMerchants(owner))).toEqual({ forgotten: 0, merchants: 0, aliases: 0 });
+});
+
+test("the boot job moves a fee still in Other into Bank fees, with no new label to recognise", async ({
+  app,
+  user,
+}) => {
+  const { owner } = await withStatement(app.baseURL, user, "rhea.prefixes");
+  const fee = await lineOf(owner, "F COTISATION CARTE");
+
+  // As a release before left it: the fee in Other, classified by default, before the marks.
+  const placed = await data.asUser(owner, async (transaction) => {
+    const [other] = await transaction
+      .select({ id: category.id })
+      .from(category)
+      .where(
+        and(eq(category.kind, "expense"), eq(category.name, "Other"), isNull(category.parentId)),
+      );
+
+    const [part] = await transaction
+      .select({ entryId: entryPart.entryId })
+      .from(entryPart)
+      .where(eq(entryPart.lineId, fee));
+
+    await transaction
+      .update(entry)
+      .set({ categoryId: other?.id ?? "", classifiedBy: "default" })
+      .where(eq(entry.id, part?.entryId ?? ""));
+
+    return part?.entryId ?? "";
+  });
+
+  // Every label names a merchant already: the re-read recognises nothing new.
+  expect(await run(rereadMerchants(owner))).toEqual({ forgotten: 0, merchants: 0, aliases: 0 });
+
+  const [moved] = await data.asUser(owner, (transaction) =>
+    transaction
+      .select({ category: category.name, classifiedBy: entry.classifiedBy })
+      .from(entry)
+      .innerJoin(category, eq(category.id, entry.categoryId))
+      .where(eq(entry.id, placed)),
+  );
+
+  expect(moved).toEqual({ category: "Bank fees", classifiedBy: "default" });
 });

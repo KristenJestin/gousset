@@ -400,7 +400,8 @@ the `image` job and runs `tools/check-upgrade.sh` on it, which, on a fresh proje
    entry: invented data the release could not hold fails here, not as the update's fault;
 4. puts the image under test in its place, as the [update](#installing) does, the compose file
    unchanged: **`migrate` runs and ends**, and has recorded every migration of the commit; run
-   again, it applies nothing and changes nothing;
+   again, it applies nothing and changes nothing; the user's untouched default categories Bank
+   fees and Interest are marked with their operation (#194);
 5. reads every row again: **every table and column of before is still there, and every row is
    identical**, but in the columns and tables the new migrations add (those of the commit's
    `packages/db/src/migrations` the release did not have), each of which must be named in them
@@ -414,14 +415,16 @@ the `image` job and runs `tools/check-upgrade.sh` on it, which, on a fresh proje
 6. starts the app: `/health` answers 200; once the boot's merchants and balances jobs have
    completed, the user's merchants (#24) and her noted balance's movement line (#31) are there, the
    line once: the boot makes them from a release older than 0.3.0, and from 0.3.0 the release's
-   own import made them, so only the boot's making no second line is checked; **the administrator and both users sign in with the same
+   own import made them, so only the boot's making no second line is checked; the merchants a
+   release before #194 made from an operation prefix, which the user never touched, are forgotten,
+   the shop's merchant is there, and the fee's entry is in Bank fees; **the administrator and both users sign in with the same
    passwords**, the temporary one still has to be replaced, the banned one is still refused, and a
    session made before the update still works;
 7. downloads the user's **export** (#22, `/api/export`), which the last release may not have: each
    of its tables holds that user's rows exactly as the release held them, with the declared
    changes, and each imported file its bytes;
 8. uploads the statement of step 2 again, through the updated app: **it adds nothing**, every line
-   found as a duplicate under the key the update gave it;
+   found as a duplicate under the key the update gave it (`done 0 8`: nothing added, 8 found);
 9. migrates an empty database beside it with the same image: **the updated schema is a fresh
    installation's**, to the column order and the grant.
 
