@@ -224,9 +224,14 @@ statement=$root/tools/check-upgrade.ofx
 first_import=$(upload camille "$statement")
 if [ -n "$first_import" ]; then
   ended=$(settled "$first_import")
-  [ "$ended" = "done 6 0" ] ||
-    fail "$from did not import $(basename "$statement") whole: $ended, not \"done 6 0\"."
+  [ "$ended" = "done 8 0" ] ||
+    fail "$from did not import $(basename "$statement") whole: $ended, not \"done 8 0\"."
   say "Camille imported $(basename "$statement") through $from's own route."
+  # A release before #194 named merchants from a label's operation prefix: the update reads them
+  # again at boot, below.
+  prefixed=$(sql "select count(*) from merchant where user_id = '$camille'
+    and name in ('Ann Carte Cafe Exemple', 'F Cotisation')")
+  say "$from made $prefixed merchant(s) of an operation prefix."
 else
   say "$from has no import route: $(basename "$statement") is not imported."
 fi
@@ -321,6 +326,14 @@ unclassified=$(unclassified)
 [ "$unclassified" = 0 ] || fail "$unclassified counted lines have no entry of their own, or more than one, or are a transfer's side with one, after the update."
 say "every counted line with an amount has its one entry."
 
+# The categories that take an operation's lines (#194): Camille's untouched defaults are marked,
+# Bank fees for the fees and Interest for the interest, by the update's migration.
+marked=$(sql "select string_agg(name || ':' || operation, ',' order by name) from category
+  where user_id = '$camille' and operation is not null")
+[ "$marked" = "Bank fees:fee,Interest:interest" ] ||
+  fail "Camille's categories marked with an operation are \"$marked\", not Bank fees and Interest."
+say "Camille's Bank fees and Interest take the fees and the interest."
+
 # Two of Camille's old transfer lines, classified where the release could (from 0.3.0,
 # tools/check-upgrade.sql), one by hand, one by a rule of hers: their expenses before the app
 # starts, which the boot must leave as they are.
@@ -365,9 +378,12 @@ done
 
 # The app recognises every user's merchants at boot (#24): Camille's lines, kept before merchants
 # existed, get theirs without an import. From 0.3.0 the release's own import recognised them
-# already (step 3b): the boot then loses none, and only an update from before merchants shows that
-# it makes them.
-held_aliases=$(held_rows merchant_alias true)
+# already (step 3b): the boot then loses none but the cleaned labels of the merchants it made from
+# an operation prefix, which the boot reads again (#194, below): a card's cancellation, a fee, and
+# the free text of her `VIR` transfers between her own accounts (tools/check-upgrade.sql), which
+# names no one; only an update from before merchants shows that it makes them.
+held_aliases=$(held_rows merchant_alias '.alias != "ANN CARTE CAFE EXEMPLE" and .alias != "F COTISATION"
+  and (.alias | (startswith("VERS LIVRET") or startswith("DEPUIS COMPTE") or startswith("EPARGNE PROJET")) | not)')
 recognised=$(sql "select count(*) from merchant_alias where user_id = '$camille'")
 [ "$recognised" != 0 ] || fail "Camille's lines got no merchant at the app's start."
 [ "$recognised" -ge "$held_aliases" ] ||
@@ -393,6 +409,28 @@ if [ "$held_moved" = 0 ]; then
   say "Camille's noted balance got its movement line at boot."
 else
   say "Camille's noted balance has the movement line $from's import made, and the boot made no second one."
+fi
+
+# The merchants the release made from an operation prefix (#194), which Camille never touched, are
+# forgotten at boot, and her card's cancellation names its shop.
+if [ -n "$first_import" ]; then
+  reread=
+  for _ in $(seq 60); do
+    left=$(sql "select count(*) from merchant where user_id = '$camille'
+      and name in ('Ann Carte Cafe Exemple', 'F Cotisation')")
+    shop=$(sql "select count(*) from merchant_alias where user_id = '$camille' and alias = 'CAFE EXEMPLE'")
+    fee=$(sql "select c.operation from statement_line l join entry_part p on p.line_id = l.id
+      join entry e on e.id = p.entry_id join category c on c.id = e.category_id
+      where l.user_id = '$camille' and l.label = 'F COTISATION CARTE'")
+    if [ "$left" = 0 ] && [ "$shop" = 1 ] && [ "$fee" = fee ]; then
+      reread=yes
+      break
+    fi
+    sleep 1
+  done
+  [ -n "$reread" ] ||
+    fail "the merchants $from made from an operation prefix were not read again, or its fee not put in Bank fees, within a minute of the app's start."
+  say "the $prefixed merchant(s) $from made from an operation prefix were read again at boot, and its fee went to Bank fees."
 fi
 
 # The boot jobs of <n> starts of the app, for every user, ended: none waits or runs any more, and
@@ -538,9 +576,9 @@ if [ -n "$first_import" ]; then
   second_import=$(upload camille-after "$statement")
   [ -n "$second_import" ] || fail "$tag has no import route."
   ended=$(settled "$second_import")
-  [ "$ended" = "done 0 6" ] ||
-    fail "$(basename "$statement") imported again after the update: $ended, not \"done 0 6\" (nothing added, 6 found)."
-  say "$(basename "$statement"), imported again on $tag, adds nothing: its 6 lines are found."
+  [ "$ended" = "done 0 8" ] ||
+    fail "$(basename "$statement") imported again after the update: $ended, not \"done 0 8\" (nothing added, 8 found)."
+  say "$(basename "$statement"), imported again on $tag, adds nothing: its 8 lines are found."
 fi
 
 # 12. The upgraded schema is a fresh installation's.

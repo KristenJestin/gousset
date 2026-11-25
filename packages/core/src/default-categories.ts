@@ -16,8 +16,18 @@ import type { Option } from "effect";
 /** The languages the default set is written in. */
 export type SetLanguage = "en" | "fr";
 
-/** A category's name in each language of the set. */
-export type DefaultName = { readonly en: string; readonly fr: string };
+/**
+ * A category's name in each language of the set; `operation` when it takes the lines of an
+ * operation that name no merchant (#194, `merchants/operations.ts`).
+ */
+export type DefaultName = {
+  readonly en: string;
+  readonly fr: string;
+  readonly operation?: CategoryOperation;
+};
+
+/** The operations a category takes the lines of: the database's `category_operation`. */
+export type CategoryOperation = "loan" | "fee" | "interest";
 
 /** A top-level category of the set, with its children, in their order. */
 export type DefaultCategory = DefaultName & {
@@ -122,7 +132,7 @@ export const DEFAULT_CATEGORIES: DefaultSet = {
       en: "Fees and taxes",
       fr: "Frais et impôts",
       children: [
-        { en: "Bank fees", fr: "Frais bancaires" },
+        { en: "Bank fees", fr: "Frais bancaires", operation: "fee" },
         { en: "Taxes", fr: "Impôts" },
       ],
     },
@@ -149,7 +159,7 @@ export const DEFAULT_CATEGORIES: DefaultSet = {
       en: "Investment income",
       fr: "Revenus financiers",
       children: [
-        { en: "Interest", fr: "Intérêts" },
+        { en: "Interest", fr: "Intérêts", operation: "interest" },
         { en: "Dividends", fr: "Dividendes" },
       ],
     },
@@ -191,6 +201,13 @@ export function defaultRows(language: SetLanguage): ReadonlyArray<DefaultRow> {
       })),
     ]),
   );
+}
+
+/** The operation a child of the set, named in `language`, takes the lines of; null for none. */
+function operationOfChild(row: DefaultRow, language: SetLanguage): CategoryOperation | null {
+  const top = DEFAULT_CATEGORIES[row.kind].find((each) => each[language] === row.parent);
+
+  return top?.children.find((each) => each[language] === row.name)?.operation ?? null;
 }
 
 /**
@@ -409,7 +426,16 @@ export async function insertDefaultSet(
 
     return parentId === undefined
       ? []
-      : [{ userId: owner, kind: row.kind, parentId, name: row.name, position: row.position }];
+      : [
+          {
+            userId: owner,
+            kind: row.kind,
+            parentId,
+            name: row.name,
+            position: row.position,
+            operation: operationOfChild(row, language),
+          },
+        ];
   });
 
   if (children.length > 0) {
