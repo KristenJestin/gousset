@@ -43,22 +43,9 @@ const Counts = Schema.Struct({
  * what still moves.
  */
 export async function animationsDone(page: Page): Promise<void> {
-  // DEBUG #167, temporary: every poll's reading, in the failure.
-  const seen: Array<string> = [];
-
-  try {
-    await expect
-      .poll(async () => {
-        const moving = [...(await animationsListed(page)), ...(await transformsMoving(page))];
-
-        seen.push(moving.join(" | "));
-
-        return moving;
-      })
-      .toEqual([]);
-  } catch (error) {
-    throw new Error(`Still moving, poll by poll:\n${seen.join("\n")}`, { cause: error });
-  }
+  await expect
+    .poll(async () => [...(await animationsListed(page)), ...(await transformsMoving(page))])
+    .toEqual([]);
 }
 
 /**

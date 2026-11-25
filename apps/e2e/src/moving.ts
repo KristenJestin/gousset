@@ -69,16 +69,7 @@ const ANIMATIONS_LISTED = `(() => {
       animation.transitionProperty ??
       Object.keys(effect?.getKeyframes?.()[0] ?? {}).filter((key) => !meta.has(key)).join(",");
 
-    // DEBUG #167, temporary: which animation (restarted or not), and the clocks.
-    window.__e2eIds ??= new WeakMap();
-    if (!window.__e2eIds.has(animation)) {
-      window.__e2eIds.set(animation, (window.__e2eNext = (window.__e2eNext ?? 0) + 1));
-    }
-    const debug = " #" + window.__e2eIds.get(animation) + " start " + String(animation.startTime) +
-      " timeline " + String(document.timeline.currentTime) + " now " + performance.now().toFixed(1) +
-      " visibility " + document.visibilityState + " opacity " + getComputedStyle(effect.target).opacity;
-
-    return debug + " " + animation.constructor.name + " " + what + " on " + named(effect?.target) +
+    return animation.constructor.name + " " + what + " on " + named(effect?.target) +
       (effect?.pseudoElement ? effect.pseudoElement : "") + ": " + animation.playState +
       (animation.pending ? " (pending)" : "") + ", at " + String(animation.currentTime) + " of " +
       String(timing?.endTime) + " ms, " + String(timing?.iterations) + " iteration(s), fill " +
