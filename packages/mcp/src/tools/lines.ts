@@ -10,6 +10,7 @@ import {
   pairEveryLine,
   pairLineWithAccount,
   pairLines,
+  refuseRefund,
   ruleWords,
   searchLines,
   showLine,
@@ -65,9 +66,10 @@ const LinesInput = Schema.Struct({
     "link",
     "unlink",
     "split",
+    "refuse_refund",
   ]).annotate({
     description:
-      "search: the lines that match, across accounts, newest first. show: one line, all that is known of it. pair: two lines as one transfer (writes). classify: what one line is (writes). unpair: undoes a line's transfer (writes). link: a line becomes a payment or a refund of another line's expense; a side of a transfer from a benefit account funds it, which keeps its cost (writes). unlink: a line leaves its expense, or unfunds (writes). split: a line across categories (writes).",
+      "search: the lines that match, across accounts, newest first. show: one line, all that is known of it. pair: two lines as one transfer (writes). classify: what one line is (writes). unpair: undoes a line's transfer (writes). link: a line becomes a payment or a refund of another line's expense; a side of a transfer from a benefit account funds it, which keeps its cost (writes). unlink: a line leaves its expense, or unfunds (writes). split: a line across categories (writes). refuse_refund: a line coming back that show proposes as a refund is none: an ordinary income, counted as received, never proposed again; a maybe refund counts as no income until the user confirms it (link) or refuses it (writes).",
   }),
   text: Schema.optional(
     Schema.String.annotate({
@@ -123,7 +125,7 @@ const LinesInput = Schema.Struct({
   line: Schema.optional(
     Schema.String.annotate({
       description:
-        "show, pair, classify, unpair, link, unlink, split: the line's handle, as search gives it.",
+        "show, pair, classify, unpair, link, unlink, split, refuse_refund: the line's handle, as search gives it.",
     }),
   ),
   other: Schema.optional(
@@ -171,17 +173,17 @@ const LinesInput = Schema.Struct({
 
 type LinesInput = typeof LinesInput.Type;
 
-const DESCRIPTION = `Every line of the user's accounts, as the bank wrote it: search across accounts, read one, say what it is. \`search\` finds lines by a piece of their label, memo or counterparty (\`text\`, any case), one account (\`account\`), a period (\`from\`, \`to\`, YYYY-MM-DD, both included), an amount range (\`amount_min\`, \`amount_max\`), or the lines to review (\`to_review: true\`, listed only then: near duplicates held, transfers whose other side the user chooses, and every counted line still classified by default, that is not classified yet); newest first, with how many match in all, each line's category and its handle. \`show\` gives one line by that handle: its account, days, amount (and the amount in another currency), label, memo, counterparty, category, expiry, the line a held one looks like, its transfer, and the import it came from or how it was made.
+const DESCRIPTION = `Every line of the user's accounts, as the bank wrote it: search across accounts, read one, say what it is. \`search\` finds lines by a piece of their label, memo or counterparty (\`text\`, any case), one account (\`account\`), a period (\`from\`, \`to\`, YYYY-MM-DD, both included), an amount range (\`amount_min\`, \`amount_max\`), or the lines to review (\`to_review: true\`, listed only then: near duplicates held, transfers whose other side the user chooses, and every counted line still classified by default); newest first, with the total, each line's category and handle. \`show\` gives one line by that handle: its account, days, amount (and in another currency), label, memo, counterparty, category, expiry, the line a held one looks like, its transfer, and the import it came from or how it was made.
 
-Use it for "when did I pay this shop?", "what was this 42.90?", "which import brought this line?", "put this line in Groceries". Use \`accounts\` instead for balances and one account's latest lines, \`month\` for where the money went, \`categories\` to list or change the categories themselves. search and show only read.
+Use it for "when did I pay this shop?", "what was this 42.90?", "which import brought this line?", "put this line in Groceries". Use \`accounts\` instead for balances and one account's latest lines, \`month\` for where the money went, \`categories\` for the categories themselves. search and show only read.
 
-Writes, with the write scope: \`classify\` says what \`line\` is, by \`kind\`: "transfer", "expense" or "income". With "expense" or "income", the line goes in \`category\`, named as \`categories\` list writes it (any case): a name alone is the top-level category of that name, else its one child; "Parent > Child" names a child. Without \`category\`, the kind's fallback. \`kind\` may be left out with a category: the line's own. Kept as the user's choice: no rule changes it unasked. The answer proposes the \`rules\` call that classifies lines like it the same way from then on. Refused, with what to do: a line held, discarded or of no amount (no expense nor income), a side of a transfer (unpair it first), a line split across several expenses, a kind or category of the other kind than the line's (money out is an expense, money in an income), an archived category, an unknown or ambiguous category name (with the names to choose from), a category with "transfer".
+Writes, with the write scope: \`classify\` says what \`line\` is, by \`kind\`: "transfer", "expense" or "income". An expense or income goes in \`category\`, named as \`categories\` list writes it (any case): a name alone is the top-level category of that name, else its one child; "Parent > Child" names a child. Without \`category\`, the kind's fallback. \`kind\` may be left out with a category: the line's own. Kept as the user's choice: no rule changes it unasked. The answer proposes the \`rules\` call that does so for lines like it from then on. Refused, with what to do: a line held, discarded or of no amount (no expense nor income), a side of a transfer (unpair it first), a line split across several expenses, a kind or category not of the line's kind (money out is an expense, money in an income), an archived category, an unknown or ambiguous category name (with the names to choose from), a category with "transfer".
 
 \`pair\` pairs \`line\` and \`other\` as one transfer, never spending; \`line\` alone: its only candidate; neither: every clear pair. \`classify\` \`kind\` "transfer" is the same; \`unpair\` undoes it. Refused: lines of one account or direction, a paired line, several candidates. With \`account\` in place of \`other\`, an account kept by its balance: Gousset makes its side, which its noted balances' movements then leave out; refused for an account kept by its lines or of another currency.
 
-An expense counts once, at payments less refunds. \`link\` adds \`line\` to \`into\`'s expense: a payment if its money goes the same way (75 paid 25 + 50 on two accounts), else a refund; \`unlink\` undoes it. \`split\` spreads it over categories. Refused: transfer sides, held lines, another currency, a refund above the net cost, linking a split line. \`show\` gives the expense and purchases it may cancel.
+An expense counts once, at payments less refunds. \`link\` adds \`line\` to \`into\`'s expense: a payment if its money goes the same way (75 paid 25 + 50 on two accounts), else a refund; \`unlink\` undoes it. \`split\` spreads it over categories. Refused: transfer sides, held lines, another currency, a refund above the net cost, linking a split line. \`show\` gives the expense and purchases it may cancel; such a line is no income until \`link\` confirms one or \`refuse_refund\` says it is no refund, never proposed again.
 
-\`account\` is the name as \`accounts\` lists it (any case); add \`institution\` when two accounts share it. An unknown or ambiguous name is refused with the names to choose from. Amounts are decimal strings in each account's own currency, without sign or currency, compared with the line's absolute amount: a -42.90 EUR payment matches "amount_min":"40". A period that ends before it starts, an amount that is no decimal, or an \`after\` no result gave is refused. \`limit\` is 1 to ${MAX_LINES} lines, ${DEFAULT_LINES} by default; when more remain, the result writes the exact next call with \`after\`: copy it.
+\`account\` is the name as \`accounts\` lists it (any case); add \`institution\` when two accounts share it. An unknown or ambiguous name is refused with the names to choose from. Amounts are decimal strings in each account's currency, without sign or currency, compared with the line's absolute amount: a -42.90 EUR payment matches "amount_min":"40". A period ending before it starts, an amount that is no decimal, or an \`after\` no result gave is refused. \`limit\` is 1 to ${MAX_LINES} lines, ${DEFAULT_LINES} by default; when more remain, the result writes the exact next call with \`after\`: copy it.
 
 Examples: {"action":"search","text":"corner cafe","account":"Current account","institution":"Riverside Bank","from":"2026-10-01"} · {"action":"search","amount_min":"40","amount_max":"45.50"} · {"action":"show","line":"<a handle search gave>"} · {"action":"classify","line":"<a handle search gave>","kind":"expense","category":"Groceries > Bakery"} · {"action":"pair","line":"<a handle search gave>","account":"Gift card"}`;
 
@@ -243,11 +245,15 @@ function filtersText(input: LinesInput, account: string | undefined): string {
   return filters.length === 0 ? `every line ${kind}` : `lines ${kind}, ${filters.join(", ")}`;
 }
 
+/** How a line that may be a refund, not answered yet, is flagged wherever it is listed (#208). */
+export const MAYBE_REFUND = "maybe a refund, not counted as income until the user answers";
+
 function rowText(line: LineRow): string {
   const held = line.toReview ? ", to review" : "";
   const category = line.category === null ? "" : `, in ${pathText(line.category)}`;
+  const maybe = line.maybeRefund ? `, ${MAYBE_REFUND}` : "";
 
-  return `- ${line.bookedOn}, ${named(line.account)}: ${amount(line.amount)}, ${labelOf(line)}${category}${held}; line: ${line.id}`;
+  return `- ${line.bookedOn}, ${named(line.account)}: ${amount(line.amount)}, ${labelOf(line)}${category}${held}${maybe}; line: ${line.id}`;
 }
 
 /** A page of the search: how many match, the filters, the lines, and the call that reads on. */
@@ -483,14 +489,20 @@ function expensesText(lineId: string, found: LineExpenses): Array<string> {
     ];
   }
 
+  // A rule's line keeps its proposals but counts as the rule says: only a default one waits (#208).
+  const counted = found.maybeRefund
+    ? " Not counted as income until the user answers: confirmed, it is linked as a refund; refused, it is an ordinary income."
+    : "";
+
   return [
     [
-      "Maybe a refund: this line may cancel all or part of an expense (a purchase cancelled, an order returned). Never applied unasked: the user confirms.",
+      `Maybe a refund: this line may cancel all or part of an expense (a purchase cancelled, an order returned). Never applied unasked: the user confirms or refuses.${counted}`,
       ...proposals.map(
         (proposal) =>
           `- ${partText(proposal.line)}, in ${pathText(proposal.category)}, costing ${amount(proposal.net)}`,
       ),
       `Confirm one with: ${call({ action: "link", line: lineId, into: first.line.lineId })}`,
+      `If it is no refund: ${call({ action: "refuse_refund", line: lineId })}`,
     ].join("\n"),
   ];
 }
@@ -894,6 +906,48 @@ function unlinkRun(input: LinesInput, owner: string) {
   );
 }
 
+/**
+ * `refuse_refund` (#208): the user's answer that a line coming back is no refund. It is an ordinary
+ * income from then on, classified as it was, and never proposed as a refund again.
+ */
+function refuseRefundRun(input: LinesInput, owner: string) {
+  const line = input.line?.trim() ?? "";
+
+  if (line === "") {
+    return Effect.fail(
+      new ToolRefusal({
+        message:
+          "refuse_refund needs line, the handle of a line coming back that show proposes as a refund, as search gives it.",
+        example: call({ action: "search", to_review: true }),
+      }),
+    );
+  }
+
+  return Effect.gen(function* () {
+    const detail = yield* showLine(owner, line);
+    const answered = yield* refuseRefund(owner, detail.id);
+    const [own] = answered.expenses;
+    const category = own === undefined ? "" : `, in ${pathText(own.category)}`;
+
+    return [
+      `No refund: the line of ${detail.bookedOn}, ${amount(detail.amount)}, ${labelOf(detail)}, is an ordinary income now${category}: counted as received in its month. It will not be proposed as a refund again.`,
+      `Should it be a refund after all, link it by hand: ${call({ action: "link", line: detail.id, into: "<a payment's handle>" })}`,
+    ].join("\n");
+  }).pipe(
+    Effect.catchTags({
+      LineNotFound: () => Effect.fail(UNKNOWN_LINE(line)),
+      RefundNotProposed: () =>
+        Effect.fail(
+          new ToolRefusal({
+            message: `No refund is proposed for the line "${line.slice(0, 80)}", so there is nothing to refuse: it is no line coming back on its own that may cancel an expense (linked or split already, classified by the user, or no purchase it may cancel). Show it to see what it is; to say what it is, classify it.`,
+            example: call({ action: "show", line }),
+          }),
+        ),
+      QueryFailed: Effect.die,
+    }),
+  );
+}
+
 const SPLIT_REFUSALS = {
   not_counted:
     "This line is held for review as a near duplicate (or thrown away): it is no expense nor income to split.",
@@ -1170,8 +1224,8 @@ function classifyAction(owner: string, input: LinesInput, kind: EntryKind | unde
 
 /**
  * The lines family (docs/mcp.md, "Tools"): searched and read; put in a category (#23), paired as
- * transfers (#26), linked into expenses of several parts and split across categories (#27), with
- * the write scope.
+ * transfers (#26), linked into expenses of several parts and split across categories (#27), a
+ * refund proposed refused (#208), with the write scope.
  */
 export const linesTool = defineTool<
   LinesInput,
@@ -1193,6 +1247,7 @@ export const linesTool = defineTool<
     link: "write",
     unlink: "write",
     split: "write",
+    refuse_refund: "write",
   },
   run: (input, caller) => {
     switch (input.action) {
@@ -1327,6 +1382,10 @@ export const linesTool = defineTool<
 
       case "split": {
         return splitRun(input, caller.userId);
+      }
+
+      case "refuse_refund": {
+        return refuseRefundRun(input, caller.userId);
       }
     }
   },
