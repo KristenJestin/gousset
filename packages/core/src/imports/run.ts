@@ -351,7 +351,7 @@ export function runImport(
       periodTo,
     });
 
-    const keys = dedupKeys(loaded.format, statement.lines);
+    const keys = dedupKeys(loaded.format, statement.lines, csvProfile?.layout);
 
     const keyed: ReadonlyArray<Keyed> = statement.lines.map((line, order) => ({
       ...line,
@@ -468,6 +468,9 @@ export function runImport(
               memo: line.memo,
               counterpartyName: line.counterparty?.name ?? null,
               counterpartyIban: line.counterparty?.iban ?? null,
+              // A payment in another currency, as the file gives it (PayPal's conversions, #201).
+              originalAmountMinor: line.original?.amountMinor ?? null,
+              originalCurrency: line.original?.currency ?? null,
               bankId: line.bankId,
               dedupKey: line.dedupKey,
               duplicateOfLineId: line.duplicateOf,

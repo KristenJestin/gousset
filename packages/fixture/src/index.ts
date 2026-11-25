@@ -29,6 +29,8 @@ export type { StatementFile, StatementFormat } from "./statements/formats";
 
 export { csvSamples } from "./statements/csv-samples";
 
+export { paypalActivity } from "./statements/paypal";
+
 export { ibanWithCheckDigits } from "./statements/iban";
 
 export { encodeWindows1252, statementSamples } from "./statements/samples";

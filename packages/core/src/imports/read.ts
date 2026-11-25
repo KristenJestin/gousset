@@ -45,6 +45,9 @@ export const ReadStatement = Schema.Struct({
       memo: Text,
       bankId: Text,
       counterparty: Schema.NullOr(Schema.Struct({ name: Text, iban: Text })),
+      original: Schema.NullOr(
+        Schema.Struct({ amountMinor: Schema.Number, currency: Schema.String }),
+      ),
     }),
   ),
   openingBalance: Balance,
@@ -77,6 +80,7 @@ function keep(statement: Statement): ReadStatement {
       memo: line.memo,
       bankId: line.bankId,
       counterparty: line.counterparty,
+      original: line.original ?? null,
     })),
     openingBalance: statement.openingBalance,
     balance: statement.balance,
