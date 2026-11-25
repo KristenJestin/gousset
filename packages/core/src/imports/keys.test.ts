@@ -28,6 +28,13 @@ describe("dedup keys", () => {
     }
   });
 
+  test("PayPal's activity trusts its transaction id, unique to each row (#201)", () => {
+    const row = { ...coffee, bankId: "0PPEXAMPLE0000001" };
+
+    expect(dedupKeys("csv", [row], "paypal-activity")).toEqual(["bank:0PPEXAMPLE0000001"]);
+    expect(dedupKeys("csv", [coffee], "paypal-activity")[0]).toMatch(/^content:[\da-f]{64}#1$/);
+  });
+
   test("a line whose format counts but whose id is missing gets the content key", () => {
     const [key] = dedupKeys("camt053", [coffee]);
 

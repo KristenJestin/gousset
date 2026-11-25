@@ -14,6 +14,7 @@ export { readMt940 } from "./mt940";
 
 export {
   csvFile,
+  headerMatches,
   matchCsvHeader,
   normalizeHeader,
   previewCsvRows,
@@ -34,6 +35,8 @@ export type { CsvProposal, CsvUnsure } from "./csv-detect";
 
 export { CsvProfile } from "./csv-profile";
 
+export type { CsvLayout } from "./csv-profile";
+
 export type { DateOrder } from "./dates";
 
 export { minorDigits, readAmount } from "./amount";
@@ -41,6 +44,7 @@ export { minorDigits, readAmount } from "./amount";
 export type {
   Balance,
   Counterparty,
+  OriginalAmount,
   Statement,
   StatementAccount,
   StatementLine,

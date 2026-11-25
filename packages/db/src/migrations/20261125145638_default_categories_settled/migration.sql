@@ -1,0 +1,1 @@
+ALTER TABLE "auth_user" ADD COLUMN "default_categories_settled" boolean DEFAULT false NOT NULL;

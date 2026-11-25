@@ -75,7 +75,8 @@ function classifiedBy(
     const own =
       payments.length > 0 && payments.every((part) => lines.has(part.lineId)) ? merchant.id : null;
 
-    return { ...each, merchantId: own };
+    // One merchant's default is weighed here: no line of an operation's category (#194).
+    return { ...each, merchantId: own, operation: null };
   });
 
   const moves = new Map(
