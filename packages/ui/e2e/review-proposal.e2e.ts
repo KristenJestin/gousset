@@ -112,11 +112,10 @@ test.describe("ReviewProposal", () => {
   test("at the top of the line's detail, focused when it opens, and Tab reaches each button", async ({
     page,
   }) => {
-    test.skip((page.viewportSize()?.width ?? 0) < 1024, "Below 1024 px the detail is a sheet");
-
     await page.goto(story("in-detail"));
 
-    const slot = page.locator('[data-slot="line-detail-content"] [data-slot="line-review"]');
+    // The detail is a sheet on every width (#182).
+    const slot = page.getByRole("dialog", { name: LABEL }).locator('[data-slot="line-review"]');
 
     await expect(slot).toContainText("Gousset proposes");
     await expect(slot).toBeFocused();

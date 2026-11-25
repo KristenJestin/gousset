@@ -1,5 +1,4 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
-import type { ReactNode } from "react";
 
 import { InFrench } from "../stories/in-french";
 import { CategoryPicker } from "./category-picker";
@@ -8,11 +7,6 @@ import { LineMerchant } from "./line-merchant";
 import { LineTransfer } from "./line-transfer";
 
 const eur = (minor: number) => ({ minor, currency: "EUR" });
-
-/** The column the page gives the detail: 360 px beside the list. */
-function Column({ children }: { children: ReactNode }) {
-  return <div className="flex h-150 w-90 max-w-full">{children}</div>;
-}
 
 /**
  * One line's detail (screen 2, block 3): its label and amount, its account, the day it was booked
@@ -24,18 +18,17 @@ function Column({ children }: { children: ReactNode }) {
  * `LineMerchant`). Every value comes worded from the
  * page; the close button or Escape closes it.
  *
- * Loading: `LineDetailSkeleton`, its title, amount and rows at the same heights.
+ * Loading: `LineDetailSkeleton`, its title, amount and rows at the same heights, in its sheet.
  *
- * From Tailwind's `lg` on it is a panel for the column `OperationsLayout` gives it beside the
- * list; below, a sheet over the list, from the bottom on a phone.
+ * On every screen it is the shared side `Sheet` over the page (#182): from the right edge from
+ * Tailwind's `md` on, from the bottom on a phone. `OperationsLayout` holds it in its own sheet,
+ * kept open from one line to the next.
  *
- * Motion: its content fades in and slides 8 px from the right (180 ms, after 120 ms) once its
- * column has widened, and fades out (120 ms) before the column closes (see `OperationsLayout`);
- * nothing in it scales. The sheet rises from its edge in 300 ms and goes back down in 200 ms.
- * Drawn by the server, it stays still. Cut under reduced motion.
+ * Motion: the sheet slides in from its edge in 300 ms and back out in 200 ms. A detail that came
+ * with the page shows at once. Cut under reduced motion.
  *
- * Don't: put it over the list on a wide screen (it hides the amounts), or edit the line's own
- * figures in it: the bank's are read only; only its category and merchant are chosen.
+ * Don't: open it as a column beside a list, or in a panel of the page's own; or edit the line's
+ * own figures in it: the bank's are read only; only its category and merchant are chosen.
  */
 const meta = {
   title: "Operations/LineDetail",
@@ -56,11 +49,6 @@ const meta = {
     },
     onClose: () => undefined,
   },
-  render: (args) => (
-    <Column>
-      <LineDetail {...args} />
-    </Column>
-  ),
 } satisfies Meta<typeof LineDetail>;
 
 export default meta;
@@ -228,20 +216,14 @@ export const BalanceMovement: Story = {
 };
 
 export const Loading: Story = {
-  render: () => (
-    <Column>
-      <LineDetailSkeleton />
-    </Column>
-  ),
+  render: () => <LineDetailSkeleton onClose={() => undefined} />,
 };
 
 export const French: Story = {
   args: { looksLike: "21 oct., MEALCARD GREENMARKET RIVERTON, −28,00 €" },
   render: (args) => (
     <InFrench>
-      <Column>
-        <LineDetail {...args} />
-      </Column>
+      <LineDetail {...args} />
     </InFrench>
   ),
 };
@@ -249,5 +231,4 @@ export const French: Story = {
 /** On a phone it is a sheet rising from the bottom edge, its label and amount at its top. */
 export const Phone: Story = {
   globals: { viewport: { value: "mobile1", isRotated: false } },
-  render: (args) => <LineDetail {...args} />,
 };

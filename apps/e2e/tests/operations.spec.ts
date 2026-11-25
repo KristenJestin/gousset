@@ -164,9 +164,8 @@ const rows = (page: Page) => list(page).getByRole("listitem");
 const row = (page: Page, label: string) => rows(page).filter({ hasText: label });
 const count = (page: Page) => page.locator('[data-slot="operations-count"]');
 
-// A line's detail: a panel beside the list on a wide screen, a sheet on a phone.
-const detail = (page: Page, label: string) =>
-  page.getByRole(onPhone(page) ? "dialog" : "region", { name: label });
+// A line's detail: a sheet over the list on every screen (#182).
+const detail = (page: Page, label: string) => page.getByRole("dialog", { name: label });
 
 /**
  * Runs `act` on the filters' fields: on a wide screen, those of the filter row; on a phone, those of
@@ -598,8 +597,8 @@ test("a line opens its detail, Escape closes it, and its address opens it on the
   await animationsDone(page);
 });
 
-// Issue #164: the shortcuts list opened over a line's detail (a sheet below `lg`) is the topmost
-// dialog: Escape closes it alone, and the focus goes into it and back to the detail.
+// Issue #164: the shortcuts list opened over a line's detail (a sheet on every screen since #182)
+// is the topmost dialog: Escape closes it alone, and the focus goes into it and back to the detail.
 test("over a line's detail, Escape closes the shortcuts list alone, then the detail", async ({
   page,
 }) => {
@@ -629,18 +628,19 @@ test("over a line's detail, Escape closes the shortcuts list alone, then the det
   await expect(row(page, GREENMARKET).getByRole("button")).toBeFocused();
 });
 
-test("on a phone, a line opened from its address leaves the rows in sight, then shows as a sheet that does not rise", async ({
+test("a line opened from its address leaves the list whole under its sheet, which does not slide in", async ({
   browser,
   page,
   app,
 }) => {
-  const phone = { width: 390, height: 844 };
   const address = `/operations?line=${greenmarketId}`;
+  const viewport = page.viewportSize() ?? { width: 1440, height: 900 };
 
-  // The server's first paint, before any script: the list whole, no column squeezing it.
+  // The server's first paint, before any script: the list whole under the sheet, no column
+  // squeezing it.
   const still = await browser.newContext({
     javaScriptEnabled: false,
-    viewport: phone,
+    viewport,
     locale: "en-US",
     timezoneId: "Europe/Paris",
   });
@@ -652,11 +652,11 @@ test("on a phone, a line opened from its address leaves the rows in sight, then 
   await first.goto(`${app.baseURL}${address}`);
   await expect(row(first, GREENMARKET)).toBeVisible();
   await expect(row(first, STREAMLY)).toBeVisible();
-  await expect(first.locator('[data-slot="operations-detail"]')).toBeHidden();
+  await expect(detail(first, GREENMARKET)).toContainText(FILE_NAME);
+  await expect(first.locator('[data-slot="operations-detail"]')).toHaveCount(0);
   await still.close();
 
-  // Once the page runs, the detail is a sheet, in its place from its first frame.
-  await page.setViewportSize(phone);
+  // Once the page runs, the detail is the same sheet, in its place from its first frame.
   await signedInAs(page, oriane);
   await page.goto(address);
 
@@ -690,8 +690,8 @@ test("a user with no line is told where the lines will come from", async ({ page
 
 /**
  * Samples, each animation frame until `window.__e2eStop`, the box of what `selector` finds (the
- * first match whose text holds `text`, when given): its top within the list's scroller, and its
- * height. Install before the action that moves it.
+ * first match whose text holds `text`, when given): its top within the list's scroller, its height,
+ * its left in the page, and the list's width. Install before the action that moves it.
  */
 async function sampleBoxes(page: Page, selector: string, text = "") {
   await page.evaluate(`(() => {
@@ -710,6 +710,8 @@ async function sampleBoxes(page: Page, selector: string, text = "") {
         window.__e2eBoxes.push({
           top: Math.round(box.top - scroller.getBoundingClientRect().top),
           height: Math.round(box.height),
+          left: Math.round(box.left),
+          listWidth: Math.round(scroller.getBoundingClientRect().width),
         });
       }
 
@@ -721,7 +723,14 @@ async function sampleBoxes(page: Page, selector: string, text = "") {
     requestAnimationFrame(sample);
   })()`);
 
-  const Boxes = Schema.Array(Schema.Struct({ top: Schema.Number, height: Schema.Number }));
+  const Boxes = Schema.Array(
+    Schema.Struct({
+      top: Schema.Number,
+      height: Schema.Number,
+      left: Schema.Number,
+      listWidth: Schema.Number,
+    }),
+  );
 
   return {
     read: async () => Schema.decodeUnknownSync(Boxes)(await page.evaluate("window.__e2eBoxes")),
@@ -729,143 +738,13 @@ async function sampleBoxes(page: Page, selector: string, text = "") {
   };
 }
 
-/**
- * Samples the detail beside the list. As each of the column and its content comes into the page,
- * before any frame draws it: its width (opacity), and its width's (opacity's) transition, `null`
- * when none. Then, each animation frame until `window.__e2eStop`: the column's width, its content's
- * opacity (`null` while there is none) and whether the panel or its content carries a scale.
- * Install before the press that opens it.
- *
- * Why the start is read on insertion, not on a frame: a transition's time runs from the frame that
- * starts it, whether or not a later frame comes in time. Firefox backdates its start to the frame
- * that first drew the new column; when the column comes in after that frame's callbacks and the next
- * frame comes late (the page busy mounting the detail), the first frame a callback sees already has
- * it halfway open (run 45575520646). Read on insertion, the start cannot be missed.
- */
-async function sampleColumn(page: Page) {
-  await page.evaluate(`(() => {
-    window.__e2eColumn = [];
-    window.__e2eStop = false;
-
-    const scaled = (element) => {
-      if (element === null) {
-        return false;
-      }
-
-      const style = getComputedStyle(element);
-      const matrix = new DOMMatrixReadOnly(style.transform === "none" ? undefined : style.transform);
-
-      return Math.abs(matrix.a - 1) > 0.001 || Math.abs(matrix.d - 1) > 0.001 ||
-        (style.scale !== "none" && style.scale !== "1");
-    };
-
-    const sample = () => {
-      const column = document.querySelector('[data-slot="operations-detail"]');
-      const content = document.querySelector('[data-slot="line-detail-content"]');
-
-      if (column !== null) {
-        window.__e2eColumn.push({
-          width: Math.round(column.getBoundingClientRect().width),
-          opacity: content === null ? null : Number(getComputedStyle(content).opacity),
-          scaled: scaled(document.querySelector('[data-slot="line-detail"]')) || scaled(content),
-        });
-      }
-
-      if (!window.__e2eStop) {
-        requestAnimationFrame(sample);
-      }
-    };
-
-    // The element's transition of that property: its first and last values, duration and delay.
-    const transitionOf = (element, property) => {
-      const found = element.getAnimations().find((each) => each.transitionProperty === property);
-
-      if (found === undefined) {
-        return null;
-      }
-
-      const keyframes = found.effect.getKeyframes();
-      const timing = found.effect.getComputedTiming();
-
-      return {
-        from: String(keyframes[0][property]),
-        to: String(keyframes.at(-1)[property]),
-        duration: Number(timing.duration),
-        delay: Number(timing.delay),
-      };
-    };
-
-    window.__e2eOpened = { column: null, content: null };
-
-    // Called once the mutations' task is done, before the next frame: what it reads is what that
-    // frame starts from.
-    const opened = new MutationObserver(() => {
-      const column = document.querySelector('[data-slot="operations-detail"]');
-      const content = document.querySelector('[data-slot="line-detail-content"]');
-
-      if (column !== null && window.__e2eOpened.column === null) {
-        window.__e2eOpened.column = {
-          width: Math.round(column.getBoundingClientRect().width),
-          transition: transitionOf(column, "width"),
-        };
-      }
-
-      if (content !== null && window.__e2eOpened.content === null) {
-        window.__e2eOpened.content = {
-          opacity: Number(getComputedStyle(content).opacity),
-          transition: transitionOf(content, "opacity"),
-        };
-      }
-
-      if (window.__e2eOpened.column !== null && window.__e2eOpened.content !== null) {
-        opened.disconnect();
-      }
-    });
-
-    opened.observe(document.body, { childList: true, subtree: true });
-    requestAnimationFrame(sample);
-  })()`);
-
-  const Transition = Schema.NullOr(
-    Schema.Struct({
-      from: Schema.String,
-      to: Schema.String,
-      duration: Schema.Number,
-      delay: Schema.Number,
-    }),
-  );
-
-  const Opened = Schema.Struct({
-    column: Schema.NullOr(Schema.Struct({ width: Schema.Number, transition: Transition })),
-    content: Schema.NullOr(Schema.Struct({ opacity: Schema.Number, transition: Transition })),
-  });
-
-  const Frames = Schema.Array(
-    Schema.Struct({
-      width: Schema.Number,
-      opacity: Schema.NullOr(Schema.Number),
-      scaled: Schema.Boolean,
-    }),
-  );
-
-  return {
-    read: async () => Schema.decodeUnknownSync(Frames)(await page.evaluate("window.__e2eColumn")),
-    opened: async () => Schema.decodeUnknownSync(Opened)(await page.evaluate("window.__e2eOpened")),
-    stop: () => page.evaluate("window.__e2eStop = true"),
-  };
-}
-
-/** The detail's column at its full width: a 16 px gap and the 360 px panel. */
-const COLUMN_WIDTH = 376;
-
 for (const reduced of [false, true]) {
   const how = reduced ? "under reduced motion, nothing moves" : "it moves";
 
-  test(`motion: the detail opens beside the list, its width moving, never a scale; ${how}`, async ({
+  // #182: on every screen the detail is the shared sheet, over the list, never a column beside it.
+  test(`motion: the detail is a sheet over the list, from the right edge or the bottom on a phone, the list left whole; ${how}`, async ({
     page,
   }) => {
-    test.skip(onPhone(page), "On a phone the detail is a sheet (the next test)");
-
     if (reduced) {
       await page.emulateMedia({ reducedMotion: "reduce" });
     }
@@ -875,66 +754,9 @@ for (const reduced of [false, true]) {
     await hydrated(page);
     await expect(page.locator("html")).toHaveAttribute("data-motion", reduced ? "reduced" : "full");
 
-    const frames = await sampleColumn(page);
-
-    await row(page, GREENMARKET).getByRole("button").click();
-    await expect(detail(page, GREENMARKET)).toBeVisible();
-    await expect
-      .poll(async () => {
-        const last = (await frames.read()).at(-1);
-
-        return last?.width === COLUMN_WIDTH && last.opacity === 1;
-      })
-      .toBe(true);
-    await frames.stop();
-
-    const seen = await frames.read();
-
-    expect(seen.filter((frame) => frame.scaled)).toEqual([]);
-
-    if (reduced) {
-      // There at once, whole: the column at its width, the content opaque, neither moving.
-      expect(await frames.opened()).toEqual({
-        column: { width: COLUMN_WIDTH, transition: null },
-        content: { opacity: 1, transition: null },
-      });
-      expect(
-        seen.filter(
-          (frame) =>
-            frame.width !== COLUMN_WIDTH || (frame.opacity !== null && frame.opacity !== 1),
-        ),
-      ).toEqual([]);
-    } else {
-      // The column widens from nothing in 300 ms; the content, hidden, fades in after 120 ms of it,
-      // in 180 ms (`OperationsLayout`, `LineDetail`).
-      expect(await frames.opened()).toEqual({
-        column: {
-          width: 0,
-          transition: { from: "0px", to: `${COLUMN_WIDTH}px`, duration: 300, delay: 0 },
-        },
-        content: {
-          opacity: 0,
-          transition: { from: "0", to: "1", duration: 180, delay: 120 },
-        },
-      });
-    }
-
-    await animationsDone(page);
-  });
-
-  test(`motion: on a phone, the detail is a sheet rising from the bottom; ${how}`, async ({
-    page,
-  }) => {
-    test.skip(!onPhone(page), "On a wide screen the detail opens beside the list");
-
-    if (reduced) {
-      await page.emulateMedia({ reducedMotion: "reduce" });
-    }
-
-    await signedInAs(page, oriane);
-    await visit(page, "/operations");
-    await hydrated(page);
-    await expect(page.locator("html")).toHaveAttribute("data-motion", reduced ? "reduced" : "full");
+    const listWidth = await page
+      .locator('[data-slot="operations-scroller"]')
+      .evaluate((node) => Math.round(node.getBoundingClientRect().width));
 
     const boxes = await sampleBoxes(page, '[role="dialog"]');
 
@@ -945,18 +767,34 @@ for (const reduced of [false, true]) {
     await expect(sheet).toBeVisible();
     await animationsDone(page);
 
-    const rest = (await boxes.read()).at(-1)?.top ?? 0;
+    const rest = (await boxes.read()).at(-1);
 
     await boxes.stop();
 
-    const below = (await boxes.read()).filter((box) => box.top > rest + 1);
+    const seen = await boxes.read();
+
+    // Drawn beyond where it rests: right of it on a wide screen, below it on a phone.
+    const away = seen.filter((box) =>
+      onPhone(page) ? box.top > (rest?.top ?? 0) + 1 : box.left > (rest?.left ?? 0) + 1,
+    );
 
     if (reduced) {
       // In its place at once.
-      expect(below).toEqual([]);
+      expect(away).toEqual([]);
     } else {
-      // Drawn on its way up from the bottom edge.
-      expect(below.length).toBeGreaterThan(1);
+      // Drawn on its way in from its edge.
+      expect(away.length).toBeGreaterThan(1);
+    }
+
+    // Over the list, which kept its width at every frame.
+    expect(seen.filter((box) => box.listWidth !== listWidth)).toEqual([]);
+    await expect(page.locator('[data-slot="operations-detail"]')).toHaveCount(0);
+
+    if (!onPhone(page)) {
+      // Along the right edge.
+      expect(await sheet.evaluate((node) => Math.round(node.getBoundingClientRect().right))).toBe(
+        page.viewportSize()?.width,
+      );
     }
   });
 

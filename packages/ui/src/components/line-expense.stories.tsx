@@ -23,7 +23,7 @@ async function saveLater() {
   return true;
 }
 
-/** The column the page gives the detail: 340 px beside the list. */
+/** A narrow column, 340 px: about what the detail's sheet gives its blocks on a phone. */
 function Column({ children }: { children: ReactNode }) {
   return <div className="flex w-85 max-w-full flex-col">{children}</div>;
 }
