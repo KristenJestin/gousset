@@ -15,7 +15,7 @@ import {
   expectAccessible,
   fixDay,
   personOfItsOwn,
-  slowServerFunctions,
+  slowServerWrites,
   test,
   visit,
 } from "../src/test";
@@ -314,8 +314,9 @@ test("the intermediary switch keeps its mark through a reload as soon as it show
   const { owner, paylink } = await onPaylinkPage(page, app, user, "intermediary-reload");
   const marked = intermediarySwitch(page);
 
-  // A slow save: the browser holds it a while before it leaves.
-  const unslow = await slowServerFunctions(page, 1500);
+  // A slow save: the browser holds it a second before it leaves; what it then reads again goes at
+  // once, so the switch shows it saved about a second after the click.
+  const unslow = await slowServerWrites(page, 1000);
 
   await marked.click();
 
