@@ -264,7 +264,6 @@ test("a phone held sideways keeps the side sheet's content clear of its notch", 
   await expect(sheet).toHaveCSS("padding-right", `${String(notch)}px`);
   await page.keyboard.press("Escape");
   await expect(sheet).toBeHidden();
-  await animationsDone(page);
 });
 
 test("on a phone, the month bar lists spent, set aside and left under it, one row each", async ({
