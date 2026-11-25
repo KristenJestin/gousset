@@ -173,7 +173,8 @@ test.describe("Operations list", () => {
     await expect(page.locator(ROW).first()).toBeVisible();
 
     // From the press to the moment the leaving row is out of the page: the clock leads, but runs
-    // at its pace.
+    // at its pace. That row's own element, the first of its text, as the samples above read it: the
+    // made-up lines repeat their labels further down.
     const gone = page.evaluate(
       ({ selector, text }) =>
         new Promise<number>((resolve) => {
@@ -182,12 +183,12 @@ test.describe("Operations list", () => {
             () => {
               const pressed = performance.now();
 
-              new MutationObserver((_, observer) => {
-                const left = [...document.querySelectorAll(selector)].every(
-                  (row) => !(row.textContent ?? "").includes(text),
-                );
+              const row = [...document.querySelectorAll(selector)].find((each) =>
+                (each.textContent ?? "").includes(text),
+              );
 
-                if (left) {
+              new MutationObserver((_, observer) => {
+                if (row?.isConnected !== true) {
                   observer.disconnect();
                   resolve(performance.now() - pressed);
                 }
