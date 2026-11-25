@@ -28,7 +28,8 @@ type Column =
   | "net"
   | "transactionId"
   | "reference"
-  | "balanceImpact";
+  | "balanceImpact"
+  | "timeZone";
 
 type Language = "en" | "fr";
 
@@ -57,7 +58,46 @@ const NAMES: ReadonlyArray<{ column: Column; language: Language; name: string }>
   { column: "reference", language: "fr", name: "id de transaction de reference" },
   { column: "balanceImpact", language: "en", name: "balance impact" },
   { column: "balanceImpact", language: "fr", name: "impact sur le solde" },
+  { column: "timeZone", language: "en", name: "timezone" },
+  { column: "timeZone", language: "en", name: "time zone" },
+  { column: "timeZone", language: "fr", name: "fuseau horaire" },
 ];
+
+/**
+ * The time zones of the United States and Canada, as PayPal names them (`PDT`) or as a zone's
+ * name does (`America/New_York`): an English export there writes the month first. Any other zone
+ * an English export names writes the day first (`CEST`, `GMT`, `Europe/London`).
+ */
+const MONTH_FIRST_ZONES: ReadonlySet<string> = new Set([
+  "pst",
+  "pdt",
+  "mst",
+  "mdt",
+  "cst",
+  "cdt",
+  "est",
+  "edt",
+  "akst",
+  "akdt",
+  "hst",
+  "ast",
+  "adt",
+  "nst",
+  "ndt",
+  "america/new_york",
+  "america/chicago",
+  "america/denver",
+  "america/phoenix",
+  "america/los_angeles",
+  "america/anchorage",
+  "america/toronto",
+  "america/vancouver",
+  "america/edmonton",
+  "america/winnipeg",
+  "america/halifax",
+  "america/st_johns",
+  "pacific/honolulu",
+]);
 
 /** The columns every export has (PayPal's mandatory ones), in the English the errors name them. */
 const REQUIRED: ReadonlyArray<readonly [Column, string]> = [
@@ -170,10 +210,17 @@ function movementsOf(rows: ReadonlyArray<CsvRow>, { at }: Columns): Array<Moveme
 }
 
 /**
- * Which of the two first numbers of the days is the day: the one a number above 12 says, otherwise
- * the language's habit (month first in PayPal's documented US format, day first in French).
+ * Which of the two first numbers of the days is the day: the one a number above 12 says; otherwise
+ * day first in French; in English, the time zone the rows name (month first in the United States
+ * and Canada, day first elsewhere). `undefined` when nothing says it: an English export with no
+ * time zone and no day after the 12th, which a guess would book on the wrong days for good, as the
+ * transaction id keeps a line from being read again.
  */
-function dateOrderOf(days: ReadonlyArray<string>, language: Language): DateOrder {
+function dateOrderOf(
+  days: ReadonlyArray<string>,
+  zones: ReadonlyArray<string>,
+  language: Language,
+): DateOrder | undefined {
   for (const day of days) {
     const read = readQifDate(day);
 
@@ -190,7 +237,20 @@ function dateOrderOf(days: ReadonlyArray<string>, language: Language): DateOrder
     }
   }
 
-  return language === "fr" ? "day-first" : "month-first";
+  const numbers = days.some((day) => readQifDate(day)?.kind === "numbers");
+
+  // No day written as two numbers (none, or ISO days): the order reads nothing.
+  if (language === "fr" || !numbers) {
+    return "day-first";
+  }
+
+  const zone = zones.map(plain).find((each) => each !== "");
+
+  if (zone === undefined) {
+    return undefined;
+  }
+
+  return MONTH_FIRST_ZONES.has(zone) ? "month-first" : "day-first";
 }
 
 /**
@@ -303,11 +363,22 @@ export const readPaypalRows = (
     const { at, language } = columns;
     const movements = movementsOf(rows, columns);
 
+    const order = dateOrderOf(
+      movements.map((movement) => textOf(movement.row, at.date)),
+      movements.map((movement) => textOf(movement.row, at.timeZone)),
+      language,
+    );
+
+    if (order === undefined) {
+      return yield* new MalformedFile({
+        line: header.line,
+        problem:
+          "Its days may be day first or month first, and nothing in the file says which: export it again with the TimeZone column, or over a period with a day after the 12th.",
+      });
+    }
+
     const reading: Reading = {
-      order: dateOrderOf(
-        movements.map((movement) => textOf(movement.row, at.date)),
-        language,
-      ),
+      order,
       syntax: syntaxOf(
         movements.map((movement) => movement.net.text),
         language,

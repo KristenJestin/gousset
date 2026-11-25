@@ -63,8 +63,8 @@ controls):
   - `memo`: OFX `MEMO` (unless it stood in for the label), QIF `M`, CAMT.053 and MT940 below, or
     `null`;
   - `bankId`: the bank's own id, or `null`: OFX `FITID` and CAMT.053 `AcctSvcrRef`, unique within
-    the account; QIF `N`, a cheque number or a reference, and MT940's references (often `NONREF`),
-    which nothing makes unique;
+    the account, and PayPal's `Transaction ID` (below); QIF `N`, a cheque number or a reference,
+    MT940's references (often `NONREF`) and any other CSV's bank id, which nothing makes unique;
   - `counterparty`: `{ name, iban }`, who paid or was paid, when the file names either, or `null`
     (always for OFX, QIF and CSV). The IBAN is upper case without spaces, `null` when what the file gives
     is not shaped as one (a domestic account number);
@@ -88,7 +88,8 @@ day is not is treated as not given, and the import's summary says so (`docs/data
 said how to read everything.
 
 CSV: `bookedOn`, `valueOn`, the amount, `label`, `memo` and `bankId` come from the columns the
-profile names; `bankId` is whatever the bank put there, which nothing makes unique. A CSV file
+profile names; `bankId` is whatever the bank put there, which nothing makes unique, but for
+PayPal's activity, whose `Transaction ID` is unique to each row (below). A CSV file
 gives no counterparty and no balance, opening or closing.
 
 **Entities are decoded until none is left** (#132). OFX, QFX and CAMT.053 write `&`, `<`, `>`, `"`
@@ -239,15 +240,20 @@ account's country writes them (`MM/DD/YYYY` for the US).
   in another currency and moves money the same way, the conversion is the line, labelled with the
   payment's `Name`, and the payment's amount is its `original`. With no account chosen (a test
   read), every row is read, in its own currency.
-- **A line** is booked on `Date` (the day PayPal completed it; its time and zone are read past),
+- **A line** is booked on `Date` (the day PayPal completed it; its time is read past, its zone
+  only for the order of the day's numbers, below),
   its amount the `Net` (`Gross` less PayPal's fee: the fee is folded, as the balance moved), its
   `label` the `Name`, or the `Type` when it names nobody (the money PayPal takes from a bank or a
   card, `Bank Deposit to PP Account`, `General Card Deposit`), its `memo` the `Type` when the label
   is the name, its `bankId` the `Transaction ID`, which PayPal makes unique to each row: the import
   keys the line by it (`bank:`), as OFX's `FITID`.
 - **Days and amounts as the file writes them**: the order of a day's two first numbers is the one
-  a number above 12 says, otherwise month first in English (PayPal's documented US format) and day
-  first in French; the decimal mark is the one an amount ends with before its cents, otherwise a
+  a number above 12 says; otherwise day first in French, and in English the one the rows'
+  `TimeZone` says: month first in the United States' and Canada's zones (`PDT`, `EST`,
+  `America/New_York`), day first in any other (`CEST`, `GMT`, `Europe/London`). An English export
+  with no day above the 12th and no zone is refused (`MalformedFile`): a guess would book its lines
+  on the wrong days, and the transaction id, their key, keeps a later import from mending them.
+  The decimal mark is the one an amount ends with before its cents, otherwise a
   point in English and a comma in French. The profile's `dateFormat` and `decimalMark` are not read
   with this layout.
 
