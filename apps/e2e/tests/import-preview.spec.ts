@@ -333,12 +333,16 @@ test("a CSV of unknown columns: the card shows its state and action, the sheet h
   await expect(page.getByRole("cell", { name: "Columns to confirm" })).toBeVisible();
 
   // Mapped, named and confirmed: the profile is saved, the sheet closes, the lines are imported.
+  // The card's action is gone with the question: focus goes to the file's row.
   await confirmColumns(page).click();
   await choose(page, "Date format", "DD/MM/YYYY, as in 03/10/2026");
   await expect(testRead(page)).toContainText("CB MARCHÉ DES HALLES");
   await sheet.getByRole("textbox", { name: "Name of the profile" }).fill("Halles bank");
   await sheet.getByRole("button", { name: "Read the file this way" }).click();
   await expect(sheet).toBeHidden();
+  await expect(
+    page.locator('[role="cell"][data-column="file"]').filter({ hasText: "sheet.csv" }),
+  ).toBeFocused();
   await expect(summaryOf(page, "sheet.csv")).toBeVisible({ timeout: 30_000 });
   await expect(added(page, "sheet.csv")).toHaveText("2");
 

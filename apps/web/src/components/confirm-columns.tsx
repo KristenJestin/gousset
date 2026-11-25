@@ -15,6 +15,7 @@ import { CsvTestRead } from "@gousset/ui/components/csv-test-read";
 import type { CsvTestResult } from "@gousset/ui/components/csv-test-read";
 import { FileButton } from "@gousset/ui/components/file-button";
 import { FormMessage } from "@gousset/ui/components/form-message";
+import { fileCellOf } from "@gousset/ui/components/import-files";
 import { ImportPrompt } from "@gousset/ui/components/import-prompt";
 import { Select } from "@gousset/ui/components/select";
 import { Sheet } from "@gousset/ui/components/sheet";
@@ -178,8 +179,8 @@ export type ColumnsSheetProps = {
  * A CSV file's columns in the shared side sheet (docs/design.md, "Actions and forms"; along the
  * bottom edge on a phone), wide enough for the file's columns side by side: its preview, from what
  * detection proposed, whose form is the sheet's. Confirming saves the profile when it is named,
- * closes the sheet and runs the import on; Cancel, Escape or the backdrop close it, the file still
- * waiting. It opens once the file's questions are read, so that it opens filled; closed, it reads
+ * closes the sheet and runs the import on, focus going to the file's row; Cancel, Escape or the
+ * backdrop close it, the file still waiting, focus back on the card's action. It opens once the file's questions are read, so that it opens filled; closed, it reads
  * nothing more, the import having moved on.
  *
  * Motion: the shared `Sheet`'s: it slides in from the right edge (from the bottom on a phone) in
@@ -229,6 +230,8 @@ function ColumnsForm({
   const [profileRefused, setProfileRefused] = useState<string>();
   const [busy, setBusy] = useState(false);
   const [saving, setSaving] = useState(false);
+  // Confirmed, the card's action is gone with the question: focus goes to the file's row.
+  const [confirmed, setConfirmed] = useState(false);
   const { resume, refused } = useResume(summary);
 
   const draft = profileOf(settings, mapping);
@@ -327,6 +330,7 @@ function ColumnsForm({
     const profile = saved ?? chosen;
 
     if (await resume(null, profile === null ? draft.profile : null, profile)) {
+      setConfirmed(true);
       onOpenChange(false);
     }
   };
@@ -387,6 +391,7 @@ function ColumnsForm({
       onOpenChange={onOpenChange}
       // While it is sent it stays open: its answer lands on the form that sent it.
       sending={busy || saving}
+      finalFocus={confirmed ? () => fileCellOf(summary.id) : undefined}
       onSubmit={(event) => {
         event.preventDefault();
         void whileBusy(setBusy, confirm);

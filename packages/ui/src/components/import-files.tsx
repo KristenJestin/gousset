@@ -95,6 +95,17 @@ function FileName({ name }: { name: string }) {
   );
 }
 
+/**
+ * The cell that names a file, by its row's `id`: where focus goes once what the file asked is
+ * answered over the page (its columns, in a sheet), the action that asked it gone with the
+ * question, so that the keyboard and screen readers stay on the file whose import goes on.
+ */
+export function fileCellOf(id: string): HTMLElement | null {
+  return document.querySelector<HTMLElement>(
+    `[role="cell"][data-column="file"][data-file="${CSS.escape(id)}"]`,
+  );
+}
+
 function CountCell({
   column,
   heading,
@@ -152,7 +163,15 @@ function FileRow({
           !open && "border-b",
         )}
       >
-        <div role="cell" data-column="file" className="flex min-w-0 basis-full flex-col gap-0.5">
+        {/* Focus comes here from code once the file's question is answered (`fileCellOf`), its
+            ring inside the row, whose neighbours touch it. */}
+        <div
+          role="cell"
+          data-column="file"
+          data-file={row.id}
+          tabIndex={-1}
+          className="flex min-w-0 basis-full flex-col gap-0.5 rounded-sm focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring"
+        >
           <FileName name={row.file} />
           <span
             data-slot="import-file-facts"
