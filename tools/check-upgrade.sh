@@ -379,9 +379,11 @@ done
 # The app recognises every user's merchants at boot (#24): Camille's lines, kept before merchants
 # existed, get theirs without an import. From 0.3.0 the release's own import recognised them
 # already (step 3b): the boot then loses none but the cleaned labels of the merchants it made from
-# an operation prefix, which the boot reads again (#194, below), and only an update from before
-# merchants shows that it makes them.
-held_aliases=$(held_rows merchant_alias '.alias != "ANN CARTE CAFE EXEMPLE" and .alias != "F COTISATION"')
+# an operation prefix, which the boot reads again (#194, below): a card's cancellation, a fee, and
+# the free text of her `VIR` transfers between her own accounts (tools/check-upgrade.sql), which
+# names no one; only an update from before merchants shows that it makes them.
+held_aliases=$(held_rows merchant_alias '.alias != "ANN CARTE CAFE EXEMPLE" and .alias != "F COTISATION"
+  and (.alias | (startswith("VERS LIVRET") or startswith("DEPUIS COMPTE") or startswith("EPARGNE PROJET")) | not)')
 recognised=$(sql "select count(*) from merchant_alias where user_id = '$camille'")
 [ "$recognised" != 0 ] || fail "Camille's lines got no merchant at the app's start."
 [ "$recognised" -ge "$held_aliases" ] ||
