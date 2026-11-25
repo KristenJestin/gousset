@@ -1323,10 +1323,14 @@ describe("the lines tool", () => {
       "an unknown or ambiguous category name",
       '{"action":"classify","line":"<a handle search gave>","kind":"expense","category":"Groceries > Bakery"}',
       '{"action":"pair","line":"<a handle search gave>","account":"Gift card"}',
-      "such a line is no income until `link` confirms one or `refuse_refund` says it is no refund, never proposed again",
     ]) {
       expect(description, said).toContain(said);
     }
+
+    // refuse_refund (#208) is described where its arguments are: the description is at its guard.
+    expect(JSON.stringify(tool?.inputSchema)).toContain(
+      "refuse_refund: a line coming back that show proposes as a refund is none",
+    );
 
     expect(description).not.toContain("(Other)");
     expect(tool?.annotations).toEqual({
