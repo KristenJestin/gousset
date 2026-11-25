@@ -586,6 +586,8 @@ function toRow(
     amount: line.amount,
     toReview: line.toReview,
     category: line.category === null ? undefined : categoryPath(line.category),
+    categoryIcon: line.category?.icon ?? null,
+    categoryColor: line.category?.color ?? null,
   };
 }
 
@@ -657,7 +659,16 @@ function LineCategoryPicker({
 
   const categories = listed
     ? offered
-    : [...offered, { id: current.id, name: categoryPath(current), children: [] }];
+    : [
+        ...offered,
+        {
+          id: current.id,
+          name: categoryPath(current),
+          icon: current.icon,
+          color: current.color,
+          children: [],
+        },
+      ];
 
   async function choose(categoryId: string) {
     if (categoryId === chosen) {
