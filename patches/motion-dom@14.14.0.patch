@@ -1,0 +1,160 @@
+diff --git a/dist/cjs/index.js b/dist/cjs/index.js
+index 61c69b5042cc211cc1a455e70771a569eb7bfcb8..42279a16c79e7be5126cc158195266f8524fa5b6 100644
+--- a/dist/cjs/index.js
++++ b/dist/cjs/index.js
+@@ -41,6 +41,18 @@ const time = {
+     },
+ };
+ 
++/**
++ * Gousset's patch (KristenJestin/gousset#167): how far a WAAPI animation's
++ * timeline reads from Motion's clock, in ms; see
++ * dist/es/animation/waapi/utils/timeline-lag.mjs.
++ */
++function timelineLag(animation) {
++    const timeline = animation.timeline ??
++        (typeof document === "undefined" ? undefined : document.timeline);
++    const current = timeline?.currentTime;
++    return typeof current === "number" ? current - time.now() : 0;
++}
++
+ // If this number is a decimal, make it just five decimal places
+ // to avoid exponents
+ const sanitize = (v) => Math.round(v * 100000) / 100000;
+@@ -2869,10 +2881,19 @@ class NativeAnimation extends WithPromise {
+             : this.animation.playState;
+     }
+     get startTime() {
+-        return this.manualStartTime ?? Number(this.animation.startTime);
++        if (this.manualStartTime !== null)
++            return this.manualStartTime;
++        const startTime = this.animation.startTime;
++        return startTime === null
++            ? Number(startTime)
++            : Number(startTime) - timelineLag(this.animation);
+     }
+     set startTime(newStartTime) {
+-        this.manualStartTime = this.animation.startTime = newStartTime;
++        this.manualStartTime = newStartTime;
++        this.animation.startTime =
++            newStartTime === null
++                ? newStartTime
++                : newStartTime + timelineLag(this.animation);
+     }
+     /**
+      * Attaches a timeline to the animation, for instance the `ScrollTimeline`.
+@@ -3782,7 +3803,7 @@ function createGroup(owner) {
+     const create = (keyframes, options) => new Animation(new KeyframeEffect(element, keyframes, options));
+     const add = (animation, offset, end = Infinity) => {
+         const segment = { animation, offset, end };
+-        animation.startTime = time.now() + offset;
++        animation.startTime = time.now() + offset + timelineLag(animation);
+         /**
+          * Animations finish when the WAAPI animation reaches their end.
+          * Once a loop has taken over, the finished animation isn't needed.
+@@ -4260,7 +4281,7 @@ function createGroup(owner) {
+             else if (rate) {
+                 animation.playbackRate !== rate &&
+                     (animation.playbackRate = rate);
+-                animation.startTime = now - local / rate;
++                animation.startTime = now - local / rate + timelineLag(animation);
+             }
+             else {
+                 /**
+diff --git a/dist/es/animation/NativeAnimation.mjs b/dist/es/animation/NativeAnimation.mjs
+index 0bf676e46c4af09d3ac3bc50751a10c15997bfb5..4a6cf31db55548dfbf55b97749a45ad71d5aa427 100644
+--- a/dist/es/animation/NativeAnimation.mjs
++++ b/dist/es/animation/NativeAnimation.mjs
+@@ -6,6 +6,7 @@ import { WithPromise } from './utils/WithPromise.mjs';
+ import { notifyAnimationStart } from './utils/notify-inspector.mjs';
+ import { startWaapiAnimation } from './waapi/start-waapi-animation.mjs';
+ import { applyGeneratorOptions } from './waapi/utils/apply-generator.mjs';
++import { timelineLag } from './waapi/utils/timeline-lag.mjs';
+ 
+ /**
+  * NativeAnimation implements AnimationPlaybackControls for the browser's Web Animations API.
+@@ -163,11 +164,24 @@ class NativeAnimation extends WithPromise {
+             ? "finished"
+             : this.animation.playState;
+     }
++    /**
++     * On Motion's clock both ways (Gousset's patch, #167): WAAPI reads a start
++     * time on the animation's timeline (`timelineLag`).
++     */
+     get startTime() {
+-        return this.manualStartTime ?? Number(this.animation.startTime);
++        if (this.manualStartTime !== null)
++            return this.manualStartTime;
++        const startTime = this.animation.startTime;
++        return startTime === null
++            ? Number(startTime)
++            : Number(startTime) - timelineLag(this.animation);
+     }
+     set startTime(newStartTime) {
+-        this.manualStartTime = this.animation.startTime = newStartTime;
++        this.manualStartTime = newStartTime;
++        this.animation.startTime =
++            newStartTime === null
++                ? newStartTime
++                : newStartTime + timelineLag(this.animation);
+     }
+     /**
+      * Attaches a timeline to the animation, for instance the `ScrollTimeline`.
+diff --git a/dist/es/animation/waapi/transforms/TransformAnimation.mjs b/dist/es/animation/waapi/transforms/TransformAnimation.mjs
+index 71172a48d8859adbe85eda9b614fbe99a7cd801b..824b818e6e7fc46d5c555db94f7a33221192a2d4 100644
+--- a/dist/es/animation/waapi/transforms/TransformAnimation.mjs
++++ b/dist/es/animation/waapi/transforms/TransformAnimation.mjs
+@@ -10,6 +10,7 @@ import { keyframes } from '../../generators/keyframes.mjs';
+ import { defaultOffset } from '../../keyframes/offsets/default.mjs';
+ import { JSAnimation, round } from '../../JSAnimation.mjs';
+ import { sampleDelta } from '../../NativeAnimationExtended.mjs';
++import { timelineLag } from '../utils/timeline-lag.mjs';
+ import { cubicBezierAsString } from '../easing/cubic-bezier.mjs';
+ import { supportedWaapiEasing } from '../easing/supported.mjs';
+ import { supportsWaapi } from '../supports/waapi.mjs';
+@@ -544,7 +545,8 @@ function createGroup(owner) {
+     const create = (keyframes, options) => new Animation(new KeyframeEffect(element, keyframes, options));
+     const add = (animation, offset, end = Infinity) => {
+         const segment = { animation, offset, end };
+-        animation.startTime = time.now() + offset;
++        // On the animation's timeline, not Motion's clock (Gousset's patch, #167).
++        animation.startTime = time.now() + offset + timelineLag(animation);
+         /**
+          * Animations finish when the WAAPI animation reaches their end.
+          * Once a loop has taken over, the finished animation isn't needed.
+@@ -1022,7 +1024,8 @@ function createGroup(owner) {
+             else if (rate) {
+                 animation.playbackRate !== rate &&
+                     (animation.playbackRate = rate);
+-                animation.startTime = now - local / rate;
++                // On the animation's timeline (Gousset's patch, #167).
++                animation.startTime = now - local / rate + timelineLag(animation);
+             }
+             else {
+                 /**
+diff --git a/dist/es/animation/waapi/utils/timeline-lag.mjs b/dist/es/animation/waapi/utils/timeline-lag.mjs
+new file mode 100644
+index 0000000000000000000000000000000000000000..b55139d361ce492c32882378c1b701894d609772
+--- /dev/null
++++ b/dist/es/animation/waapi/utils/timeline-lag.mjs
+@@ -0,0 +1,20 @@
++import { time } from '../../../frameloop/sync-time.mjs';
++
++/**
++ * Gousset's patch (KristenJestin/gousset#167): how far a WAAPI animation's
++ * timeline reads from Motion's clock (`time.now()`, performance.now() or the
++ * frame's timestamp), in ms. Motion sets WAAPI start times on its own clock;
++ * a start time is read on the animation's timeline. Chromium's document
++ * timeline reads as performance.now(); Firefox's can trail it by seconds
++ * (4.4 s after a reload, in CI), and an animation started on Motion's clock
++ * then waits that long before it moves. A timeline without a time in ms (a
++ * scroll timeline, an inactive one) gives 0: Motion's own handling is kept.
++ */
++function timelineLag(animation) {
++    const timeline = animation.timeline ??
++        (typeof document === "undefined" ? undefined : document.timeline);
++    const current = timeline?.currentTime;
++    return typeof current === "number" ? current - time.now() : 0;
++}
++
++export { timelineLag };
