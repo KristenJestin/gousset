@@ -1,0 +1,37 @@
+{
+  "type": "diff",
+  "version": "10",
+  "dialect": "postgres",
+  "id": "e5f41b9b-23a2-422e-bf3e-a5340be329a2",
+  "prevIds": ["d6bd10e9-3ae0-46af-bfa5-da8beb31ec49"],
+  "footprints": [
+    {
+      "statementType": "add_column",
+      "statementTarget": ["column", "public", "category", "color"],
+      "writes": [
+        "s|col|public.category.color",
+        "n|col|public.category.color",
+        "e|col|public.category.color"
+      ],
+      "reads": ["n|tbl|public.category", "n|sch|public"]
+    }
+  ],
+  "deltas": [
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "category",
+        "name": "color",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    }
+  ]
+}

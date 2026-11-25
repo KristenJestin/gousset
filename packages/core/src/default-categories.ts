@@ -3,11 +3,16 @@ import { UserData } from "@gousset/db/user-data";
 import type { QueryFailed, UserTransaction } from "@gousset/db/user-data";
 import { Effect } from "effect";
 
+import type { CategoryColorKey, CategoryIconKey } from "./category-looks";
+
 // The categories every user starts with (#23; docs/data-model.md, v0.3): two levels, expense and
 // income, each kind with its fallback, "Other", where an entry goes until it is classified. The set
 // is copied into a user's rows at sign-up, in the language their browser prefers; from then on the
 // names are theirs. The migration `*_categories_isolation` gives every user who existed before it
-// the English set: a unit test keeps its SQL equal to this constant.
+// the English set: a unit test keeps its SQL equal to this constant. Each category has its icon,
+// and each top-level one its colour, which its children take (#205): the migration
+// `*_category_color` gives them to the categories of the set a user left as they were, and a unit
+// test keeps its SQL equal to this constant too.
 
 /** The languages the default set is written in. */
 export type SetLanguage = "en" | "fr";
@@ -15,10 +20,15 @@ export type SetLanguage = "en" | "fr";
 /** A category's name in each language of the set. */
 export type DefaultName = { readonly en: string; readonly fr: string };
 
-/** A top-level category of the set, with its children, in their order. */
+/** A child of the set: its names and its icon; its colour is its parent's. */
+export type DefaultChild = DefaultName & { readonly icon: CategoryIconKey };
+
+/** A top-level category of the set, with its icon, its colour and its children, in their order. */
 export type DefaultCategory = DefaultName & {
+  readonly icon: CategoryIconKey;
+  readonly color: CategoryColorKey;
   readonly fallback?: true;
-  readonly children: ReadonlyArray<DefaultName>;
+  readonly children: ReadonlyArray<DefaultChild>;
 };
 
 /** The set, by kind: top-level categories in their order. */
@@ -33,142 +43,179 @@ export const DEFAULT_CATEGORIES: DefaultSet = {
     {
       en: "Housing",
       fr: "Logement",
+      icon: "housing",
+      color: "blue",
       children: [
-        { en: "Rent", fr: "Loyer" },
-        { en: "Energy", fr: "Énergie" },
-        { en: "Home insurance", fr: "Assurance habitation" },
-        { en: "Repairs", fr: "Travaux" },
+        { en: "Rent", fr: "Loyer", icon: "rent" },
+        { en: "Energy", fr: "Énergie", icon: "energy" },
+        { en: "Home insurance", fr: "Assurance habitation", icon: "insurance" },
+        { en: "Repairs", fr: "Travaux", icon: "repairs" },
       ],
     },
     {
       en: "Groceries",
       fr: "Courses",
+      icon: "groceries",
+      color: "green",
       children: [
-        { en: "Supermarket", fr: "Supermarché" },
-        { en: "Market", fr: "Marché" },
-        { en: "Bakery", fr: "Boulangerie" },
+        { en: "Supermarket", fr: "Supermarché", icon: "supermarket" },
+        { en: "Market", fr: "Marché", icon: "market" },
+        { en: "Bakery", fr: "Boulangerie", icon: "bakery" },
       ],
     },
     {
       en: "Transport",
       fr: "Transports",
+      icon: "transport",
+      color: "cyan",
       children: [
-        { en: "Fuel", fr: "Carburant" },
-        { en: "Public transport", fr: "Transports en commun" },
-        { en: "Car maintenance", fr: "Entretien du véhicule" },
-        { en: "Parking and tolls", fr: "Parking et péages" },
+        { en: "Fuel", fr: "Carburant", icon: "fuel" },
+        { en: "Public transport", fr: "Transports en commun", icon: "train" },
+        { en: "Car maintenance", fr: "Entretien du véhicule", icon: "car" },
+        { en: "Parking and tolls", fr: "Parking et péages", icon: "parking" },
       ],
     },
     {
       en: "Eating out",
       fr: "Sorties au restaurant",
+      icon: "restaurants",
+      color: "orange",
       children: [
-        { en: "Restaurants", fr: "Restaurants" },
-        { en: "Cafés and bars", fr: "Cafés et bars" },
-        { en: "Takeaway", fr: "Plats à emporter" },
+        { en: "Restaurants", fr: "Restaurants", icon: "restaurants" },
+        { en: "Cafés and bars", fr: "Cafés et bars", icon: "cafe" },
+        { en: "Takeaway", fr: "Plats à emporter", icon: "takeaway" },
       ],
     },
     {
       en: "Health",
       fr: "Santé",
+      icon: "health",
+      color: "red",
       children: [
-        { en: "Doctor", fr: "Médecin" },
-        { en: "Pharmacy", fr: "Pharmacie" },
-        { en: "Health insurance", fr: "Mutuelle" },
+        { en: "Doctor", fr: "Médecin", icon: "doctor" },
+        { en: "Pharmacy", fr: "Pharmacie", icon: "pharmacy" },
+        { en: "Health insurance", fr: "Mutuelle", icon: "insurance" },
       ],
     },
     {
       en: "Leisure",
       fr: "Loisirs",
+      icon: "leisure",
+      color: "violet",
       children: [
-        { en: "Sport", fr: "Sport" },
-        { en: "Culture", fr: "Culture" },
-        { en: "Travel", fr: "Voyages" },
-        { en: "Hobbies", fr: "Passe-temps" },
+        { en: "Sport", fr: "Sport", icon: "sport" },
+        { en: "Culture", fr: "Culture", icon: "culture" },
+        { en: "Travel", fr: "Voyages", icon: "travel" },
+        { en: "Hobbies", fr: "Passe-temps", icon: "hobbies" },
       ],
     },
     {
       en: "Shopping",
       fr: "Achats",
+      icon: "shopping",
+      color: "pink",
       children: [
-        { en: "Clothing", fr: "Vêtements" },
-        { en: "Electronics", fr: "Électronique" },
-        { en: "Home and garden", fr: "Maison et jardin" },
+        { en: "Clothing", fr: "Vêtements", icon: "clothes" },
+        { en: "Electronics", fr: "Électronique", icon: "electronics" },
+        { en: "Home and garden", fr: "Maison et jardin", icon: "garden" },
       ],
     },
     {
       en: "Subscriptions",
       fr: "Abonnements",
+      icon: "subscriptions",
+      color: "indigo",
       children: [
-        { en: "Phone and internet", fr: "Téléphone et internet" },
-        { en: "Streaming", fr: "Streaming" },
-        { en: "Software", fr: "Logiciels" },
+        { en: "Phone and internet", fr: "Téléphone et internet", icon: "phone" },
+        { en: "Streaming", fr: "Streaming", icon: "streaming" },
+        { en: "Software", fr: "Logiciels", icon: "software" },
       ],
     },
     {
       en: "Family",
       fr: "Famille",
+      icon: "family",
+      color: "amber",
       children: [
-        { en: "Childcare", fr: "Garde d'enfants" },
-        { en: "Education", fr: "Scolarité" },
-        { en: "Gifts", fr: "Cadeaux" },
+        { en: "Childcare", fr: "Garde d'enfants", icon: "children" },
+        { en: "Education", fr: "Scolarité", icon: "education" },
+        { en: "Gifts", fr: "Cadeaux", icon: "gifts" },
       ],
     },
     {
       en: "Fees and taxes",
       fr: "Frais et impôts",
+      icon: "fees",
+      color: "olive",
       children: [
-        { en: "Bank fees", fr: "Frais bancaires" },
-        { en: "Taxes", fr: "Impôts" },
+        { en: "Bank fees", fr: "Frais bancaires", icon: "bank" },
+        { en: "Taxes", fr: "Impôts", icon: "taxes" },
       ],
     },
-    { en: "Other", fr: "Autre", fallback: true, children: [] },
+    { en: "Other", fr: "Autre", icon: "other", color: "grey", fallback: true, children: [] },
   ],
   income: [
     {
       en: "Salary",
       fr: "Salaire",
+      icon: "salary",
+      color: "green",
       children: [
-        { en: "Pay", fr: "Paie" },
-        { en: "Bonus", fr: "Prime" },
+        { en: "Pay", fr: "Paie", icon: "pay" },
+        { en: "Bonus", fr: "Prime", icon: "bonus" },
       ],
     },
     {
       en: "Benefits",
       fr: "Aides et allocations",
+      icon: "benefits",
+      color: "teal",
       children: [
-        { en: "Family allowance", fr: "Allocations familiales" },
-        { en: "Housing aid", fr: "Aide au logement" },
+        { en: "Family allowance", fr: "Allocations familiales", icon: "family" },
+        { en: "Housing aid", fr: "Aide au logement", icon: "housing" },
       ],
     },
     {
       en: "Investment income",
       fr: "Revenus financiers",
+      icon: "investments",
+      color: "blue",
       children: [
-        { en: "Interest", fr: "Intérêts" },
-        { en: "Dividends", fr: "Dividendes" },
+        { en: "Interest", fr: "Intérêts", icon: "interest" },
+        { en: "Dividends", fr: "Dividendes", icon: "dividends" },
       ],
     },
     {
       en: "Reimbursements",
       fr: "Remboursements",
+      icon: "reimbursements",
+      color: "cyan",
       children: [
-        { en: "Health reimbursements", fr: "Remboursements santé" },
-        { en: "Expense claims", fr: "Notes de frais" },
+        { en: "Health reimbursements", fr: "Remboursements santé", icon: "health" },
+        { en: "Expense claims", fr: "Notes de frais", icon: "expense-claims" },
       ],
     },
-    { en: "Gifts received", fr: "Cadeaux reçus", children: [] },
-    { en: "Other", fr: "Autre", fallback: true, children: [] },
+    {
+      en: "Gifts received",
+      fr: "Cadeaux reçus",
+      icon: "gifts",
+      color: "pink",
+      children: [],
+    },
+    { en: "Other", fr: "Autre", icon: "other", color: "grey", fallback: true, children: [] },
   ],
 };
 
-/** One row of the set, flat: what the migration's SQL lists. */
+/** One row of the set, flat: what the migrations' SQL lists. */
 export type DefaultRow = {
   readonly kind: "expense" | "income";
   readonly parent: string | null;
   readonly name: string;
   readonly position: number;
   readonly fallback: boolean;
+  readonly icon: CategoryIconKey;
+  /** A top-level category's; null for a child, which takes its parent's. */
+  readonly color: CategoryColorKey | null;
 };
 
 /** The set in one language, flat: each top-level category, then its children. */
@@ -177,13 +224,23 @@ export function defaultRows(language: SetLanguage): ReadonlyArray<DefaultRow> {
 
   return kinds.flatMap((kind) =>
     DEFAULT_CATEGORIES[kind].flatMap((top, position) => [
-      { kind, parent: null, name: top[language], position, fallback: top.fallback === true },
+      {
+        kind,
+        parent: null,
+        name: top[language],
+        position,
+        fallback: top.fallback === true,
+        icon: top.icon,
+        color: top.color,
+      },
       ...top.children.map((child, childPosition) => ({
         kind,
         parent: top[language],
         name: child[language],
         position: childPosition,
         fallback: false,
+        icon: child.icon,
+        color: null,
       })),
     ]),
   );
@@ -238,6 +295,8 @@ export async function insertDefaultSet(
         userId: owner,
         kind: row.kind,
         name: row.name,
+        icon: row.icon,
+        color: row.color,
         position: row.position,
         isFallback: row.fallback,
       })),
@@ -251,7 +310,16 @@ export async function insertDefaultSet(
 
     return parentId === undefined
       ? []
-      : [{ userId: owner, kind: row.kind, parentId, name: row.name, position: row.position }];
+      : [
+          {
+            userId: owner,
+            kind: row.kind,
+            parentId,
+            name: row.name,
+            icon: row.icon,
+            position: row.position,
+          },
+        ];
   });
 
   if (children.length > 0) {

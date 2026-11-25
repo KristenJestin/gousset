@@ -101,4 +101,26 @@ values ('mcp-refresh-1', 'invented-refresh-token-hash', 'https://agent.example.c
 insert into auth_oauth_access_token (id, token, client_id, user_id, resources, refresh_id, expires_at, created_at, scopes)
 values ('mcp-access-1', 'invented-access-token-hash', 'https://agent.example.com/oauth/client.json', :'camille', '{http://localhost/mcp}', 'mcp-refresh-1', '2026-11-04 10:00:05', '2026-11-04 09:00:05', '{gousset:read,gousset:write}');
 
+-- From 0.3.0 on, every user has the default categories (#23). Camille made two of them hers: an icon
+-- of her choosing on "Housing", and "Gifts received" renamed "Presents". The update gives the set's
+-- icons and colours (#205) only to categories still the set's, never over a choice:
+-- tools/check-upgrade.changes.json declares the set's rows with no icon, so these two must stay as
+-- she left them. psql does not fill a variable inside $$, so Camille goes through a setting, the
+-- one row-level security reads (docs/data-model.md, "Ownership and isolation").
+select set_config('gousset.user_id', :'camille', true);
+
+DO $$
+BEGIN
+  IF to_regclass('public.category') IS NOT NULL THEN
+    UPDATE category SET icon = 'pets'
+    WHERE user_id = current_setting('gousset.user_id') AND kind = 'expense' AND name = 'Housing'
+      AND parent_id IS NULL;
+
+    UPDATE category SET name = 'Presents'
+    WHERE user_id = current_setting('gousset.user_id') AND kind = 'income' AND name = 'Gifts received'
+      AND parent_id IS NULL;
+  END IF;
+END
+$$;
+
 commit;

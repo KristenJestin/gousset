@@ -537,7 +537,7 @@ export const category = pgTable.withRLS(
     parentId: uuid("parent_id"),
     kind: entryKind("kind").notNull(),
     name: text("name").notNull(),
-    // A key of the icons shipped with packages/ui.
+    // A key of the category icons (packages/core, `category-looks.ts`), drawn by packages/ui.
     icon: text("icon"),
     // Siblings are ordered by (position, id); not unique, so a move writes the moved row only.
     position: integer("position").default(0).notNull(),
@@ -549,6 +549,9 @@ export const category = pgTable.withRLS(
     isFallback: boolean("is_fallback").default(false).notNull(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
+    // Added with the category's look (#205): a key of the palette (packages/core,
+    // `category-looks.ts`), drawn by packages/ui. Null: its parent's, or none at the top.
+    color: text("color"),
   },
   (table) => [
     unique("category_user_id_id_key").on(table.userId, table.id),

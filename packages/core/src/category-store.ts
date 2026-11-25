@@ -2,6 +2,8 @@ import type { QueryFailed } from "@gousset/db/user-data";
 import { Context } from "effect";
 import type { Effect, Result } from "effect";
 
+import { shownColor, shownIcon } from "./category-looks";
+import type { CategoryColorKey, CategoryIconKey } from "./category-looks";
 import type { CategoryNotFound, LineNotFound } from "./errors";
 import type { MerchantNotFound } from "./merchants/errors";
 
@@ -22,7 +24,10 @@ export type CategoryRecord = {
   readonly parentId: string | null;
   readonly kind: EntryKind;
   readonly name: string;
+  /** A key of `CATEGORY_ICONS` (`./category-looks`); null for none. */
   readonly icon: string | null;
+  /** A key of `CATEGORY_COLORS`; null for its parent's, or none at the top. */
+  readonly color: string | null;
   readonly position: number;
   /** When it was archived, ISO 8601; null while in use. */
   readonly archivedAt: string | null;
@@ -36,7 +41,10 @@ export type NewCategory = Omit<CategoryRecord, "id" | "archivedAt">;
 
 /** What an update sets on a category; the rest stays. */
 export type CategoryPatch = Partial<
-  Pick<CategoryRecord, "name" | "parentId" | "icon" | "position" | "archivedAt" | "benchmark">
+  Pick<
+    CategoryRecord,
+    "name" | "parentId" | "icon" | "color" | "position" | "archivedAt" | "benchmark"
+  >
 >;
 
 /**
@@ -88,7 +96,34 @@ export type LineCategory = {
   /** Its parent's name, for a child. */
   readonly parentName: string | null;
   readonly kind: EntryKind;
+  /** Its icon; null for none. */
+  readonly icon: CategoryIconKey | null;
+  /** The colour it is shown in: its own, else its parent's (#205); null for none. */
+  readonly color: CategoryColorKey | null;
 };
+
+/** A category and its parent's name and colour, as the database or a list reads them. */
+export type ShownCategoryFacts = {
+  readonly id: string;
+  readonly name: string;
+  readonly kind: EntryKind;
+  readonly icon: string | null;
+  readonly color: string | null;
+  readonly parentName: string | null;
+  readonly parentColor: string | null;
+};
+
+/** A category as a line shows it: its icon, and its own colour or its parent's. */
+export function lineCategoryOf(facts: ShownCategoryFacts): LineCategory {
+  return {
+    id: facts.id,
+    name: facts.name,
+    parentName: facts.parentName,
+    kind: facts.kind,
+    icon: shownIcon(facts.icon),
+    color: shownColor(facts.color, facts.parentColor),
+  };
+}
 
 /** What a line's classification is decided from, read in the transaction that writes it. */
 export type LineEntries = {
