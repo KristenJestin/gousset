@@ -14,6 +14,7 @@ import {
   addUser,
   animationsDone,
   expect,
+  expectAccessible,
   fixDay,
   personOfItsOwn,
   slowServerFunctions,
@@ -278,18 +279,28 @@ test("a row's detail compares with the previous month", async ({ page, app, user
   await page.keyboard.press("Escape");
   await expect(panel).toHaveCount(0);
   await expect(spendingRow(page, "Groceries")).toBeFocused();
-
-  // The panel shrinks back into its row through Motion's layout animation, a transform it drives
-  // itself, which `document.getAnimations()` does not list: until it ends, the growing row covers
-  // the rows under it, and the closing accessibility check would read them as hidden.
-  await expect
-    .poll(() =>
-      spendingRow(page, "Groceries").evaluate((row) =>
-        row.parentElement === null ? "none" : getComputedStyle(row.parentElement).transform,
-      ),
-    )
-    .toBe("none");
   await animationsDone(page);
+});
+
+// Issue #167, "How to verify": the shared waits see Motion's layout animations, which the page does
+// not list. The panel shrinks back into its row by a transform Motion writes at each frame; until it
+// ends, the row covers the ones under it, and axe would read them as hidden.
+test("a test that closes a shared-layout panel and checks accessibility at once passes, with no per-test wait", async ({
+  page,
+  app,
+  user,
+}) => {
+  await signedInWithMonths(page, app, user, "lucien");
+  await visit(page, OCTOBER);
+
+  await spendingRow(page, "Groceries").click();
+
+  const panel = block(page, "Where the money goes").getByRole("group", { name: "Groceries" });
+
+  await expect(panel).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(panel).toHaveCount(0);
+  await expectAccessible(page);
 });
 
 test("the movements of the month", async ({ page, app, user }) => {
