@@ -741,6 +741,13 @@ export const merchantsLayer = Layer.effect(
                 .set({ merchantId: target.id })
                 .where(eq(merchantAlias.id, row.id));
 
+              // A split is the user's: both merchants are marked as changed (`updated_at`), so that
+              // no boot job ever takes them back together (#193, `./town-merge`).
+              await transaction
+                .update(merchant)
+                .set({ updatedAt: sql`clock_timestamp()` })
+                .where(inArray(merchant.id, [from.id, target.id]));
+
               // Its lines' entries follow their new merchant's default category.
               await classifyByMerchants(transaction, { every: true });
 

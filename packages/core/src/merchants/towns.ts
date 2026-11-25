@@ -107,10 +107,33 @@ function add(index: Map<string, Set<string>>, form: string, value: string): void
 }
 
 /**
- * The towns the keys show: a doubled one, and the last words of two shops each paid in the same two
- * places (`PIZZA NOVA` and `FRESHMART`, each in `RIVERTON` and `LAKESIDE`), by their compact form.
+ * The most places a shop is seen in and still shows towns: a name followed by more distinct last
+ * words is the start of other names or of references (`ABCD QR0001`, `ABCD QR0002`…), and leaving it
+ * out keeps the reading linear in the keys (each shop's places are read once per place).
  */
-function townsOf(splits: ReadonlyArray<Split>, doubled: ReadonlyArray<Split>): ReadonlySet<string> {
+const MAX_PLACES = 64;
+
+/** How sure a town must be: what recognition reads, or what the boot's merge acts on. */
+type Sureness = {
+  /** The fewest shops paid in a town, and in the other town of its two shops. */
+  readonly minShops: number;
+  /** Whether words doubled at a label's end are a town, and a town cut short is read. */
+  readonly loose: boolean;
+};
+
+const READ: Sureness = { minShops: 1, loose: true };
+const SURE: Sureness = { minShops: 3, loose: false };
+
+/**
+ * The towns the keys show, by their compact form: the last words of two shops each paid in the same
+ * two places (`PIZZA NOVA` and `FRESHMART`, each in `RIVERTON` and `LAKESIDE`), each place one where
+ * at least `minShops` shops were paid; and, when `loose`, a doubled one.
+ */
+function townsOf(
+  splits: ReadonlyArray<Split>,
+  doubled: ReadonlyArray<Split>,
+  sureness: Sureness,
+): ReadonlySet<string> {
   const tailsOf = new Map<string, Set<string>>();
   const shopsOf = new Map<string, Set<string>>();
 
@@ -119,18 +142,31 @@ function townsOf(splits: ReadonlyArray<Split>, doubled: ReadonlyArray<Split>): R
     add(shopsOf, split.tailCompact, split.shopCompact);
   }
 
-  const towns = new Set(doubled.map((split) => split.tailCompact));
+  const towns = new Set(sureness.loose ? doubled.map((split) => split.tailCompact) : []);
+  const placed = (place: string) => (shopsOf.get(place)?.size ?? 0) >= sureness.minShops;
 
   for (const [tail, shops] of shopsOf) {
+    if (shops.size < Math.max(2, sureness.minShops)) {
+      continue;
+    }
+
     // The other places of the shops seen so far: one seen again is a second shop's in both.
     const elsewhere = new Set<string>();
 
     const shared = [...shops].some((shop) => {
-      const places = [...(tailsOf.get(shop) ?? [])].filter((place) => place !== tail);
-      const again = places.some((place) => elsewhere.has(place));
+      const places = tailsOf.get(shop) ?? new Set<string>();
+
+      if (places.size < 2 || places.size > MAX_PLACES) {
+        return false;
+      }
+
+      let again = false;
 
       for (const place of places) {
-        elsewhere.add(place);
+        if (place !== tail && placed(place)) {
+          again ||= elsewhere.has(place);
+          elsewhere.add(place);
+        }
       }
 
       return again;
@@ -151,10 +187,30 @@ function townsOf(splits: ReadonlyArray<Split>, doubled: ReadonlyArray<Split>): R
  * LAKESIDE`, `FRESHMART RIVERTON`, `FRESHMART LAKESIDE`), or words doubled at a label's end
  * (`FRESHMART RIVERTON RIVERTON`). A town known so ends any card key whose name before it is a
  * shop's (`splitAt`), the most words that can be; cut short at a bank's fixed width (`RIVERT`, four
- * letters at least), only after a shop another key shows in a whole town. Deterministic, whatever
- * the order of the keys.
+ * letters at least), only after a shop another key shows in a whole town. A name seen before more
+ * than `MAX_PLACES` last words shows no town. Deterministic, whatever the order of the keys.
  */
 export function shopsOf(cardKeys: Iterable<MerchantKey>): ReadonlyMap<MerchantKey, MerchantKey> {
+  return shopsWith(cardKeys, READ);
+}
+
+/**
+ * The shops of the towns the boot's merge is sure of (#193, `./town-merge`): the last words of two
+ * shops each paid in the same two places, each a place where at least three shops were paid, whole;
+ * a doubled one only when it is such a town. Two pairs of names sharing their words (`CORNER CAFE`,
+ * `CORNER BAKERY`, `GRAND CAFE`, `GRAND BAKERY`), a doubled word (`CAFE BORA BORA`) and a town cut
+ * short are none.
+ */
+export function sureShopsOf(
+  cardKeys: Iterable<MerchantKey>,
+): ReadonlyMap<MerchantKey, MerchantKey> {
+  return shopsWith(cardKeys, SURE);
+}
+
+function shopsWith(
+  cardKeys: Iterable<MerchantKey>,
+  sureness: Sureness,
+): ReadonlyMap<MerchantKey, MerchantKey> {
   const keys = [...new Set(cardKeys)].toSorted();
   const doubled = new Map<MerchantKey, Split>();
   const splits: Array<Split> = [];
@@ -169,7 +225,7 @@ export function shopsOf(cardKeys: Iterable<MerchantKey>): ReadonlyMap<MerchantKe
     }
   }
 
-  const towns = townsOf(splits, [...doubled.values()]);
+  const towns = townsOf(splits, [...doubled.values()], sureness);
   const shops = new Map<MerchantKey, MerchantKey>();
 
   if (towns.size === 0) {
@@ -177,11 +233,20 @@ export function shopsOf(cardKeys: Iterable<MerchantKey>): ReadonlyMap<MerchantKe
   }
 
   for (const key of keys) {
-    const shop = doubled.get(key) ?? splitsOf(key).find((split) => towns.has(split.tailCompact));
+    const twice = doubled.get(key);
+
+    const shop =
+      twice !== undefined && towns.has(twice.tailCompact)
+        ? twice
+        : splitsOf(key).find((split) => towns.has(split.tailCompact));
 
     if (shop !== undefined) {
       shops.set(key, shop.shop);
     }
+  }
+
+  if (!sureness.loose) {
+    return shops;
   }
 
   // A town cut short, after a shop seen in a whole town.
@@ -215,11 +280,22 @@ export function shopsOf(cardKeys: Iterable<MerchantKey>): ReadonlyMap<MerchantKe
 export function shopsOfLines(
   lines: ReadonlyArray<{ readonly label: string; readonly counterpartyName: string | null }>,
 ): ReadonlyMap<MerchantKey, MerchantKey> {
-  return shopsOf(
-    lines.flatMap((line) => {
-      const key = isCardPayment(line.label) ? merchantKey(line.label, line.counterpartyName) : null;
+  return shopsOf(cardKeysOf(lines));
+}
 
-      return key === null ? [] : [key];
-    }),
-  );
+/** The shops of the towns the boot's merge is sure of (`sureShopsOf`), read from the lines. */
+export function sureShopsOfLines(
+  lines: ReadonlyArray<{ readonly label: string; readonly counterpartyName: string | null }>,
+): ReadonlyMap<MerchantKey, MerchantKey> {
+  return sureShopsOf(cardKeysOf(lines));
+}
+
+function cardKeysOf(
+  lines: ReadonlyArray<{ readonly label: string; readonly counterpartyName: string | null }>,
+): ReadonlyArray<MerchantKey> {
+  return lines.flatMap((line) => {
+    const key = isCardPayment(line.label) ? merchantKey(line.label, line.counterpartyName) : null;
+
+    return key === null ? [] : [key];
+  });
 }

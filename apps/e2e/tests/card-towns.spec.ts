@@ -1,7 +1,6 @@
 import type { Client } from "@modelcontextprotocol/client";
 import type { Page } from "@playwright/test";
-import { lineMerchant, merchantsLayer, rereadMerchants } from "@gousset/core";
-import type { Merchants } from "@gousset/core";
+import { Merchants, lineMerchant, merchantsLayer, rereadMerchants } from "@gousset/core";
 import type { UserData } from "@gousset/db/user-data";
 import { merchant, merchantAlias, statementLine } from "@gousset/db/schema/ledger";
 import { exampleStatement } from "@gousset/fixture";
@@ -16,22 +15,25 @@ import { openUserData } from "../src/user-data";
 
 // Issue #193, "How to verify": a card label's trailing town is no part of its merchant. An invented
 // statement with one shop in two towns shows one merchant, in the browser and through the MCP door;
-// the towns are known from the statement's own card labels (another shop paid in both), and a shop
-// whose name ends in a place word that is no town keeps it. And the boot job: the merchants a
-// release before made one per town go into one when the user never touched them, the others stay.
-// Each test has a user of its own. Every shop, town, label and amount is invented.
+// the towns are known from the statement's own card labels (other shops paid in both), and a shop
+// whose name ends in a place word that is no town keeps it. And the boot job, once per user made
+// before: the merchants a release before made one per town go into one when the user never touched
+// them; those the user renamed or split stay, and so does a split made now. Each test has a user of
+// its own. Every shop, town, label and amount is invented.
 
 const TODAY = "2026-11-15";
 
 const PIZZA_RIVERTON = "CARTE X1234 03/10 PIZZA NOVA RIVERTON";
 const PIZZA_LAKESIDE = "CARTE X1234 17/10 PIZZA NOVA LAKESIDE";
 
-/** One shop in two towns, another shop paid in both, and a café named after a place. */
+/** One shop in two towns, two other shops paid in both, and a café named after a place. */
 const LINES: ReadonlyArray<Omit<StatementLine, "reference">> = [
   { bookedOn: "2026-10-03", amountMinor: -2450, label: PIZZA_RIVERTON },
   { bookedOn: "2026-10-17", amountMinor: -1890, label: PIZZA_LAKESIDE },
   { bookedOn: "2026-10-04", amountMinor: -6120, label: "CARTE X1234 04/10 FRESHMART RIVERTON" },
   { bookedOn: "2026-10-18", amountMinor: -3375, label: "CARTE X1234 18/10 FRESHMART LAKESIDE" },
+  { bookedOn: "2026-10-06", amountMinor: -1500, label: "CARTE X1234 06/10 BOOKMILL RIVERTON" },
+  { bookedOn: "2026-10-19", amountMinor: -990, label: "CARTE X1234 19/10 BOOKMILL LAKESIDE" },
   { bookedOn: "2026-10-09", amountMinor: -420, label: "CARTE X1234 09/10 CAFE DU PORT" },
 ];
 
@@ -113,6 +115,8 @@ test("an invented statement with one shop in two towns shows one merchant", asyn
   const { person, owner } = await withStatement(app.baseURL, user, "tobin.towns");
 
   expect(await merchantsOf(owner)).toEqual([
+    "Bookmill: BOOKMILL LAKESIDE",
+    "Bookmill: BOOKMILL RIVERTON",
     "Cafe Du Port: CAFE DU PORT",
     "Freshmart: FRESHMART LAKESIDE",
     "Freshmart: FRESHMART RIVERTON",
@@ -126,7 +130,7 @@ test("an invented statement with one shop in two towns shows one merchant", asyn
 
   const merchants = page.getByRole("list", { name: "Merchants" }).getByRole("link");
 
-  await expect(merchants).toHaveCount(3);
+  await expect(merchants).toHaveCount(4);
   await expect(merchants.filter({ hasText: "Pizza Nova" })).toHaveAccessibleName(
     /^Pizza Nova 2 labels/,
   );
@@ -182,7 +186,8 @@ test("the boot job merges the merchants a release made per town, unless the user
 }) => {
   const { owner } = await withStatement(app.baseURL, user, "vera.towns");
 
-  // As a release before left them: one merchant per town, the user having renamed one.
+  // As a release before left them, recognition writing each merchant with its cleaned label in one
+  // transaction: one merchant per town, one of them renamed by the user.
   await data.asUser(owner, async (transaction) => {
     await transaction.delete(merchant);
 
@@ -193,20 +198,39 @@ test("the boot job merges the merchants a release made per town, unless the user
         { userId: owner, name: "Pizza Nova Lakeside" },
         { userId: owner, name: "Freshmart Riverton" },
         { userId: owner, name: "Freshmart By The Lake" },
+        { userId: owner, name: "Bookmill Riverton" },
         { userId: owner, name: "Cafe Du Port" },
       ])
       .returning({ id: merchant.id, name: merchant.name });
 
-    const idOf = (name: string) => made.find((each) => each.name === name)?.id ?? "";
+    const id = (name: string) => made.find((each) => each.name === name)?.id ?? "";
 
     await transaction.insert(merchantAlias).values([
-      { userId: owner, merchantId: idOf("Pizza Nova Riverton"), alias: "PIZZA NOVA RIVERTON" },
-      { userId: owner, merchantId: idOf("Pizza Nova Lakeside"), alias: "PIZZA NOVA LAKESIDE" },
-      { userId: owner, merchantId: idOf("Freshmart Riverton"), alias: "FRESHMART RIVERTON" },
-      { userId: owner, merchantId: idOf("Freshmart By The Lake"), alias: "FRESHMART LAKESIDE" },
-      { userId: owner, merchantId: idOf("Cafe Du Port"), alias: "CAFE DU PORT" },
+      { userId: owner, merchantId: id("Pizza Nova Riverton"), alias: "PIZZA NOVA RIVERTON" },
+      { userId: owner, merchantId: id("Pizza Nova Lakeside"), alias: "PIZZA NOVA LAKESIDE" },
+      { userId: owner, merchantId: id("Freshmart Riverton"), alias: "FRESHMART RIVERTON" },
+      { userId: owner, merchantId: id("Freshmart By The Lake"), alias: "FRESHMART LAKESIDE" },
+      { userId: owner, merchantId: id("Bookmill Riverton"), alias: "BOOKMILL RIVERTON" },
+      { userId: owner, merchantId: id("Bookmill Riverton"), alias: "BOOKMILL LAKESIDE" },
+      { userId: owner, merchantId: id("Cafe Du Port"), alias: "CAFE DU PORT" },
     ]);
   });
+
+  // Later, as a release before split it: Bookmill's Lakeside label moved into a merchant of its own,
+  // named as recognition would name it, neither merchant marked as changed.
+  await data.asUser(owner, async (transaction) => {
+    const [split] = await transaction
+      .insert(merchant)
+      .values({ userId: owner, name: "Bookmill Lakeside" })
+      .returning({ id: merchant.id });
+
+    await transaction
+      .update(merchantAlias)
+      .set({ merchantId: split?.id ?? "" })
+      .where(eq(merchantAlias.alias, "BOOKMILL LAKESIDE"));
+  });
+
+  await data.madeBeforeTowns(owner);
 
   expect(await run(rereadMerchants(owner))).toEqual({
     forgotten: 0,
@@ -215,12 +239,14 @@ test("the boot job merges the merchants a release made per town, unless the user
     aliases: 0,
   });
 
-  // The pizzeria's two merchants are one; Freshmart's untouched one is named after the shop, and
-  // the one the user renamed stays as it is.
+  // The pizzeria's two merchants are one, named after the shop. Freshmart's, one of them renamed,
+  // and Bookmill's, split, stay as they are.
   expect(await merchantsOf(owner)).toEqual([
+    "Bookmill Lakeside: BOOKMILL LAKESIDE",
+    "Bookmill Riverton: BOOKMILL RIVERTON",
     "Cafe Du Port: CAFE DU PORT",
-    "Freshmart: FRESHMART RIVERTON",
     "Freshmart By The Lake: FRESHMART LAKESIDE",
+    "Freshmart Riverton: FRESHMART RIVERTON",
     "Pizza Nova: PIZZA NOVA LAKESIDE",
     "Pizza Nova: PIZZA NOVA RIVERTON",
   ]);
@@ -239,11 +265,39 @@ test("the boot job merges the merchants a release made per town, unless the user
 
   expect(renamed?.updatedAt.getTime()).toBe(renamed?.createdAt.getTime());
 
-  // Run again, it finds nothing to do.
+  // Once per user: the next boot finds the user marked, and merges nothing.
   expect(await run(rereadMerchants(owner))).toEqual({
     forgotten: 0,
     merged: 0,
     merchants: 0,
     aliases: 0,
   });
+});
+
+test("a shop the user split by town stays split at the boot", async ({ app, user }) => {
+  const { owner } = await withStatement(app.baseURL, user, "wren.towns");
+
+  const [pizza] = await data.asUser(owner, (transaction) =>
+    transaction.select({ id: merchant.id }).from(merchant).where(eq(merchant.name, "Pizza Nova")),
+  );
+
+  // The user keeps the Lakeside pizzeria apart: its label moves into a merchant of its own.
+  await run(
+    Effect.gen(function* () {
+      const merchants = yield* Merchants;
+
+      return yield* merchants.moveAlias(
+        owner,
+        pizza?.id ?? "",
+        "PIZZA NOVA LAKESIDE",
+        "Pizza Nova Lakeside",
+      );
+    }),
+  );
+
+  await data.madeBeforeTowns(owner);
+
+  expect((await run(rereadMerchants(owner))).merged).toBe(0);
+  expect(await merchantsOf(owner)).toContain("Pizza Nova Lakeside: PIZZA NOVA LAKESIDE");
+  expect(await merchantsOf(owner)).toContain("Pizza Nova: PIZZA NOVA RIVERTON");
 });

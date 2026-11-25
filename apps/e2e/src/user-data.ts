@@ -260,6 +260,14 @@ export function openUserData(database: string) {
     },
 
     /**
+     * Marks `owner` as a user made before #193, whose merchants made one per town the next boot's
+     * merchants job merges, once (`auth_user.merchant_towns_merged`).
+     */
+    async madeBeforeTowns(owner: string): Promise<void> {
+      await db.update(authUser).set({ merchantTownsMerged: false }).where(eq(authUser.id, owner));
+    },
+
+    /**
      * The made-up data of two months, and a CSV profile, as `owner`'s rows, with the merchants of its
      * lines recognised as the app does at boot (the seed writes lines, not merchants). A user who
      * already has accounts is left as they are, profile included.

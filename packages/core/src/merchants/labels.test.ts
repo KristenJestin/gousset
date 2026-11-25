@@ -667,6 +667,25 @@ describe("assigning keys to merchants", () => {
     ]);
   });
 
+  test("a key equal to a merchant's name that is the shop of its labels goes to it", () => {
+    const markets = new Map([
+      ["CARREFOUR MARKET RIVERTON", "CARREFOUR MARKET"],
+      ["CARREFOUR MARKET LAKESIDE", "CARREFOUR MARKET"],
+    ]);
+
+    const known: Array<KnownKey> = [
+      { key: "CARREFOUR", merchantId: "carrefour" },
+      { key: nameKey("Carrefour"), merchantId: "carrefour" },
+      { key: "CARREFOUR MARKET RIVERTON", merchantId: "market" },
+      { key: "CARREFOUR MARKET LAKESIDE", merchantId: "market" },
+      { key: nameKey("Carrefour Market"), merchantId: "market", whole: true },
+    ];
+
+    expect(
+      assignMerchants(["CARREFOUR MARKET"], known, undefined, (key) => markets.get(key)),
+    ).toEqual([{ alias: "CARREFOUR MARKET", merchant: { id: "market" } }]);
+  });
+
   test("a key given twice is assigned once", () => {
     expect(assignMerchants(["TLX", "TLX"], [])).toEqual([
       { alias: "TLX", merchant: { name: "TLX" } },

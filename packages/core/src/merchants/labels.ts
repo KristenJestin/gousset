@@ -682,8 +682,13 @@ function ownerOfShop(shop: MerchantKey, known: Known): string | undefined {
 function ownerOf(key: MerchantKey, known: Known, intermediary: boolean): string | undefined {
   const compact = compactOf(key);
 
+  // A shop counts here (#193): a key equal to it, a town or none, is its merchant's.
   const [equal] = [
-    ...new Set([...ownersOf(known.byCompact, compact), ...ownersOf(known.exact, compact)]),
+    ...new Set([
+      ...ownersOf(known.byCompact, compact),
+      ...ownersOf(known.exact, compact),
+      ...ownersOf(known.shops, compact),
+    ]),
   ].toSorted();
 
   if (equal !== undefined || intermediary) {

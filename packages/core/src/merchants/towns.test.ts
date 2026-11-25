@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vite-plus/test";
 
-import { shopsOf } from "./towns";
+import { shopsOf, sureShopsOf } from "./towns";
 
 // Every shop and town here is invented.
 
@@ -21,6 +21,52 @@ const KNOWN_SHOPS = {
   "CORNER CAFE RIVERTON": "CORNER CAFE",
   "CORNER CAFE LAKESIDE": "CORNER CAFE",
 };
+
+/** Each key whose sure town is dropped, with what is left. */
+const sure = (keys: ReadonlyArray<string>) => Object.fromEntries(sureShopsOf(keys));
+
+describe("the towns the boot's merge is sure of", () => {
+  /** Three shops each paid in Riverton and in Lakeside. */
+  const THREE_SHOPS = [
+    "PIZZA NOVA RIVERTON",
+    "PIZZA NOVA LAKESIDE",
+    "FRESHMART RIVERTON",
+    "FRESHMART LAKESIDE",
+    "BOOKMILL RIVERTON",
+    "BOOKMILL LAKESIDE",
+  ];
+
+  test("a town where three shops were paid, each paid in another such town", () => {
+    expect(sure(THREE_SHOPS)).toEqual({
+      "PIZZA NOVA RIVERTON": "PIZZA NOVA",
+      "PIZZA NOVA LAKESIDE": "PIZZA NOVA",
+      "FRESHMART RIVERTON": "FRESHMART",
+      "FRESHMART LAKESIDE": "FRESHMART",
+      "BOOKMILL RIVERTON": "BOOKMILL",
+      "BOOKMILL LAKESIDE": "BOOKMILL",
+    });
+  });
+
+  test("two pairs of names sharing their words are no sure towns", () => {
+    expect(
+      sure(["CORNER CAFE", "CORNER BAKERY", "GRAND CAFE", "GRAND BAKERY", "PORT CAFE"]),
+    ).toEqual({});
+  });
+
+  test("a doubled last word, and a town cut short, are no sure towns", () => {
+    expect(sure([...THREE_SHOPS, "CAFE BORA BORA", "PIZZA NOVA RIVERT"])).not.toHaveProperty(
+      "CAFE BORA BORA",
+    );
+    expect(sure([...THREE_SHOPS, "PIZZA NOVA RIVERT"])).not.toHaveProperty("PIZZA NOVA RIVERT");
+  });
+
+  test("a sure town doubled at a label's end goes with both its copies", () => {
+    expect(sure([...THREE_SHOPS, "FRESHMART RIVERTON RIVERTON"])).toHaveProperty(
+      "FRESHMART RIVERTON RIVERTON",
+      "FRESHMART",
+    );
+  });
+});
 
 describe("a card label's trailing town", () => {
   test("one shop in three towns is one shop", () => {
@@ -125,6 +171,29 @@ describe("a card label's trailing town", () => {
     ]).flat();
 
     expect(shopsOf(keys).size).toBe(0);
+  });
+
+  test("a name before tens of thousands of last words is read in linear time, and is no shop", () => {
+    // Invented: two names each followed by 20,000 references of their own, the same for both.
+    const letters = "ABCDEFGHIJKLMNOPQRSTUVWYZ";
+
+    const code = (index: number) =>
+      Array.from(
+        { length: 4 },
+        (_digit, place) =>
+          letters[Math.floor(index / letters.length ** (3 - place)) % letters.length] ?? "A",
+      ).join("");
+
+    const keys = Array.from({ length: 20_000 }, (_unused, index) => [
+      `ABCD QR${code(index)}`,
+      `EFGH QR${code(index)}`,
+    ]).flat();
+
+    const started = performance.now();
+
+    expect(shopsOf(keys).size).toBe(0);
+    // Loose: a quadratic reading takes minutes.
+    expect(performance.now() - started).toBeLessThan(5000);
   });
 
   test("gives the same shops whatever the order of the keys", () => {

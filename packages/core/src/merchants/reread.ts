@@ -2,7 +2,7 @@ import { entry, merchant, merchantAlias, rule, statementLine } from "@gousset/db
 import { UserData } from "@gousset/db/user-data";
 import type { UserTransaction } from "@gousset/db/user-data";
 import { and, eq, inArray, ne, sql } from "drizzle-orm";
-import { Effect } from "effect";
+import { Effect, Option } from "effect";
 
 import { takeCategoryTurn } from "../category-turn";
 import { formerMerchantKey, merchantKey, merchantName } from "./labels";
@@ -172,20 +172,24 @@ export async function forgetOperationMerchantsIn(transaction: UserTransaction): 
 }
 
 /**
- * Reads `owner`'s merchants again (#194), what the app does once at every boot: forgets those made
- * from an operation prefix that the user never touched (`forgetOperationMerchantsIn`), merges those
- * made one per town of a shop that the user never touched (#193, `mergeTownMerchantsIn`), then
+ * Reads `owner`'s merchants again (#194), what the app does once at every boot: merges, once per
+ * user, those made one per town of a shop that the user never touched (#193,
+ * `mergeTownMerchantsIn`, in a transaction of its own that marks the user); then forgets those made
+ * from an operation prefix that the user never touched (`forgetOperationMerchantsIn`), and
  * recognises the merchant of every line whose cleaned label names none yet, in one transaction.
  */
 export const rereadMerchants = (owner: string) =>
   Effect.gen(function* () {
     const userData = yield* UserData;
 
+    const merged = yield* userData
+      .mergingTownMerchants(owner, (transaction) => mergeTownMerchantsIn(transaction))
+      .pipe(Effect.map(Option.getOrElse(() => 0)));
+
     return yield* userData.transaction(owner, async (transaction): Promise<Reread> => {
       await takeCategoryTurn(transaction, owner);
 
       const forgotten = await forgetOperationMerchantsIn(transaction);
-      const merged = await mergeTownMerchantsIn(transaction);
       const recognised = await recogniseIn(transaction, owner);
 
       return { ...recognised, forgotten, merged };

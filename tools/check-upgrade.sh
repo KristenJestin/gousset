@@ -224,21 +224,38 @@ statement=$root/tools/check-upgrade.ofx
 first_import=$(upload camille "$statement")
 if [ -n "$first_import" ]; then
   ended=$(settled "$first_import")
-  [ "$ended" = "done 12 0" ] ||
-    fail "$from did not import $(basename "$statement") whole: $ended, not \"done 12 0\"."
+  [ "$ended" = "done 15 0" ] ||
+    fail "$from did not import $(basename "$statement") whole: $ended, not \"done 15 0\"."
   say "Camille imported $(basename "$statement") through $from's own route."
   # A release before #194 named merchants from a label's operation prefix: the update reads them
   # again at boot, below.
   prefixed=$(sql "select count(*) from merchant where user_id = '$camille'
     and name in ('Ann Carte Cafe Exemple', 'F Cotisation')")
   say "$from made $prefixed merchant(s) of an operation prefix."
-  # A release before #193 made a merchant per town of a shop's card labels: the update merges them
-  # at boot, below. Pizza Nova and Freshmart, each paid in Riverton and in Lakeside, show the towns.
+  # A release before #193 made a merchant per town of a shop's card labels: the update merges those
+  # Camille never touched, once, at boot, below. Pizza Nova, Freshmart and Bookmill, each paid in
+  # Riverton and in Lakeside, show the towns. Camille split Bookmill's by town herself (after
+  # merging them): the boot leaves it so. Cafe Bora Bora ends with a doubled word, which is no sure
+  # town: the boot leaves it whole.
   per_town=$(sql "select count(*) from merchant where user_id = '$camille' and name in
-    ('Pizza Nova Riverton', 'Pizza Nova Lakeside', 'Freshmart Riverton', 'Freshmart Lakeside')")
+    ('Pizza Nova Riverton', 'Pizza Nova Lakeside', 'Freshmart Riverton', 'Freshmart Lakeside',
+     'Bookmill Riverton', 'Bookmill Lakeside', 'Cafe Bora Bora')")
   case $from in
     0.1.* | 0.2.*) ;;
-    *) [ "$per_town" = 4 ] || fail "$from made $per_town merchant(s) of a shop in a town, not 4." ;;
+    *)
+      [ "$per_town" = 7 ] || fail "$from made $per_town merchant(s) of a shop in a town, not 7."
+      # Her merge of Bookmill's two merchants, as the release does it: the labels move, the merged
+      # one goes, the one kept is changed. Then her split: a new merchant, named as recognition
+      # names it, takes the Lakeside label.
+      sql "update merchant_alias set merchant_id = (select id from merchant where user_id = '$camille'
+        and name = 'Bookmill Riverton') where user_id = '$camille' and alias = 'BOOKMILL LAKESIDE';
+        delete from merchant where user_id = '$camille' and name = 'Bookmill Lakeside';
+        update merchant set updated_at = clock_timestamp() where user_id = '$camille'
+          and name = 'Bookmill Riverton'" > /dev/null
+      sql "insert into merchant (user_id, name) values ('$camille', 'Bookmill Lakeside');
+        update merchant_alias set merchant_id = (select id from merchant where user_id = '$camille'
+        and name = 'Bookmill Lakeside') where user_id = '$camille' and alias = 'BOOKMILL LAKESIDE'" > /dev/null
+      ;;
   esac
   say "$from made $per_town merchant(s) of a shop in a town."
 else
@@ -442,19 +459,32 @@ if [ -n "$first_import" ]; then
   say "the $prefixed merchant(s) $from made from an operation prefix were read again at boot, and its fee went to Bank fees."
 
   # The merchants the release made one per town (#193), which Camille never touched, are one per
-  # shop after the boot, named after it, each with both its cleaned labels.
-  one_per_shop="Freshmart:FRESHMART LAKESIDE,Freshmart:FRESHMART RIVERTON,Pizza Nova:PIZZA NOVA LAKESIDE,Pizza Nova:PIZZA NOVA RIVERTON"
+  # shop after the boot, named after it, each with both its cleaned labels; Bookmill's, which she
+  # split, and Cafe Bora Bora stay as they were. From a release before merchants, the boot's
+  # recognition names each shop without its town, and Cafe Bora Bora after its doubled word.
+  case $from in
+    0.1.* | 0.2.*)
+      one_per_shop="Bookmill:BOOKMILL LAKESIDE,Bookmill:BOOKMILL RIVERTON,Cafe:CAFE BORA BORA" ;;
+    *)
+      one_per_shop="Bookmill Lakeside:BOOKMILL LAKESIDE,Bookmill Riverton:BOOKMILL RIVERTON,Cafe Bora Bora:CAFE BORA BORA" ;;
+  esac
+  one_per_shop="$one_per_shop,Freshmart:FRESHMART LAKESIDE,Freshmart:FRESHMART RIVERTON,Pizza Nova:PIZZA NOVA LAKESIDE,Pizza Nova:PIZZA NOVA RIVERTON"
   shops=
   for _ in $(seq 60); do
     shops=$(sql "select coalesce(string_agg(m.name || ':' || a.alias, ',' order by m.name, a.alias), '')
       from merchant m join merchant_alias a on a.merchant_id = m.id
-      where m.user_id = '$camille' and (m.name like 'Pizza Nova%' or m.name like 'Freshmart%')")
+      where m.user_id = '$camille' and a.alias in ('PIZZA NOVA RIVERTON', 'PIZZA NOVA LAKESIDE',
+        'FRESHMART RIVERTON', 'FRESHMART LAKESIDE', 'BOOKMILL RIVERTON', 'BOOKMILL LAKESIDE',
+        'CAFE BORA BORA')")
     [ "$shops" != "$one_per_shop" ] || break
     sleep 1
   done
   [ "$shops" = "$one_per_shop" ] ||
     fail "Camille's merchants of a shop in two towns are \"$shops\" a minute after the app's start, not \"$one_per_shop\"."
-  say "the $per_town merchant(s) $from made per town are one per shop after the boot: Pizza Nova and Freshmart."
+  [ "$(sql "select merchant_towns_merged from auth_user where id = '$camille'")" = t ] ||
+    fail "Camille is not marked as having had her merchants of a shop in a town merged."
+  say "the $per_town merchant(s) $from made per town are one per shop after the boot, once: Pizza Nova and"
+  say "  Freshmart; Bookmill's, which Camille split, and Cafe Bora Bora, of no sure town, stay as they were."
 fi
 
 # The boot jobs of <n> starts of the app, for every user, ended: none waits or runs any more, and
@@ -600,9 +630,9 @@ if [ -n "$first_import" ]; then
   second_import=$(upload camille-after "$statement")
   [ -n "$second_import" ] || fail "$tag has no import route."
   ended=$(settled "$second_import")
-  [ "$ended" = "done 0 12" ] ||
-    fail "$(basename "$statement") imported again after the update: $ended, not \"done 0 12\" (nothing added, 12 found)."
-  say "$(basename "$statement"), imported again on $tag, adds nothing: its 12 lines are found."
+  [ "$ended" = "done 0 15" ] ||
+    fail "$(basename "$statement") imported again after the update: $ended, not \"done 0 15\" (nothing added, 15 found)."
+  say "$(basename "$statement"), imported again on $tag, adds nothing: its 15 lines are found."
 fi
 
 # 12. The upgraded schema is a fresh installation's.

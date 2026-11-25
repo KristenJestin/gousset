@@ -208,8 +208,13 @@ prefix of another key: `BOULANGERIE` of `BOULANGERIE RIVERTON` never takes `BOUL
 merchant's name that is the shop of its own cleaned labels compares whole as well (`whole`), so
 that the merchant "Boulangerie" a town made does not take it either.
 
-The merchants a release made one per town, which the user never touched, are merged at boot
-(`town-merge.ts`; docs/data-model.md, v0.3, "The merchants made one per town are merged").
+A name seen before more than 64 distinct last words shows no town (`MAX_PLACES`): it is the start
+of other names or of references, and leaving it out keeps the reading linear in the keys.
+
+The merchants a release made one per town, which the user never touched, are merged once per user
+at boot (`town-merge.ts`; docs/data-model.md, v0.3, "The merchants made one per town are merged once
+per user"), on the towns `sureShopsOf` is sure of: two shops each paid in the same two places, each
+a place where at least three shops were paid, whole. None of the false towns below is one.
 
 ### Known limits of the town
 
@@ -218,8 +223,9 @@ The merchants a release made one per town, which the user never touched, are mer
   them from two shops whose names share their first words. The user merges; a merchant named
   after the shop then takes the shop's labels in every town.
 - **Two shops whose names differ in their last word**, each paid with another such pair
-  (`CORNER CAFE`, `CORNER BAKERY`, `GRAND CAFE`, `GRAND BAKERY`), make `CAFE` and `BAKERY` towns. The
-  user splits.
+  (`CORNER CAFE`, `CORNER BAKERY`, `GRAND CAFE`, `GRAND BAKERY`), make `CAFE` and `BAKERY` towns for
+  the labels recognised from then on. The user splits, and a split holds: the boot's merge never
+  takes a merchant the user changed.
 - **A doubled last word** is a town (`CAFE BORA BORA` is `CAFE` in `BORA`), and then ends any card
   key.
 - **A town cut short** is found only after a shop seen in the whole town.
