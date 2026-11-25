@@ -11,7 +11,7 @@ import type { CategoryColorKey, CategoryIconKey } from "./category-looks";
 // names are theirs. The migration `*_categories_isolation` gives every user who existed before it
 // the English set: a unit test keeps its SQL equal to this constant. Each category has its icon,
 // and each top-level one its colour, which its children take (#205): the migration
-// `*_category_color` gives them to the categories of the set a user left as they were, and a unit
+// `*_default_category_looks` gives them to the categories of the set a user left as they were, and a unit
 // test keeps its SQL equal to this constant too.
 
 /** The languages the default set is written in. */
