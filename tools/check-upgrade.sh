@@ -320,6 +320,30 @@ unclassified=$(unclassified)
 [ "$unclassified" = 0 ] || fail "$unclassified counted lines have no entry of their own, or more than one, after the update."
 say "every counted line with an amount has its one entry."
 
+# Money coming back that may be a refund is no income until the user answers (#208), read from
+# the lines and only the user's answer stored (statement_line.refund_refused): the refund Camille
+# left unanswered on the release (tools/check-upgrade.sql, from 0.3.0) is answered by nothing after
+# the update, still the only line of its income classified by default, with the purchase it may
+# cancel, so the app shows it apart; the one she classified by hand stays hers, an income.
+if [ "$(held_rows entry_part '.line_id == "019a0000-0000-7000-8000-000000000409"')" = 1 ]; then
+  waiting=$(sql "select count(*) from statement_line l
+    join entry_part p on p.line_id = l.id join entry e on e.id = p.entry_id
+    where l.id = '019a0000-0000-7000-8000-000000000409' and not l.refund_refused
+      and e.kind = 'income' and e.classified_by = 'default'
+      and (select count(*) from entry_part q where q.entry_id = e.id) = 1
+      and exists (select 1 from statement_line b join entry_part bp on bp.line_id = b.id
+        where b.id = '019a0000-0000-7000-8000-000000000408' and bp.role = 'payment'
+          and b.label = l.label and b.booked_on <= l.booked_on and -b.amount_minor >= l.amount_minor)")
+  [ "$waiting" = 1 ] ||
+    fail "the refund Camille left unanswered on $from is no longer one that waits for her answer."
+  kept=$(sql "select e.kind || ' ' || e.classified_by || ' ' || l.refund_refused from statement_line l
+    join entry_part p on p.line_id = l.id join entry e on e.id = p.entry_id
+    where l.id = '019a0000-0000-7000-8000-000000000411'")
+  [ "$kept" = "income user false" ] ||
+    fail "the refund Camille classified by hand on $from reads \"$kept\", not \"income user false\"."
+  say "Camille's unanswered refund waits apart for her answer; the one she classified stays an income."
+fi
+
 # 8. The installation as `docker compose up` brings it back: migrate, then the app.
 booted=$(sql "select now()")
 "${compose[@]}" up --detach --no-build --pull never --wait --wait-timeout 180 > "$work/up" 2>&1 ||
