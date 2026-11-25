@@ -98,7 +98,7 @@ export function monthsCounted(firstDay: string | null, from: string, to: string)
 }
 
 /** The last day of a month `YYYY-MM`. */
-function lastDayOf(month: string): string {
+export function lastDayOf(month: string): string {
   const [year = 0, number = 1] = month.split("-").map(Number);
 
   return new Date(Date.UTC(year, number, 0)).toISOString().slice(0, 10);
@@ -130,6 +130,143 @@ function totals(rows: ReadonlyArray<MonthlySpending>, currency: string) {
 }
 
 /**
+ * The months an average of `month` reads (`YYYY-MM`, both included): the six before it, up to the
+ * last full month before `current`, today's. A month to come, or the one under way, is no month to
+ * average, so `averageTo` may come before `averageFrom`: none.
+ */
+export function averageWindow(month: string, current: string) {
+  const averageFrom = addMonths(month, -BENCHMARK_WINDOW);
+  const lastFull = addMonths(current, -1);
+  const previous = addMonths(month, -1);
+
+  return { averageFrom, averageTo: previous < lastFull ? previous : lastFull };
+}
+
+/** What the benchmarks of a month are computed from, read in one go. */
+export type BenchmarkFacts = {
+  /** `YYYY-MM`. */
+  readonly month: string;
+  /** The user's currency. */
+  readonly currency: string;
+  /** Today's month, `YYYY-MM`. */
+  readonly currentMonth: string;
+  /** Every category of the user's, archived ones included. */
+  readonly categories: ReadonlyArray<CategoryRecord>;
+  /** The expenses summed by category, month and currency, from the window's start to `month`. */
+  readonly history: ReadonlyArray<MonthlySpending>;
+  /** The day the user's first entry happened; null with none. */
+  readonly firstDay: string | null;
+};
+
+/**
+ * Every expense category's spending in a month against its benchmark (`monthBenchmarks`), from what
+ * was read: pure, so that the month read (`./month`) computes the same from its own transaction.
+ */
+export function benchmarksOf(facts: BenchmarkFacts): MonthBenchmarks {
+  const { month, currency, categories, history } = facts;
+  const { averageFrom, averageTo } = averageWindow(month, facts.currentMonth);
+  const monthsAveraged = monthsCounted(facts.firstDay, averageFrom, averageTo);
+
+  const expenses = categories.filter((each) => each.kind === "expense");
+  const childrenOf = (id: string) => expenses.filter((each) => each.parentId === id);
+
+  /** The rows of a category's own expenses, and its children's for a top-level one. */
+  const rowsOf = (category: CategoryRecord) => {
+    const ids = new Set([category.id, ...childrenOf(category.id).map((child) => child.id)]);
+
+    return history.filter((row) => ids.has(row.categoryId));
+  };
+
+  const benchmarkOf = (
+    category: CategoryRecord,
+    before: ReadonlyArray<MonthlySpending>,
+  ): MonthBenchmark => {
+    switch (category.benchmark.mode) {
+      case "automatic": {
+        const net = before
+          .filter((row) => row.currency === currency)
+          .reduce((sum, row) => sum + row.minor, 0);
+
+        // Nothing spent, net (no expense, or all refunded): nothing to average.
+        return {
+          mode: "automatic",
+          amount:
+            monthsAveraged === 0 || net <= 0
+              ? null
+              : { minor: Math.round(net / monthsAveraged), currency },
+        };
+      }
+
+      case "fixed": {
+        return { mode: "fixed", amount: { minor: category.benchmark.minor, currency } };
+      }
+
+      case "none": {
+        return { mode: "none" };
+      }
+    }
+  };
+
+  const rowOf = (
+    category: CategoryRecord,
+    children: ReadonlyArray<CategoryInMonth>,
+  ): CategoryInMonth => {
+    const rows = rowsOf(category);
+
+    const now = totals(
+      rows.filter((row) => row.month === month),
+      currency,
+    );
+
+    const benchmark = benchmarkOf(
+      category,
+      rows.filter((row) => row.month >= averageFrom && row.month <= averageTo),
+    );
+
+    const mark = benchmark.mode === "none" ? null : benchmark.amount;
+
+    return {
+      id: category.id,
+      name: category.name,
+      icon: category.icon,
+      parentId: category.parentId,
+      archived: category.archivedAt !== null,
+      spent: { minor: now.own, currency },
+      elsewhere: now.elsewhere,
+      benchmark,
+      drifts: mark !== null && now.own > mark.minor,
+      children,
+    };
+  };
+
+  const tree = expenses
+    .filter((each) => each.parentId === null)
+    .toSorted(inOrder)
+    .flatMap((top) => {
+      const children = childrenOf(top.id)
+        .toSorted(inOrder)
+        .map((child) => rowOf(child, []))
+        .filter(shown);
+
+      const row = rowOf(top, children);
+
+      return shown(row) || children.length > 0 ? [row] : [];
+    });
+
+  const drifting = tree.flatMap((top) => [top, ...top.children]).filter((row) => row.drifts);
+
+  return {
+    month,
+    currency,
+    averageFrom,
+    averageTo,
+    monthsAveraged,
+    categories: tree,
+    drifting,
+  };
+}
+
+/**
  * Every expense category's spending in `month` (`YYYY-MM`) against its benchmark, in the user's
  * `currency`. An automatic benchmark is the monthly average of the six months before, counting
  * only the months from the user's first entry on and before today's month (a month with nothing
@@ -141,11 +278,8 @@ function totals(rows: ReadonlyArray<MonthlySpending>, currency: string) {
 export const monthBenchmarks = (owner: string, month: string, currency: string) =>
   Effect.gen(function* () {
     const store = yield* CategoryStore;
-    const averageFrom = addMonths(month, -BENCHMARK_WINDOW);
-    const lastFull = addMonths(yield* currentMonth, -1);
-    const previous = addMonths(month, -1);
-    // A month to come, or the one under way, is no month to average.
-    const averageTo = previous < lastFull ? previous : lastFull;
+    const current = yield* currentMonth;
+    const { averageFrom } = averageWindow(month, current);
     const categories = yield* store.list(owner);
 
     const history = yield* store.spending(owner, {
@@ -153,105 +287,7 @@ export const monthBenchmarks = (owner: string, month: string, currency: string) 
       to: lastDayOf(month),
     });
 
-    const monthsAveraged = monthsCounted(yield* store.firstEntry(owner), averageFrom, averageTo);
+    const firstDay = yield* store.firstEntry(owner);
 
-    const expenses = categories.filter((each) => each.kind === "expense");
-    const childrenOf = (id: string) => expenses.filter((each) => each.parentId === id);
-
-    /** The rows of a category's own expenses, and its children's for a top-level one. */
-    const rowsOf = (category: CategoryRecord) => {
-      const ids = new Set([category.id, ...childrenOf(category.id).map((child) => child.id)]);
-
-      return history.filter((row) => ids.has(row.categoryId));
-    };
-
-    const benchmarkOf = (
-      category: CategoryRecord,
-      before: ReadonlyArray<MonthlySpending>,
-    ): MonthBenchmark => {
-      switch (category.benchmark.mode) {
-        case "automatic": {
-          const net = before
-            .filter((row) => row.currency === currency)
-            .reduce((sum, row) => sum + row.minor, 0);
-
-          // Nothing spent, net (no expense, or all refunded): nothing to average.
-          return {
-            mode: "automatic",
-            amount:
-              monthsAveraged === 0 || net <= 0
-                ? null
-                : { minor: Math.round(net / monthsAveraged), currency },
-          };
-        }
-
-        case "fixed": {
-          return { mode: "fixed", amount: { minor: category.benchmark.minor, currency } };
-        }
-
-        case "none": {
-          return { mode: "none" };
-        }
-      }
-    };
-
-    const rowOf = (
-      category: CategoryRecord,
-      children: ReadonlyArray<CategoryInMonth>,
-    ): CategoryInMonth => {
-      const rows = rowsOf(category);
-
-      const now = totals(
-        rows.filter((row) => row.month === month),
-        currency,
-      );
-
-      const benchmark = benchmarkOf(
-        category,
-        rows.filter((row) => row.month >= averageFrom && row.month <= averageTo),
-      );
-
-      const mark = benchmark.mode === "none" ? null : benchmark.amount;
-
-      return {
-        id: category.id,
-        name: category.name,
-        icon: category.icon,
-        parentId: category.parentId,
-        archived: category.archivedAt !== null,
-        spent: { minor: now.own, currency },
-        elsewhere: now.elsewhere,
-        benchmark,
-        drifts: mark !== null && now.own > mark.minor,
-        children,
-      };
-    };
-
-    const tree = expenses
-      .filter((each) => each.parentId === null)
-      .toSorted(inOrder)
-      .flatMap((top) => {
-        const children = childrenOf(top.id)
-          .toSorted(inOrder)
-          .map((child) => rowOf(child, []))
-          .filter(shown);
-
-        const row = rowOf(top, children);
-
-        return shown(row) || children.length > 0 ? [row] : [];
-      });
-
-    const drifting = tree.flatMap((top) => [top, ...top.children]).filter((row) => row.drifts);
-
-    const benchmarks: MonthBenchmarks = {
-      month,
-      currency,
-      averageFrom,
-      averageTo,
-      monthsAveraged,
-      categories: tree,
-      drifting,
-    };
-
-    return benchmarks;
+    return benchmarksOf({ month, currency, currentMonth: current, categories, history, firstDay });
   });

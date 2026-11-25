@@ -33,6 +33,11 @@ export type MonthBarProps = {
   note?: string;
   /** At the end of the first line, usually a `Delta` against the 6-month average. */
   comparison?: ReactNode;
+  /**
+   * Quiet lines under the legend, one each: the month in each other currency, never converted
+   * ("In USD: received $0, spent $25…").
+   */
+  notes?: ReadonlyArray<string>;
   /** A part was chosen (click, or Enter / Space on its button): open what it is made of. */
   onSelect?: (role: MoneyRole) => void;
   /** The page's language (`<html lang>`) unless given. */
@@ -136,9 +141,12 @@ function PartContent({
   const messages = useUiMessages().money;
   const language = usePageLanguage();
   const over = role === "left" && overspent;
+  // More came back from savings than went to them: said as such, the amount without its sign.
+  const takenBack = role === "saved" && amount.minor < 0;
 
-  const label =
-    restricted === null
+  const label = takenBack
+    ? messages.takenFromSavings
+    : restricted === null
       ? messages.roles[role]
       : messages.leftRestricted(
           formatMoney(restricted, { locale: locale ?? language, whole: true }),
@@ -160,7 +168,7 @@ function PartContent({
           />
         )}
         <Amount
-          value={over ? { ...amount, minor: Math.abs(amount.minor) } : amount}
+          value={over || takenBack ? { ...amount, minor: Math.abs(amount.minor) } : amount}
           whole
           size="sm"
           locale={locale}
@@ -195,8 +203,11 @@ const PART_CLASSES =
  * name cut short, so the block's height never changes. Each key is a button when `onSelect` is
  * given. When more went out than came in, the bar stretches to what went out, a dark mark shows
  * where the money received ended, and the part left says by how much the month is overspent, in
- * red. With `restricted`, the end of the part left is hatched (benefit accounts' money) and its
- * label says how much of it.
+ * red; the month is overspent only when `left` is below zero. Set aside below zero (taken back
+ * from savings) draws no part, and its key says "taken from savings" with the amount. With
+ * `restricted`, the end of the part left is hatched (benefit accounts' money) and its
+ * label says how much of it. `notes` adds a quiet line each under the legend (the month in another
+ * currency), cut short rather than wrapped.
  *
  * Motion: when the month changes, the parts grow or shrink to their new widths in 200 ms
  * (ease-out) and the amounts roll; cut under reduced motion.
@@ -209,6 +220,7 @@ export function MonthBar({
   restricted,
   note,
   comparison,
+  notes,
   onSelect,
   locale,
 }: MonthBarProps) {
@@ -263,6 +275,15 @@ export function MonthBar({
           ),
         )}
       </div>
+      {notes === undefined || notes.length === 0 ? null : (
+        <ul data-slot="month-bar-notes" className="flex flex-col">
+          {notes.map((line) => (
+            <li key={line} className="h-4 truncate text-xs text-muted-foreground tabular-nums">
+              {line}
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }

@@ -19,7 +19,7 @@ Gousset's words, used in every result:
 - benchmark: a suggested monthly mark for a category, not a budget.
 
 Which tool answers what:
-- \`month\`: a month's subscriptions (recurring payments, stops, price rises) and benchmarks (each expense category against its mark, what drifts). Use it for "am I spending more than usual?". Its summary is not available yet and gives no figure: read money with \`accounts\` and \`lines\`.
+- \`month\`: the monthly review of the user's own data: summary (received, spent, set aside, left, movements, lines to review, imports, flags), spending by category or merchant, a row's days, subscriptions and benchmarks. Use it for "how did my month go?" or "am I spending more than usual?".
 - \`imports\`: imports a bank statement file into an account without duplicates, and lists, follows and undoes imports. Use it when the user gives a statement or asks what was imported.
 - \`accounts\`: the user's accounts by group (available, restricted, savings and investments, owed) with balances and totals per currency, and one account's last lines and balance check against its statement; creates, edits, closes and reopens accounts, notes the balance of one kept by its balance and sets a benefit credit's expiry. Use it for "how much do I have?", "does my balance match my bank's?" or to set accounts up before importing statements.
 - \`data\`: what an export of all the user's data holds, and where to download it. Use it to export or back up their data.

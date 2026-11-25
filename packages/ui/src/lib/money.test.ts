@@ -284,6 +284,32 @@ describe("the bars", () => {
     expect(layout.restricted).toBeNull();
   });
 
+  it("leaves money when more was taken back from savings than the overspending", () => {
+    const layout = monthBarLayout({
+      received: eur(200_000),
+      spent: eur(230_000),
+      saved: eur(-50_000),
+      left: eur(20_000),
+    });
+
+    expect(layout.overspent).toBe(false);
+    expect(layout.receivedMark).toBeNull();
+    expect(layout.parts.map((part) => part.width)).toEqual([92, 0, 8]);
+  });
+
+  it("marks where the money in ended, savings taken back included, when still overspent", () => {
+    const layout = monthBarLayout({
+      received: eur(200_000),
+      spent: eur(250_000),
+      saved: eur(-25_000),
+      left: eur(-25_000),
+    });
+
+    expect(layout.overspent).toBe(true);
+    expect(layout.receivedMark).toBe(90);
+    expect(layout.parts.map((part) => part.width)).toEqual([100, 0, 0]);
+  });
+
   it("hatches the restricted money at the end of the part left, never wider than it", () => {
     const figures = {
       received: eur(200_000),

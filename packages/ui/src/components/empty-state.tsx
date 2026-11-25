@@ -23,19 +23,26 @@ export type EmptyStateProps = {
   icon?: IconName;
   /** The one thing to do about it ("Import statements"). */
   action?: StateAction;
+  /**
+   * Where to go about it, in the place of `action`: `ButtonLink`s to other pages (the app's router
+   * links), the main one first.
+   */
+  links?: ReactNode;
   /** `block` fills a block, centred; `compact` is one row, inside a list or a small block. */
   size?: StateSize;
 };
 
 /**
  * What a block shows when it has nothing to show: an icon, a title, a line of help and maybe one
- * action. It sits inside a block and draws no block of its own. No illustration.
+ * action, or links to the pages where it is filled. It sits inside a block and draws no block of
+ * its own. No illustration.
  */
 export function EmptyState({
   title,
   description,
   icon = "empty",
   action,
+  links,
   size = "block",
 }: EmptyStateProps) {
   return (
@@ -52,15 +59,19 @@ export function EmptyState({
         </>
       }
       action={
-        action === undefined ? null : (
-          <Button
-            variant="secondary"
-            size={size === "compact" ? "sm" : "md"}
-            icon={action.icon}
-            onClick={() => action.onClick()}
-          >
-            {action.label}
-          </Button>
+        links === undefined ? (
+          action === undefined ? null : (
+            <Button
+              variant="secondary"
+              size={size === "compact" ? "sm" : "md"}
+              icon={action.icon}
+              onClick={() => action.onClick()}
+            >
+              {action.label}
+            </Button>
+          )
+        ) : (
+          <div className="flex flex-wrap items-center justify-center gap-2">{links}</div>
         )
       }
     />

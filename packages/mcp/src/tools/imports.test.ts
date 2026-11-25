@@ -13,6 +13,7 @@ import {
   ImportUnavailable,
   Imports,
   Merchants,
+  MonthFacts,
   RuleJobs,
   Subscriptions,
   TooManyFileUploads,
@@ -281,6 +282,7 @@ function runnerOf(state: Fake): Runner<GoussetServices> {
           Layer.mock(UserData, {}),
           Layer.mock(RuleJobs, {}),
           Layer.mock(Subscriptions, {}),
+          Layer.mock(MonthFacts, {}),
         ),
       ),
     );
@@ -313,6 +315,7 @@ function runnerWithTime(state: Fake): Runner<GoussetServices> {
             Layer.mock(UserData, {}),
             Layer.mock(RuleJobs, {}),
             Layer.mock(Subscriptions, {}),
+            Layer.mock(MonthFacts, {}),
             TestClock.layer(),
           ),
         ),

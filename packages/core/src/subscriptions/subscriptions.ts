@@ -3,7 +3,9 @@ import type { QueryFailed } from "@gousset/db/user-data";
 import { Context, Effect, Layer } from "effect";
 
 import { AccountStore } from "../account-store";
+import type { AccountRecord } from "../account-store";
 import { creditsLeft, expiringOf } from "../credits";
+import type { CountedLine } from "../credits";
 import { FutureMonthRefused } from "../errors";
 import type { Money } from "../month";
 import { today } from "../today";
@@ -92,8 +94,8 @@ function yearsBefore(day: string, years: number): string {
 
 const earlier = (a: string, b: string) => (a < b ? a : b);
 
-/** Today, after refusing a month to come. */
-const checkedToday = (month: string) =>
+/** Today, after refusing a month to come (`FutureMonthRefused`). */
+export const checkedToday = (month: string) =>
   Effect.gen(function* () {
     const day = yield* today;
     const current = day.slice(0, 7);
@@ -105,12 +107,14 @@ const checkedToday = (month: string) =>
     return day;
   });
 
+/** The days whose charges a detection as of `asOf` reads: the three years up to it. */
+export const chargeRange = (asOf: string) => ({ from: yearsBefore(asOf, CHARGE_YEARS), to: asOf });
+
 /** The subscriptions detected as of `asOf`, from the three years of charges before it. */
 const detectedAsOf = (owner: string, asOf: string) =>
   Effect.gen(function* () {
     const store = yield* Subscriptions;
-    const range = { from: yearsBefore(asOf, CHARGE_YEARS), to: asOf };
-    const charges = yield* store.charges(owner, range);
+    const charges = yield* store.charges(owner, chargeRange(asOf));
 
     return detectSubscriptions(charges, asOf);
   });
@@ -135,6 +139,38 @@ export const monthSubscriptions = (owner: string, month: string) =>
     return read;
   });
 
+/** An open benefit account kept by its lines: the accounts whose credits expire. */
+export const followsCredits = (account: Pick<AccountRecord, "kind" | "mode" | "closedOn">) =>
+  account.kind === "benefit" && account.mode === "lines" && account.closedOn === null;
+
+/**
+ * What is left on an account's credits on each day they expire from `from` to `to`, replayed from
+ * its counted `lines` (booked up to the day it looks from, oldest first). For the calendar and the
+ * month's flags alike.
+ */
+export function expiringCreditsOf(
+  account: Pick<AccountRecord, "id" | "name" | "currency" | "openingBalanceMinor" | "creditOrder">,
+  lines: ReadonlyArray<CountedLine>,
+  range: { readonly from: string; readonly to: string },
+): ReadonlyArray<ExpiringCredit> {
+  return expiringOf(
+    creditsLeft(account.openingBalanceMinor, lines, account.creditOrder).credits,
+  ).flatMap(({ day, minor }): ReadonlyArray<ExpiringCredit> =>
+    day >= range.from && day <= range.to
+      ? [
+          {
+            id: `expiring:${account.id}:${day}`,
+            day,
+            kind: "expiring",
+            accountId: account.id,
+            name: account.name,
+            amount: { minor, currency: account.currency },
+          },
+        ]
+      : [],
+  );
+}
+
 /** What expires on the user's benefit accounts kept by their lines, from `from` to `to`. */
 const expiringCredits = (
   owner: string,
@@ -144,24 +180,11 @@ const expiringCredits = (
   Effect.gen(function* () {
     const accounts = yield* AccountStore;
     const facts = yield* accounts.facts(owner, asOf);
-
-    const benefit = facts.filter(
-      ({ account }) =>
-        account.kind === "benefit" && account.mode === "lines" && account.closedOn === null,
-    );
+    const benefit = facts.filter(({ account }) => followsCredits(account));
 
     const expiring = yield* Effect.forEach(benefit, ({ account }) =>
       Effect.map(accounts.countedLines(owner, account.id, asOf), (lines) =>
-        expiringOf(creditsLeft(account.openingBalanceMinor, lines, account.creditOrder).credits)
-          .filter(({ day }) => day >= range.from && day <= range.to)
-          .map(({ day, minor }): ExpiringCredit => ({
-            id: `expiring:${account.id}:${day}`,
-            day,
-            kind: "expiring",
-            accountId: account.id,
-            name: account.name,
-            amount: { minor, currency: account.currency },
-          })),
+        expiringCreditsOf(account, lines, range),
       ),
     );
 

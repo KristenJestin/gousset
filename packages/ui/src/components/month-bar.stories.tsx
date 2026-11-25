@@ -113,6 +113,29 @@ export const Overspent: Story = {
   args: { ...OVERSPENT_FIGURES, note: "salary and meal vouchers", onSelect: () => undefined },
 };
 
+/**
+ * Money taken back from savings: set aside is less than nothing. More was spent than received, yet
+ * money is left, so the month is not overspent: the bar stretches past the money received with no
+ * mark, draws no part for the savings, and their key reads "€500 taken from savings".
+ */
+export const TakenFromSavings: Story = {
+  args: {
+    received: { minor: 200_000, currency: "EUR" },
+    spent: { minor: 230_000, currency: "EUR" },
+    saved: { minor: -50_000, currency: "EUR" },
+    left: { minor: 20_000, currency: "EUR" },
+    note: "salary",
+  },
+};
+
+/** The month in another currency, apart and never converted: a quiet line under the legend. */
+export const OtherCurrencies: Story = {
+  args: {
+    note: "salary and meal vouchers",
+    notes: ["In USD: received $0, spent $25, set aside $0, left −$25"],
+  },
+};
+
 /** A month with nothing yet: an empty bar, zeros. */
 export const Empty: Story = {
   args: {

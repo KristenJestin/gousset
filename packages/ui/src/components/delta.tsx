@@ -105,3 +105,46 @@ export function Delta({
     </span>
   );
 }
+
+export type DeltaListItem = DeltaProps & {
+  id: string;
+  /** What it is held against, short and seen after the change: "vs. average". */
+  label: string;
+};
+
+export type DeltaListProps = {
+  /** Before the changes, what changed: "spending". */
+  lead?: string;
+  items: ReadonlyArray<DeltaListItem>;
+};
+
+/**
+ * Several changes of one figure on one line, each followed by what it is held against: "spending
+ * +5% vs. average · −3% vs. September". On a phone the short labels give way (each change's
+ * sentence is still read); the line never wraps.
+ *
+ * Motion: each `Delta`'s own (its colour moves in 150 ms); cut under reduced motion.
+ */
+export function DeltaList({ lead, items }: DeltaListProps) {
+  return (
+    <span
+      data-slot="delta-list"
+      className="inline-flex items-center gap-2 text-xs whitespace-nowrap text-muted-foreground"
+    >
+      {lead === undefined ? null : <span>{lead}</span>}
+      {items.map(({ id, label, ...delta }, index) => (
+        <span key={id} className="inline-flex items-center gap-1">
+          {index === 0 ? null : (
+            <span aria-hidden="true" className="pr-1">
+              ·
+            </span>
+          )}
+          <Delta {...delta} />
+          <span aria-hidden="true" className="max-sm:hidden">
+            {label}
+          </span>
+        </span>
+      ))}
+    </span>
+  );
+}

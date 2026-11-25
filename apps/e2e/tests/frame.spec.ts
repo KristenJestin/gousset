@@ -274,12 +274,12 @@ test("on a phone, a tab bar holds review, operations, accounts and more", async 
 test("an older month address still opens its screen", async ({ userPage }) => {
   await fixDay(userPage, "2026-11-15");
 
-  // The review has no month until it reads real lines (#126): its older address opens it all the
-  // same, its link the current one.
+  // The review opens on the address's month (#32), or leads a user with no line yet to the first
+  // import (the worker's user may have imported in another test); its link is the current one.
   await visit(userPage, "/?month=2026-10");
-  await expect(
-    userPage.getByRole("heading", { name: "Your monthly review is not ready yet" }),
-  ).toBeVisible();
+  await expect(userPage.getByRole("main")).toContainText(
+    /October 2026|Your review starts with your first import/,
+  );
   await expect(
     userPage.getByRole("navigation", { name: "Main" }).getByRole("link", { name: "Review" }),
   ).toHaveAttribute("aria-current", "page");
@@ -317,10 +317,10 @@ test.describe("in French", () => {
 
     await expect(userPage.locator("html")).toHaveAttribute("lang", "fr");
     await expect(userPage.getByRole("heading", { level: 1, name: "Bilan du mois" })).toBeVisible();
-    // The screen's own words too, not only the frame's (its dates by locale: review.spec.ts).
-    await expect(
-      userPage.getByRole("heading", { name: "Votre bilan du mois n'est pas encore prêt" }),
-    ).toBeVisible();
+    // The screen's own words too, not only the frame's: its month by locale, or its empty state.
+    await expect(userPage.getByRole("main")).toContainText(
+      /novembre 2026|Votre bilan commence avec votre premier import/i,
+    );
     // Following the browser saves nothing: the browser's next language still wins.
     expect(await languageCookie(userPage)).toBeUndefined();
 

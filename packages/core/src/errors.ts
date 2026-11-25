@@ -131,16 +131,9 @@ export class SplitRefused extends Schema.TaggedError<SplitRefused>()("SplitRefus
   index: Schema.optional(Schema.Number),
 }) {}
 
-/** A month too far from today to be read: more than ten years before or after it. */
-export class MonthOutOfRange extends Schema.TaggedError<MonthOutOfRange>()("MonthOutOfRange", {
-  month: Schema.String,
-  earliest: Schema.String,
-  latest: Schema.String,
-}) {}
-
 /**
  * A month after the current one (`current`): what is detected of the subscriptions (#34) is read up
- * to today, and a month to come has nothing paid nor stopped yet.
+ * to today, and a month to come has nothing paid nor stopped yet; nor has it any figure (#32).
  */
 export class FutureMonthRefused extends Schema.TaggedError<FutureMonthRefused>()(
   "FutureMonthRefused",

@@ -117,6 +117,23 @@ export function chargesOf(
   merchants: ReadonlyMap<string, ChargeMerchant>,
 ): ReadonlyArray<Charge> {
   const byEntry = new Map<string, Array<ChargePart>>();
+  // Each label cleaned once: three years of payments repeat the same few shops.
+  const keys = new Map<string, string | null>();
+
+  const keyOf = (part: ChargePart) => {
+    const text = JSON.stringify([part.label, part.counterpartyName]);
+    const cached = keys.get(text);
+
+    if (cached !== undefined) {
+      return cached;
+    }
+
+    const key = merchantKey(part.label, part.counterpartyName);
+
+    keys.set(text, key);
+
+    return key;
+  };
 
   for (const part of parts) {
     const known = byEntry.get(part.entryId);
@@ -143,7 +160,7 @@ export function chargesOf(
 
     const labelIds = new Set(
       payments.map((part) => {
-        const key = merchantKey(part.label, part.counterpartyName);
+        const key = keyOf(part);
 
         return key === null ? null : (merchantOfAlias.get(key) ?? null);
       }),

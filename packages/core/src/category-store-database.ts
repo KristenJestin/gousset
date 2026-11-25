@@ -88,7 +88,10 @@ function columnsOf(patch: CategoryPatch): Partial<typeof category.$inferInsert> 
   return columns;
 }
 
-async function readAll(transaction: UserTransaction): Promise<ReadonlyArray<CategoryRecord>> {
+/** Every category of the user's, archived ones included, in `transaction`. */
+export async function readAll(
+  transaction: UserTransaction,
+): Promise<ReadonlyArray<CategoryRecord>> {
   const rows = await transaction.select().from(category);
 
   return rows.map(record);

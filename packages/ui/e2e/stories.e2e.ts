@@ -80,10 +80,8 @@ const SHOTS: ReadonlyArray<Shot> = [
   { id: "import-csv-preview--default" },
   { id: "states-emptystate--in-a-block" },
   { id: "states-errorstate--beside-a-working-block" },
-  // The review until it reads real lines (#126): a user with lines, a new user, a phone.
-  { id: "states-reviewcoming--with-data" },
-  { id: "states-reviewcoming--new-user" },
-  { id: "states-reviewcoming--phone", width: 320 },
+  // The review of a user with no line yet (#32): links to the first import and the accounts.
+  { id: "states-emptystate--with-links" },
   { id: "layout-card--with-description" },
   { id: "layout-screen--sign-in" },
   { id: "data-list--loading-beside-loaded" },
@@ -100,12 +98,19 @@ const SHOTS: ReadonlyArray<Shot> = [
   { id: "money-month-bar--narrow-part" },
   // The legend on one line at the narrowest phone (#83), Storybook's `mobile1`.
   { id: "money-month-bar--phone", width: 320 },
+  // The month in another currency, apart (#32).
+  { id: "money-month-bar--other-currencies" },
+  { id: "money-delta--several" },
   { id: "money-breakdown--default" },
   { id: "money-breakdown--loading" },
+  // An open row's figures against its average and the month before (#32).
+  { id: "money-breakdown--detail-figures" },
   { id: "money-amount--counting" },
   { id: "money-movement-list--default" },
   { id: "money-investment-list--loss" },
   { id: "money-review-lines--default" },
+  // The review's first lines, read only, and its link into the review mode (#32).
+  { id: "money-review-lines--read-only" },
   // The recurring payments' calendar (#34): the month and the agenda, on a desktop and a phone.
   { id: "money-recurringcalendar--default" },
   { id: "money-recurringcalendar--agenda-view" },

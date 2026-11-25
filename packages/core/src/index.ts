@@ -21,12 +21,10 @@ export {
   ExpiryBeforeCredit,
   FundRefused,
   FutureMonthRefused,
-  LineAlreadyReviewed,
   LineNotClassifiable,
   LineNotFound,
   LineSearchRefused,
   LinkRefused,
-  MonthOutOfRange,
   NotACredit,
   NotATransfer,
   NotFunding,
@@ -69,28 +67,48 @@ export type { PartRole } from "./expenses/parts";
 
 export { matchTopUps } from "./expenses/top-ups";
 
-export { FixtureLedger, Ledger, MONTHS_FROM_TODAY } from "./ledger";
-
 export {
-  BENCHMARK_MONTHS,
-  approveLine,
-  linesToReview,
-  monthOverview,
+  LINES_TO_REVIEW_SHOWN,
+  MonthFacts,
+  monthFactsLayer,
+  monthFlags,
+  monthImportState,
+  monthLinesToReview,
+  monthMovements,
+  monthReview,
+  monthSpending,
   monthSummary,
-  spending,
   spendingDays,
 } from "./month";
 
 export type {
+  BenefitLine,
+  CategorySpending,
+  CategorySpendingRead,
+  ImportState,
   LineToReview,
-  LinesToReview,
+  MerchantSpending,
+  MerchantSpendingRead,
   Money,
-  MonthOverview,
+  MonthAccount,
+  MonthFlag,
+  MonthFlags,
+  MonthLinesToReview,
+  MonthMerchant,
+  MonthMovements,
+  MonthPart,
+  MonthReview,
+  MonthRows,
+  MonthScope,
+  MonthSpending,
   MonthSummary,
-  Spending,
+  MonthTransfer,
+  Movement,
+  PartialImport,
+  SpendingBy,
   SpendingDay,
   SpendingDays,
-  SpendingRow,
+  StatementReach,
 } from "./month";
 
 export {
@@ -162,9 +180,20 @@ export type {
   LineClassification,
 } from "./categories";
 
-export { BENCHMARK_WINDOW, monthBenchmarks } from "./benchmarks";
+export {
+  BENCHMARK_WINDOW,
+  averageWindow,
+  benchmarksOf,
+  lastDayOf,
+  monthBenchmarks,
+} from "./benchmarks";
 
-export type { CategoryInMonth, MonthBenchmark, MonthBenchmarks } from "./benchmarks";
+export type {
+  BenchmarkFacts,
+  CategoryInMonth,
+  MonthBenchmark,
+  MonthBenchmarks,
+} from "./benchmarks";
 
 export { CategoryStore } from "./category-store";
 
@@ -222,19 +251,6 @@ export type {
 export { proposalKey, proposalOf } from "./review-proposal";
 
 export type { ProposalFacts, RepeatedLine, ReviewProposal } from "./review-proposal";
-
-export { flags, importState, investments, movements } from "./review";
-
-export type {
-  Flag,
-  Flags,
-  ImportState,
-  InvestmentAccount,
-  Investments,
-  Movement,
-  Movements,
-  PartialImport,
-} from "./review";
 
 export { startingPoints } from "./starting-points";
 
@@ -465,6 +481,8 @@ export type {
 export {
   CHARGE_YEARS,
   Subscriptions,
+  expiringCreditsOf,
+  followsCredits,
   monthSubscriptions,
   subscriptionCalendar,
   subscriptionsLayer,

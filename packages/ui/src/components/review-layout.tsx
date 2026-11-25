@@ -76,13 +76,16 @@ export type ReviewCellProps = {
   children: ReactNode;
 };
 
-/** A cell of `ReviewGrid`: one block, or the side's stacked blocks. */
+/**
+ * A cell of `ReviewGrid`: one block, or the side's stacked blocks. A side cell keeps to the right
+ * column even when no main cell sits beside it (a month with nothing to review).
+ */
 export function ReviewCell({ column, lastOnPhone = false, children }: ReviewCellProps) {
   return (
     <div
       className={cn(
         "flex min-w-0 flex-col gap-4 md:gap-5",
-        column === "main" ? "lg:col-span-6" : "lg:col-span-5",
+        column === "main" ? "lg:col-span-6" : "lg:col-span-5 lg:col-start-7",
         lastOnPhone && "max-lg:order-last",
       )}
     >
