@@ -389,12 +389,15 @@ the `image` job and runs `tools/check-upgrade.sh` on it, which, on a fresh proje
    one still on her temporary password, one banned; and **through the tables' owner
    (`tools/check-upgrade.sql`) for what the release offers no route for**: 0.1.1 has neither an
    accounts screen nor an import route, so two users' accounts of every kind, balances, an import
-   with its file and its lines (a held duplicate, a foreign currency, a discarded line), a CSV
-   profile, and an MCP client with its consent and tokens are written as the app would write them;
+   with its file and its lines (a held duplicate, a foreign currency, a discarded line), with each
+   counted line's entry where the release has entries (from 0.3.0, #23), a CSV profile, and an MCP
+   client with its consent and tokens are written as the app would write them;
    and, where the release has its import route (from 0.2.0), a user uploads an invented statement
    (`tools/check-upgrade.ofx`, whose bank encodes entities twice, #132), read as that release
    reads it;
 3. stops the app, as an update does, and reads every row of every table of the `public` schema;
+   from a release that has entries, every counted line with an amount must already have its one
+   entry: invented data the release could not hold fails here, not as the update's fault;
 4. puts the image under test in its place, as the [update](#installing) does, the compose file
    unchanged: **`migrate` runs and ends**, and has recorded every migration of the commit; run
    again, it applies nothing and changes nothing;
@@ -408,7 +411,10 @@ the `image` job and runs `tools/check-upgrade.sh` on it, which, on a fresh proje
    declaration must find a row of the release once its statement was imported, the rows after the
    update must be exactly the rows before with the declared changes, and no other row may change:
    a declaration says what changes, it never lets a table or a column change freely;
-6. starts the app: `/health` answers 200; **the administrator and both users sign in with the same
+6. starts the app: `/health` answers 200; once the boot's merchants and balances jobs have
+   completed, the user's merchants (#24) and her noted balance's movement line (#31) are there, the
+   line once: the boot makes them from a release older than 0.3.0, and from 0.3.0 the release's
+   own import made them, so only the boot's making no second line is checked; **the administrator and both users sign in with the same
    passwords**, the temporary one still has to be replaced, the banned one is still refused, and a
    session made before the update still works;
 7. downloads the user's **export** (#22, `/api/export`), which the last release may not have: each
