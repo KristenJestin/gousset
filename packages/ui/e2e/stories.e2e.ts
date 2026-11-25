@@ -159,7 +159,8 @@ const SHOTS: ReadonlyArray<Shot> = [
   },
   { id: "operations-operationslist--phone", width: 390 },
   { id: "operations-operationslayout--line-open" },
-  // A line's detail beside the list in French, and a sheet over it on a phone (#128).
+  // A line's detail in its side sheet over the list, in French, and a bottom sheet on a phone
+  // (#128, #182).
   { id: "operations-operationslayout--line-open-french" },
   { id: "operations-operationslayout--phone", width: 390 },
   { id: "categories-categorytree--default" },

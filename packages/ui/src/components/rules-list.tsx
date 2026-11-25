@@ -45,7 +45,7 @@ export type RulesListProps = {
   onOpen: (id: string) => void;
   /** Moves a rule to `place` (from 1); a promise keeps its button busy until it settles. */
   onMove: (id: string, place: number) => Promise<void> | void;
-  /** The rule open beside the list. */
+  /** The rule open in its sheet, over the list. */
   openId?: string;
   /** The page's language (`<html lang>`) unless given. */
   locale?: string;

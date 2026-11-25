@@ -39,7 +39,7 @@ type ReviewingProps = {
 };
 
 /**
- * The proposal as the operations page holds it, in the detail's column (360 px): accepting or
+ * The proposal as the operations page holds it, at most 360 px wide (a phone's sheet): accepting or
  * correcting takes half a second, long enough to see the button busy, then what was done is
  * written under it.
  */
@@ -185,20 +185,18 @@ export const LongWords: Story = {
   },
 };
 
-/** At the top of the line's detail, where the operations page shows it. */
+/** At the top of the line's detail, in its sheet, where the operations page shows it. */
 export const InDetail: Story = {
   render: (args) => (
-    <div className="flex h-150 w-90 max-w-full">
-      <LineDetail
-        label={args.label}
-        amount={{ minor: -5200, currency: "EUR" }}
-        account="Current account"
-        bookedOn="21 October 2026"
-        rawLabel="CB GREENMARKET 2110 RIVERTON CARTE 4971"
-        review={<Reviewing {...args} />}
-        onClose={() => undefined}
-      />
-    </div>
+    <LineDetail
+      label={args.label}
+      amount={{ minor: -5200, currency: "EUR" }}
+      account="Current account"
+      bookedOn="21 October 2026"
+      rawLabel="CB GREENMARKET 2110 RIVERTON CARTE 4971"
+      review={<Reviewing {...args} />}
+      onClose={() => undefined}
+    />
   ),
 };
 

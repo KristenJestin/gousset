@@ -296,14 +296,6 @@
   }
 }
 
-/* The width alone moves, as Tailwind's own `transition-*` do theirs: a column that opens beside a
-   list (`OperationsLayout`, #128). */
-@utility transition-width {
-  transition-property: width;
-  transition-timing-function: var(--tw-ease, var(--default-transition-timing-function));
-  transition-duration: var(--tw-duration, var(--default-transition-duration));
-}
-
 /* A square of the text's size: the loader and inline marks follow the text they sit in. */
 @utility size-em {
   width: 1em;

@@ -6,13 +6,13 @@ const story = (component: string, name: string) =>
 
 /**
  * What to read at each frame, on the elements `selector` matches whose text holds `text`: how many
- * there are, or the first one's computed opacity or transform, or the top or left of its box as
- * drawn ("none" when there is none).
+ * there are, or the first one's computed opacity or transform, or the top, left or width of its box
+ * as drawn ("none" when there is none).
  */
 type Reading = {
   selector: string;
   text: string;
-  read: "count" | "opacity" | "transform" | "top" | "left";
+  read: "count" | "opacity" | "transform" | "top" | "left" | "width";
 };
 
 /** One frame: its time from the start, in ms, and each reading's value, in order. */
@@ -49,7 +49,7 @@ async function sampleFrames(
             return "none";
           }
 
-          if (read === "top" || read === "left") {
+          if (read === "top" || read === "left" || read === "width") {
             return String(Math.round(first.getBoundingClientRect()[read]));
           }
 
@@ -264,214 +264,121 @@ test.describe("Operations list", () => {
   });
 });
 
-/**
- * One frame of the detail beside the list: its time from the press, in ms; its column's width
- * (`null` while there is none); its content's opacity (`null` likewise); whether the panel or its
- * content carries a scale at that frame; and whether an amount of the list is cut or covered.
- */
-type DetailFrame = {
-  at: number;
-  width: number | null;
-  opacity: number | null;
-  scaled: boolean;
-  amountHidden: boolean;
-};
-
-/** Samples the detail at every frame for `forMs`, from the press on `trigger`. */
-async function sampleDetail(page: Page, trigger: Locator, forMs = 800) {
-  const frames = page.evaluate((duration) => {
-    // Runs in the page: everything it needs is in its argument.
-    // oxlint-disable-next-line unicorn/consistent-function-scoping -- runs in the page, which sees nothing outside this function.
-    const scaledBy = (element: Element | null) => {
-      if (element === null) {
-        return false;
-      }
-
-      const style = getComputedStyle(element);
-
-      const matrix = new DOMMatrixReadOnly(
-        style.transform === "none" ? undefined : style.transform,
-      );
-
-      return (
-        Math.abs(matrix.a - 1) > 0.001 ||
-        Math.abs(matrix.d - 1) > 0.001 ||
-        (style.scale !== "none" && style.scale !== "1")
-      );
-    };
-
-    const read = () => {
-      const column = document.querySelector('[data-slot="operations-detail"]');
-      const content = document.querySelector('[data-slot="line-detail-content"]');
-      const list = document.querySelector('[data-slot="operations-scroller"]');
-      const listRight = list?.getBoundingClientRect().right ?? 0;
-      const columnLeft = column?.getBoundingClientRect().left ?? Number.POSITIVE_INFINITY;
-
-      // An amount is hidden when it reaches past the list's box (which clips it) or under the
-      // detail's column.
-      const amountHidden = [
-        ...document.querySelectorAll('[data-slot="operation-row"] [data-slot="amount"]'),
-      ].some((amount) => {
-        const right = amount.getBoundingClientRect().right;
-
-        return right > listRight + 0.5 || right > columnLeft + 0.5;
-      });
-
-      return {
-        width: column === null ? null : column.getBoundingClientRect().width,
-        opacity: content === null ? null : Number(getComputedStyle(content).opacity),
-        scaled: scaledBy(document.querySelector('[data-slot="line-detail"]')) || scaledBy(content),
-        amountHidden,
-      };
-    };
-
-    return new Promise<Array<DetailFrame>>((resolve) => {
-      const seen: Array<DetailFrame> = [];
-
-      document.addEventListener(
-        "pointerdown",
-        () => {
-          const begin = performance.now();
-
-          const sample = () => {
-            const at = performance.now() - begin;
-
-            seen.push({ at, ...read() });
-
-            if (at < duration) {
-              requestAnimationFrame(sample);
-            } else {
-              resolve(seen);
-            }
-          };
-
-          requestAnimationFrame(sample);
-        },
-        { once: true, capture: true },
-      );
-    });
-  }, forMs);
-
-  await trigger.click();
-
-  return frames;
-}
-
-/** The column's full width: a 16 px gap and the 360 px panel. */
-const COLUMN_WIDTH = 376;
-
 const LABEL = "CB GREENMARKET 2110";
 
 const openingRow = (page: Page) =>
   page.locator(ROW).filter({ hasText: LABEL }).first().getByRole("button");
 
-const panel = (page: Page) => page.getByRole("region", { name: "CB GREENMARKET 2110 RIVERTON" });
+/** The open line's detail: the side sheet, named by its label. */
+const detailSheet = (page: Page) =>
+  page.getByRole("dialog", { name: "CB GREENMARKET 2110 RIVERTON" });
 
-/** Whole, at its full width with its content shown. */
-const whole = (frame: DetailFrame) => frame.width === COLUMN_WIDTH && frame.opacity === 1;
+/** The list's width as drawn. */
+const listWidth = (page: Page) =>
+  page
+    .locator('[data-slot="operations-scroller"]')
+    .evaluate((node) => Math.round(node.getBoundingClientRect().width));
 
-/** Gone: taken away, or drawn at no width with no content. */
-const gone = (frame: DetailFrame) =>
-  frame.width === null || (frame.width === 0 && frame.opacity === 0);
+/** The times of the frames that draw the sheet right of where it rests (`rest`, its left). */
+const offRightEdge = (frames: ReadonlyArray<Frame>, rest: number) =>
+  timesWhen(frames, 0, (left) => left !== "none" && Number(left) > rest + 1);
 
-/** Opens the line and waits until its detail stands still, at its full width. */
-async function openAndSettle(page: Page) {
-  await openingRow(page).click();
-  await expect(panel(page)).toBeVisible();
+/** Where the open side sheet rests: its left, once it stands still. */
+async function restingLeft(page: Page) {
   await expect.poll(() => page.evaluate(() => document.getAnimations().length)).toBe(0);
+
+  return detailSheet(page).evaluate((node) => Math.round(node.getBoundingClientRect().left));
 }
 
-test.describe("Line detail beside the list", () => {
+/** Opens the line and waits until its sheet stands still. */
+async function openAndSettle(page: Page) {
+  await openingRow(page).click();
+  await expect(detailSheet(page)).toBeVisible();
+
+  return restingLeft(page);
+}
+
+/** The side sheet's left and the list's width at each frame. */
+const sheetAndList: ReadonlyArray<Reading> = [
+  { selector: '[role="dialog"]', text: LABEL, read: "left" },
+  { selector: '[data-slot="operations-scroller"]', text: "", read: "width" },
+];
+
+test.describe("Line detail in the side sheet", () => {
   test.beforeEach(async ({ page }, testInfo) => {
-    test.skip(testInfo.project.name === "phone", "Beside the list from 1024 px on");
+    test.skip(testInfo.project.name === "phone", "A side sheet from 768 px on");
     await page.goto(story("operationslayout", "desktop"));
     await expect(page.locator(ROW).first()).toBeVisible();
   });
 
-  test("opening, its column widens in 300 ms and the content fades in once there is room, nothing scaled, no amount covered", async ({
-    page,
-  }) => {
-    const frames = await sampleDetail(page, openingRow(page));
-    const shown = frames.filter((frame) => frame.width !== null);
-    // The column comes with the click, which follows the press by as long as the browser takes:
-    // its times count from its first frame.
-    const start = shown[0]?.at ?? Number.NaN;
-    const since = (frame: DetailFrame) => frame.at - start;
-    const widening = shown.filter((frame) => (frame.width ?? 0) < COLUMN_WIDTH - 0.5);
-    const full = shown.find((frame) => (frame.width ?? 0) >= COLUMN_WIDTH - 0.5);
+  // #182: on a wide screen as on a tablet, the detail is a sheet over the list, never a column
+  // beside it.
+  for (const width of [1280, 900]) {
+    test(`${String(width)} px wide, opening, it slides in from the right edge over the list in 300 ms, the list left whole`, async ({
+      page,
+    }) => {
+      await page.setViewportSize({ width, height: 800 });
 
-    // The width moves, from nothing to its own, in about 300 ms.
-    expect(widening.length).toBeGreaterThan(2);
-    expect(Math.min(...widening.map((frame) => frame.width ?? 0))).toBeLessThan(COLUMN_WIDTH / 2);
-    expect(full).toBeDefined();
-    expect(full === undefined ? 0 : since(full)).toBeGreaterThan(200);
-    expect(full === undefined ? 0 : since(full)).toBeLessThan(500);
+      const before = await listWidth(page);
+      const opening = await sampleFrames(page, sheetAndList, { trigger: openingRow(page) });
 
-    // The content waits for room (120 ms), then fades in.
-    expect(shown.filter((frame) => since(frame) < 90).every((frame) => frame.opacity === 0)).toBe(
-      true,
-    );
-    expect(shown.some((frame) => (frame.opacity ?? 0) > 0 && (frame.opacity ?? 0) < 1)).toBe(true);
-    expect(shown.at(-1)?.opacity).toBe(1);
+      await expect(detailSheet(page)).toBeVisible();
 
-    expect(frames.filter((frame) => frame.scaled)).toEqual([]);
-    expect(frames.filter((frame) => frame.amountHidden)).toEqual([]);
-    await expect(panel(page)).toBeFocused();
+      const rest = await restingLeft(page);
+      const sliding = offRightEdge(opening, rest);
+
+      // It slid in from beyond the right edge, in about 300 ms, and rests along it.
+      expect(sliding.length).toBeGreaterThan(2);
+      expect(Math.max(...sliding)).toBeGreaterThan(150);
+      expect(Math.max(...sliding)).toBeLessThan(550);
+      expect(Number(opening.at(-1)?.values[0])).toBe(rest);
+      expect(
+        await detailSheet(page).evaluate((node) => Math.round(node.getBoundingClientRect().right)),
+      ).toBe(width);
+      // Over the list, which kept its width at every frame: no column beside it.
+      expect(new Set(opening.map(({ values }) => values[1]))).toEqual(new Set([String(before)]));
+      await expect(page.locator('[data-slot="operations-detail"]')).toHaveCount(0);
+      // Its label and amount at its top, the focus in it.
+      await expect(detailSheet(page).locator('[data-slot="amount"]').first()).toBeVisible();
+      await expect(detailSheet(page)).toBeFocused();
+    });
+  }
+
+  test("closing, it slides back out and the focus goes back to its row", async ({ page }) => {
+    const rest = await openAndSettle(page);
+
+    const closing = await sampleFrames(page, sheetAndList, {
+      trigger: detailSheet(page).getByRole("button", { name: "Close" }),
+    });
+
+    expect(offRightEdge(closing, rest).length).toBeGreaterThan(1);
+    await expect(detailSheet(page)).toHaveCount(0);
+    await expect(openingRow(page)).toBeFocused();
   });
 
-  test("closing, the content fades out before the column closes, nothing scaled, no amount covered", async ({
-    page,
-  }) => {
-    await openAndSettle(page);
-
-    const frames = await sampleDetail(page, panel(page).getByRole("button", { name: "Close" }));
-    const narrowed = frames.filter((frame) => frame.width !== null && frame.width < 360);
-
-    // The content fades while the column keeps its width…
-    expect(
-      frames.some(
-        (frame) =>
-          (frame.width ?? 0) >= COLUMN_WIDTH - 0.5 &&
-          (frame.opacity ?? 0) > 0 &&
-          (frame.opacity ?? 0) < 1,
-      ),
-    ).toBe(true);
-    // …and is gone before the column cuts into the panel.
-    expect(narrowed.length).toBeGreaterThan(1);
-    expect(narrowed.every((frame) => frame.opacity === 0)).toBe(true);
-    // Gone within about 320 ms.
-    const removed = frames.find((frame) => frame.width === null);
-
-    expect(removed).toBeDefined();
-    expect(removed?.at).toBeLessThan(600);
-
-    expect(frames.filter((frame) => frame.scaled)).toEqual([]);
-    expect(frames.filter((frame) => frame.amountHidden)).toEqual([]);
-  });
-
-  test("under reduced motion, the detail is there, or not", async ({ page }) => {
+  test("under reduced motion, the sheet is there, or not", async ({ page }) => {
     await page.emulateMedia({ reducedMotion: "reduce" });
 
-    const opening = await sampleDetail(page, openingRow(page), 400);
-    const shown = opening.filter((frame) => frame.width !== null);
+    const opening = await sampleFrames(page, sheetAndList, { trigger: openingRow(page) }, 400);
+    const rest = await restingLeft(page);
 
-    expect(shown.length).toBeGreaterThan(0);
-    expect(shown.every(whole)).toBe(true);
+    expect(opening.some(({ values }) => values[0] !== "none")).toBe(true);
+    expect(offRightEdge(opening, rest)).toEqual([]);
 
-    const closing = await sampleDetail(
+    const closing = await sampleFrames(
       page,
-      panel(page).getByRole("button", { name: "Close" }),
+      sheetAndList,
+      { trigger: detailSheet(page).getByRole("button", { name: "Close" }) },
       400,
     );
 
-    // Whole, then gone: no frame on the way.
-    expect(closing.filter((frame) => !whole(frame) && !gone(frame))).toEqual([]);
-    expect(closing.at(-1)?.width).toBeNull();
+    expect(offRightEdge(closing, rest)).toEqual([]);
+    await expect(detailSheet(page)).toHaveCount(0);
   });
 
   test("Escape closes it and gives the focus back to its row", async ({ page }) => {
     await openingRow(page).click();
-    await expect(page.locator('[data-slot="line-detail"]')).toBeVisible();
+    await expect(detailSheet(page)).toBeVisible();
     await page.keyboard.press("Escape");
     await expect(page.locator('[data-slot="line-detail"]')).toHaveCount(0);
     await expect(openingRow(page)).toBeFocused();
@@ -490,43 +397,6 @@ async function restingTop(page: Page) {
 
   return dialog.evaluate((node) => Math.round(node.getBoundingClientRect().top));
 }
-
-test.describe("Line detail on a tablet", () => {
-  test("between 768 and 1023 px the detail is a modal sheet from the side, the list left whole", async ({
-    page,
-  }) => {
-    await page.setViewportSize({ width: 900, height: 800 });
-    await page.goto(story("operationslayout", "desktop"));
-    await expect(page.locator(ROW).first()).toBeVisible();
-
-    const listWidth = () =>
-      page
-        .locator('[data-slot="operations-scroller"]')
-        .evaluate((node) => Math.round(node.getBoundingClientRect().width));
-
-    const before = await listWidth();
-
-    const opening = await sampleFrames(
-      page,
-      [{ selector: '[role="dialog"]', text: LABEL, read: "left" }],
-      { trigger: openingRow(page) },
-    );
-
-    const dialog = page.getByRole("dialog", { name: "CB GREENMARKET 2110 RIVERTON" });
-
-    await expect(dialog).toBeVisible();
-    await expect.poll(() => page.evaluate(() => document.getAnimations().length)).toBe(0);
-
-    const rest = await dialog.evaluate((node) => Math.round(node.getBoundingClientRect().left));
-
-    // It slid in from the right edge, over the list, which kept its width: no column beside it.
-    expect(
-      timesWhen(opening, 0, (left) => left !== "none" && Number(left) > rest + 1).length,
-    ).toBeGreaterThan(1);
-    expect(await listWidth()).toBe(before);
-    await expect(page.locator('[data-slot="line-detail-content"]')).toHaveCount(0);
-  });
-});
 
 test.describe("Line detail on a phone", () => {
   // The sheet's top as drawn: its slide is a `translate`, which the box carries.
@@ -601,31 +471,48 @@ test.describe("Line detail on a phone", () => {
     page,
   }) => {
     await page.goto(story("operationslayout", "phone-next-line"));
-
-    const dialog = page.getByRole("dialog");
-    const title = dialog.locator('[id$="-title"]');
-
-    await expect(dialog).toBeVisible();
-
-    await restingTop(page);
-
-    const first = await title.textContent();
-
-    // The same element after: a sheet put up again would be a new one.
-    await dialog.evaluate((node) => node.setAttribute("data-e2e-first", ""));
-
-    const stepping = await sampleFrames(
-      page,
-      [{ selector: '[role="dialog"]', text: "", read: "top" }],
-      { trigger: dialog.getByRole("button", { name: "Next line" }) },
-      400,
-    );
-
-    await expect(title).not.toHaveText(first ?? "");
-    await expect(page.locator('[role="dialog"][data-e2e-first]')).toHaveCount(1);
-    expect(stepping.every(({ values }) => values[0] !== "none")).toBe(true);
-    // Still: its top jumps to the next line's height at once, never sliding there.
-    expect(new Set(stepping.map(({ values }) => values[0])).size).toBeLessThanOrEqual(2);
-    await expect(dialog.locator('[data-slot="line-review"]')).toBeFocused();
+    await stepsStill(page, "top");
   });
 });
+
+// #182: the side sheet, too, stays open from one line to the next, on a wide screen.
+test("on a wide screen, from one line to the next, the side sheet stays open and still, the focus on the next line", async ({
+  page,
+}, testInfo) => {
+  test.skip(testInfo.project.name === "phone", "A side sheet from 768 px on");
+  await page.goto(story("operationslayout", "next-line"));
+  await stepsStill(page, "left");
+});
+
+/**
+ * From the open line to the next (the story's "Next line"): the same sheet, never put up again,
+ * its title the next line's, its edge (`edge`: its top on a phone, its left on a wide screen) where
+ * it was or at the next line's height at once, never sliding; the focus on the next line's proposal.
+ */
+async function stepsStill(page: Page, edge: "top" | "left") {
+  const dialog = page.getByRole("dialog");
+  const title = dialog.locator('[id$="-title"]');
+
+  await expect(dialog).toBeVisible();
+
+  await restingTop(page);
+
+  const first = await title.textContent();
+
+  // The same element after: a sheet put up again would be a new one.
+  await dialog.evaluate((node) => node.setAttribute("data-e2e-first", ""));
+
+  const stepping = await sampleFrames(
+    page,
+    [{ selector: '[role="dialog"]', text: "", read: edge }],
+    { trigger: dialog.getByRole("button", { name: "Next line" }) },
+    400,
+  );
+
+  await expect(title).not.toHaveText(first ?? "");
+  await expect(page.locator('[role="dialog"][data-e2e-first]')).toHaveCount(1);
+  expect(stepping.every(({ values }) => values[0] !== "none")).toBe(true);
+  // Still: its edge jumps to the next line's place at once, never sliding there.
+  expect(new Set(stepping.map(({ values }) => values[0])).size).toBeLessThanOrEqual(2);
+  await expect(dialog.locator('[data-slot="line-review"]')).toBeFocused();
+}

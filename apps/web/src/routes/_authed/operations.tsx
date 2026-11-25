@@ -531,7 +531,7 @@ function Operations() {
   );
 }
 
-/** The open line's detail, once read: the detail opens at its full size, its column never empty. */
+/** The open line's detail, once read: the detail opens whole, its sheet never empty. */
 function useOpenedLine(openId: string | undefined) {
   const { data: opened } = useQuery({
     ...lineQueries.detail(openId ?? ""),
