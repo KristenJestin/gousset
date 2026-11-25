@@ -232,8 +232,14 @@ account's country writes them (`MM/DD/YYYY` for the US).
   the profile's `header` and `columns` describe the mandatory columns, in their order, for the
   import screen and the MCP door to show.
 - **A row counts when it moved the balance**: its `Status` is `Completed` (`Terminé`), and its
-  `Balance Impact`, when the file has the column, is not `Memo` (an authorisation, a cart's item
-  rows). Pending, denied, reversed or voided rows are left out.
+  `Balance Impact` is not `Memo`. Pending, denied, reversed or voided rows are left out. PayPal's
+  report says no more of a memo than "the impact of the transaction on the account balance:
+  `Debit`, `Credit`, or `Memo`"; its list of event codes (T-codes) names the events that move no
+  money: an authorisation, a reauthorisation and its void (`T13`), a display-only row (`T9800`).
+  Such a row is `Completed` like a payment, and its `Type` is the event's description in the
+  account's language, which no list of the reader's would follow: only `Balance Impact` tells it.
+  So an export without that column, which PayPal selects by default, is refused
+  (`MalformedFile`, naming it): a voided authorisation would otherwise be read as money received.
 - **In the account's currency**: a row in another moves another balance, and is left out. A payment
   in another currency is taken from this one by its conversion, a row in the account's currency
   that names nobody and refers to the payment (`Reference Txn ID`): when the payment it refers to is

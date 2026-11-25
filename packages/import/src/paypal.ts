@@ -14,7 +14,8 @@ import { cleanValue } from "./text";
 // report, read as the statement of a PayPal account. The report lets its user choose its columns,
 // and names them in the account's language, so they are found by their names; its days and amounts
 // are written as the account's country writes them, so they are read as the file shows them. Only
-// the rows that moved the balance count: completed, and not a memo. A payment in another currency
+// the rows that moved the balance count: completed, and not a memo, which only the Balance Impact
+// column tells, so an export without it is refused. A payment in another currency
 // is taken from the balance by its conversion, which names nobody: the conversion is the line, and
 // it takes the payment's name and amount.
 
@@ -185,7 +186,7 @@ type Movement = {
   readonly reference: string;
 };
 
-/** The rows that moved the balance: completed, and not a memo when the export says. */
+/** The rows that moved the balance: completed, and not a memo. */
 function movementsOf(rows: ReadonlyArray<CsvRow>, { at }: Columns): Array<Movement> {
   return rows.flatMap((row) => {
     const completed = COMPLETED.has(plain(textOf(row, at.status)));
@@ -343,7 +344,8 @@ const lineOf = (movement: Movement, at: Columns["at"], reading: Reading) =>
 /**
  * The lines of PayPal's activity, from its header row and the rows below it, in the file's order:
  * the rows that moved the balance in the account's currency (every currency when it is not
- * checked). Fails with `MalformedFile` when the header lacks a column the report always has.
+ * checked). Fails with `MalformedFile` when the header lacks a column the report always has, or
+ * Balance Impact.
  */
 export const readPaypalRows = (
   header: CsvRow,
@@ -357,6 +359,16 @@ export const readPaypalRows = (
       return yield* new MalformedFile({
         line: header.line,
         problem: `No column named ${columns.missing}: the file is not PayPal's activity, or that column was left out of it.`,
+      });
+    }
+
+    // A memo (an authorisation, its void, a display-only row) is completed like a payment and moved
+    // no money: without the column that says so, the reader would count it (README).
+    if (columns.at.balanceImpact === undefined) {
+      return yield* new MalformedFile({
+        line: header.line,
+        problem:
+          "No column named Balance Impact: without it, the rows that moved no money (an authorisation, its void) cannot be told from those that did. Export it again with that column, which PayPal selects by default.",
       });
     }
 
