@@ -192,6 +192,69 @@ describe("the untouched defaults, in the user's language", () => {
     expect(renames.get("expense/Housing/Rent")).toBe("Loyer");
   });
 
+  test("a default renamed by hand to the other language's name stays the user's", () => {
+    // The English set; the user named a top-level category and a child in French (#218).
+    const rows = heldSet("en").map((row) => {
+      switch (row.id) {
+        case "expense/Groceries": {
+          return { ...row, name: "Courses" };
+        }
+
+        case "expense/Health/Pharmacy": {
+          return { ...row, name: "Pharmacie" };
+        }
+
+        default: {
+          return row;
+        }
+      }
+    });
+
+    // A first page in English, the set's language: nothing to rename, nothing renamed back.
+    expect(renamesInto(rows, "en")).toEqual([]);
+
+    // In French: the untouched ones are renamed; the user's two kept, with the children of theirs.
+    const renames = renamed(rows, "fr");
+
+    expect(renames.has("expense/Groceries")).toBe(false);
+    expect(renames.has("expense/Groceries/Supermarket")).toBe(false);
+    expect(renames.has("expense/Health/Pharmacy")).toBe(false);
+    expect(renames.get("expense/Health")).toBe("Santé");
+    expect(renames.get("expense/Health/Doctor")).toBe("Médecin");
+  });
+
+  test("in a set made in French, a name given in English stays", () => {
+    const rows = heldSet("fr").map((row) =>
+      row.id === "expense/Logement" ? { ...row, name: "Housing" } : row,
+    );
+
+    expect(renamesInto(rows, "fr")).toEqual([]);
+    expect(renamed(rows, "en").has("expense/Logement")).toBe(false);
+    expect(renamed(rows, "en").get("expense/Courses")).toBe("Groceries");
+  });
+
+  test("when the defaults tell no language of the set, nothing is renamed", () => {
+    // As many named in English as in French: which ones the user renamed cannot be told.
+    const rows = heldSet("en").flatMap((row) => {
+      switch (row.id) {
+        case "expense/Other": {
+          return [row];
+        }
+
+        case "income/Other": {
+          return [{ ...row, name: "Autre" }];
+        }
+
+        default: {
+          return [];
+        }
+      }
+    });
+
+    expect(renamesInto(rows, "fr")).toEqual([]);
+    expect(renamesInto(rows, "en")).toEqual([]);
+  });
+
   test("a category of the user's own with a default's name is not the fallback", () => {
     const rows = heldSet("en").map((row) =>
       row.id === "expense/Other" ? { ...row, fallback: false } : row,

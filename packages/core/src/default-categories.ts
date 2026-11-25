@@ -268,28 +268,20 @@ export type DefaultRename = { readonly id: string; readonly name: string };
 
 const LANGUAGES: ReadonlyArray<SetLanguage> = ["en", "fr"];
 
-const isNameOf = (slot: DefaultName, name: string) =>
-  LANGUAGES.some((language) => slot[language] === name);
-
 /**
- * What renames a user's untouched defaults into `language`. A default is untouched while it sits
- * where the set put it, not archived, with a name the set gives it in one of its languages: a
- * top-level category at the top of its kind (a fallback only as its kind's fallback), a child under
- * an untouched top-level category of the set. What the user renamed, moved or archived is theirs,
- * and so are the children of a top-level category they renamed. A name a sibling already holds
- * (letter case aside) is left as it is.
+ * The live categories that sit where the set put them with a name `named` accepts, each with its
+ * place in the set: a top-level category at the top of its kind (a fallback only as its kind's
+ * fallback), a child under such a top-level category.
  */
-export function renamesInto(
-  rows: ReadonlyArray<HeldCategory>,
-  language: SetLanguage,
-): ReadonlyArray<DefaultRename> {
-  const live = rows.filter((row) => !row.archived);
-
+function placed(
+  live: ReadonlyArray<HeldCategory>,
+  named: (slot: DefaultName, name: string) => boolean,
+) {
   const tops = live.flatMap((row) => {
     const slot =
       row.parentId === null
         ? DEFAULT_CATEGORIES[row.kind].find(
-            (top) => isNameOf(top, row.name) && (top.fallback === true) === row.fallback,
+            (top) => named(top, row.name) && (top.fallback === true) === row.fallback,
           )
         : undefined;
 
@@ -300,10 +292,59 @@ export function renamesInto(
 
   const children = live.flatMap((row) => {
     const parent = row.parentId === null ? undefined : slotOfTop.get(row.parentId);
-    const slot = parent?.children.find((child) => isNameOf(child, row.name));
+    const slot = parent?.children.find((child) => named(child, row.name));
 
     return slot === undefined ? [] : [{ row, slot }];
   });
+
+  return [...tops, ...children];
+}
+
+/**
+ * The language a user's set was written in, as their categories tell it (#218). The set is written
+ * whole in one language (by the migration, at sign-up, or by the administrator's creation), and the
+ * user may since have renamed a default to the other language's name: the set's language is the
+ * one more of the defaults where the set put them are named in, a name both languages share telling
+ * nothing. None when as many are named in each: what the user renamed cannot be told then.
+ */
+function languageOfSet(live: ReadonlyArray<HeldCategory>): SetLanguage | undefined {
+  const inPlace = placed(live, (slot, name) => LANGUAGES.some((each) => slot[each] === name));
+
+  const named = LANGUAGES.map((language) => ({
+    language,
+    count: inPlace.filter(
+      ({ row, slot }) =>
+        slot[language] === row.name &&
+        LANGUAGES.every((other) => other === language || slot[other] !== row.name),
+    ).length,
+  })).toSorted((a, b) => b.count - a.count);
+
+  const [first, second] = named;
+
+  return first === undefined || first.count === (second?.count ?? 0) ? undefined : first.language;
+}
+
+/**
+ * What renames a user's untouched defaults into `language`. A default is untouched while it sits
+ * where the set put it, not archived, with the name the set gave it in the language it was written
+ * in (`languageOfSet`): a top-level category at the top of its kind (a fallback only as its kind's
+ * fallback), a child under an untouched top-level category of the set. What the user renamed (to
+ * the other language's name too), moved or archived is theirs, and so are the children of a
+ * top-level category they renamed. A name a sibling already holds (letter case aside) is left as
+ * it is.
+ */
+export function renamesInto(
+  rows: ReadonlyArray<HeldCategory>,
+  language: SetLanguage,
+): ReadonlyArray<DefaultRename> {
+  const live = rows.filter((row) => !row.archived);
+  const written = languageOfSet(live);
+
+  if (written === undefined) {
+    return [];
+  }
+
+  const untouched = placed(live, (slot, name) => slot[written] === name);
 
   // The names each set of siblings holds, as the renames change them.
   const siblingsOf = (row: HeldCategory) => `${row.kind}/${row.parentId ?? ""}`;
@@ -316,7 +357,7 @@ export function renamesInto(
     taken.set(siblingsOf(row), names);
   }
 
-  return [...tops, ...children].flatMap(({ row, slot }) => {
+  return untouched.flatMap(({ row, slot }) => {
     const name = slot[language];
     const names = taken.get(siblingsOf(row));
 
