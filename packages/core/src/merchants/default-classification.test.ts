@@ -17,6 +17,7 @@ const entry = (change: Partial<DefaultEntry> = {}): DefaultEntry => ({
   categoryId: "other-expense",
   classifiedBy: "default",
   merchantId: "greenmarket",
+  operation: null,
   ...change,
 });
 
@@ -148,6 +149,73 @@ describe("a merchant's default category", () => {
         [entry({ id: "new" }), entry({ id: "kept", categoryId: "groceries" })],
         archived,
         FALLBACKS,
+      ),
+    ).toEqual([]);
+  });
+});
+
+describe("an operation's category (#194)", () => {
+  // The user's categories marked with an operation, by kind: Bank fees (expense) takes the fees,
+  // Interest (income) the interest; no category takes the loans.
+  const OPERATIONS = new Map([
+    ["expense/fee", "bank-fees"],
+    ["income/interest", "interest"],
+  ]);
+
+  test("takes the entries of its operation's lines, of its kind, still classified by default", () => {
+    expect(
+      defaultCategoryMoves(
+        [
+          entry({ id: "fee", merchantId: null, operation: "fee" }),
+          entry({
+            id: "interest",
+            kind: "income",
+            categoryId: "other-income",
+            merchantId: null,
+            operation: "interest",
+          }),
+        ],
+        defaults(),
+        FALLBACKS,
+        OPERATIONS,
+      ),
+    ).toEqual([
+      { entryId: "fee", categoryId: "bank-fees" },
+      { entryId: "interest", categoryId: "interest" },
+    ]);
+  });
+
+  test("leaves an entry of no such category, of the other kind, or classified already", () => {
+    expect(
+      defaultCategoryMoves(
+        [
+          entry({ id: "loan", merchantId: null, operation: "loan" }),
+          entry({
+            id: "fee-back",
+            kind: "income",
+            categoryId: "other-income",
+            merchantId: null,
+            operation: "fee",
+          }),
+          entry({ id: "debit-interest", merchantId: null, operation: "interest" }),
+          entry({ id: "user", merchantId: null, operation: "fee", classifiedBy: "user" }),
+          entry({ id: "rule", merchantId: null, operation: "fee", classifiedBy: "rule" }),
+          entry({ id: "there", merchantId: null, operation: "fee", categoryId: "bank-fees" }),
+        ],
+        defaults(),
+        FALLBACKS,
+        OPERATIONS,
+      ),
+    ).toEqual([]);
+  });
+
+  test("with none marked, or archived and so left out, it moves nothing", () => {
+    expect(
+      defaultCategoryMoves(
+        [entry({ id: "fee", merchantId: null, operation: "fee", categoryId: "taxes" })],
+        defaults(),
+        FALLBACKS,
+        new Map(),
       ),
     ).toEqual([]);
   });

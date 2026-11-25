@@ -1,0 +1,111 @@
+{
+  "type": "diff",
+  "version": "10",
+  "dialect": "postgres",
+  "id": "eb43fb20-8bcd-4b73-ae3f-9d687feb8be3",
+  "prevIds": ["c3ee363f-ee9e-4146-9a44-e0276cde8ab0"],
+  "footprints": [
+    {
+      "statementType": "create_enum",
+      "statementTarget": ["enum", "public", "category_operation"],
+      "writes": [
+        "s|enum|public.category_operation",
+        "n|enum|public.category_operation",
+        "e|enum|public.category_operation",
+        "n|type|public.category_operation"
+      ],
+      "reads": ["n|sch|public"]
+    },
+    {
+      "statementType": "add_column",
+      "statementTarget": ["column", "public", "category", "operation"],
+      "writes": [
+        "s|col|public.category.operation",
+        "n|col|public.category.operation",
+        "e|col|public.category.operation"
+      ],
+      "reads": ["n|tbl|public.category", "n|sch|public", "n|enum|public.category_operation"]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": ["index", "public", "category", "category_one_per_operation"],
+      "writes": [
+        "s|idx|public.category_one_per_operation",
+        "n|idx|public.category_one_per_operation",
+        "e|idx|public.category_one_per_operation",
+        "n|rel|public.category_one_per_operation"
+      ],
+      "reads": [
+        "n|tbl|public.category",
+        "n|sch|public",
+        "n|col|public.category.user_id",
+        "n|col|public.category.kind",
+        "n|col|public.category.operation"
+      ]
+    }
+  ],
+  "deltas": [
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "name": "category_operation",
+        "values": ["loan", "fee", "interest"],
+        "entityType": "enums"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "category",
+        "name": "operation",
+        "type": "category_operation",
+        "typeSchema": "public",
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "category",
+        "name": "category_one_per_operation",
+        "nameExplicit": true,
+        "columns": [
+          {
+            "value": "user_id",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          },
+          {
+            "value": "kind",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          },
+          {
+            "value": "operation",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          }
+        ],
+        "isUnique": true,
+        "where": "\"operation\" is not null",
+        "with": "",
+        "method": "btree",
+        "entityType": "indexes"
+      }
+    }
+  ]
+}
