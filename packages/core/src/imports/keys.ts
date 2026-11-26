@@ -1,5 +1,7 @@
 import { createHash } from "node:crypto";
 
+import type { CsvLayout } from "@gousset/import";
+
 // How an import recognises a line it already has (docs/data-model.md, "Imports and
 // deduplication"): each line read gets a dedup key, and the unique key `(account_id, dedup_key)`
 // decides what is added. A line with no exact match may still be the same payment read another way:
@@ -37,17 +39,28 @@ function contentOf(line: KeyedLine): string {
     .digest("hex");
 }
 
+/** The CSV layouts whose bank id is unique: PayPal's transaction id, one per row (#201). */
+const UNIQUE_LAYOUT_IDS: ReadonlySet<CsvLayout> = new Set(["paypal-activity"]);
+
 /**
- * Each line's dedup key, in the file's order: `bank:` and the bank's id where the format makes it
- * unique and the line has one; otherwise `content:`, the SHA-256 of the booking date, the amount
- * and the label, and the occurrence of that triple in the file, so that two identical coffees of
- * one day are `…#1` and `…#2` and stay two.
+ * Each line's dedup key, in the file's order: `bank:` and the bank's id where the format, or the
+ * CSV profile's `layout`, makes it unique and the line has one; otherwise `content:`, the SHA-256
+ * of the booking date, the amount and the label, and the occurrence of that triple in the file, so
+ * that two identical coffees of one day are `…#1` and `…#2` and stay two.
  */
-export function dedupKeys(format: ImportFormat, lines: ReadonlyArray<KeyedLine>): Array<string> {
+export function dedupKeys(
+  format: ImportFormat,
+  lines: ReadonlyArray<KeyedLine>,
+  layout?: CsvLayout,
+): Array<string> {
   const occurrences = new Map<string, number>();
 
+  const unique =
+    UNIQUE_BANK_IDS.has(format) ||
+    (format === "csv" && layout !== undefined && UNIQUE_LAYOUT_IDS.has(layout));
+
   return lines.map((line) => {
-    if (UNIQUE_BANK_IDS.has(format) && line.bankId !== null && line.bankId !== "") {
+    if (unique && line.bankId !== null && line.bankId !== "") {
       return `${BANK}${line.bankId}`;
     }
 

@@ -261,6 +261,16 @@ export function openUserData(database: string) {
       return found.id;
     },
 
+    /** Whether the default categories of the user of this e-mail are marked as in their language. */
+    async defaultsSettled(email: string): Promise<boolean | undefined> {
+      const [found] = await db
+        .select({ settled: authUser.defaultCategoriesSettled })
+        .from(authUser)
+        .where(eq(authUser.email, email));
+
+      return found?.settled;
+    },
+
     /**
      * The made-up data of two months, and a CSV profile, as `owner`'s rows, with the merchants of its
      * lines recognised as the app does at boot (the seed writes lines, not merchants). A user who

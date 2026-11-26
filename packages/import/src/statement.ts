@@ -12,6 +12,14 @@ export type Counterparty = {
   iban: string | null;
 };
 
+/** What a line paid or received in a currency other than its statement's, as the file says. */
+export type OriginalAmount = {
+  /** In minor units of `currency`, signed as the line is. */
+  readonly amountMinor: number;
+  /** Its ISO 4217 code. */
+  readonly currency: string;
+};
+
 /** One line of a statement, as the file gives it. */
 export type StatementLine = {
   /**
@@ -46,6 +54,11 @@ export type StatementLine = {
   bankId: string | null;
   /** Who paid or was paid, when the file names them (CAMT.053, MT940); `null` otherwise. */
   counterparty: Counterparty | null;
+  /**
+   * What the line was in another currency, when the file says so (PayPal's activity, a payment
+   * converted: README); left out otherwise.
+   */
+  original?: OriginalAmount;
 };
 
 /** The account's balance at the end of the day `on`, every line booked that day included. */

@@ -55,6 +55,10 @@ export const authUser = pgTable("auth_user", {
   // account's by default. Its check (three capital letters) lives in its migration
   // (migrations/*_user_currency), since `pnpm auth:generate` rewrites this file.
   currency: text("currency").default("EUR").notNull(),
+  // Whether the user's default categories are in their language (#195): set at sign-up, which
+  // makes them so; false for a user made before, or by the administrator, until their first
+  // signed-in page renames the defaults they never touched (packages/core, default-categories.ts).
+  defaultCategoriesSettled: boolean("default_categories_settled").default(false).notNull(),
 });
 
 export const authSession = pgTable(

@@ -13,7 +13,11 @@ import type { Look } from "./look";
 import { merchantKey } from "./merchants/labels";
 import { monthRowsIn } from "./month-rows";
 import { reviewQueue } from "./review-queue";
-import { detectSubscriptions, subscriptionsOfMonth } from "./subscriptions/detection";
+import {
+  detectSubscriptions,
+  subscriptionId,
+  subscriptionsOfMonth,
+} from "./subscriptions/detection";
 import type { Charge } from "./subscriptions/detection";
 import {
   chargeRange,
@@ -90,6 +94,11 @@ export type StatementReach = {
   readonly accountId: string;
   readonly importedTo: string | null;
   readonly statementTo: string | null;
+  /**
+   * Kept by hand: no import ever done, no statement balance, and lines entered by hand (a benefit
+   * account without a file, #235). It expects no statement.
+   */
+  readonly keptByHand: boolean;
 };
 
 /** What one read of the month asks for, every range decided by the logic. */
@@ -314,7 +323,7 @@ export type ImportState = {
   readonly month: string;
   /** The day they should reach: the month's last, or today in the month under way. */
   readonly expected: string;
-  /** The open accounts kept by their lines that existed in the month. */
+  /** The open accounts kept by their lines that existed in the month, but those kept by hand. */
   readonly accounts: number;
   /** Those whose statements reach `expected`. */
   readonly imported: number;
@@ -333,6 +342,8 @@ export type MonthFlag =
     }
   | {
       readonly kind: "price-rise";
+      /** Its subscription's (`subscriptionId`): one merchant may have several. */
+      readonly subscriptionId: string;
       readonly merchant: string;
       readonly merchantId: string;
       /** How the merchant is shown (#204). */
@@ -342,6 +353,8 @@ export type MonthFlag =
     }
   | {
       readonly kind: "stopped";
+      /** Its subscription's (`subscriptionId`): one merchant may have several. */
+      readonly subscriptionId: string;
       readonly merchant: string;
       readonly merchantId: string;
       /** How the merchant is shown (#204). */
@@ -976,10 +989,12 @@ function importStateOf(reading: Reading): ImportState {
   const expected = earlier(last, reading.today);
   const reach = new Map(reading.rows.reach.map((row) => [row.accountId, row]));
 
-  // The open accounts kept by their lines, opened by the month's end and not closed before it.
+  // The open accounts kept by their lines, opened by the month's end and not closed before it;
+  // one kept by hand, never imported, expects no file (#235).
   const counted = reading.rows.accounts.filter(
     (account) =>
       account.mode === "lines" &&
+      reach.get(account.id)?.keptByHand !== true &&
       (account.openedOn === null || account.openedOn <= last) &&
       (account.closedOn === null || account.closedOn >= first),
   );
@@ -1049,6 +1064,7 @@ function flagsOf(
       : [
           {
             kind: "price-rise",
+            subscriptionId: subscriptionId(each),
             merchant: each.merchant,
             merchantId: each.merchantId,
             look: each.look,
@@ -1060,6 +1076,7 @@ function flagsOf(
 
   const stopped = detected.stopped.map((each): MonthFlag => ({
     kind: "stopped",
+    subscriptionId: subscriptionId(each),
     merchant: each.merchant,
     merchantId: each.merchantId,
     look: each.look,

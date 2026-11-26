@@ -2,7 +2,15 @@ import fc from "fast-check";
 import { describe, expect, test } from "vite-plus/test";
 
 import { isKnownIntermediary } from "./intermediaries";
-import { MAX_KEY_LENGTH, assignMerchants, merchantKey, merchantName, nameKey } from "./labels";
+import {
+  MAX_KEY_LENGTH,
+  assignMerchants,
+  formerMerchantKey,
+  merchantKey,
+  merchantName,
+  nameKey,
+  operationOf,
+} from "./labels";
 import type { KnownKey } from "./labels";
 
 // Every label, shop, town and person here is invented.
@@ -68,18 +76,20 @@ const LABELS: ReadonlyArray<readonly [string, string, string | null]> = [
     "VIR INST DE: ACME CONSEIL MOTIF: PRIME",
     "ACME CONSEIL",
   ],
+  // A transfer names its party only through a marker (#194): free text names no one.
+  ["French transfer, free text", "VIR SEPA ACME CONSEIL SALAIRE OCTOBRE", null],
   [
-    "French transfer, free text kept",
-    "VIR SEPA ACME CONSEIL SALAIRE OCTOBRE",
-    "ACME CONSEIL SALAIRE OCTOBRE",
+    "French transfer, a party marker /BEN",
+    "VIR SEPA EMIS /BEN CAMILLE EXEMPLE /REF 42",
+    "CAMILLE EXEMPLE",
   ],
   [
     "French transfer, /FRM and a legal form",
     "VIREMENT RECU /FRM ACME CONSEIL SAS /REF REM-2026-10",
     "ACME CONSEIL",
   ],
-  // French banks: fees keep a key, withdrawals give none.
-  ["French account fee", "FRAIS TENUE DE COMPTE", "FRAIS TENUE DE COMPTE"],
+  // French banks: a fee's prefix names no one (#194), nor does a withdrawal.
+  ["French account fee", "FRAIS TENUE DE COMPTE", null],
   ["French overdraft fee", "COMMISSION D'INTERVENTION 21/10", "COMMISSION D'INTERVENTION"],
   ["French card fee", "COTISATION CARTE VISA CLASSIC", "COTISATION CARTE VISA CLASSIC"],
   ["French withdrawal, DAB", "RETRAIT DAB 21/10 RIVERTON", null],
@@ -161,6 +171,25 @@ const LABELS: ReadonlyArray<readonly [string, string, string | null]> = [
   ["only payment words", "CB VISA", null],
   ["an empty label", "", null],
   ["only spaces", "   ", null],
+  // Operation prefixes (#194): what the line is, never its merchant.
+  ["a card cancellation names the shop", "ANN CARTE SHOPLY 12/10 RIVERTON", "SHOPLY"],
+  ["a card cancellation, the town kept", "ANN CARTE SHOPLY RIVERTON", "SHOPLY RIVERTON"],
+  ["a card cancellation, lower case", "Ann Carte Shoply 12/10", "SHOPLY"],
+  ["a loan instalment", "ECH PRET 0000001", null],
+  ["a loan instalment with words", "ECH PRET IMMO 0000001 12/10", null],
+  ["a fee, F", "F COTISATION CARTE", null],
+  ["a fee, FRAIS", "FRAIS COMMISSION INTERVENTION 12/10", null],
+  ["interest alone", "INTERETS", null],
+  ["interest, accents", "Intérêts créditeurs 2026", null],
+  ["a cheque deposit", "REMISE CHEQUE 0001234", null],
+  ["a withdrawal, RETRAIT alone", "RETRAIT RIVERTON 21/10", null],
+  ["a transfer between one's own accounts", "VIR DE EPARGNE", null],
+  // A prefix is matched whole, with its space.
+  ["F is no fee at a word's start", "FERNWOOD 21/10 RIVERTON", "FERNWOOD"],
+  ["F is no fee after a card's prefix", "CB FERNWOOD 21/10", "FERNWOOD"],
+  ["FRAIS glued to a name is no fee", "FRAISERIE DU COIN 21/10", "FRAISERIE DU COIN"],
+  ["RETRAIT glued to a name is no withdrawal", "CB RETRAITE DOUCE 21/10", "RETRAITE DOUCE"],
+  ["VIR glued to a name is no transfer", "CB VIRAGO 21/10", "VIRAGO"],
 ];
 
 describe("merchant key of a label", () => {
@@ -179,6 +208,31 @@ describe("merchant key of a label", () => {
 
   test("a cash withdrawal has no merchant, whatever the counterparty", () => {
     expect(merchantKey("RETRAIT DAB 21/10", "Riverton Savings")).toBeNull();
+  });
+
+  test("a payment and its cancellation name one shop", () => {
+    expect(merchantKey("ANN CARTE SHOPLY 12/10 RIVERTON", null)).toBe(
+      merchantKey("CB SHOPLY 10/10 RIVERTON", null),
+    );
+  });
+
+  test("a loan, a fee, interest, a cheque deposit name no one, whatever the counterparty", () => {
+    for (const label of [
+      "ECH PRET 0000001",
+      "F COTISATION CARTE",
+      "INTERETS",
+      "REMISE CHEQUE 0001234",
+      "RETRAIT RIVERTON",
+    ]) {
+      expect(merchantKey(label, "Riverton Savings")).toBeNull();
+    }
+  });
+
+  test("a shop named like a prefix it does not start with is no operation", () => {
+    // `VIREMENT` is a payment word that a name's start loses (README, "Known limits").
+    expect(operationOf("VIREMENT GRATUIT 21/10")).toBeNull();
+    expect(merchantKey("VIREMENT GRATUIT 21/10", null)).toBe("GRATUIT");
+    expect(operationOf("FERNWOOD")).toBeNull();
   });
 
   test("a free text stops at the longest key, on a word, and its name is no longer", () => {
@@ -234,6 +288,15 @@ describe("merchant key of a label", () => {
     "ß",
     "ATM",
     "10:15",
+    "ANN CARTE",
+    "ANN",
+    "F",
+    "FRAIS",
+    "ECH PRET",
+    "INTERETS",
+    "REMISE CHEQUE",
+    "RETRAIT",
+    "VIR SEPA",
   );
 
   const labels = fc.oneof(
@@ -270,6 +333,52 @@ describe("merchant key of a label", () => {
       }),
       { numRuns: 2000 },
     );
+  });
+});
+
+describe("operation of a label", () => {
+  test.each([
+    ["CB SHOPLY 10/10", "card"],
+    ["CARTE X1234 SHOPLY", "card"],
+    ["ANN CARTE SHOPLY 12/10", "card_cancellation"],
+    ["PRLV SEPA STREAMFLIX", "direct_debit"],
+    ["VIR DE EPARGNE", "transfer"],
+    ["VIR SEPA RECU /DE ACME CONSEIL", "transfer"],
+    ["ECH PRET 0000001", "loan"],
+    ["F COTISATION CARTE", "fee"],
+    ["FRAIS TENUE DE COMPTE", "fee"],
+    ["INTERETS", "interest"],
+    ["  intérêts  créditeurs", "interest"],
+    ["REMISE CHEQUE 0001234", "cheque_deposit"],
+    ["RETRAIT DAB 21/10", "withdrawal"],
+  ])("%s is a %s", (label, operation) => {
+    expect(operationOf(label)).toBe(operation);
+  });
+
+  test.each(["FERNWOOD", "VIREMENT GRATUIT", "FRAISERIE", "CB*4821 SHOPLY", "ANNCARTE", ""])(
+    "%s has no operation prefix",
+    (label) => {
+      expect(operationOf(label)).toBeNull();
+    },
+  );
+});
+
+describe("former key of a label, before the operation prefixes", () => {
+  test.each([
+    ["ANN CARTE SHOPLY RIVERTON", null, "ANN CARTE SHOPLY RIVERTON"],
+    ["ANN CARTE 12/10 SHOPLY", null, "ANN"],
+    ["F COTISATION CARTE", null, "F COTISATION"],
+    ["FRAIS TENUE DE COMPTE", null, "FRAIS TENUE DE COMPTE"],
+    ["ECH PRET 0000001", null, "ECH PRET"],
+    ["INTERETS", null, "INTERETS"],
+    ["REMISE CHEQUE 0001234", null, "REMISE CHEQUE"],
+    ["RETRAIT RIVERTON 21/10", null, "RETRAIT RIVERTON"],
+    ["VIR DE EPARGNE", null, "DE EPARGNE"],
+    ["VIR SEPA RECU REF 12345", "Acme Conseil SAS", "ACME CONSEIL"],
+    ["CB GREENMARKET 2110 RIVERTON", null, "GREENMARKET"],
+    ["RETRAIT DAB 21/10", null, null],
+  ])("%s (counterparty %s) was %s", (label, counterparty, key) => {
+    expect(formerMerchantKey(label, counterparty)).toBe(key);
   });
 });
 

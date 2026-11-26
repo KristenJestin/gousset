@@ -107,7 +107,7 @@ From Anthropic's [Writing effective tools for agents](https://www.anthropic.com/
 Two guards, held by tests, say when the list grows too big to be read well:
 
 - at most **15 tools**;
-- at most **44,000 characters** of definitions in the listing (raised from 30,000: about ten tools of up to 4,000 characters each; raised from 40,000 for #32 and #35 by the lead, under the owner's delegation, pending his confirmation);
+- at most **44,000 characters** of definitions in the listing (raised from 30,000: about ten tools of up to 4,000 characters each; raised from 40,000 for #32 and #35, confirmed by the maintainer on 2026-11-25);
 - every **description under 4,000 characters**, within Claude Code's cut of 4,096 for an upfront tool. An older version cuts at 2,048: the important part comes first, so that what it keeps still says what the tool does, with an example call when an argument is easy to get wrong.
 
 They are not a number to trim to. **A tool keeps the description and the example it needs; a new tool is never paid for by shortening another, and a review refuses such a trim.** When a guard fails, nobody trims: the maintainer decides.

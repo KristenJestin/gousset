@@ -307,7 +307,119 @@ test.describe("Switch", () => {
     await page.emulateMedia({ reducedMotion: "reduce" });
     await expect(thumb).toHaveCSS("transition-duration", "0s");
   });
+
+  // Issue #224: a switch a page saves says so until the save ends.
+  test("a switch being saved is busy at once, keeps its value and its focus, and shows the loader after about 300 ms", async ({
+    page,
+  }) => {
+    await page.goto(story("switch", "slow-save"));
+
+    const control = page.getByRole("switch", { name: "Hide amounts on screen" });
+
+    await expect(control).not.toHaveAttribute("aria-busy", "true");
+
+    const timeline = await switchLoaderTimeline(control, 2300);
+
+    // Busy and on during the 1.5 s save; the loader from about 300 ms, never before.
+    expect(timeline.busyFirst ?? Number.NaN).toBeLessThan(200);
+    expect(timeline.first).not.toBeNull();
+    expect(timeline.first ?? 0).toBeGreaterThanOrEqual(280);
+    expect(timeline.last ?? 0).toBeGreaterThan(1400);
+    await expect(control).not.toHaveAttribute("aria-busy", "true");
+    await expect(control.locator('[data-slot="loader"]')).toHaveCount(0);
+    await expect(control).toBeChecked();
+    await expect(control).toBeFocused();
+  });
+
+  test("a switch saved fast is busy but never shows the loader", async ({ page }) => {
+    await page.goto(story("switch", "fast-save"));
+
+    const control = page.getByRole("switch", { name: "Hide amounts on screen" });
+    const timeline = await switchLoaderTimeline(control, 900);
+
+    expect(timeline.busyFirst).not.toBeNull();
+    expect({ first: timeline.first, last: timeline.last }).toEqual({ first: null, last: null });
+    await expect(control).toBeChecked();
+  });
+
+  test("a pending switch stays named and focusable; its loader only pulses under reduced motion", async ({
+    page,
+  }) => {
+    await page.goto(story("switch", "pending"));
+
+    const control = page.getByRole("switch", { name: "Hide amounts on screen" });
+    const coin = control.locator('[data-slot="loader"] circle');
+
+    await expect(control).toHaveAttribute("aria-busy", "true");
+    await expect(control).toBeEnabled();
+    await expect(control).toHaveAccessibleName("Hide amounts on screen");
+    await control.focus();
+    await expect(control).toBeFocused();
+    await expect(coin).toHaveCSS("animation-name", "coin-fall");
+    await page.emulateMedia({ reducedMotion: "reduce" });
+    await expect(coin).toHaveCSS("animation-name", "coin-pulse");
+  });
 });
+
+/**
+ * Clicks the switch (a real pointer click, as ui-sdk listens to it) and samples, at every frame for
+ * `forMs` from the press, when it is busy and when its loader is drawn: the times each first showed,
+ * and the loader's last, or null. The listener is in place before the click, and the result is
+ * written on the switch, so a click that came first cannot leave the test waiting forever.
+ */
+async function switchLoaderTimeline(control: Locator, forMs: number) {
+  await control.evaluate((element, duration) => {
+    let busyFirst: number | null = null;
+    let first: number | null = null;
+    let last: number | null = null;
+
+    element.addEventListener(
+      "pointerdown",
+      () => {
+        const start = performance.now();
+
+        const sample = () => {
+          const now = performance.now() - start;
+
+          if (element.getAttribute("aria-busy") === "true") {
+            busyFirst ??= now;
+          }
+
+          if (element.querySelector('[data-slot="loader"]') !== null) {
+            first ??= now;
+            last = now;
+          }
+
+          if (now < duration) {
+            requestAnimationFrame(sample);
+          } else {
+            element.dataset.busyFirst = busyFirst === null ? "none" : String(busyFirst);
+            element.dataset.loaderFirst = first === null ? "none" : String(first);
+            element.dataset.loaderLast = last === null ? "none" : String(last);
+          }
+        };
+
+        requestAnimationFrame(sample);
+      },
+      { once: true },
+    );
+  }, forMs);
+
+  await control.click();
+  await expect(control).toHaveAttribute("data-loader-last", /.+/, { timeout: forMs + 5000 });
+
+  const read = async (name: string) => {
+    const value = await control.getAttribute(name);
+
+    return value === null || value === "none" ? null : Number(value);
+  };
+
+  return {
+    busyFirst: await read("data-busy-first"),
+    first: await read("data-loader-first"),
+    last: await read("data-loader-last"),
+  };
+}
 
 test.describe("DatePicker", () => {
   test("a date picker opens and picks a day with the keyboard", async ({ page }) => {

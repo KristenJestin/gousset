@@ -147,13 +147,21 @@ export async function monthRowsIn(
     .where(and(eq(accountBalance.source, "statement"), lte(accountBalance.day, scope.statementsTo)))
     .groupBy(accountBalance.accountId);
 
+  // The accounts with lines entered by hand: those never imported are kept by hand (#235).
+  const manual = await transaction
+    .selectDistinct({ accountId: statementLine.accountId })
+    .from(statementLine)
+    .where(eq(statementLine.source, "manual"));
+
   const importedOf = new Map(imported.map((row) => [row.accountId, row.to]));
   const statementOf = new Map(statements.map((row) => [row.accountId, row.to]));
+  const byHand = new Set(manual.map((row) => row.accountId));
 
   const reach = accounts.map((each): StatementReach => ({
     accountId: each.id,
     importedTo: importedOf.get(each.id) ?? null,
     statementTo: statementOf.get(each.id) ?? null,
+    keptByHand: byHand.has(each.id) && !importedOf.has(each.id) && !statementOf.has(each.id),
   }));
 
   return {

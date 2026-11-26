@@ -5,7 +5,9 @@ import type { CsvProfile } from "./csv-profile";
 // style, never by a bank, and recognises its files by their header alone. They are the styles
 // detection cannot settle by itself: a statement whose days are all the 12th or before reads both
 // day first and month first, and columns named "Paid out" and "Paid in" say no direction detection
-// knows. A file in a style detection settles needs no shipped profile.
+// knows. A file in a style detection settles needs no shipped profile. PayPal's activity is the one
+// named by its institution (#201): a payment service, not a bank's style, whose export is no table
+// of one line per row (`layout`, README, "PayPal's activity").
 
 /** A profile shipped with Gousset, in the shape a user's own profile has. */
 export type ShippedProfile = {
@@ -115,6 +117,36 @@ export const SHIPPED_PROFILES: ReadonlyArray<ShippedProfile> = [
         bankId: null,
         currency: null,
       },
+    },
+  },
+  {
+    key: "paypal-activity",
+    name: "PayPal activity",
+    kind: "statement",
+    // The report's mandatory columns, in its order. A file is recognised by its columns' names
+    // (`layout`), whichever others its user selected and whatever their language.
+    header:
+      "date;time;timezone;name;type;status;currency;gross;fee;net;from email address;to email address;transaction id;reference txn id;receipt id",
+    profile: {
+      version: 1,
+      separator: ",",
+      encoding: "utf8",
+      skipRows: 0,
+      headerRow: true,
+      // PayPal's documented US format. The layout reads each file's days and amounts as it writes
+      // them, from its columns found by name: these say where they are in the header above.
+      dateFormat: "MM/DD/YYYY",
+      decimalMark: ".",
+      columns: {
+        bookedOn: 1,
+        valueOn: null,
+        amount: { kind: "signed", column: 10 },
+        label: 4,
+        memo: 5,
+        bankId: 13,
+        currency: 7,
+      },
+      layout: "paypal-activity",
     },
   },
 ];
