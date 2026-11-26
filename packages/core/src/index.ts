@@ -429,6 +429,79 @@ export type { LineTransfer, PairingSummary, TransferSide, Unpaired } from "./tra
 
 export { CARD_DAYS, TRANSFER_DAYS } from "./transfers/pairing";
 
+export {
+  DEFAULT_OPERATIONS_LISTED,
+  Investments,
+  MAX_OPERATIONS_LISTED,
+  correctInvestmentOperation,
+  deleteInvestmentOperation,
+  enterInvestmentOperation,
+  investmentAccounts,
+  investmentOperations,
+  investmentPosition,
+  investmentsLayer,
+} from "./investments/investments";
+
+export type {
+  InvestmentAccount,
+  OperationPage,
+  OperationPaging,
+  PositionDetail,
+} from "./investments/investments";
+
+export { investmentAccountIn } from "./investments/rows";
+
+export type {
+  AccountRefusal,
+  AccountRefused,
+  NamedSecurity,
+  OperationRead,
+  PositionRead,
+  SecurityRead,
+  UnitAmount,
+} from "./investments/rows";
+
+export {
+  InvalidIsin,
+  InvalidQuantity,
+  NotAnInvestmentAccount,
+  OperationNotFound,
+  OperationRefused,
+  SecurityNotFound,
+} from "./investments/errors";
+
+export { MAX_SECURITY_NAME, checkOperation } from "./investments/operation-input";
+
+export type { CheckedOperation, OperationInput } from "./investments/operation-input";
+
+export { saveImportedOperations } from "./investments/import-operations";
+
+export type { ImportedOperation, SavedOperations } from "./investments/import-operations";
+
+export { operationDedupKeys } from "./imports/operation-keys";
+
+export type { KeyedOperation } from "./imports/operation-keys";
+
+export {
+  DECIMALS,
+  INTEGER_DIGITS,
+  compareDecimals,
+  formatDecimal,
+  parseDecimal,
+  productMinor,
+  toMinor,
+} from "./investments/decimal";
+
+export type { Decimal } from "./investments/decimal";
+
+export { isinCheckDigit, parseIsin } from "./investments/isin";
+
+export { averageCost, isOpen, positionOf } from "./investments/positions";
+
+export type { OperationKind, Position, PositionOperation } from "./investments/positions";
+
+export { INSIDE_KINDS, movesInside } from "./investments/cash";
+
 export { DataExport, dataExportLayer } from "./export/export";
 
 export type { ExportContents } from "./export/export";

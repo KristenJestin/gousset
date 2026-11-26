@@ -523,7 +523,13 @@ async function pairWithAccountInTransaction(
   return { done: await lineTransfer(transaction, line, day) };
 }
 
-async function unpairInTransaction(
+/**
+ * Undoes the transfer `lineId` is a side of, in `transaction` (`Transfers.unpair`): its sides no
+ * transfer any more and back to review, a side the app made deleted, each line left with its entry.
+ * Also what a correction or a deletion of an investment operation runs first (v0.6). Lines booked
+ * after `day` are none of the user's.
+ */
+export async function unpairInTransaction(
   transaction: UserTransaction,
   owner: string,
   lineId: string,

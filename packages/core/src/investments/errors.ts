@@ -30,6 +30,11 @@ export class NotAnInvestmentAccount extends Schema.TaggedError<NotAnInvestmentAc
   { accountId: Schema.String, reason: Schema.Literals(["kind", "balance"]) },
 ) {}
 
+/** No security of the user's has this id. */
+export class SecurityNotFound extends Schema.TaggedError<SecurityNotFound>()("SecurityNotFound", {
+  securityId: Schema.String,
+}) {}
+
 /** No operation of the user's has this id. */
 export class OperationNotFound extends Schema.TaggedError<OperationNotFound>()(
   "OperationNotFound",
