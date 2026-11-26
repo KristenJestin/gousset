@@ -3,8 +3,11 @@ import type { Exit } from "effect";
 
 import { invalidField, readAmount } from "./amount";
 import type { AmountSyntax, FieldText } from "./amount";
+import { isLayoutHeader } from "./brokers";
 import { dateExample, dayReader, lastColumn } from "./csv-profile";
 import type { CsvProfile, DayReader } from "./csv-profile";
+import { readsOperations } from "./operations-profile";
+import type { CsvDefinition } from "./operations-profile";
 import { decodeCsv, parseRows, skipLines } from "./csv-parse";
 import type { CsvCell, CsvEncoding, CsvRow, ParseLimit } from "./csv-parse";
 import { InvalidOption, MalformedFile, MissingField, UnsupportedContent } from "./errors";
@@ -25,7 +28,7 @@ export type CsvOptions = {
 };
 
 /** The cell of a row at `column`; a row shorter than that has it empty, on the row's last line. */
-function cellAt(row: CsvRow, column: number): CsvCell {
+export function cellAt(row: CsvRow, column: number): CsvCell {
   return row.cells[column - 1] ?? { text: "", line: row.cells.at(-1)?.line ?? row.line, column };
 }
 
@@ -243,12 +246,15 @@ export function csvFile(bytes: Uint8Array): CsvFile {
   };
 }
 
+/** How any profile splits a file into rows, a statement's or a broker's operations'. */
+export type CsvTable = Pick<CsvProfile, "encoding" | "separator" | "skipRows" | "headerRow">;
+
 /**
  * The rows of the file past the lines the profile skips, blank ones left out; all, or `limit`. With
  * a limit, the lines skipped are looked for within its characters too: a skipped line of megabytes
  * is not scanned to its end.
  */
-const readRows = (file: CsvFile, profile: CsvProfile, limit?: ParseLimit) =>
+export const readRows = (file: CsvFile, profile: CsvTable, limit?: ParseLimit) =>
   Effect.gen(function* () {
     const text = yield* file.text(profile.encoding);
     const { rest, line } = skipLines(text, profile.skipRows, limit?.characters);
@@ -269,7 +275,7 @@ export function normalizeHeader(cells: ReadonlyArray<string>): string {
  */
 export const readCsvHeader = (
   file: CsvFile,
-  profile: CsvProfile,
+  profile: CsvTable,
 ): Effect.Effect<string | null, ReadError> =>
   Effect.gen(function* () {
     if (!profile.headerRow) {
@@ -292,19 +298,27 @@ export const readCsvHeader = (
 const HEADER_SEARCH: ParseLimit = { rows: 1, lines: 100, characters: 64 * 1024 };
 
 /** What a profile is matched by: its definition, and the header of the files it reads, if kept. */
-export type CsvCandidate = { readonly header: string | null; readonly profile: CsvProfile };
+export type CsvCandidate = { readonly header: string | null; readonly profile: CsvDefinition };
 
 /**
  * Whether a file's header row, as the candidate's profile reads it (`readCsvHeader`), is the one
- * the candidate recognises: its `header`, or, for PayPal's activity (`layout`), any header that
- * names PayPal's columns, whichever its user selected, in English or in French.
+ * the candidate recognises: its `header`, or, for PayPal's activity and a broker's export
+ * (`layout`), any header that names the columns that layout needs, wherever they stand.
  */
 export function headerMatches(candidate: CsvCandidate, header: string | null): boolean {
   if (candidate.header === null || header === null) {
     return false;
   }
 
-  return candidate.profile.layout === "paypal-activity"
+  const { profile } = candidate;
+
+  if (readsOperations(profile)) {
+    return profile.layout === undefined
+      ? header === candidate.header
+      : isLayoutHeader(profile.layout, header);
+  }
+
+  return profile.layout === "paypal-activity"
     ? isPaypalHeader(header)
     : header === candidate.header;
 }
@@ -339,7 +353,7 @@ export const matchCsvHeader = <Candidate extends CsvCandidate>(
   });
 
 /** An account's currency as `readCsv` takes it, upper case, or `InvalidOption`. */
-function currencyOf(text: string): Effect.Effect<string, InvalidOption> {
+export function currencyOf(text: string): Effect.Effect<string, InvalidOption> {
   const currency = text.toUpperCase();
 
   if (!/^[A-Z]{3}$/.test(currency)) {
@@ -379,7 +393,7 @@ export const readCsv = (
  * not fit a file; few enough that trying fifty profiles on the server's thread costs what parsing
  * their tops costs, never a mebibyte each.
  */
-const SAMPLE: ParseLimit = { rows: 51, lines: 200, characters: 64 * 1024 };
+export const SAMPLE: ParseLimit = { rows: 51, lines: 200, characters: 64 * 1024 };
 
 /**
  * Reads the top of a file with a profile, as `readCsv` reads it whole: its first 50 lines past the
@@ -413,7 +427,7 @@ const PREVIEW: ParseLimit = { rows: 6, lines: 100, characters: 64 * 1024 };
  */
 export const previewCsvRows = (
   file: CsvFile,
-  profile: CsvProfile,
+  profile: CsvTable,
 ): Effect.Effect<ReadonlyArray<ReadonlyArray<string>>, ReadError> =>
   Effect.map(readRows(file, profile, PREVIEW), ({ rows }) =>
     rows.map((row) => row.cells.map((cell) => cell.text)),

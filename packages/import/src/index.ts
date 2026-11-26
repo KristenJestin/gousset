@@ -23,11 +23,39 @@ export {
   testReadCsv,
 } from "./csv";
 
-export type { CsvCandidate, CsvFile, CsvOptions } from "./csv";
+export type { CsvCandidate, CsvFile, CsvOptions, CsvTable } from "./csv";
 
-export { SHIPPED_PROFILES, shippedProfile } from "./csv-shipped";
+export {
+  BROKER_LAYOUTS,
+  CsvDefinition,
+  OPERATION_KINDS,
+  OperationKind,
+  OperationsProfile,
+  readsOperations,
+} from "./operations-profile";
 
-export type { ShippedProfile } from "./csv-shipped";
+export type { BrokerLayout } from "./operations-profile";
+
+export { readOperations, testReadOperations } from "./operations";
+
+export type { OperationRow, Operations } from "./operations";
+
+export { DEGIRO } from "./brokers/degiro";
+
+export { FORTUNEO } from "./brokers/fortuneo";
+
+export {
+  SHIPPED_OPERATIONS_PROFILES,
+  SHIPPED_PROFILES,
+  shippedOperationsProfile,
+  shippedProfile,
+} from "./csv-shipped";
+
+export type {
+  ShippedOperationsProfile,
+  ShippedProfile,
+  ShippedStatementProfile,
+} from "./csv-shipped";
 
 export { detectCsvProfile } from "./csv-detect";
 

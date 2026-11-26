@@ -269,6 +269,136 @@ account's country writes them (`MM/DD/YYYY` for the US).
   point in English and a comma in French. The profile's `dateFormat` and `decimalMark` are not read
   with this layout.
 
+## Brokers' operations
+
+A broker's export (v0.6, `docs/data-model.md`, "Investments") is read into **operations** rather
+than lines (`src/operations.ts`), through a profile of the kind `operations`
+(`OperationsProfile`, `src/operations-profile.ts`): `readOperations(bytes, profile, { currency })`
+reads a whole file in the account's currency, `testReadOperations(file, profile, currency)` its
+top as `testReadCsv` does. Each row is an `OperationRow`, in the file's order:
+
+- `line`: the file's line its row starts on, for the import's errors;
+- `kind`: `deposit`, `withdrawal`, `purchase`, `sale`, `dividend` or `fee`;
+- `bookedOn`, `valueOn`: the day of the trade and its settlement day (or `null`), `YYYY-MM-DD`;
+- `amountMinor`: the cash it moved, fees included, in minor units of the account's currency,
+  **signed by its kind**: a purchase, a fee and a withdrawal negative, the others positive. A
+  broker may write a purchase with its minus or without; a minus on a kind that brings money in
+  contradicts it and is refused, as is an amount of zero. Read from the digits (`readAmount`);
+- `isin`: upper case, its check digit checked (ISO 6166), a purchase's, a sale's and a dividend's,
+  a fee's when it names one; a deposit's and a withdrawal's is read past;
+- `securityName`, `securityCurrency`: the security's name and the ISO 4217 code it is quoted in,
+  when the file gives them, for a security the account does not know yet;
+- `quantity`, `unitPrice`: a purchase's and a sale's alone (a dividend's count of shares is read
+  past), exact text with a point and no trailing zero (`0.0347`), never a float (`readDecimal`:
+  15 digits before the mark, 10 after, thousands grouped as the profile's amounts are). A
+  quantity's sign is read past, but where it gives the kind (below);
+- `feesMinor`: the fees, or a dividend's withholding tax, whatever their sign, from 0;
+- `label`: the broker's text for the row; `reference`: its own reference for the row, and
+  `referenceUnique`, whether the profile makes it unique to the row: the import then keys the
+  operation by it (`bank:`), else by its content (`operation:`).
+
+An operations profile, version 1, is a statement profile's table (`separator`, `encoding`,
+`skipRows`, `headerRow`, `dateFormat`, `decimalMark`, read as above) with, instead of its
+columns:
+
+- `reads: "operations"`, so that a shared file is never taken for a statement's profile;
+  `CsvDefinition` decodes either (`Schema.fromJsonString(CsvDefinition)`), and `readsOperations`
+  tells them apart;
+- `columns`, counted from 1, or `null`: `bookedOn` and `amount`, required; `valueOn`, `kind`,
+  `isin`, `securityName`, `securityCurrency`, `quantity`, `unitPrice`, `fees`, `label`,
+  `reference`;
+- `kinds`: the words of the `kind` column (`[{ "word": "Buy", "kind": "purchase" }]`, 100 at
+  most), compared trimmed, in any case, accents aside. **A word the profile does not map is
+  refused at its line and column** (`InvalidField`, `kind`), never guessed. With no `kind`
+  column, every row is a purchase or a sale, told by its quantity's sign (negative sold);
+- `referenceUnique`: whether the broker makes `reference` unique to each row;
+- `layout`, left out for a table read by its columns' places: a broker's export whose columns are
+  found by their names (`fortuneo`, `degiro-transactions`), wherever they stand, as PayPal's
+  are; its `columns` then say where they stand in the header the profile ships with.
+
+The shipped ones (`SHIPPED_OPERATIONS_PROFILES`, `src/csv-shipped.ts`, beside the statements'
+`SHIPPED_PROFILES`; `shippedOperationsProfile(key)` finds one) recognise a file by the names of
+the columns their layout needs (`headerMatches`, `matchCsvHeader`):
+
+| Key                   | Broker   | Layout                |
+| --------------------- | -------- | --------------------- |
+| `fortuneo-operations` | Fortuneo | `fortuneo`            |
+| `degiro-transactions` | Degiro   | `degiro-transactions` |
+
+Beyond what each row says (`MissingField` for what its kind needs, `InvalidField` for what cannot
+be read), a row in another currency than the account's is refused (`UnsupportedContent`):
+Gousset converts no currency, but where the broker gives the trade's value in the account's
+currency (Degiro, below).
+
+### Fortuneo
+
+`src/brokers/fortuneo.ts`, the history of operations of a securities account or a PEA. **Its
+knowledge is remembered from Fortuneo's public help pages, not re-checked here: every name below
+is guessed**, and the whole of it is the table at the top of that module (`FORTUNEO`: separator,
+encoding, date format, decimal mark, each field's column names, the words of its kinds), so that
+a real export's header changes that table alone. The tests build their invented files from it.
+
+- Guessed: `;`, Windows-1252, `DD/MM/YYYY`, a decimal comma, a header row; the columns `Date`,
+  `Opération` (the kind), `Libellé` (the security's name and the label), `Code ISIN`, `Qté`,
+  `Prix d'exé` (the unit price), `Montant brut` (read past), `Courtage` (the fees), `Montant net`
+  (the amount), `Devise` (the amount's currency, checked against the account's), and their
+  other names (`ISIN`, `Quantité`, `Prix d'exécution`, `Cours`, `Frais`, `Date opération`).
+- Guessed words: `Achat Comptant`, `Achat` (purchase), `Vente Comptant`, `Vente` (sale),
+  `Encaissement dividende`, `Dividende`, `Coupons` (dividend), `Versement espèces`, `Versement`
+  (deposit), `Retrait espèces`, `Retrait` (withdrawal), `Droits de garde`, `Frais`,
+  `Taxe sur les transactions financières` (fee). Any other is refused at its line.
+- No reference: an operation is keyed by its content.
+
+### Degiro
+
+`src/brokers/degiro.ts`, its `Transactions.csv` (purchases and sales; the deposits, dividends
+and fees of its `Account.csv` are not read: that file repeats each trade, writes a dividend's tax
+as a row apart and changes currencies in rows of their own, which would take a layout of their
+own). **Its knowledge is remembered from Degiro's public help pages, not re-checked here.**
+
+- Its columns, in English: `Date` (`DD-MM-YYYY`), `Time`, `Product` (the security's name and the
+  label), `ISIN`, `Reference exchange`, `Venue`, `Quantity` (negative for a sale: no column names
+  the kind), `Price`, `Local value`, `Value` (in the account's currency), `Exchange rate`,
+  `Transaction and/or third` (the fees), `Total` (the amount) and `Order ID` (the reference),
+  each amount followed by a column with no name holding its currency. `,`, UTF-8, every value
+  quoted.
+- Guessed: the decimal point (an export in English), the fees' other names (`Transaction and/or
+  third party fees`, `Transaction costs`), and that the price's currency is the product's
+  quotation currency. An export in another language is not recognised.
+- **A price in another currency** than the account's (a share quoted in dollars in a euro
+  account): the unit price is the trade's `Value` in the account's currency divided by its
+  quantity, to 10 decimals, rounded half up, since an operation's unit price is in the account's
+  currency (`docs/data-model.md`, v0.6). The totals and the fees must be in the account's
+  currency.
+- `Order ID` is not unique to a row: an order executed in several parts gives each part its row
+  with the same id, so an operation is keyed by its content.
+
+### Mapped by hand
+
+A broker no layout knows is read by a profile the user maps on the import screen (or through the
+MCP door): which column holds each field, and which words of the kind column name which kind.
+It has no `layout`, recognises the next file by its whole header as a statement's profile does,
+and is the same JSON the user exports and imports (`OperationsProfile`, above).
+
+### How to add a broker
+
+1. Write `src/brokers/<broker>.ts` beside `fortuneo.ts`: a table at its top (separator,
+   encoding, date format, decimal mark, the header in its order, each field's column names, the
+   words of its kinds), its `BrokerColumns` (`names`, the fields a header `required`s, the
+   `currencyAfter` columns with no name), and its shipped `OperationsProfile`, its `columns`
+   where its header puts them. Say at its top where the knowledge comes from.
+2. Add its layout's name to `BROKER_LAYOUTS` (`src/operations-profile.ts`) and its columns to
+   `BROKERS` (`src/brokers/index.ts`).
+3. Add its shipped profile to `SHIPPED_OPERATIONS_PROFILES` (`src/csv-shipped.ts`), under a
+   stable key: an import keeps it.
+4. Test it in `src/operations.test.ts` on an invented file built from its table: each kind it
+   writes, its header recognised, a row it cannot tell refused at its line.
+5. Add it to this part: where its knowledge comes from, and which columns and values are
+   guessed.
+
+A broker whose rows need more than finding columns by name (a kind told by two columns, a row
+that is two operations) adds a field to `OperationField` and its reading to `src/operations.ts`.
+
 ## Errors
 
 Every error is a tagged error (`src/errors.ts`); all but `NotAStatement` and `InvalidOption` name
