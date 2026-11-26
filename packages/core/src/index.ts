@@ -357,7 +357,7 @@ export type {
   ProfilesForImport,
 } from "./imports/summary";
 
-export { ImportJobInput, markFailed, runImport } from "./imports/run";
+export { ImportJobInput, importConnectionName, markFailed, runImport } from "./imports/run";
 
 export type { ImportProgress, ImportRun } from "./imports/run";
 
