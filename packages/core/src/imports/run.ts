@@ -66,6 +66,13 @@ export type ImportRun = { readonly months: ReadonlyArray<string> };
 /** How many lines one insert writes, and the screen's progress moves by. */
 const CHUNK = 200;
 
+/**
+ * The name an import's transactions give their connection (`application_name`, for the
+ * transaction only): what a save that lasts finds them by in `pg_stat_activity` (#241). Its id
+ * alone, never what the file holds.
+ */
+export const importConnectionName = (importId: string) => `gousset-import:${importId}`;
+
 const nothing: ImportRun = { months: [] };
 
 /**
@@ -238,7 +245,13 @@ export function runImport(
     const reader = yield* StatementReader;
 
     const inTransaction = <A>(work: (transaction: UserTransaction) => Promise<A>) =>
-      userData.transaction(owner, work);
+      userData.transaction(owner, async (transaction) => {
+        await transaction.execute(
+          sql`select set_config('application_name', ${importConnectionName(importId)}, true)`,
+        );
+
+        return work(transaction);
+      });
 
     /** Runs `work` on the import while it is still the job's; stops the run otherwise. */
     const whileRunning = <A>(work: (transaction: UserTransaction) => Promise<A>) =>

@@ -16,15 +16,34 @@ import { ENV } from "../../../env.server";
 import { isDoorOpen, notFound } from "../../../lib/mcp-door";
 import { auth, db } from "../../../services";
 
-const trustedProxies = (ENV.TRUSTED_PROXIES ?? "")
-  .split(",")
-  .map((entry) => entry.trim())
-  .filter((entry) => entry !== "");
+/**
+ * The reverse proxies the app was started behind. The environment is passed whole: written
+ * `ENV.TRUSTED_PROXIES`, a public variable is replaced by its build-time value (`security.ts` says
+ * the same), and the list stayed empty whatever the installation set (#245).
+ */
+function trustedProxiesOf(env: { readonly TRUSTED_PROXIES?: string }): ReadonlyArray<string> {
+  return (env.TRUSTED_PROXIES ?? "")
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter((entry) => entry !== "");
+}
+
+const trustedProxies = trustedProxiesOf(ENV);
 
 const shouldWarnIgnoredForward = createIgnoredForwardWarning();
 
 /** Attempts at a password, signing in or changing it, counted in this process. */
 const passwordAttempts = createSignInLimits();
+
+/**
+ * The authorization requests one address may make in a minute, as the app was started with. The
+ * environment is passed whole: written `ENV.MCP_AUTHORIZE_PER_MINUTE`, a public variable is
+ * replaced by its build-time value (`security.ts` says the same), and the limit stayed 30 whatever
+ * the app was given (#244).
+ */
+function authorizePerMinute(env: { readonly MCP_AUTHORIZE_PER_MINUTE?: number }): number {
+  return env.MCP_AUTHORIZE_PER_MINUTE ?? 30;
+}
 
 const AUTHORIZE_PATH = "/api/auth/oauth2/authorize";
 const MINUTE = 60_000;
@@ -35,7 +54,7 @@ const HOUR = 60 * MINUTE;
  * document and write a client, before anyone signs in. A person connecting agents makes a few;
  * MCP_AUTHORIZE_PER_MINUTE raises it where many clients share one address (the end-to-end tests).
  */
-const authorizeRequests = createRequestLimit(ENV.MCP_AUTHORIZE_PER_MINUTE ?? 30, MINUTE);
+const authorizeRequests = createRequestLimit(authorizePerMinute(ENV), MINUTE);
 
 let lastClientCleanup = 0;
 

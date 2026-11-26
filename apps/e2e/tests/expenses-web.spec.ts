@@ -3,7 +3,7 @@ import { exampleStatement } from "@gousset/fixture";
 import type { Statement, StatementLine } from "@gousset/fixture";
 
 import { addUser } from "../src/auth";
-import { detailSight, lineDetail } from "../src/frame";
+import { detailAtRest, detailSight, lineDetail } from "../src/frame";
 import { importsOn, statementFile } from "../src/imports";
 import { animationsDone, expect, expectAccessible, fixDay, test, visit } from "../src/test";
 import { openUserData } from "../src/user-data";
@@ -58,7 +58,10 @@ async function importInto(
   expect(done.status, name).toBe("done");
 }
 
-/** Opens the line of this label whose row says `text` too. */
+/**
+ * Opens the line of this label whose row says `text` too: its detail, once it stands still, so that
+ * a click in it lands (#223).
+ */
 async function openLine(page: Page, label: string, text: string) {
   await rows(page)
     .filter({ hasText: label })
@@ -66,9 +69,13 @@ async function openLine(page: Page, label: string, text: string) {
     .first()
     .getByRole("button")
     .click();
-  await expect(lineDetail(page, label)).toBeVisible();
 
-  return lineDetail(page, label);
+  const detail = lineDetail(page, label);
+
+  await expect(detail).toBeVisible();
+  await detailAtRest(detail);
+
+  return detail;
 }
 
 const HARBOR_HOME = "CB HARBOR HOME 1210 RIVERTON";

@@ -127,6 +127,12 @@ function quoteIdentifier(name: string): string {
 /**
  * Drops the database if it exists, closing what is connected to it (a server left behind by an
  * interrupted run), then creates it, from `template` when one is given.
+ *
+ * Every session on it logs a lock it waits for past a second, with who holds it (#241): Postgres
+ * keeps `log_lock_waits` off, and a test that stalls on a lock would otherwise leave nothing in the
+ * server's log, which CI prints at the end of each job. A database's settings are not copied with
+ * it, so each one gets them; setting them takes the harness's superuser, as CI's and
+ * `pnpm db:start`'s are.
  */
 export async function recreateDatabase(database: string, template?: string): Promise<void> {
   const from = template === undefined ? "" : ` TEMPLATE ${quoteIdentifier(template)}`;
@@ -135,6 +141,8 @@ export async function recreateDatabase(database: string, template?: string): Pro
     [
       `DROP DATABASE IF EXISTS ${quoteIdentifier(database)} WITH (FORCE)`,
       `CREATE DATABASE ${quoteIdentifier(database)}${from}`,
+      `ALTER DATABASE ${quoteIdentifier(database)} SET log_lock_waits = on`,
+      `ALTER DATABASE ${quoteIdentifier(database)} SET deadlock_timeout = '1s'`,
     ],
     template !== undefined,
   );
