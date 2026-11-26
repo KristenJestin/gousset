@@ -13,6 +13,7 @@ import { AccountNotFound } from "../errors";
 import { isId } from "../imports/rows";
 import type { Money } from "../month";
 import { today } from "../today";
+import { pairTransfers } from "../transfers/pair-lines";
 import { unpairInTransaction } from "../transfers/transfers";
 import { movesInside } from "./cash";
 import { NotAnInvestmentAccount, OperationNotFound, SecurityNotFound } from "./errors";
@@ -121,7 +122,8 @@ export class Investments extends Context.Service<
     ) => Effect.Effect<PositionDetail, AccountNotFound | SecurityNotFound | Failure>;
     /**
      * Enters an operation by hand: its line (`source = manual`) and the operation, its security
-     * found by ISIN or made. A deposit or a withdrawal gets its default entry, as any line does.
+     * found by ISIN or made. A deposit or a withdrawal gets its default entry, as any line does,
+     * and is paired at once with its only candidate as a transfer.
      */
     readonly enter: (
       owner: string,
@@ -180,6 +182,29 @@ async function lockedOperation(transaction: UserTransaction, operationId: string
     .for("update");
 
   return readOperation(transaction, operationId);
+}
+
+/**
+ * A deposit's or a withdrawal's line saved by hand is paired at once, as an import pairs its lines:
+ * with its only candidate, which has no other; with several, it waits for the user's choice, as any
+ * line to review does. A purchase's, a sale's, a dividend's and a fee's line is never a side.
+ */
+async function pairCash(
+  transaction: UserTransaction,
+  owner: string,
+  lineId: string,
+  accountId: string,
+  checked: CheckedOperation,
+): Promise<void> {
+  if (!movesInside(checked.kind)) {
+    await pairTransfers(transaction, owner, {
+      kind: "lines",
+      lineIds: [lineId],
+      accountId,
+      from: checked.bookedOn,
+      to: checked.bookedOn,
+    });
+  }
 }
 
 /** The security id and name an operation names, made when new; nulls for none. */
@@ -253,6 +278,7 @@ async function enterIn(
   // A deposit's or a withdrawal's line is money coming in or going out: its entry, as any line's.
   // A purchase's, a sale's, a dividend's and a fee's have none (`entriesForLines` leaves them).
   await entriesForLines(transaction, owner, [line.id]);
+  await pairCash(transaction, owner, line.id, target.account.id, checked);
 
   return written(transaction, made.id);
 }
@@ -330,6 +356,7 @@ async function correctIn(
 
   // A deposit or a withdrawal now, with no entry: its default one, as any line's.
   await entriesForLines(transaction, owner, [current.lineId]);
+  await pairCash(transaction, owner, current.lineId, target.account.id, checked);
 
   return written(transaction, current.id);
 }

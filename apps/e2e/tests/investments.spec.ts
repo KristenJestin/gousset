@@ -400,16 +400,92 @@ test("an operation's cash is never paired as a transfer, nor offered as a side",
     new TransferRefused({ reason: "investment_operation", lineId: sale.lineId }),
   );
 
-  // A deposit of that amount is the current account's other side, as any line is.
+  // A deposit of that amount is the current account's other side, as any line is: its only
+  // candidate, paired at once.
   const deposit = await enter(pea, {
     kind: "deposit",
     bookedOn: "2026-10-09",
     amountMinor: 24_013,
   });
 
-  expect((await run(lineTransferOf(owner, out))).candidates.map((each) => each.id)).toEqual([
-    deposit.lineId,
-  ]);
+  expect(deposit.paired).toBe(true);
+  expect((await run(lineTransferOf(owner, out))).paired?.other.id).toBe(deposit.lineId);
+});
+
+test("a deposit or a withdrawal entered by hand is paired at once with its only candidate", async () => {
+  const current = await newAccount("At once current", "current");
+  const savings = await newAccount("At once savings", "savings");
+  const pea = await newAccount("At once PEA", "investment");
+
+  const out = await importLine(current, "at-once-current", {
+    bookedOn: "2026-10-06",
+    amountMinor: -60_047,
+    label: "SEPA TRF TO MY PEA",
+  });
+
+  // One candidate: the transfer is made, and the deposit loses its entry.
+  const deposit = await enter(pea, {
+    kind: "deposit",
+    bookedOn: "2026-10-06",
+    amountMinor: 60_047,
+  });
+
+  expect(deposit.paired).toBe(true);
+  expect((await run(lineTransferOf(owner, out))).paired?.other.id).toBe(deposit.lineId);
+  expect(await entriesOf([out, deposit.lineId])).toEqual([[], []]);
+
+  // Two candidates, on two accounts: the withdrawal waits for the user's choice, with its entry.
+  const other = await newAccount("At once other current", "current");
+
+  const intoCurrent = await importLine(other, "at-once-current-in", {
+    bookedOn: "2026-10-20",
+    amountMinor: 7047,
+    label: "SEPA TRF FROM MY PEA",
+  });
+
+  const intoSavings = await importLine(savings, "at-once-savings-in", {
+    bookedOn: "2026-10-20",
+    amountMinor: 7047,
+    label: "SEPA TRF FROM MY PEA",
+  });
+
+  const withdrawal = await enter(pea, {
+    kind: "withdrawal",
+    bookedOn: "2026-10-20",
+    amountMinor: -7047,
+  });
+
+  expect(withdrawal.paired).toBe(false);
+
+  const waiting = await run(lineTransferOf(owner, withdrawal.lineId));
+
+  expect(waiting.paired).toBeNull();
+  expect(waiting.candidates.map((each) => each.id).toSorted()).toEqual(
+    [intoCurrent, intoSavings].toSorted(),
+  );
+  expect(await entriesOf([withdrawal.lineId])).toEqual([["default"]]);
+
+  // A fee corrected into a withdrawal is paired at once too, with its one candidate.
+  const back = await importLine(await newAccount("At once back", "savings"), "at-once-back", {
+    bookedOn: "2026-10-27",
+    amountMinor: 3047,
+    label: "SEPA TRF FROM MY PEA",
+  });
+
+  const fee = await enter(pea, { kind: "fee", bookedOn: "2026-10-27", amountMinor: -3047 });
+
+  expect(fee.paired).toBe(false);
+
+  const corrected = await run(
+    correctInvestmentOperation(
+      owner,
+      fee.id,
+      operation({ kind: "withdrawal", bookedOn: "2026-10-27", amountMinor: -3047 }),
+    ),
+  );
+
+  expect(corrected.paired).toBe(true);
+  expect((await run(lineTransferOf(owner, back))).paired?.other.id).toBe(fee.lineId);
 });
 
 test("a purchase's label names no merchant", async () => {
@@ -519,13 +595,14 @@ test("the month: received and spent are unchanged, and set aside is the deposit"
       .where(eq(statementLine.amountMinor, -35_029)),
   );
 
+  // Its only candidate: paired at once.
   const deposit = await enter(pea, {
     kind: "deposit",
     bookedOn: "2026-09-12",
     amountMinor: 35_029,
   });
 
-  await run(pairLines(owner, out?.id ?? "", deposit.lineId));
+  expect((await run(lineTransferOf(owner, out?.id ?? ""))).paired?.other.id).toBe(deposit.lineId);
 
   const before = await run(monthSummary(owner, "2026-09", "EUR"));
 
@@ -573,7 +650,8 @@ test("correcting an operation changes its line with it, and unpairs a deposit mo
     amountMinor: 40_031,
   });
 
-  await run(pairLines(owner, out, deposit.lineId));
+  // Paired at once, with its only candidate.
+  expect(deposit.paired).toBe(true);
 
   // A deposit moved in its amount is no transfer any more: both lines to review, each its entry.
   const moved = await run(
@@ -647,7 +725,8 @@ test("deleting an operation deletes its line, unpairs a deposit, and keeps its s
     amountMinor: 40_037,
   });
 
-  await run(pairLines(owner, out, deposit.lineId));
+  // Paired at once, with its only candidate.
+  expect(deposit.paired).toBe(true);
 
   const removed = await run(deleteInvestmentOperation(owner, deposit.id));
 
