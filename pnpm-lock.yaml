@@ -220,6 +220,7 @@ overrides:
   vite@*: npm:@voidzero-dev/vite-plus-core@8.3.8000
 
 patchedDependencies:
+  '@ui-sdk/core@0.1.0-beta.13': 82066d49bef99f9507108c9404cccd46b061d28d16615e50950a6404d36fa08f
   motion-dom@14.14.0: acc06f4f655afb276c67f1fe09e0581b9136a7e4db5607ec94f3e4c79b8b14c5
 
 importers:
@@ -696,10 +697,10 @@ importers:
         version: 3.52.0(react@19.3.1)
       '@ui-sdk/core':
         specifier: 0.1.0-beta.13
-        version: 0.1.0-beta.13
+        version: 0.1.0-beta.13(patch_hash=82066d49bef99f9507108c9404cccd46b061d28d16615e50950a6404d36fa08f)
       '@ui-sdk/react':
         specifier: 0.1.0-beta.13
-        version: 0.1.0-beta.13(@types/react@19.3.0)(@ui-sdk/core@0.1.0-beta.13)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
+        version: 0.1.0-beta.13(@types/react@19.3.0)(@ui-sdk/core@0.1.0-beta.13(patch_hash=82066d49bef99f9507108c9404cccd46b061d28d16615e50950a6404d36fa08f))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)
       cn:
         specifier: ^0.5.2
         version: 0.5.2
@@ -9072,11 +9073,11 @@ snapshots:
   '@typescript/typescript-win32-x64@7.0.2':
     optional: true
 
-  '@ui-sdk/core@0.1.0-beta.13': {}
+  '@ui-sdk/core@0.1.0-beta.13(patch_hash=82066d49bef99f9507108c9404cccd46b061d28d16615e50950a6404d36fa08f)': {}
 
-  '@ui-sdk/react@0.1.0-beta.13(@types/react@19.3.0)(@ui-sdk/core@0.1.0-beta.13)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)':
+  '@ui-sdk/react@0.1.0-beta.13(@types/react@19.3.0)(@ui-sdk/core@0.1.0-beta.13(patch_hash=82066d49bef99f9507108c9404cccd46b061d28d16615e50950a6404d36fa08f))(react-dom@19.3.1(react@19.3.1))(react@19.3.1)':
     dependencies:
-      '@ui-sdk/core': 0.1.0-beta.13
+      '@ui-sdk/core': 0.1.0-beta.13(patch_hash=82066d49bef99f9507108c9404cccd46b061d28d16615e50950a6404d36fa08f)
       react: 19.3.1
       react-dom: 19.3.1(react@19.3.1)
     optionalDependencies:
