@@ -1,7 +1,15 @@
-import type { Page } from "@playwright/test";
+import type { Locator, Page } from "@playwright/test";
 
 import { onPhone, openAccountMenu } from "../src/frame";
-import { animationsDone, expect, test, visit } from "../src/test";
+import {
+  addUser,
+  animationsDone,
+  expect,
+  personOfItsOwn,
+  slowServerWrites,
+  test,
+  visit,
+} from "../src/test";
 
 /** The page, once its scripts are loaded and the shortcuts listen. */
 async function openHome(page: Page) {
@@ -127,20 +135,52 @@ test.describe("in French", () => {
 async function setSingleKeyShortcuts(page: Page, on: boolean) {
   await visit(page, "/settings");
 
-  const setting = page.getByRole("switch", { name: "Single-key shortcuts" });
+  const setting = shortcutsSwitch(page);
 
   if ((await setting.isChecked()) !== on) {
-    // The save has answered before the reload, which would otherwise cut it short.
-    const saved = page.waitForResponse((response) => response.request().method() === "POST");
-
     await setting.click();
-    await saved;
   }
 
-  await expect(setting).toBeChecked({ checked: on });
+  await expectSaved(setting, on);
   await page.reload();
   await expect(setting).toBeChecked({ checked: on });
 }
+
+const shortcutsSwitch = (page: Page) => page.getByRole("switch", { name: "Single-key shortcuts" });
+
+/** The switch shows its value saved: no save of it is pending any more (#224). */
+async function expectSaved(setting: Locator, checked: boolean) {
+  await expect(setting).not.toHaveAttribute("aria-busy", "true");
+  await expect(setting).toBeChecked({ checked });
+}
+
+// Issue #224: the switch showed the new value saved as soon as it was clicked; a reload before the
+// save ended lost it. A user of the test's own: the worker's user keeps its shortcuts on.
+test("the single-key shortcuts switch keeps its value through a reload as soon as it shows saved", async ({
+  page,
+  app,
+  user,
+}) => {
+  const person = await addUser(app.baseURL, user, personOfItsOwn("shortcuts-reload"));
+
+  await page.context().addCookies([...person.cookies]);
+  await visit(page, "/settings");
+
+  const setting = shortcutsSwitch(page);
+
+  await expect(setting).toBeChecked();
+
+  // A slow save: the browser holds it a second before it leaves; what it then reads again goes at
+  // once, so the switch shows it saved about a second after the click.
+  const unslow = await slowServerWrites(page, 1000);
+
+  await setting.click();
+  await expect(setting).not.toBeChecked();
+  await expectSaved(setting, false);
+  await unslow();
+  await page.reload();
+  await expectSaved(shortcutsSwitch(page), false);
+});
 
 test("with the setting off, typing ? outside a text field opens nothing; the list opens from the menu", async ({
   userPage,
