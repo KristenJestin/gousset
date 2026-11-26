@@ -41,7 +41,7 @@ import type { ExistingLine, ImportFormat, ReadLine } from "./keys";
 import { operationDedupKeys } from "./operation-keys";
 import { StatementReader } from "./read";
 import type { ReadOperation, ReadStatement } from "./read";
-import { matchProfile, profileCandidates } from "./profiles";
+import { candidatesFor, fileDestination, matchProfile, profileCandidates } from "./profiles";
 import { pairTransfers } from "../transfers/pair-lines";
 import { isId } from "./rows";
 import type { ImportStep } from "./summary";
@@ -384,9 +384,17 @@ export function runImport(
 
     // A CSV file with no profile given is read with the user's profile that recognises its header,
     // else a shipped one, else as detection proposes; the import records which (none for
-    // detection). A profile given was recorded when the user chose it.
+    // detection). Only an investment account's file is tried with an operations profile, and with
+    // no account known a statement's profile comes first (`candidatesFor`). A profile given was
+    // recorded when the user chose it.
     if (loaded.format === "csv" && csvProfile === null) {
-      const candidates = yield* inTransaction(profileCandidates);
+      const candidates = yield* inTransaction(async (transaction) =>
+        candidatesFor(
+          await profileCandidates(transaction),
+          await fileDestination(transaction, loaded.account?.id ?? null),
+        ),
+      );
+
       const matched = yield* matchProfile(loaded.bytes, candidates);
 
       yield* setStatus({

@@ -10,7 +10,7 @@ import {
 } from "@gousset/core";
 import type { AccountStore, Investments } from "@gousset/core";
 import type { UserData } from "@gousset/db/user-data";
-import { account, statementLine } from "@gousset/db/schema/ledger";
+import { account, importProfile, statementLine } from "@gousset/db/schema/ledger";
 import { FORTUNEO_HEADER, fortuneoExport } from "@gousset/fixture";
 import { eq } from "drizzle-orm";
 import { Effect, Layer } from "effect";
@@ -356,6 +356,163 @@ test("a broker's file read with its profile on a current account is refused", as
     linesAdded: 0,
   });
   expect(await linesOfImport(owner, done.id)).toEqual([]);
+});
+
+/**
+ * A hand-made operations profile, shared as a file, whose columns are found by names as generic as
+ * a bank statement's: it recognises any file whose header names `Date` and `Amount`.
+ */
+const GENERIC_OPERATIONS = JSON.stringify({
+  version: 2,
+  reads: "operations",
+  separator: ";",
+  encoding: "utf8",
+  skipRows: 0,
+  headerRow: true,
+  dateFormat: "YYYY-MM-DD",
+  decimalMark: ",",
+  columns: { bookedOn: { names: ["Date"] }, amount: { names: ["Amount"] } },
+  kinds: [],
+  referenceUnique: false,
+});
+
+/** An invented bank statement whose header names the generic profile's columns. */
+const bankStatement = () => ({
+  fileName: "statement-2026-11.csv",
+  contents:
+    "Date;Label;Amount\n2026-11-14;EXAMPLE GROCER;-12,40\n2026-11-15;EXAMPLE BAKERY;-3,20\n",
+});
+
+/** A user of the test's own, with the made-up data and the generic operations profile. */
+async function personWithGenericProfile(
+  app: { baseURL: string },
+  user: Parameters<typeof addUser>[1],
+  local: string,
+) {
+  const person = await addUser(app.baseURL, user, personOfItsOwn(local));
+  const owner = await data.ownerOf(person.email);
+
+  await data.seed(owner);
+
+  const saved = await imports.withProfiles((service) =>
+    service.importFile(owner, {
+      name: "Generic operations",
+      institution: null,
+      content: GENERIC_OPERATIONS,
+    }),
+  );
+
+  expect(saved).toMatchObject({ source: "stored", kind: "operations", header: null });
+
+  return {
+    owner,
+    current: await accountNamed(owner, "Current account"),
+    generic: saved.source === "stored" ? saved.id : "",
+  };
+}
+
+test("a bank statement dropped on a current account is read as a statement, though an operations profile recognises its header", async ({
+  app,
+  user,
+}) => {
+  const { owner, current, generic } = await personWithGenericProfile(app, user, "broker-generic");
+  const done = await imports.importFile(owner, current, bankStatement());
+
+  expect(done).toMatchObject({
+    status: "done",
+    reads: "statement",
+    linesRead: 2,
+    linesAdded: 2,
+    errorCode: null,
+  });
+  // Read as detection proposes: no profile of the user's took it.
+  expect(await imports.profileOf(owner, done.id)).toEqual({
+    profileId: null,
+    shippedProfile: null,
+  });
+
+  const fit = await imports.withProfiles((service) => service.forImport(owner, done.id));
+
+  // The import screen offers it no more than the import tried it.
+  expect(
+    fit.fitting.some(({ profile }) => profile.source === "stored" && profile.id === generic),
+  ).toBe(false);
+});
+
+test("the same bank statement dropped with no account chosen still reads as a statement", async ({
+  app,
+  user,
+}) => {
+  const { owner, current } = await personWithGenericProfile(app, user, "broker-no-account");
+
+  // A statement profile of the user's, saved before the operations one, whose header is the file's.
+  const statementProfile = await imports.withProfiles((service) =>
+    service.save(owner, {
+      name: "Example bank",
+      institution: null,
+      definition: {
+        version: 1,
+        separator: ";",
+        encoding: "utf8",
+        skipRows: 0,
+        headerRow: true,
+        dateFormat: "YYYY-MM-DD",
+        decimalMark: ",",
+        columns: {
+          bookedOn: 1,
+          valueOn: null,
+          amount: { kind: "signed", column: 3 },
+          label: 2,
+          memo: null,
+          bankId: null,
+          currency: null,
+        },
+      },
+      header: "date;label;amount",
+    }),
+  );
+
+  const statementId = statementProfile.source === "stored" ? statementProfile.id : "";
+
+  // The operations profile is the most recently updated: it would be tried first.
+  await data.asUser(owner, (transaction) =>
+    transaction
+      .update(importProfile)
+      .set({ updatedAt: new Date("2025-12-01T00:00:00Z") })
+      .where(eq(importProfile.id, statementId)),
+  );
+
+  const { started } = await imports.keep(owner, null, bankStatement());
+
+  await imports.run(owner, started.id);
+
+  expect(await imports.show(owner, started.id)).toMatchObject({
+    status: "waiting",
+    waitingFor: "account",
+  });
+
+  // With no account known, the statement's profile comes before the operations' that also fits.
+  const fit = await imports.withProfiles((service) => service.forImport(owner, started.id));
+
+  expect(fit.fitting.map(({ profile, by }) => `${profile.name} ${by}`)).toEqual([
+    "Example bank header",
+    "Generic operations header",
+  ]);
+
+  await imports.resume(owner, started.id, current);
+  await imports.run(owner, started.id);
+
+  expect(await imports.show(owner, started.id)).toMatchObject({
+    status: "done",
+    reads: "statement",
+    profile: "Example bank",
+    linesAdded: 2,
+    errorCode: null,
+  });
+  expect(await imports.profileOf(owner, started.id)).toEqual({
+    profileId: statementId,
+    shippedProfile: null,
+  });
 });
 
 test("no broker's profile is shipped: none reads a Fortuneo file until the user has one", async ({

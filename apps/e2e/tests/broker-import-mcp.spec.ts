@@ -202,7 +202,18 @@ test("an agent writes a broker's profile, test-reads it, keeps it and imports wi
   expect(again.text).toContain("Read as a broker's operations with Fortuneo by the agent.");
   expect(again.text).toContain("2 operations read: 0 added, 2 already known (duplicates).");
 
-  const refused = await upload("fortuneo-on-current.csv", EVERYDAY);
+  // On a current account no operations profile is tried: it waits for its columns, and read with
+  // the broker's profile all the same, it is refused.
+  const onCurrent = await upload("fortuneo-on-current.csv", EVERYDAY);
+
+  expect(onCurrent.isError, onCurrent.text).toBe(false);
+  expect(onCurrent.text).toContain("waits for its CSV columns to be confirmed");
+
+  const refused = await call({
+    action: "confirm",
+    import: /"import":"([\da-f-]{36})"/.exec(onCurrent.text)?.[1] ?? "",
+    profile: "Fortuneo by the agent",
+  });
 
   expect(refused.text).toContain("failed");
   expect(refused.text).toContain(

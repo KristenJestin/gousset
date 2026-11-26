@@ -334,8 +334,10 @@ columns:
   recognises any file whose header row names every column it requires, its optional ones there or
   not, and has as many columns as it reads at their places (`headerMatches`, `matchCsvHeader`),
   rather than one exact header: kept with a header or with none, as a profile file imported is, it
-  reads the next such file on its own. A profile whose every column is at its place recognises only
-  the header it was saved with;
+  reads the next such file on its own; the import tries it on an investment account's file only
+  (`packages/core`, `candidatesFor`), names as common as `Date` and `Amount` being a bank
+  statement's too. A profile whose every column is at its place recognises only the header it was
+  saved with;
 
 - `kinds`: the words of the `kind` column (`[{ "word": "Buy", "kind": "purchase" }]`, 100 at
   most), compared trimmed, in any case, accents aside. **A word the profile does not map is

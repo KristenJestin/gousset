@@ -27,6 +27,7 @@ import {
   ProfileUnreadable,
   TooManyProfiles,
 } from "./errors";
+import { investmentAccountIn } from "../investments/rows";
 import { isId } from "./rows";
 import { MAX_PROFILE_FILE, MAX_PROFILE_HEADER, MAX_PROFILE_NAME, MAX_PROFILES } from "./summary";
 import type {
@@ -146,6 +147,68 @@ export async function profileCandidates(
 }
 
 /**
+ * Where an import's file goes, as far as which profiles may read it (#250): an investment account
+ * kept by its lines, the only one a broker's operations go into; another account; or none known
+ * yet (chosen by the user or found by the import).
+ */
+export type FileDestination = "investment" | "other" | "unknown";
+
+/** Where a file whose account is `accountId`, or none yet, goes. */
+export async function fileDestination(
+  transaction: UserTransaction,
+  accountId: string | null,
+): Promise<FileDestination> {
+  if (accountId === null) {
+    return "unknown";
+  }
+
+  const found = await investmentAccountIn(transaction, accountId);
+
+  if ("account" in found) {
+    return "investment";
+  }
+
+  return "missing" in found ? "unknown" : "other";
+}
+
+/**
+ * The profiles that may read a file going to `destination`, in the order they are tried. An
+ * operations profile finding its columns by names ("Date", "Amount") recognises a bank statement's
+ * header too: on an account that takes no operations, none is tried; with no account known, the
+ * statements' come first, so that a statement profile wins a file both recognise; on an investment
+ * account, all are, in their order.
+ */
+function forDestination<T>(
+  profiles: ReadonlyArray<T>,
+  readsOperationsOf: (profile: T) => boolean,
+  destination: FileDestination,
+): ReadonlyArray<T> {
+  switch (destination) {
+    case "investment": {
+      return profiles;
+    }
+
+    case "other": {
+      return profiles.filter((profile) => !readsOperationsOf(profile));
+    }
+
+    case "unknown": {
+      return [
+        ...profiles.filter((profile) => !readsOperationsOf(profile)),
+        ...profiles.filter(readsOperationsOf),
+      ];
+    }
+  }
+}
+
+/** The candidates tried on a file going to `destination` (`forDestination`). */
+export const candidatesFor = (
+  candidates: ReadonlyArray<ProfileCandidate>,
+  destination: FileDestination,
+): ReadonlyArray<ProfileCandidate> =>
+  forDestination(candidates, (candidate) => readsOperations(candidate.profile), destination);
+
+/**
  * The first candidate whose header the file has (`matchCsvHeader`), or `undefined`. The file is
  * decoded once, and each candidate reads its top only.
  */
@@ -263,8 +326,9 @@ export class ImportProfiles extends Context.Service<
     ) => Effect.Effect<ProfileCandidate, ProfileNotFound | ProfileUnreadable | Failure>;
     /**
      * Which profiles read a CSV import's file: those that recognise its header (`headerMatches`),
-     * then those that recognise no file whose test read of the file's top passes, each in the order
-     * an upload tries them (`ProfilesForImport`); and the profile the import used.
+     * then those that recognise no file whose test read of the file's top passes, each among those
+     * an upload tries for the import's account and in their order (`candidatesFor`,
+     * `ProfilesForImport`); and the profile the import used.
      */
     readonly forImport: (
       owner: string,
@@ -498,6 +562,7 @@ export const importProfilesLayer = Layer.effect(
               .select({
                 fileName: statementImport.fileName,
                 status: statementImport.status,
+                accountId: statementImport.accountId,
                 profileId: statementImport.profileId,
                 shippedProfile: statementImport.shippedProfile,
                 currency: account.currency,
@@ -513,22 +578,31 @@ export const importProfilesLayer = Layer.effect(
             }
 
             const stored = await storedProfiles(transaction);
+            const destination = await fileDestination(transaction, row.accountId);
 
-            return { row, stored: stored.map(storedEntry) };
+            return { row, stored: stored.map(storedEntry), destination };
           });
 
           if (found === undefined) {
             return yield* new ImportNotFound({ importId });
           }
 
-          const { row, stored } = found;
+          const { row, stored, destination } = found;
 
-          // In the order an upload tries them (`profileCandidates`): at most fifty of the user's and
-          // the shipped ones, on a file decoded once, each reading its top only.
+          // In the order an upload tries them (`profileCandidates`, `candidatesFor`): at most fifty
+          // of the user's and the shipped ones, on a file decoded once, each reading its top only.
           const entries: ReadonlyArray<ImportProfileEntry> = [...stored, ...SHIPPED_ENTRIES];
           const file = csvFile(row.content);
 
-          const tried = yield* Effect.forEach(entries, (entry) => fits(file, entry, row.currency));
+          const tried = yield* Effect.forEach(
+            forDestination(
+              entries,
+              (entry) => entry.definition !== null && readsOperations(entry.definition),
+              destination,
+            ),
+            (entry) => fits(file, entry, row.currency),
+          );
+
           const fitting = tried.flatMap((fit) => (fit === undefined ? [] : [fit]));
 
           const used =
