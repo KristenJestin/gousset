@@ -16,10 +16,19 @@ import { ENV } from "../../../env.server";
 import { isDoorOpen, notFound } from "../../../lib/mcp-door";
 import { auth, db } from "../../../services";
 
-const trustedProxies = (ENV.TRUSTED_PROXIES ?? "")
-  .split(",")
-  .map((entry) => entry.trim())
-  .filter((entry) => entry !== "");
+/**
+ * The reverse proxies the app was started behind. The environment is passed whole: written
+ * `ENV.TRUSTED_PROXIES`, a public variable is replaced by its build-time value (`security.ts` says
+ * the same), and the list stayed empty whatever the installation set (#245).
+ */
+function trustedProxiesOf(env: { readonly TRUSTED_PROXIES?: string }): ReadonlyArray<string> {
+  return (env.TRUSTED_PROXIES ?? "")
+    .split(",")
+    .map((entry) => entry.trim())
+    .filter((entry) => entry !== "");
+}
+
+const trustedProxies = trustedProxiesOf(ENV);
 
 const shouldWarnIgnoredForward = createIgnoredForwardWarning();
 
