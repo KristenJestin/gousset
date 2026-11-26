@@ -139,6 +139,25 @@ async function fortuneoFile(testInfo: TestInfo, fileName: string) {
   return path;
 }
 
+/** Another month of the same invented Fortuneo export: a deposit and a custody fee. */
+async function laterFortuneoFile(testInfo: TestInfo, fileName: string) {
+  const path = testInfo.outputPath(fileName);
+
+  await writeFile(
+    path,
+    encodeWindows1252(
+      [
+        "Date;Opération;Libellé;Code ISIN;Qté;Prix d'exé;Montant brut;Courtage;Montant net;Devise",
+        "05/12/2026;Versement espèces;VIREMENT;;;;;;150,00;EUR",
+        "11/12/2026;Droits de garde;DROITS DE GARDE;;;;;;-3,00;EUR",
+        "",
+      ].join("\r\n"),
+    ),
+  );
+
+  return path;
+}
+
 /**
  * An invented broker no profile knows, in UTF-8 with semicolons, dates with dots and decimal
  * points: a deposit, a purchase and a coupon, each amount's currency beside it. Its days are all
@@ -205,6 +224,49 @@ test("a Fortuneo file is read with the library's profile file, imported on the s
   await expect(figure(page, "fortuneo.csv", "added")).toHaveText("2");
 
   expect(await operationsOf(owner, pea)).toEqual([
+    ["purchase", -25_295],
+    ["deposit", 30_000],
+  ]);
+
+  await animationsDone(page);
+});
+
+test("a library profile imported, then a matching file dropped, is read with it without picking", async ({
+  app,
+  user,
+  page,
+}, testInfo) => {
+  test.setTimeout(120_000);
+
+  const { owner, pea } = await importer(app, user, page, "recognised");
+
+  await visit(page, "/import");
+  await dropInto(page, await fortuneoFile(testInfo, "fortuneo.csv"), "fortuneo.csv", PEA);
+  await preview(page, "fortuneo.csv");
+  await importLibraryProfile(page);
+  await page.getByRole("button", { name: "Read the file this way" }).click();
+  await expect(figure(page, "fortuneo.csv", "added")).toHaveText("2", { timeout: 30_000 });
+
+  // The next export is read with the profile imported, its columns found by their names: nothing
+  // to pick, no preview.
+  await dropInto(
+    page,
+    await laterFortuneoFile(testInfo, "fortuneo-later.csv"),
+    "fortuneo-later.csv",
+    PEA,
+  );
+  await expect(summaryOf(page, "fortuneo-later.csv")).toContainText(
+    `Read as a broker's operations with fortuneo-operations, into ${PEA}.`,
+    { timeout: 30_000 },
+  );
+  await expect(figure(page, "fortuneo-later.csv", "added")).toHaveText("2");
+  await expect(
+    page.getByRole("table", { name: "The first lines of fortuneo-later.csv" }),
+  ).toHaveCount(0);
+
+  expect(await operationsOf(owner, pea)).toEqual([
+    ["fee", -300],
+    ["deposit", 15_000],
     ["purchase", -25_295],
     ["deposit", 30_000],
   ]);

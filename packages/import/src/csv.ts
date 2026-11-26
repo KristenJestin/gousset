@@ -6,7 +6,7 @@ import type { AmountSyntax, FieldText } from "./amount";
 import { dateExample, dayReader, lastColumn } from "./csv-profile";
 import type { CsvProfile, DayReader } from "./csv-profile";
 import { findsColumnsByName, namesEveryColumn } from "./operations-columns";
-import { readsOperations } from "./operations-profile";
+import { lastOperationColumn, readsOperations } from "./operations-profile";
 import type { CsvDefinition } from "./operations-profile";
 import { decodeCsv, parseRows, skipLines } from "./csv-parse";
 import type { CsvCell, CsvEncoding, CsvRow, ParseLimit } from "./csv-parse";
@@ -301,35 +301,55 @@ const HEADER_SEARCH: ParseLimit = { rows: 1, lines: 100, characters: 64 * 1024 }
 export type CsvCandidate = { readonly header: string | null; readonly profile: CsvDefinition };
 
 /**
+ * Whether a profile recognises a file by the names of the columns it needs rather than by a whole
+ * header kept with it: PayPal's activity (`layout`), and an operations profile that finds a column
+ * by its name. Such a profile needs no header kept: one imported from a file recognises its files.
+ */
+function matchesByNames(profile: CsvDefinition): boolean {
+  return readsOperations(profile)
+    ? findsColumnsByName(profile)
+    : profile.layout === "paypal-activity";
+}
+
+/**
+ * Whether a candidate can recognise a file at all: by the header kept with it, or by its columns'
+ * names. A profile of places imported from a file keeps no header: it recognises none until saved
+ * again from a preview, and is chosen by hand meanwhile.
+ */
+export function recognisesFiles(candidate: CsvCandidate): boolean {
+  return candidate.header !== null || matchesByNames(candidate.profile);
+}
+
+/**
  * Whether a file's header row, as the candidate's profile reads it (`readCsvHeader`), is the one
  * the candidate recognises: its `header`, or, for PayPal's activity (`layout`) and an operations
  * profile that finds its columns by their names, any header that names the columns it needs,
- * wherever they stand.
+ * wherever they stand, whether or not a header was kept with it. An operations profile that also
+ * reads a column at its place needs a header that wide (`lastOperationColumn`).
  */
 export function headerMatches(candidate: CsvCandidate, header: string | null): boolean {
-  if (candidate.header === null || header === null) {
+  if (header === null) {
     return false;
   }
 
   const { profile } = candidate;
 
-  if (readsOperations(profile)) {
-    return findsColumnsByName(profile)
-      ? namesEveryColumn(profile, header)
-      : header === candidate.header;
+  if (matchesByNames(profile)) {
+    return readsOperations(profile)
+      ? header.split(";").length >= lastOperationColumn(profile) &&
+          namesEveryColumn(profile, header)
+      : isPaypalHeader(header);
   }
 
-  return profile.layout === "paypal-activity"
-    ? isPaypalHeader(header)
-    : header === candidate.header;
+  return candidate.header !== null && header === candidate.header;
 }
 
 /**
  * The first of `candidates` whose header the file's header row matches (`headerMatches`), as its
- * own profile reads it (`readCsvHeader`): the profile that recognises the file. A candidate with no
- * header, or whose profile cannot read the file's top (another encoding), is passed over;
- * `undefined` when none matches. Only the top of the file is parsed (`HEADER_SEARCH`), once per
- * candidate.
+ * own profile reads it (`readCsvHeader`): the profile that recognises the file. A candidate that
+ * recognises no file (`recognisesFiles`), or whose profile cannot read the file's top (another
+ * encoding), is passed over; `undefined` when none matches. Only the top of the file is parsed
+ * (`HEADER_SEARCH`), once per candidate.
  */
 export const matchCsvHeader = <Candidate extends CsvCandidate>(
   file: CsvFile,
@@ -337,7 +357,7 @@ export const matchCsvHeader = <Candidate extends CsvCandidate>(
 ): Effect.Effect<Candidate | undefined> =>
   Effect.gen(function* () {
     for (const candidate of candidates) {
-      if (candidate.header === null) {
+      if (!recognisesFiles(candidate)) {
         continue;
       }
 

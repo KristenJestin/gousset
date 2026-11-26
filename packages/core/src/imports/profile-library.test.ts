@@ -20,6 +20,7 @@ import { describe, expect, test } from "vite-plus/test";
 
 import { checkOperation } from "../investments/operation-input";
 import { operationDedupKeys } from "./operation-keys";
+import { matchProfile } from "./profiles";
 
 // The library of profiles (`packages/import/profiles/`, its README): each file is the JSON a user
 // exports from Gousset, imported through the profile import as it is, and it reads the invented
@@ -252,6 +253,17 @@ describe.each(LIBRARY)("the library's $file", ({ file, files }) => {
       expect(keysOf(operations)).toEqual(keys);
     },
   );
+
+  test.each(files)("imported with no header, recognises $name on upload", ({ bytes }) => {
+    const candidate = {
+      header: null,
+      profile: imported(file),
+      profileId: "imported",
+      shippedProfile: null,
+    };
+
+    expect(Effect.runSync(matchProfile(bytes, [candidate]))?.profileId).toBe("imported");
+  });
 
   test.each(files)("refuses $name in dollars at the amount's currency", ({ bytes, refused }) => {
     const exit = read(bytes, imported(file), "USD");

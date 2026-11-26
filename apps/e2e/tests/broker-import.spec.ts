@@ -285,6 +285,25 @@ test("import the same Fortuneo file again with the library's profile: nothing is
   expect(await linesOfImport(owner, again.id)).toEqual([]);
 });
 
+test("a library profile imported, then a matching file uploaded, is read with it without picking", async ({
+  app,
+  user,
+}) => {
+  const { owner, pea, profile } = await personWithPea(app, user, "broker-recognised");
+  const done = await imports.importFile(owner, pea, fortuneoFile());
+
+  expect(done).toMatchObject({
+    status: "done",
+    reads: "operations",
+    profile: "Fortuneo (library)",
+    linesAdded: 6,
+  });
+  expect(await imports.profileOf(owner, done.id)).toEqual({
+    profileId: profile,
+    shippedProfile: null,
+  });
+});
+
 test("undoing a Fortuneo import removes its operations and their lines", async ({ app, user }) => {
   const { owner, pea, profile } = await personWithPea(app, user, "broker-undo");
   const before = await run(investmentOperations(owner, pea, { limit: 500 }));
@@ -358,10 +377,11 @@ test("no broker's profile is shipped: none reads a Fortuneo file until the user 
 
   expect((await fitting()).fitting).toEqual([]);
 
-  // Imported from the library, kept with no header: it reads the file by a test read.
+  // Imported from the library, kept with no header: it finds its columns by their names, and so
+  // recognises the file by its header, as an upload does.
   const profile = await libraryProfile(owner);
 
   expect((await fitting()).fitting).toEqual([
-    { by: "test-read", profile: expect.objectContaining({ source: "stored", id: profile }) },
+    { by: "header", profile: expect.objectContaining({ source: "stored", id: profile }) },
   ]);
 });

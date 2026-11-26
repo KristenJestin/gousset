@@ -9,6 +9,7 @@ import {
   matchCsvHeader,
   readCsvHeader,
   readsOperations,
+  recognisesFiles,
   shippedProfile,
   testReadCsv,
   testReadOperations,
@@ -239,9 +240,10 @@ export class ImportProfiles extends Context.Service<
       choice: ProfileChoice,
     ) => Effect.Effect<ProfileFile, ProfileNotFound | ProfileUnreadable | Failure>;
     /**
-     * Saves a profile shared as a file (`exportFile`'s) under the name the user gives it. It
-     * recognises no file by its header until saved again from a preview. A file longer than
-     * `MAX_PROFILE_FILE` is refused before it is parsed.
+     * Saves a profile shared as a file (`exportFile`'s) under the name the user gives it, with no
+     * header: one that finds its columns by their names recognises any file whose header names
+     * them (`recognisesFiles`), one of places none until saved again from a preview. A file longer
+     * than `MAX_PROFILE_FILE` is refused before it is parsed.
      */
     readonly importFile: (
       owner: string,
@@ -260,9 +262,9 @@ export class ImportProfiles extends Context.Service<
       choice: ProfileChoice,
     ) => Effect.Effect<ProfileCandidate, ProfileNotFound | ProfileUnreadable | Failure>;
     /**
-     * Which profiles read a CSV import's file: those whose header is the file's, then those with no
-     * header whose test read of the file's top passes, each in the order an upload tries them
-     * (`ProfilesForImport`); and the profile the import used.
+     * Which profiles read a CSV import's file: those that recognise its header (`headerMatches`),
+     * then those that recognise no file whose test read of the file's top passes, each in the order
+     * an upload tries them (`ProfilesForImport`); and the profile the import used.
      */
     readonly forImport: (
       owner: string,
@@ -551,7 +553,10 @@ export const importProfilesLayer = Layer.effect(
   }),
 );
 
-/** How a profile reads a file: by its header, by a test read when it keeps none, or not at all. */
+/**
+ * How a profile reads a file: by its header, as an upload recognises it; by a test read when it
+ * recognises no file (`recognisesFiles`); or not at all.
+ */
 const fits = (
   file: CsvFile,
   entry: ImportProfileEntry,
@@ -563,7 +568,7 @@ const fits = (
     return Effect.succeed(undefined);
   }
 
-  if (entry.header !== null) {
+  if (recognisesFiles({ header: entry.header, profile: definition })) {
     return readCsvHeader(file, definition).pipe(
       Effect.match({
         onFailure: () => undefined,

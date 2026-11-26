@@ -4,6 +4,8 @@ Profile files for exports Gousset does not read on its own, to take or leave: Go
 broker's profile and recognises no broker by itself (#250). A user who has one of these exports
 imports the file through the profile import of the import screen ("Import a profile file"), names
 it, and chooses it for the file; an agent does the same with the `imports` tool of the MCP door.
+From then on, the user's next export is read with it on its own: these profiles find their columns
+by their names, and recognise any file whose header names those they need.
 Nothing in the app lists this folder yet: shipping the library inside Gousset is #258's.
 
 Each file is **exactly the JSON a user exports from Gousset** ("Export the profile" on the import

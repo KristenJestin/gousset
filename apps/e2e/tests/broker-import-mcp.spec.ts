@@ -1,9 +1,12 @@
+import { readFile } from "node:fs/promises";
+
 import type { Client } from "@modelcontextprotocol/client";
 import type { Page } from "@playwright/test";
 import { account } from "@gousset/db/schema/ledger";
 import { encodeWindows1252 } from "@gousset/fixture";
 
 import { addUser } from "../src/auth";
+import { importsOn } from "../src/imports";
 import { connectMcp, expect, test } from "../src/test";
 import { openUserData } from "../src/user-data";
 
@@ -205,4 +208,69 @@ test("an agent writes a broker's profile, test-reads it, keeps it and imports wi
   expect(refused.text).toContain(
     "A broker's operations go only into an investment account kept by its lines.",
   );
+});
+
+/** The library's Fortuneo profile file, as a user downloads it from the repository. */
+const LIBRARY_FILE = new URL(
+  "../../../packages/import/profiles/operations/fortuneo-operations.json",
+  import.meta.url,
+);
+
+test("a library profile imported, then a matching file uploaded by an agent, is read with it without picking", async ({
+  app,
+  user,
+  page,
+  baseURL,
+  mcpClientId,
+}, testInfo) => {
+  test.setTimeout(120_000);
+
+  const investor = await addUser(app.baseURL, user, {
+    name: "Kai Example",
+    email: `kai.library.worker${app.slot}.${testInfo.repeatEachIndex}@example.com`,
+    password: `e2e-kai-password-${app.slot}`,
+  });
+
+  const data = openUserData(app.database);
+
+  try {
+    const owner = await data.ownerOf(investor.email);
+
+    await data.asUser(owner, (transaction) =>
+      transaction
+        .insert(account)
+        .values({ userId: owner, name: PEA, kind: "investment", envelope: "pea", currency: "EUR" }),
+    );
+
+    // The user imported the library's profile file, kept with no header, as the screen does.
+    const content = await readFile(LIBRARY_FILE, "utf8");
+
+    await importsOn(data).withProfiles((service) =>
+      service.importFile(owner, { name: "Fortuneo (library)", institution: null, content }),
+    );
+  } finally {
+    await data.close();
+  }
+
+  await page.context().addCookies([...investor.cookies]);
+
+  const session = await connectMcp({
+    baseURL: baseURL ?? "",
+    page,
+    consent: allowReadAndWrite,
+    scope: "read write",
+    clientId: mcpClientId,
+  });
+
+  const uploaded = await callText(session.client, "imports", {
+    action: "upload",
+    file_name: "fortuneo-december.csv",
+    content_base64: Buffer.from(fortuneo).toString("base64"),
+    account: PEA,
+  });
+
+  expect(uploaded.isError, uploaded.text).toBe(false);
+  expect(uploaded.text).toContain(`Imported fortuneo-december.csv into ${PEA}`);
+  expect(uploaded.text).toContain("Read as a broker's operations with Fortuneo (library).");
+  expect(uploaded.text).toContain("2 operations read: 2 added, 0 already known (duplicates).");
 });

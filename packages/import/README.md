@@ -158,7 +158,11 @@ the file once per encoding however many profiles are tried on it. `readCsvHeader
 file's first row only, and looks for it within 64 KiB of text for the lines skipped and 100 lines
 and 64 KiB past them: a header further down is none, so that trying every profile on a large file
 costs what its top costs. `matchCsvHeader(file, candidates)` gives the first of the candidates (a
-definition and its header) whose header the file has, each read with its own profile;
+definition and its header, `null` for a profile imported from a file) whose header the file has,
+each read with its own profile; a profile that finds its columns by their names (PayPal's activity,
+an operations profile of version 2) recognises a file by those names whether or not it keeps a
+header, one of places only by the header it keeps (`recognisesFiles` says whether a candidate can
+recognise any file);
 `testReadCsv(file, profile, currency)` reads the file's first 50 lines (within 200 lines and 64 KiB
 past those skipped, as the header search does) as `readCsv` would, and
 succeeds with them when the profile fits them (with no currency, amounts are read with up to four
@@ -231,9 +235,10 @@ account's country writes them (`MM/DD/YYYY` for the US).
   document its French names publicly: those are a guess, and the invented French export of the
   tests is built on it. A header lacking one of `Date`, `Name`, `Type`, `Status`, `Currency`,
   `Net` or `Transaction ID` is not PayPal's activity (`MalformedFile`, naming the column).
-  `headerMatches` and `matchCsvHeader` recognise a file by those names, never by its whole header:
-  the profile's `header` and `columns` describe the mandatory columns, in their order, for the
-  import screen and the MCP door to show.
+  `headerMatches` and `matchCsvHeader` recognise a file by those names, never by its whole header,
+  and so does a copy of the profile imported from a file with no header: the profile's `header` and
+  `columns` describe the mandatory columns, in their order, for the import screen and the MCP door
+  to show.
 - **A row counts when it moved the balance**: its `Status` is `Completed` (`Terminé`), and its
   `Balance Impact` is not `Memo`. Pending, denied, reversed or voided rows are left out. PayPal's
   report says no more of a memo than "the impact of the transaction on the account balance:
@@ -325,9 +330,12 @@ columns:
   - `{ "after": ["Price"] }`: the column right after the one so named, when it has no name of its
     own, as a broker writes an amount's currency (Degiro); absent otherwise.
 
-  A profile that finds a column by name reads a header row (`MalformedFile` without one), and,
-  saved with a header, recognises any file whose header row names every column it requires
-  (`headerMatches`, `matchCsvHeader`), rather than that exact header;
+  A profile that finds a column by name reads a header row (`MalformedFile` without one), and
+  recognises any file whose header row names every column it requires, its optional ones there or
+  not, and has as many columns as it reads at their places (`headerMatches`, `matchCsvHeader`),
+  rather than one exact header: kept with a header or with none, as a profile file imported is, it
+  reads the next such file on its own. A profile whose every column is at its place recognises only
+  the header it was saved with;
 
 - `kinds`: the words of the `kind` column (`[{ "word": "Buy", "kind": "purchase" }]`, 100 at
   most), compared trimmed, in any case, accents aside. **A word the profile does not map is
@@ -371,7 +379,8 @@ by the places the preview shows.
 
 The library (`profiles/`, its [README](profiles/README.md)) holds profile files for brokers'
 exports, to import through the profile import, each exactly the JSON an export writes, its
-`description` saying whether it is checked or guessed: today Fortuneo's history of operations and
+`description` saying whether it is checked or guessed; imported, one that finds its columns by
+their names reads the next such export on its own, with nothing to pick: today Fortuneo's history of operations and
 Degiro's `Transactions.csv`, both guessed from their public help pages, never checked on a real
 export. To add one, map a real export by hand, export the profile, and follow the library's
 README: the file, an invented export in `@gousset/fixture`, its case in the library's test

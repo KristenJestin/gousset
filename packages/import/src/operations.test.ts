@@ -6,6 +6,7 @@ import {
   FORTUNEO_HEADER,
   FORTUNEO_ROWS,
   degiroExport,
+  encodeWindows1252,
   fortuneoExport,
   fortuneoRow,
 } from "@gousset/fixture";
@@ -526,6 +527,72 @@ describe("a profile of version 2", () => {
       HAND_MAPPED,
     );
     expect(Schema.encodeSync(CsvDefinition)(decodeShared(saved))).toMatchObject({ version: 2 });
+  });
+});
+
+/** What a profile is matched by: its key, the header it keeps (none for a file imported), itself. */
+type Candidate = { key: string; header: string | null; profile: CsvDefinition };
+
+const matchedKey = (bytes: Uint8Array, candidates: ReadonlyArray<Candidate>) =>
+  Effect.runSync(matchCsvHeader(csvFile(bytes), candidates))?.key;
+
+/** The library's Fortuneo profile, kept with no header as the profile import keeps a file. */
+const imported: Candidate = { key: "imported", header: null, profile: FORTUNEO_PROFILE };
+
+/** It, reading the broker's reference at a place. */
+const referenceAt = (place: number): Candidate => ({
+  ...imported,
+  profile: { ...FORTUNEO_PROFILE, columns: { ...FORTUNEO_PROFILE.columns, reference: place } },
+});
+
+/** A Fortuneo header under `blank` blank lines. */
+const headerBelow = (blank: number) =>
+  encodeWindows1252(`${"\r\n".repeat(blank)}${FORTUNEO_HEADER.join(";")}\r\n`);
+
+describe("a profile kept with no header, as a profile file is imported", () => {
+  test("finding its columns by name, recognises a file whose header names every one it needs", () => {
+    expect(matchedKey(fortuneoFile(FORTUNEO_ROWS), [...SHIPPED_PROFILES, imported])).toBe(
+      "imported",
+    );
+    expect(matchedKey(degiroFile(DEGIRO_ROWS), [{ ...imported, profile: DEGIRO_PROFILE }])).toBe(
+      "imported",
+    );
+  });
+
+  test("an optional column may be missing from the header, a required one may not", () => {
+    const lean = FORTUNEO_HEADER.filter((name) => name !== "Courtage" && name !== "Devise");
+    const withoutAmount = FORTUNEO_HEADER.filter((name) => name !== "Montant net");
+
+    expect(matchedKey(fortuneoFile([], lean), [imported])).toBe("imported");
+    expect(matchedKey(fortuneoFile([], withoutAmount), [imported])).toBeUndefined();
+    expect(matchedKey(handMapped([]), [imported])).toBeUndefined();
+  });
+
+  test("the first candidate that recognises the file is the one", () => {
+    const second: Candidate = { ...imported, key: "second" };
+
+    expect(matchedKey(fortuneoFile(FORTUNEO_ROWS), [imported, second])).toBe("imported");
+    expect(matchedKey(fortuneoFile(FORTUNEO_ROWS), [second, imported])).toBe("second");
+  });
+
+  test("finding a column at its place, recognises no header narrower than that place", () => {
+    expect(matchedKey(fortuneoFile(FORTUNEO_ROWS), [referenceAt(10)])).toBe("imported");
+    expect(matchedKey(fortuneoFile(FORTUNEO_ROWS), [referenceAt(11)])).toBeUndefined();
+  });
+
+  test("finding every column at its place, recognises a file only by the header it was saved with", () => {
+    const bytes = handMapped(["2026-10-01;;Cash in;;;;;;500,00;R-1"]);
+    const header = "day;settled;what;isin;name;units;price;fees;cash;ref";
+
+    expect(
+      matchedKey(bytes, [{ key: "imported", header: null, profile: HAND_MAPPED }]),
+    ).toBeUndefined();
+    expect(matchedKey(bytes, [{ key: "saved", header, profile: HAND_MAPPED }])).toBe("saved");
+  });
+
+  test("looks for the header at the file's top only", () => {
+    expect(matchedKey(headerBelow(10), [imported])).toBe("imported");
+    expect(matchedKey(headerBelow(150), [imported])).toBeUndefined();
   });
 });
 

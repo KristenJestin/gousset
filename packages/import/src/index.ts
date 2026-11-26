@@ -20,6 +20,7 @@ export {
   previewCsvRows,
   readCsv,
   readCsvHeader,
+  recognisesFiles,
   testReadCsv,
 } from "./csv";
 
