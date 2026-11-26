@@ -14,7 +14,9 @@ export const CSV_FIELDS = [
 
 /**
  * What a column of a broker's export can hold, as a profile of operations reads it (v0.6): the
- * day, the kind of operation, the security, the quantity and the price, the fees, the cash moved.
+ * day, the kind of operation, the security, the quantity and the price, the fees, the cash moved,
+ * and the currencies they are written in (`currency`, the amount's), with the trade's value in the
+ * account's currency for a price in another.
  */
 export const OPERATION_FIELDS = [
   "bookedOn",
@@ -25,8 +27,12 @@ export const OPERATION_FIELDS = [
   "securityCurrency",
   "quantity",
   "unitPrice",
+  "priceCurrency",
+  "value",
   "fees",
+  "feesCurrency",
   "amount",
+  "currency",
   "label",
   "reference",
   "ignored",

@@ -168,7 +168,10 @@ function displaced(field: CsvField): ReadonlyArray<CsvField> {
     case "securityCurrency":
     case "quantity":
     case "unitPrice":
+    case "priceCurrency":
+    case "value":
     case "fees":
+    case "feesCurrency":
     case "reference":
       return [field];
   }
@@ -317,10 +320,10 @@ export function operationsProfileOf(
       amount,
       label: placeOf(mapping, "label"),
       reference: placeOf(mapping, "reference"),
-      amountCurrency: null,
-      feesCurrency: null,
-      priceCurrency: null,
-      value: null,
+      amountCurrency: placeOf(mapping, "currency"),
+      feesCurrency: placeOf(mapping, "feesCurrency"),
+      priceCurrency: placeOf(mapping, "priceCurrency"),
+      value: placeOf(mapping, "value"),
     },
     kinds: words.flatMap(({ word, kind }) => (kind === null ? [] : [{ word, kind }])),
     // Nothing on the screen says a broker's reference is unique to its row: keyed by content.
@@ -328,6 +331,25 @@ export function operationsProfileOf(
   };
 
   return { profile };
+}
+
+/**
+ * A broker's operations profile chosen from the list, read as it is (its columns at their places or
+ * found by their names, its words, its description), with the file's settings the form now says.
+ */
+export function startedOperations(
+  profile: OperationsProfile,
+  settings: CsvFileSettings,
+): OperationsProfile {
+  return {
+    ...profile,
+    separator: settings.separator,
+    encoding: settings.encoding,
+    skipRows: settings.skipRows,
+    headerRow: settings.headerRow,
+    dateFormat: settings.dateFormat,
+    decimalMark: settings.decimalMark,
+  };
 }
 
 /** A broker's operations profile's settings, as the form shows them. */
@@ -365,8 +387,14 @@ export function operationsMappingOf(
     [at(places.securityCurrency), "securityCurrency"],
     [at(places.quantity), "quantity"],
     [at(places.unitPrice), "unitPrice"],
+    // Shown over the security's currency when both are one column (Degiro's): a price in another
+    // currency is read from the trade's value only when its currency's column says so.
+    [at(places.priceCurrency), "priceCurrency"],
+    [at(places.value), "value"],
     [at(places.fees), "fees"],
+    [at(places.feesCurrency), "feesCurrency"],
     [at(places.amount), "amount"],
+    [at(places.amountCurrency), "currency"],
     // A broker's label is often its security's name, in the same column: the name is shown.
     [places.label === places.securityName ? null : at(places.label), "label"],
     [at(places.reference), "reference"],

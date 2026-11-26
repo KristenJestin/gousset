@@ -1,4 +1,5 @@
 import type { CsvProfile, OperationsProfile } from "@gousset/import";
+import type { CsvField } from "@gousset/ui/lib/csv-fields";
 import { describe, expect, test } from "vite-plus/test";
 
 import {
@@ -11,6 +12,7 @@ import {
   profileOf,
   remap,
   settingsOf,
+  startedOperations,
   withSettings,
 } from "./csv-mapping";
 
@@ -234,6 +236,68 @@ describe("a broker's operations as the preview maps their columns", () => {
         { word: "Coupon", kind: null },
       ]),
     ).toEqual({ profile: operations });
+  });
+
+  test("maps the currencies and the trade's value to the profile's columns", () => {
+    const mapping: Array<CsvField> = [
+      "bookedOn",
+      "unitPrice",
+      "priceCurrency",
+      "value",
+      "fees",
+      "feesCurrency",
+      "amount",
+      "currency",
+    ];
+
+    const made = operationsProfileOf(operationsSettingsOf(operations), mapping, []);
+
+    expect("profile" in made ? made.profile.columns : made).toMatchObject({
+      priceCurrency: 3,
+      value: 4,
+      fees: 5,
+      feesCurrency: 6,
+      amount: 7,
+      amountCurrency: 8,
+    });
+    expect("profile" in made ? operationsMappingOf(made.profile, 8, []) : []).toEqual(mapping);
+  });
+
+  test("shows a profile's columns found by their names where the file's header puts them", () => {
+    const named: OperationsProfile = {
+      ...operations,
+      columns: {
+        ...operations.columns,
+        bookedOn: { names: ["Day"] },
+        amount: { names: ["Cash"] },
+        amountCurrency: { after: ["Cash"] },
+        kind: null,
+        isin: null,
+        securityName: null,
+        quantity: null,
+        unitPrice: null,
+        fees: null,
+        reference: null,
+      },
+    };
+
+    expect(operationsMappingOf(named, 4, ["Note", "Cash", "", "Day"])).toEqual([
+      "ignored",
+      "amount",
+      "currency",
+      "bookedOn",
+    ]);
+  });
+
+  test("a profile chosen from the list is read as it is, with the settings the form says", () => {
+    const settings = { ...operationsSettingsOf(operations), separator: "," as const, skipRows: 2 };
+
+    expect(startedOperations({ ...operations, description: "Guessed." }, settings)).toEqual({
+      ...operations,
+      description: "Guessed.",
+      separator: ",",
+      skipRows: 2,
+    });
   });
 
   test("names what it still lacks: a day and an amount, no label", () => {

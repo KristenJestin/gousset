@@ -31,6 +31,9 @@ const FIELD_NAMES = {
   unitPrice: () => m.importCsvFieldUnitPrice(),
   fees: () => m.importCsvFieldFees(),
   reference: () => m.importCsvFieldReference(),
+  priceCurrency: () => m.importCsvFieldPriceCurrency(),
+  value: () => m.importCsvFieldTradeValue(),
+  feesCurrency: () => m.importCsvFieldFeesCurrency(),
 } satisfies { readonly [Field in CsvField]: () => string };
 
 /** Each field a column can hold, by its name in the page's language. */
@@ -60,9 +63,14 @@ export function operationFieldNames() {
     securityCurrency: FIELD_NAMES.securityCurrency(),
     quantity: FIELD_NAMES.quantity(),
     unitPrice: FIELD_NAMES.unitPrice(),
+    priceCurrency: FIELD_NAMES.priceCurrency(),
+    value: FIELD_NAMES.value(),
     fees: FIELD_NAMES.fees(),
+    feesCurrency: FIELD_NAMES.feesCurrency(),
     // Signed by its kind, whatever the file writes: not "Amount (signed)" here.
     amount: m.importCsvFieldOperationAmount(),
+    // Checked against the account's: Gousset converts no currency.
+    currency: m.importCsvFieldOperationCurrency(),
     label: FIELD_NAMES.label(),
     reference: FIELD_NAMES.reference(),
     ignored: FIELD_NAMES.ignored(),
