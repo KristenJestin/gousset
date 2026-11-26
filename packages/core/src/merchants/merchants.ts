@@ -13,6 +13,7 @@ import { and, asc, count, desc, eq, exists, gt, inArray, lte, ne, or, sql } from
 import { alias as aliasOf } from "drizzle-orm/pg-core";
 import { Context, Effect, Layer, Result } from "effect";
 
+import { lineCategoryOf } from "../category-store";
 import type { LineCategory } from "../category-store";
 import { takeCategoryTurn } from "../category-turn";
 import { LineNotFound } from "../errors";
@@ -598,6 +599,9 @@ async function defaultCategoryOf(
       name: category.name,
       parentName: parentCategory.name,
       kind: category.kind,
+      icon: category.icon,
+      color: category.color,
+      parentColor: parentCategory.color,
       archivedAt: category.archivedAt,
     })
     .from(merchant)
@@ -609,9 +613,7 @@ async function defaultCategoryOf(
     return null;
   }
 
-  const { archivedAt, ...shown } = row;
-
-  return { ...shown, archived: archivedAt !== null };
+  return { ...lineCategoryOf(row), archived: row.archivedAt !== null };
 }
 
 /** A name as the user gave it, trimmed, or why it is refused. */

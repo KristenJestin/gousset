@@ -1,5 +1,7 @@
 import { Effect } from "effect";
 
+import { shownColor, shownIcon } from "./category-looks";
+import type { CategoryColorKey, CategoryIconKey } from "./category-looks";
 import { CategoryStore } from "./category-store";
 import { currentMonth } from "./today";
 import type { CategoryRecord, MonthlySpending } from "./category-store";
@@ -28,7 +30,9 @@ export type MonthBenchmark =
 export type CategoryInMonth = {
   readonly id: string;
   readonly name: string;
-  readonly icon: string | null;
+  readonly icon: CategoryIconKey | null;
+  /** The colour it is shown in: its own, else its parent's (#205); null for none. */
+  readonly color: CategoryColorKey | null;
   /** Null for a top-level category. */
   readonly parentId: string | null;
   /** Archived: shown only for what it cost this month. */
@@ -210,6 +214,7 @@ export function benchmarksOf(facts: BenchmarkFacts): MonthBenchmarks {
   const rowOf = (
     category: CategoryRecord,
     children: ReadonlyArray<CategoryInMonth>,
+    parentColor: string | null,
   ): CategoryInMonth => {
     const rows = rowsOf(category);
 
@@ -228,7 +233,8 @@ export function benchmarksOf(facts: BenchmarkFacts): MonthBenchmarks {
     return {
       id: category.id,
       name: category.name,
-      icon: category.icon,
+      icon: shownIcon(category.icon),
+      color: shownColor(category.color, parentColor),
       parentId: category.parentId,
       archived: category.archivedAt !== null,
       spent: { minor: now.own, currency },
@@ -245,10 +251,10 @@ export function benchmarksOf(facts: BenchmarkFacts): MonthBenchmarks {
     .flatMap((top) => {
       const children = childrenOf(top.id)
         .toSorted(inOrder)
-        .map((child) => rowOf(child, []))
+        .map((child) => rowOf(child, [], top.color))
         .filter(shown);
 
-      const row = rowOf(top, children);
+      const row = rowOf(top, children, null);
 
       return shown(row) || children.length > 0 ? [row] : [];
     });

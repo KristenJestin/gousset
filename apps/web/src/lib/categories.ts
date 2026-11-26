@@ -73,15 +73,26 @@ export function choicesOf(tree: CategoryTree, kind: EntryKind, except?: string) 
   const offered = (node: CategoryNode) => inUse(node) && node.id !== except;
 
   return tree[kind].filter(offered).map((top) => ({
+    ...lookOf(top),
     id: top.id,
     name: top.name,
-    children: top.children.filter(offered).map((child) => ({ id: child.id, name: child.name })),
+    children: top.children
+      .filter(offered)
+      .map((child) => ({ ...lookOf(child), id: child.id, name: child.name })),
   }));
 }
 
-/** The top-level categories in use a category of `kind` may go under: never itself. */
+/** What a category is shown with (#205): its icon, and the colour it is shown in. */
+export function lookOf(node: CategoryNode) {
+  return { icon: node.icon, color: node.shownColor };
+}
+
+/**
+ * The top-level categories in use a category of `kind` may go under, never itself, with their
+ * colour: a child without its own takes it.
+ */
 export function parentsOf(tree: CategoryTree, kind: EntryKind, except?: string) {
   return tree[kind]
     .filter((top) => inUse(top) && top.id !== except)
-    .map((top) => ({ id: top.id, name: top.name }));
+    .map((top) => ({ id: top.id, name: top.name, color: top.color }));
 }

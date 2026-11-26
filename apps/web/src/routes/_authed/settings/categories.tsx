@@ -21,6 +21,7 @@ import type { CategoryAnswer } from "@/components/category-forms";
 import {
   BenchmarkDialog,
   CreateCategoryDialog,
+  LookCategoryDialog,
   MergeCategoryDialog,
   MoveCategoryDialog,
   RenameCategoryDialog,
@@ -34,7 +35,7 @@ import {
 } from "@/functions/categories";
 import { categoryRefusalMessage } from "@/i18n/messages";
 import type { CategoryView } from "@/lib/categories";
-import { choicesOf, parentsOf, rowsOf } from "@/lib/categories";
+import { choicesOf, lookOf, parentsOf, rowsOf } from "@/lib/categories";
 import { categoryQueries, invalidateCategories } from "@/queries/categories";
 
 /**
@@ -72,7 +73,7 @@ async function answerOf<Answer extends CategoryAnswer>(
 }
 
 /** The dialog a row's menu opened, and on which category. */
-type Action = "rename" | "move" | "merge" | "benchmark" | "archive";
+type Action = "rename" | "look" | "move" | "merge" | "benchmark" | "archive";
 
 function isView(value: string): value is CategoryView {
   return value === "expense" || value === "income" || value === "archived";
@@ -128,6 +129,7 @@ function CategoriesContent() {
       id: node.id,
       name: row.name,
       child: row.child,
+      ...lookOf(node),
       // A top-level category counts its children's lines in its average, as its benchmark does.
       average: node.parentId === null ? node.averageWithChildren : node.average,
       benchmark: benchmarkText(node),
@@ -146,6 +148,7 @@ function CategoriesContent() {
           <MenuItem icon="edit" onSelect={() => openAction("rename", node)}>
             {m.categoriesRename()}
           </MenuItem>
+          <MenuItem onSelect={() => openAction("look", node)}>{m.categoriesLook()}</MenuItem>
           <MenuItem onSelect={() => openAction("move", node)}>{m.categoriesMove()}</MenuItem>
           <MenuItem onSelect={() => openAction("merge", node)}>{m.categoriesMerge()}</MenuItem>
           <MenuItem onSelect={() => openAction("benchmark", node)}>
@@ -290,8 +293,13 @@ function ActionDialog({
   const categoryId = node.id;
   const kind: EntryKind = node.kind;
 
-  const edit = (patch: { name?: string; parentId?: string | null; benchmark?: Benchmark }) =>
-    change(() => editCategory({ data: { categoryId, ...patch } }));
+  const edit = (patch: {
+    name?: string;
+    parentId?: string | null;
+    benchmark?: Benchmark;
+    icon?: string | null;
+    color?: string | null;
+  }) => change(() => editCategory({ data: { categoryId, ...patch } }));
 
   switch (action) {
     case "rename":
@@ -301,6 +309,17 @@ function ActionDialog({
           onOpenChange={onOpenChange}
           name={node.name}
           onRename={(name) => edit({ name })}
+        />
+      );
+    case "look":
+      return (
+        <LookCategoryDialog
+          open={open}
+          onOpenChange={onOpenChange}
+          name={node.name}
+          initial={{ icon: node.icon, color: node.color }}
+          parent={parentsOf(tree, kind).find((each) => each.id === node.parentId)}
+          onSave={(look) => edit(look)}
         />
       );
     case "move":

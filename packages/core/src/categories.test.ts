@@ -612,7 +612,14 @@ describe("classifying a line", () => {
     );
 
     expect(result).toMatchObject({
-      success: { id: bakery.id, name: "Bakery", parentName: "Groceries", kind: "expense" },
+      success: {
+        id: bakery.id,
+        name: "Bakery",
+        parentName: "Groceries",
+        kind: "expense",
+        icon: null,
+        color: null,
+      },
     });
     expect(after.entries.find((each) => each.id === paid.id)).toMatchObject({
       categoryId: bakery.id,
@@ -700,7 +707,14 @@ describe("a merchant's default category", () => {
     );
 
     expect(result).toMatchObject({
-      success: { id: bakery.id, name: "Bakery", parentName: "Groceries", kind: "expense" },
+      success: {
+        id: bakery.id,
+        name: "Bakery",
+        parentName: "Groceries",
+        kind: "expense",
+        icon: null,
+        color: null,
+      },
     });
     expect(defaultOf(set, shop)).toBe(bakery.id);
 
@@ -823,5 +837,94 @@ describe("a merchant's default category", () => {
 
     expect(defaultOf(after, cleared)).toBeNull();
     expect(defaultOf(after, kept)).toBe(rent.id);
+  });
+});
+
+describe("a category's look (#205)", () => {
+  test("an icon and a colour are chosen when it is made or edited, and cleared with null", async () => {
+    const { rows, housing } = startingRows();
+
+    const { rows: made } = await run(
+      rows,
+      createCategory(ADA, { kind: "expense", name: "Pets", icon: "pets", color: "teal" }),
+    );
+
+    const pets = made.categories.find((each) => each.name === "Pets");
+
+    expect({ icon: pets?.icon, color: pets?.color }).toEqual({ icon: "pets", color: "teal" });
+
+    const { rows: edited } = await run(
+      made,
+      editCategory(ADA, housing.id, { icon: "rent", color: "indigo" }),
+    );
+
+    const shown = edited.categories.find((each) => each.id === housing.id);
+
+    expect({ icon: shown?.icon, color: shown?.color }).toEqual({ icon: "rent", color: "indigo" });
+
+    // Left out, they stay; null clears them.
+    const { rows: renamed } = await run(edited, editCategory(ADA, housing.id, { name: "Home" }));
+
+    expect(renamed.categories.find((each) => each.id === housing.id)?.color).toBe("indigo");
+
+    const { rows: cleared } = await run(
+      renamed,
+      editCategory(ADA, housing.id, { icon: null, color: null }),
+    );
+
+    const plain = cleared.categories.find((each) => each.id === housing.id);
+
+    expect({ icon: plain?.icon, color: plain?.color }).toEqual({ icon: null, color: null });
+  });
+
+  test("an icon or a colour that is none of the lists' is refused", async () => {
+    const { rows, housing } = startingRows();
+
+    expect(
+      await outcome(rows, createCategory(ADA, { kind: "expense", name: "Pets", icon: "dog" })),
+    ).toBe("CategoryRefused:icon");
+
+    expect(
+      await outcome(rows, createCategory(ADA, { kind: "expense", name: "Pets", color: "#ff0000" })),
+    ).toBe("CategoryRefused:color");
+
+    expect(await outcome(rows, editCategory(ADA, housing.id, { color: "Blue" }))).toBe(
+      "CategoryRefused:color",
+    );
+  });
+
+  test("a child takes its parent's colour unless it has its own", async () => {
+    const { rows, housing, rent, energy } = startingRows();
+
+    const { rows: blue } = await run(rows, editCategory(ADA, housing.id, { color: "blue" }));
+    const { rows: amber } = await run(blue, editCategory(ADA, energy.id, { color: "amber" }));
+    const { result } = await run(amber, listCategories(ADA));
+    const tree = Result.isSuccess(result) ? result.success : undefined;
+    const home = tree?.expense.find((each) => each.id === housing.id);
+    const childOf = (id: string) => home?.children.find((each) => each.id === id);
+
+    expect({ own: home?.color, shown: home?.shownColor }).toEqual({ own: "blue", shown: "blue" });
+    expect({ own: childOf(rent.id)?.color, shown: childOf(rent.id)?.shownColor }).toEqual({
+      own: null,
+      shown: "blue",
+    });
+    expect({ own: childOf(energy.id)?.color, shown: childOf(energy.id)?.shownColor }).toEqual({
+      own: "amber",
+      shown: "amber",
+    });
+  });
+
+  test("a line's category shows its icon and its colour, its parent's for a child", async () => {
+    const { rows, housing, rent } = startingRows();
+    const paid = entryIn(rows, rent, "2026-11-02", 80_000);
+    const lineId = paid.parts[0]?.lineId ?? "";
+
+    const { rows: blue } = await run(rows, editCategory(ADA, housing.id, { color: "blue" }));
+    const { rows: drawn } = await run(blue, editCategory(ADA, rent.id, { icon: "rent" }));
+    const { result } = await run(drawn, classifyLine(ADA, lineId, { categoryId: rent.id }));
+
+    expect(result).toMatchObject({
+      success: { name: "Rent", parentName: "Housing", icon: "rent", color: "blue" },
+    });
   });
 });

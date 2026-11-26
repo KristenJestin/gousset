@@ -10,6 +10,8 @@ import {
 } from "@ui-sdk/react/select";
 
 import { controlClasses, focusRing, itemClasses, popupClasses } from "../lib/form-classes";
+import { paletteText } from "../lib/palette";
+import type { PaletteColor } from "../lib/palette";
 import { cn } from "../lib/utils";
 import { Icon } from "./icon";
 import type { IconName } from "./icons";
@@ -23,8 +25,28 @@ export type ChoiceItem = {
   label: string;
   /** Shown before the label, in the list and once chosen. */
   icon?: IconName;
+  /** The icon's colour (a category's, #205); the muted text's when left out. */
+  iconColor?: PaletteColor | null;
   disabled?: boolean;
 };
+
+/** A choice's icon, in its colour when it has one: the chosen value's icon copies it. */
+export function ChoiceIcon({ item }: { item: ChoiceItem & { icon: IconName } }) {
+  return (
+    <span
+      data-icon={item.icon}
+      data-color={item.iconColor ?? undefined}
+      className={cn(
+        "flex",
+        item.iconColor === undefined || item.iconColor === null
+          ? undefined
+          : paletteText[item.iconColor],
+      )}
+    >
+      <Icon name={item.icon} />
+    </span>
+  );
+}
 
 export type SelectProps = FieldProps & {
   items: ReadonlyArray<ChoiceItem>;
@@ -119,7 +141,7 @@ function ChoiceRow({ item }: { item: ChoiceItem }) {
     >
       {item.icon === undefined ? null : (
         <SelectItemIcon className="flex text-muted-foreground">
-          <Icon name={item.icon} />
+          <ChoiceIcon item={{ ...item, icon: item.icon }} />
         </SelectItemIcon>
       )}
       <span className="flex-1 truncate">{item.label}</span>

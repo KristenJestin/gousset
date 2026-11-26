@@ -9,20 +9,31 @@ const EXPENSES: ReadonlyArray<CategoryChoice> = [
   {
     id: "housing",
     name: "Housing",
+    icon: "housing",
+    color: "blue",
     children: [
-      { id: "rent", name: "Rent" },
-      { id: "energy", name: "Energy" },
+      { id: "rent", name: "Rent", icon: "rent", color: "blue" },
+      { id: "energy", name: "Energy", icon: "energy", color: "amber" },
     ],
   },
   {
     id: "groceries",
     name: "Groceries",
+    icon: "groceries",
+    color: "green",
     children: [
-      { id: "supermarket", name: "Supermarket" },
-      { id: "bakery", name: "Bakery" },
+      { id: "supermarket", name: "Supermarket", icon: "supermarket", color: "green" },
+      { id: "bakery", name: "Bakery", icon: "bakery", color: "green" },
     ],
   },
-  { id: "leisure", name: "Leisure", children: [{ id: "sport", name: "Sport" }] },
+  {
+    id: "leisure",
+    name: "Leisure",
+    icon: "leisure",
+    color: "violet",
+    children: [{ id: "sport", name: "Sport", icon: "sport", color: "violet" }],
+  },
+  // No icon nor colour: `other`'s drawing, muted.
   { id: "other", name: "Other" },
 ];
 
@@ -49,7 +60,9 @@ function Choosing({ initial }: { initial: string | null }) {
 /**
  * One category among the user's, found by typing (a `Combobox`): each top-level category, then its
  * children named with it ("Groceries › Bakery"), so typing a parent's name finds its children too.
- * The page gives only the categories that may be chosen (of the line's kind, not archived).
+ * Each shows its icon in the colour it is shown in (#205), in the list and once chosen. The page
+ * gives only the categories that may be chosen (of the line's kind, not archived), each with the
+ * colour it is shown in: a child's own, else its parent's.
  *
  * Motion: as `Combobox`, the list fades and grows in 150 ms, ease-out. Cut under reduced motion.
  *

@@ -180,6 +180,8 @@ function defaultOf(state: Store, merchantId: string): MerchantDefaultCategory | 
     name: category.name,
     parentName: parent?.name ?? null,
     kind: category.kind,
+    icon: null,
+    color: null,
     archived: category.archivedAt !== null,
   };
 }

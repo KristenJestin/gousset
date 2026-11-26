@@ -18,6 +18,7 @@
   },
   "dependencies": {
     "@fontsource-variable/geist": "^5.3.0",
+    "@gousset/core": "workspace:*",
     "@gousset/currency": "workspace:*",
     "@gousset/i18n": "workspace:*",
     "@qnot/core": "0.1.0",

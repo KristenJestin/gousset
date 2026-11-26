@@ -287,7 +287,8 @@ export class CategoryNameTaken extends Schema.TaggedError<CategoryNameTaken>()(
  * - `name`: a name empty or longer than 100 characters once trimmed, or holding `>`;
  * - `too_many`: the user has 300 categories already, archived ones included;
  * - `benchmark`: a fixed benchmark that is no whole number of minor units from 0;
- * - `icon`: an icon that is no key (lower case letters, digits and `-`, 64 at most);
+ * - `icon`: an icon that is none of the category icons (`CATEGORY_ICONS`, `./category-looks`);
+ * - `color`: a colour that is none of the palette's (`CATEGORY_COLORS`, `./category-looks`);
  * - `position`: a position that is no whole number from 0 to 1,000,000.
  */
 export class CategoryRefused extends Schema.TaggedError<CategoryRefused>()("CategoryRefused", {
@@ -302,6 +303,7 @@ export class CategoryRefused extends Schema.TaggedError<CategoryRefused>()("Cate
     "too_many",
     "benchmark",
     "icon",
+    "color",
     "position",
   ]),
   fallback: Schema.optional(Schema.String),

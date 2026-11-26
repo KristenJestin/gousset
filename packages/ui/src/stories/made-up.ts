@@ -3,6 +3,7 @@
 // Money is in integer minor units (cents) with its currency, never a float.
 
 import type { CategoryIconName } from "../components/icons";
+import type { PaletteColor } from "../lib/palette";
 
 export type MadeUpMoney = { minor: number; currency: string };
 
@@ -31,25 +32,43 @@ export type MadeUpCategory = {
   id: string;
   name: string;
   icon: CategoryIconName;
+  /** The colour it is shown in (#205). */
+  color: PaletteColor;
   spent: MadeUpMoney;
   /** The six-month average this month is held against. */
   benchmark: MadeUpMoney;
 };
 
 export const CATEGORIES: ReadonlyArray<MadeUpCategory> = [
-  { id: "housing", name: "Housing", icon: "housing", spent: eur(69_000), benchmark: eur(69_000) },
+  {
+    id: "housing",
+    name: "Housing",
+    icon: "housing",
+    color: "blue",
+    spent: eur(69_000),
+    benchmark: eur(69_000),
+  },
   {
     id: "groceries",
     name: "Groceries",
     icon: "groceries",
+    color: "green",
     spent: eur(43_000),
     benchmark: eur(39_500),
   },
-  { id: "leisure", name: "Leisure", icon: "leisure", spent: eur(23_000), benchmark: eur(16_000) },
+  {
+    id: "leisure",
+    name: "Leisure",
+    icon: "leisure",
+    color: "violet",
+    spent: eur(23_000),
+    benchmark: eur(16_000),
+  },
   {
     id: "transport",
     name: "Transport",
     icon: "transport",
+    color: "cyan",
     spent: eur(17_000),
     benchmark: eur(16_500),
   },
@@ -57,18 +76,34 @@ export const CATEGORIES: ReadonlyArray<MadeUpCategory> = [
     id: "restaurants",
     name: "Restaurants",
     icon: "restaurants",
+    color: "orange",
     spent: eur(14_500),
     benchmark: eur(15_200),
   },
-  { id: "health", name: "Health", icon: "health", spent: eur(9800), benchmark: eur(6000) },
+  {
+    id: "health",
+    name: "Health",
+    icon: "health",
+    color: "red",
+    spent: eur(9800),
+    benchmark: eur(6000),
+  },
   {
     id: "subscriptions",
     name: "Subscriptions",
     icon: "subscriptions",
+    color: "indigo",
     spent: eur(4847),
     benchmark: eur(4797),
   },
-  { id: "gifts", name: "Gifts", icon: "gifts", spent: eur(0), benchmark: eur(3500) },
+  {
+    id: "gifts",
+    name: "Gifts",
+    icon: "gifts",
+    color: "amber",
+    spent: eur(0),
+    benchmark: eur(3500),
+  },
 ];
 
 export const MERCHANTS = [
