@@ -567,7 +567,7 @@ async function matchingEntries(
 }
 
 /** The expenses of one whole line each whose line's merchant is one of `merchantIds`, with it. */
-export async function merchantExpensesIn(
+async function merchantExpensesIn(
   transaction: UserTransaction,
   merchantIds: ReadonlyArray<string>,
 ): Promise<ReadonlyArray<LineEntry & { readonly lineMerchantId: string }>> {
@@ -1508,8 +1508,11 @@ function merchantRuleOf(row: RuleRow): string | null {
 
 /** A subject's rules: those of its merchants, and how many others attach it. */
 export type SubjectRules = {
-  /** Its merchants' rules, one per merchant (the first when several), by name. */
-  readonly merchants: ReadonlyArray<RuleMerchant & { readonly ruleId: string }>;
+  /**
+   * Its merchants, by name, each with its rules ("merchant is" it and nothing else), in their order:
+   * one, unless the user made two alike.
+   */
+  readonly merchants: ReadonlyArray<RuleMerchant & { readonly ruleIds: ReadonlyArray<string> }>;
   /** The other rules that attach it. */
   readonly others: number;
 };
@@ -1525,26 +1528,29 @@ export async function subjectRulesIn(
     .where(eq(rule.attachSubjectId, subjectId))
     .orderBy(asc(rule.position), asc(rule.id));
 
-  const ruleOf = new Map<string, string>();
+  const rulesOf = new Map<string, Array<string>>();
   let others = 0;
 
   for (const row of rows) {
     const merchantId = merchantRuleOf(row);
+    const known = merchantId === null ? undefined : rulesOf.get(merchantId);
 
-    if (merchantId === null || ruleOf.has(merchantId)) {
-      others += merchantId === null ? 1 : 0;
+    if (merchantId === null) {
+      others += 1;
+    } else if (known === undefined) {
+      rulesOf.set(merchantId, [row.id]);
     } else {
-      ruleOf.set(merchantId, row.id);
+      known.push(row.id);
     }
   }
 
-  const named = await merchantsAmong(transaction, [...ruleOf.keys()]);
+  const named = await merchantsAmong(transaction, [...rulesOf.keys()]);
 
   return {
     merchants: named.map((each) => ({
       id: each.id,
       name: each.name,
-      ruleId: ruleOf.get(each.id) ?? "",
+      ruleIds: rulesOf.get(each.id) ?? [],
     })),
     others,
   };
@@ -1577,8 +1583,33 @@ async function merchantChangesIn(
   return {
     wanted,
     added: wanted.filter((each) => !had.has(each)),
+    kept: existing.filter((each) => wanted.includes(each.id)),
     removed: existing.filter((each) => !wanted.includes(each.id)),
   };
+}
+
+/**
+ * The past expenses of the merchants `merchantIds` that their rules would attach to `subjectId`
+ * now, with each one's merchant: those of one whole line each whose line's merchant is one of them,
+ * neither attached to the subject already nor declined for it, the subject not archived. Every one
+ * of them for a subject not made yet (null).
+ */
+export async function merchantPastIn(
+  transaction: UserTransaction,
+  subjectId: string | null,
+  merchantIds: ReadonlyArray<string>,
+) {
+  const expenses = await merchantExpensesIn(transaction, merchantIds);
+
+  if (subjectId === null) {
+    return expenses;
+  }
+
+  const subjects = await subjectFacts(transaction, [subjectId]);
+
+  return expenses.filter(
+    (each) => subjectPart(subjectId, subjectTarget(subjects, each), subjects.open) === "attaches",
+  );
 }
 
 /**
@@ -1598,7 +1629,9 @@ export async function subjectMerchantsProblemIn(
     return Result.fail(missing);
   }
 
-  if ((await ruleCount(transaction)) - removed.length + added.length > MAX_RULES) {
+  const dropped = removed.flatMap((each) => each.ruleIds).length;
+
+  if ((await ruleCount(transaction)) - dropped + added.length > MAX_RULES) {
     return Result.fail(new TooManyRules({ limit: MAX_RULES }));
   }
 
@@ -1608,11 +1641,11 @@ export async function subjectMerchantsProblemIn(
 /**
  * Makes the rules of a subject's merchants be those of `merchantIds` (#37), in `owner`'s
  * transaction, its category turn taken, once `subjectMerchantsProblemIn` found nothing wrong: one
- * rule "merchant is" each, attaching the subject, made by the user, tried after the others; the rule
- * of a merchant left out is deleted (what it attached stays), every other rule stays as it is. With
- * `attachPast`, the past expenses of the merchants added are attached to the subject now, as
- * applying their rules to the past with the lines classified by hand would, a declined pair aside.
- * How many expenses it attached.
+ * rule "merchant is" each, attaching the subject, made by the user, tried after the others; every
+ * rule of a merchant left out is deleted (what they attached stays), every other rule stays as it
+ * is. With `attachPast`, the past expenses of every merchant of `merchantIds` (those it had too) are
+ * attached to the subject now, as applying their rules to the past with the lines classified by
+ * hand would, a declined pair aside (`merchantPastIn`). How many expenses it attached.
  */
 export async function setSubjectMerchantsIn(
   transaction: UserTransaction,
@@ -1621,58 +1654,67 @@ export async function setSubjectMerchantsIn(
   merchantIds: ReadonlyArray<string>,
   attachPast: boolean,
 ): Promise<number> {
-  const { added, removed } = await merchantChangesIn(transaction, subjectId, merchantIds);
+  const { added, kept, removed } = await merchantChangesIn(transaction, subjectId, merchantIds);
+  // Two rules alike, made by hand, go together: none is left to attach the subject unseen.
+  const dropped = removed.flatMap((each) => each.ruleIds);
 
-  if (removed.length > 0) {
-    await transaction.delete(rule).where(
-      inArray(
-        rule.id,
-        removed.map((each) => each.ruleId),
-      ),
-    );
+  if (dropped.length > 0) {
+    await transaction.delete(rule).where(inArray(rule.id, dropped));
   }
 
-  if (added.length === 0) {
-    return 0;
-  }
+  const first = added.length === 0 ? 0 : await nextPosition(transaction);
 
-  const first = await nextPosition(transaction);
-
-  const made = await transaction
-    .insert(rule)
-    .values(
-      added.map((merchantId, index): typeof rule.$inferInsert => ({
-        userId: owner,
-        position: first + index,
-        conditions: merchantIs(merchantId),
-        attachSubjectId: subjectId,
-        createdFrom: "user",
-      })),
-    )
-    .returning({ id: rule.id, conditions: rule.conditions });
+  const made =
+    added.length === 0
+      ? []
+      : await transaction
+          .insert(rule)
+          .values(
+            added.map((merchantId, index): typeof rule.$inferInsert => ({
+              userId: owner,
+              position: first + index,
+              conditions: merchantIs(merchantId),
+              attachSubjectId: subjectId,
+              createdFrom: "user",
+            })),
+          )
+          .returning({ id: rule.id, conditions: rule.conditions });
 
   if (!attachPast) {
     return 0;
   }
 
-  const expenses = await merchantExpensesIn(transaction, added);
-  const subjects = await subjectFacts(transaction, [subjectId]);
+  // Each merchant's rule attaches its past: the first of those it had, or the one just made.
+  const rules = [
+    ...kept.flatMap((each) => {
+      const [ruleId] = each.ruleIds;
+
+      return ruleId === undefined ? [] : [{ ruleId, merchantId: each.id }];
+    }),
+    ...made.flatMap((row) => {
+      const conditions = conditionsOf(row);
+      const [merchantId] = Option.isSome(conditions) ? merchantsNamed(conditions.value) : [];
+
+      return merchantId === undefined ? [] : [{ ruleId: row.id, merchantId }];
+    }),
+  ];
+
+  const expenses = await merchantPastIn(
+    transaction,
+    subjectId,
+    rules.map((each) => each.merchantId),
+  );
+
   let attached = 0;
 
-  for (const row of made) {
-    const conditions = conditionsOf(row);
-    const merchantId = Option.isSome(conditions) ? merchantsNamed(conditions.value)[0] : undefined;
-
-    const ids = expenses.flatMap((each) =>
-      each.lineMerchantId === merchantId &&
-      subjectPart(subjectId, subjectTarget(subjects, each), subjects.open) === "attaches"
-        ? [each.id]
-        : [],
+  for (const each of rules) {
+    const ids = expenses.flatMap((expense) =>
+      expense.lineMerchantId === each.merchantId ? [expense.id] : [],
     );
 
     const written = await attachSubjects(transaction, subjectId, ids, ["default", "rule", "user"]);
 
-    await countApplied(transaction, row.id, written.size);
+    await countApplied(transaction, each.ruleId, written.size);
     attached += written.size;
   }
 
@@ -1682,7 +1724,9 @@ export async function setSubjectMerchantsIn(
 /**
  * Moves the conditions that name the merchant `from` to the merchant `into`, in the transaction of
  * a merge that deletes `from`: a condition's merchant is an id inside the rule's JSON, which no
- * foreign key follows.
+ * foreign key follows. Two rules of a subject's merchants made alike by the move ("merchant is"
+ * `into`, the same subject, enabled alike, nothing else set) become one: the earliest stays,
+ * counting what both applied to, and the other is deleted.
  */
 export async function moveMerchantConditionsIn(
   transaction: UserTransaction,
@@ -1705,6 +1749,38 @@ export async function moveMerchantConditionsIn(
         .update(rule)
         .set({ conditions: mergedMerchant(conditions.value, from, into) })
         .where(eq(rule.id, row.id));
+    }
+  }
+
+  if (rows.length > 0) {
+    await mergeAlikeIn(transaction, into);
+  }
+}
+
+/** Makes one of the rules of a subject's merchant `merchantId` that are alike. */
+async function mergeAlikeIn(transaction: UserTransaction, merchantId: string): Promise<void> {
+  const naming = JSON.stringify({ children: [{ field: "merchant", value: merchantId }] });
+
+  const rows = await transaction
+    .select()
+    .from(rule)
+    .where(and(isNotNull(rule.attachSubjectId), sql`${rule.conditions} @> ${naming}::jsonb`))
+    .orderBy(asc(rule.position), asc(rule.id))
+    .for("update");
+
+  // The earliest rule of each subject, enabled or not, by `subject/enabled`.
+  const earliest = new Map<string, string>();
+
+  for (const row of rows.filter((each) => merchantRuleOf(each) === merchantId)) {
+    const key = `${row.attachSubjectId ?? ""}/${row.enabled}`;
+    const kept = earliest.get(key);
+
+    if (kept === undefined) {
+      earliest.set(key, row.id);
+    } else {
+      await transaction.delete(rule).where(eq(rule.id, row.id));
+
+      await countApplied(transaction, kept, row.appliedCount);
     }
   }
 }

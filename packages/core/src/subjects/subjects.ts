@@ -31,7 +31,7 @@ import type { NamedMerchant } from "../merchants/line-merchant";
 import type { Money } from "../month";
 import type { TooManyRules } from "../rules/errors";
 import {
-  merchantExpensesIn,
+  merchantPastIn,
   setSubjectMerchantsIn,
   subjectMerchantsProblemIn,
   subjectRulesIn,
@@ -229,7 +229,10 @@ export type SubjectInput = {
   readonly accountIds?: ReadonlyArray<string>;
   /** Its merchants: a rule "merchant is" each attaches it (`setSubjectMerchantsIn`). */
   readonly merchantIds?: ReadonlyArray<string>;
-  /** With `merchantIds`: the past expenses of the merchants added are attached to it at once. */
+  /**
+   * With `merchantIds`: the past expenses of each of them, those it had too, are attached to it at
+   * once, a declined pair aside.
+   */
   readonly attachPast?: boolean;
 };
 
@@ -244,7 +247,10 @@ export type SubjectSaved = SubjectRecord & { readonly attached: number };
 
 /** What the past expenses of some merchants come to, before they are a subject's. */
 export type SubjectMerchantsPreview = {
-  /** How many expenses of one whole line each name one of the merchants. */
+  /**
+   * How many expenses of one whole line each name one of the merchants, and are not the subject's
+   * yet nor declined for it: those `attachPast` would attach.
+   */
   readonly expenses: number;
   /** What they cost, in the user's currency. */
   readonly total: Money;
@@ -1490,8 +1496,9 @@ export const createSubject = (owner: string, input: SubjectInput) =>
 
 /**
  * Changes a subject: each field left out stays as it is, `accountIds` replaces its links,
- * `merchantIds` its merchants (the rule of a merchant left out is deleted, what it attached stays;
- * `attachPast` attaches the past expenses of those added), and `archived` archives or restores it
+ * `merchantIds` its merchants (the rules of a merchant left out are deleted, what they attached
+ * stays; `attachPast` attaches the past expenses of every merchant given, those it had too, a
+ * declined pair aside), and `archived` archives or restores it
  * (it keeps its expenses; an archived subject can no longer be chosen as a parent nor get expenses,
  * nor a merchant: `SubjectRefused` `archived`). A move refuses a cycle (`SubjectRefused` `cycle`):
  * the new parent's ancestors are walked in the transaction that moves it. Refused otherwise as
@@ -1553,14 +1560,16 @@ export const refuseProposals = (
 
 /**
  * What the past expenses of the merchants `merchantIds` come to, before a subject is made from them
- * (or given them): those of one whole line each whose line's merchant is one of them (its entry's,
- * else its label's), how many, and their cost in the user's `currency`, others apart. Refused for a
- * merchant the user does not have (`MerchantNotFound`).
+ * (`subjectId` null) or given them: those of one whole line each whose line's merchant is one of
+ * them (its entry's, else its label's), and for a subject that exists, neither attached to it yet
+ * nor declined for it: what `attachPast` would attach. How many, and their cost in the user's
+ * `currency`, others apart. Refused for a merchant the user does not have (`MerchantNotFound`).
  */
 export const subjectMerchantsPreview = (
   owner: string,
   merchantIds: ReadonlyArray<string>,
   currency: string,
+  subjectId: string | null = null,
 ) =>
   Effect.gen(function* () {
     const userData = yield* UserData;
@@ -1575,7 +1584,12 @@ export const subjectMerchantsPreview = (
           return Result.fail(missing);
         }
 
-        const expenses = await merchantExpensesIn(transaction, merchantIds);
+        // An id that is none is no subject of the user's: nothing of it is attached nor declined.
+        const expenses = await merchantPastIn(
+          transaction,
+          subjectId !== null && isId(subjectId) ? subjectId : null,
+          merchantIds,
+        );
 
         const sums = sumsOf(
           expenses.map((each) => ({ currency: each.currency, minor: Math.abs(each.amountMinor) })),

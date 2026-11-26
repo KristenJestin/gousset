@@ -588,6 +588,162 @@ test("creating a subject with merchants and attachPast attaches the past", async
   expect(await subjectsOf(owner, entryOf(later, "CB TYREHOUSE 0310").entryId)).toEqual([]);
 });
 
+test("an edit with attachPast attaches the past of every merchant it names, those it had too", async ({
+  app,
+  user,
+}) => {
+  const owner = await ownerFor(app, user, "subject-rule-edit-past");
+
+  const lines = await importLines(owner, [
+    { day: "2026-08-02", minor: 5000, label: "CB FUELSTOP 0208" },
+    { day: "2026-08-20", minor: 4500, label: "CB FUELSTOP 2008" },
+    { day: "2026-08-21", minor: 30_000, label: "CB TYREHOUSE 2108" },
+    { day: "2026-08-22", minor: 700, label: "CB BAKEHOUSE 2208" },
+  ]);
+
+  const fuelstop = await merchantOf(owner, "CB FUELSTOP 0208");
+  const tyrehouse = await merchantOf(owner, "CB TYREHOUSE 2108");
+  const declined = entryOf(lines, "CB FUELSTOP 2008");
+
+  // Made from a merchant without its past, as the MCP door's create is when asked nothing more.
+  const van = await run(createSubject(owner, { name: "Van", merchantIds: [fuelstop] }));
+
+  expect(van.attached).toBe(0);
+  await run(refuseProposals(owner, van.id, [declined.entryId]));
+
+  // What the sheet and the door say first is what the edit attaches: the declined pair stays out.
+  expect(await run(subjectMerchantsPreview(owner, [fuelstop, tyrehouse], "EUR", van.id))).toEqual({
+    expenses: 2,
+    total: eur(35_000),
+    elsewhere: [],
+  });
+
+  const edited = await run(
+    editSubject(owner, van.id, { merchantIds: [fuelstop, tyrehouse], attachPast: true }),
+  );
+
+  expect(edited.attached).toBe(2);
+  expect(await subjectsOf(owner, entryOf(lines, "CB FUELSTOP 0208").entryId)).toEqual([van.id]);
+  expect(await subjectsOf(owner, entryOf(lines, "CB TYREHOUSE 2108").entryId)).toEqual([van.id]);
+  expect(await subjectsOf(owner, declined.entryId)).toEqual([]);
+  expect(await subjectsOf(owner, entryOf(lines, "CB BAKEHOUSE 2208").entryId)).toEqual([]);
+
+  const counts = (await run(listRules(owner))).rules.map((each) => [
+    each.conditions.children,
+    each.appliedCount,
+  ]);
+
+  expect(counts).toEqual(
+    expect.arrayContaining([
+      [[{ kind: "rule", field: "merchant", operator: "eq", value: fuelstop }], 1],
+      [[{ kind: "rule", field: "merchant", operator: "eq", value: tyrehouse }], 1],
+    ]),
+  );
+
+  // Asked again, there is nothing left to attach.
+  expect(await run(subjectMerchantsPreview(owner, [fuelstop, tyrehouse], "EUR", van.id))).toEqual({
+    expenses: 0,
+    total: eur(0),
+    elsewhere: [],
+  });
+  expect(
+    (
+      await run(
+        editSubject(owner, van.id, { merchantIds: [fuelstop, tyrehouse], attachPast: true }),
+      )
+    ).attached,
+  ).toBe(0);
+});
+
+/** The rules that attach `subjectId`, in their order: their id, conditions and count. */
+async function rulesOf(owner: string, subjectId: string) {
+  return (await run(listRules(owner))).rules.flatMap((each) =>
+    each.subject?.id === subjectId
+      ? [{ id: each.id, conditions: each.conditions, appliedCount: each.appliedCount }]
+      : [],
+  );
+}
+
+test("a merge keeps one rule of a subject's merchant, which dropping the merchant deletes", async ({
+  app,
+  user,
+}) => {
+  const owner = await ownerFor(app, user, "subject-rule-merge-twins");
+
+  await importLines(owner, [
+    { day: "2026-10-01", minor: 5000, label: "CB FUELSTOP 0110" },
+    { day: "2026-10-02", minor: 4000, label: "CB PETROLPOINT 0210" },
+    { day: "2026-10-03", minor: 4200, label: "CB PETROLPOINT 0310" },
+  ]);
+
+  const fuelstop = await merchantOf(owner, "CB FUELSTOP 0110");
+  const petrolpoint = await merchantOf(owner, "CB PETROLPOINT 0210");
+
+  const van = await run(
+    createSubject(owner, { name: "Van", merchantIds: [petrolpoint, fuelstop], attachPast: true }),
+  );
+
+  expect(van.attached).toBe(3);
+
+  const [first, second] = await rulesOf(owner, van.id);
+
+  expect([first?.conditions, second?.conditions]).toEqual([
+    merchantIs(petrolpoint),
+    merchantIs(fuelstop),
+  ]);
+
+  await run(
+    Effect.gen(function* () {
+      const merchants = yield* Merchants;
+
+      return yield* merchants.merge(owner, petrolpoint, fuelstop);
+    }),
+  );
+
+  // The two rules became one: the earliest stays, counting what both attached.
+  expect(await rulesOf(owner, van.id)).toEqual([
+    { id: first?.id, conditions: merchantIs(fuelstop), appliedCount: 3 },
+  ]);
+  expect(
+    (await run(showSubject(owner, van.id, "EUR", "all"))).merchants.map((each) => each.id),
+  ).toEqual([fuelstop]);
+
+  // Dropped, the merchant leaves no rule behind to attach the subject.
+  await run(editSubject(owner, van.id, { merchantIds: [] }));
+
+  expect(await rulesOf(owner, van.id)).toEqual([]);
+
+  const later = await importLines(owner, [
+    { day: "2026-10-12", minor: 4100, label: "CB PETROLPOINT 1210" },
+  ]);
+
+  expect(await subjectsOf(owner, entryOf(later, "CB PETROLPOINT 1210").entryId)).toEqual([]);
+});
+
+test("dropping a merchant deletes every rule of it that attaches the subject", async ({
+  app,
+  user,
+}) => {
+  const owner = await ownerFor(app, user, "subject-rule-drop-twins");
+
+  await importLines(owner, [{ day: "2026-10-01", minor: 30_000, label: "CB TYREHOUSE 0110" }]);
+
+  const tyrehouse = await merchantOf(owner, "CB TYREHOUSE 0110");
+  const van = await newSubject(owner, "Van");
+
+  // Two rules made by hand, alike: the subject lists the merchant once.
+  await rule(owner, { conditions: merchantIs(tyrehouse), subjectId: van });
+  await rule(owner, { conditions: merchantIs(tyrehouse), subjectId: van });
+
+  expect(
+    (await run(showSubject(owner, van, "EUR", "all"))).merchants.map((each) => each.id),
+  ).toEqual([tyrehouse]);
+
+  await run(editSubject(owner, van, { merchantIds: [] }));
+
+  expect(await rulesOf(owner, van)).toEqual([]);
+});
+
 test("a merge moves the condition", async ({ app, user }) => {
   const owner = await ownerFor(app, user, "subject-rule-merge");
 
