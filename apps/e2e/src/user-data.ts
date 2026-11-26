@@ -4,7 +4,18 @@ import { relations } from "@gousset/db/relations";
 import { randomUUID } from "node:crypto";
 
 import { authOauthClient, authOauthConsent, authUser } from "@gousset/db/schema/auth";
-import { importProfile, importUpload, merchant, rule } from "@gousset/db/schema/ledger";
+import {
+  account,
+  entry,
+  entrySubject,
+  importProfile,
+  importUpload,
+  merchant,
+  rule,
+  subject,
+  subjectAccount,
+  subjectEntryRefused,
+} from "@gousset/db/schema/ledger";
 import { recogniseMerchants } from "@gousset/core";
 import { seedMadeUpData } from "@gousset/db/seed";
 import type { SeedSummary } from "@gousset/db/seed";
@@ -20,7 +31,7 @@ import { databaseUrl } from "./database";
 export type UserTable = { name: string; key: string; rows: string };
 
 /**
- * Every table holding a user's rows (docs/data-model.md, v0.2 and v0.3). A table added later must be listed
+ * Every table holding a user's rows (docs/data-model.md, v0.2 to v0.5). A table added later must be listed
  * here: the isolation spec fails until it is, then tries every rule on it.
  */
 export const ACCOUNTS: UserTable = { name: "account", key: "id", rows: "accounts" };
@@ -40,6 +51,10 @@ export const USER_TABLES: ReadonlyArray<UserTable> = [
   { name: "merchant", key: "id", rows: "merchants" },
   { name: "merchant_alias", key: "id", rows: "merchants' cleaned labels" },
   { name: "rule", key: "id", rows: "rules" },
+  { name: "subject", key: "id", rows: "subjects" },
+  { name: "entry_subject", key: "entry_id", rows: "expenses' subjects" },
+  { name: "subject_account", key: "account_id", rows: "subjects' accounts" },
+  { name: "subject_entry_refused", key: "entry_id", rows: "proposals refused for a subject" },
 ];
 
 /**
@@ -303,6 +318,47 @@ export function openUserData(database: string) {
                   setMerchantId: shop?.id ?? null,
                   createdFrom: "user",
                 });
+              });
+
+              // A subject of the user's (#37), linked to an account, with an expense attached and
+              // another refused as a proposal, so that its tables hold rows of theirs too.
+              yield* userData.transaction(owner, async (each) => {
+                const [van] = await each
+                  .insert(subject)
+                  .values({ userId: owner, name: "Van", startsOn: "2026-09-01" })
+                  .returning({ id: subject.id });
+
+                const [linked] = await each.select({ id: account.id }).from(account).limit(1);
+
+                const expenses = await each
+                  .select({ id: entry.id })
+                  .from(entry)
+                  .where(eq(entry.kind, "expense"))
+                  .orderBy(entry.id)
+                  .limit(2);
+
+                const [attached, refused] = expenses;
+
+                if (
+                  van === undefined ||
+                  linked === undefined ||
+                  attached === undefined ||
+                  refused === undefined
+                ) {
+                  throw new Error("The seed wrote no account, or fewer than two expenses.");
+                }
+
+                await each
+                  .insert(subjectAccount)
+                  .values({ userId: owner, subjectId: van.id, accountId: linked.id });
+
+                await each
+                  .insert(entrySubject)
+                  .values({ userId: owner, subjectId: van.id, entryId: attached.id });
+
+                await each
+                  .insert(subjectEntryRefused)
+                  .values({ userId: owner, subjectId: van.id, entryId: refused.id });
               });
             }),
           ),

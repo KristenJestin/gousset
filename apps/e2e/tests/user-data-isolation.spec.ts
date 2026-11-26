@@ -1,10 +1,13 @@
 import {
   account,
+  entry,
+  entrySubject,
   merchant,
   merchantAlias,
   rule,
   statementImport,
   statementLine,
+  subject,
 } from "@gousset/db/schema/ledger";
 import { sql } from "drizzle-orm";
 
@@ -292,6 +295,23 @@ test("a user never attaches a row to another user's row", async () => {
         createdFrom: "user",
       }),
     ),
+  ).toBe("23503");
+
+  // An expense of one's own attached to the other user's subject (#37).
+  const [samsSubject] = await data.asUser(sam, (transaction) =>
+    transaction.select({ id: subject.id }).from(subject).limit(1),
+  );
+
+  expect(samsSubject).toBeDefined();
+
+  expect(
+    await data.refusal(alex, async (transaction) => {
+      const [own] = await transaction.select({ id: entry.id }).from(entry).limit(1);
+
+      await transaction
+        .insert(entrySubject)
+        .values({ userId: alex, entryId: own?.id ?? "", subjectId: samsSubject?.id ?? "" });
+    }),
   ).toBe("23503");
 });
 

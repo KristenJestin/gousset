@@ -672,12 +672,146 @@ export const rule = pgTable.withRLS(
     createdFrom: ruleOrigin("created_from").notNull(),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
+    // Added with the subjects (v0.5, #37), after the others: the subject a rule attaches its lines'
+    // expenses to. Its key (`on delete set null (attach_subject_id)`, which Drizzle cannot write) is
+    // in the custom migration `*_subjects_isolation`.
+    attachSubjectId: uuid("attach_subject_id"),
   },
   (table) => [
     unique("rule_user_id_id_key").on(table.userId, table.id),
     // A merge of merchants or categories moves them, and a deletion clears them.
     index("rule_set_merchant_id_idx").on(table.setMerchantId),
     index("rule_set_category_id_idx").on(table.setCategoryId),
+    index("rule_attach_subject_id_idx").on(table.attachSubjectId),
     ownRowsOnly("rule"),
+  ],
+);
+
+/**
+ * What the money is spent for (v0.5, #37; docs/vision.md, "Subjects"): Van, House, Garden shed under
+ * House, Alps 2028. Nested at any depth; a cycle is refused by packages/core, which walks the new
+ * parent's ancestors in the transaction that moves it. Its parent is a kept reference (`on delete no
+ * action deferrable initially deferred`) and its loan is cleared on its own column (`on delete set
+ * null (loan_account_id)`): Drizzle can write neither, so both are in the custom migration
+ * `*_subjects_isolation`. Never deleted, archived.
+ */
+export const subject = pgTable.withRLS(
+  "subject",
+  {
+    id: id(),
+    userId: owner(),
+    // Null for a top-level subject.
+    parentId: uuid("parent_id"),
+    name: text("name").notNull(),
+    archivedAt: timestamp("archived_at", { withTimezone: true }),
+    // "Has a value": what it is worth, in minor units of its own currency, and the loan it is
+    // bought with (one of the user's `loan` accounts).
+    estimatedValueMinor: minor("estimated_value_minor"),
+    valueCurrency: text("value_currency"),
+    loanAccountId: uuid("loan_account_id"),
+    // "Has dates": the expenses of the period are proposed, never attached unasked.
+    startsOn: day("starts_on"),
+    endsOn: day("ends_on"),
+    createdAt: createdAt(),
+    updatedAt: updatedAt(),
+  },
+  (table) => [
+    unique("subject_user_id_id_key").on(table.userId, table.id),
+    // Two top-level subjects cannot share a name either.
+    unique("subject_user_id_parent_id_name_key")
+      .on(table.userId, table.parentId, table.name)
+      .nullsNotDistinct(),
+    // A deleted loan account clears it.
+    index("subject_loan_account_id_idx").on(table.loanAccountId),
+    check(
+      "subject_value_and_currency",
+      sql`(${table.estimatedValueMinor} is null) = (${table.valueCurrency} is null)`,
+    ),
+    check("subject_value_currency_iso_4217", sql`${table.valueCurrency} ~ '^[A-Z]{3}$'`),
+    check("subject_ends_after_start", sql`${table.endsOn} >= ${table.startsOn}`),
+    ownRowsOnly("subject"),
+  ],
+);
+
+/**
+ * An expense's subjects, zero or more: it counts in full in each, and once in a parent of several
+ * (a rule of the queries, packages/core's `subjects`, not of this table).
+ */
+export const entrySubject = pgTable.withRLS(
+  "entry_subject",
+  {
+    entryId: uuid("entry_id").notNull(),
+    subjectId: uuid("subject_id").notNull(),
+    userId: owner(),
+  },
+  (table) => [
+    primaryKey({ name: "entry_subject_pkey", columns: [table.entryId, table.subjectId] }),
+    foreignKey({
+      name: "entry_subject_entry_fk",
+      columns: [table.userId, table.entryId],
+      foreignColumns: [entry.userId, entry.id],
+    }).onDelete("cascade"),
+    foreignKey({
+      name: "entry_subject_subject_fk",
+      columns: [table.userId, table.subjectId],
+      foreignColumns: [subject.userId, subject.id],
+    }).onDelete("cascade"),
+    // A subject's expenses.
+    index("entry_subject_subject_id_idx").on(table.subjectId),
+    ownRowsOnly("entry_subject"),
+  ],
+);
+
+/** The accounts linked to a subject: the van's fuel card, say. */
+export const subjectAccount = pgTable.withRLS(
+  "subject_account",
+  {
+    subjectId: uuid("subject_id").notNull(),
+    accountId: uuid("account_id").notNull(),
+    userId: owner(),
+  },
+  (table) => [
+    primaryKey({ name: "subject_account_pkey", columns: [table.subjectId, table.accountId] }),
+    foreignKey({
+      name: "subject_account_subject_fk",
+      columns: [table.userId, table.subjectId],
+      foreignColumns: [subject.userId, subject.id],
+    }).onDelete("cascade"),
+    foreignKey({
+      name: "subject_account_account_fk",
+      columns: [table.userId, table.accountId],
+      foreignColumns: [account.userId, account.id],
+    }).onDelete("cascade"),
+    ownRowsOnly("subject_account"),
+  ],
+);
+
+/**
+ * The user said an expense of a dated subject's period is not the subject's: it is never proposed
+ * for it again. Only the user's answer is stored, as `link_refused` and `transfer_refused` are;
+ * attaching the expense by hand clears it.
+ */
+export const subjectEntryRefused = pgTable.withRLS(
+  "subject_entry_refused",
+  {
+    subjectId: uuid("subject_id").notNull(),
+    entryId: uuid("entry_id").notNull(),
+    userId: owner(),
+  },
+  (table) => [
+    primaryKey({ name: "subject_entry_refused_pkey", columns: [table.subjectId, table.entryId] }),
+    foreignKey({
+      name: "subject_entry_refused_subject_fk",
+      columns: [table.userId, table.subjectId],
+      foreignColumns: [subject.userId, subject.id],
+    }).onDelete("cascade"),
+    foreignKey({
+      name: "subject_entry_refused_entry_fk",
+      columns: [table.userId, table.entryId],
+      foreignColumns: [entry.userId, entry.id],
+    }).onDelete("cascade"),
+    // A deleted entry's refusals go with it.
+    index("subject_entry_refused_entry_id_idx").on(table.entryId),
+    ownRowsOnly("subject_entry_refused"),
   ],
 );
