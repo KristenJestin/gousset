@@ -1,7 +1,7 @@
 import { Effect, Layer } from "effect";
 
 import { memoryId } from "./account-store-memory";
-import { CategoryStore } from "./category-store";
+import { CategoryStore, lineCategoryOf } from "./category-store";
 import type {
   CategoryRecord,
   CategoryStep,
@@ -97,8 +97,16 @@ function classifiedBy(
 export type MemoryCategoryRows = {
   categories: Array<CategoryRecord>;
   entries: Array<MemoryEntry>;
-  /** The lines that exist, by id, with their amount, and whether each is a side of a transfer. */
-  lines: Array<{ readonly id: string; readonly amountMinor: number; readonly paired?: boolean }>;
+  /**
+   * The lines that exist, by id, with their amount, whether each is a side of a transfer, and
+   * whether it may be a refund the user has not answered (`maybeRefundsAmong`).
+   */
+  lines: Array<{
+    readonly id: string;
+    readonly amountMinor: number;
+    readonly paired?: boolean;
+    readonly maybeRefund?: boolean;
+  }>;
   /** The merchants; none when left out. */
   merchants?: Array<MemoryMerchant>;
 };
@@ -115,6 +123,7 @@ export function memoryCategory(
     kind,
     name,
     icon: null,
+    color: null,
     position: 0,
     archivedAt: null,
     benchmark: { mode: "automatic" },
@@ -193,8 +202,13 @@ export function memoryCategoryStore(rows: Map<string, MemoryCategoryRows> = new 
     list: (owner) => Effect.sync(() => of(owner).categories),
 
     use: (owner, range) =>
-      Effect.sync(() =>
-        of(owner).categories.flatMap((category): ReadonlyArray<CategoryUse> => {
+      Effect.sync(() => {
+        // Money coming back that may be a refund is no income until the user answers (#208).
+        const waiting = new Set(
+          of(owner).lines.flatMap((line) => (line.maybeRefund === true ? [line.id] : [])),
+        );
+
+        return of(owner).categories.flatMap((category): ReadonlyArray<CategoryUse> => {
           const own = of(owner).entries.filter((each) => each.categoryId === category.id);
           const net = new Map<string, number>();
 
@@ -204,6 +218,10 @@ export function memoryCategoryStore(rows: Map<string, MemoryCategoryRows> = new 
             }
 
             for (const part of each.parts) {
+              if (each.kind === "income" && waiting.has(part.lineId)) {
+                continue;
+              }
+
               const signed = part.role === "payment" ? part.amountMinor : -part.amountMinor;
 
               net.set(part.currency, (net.get(part.currency) ?? 0) + signed);
@@ -219,8 +237,8 @@ export function memoryCategoryStore(rows: Map<string, MemoryCategoryRows> = new 
                   net: [...net].map(([currency, minor]) => ({ currency, minor })),
                 },
               ];
-        }),
-      ),
+        });
+      }),
 
     spending: (owner, range) =>
       Effect.sync(() => {
@@ -307,16 +325,7 @@ export function memoryCategoryStore(rows: Map<string, MemoryCategoryRows> = new 
           ),
         });
 
-        const parent = own.categories.find((each) => each.id === category.parentId);
-
-        const shown: LineCategory = {
-          id: category.id,
-          name: category.name,
-          parentName: parent?.name ?? null,
-          kind: category.kind,
-        };
-
-        return shown;
+        return shownIn(own.categories, category);
       }),
 
     setMerchantDefault: (owner, merchantId, decide) =>
@@ -347,16 +356,21 @@ export function memoryCategoryStore(rows: Map<string, MemoryCategoryRows> = new 
           return null;
         }
 
-        const parent = own.categories.find((each) => each.id === category.parentId);
-
-        const shown: LineCategory = {
-          id: category.id,
-          name: category.name,
-          parentName: parent?.name ?? null,
-          kind: category.kind,
-        };
-
-        return shown;
+        return shownIn(own.categories, category);
       }),
   }));
+}
+
+/** A category as a line shows it, with its parent's name and colour, among `categories`. */
+function shownIn(
+  categories: ReadonlyArray<CategoryRecord>,
+  category: CategoryRecord,
+): LineCategory {
+  const parent = categories.find((each) => each.id === category.parentId);
+
+  return lineCategoryOf({
+    ...category,
+    parentName: parent?.name ?? null,
+    parentColor: parent?.color ?? null,
+  });
 }

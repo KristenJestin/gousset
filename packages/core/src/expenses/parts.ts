@@ -125,7 +125,7 @@ const compactOf = (key: string) => key.replaceAll(/[^A-Z\d]/g, "");
  * Whether two lines are the same merchant's: the same merchant by their aliases, or a cleaned label
  * that holds the other's ("AVOIR CORNER BISTRO" and "CORNER BISTRO"), letters and digits only.
  */
-function sameMerchant(a: ProposalLine, b: ProposalLine): boolean {
+export function sameMerchant(a: ProposalLine, b: ProposalLine): boolean {
   if (a.merchantId !== null && a.merchantId === b.merchantId) {
     return true;
   }

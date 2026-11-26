@@ -2,8 +2,9 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import type { ReactNode } from "react";
 
 import { cn } from "@gousset/ui/lib/utils";
-import { measureEdgePairs, measureTextPairs } from "@gousset/ui/lib/contrast";
+import { measureEdgePairs, measurePalette, measureTextPairs } from "@gousset/ui/lib/contrast";
 import type { MeasuredPair } from "@gousset/ui/lib/contrast";
+import { PALETTE_COLORS, paletteBackground } from "@gousset/ui/lib/palette";
 import { duration, easeOut } from "@gousset/ui/lib/motion";
 import { themeTokens } from "@gousset/ui/lib/tokens";
 import type { ThemeToken } from "@gousset/ui/lib/tokens";
@@ -86,6 +87,9 @@ const SWATCHES = new Map(
     "--chart-scale-04": "bg-chart-scale-04",
     "--chart-scale-05": "bg-chart-scale-05",
     "--chart-scale-pattern-color": "bg-chart-scale-pattern-color",
+    ...Object.fromEntries(
+      PALETTE_COLORS.map((color) => [`--palette-${color}`, paletteBackground[color]]),
+    ),
   }),
 );
 
@@ -115,6 +119,10 @@ const NOTES = new Map(
 const GROUPS = [
   { title: "Brand", holds: (name: string) => name.startsWith("--brand-") },
   { title: "Money (Gousset's own)", holds: (name: string) => name.startsWith("--money-") },
+  {
+    title: "Palette (the user's own colours: a category's)",
+    holds: (name: string) => name.startsWith("--palette-"),
+  },
   { title: "Charts (Bklit's names)", holds: (name: string) => name.startsWith("--chart-") },
   { title: "Sidebar (shadcn's names)", holds: (name: string) => name.startsWith("--sidebar") },
   {
@@ -235,6 +243,22 @@ function TokenSheet() {
           Contrast of the edge of a floating surface (1.7:1 or more, computed from globals.css)
         </h2>
         <ContrastTable label="Edge" pairs={measureEdgePairs(globals)} />
+      </section>
+
+      <section className="flex flex-col gap-2">
+        <h2 className="text-sm font-medium text-muted-foreground">
+          Contrast of the palette on what it is drawn on, and on its own tile (4.5:1 or more,
+          computed from globals.css)
+        </h2>
+        <ContrastTable
+          label="Colour"
+          pairs={measurePalette(globals, PALETTE_COLORS).map((swatch) => ({
+            text: swatch.color,
+            surface: swatch.on,
+            light: swatch.light,
+            dark: swatch.dark,
+          }))}
+        />
       </section>
     </div>
   );

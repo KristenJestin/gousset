@@ -82,6 +82,7 @@ describe("a call to the MCP door", () => {
                         benefitLines: [],
                         reach: [],
                         charges: [],
+                        maybeRefunds: [],
                       }),
                   }),
                 ),

@@ -55,8 +55,8 @@ export function accountRefusalMessage(code: string): string {
 
 /**
  * A refusal of a change of the categories (`CategoryRefusalCode`) or of a line's category
- * (`LineRefusalCode`), by its code. An icon or a position the page never sends falls to the
- * general message. `fallback` names the fallback a refusal is about, as the user called it.
+ * (`LineRefusalCode`), by its code. A position the page never sends falls to the general message.
+ * `fallback` names the fallback a refusal is about, as the user called it.
  */
 export function categoryRefusalMessage(code: string, fallback?: string | null): string {
   switch (code) {
@@ -82,6 +82,9 @@ export function categoryRefusalMessage(code: string, fallback?: string | null): 
       return m.categoryRefusalTooMany();
     case "CATEGORY_BENCHMARK":
       return m.categoryRefusalBenchmark();
+    case "CATEGORY_ICON":
+    case "CATEGORY_COLOR":
+      return m.categoryRefusalLook();
     case "CATEGORY_KIND_MISMATCH":
       return m.categoryRefusalKindMismatch();
     case "LINE_NOT_CLASSIFIABLE":

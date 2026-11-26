@@ -287,7 +287,7 @@ test("the boot job forgets the merchants a release made from a prefix, unless th
 
   const reread = await run(rereadMerchants(owner));
 
-  expect(reread).toEqual({ forgotten: 2, merchants: 0, aliases: 0 });
+  expect(reread).toEqual({ forgotten: 2, merged: 0, merchants: 0, aliases: 0 });
   expect(await merchantsOf(owner)).toEqual([
     "Account Fees: FRAIS TENUE DE COMPTE",
     "Ech Pret: ECH PRET",
@@ -301,7 +301,12 @@ test("the boot job forgets the merchants a release made from a prefix, unless th
   expect((await run(lineMerchant(owner, cancellation))).merchant?.name).toBe("Shoply");
 
   // Run again, it finds nothing to do.
-  expect(await run(rereadMerchants(owner))).toEqual({ forgotten: 0, merchants: 0, aliases: 0 });
+  expect(await run(rereadMerchants(owner))).toEqual({
+    forgotten: 0,
+    merged: 0,
+    merchants: 0,
+    aliases: 0,
+  });
 });
 
 test("the boot job moves a fee still in Other into Bank fees, with no new label to recognise", async ({
@@ -334,7 +339,12 @@ test("the boot job moves a fee still in Other into Bank fees, with no new label 
   });
 
   // Every label names a merchant already: the re-read recognises nothing new.
-  expect(await run(rereadMerchants(owner))).toEqual({ forgotten: 0, merchants: 0, aliases: 0 });
+  expect(await run(rereadMerchants(owner))).toEqual({
+    forgotten: 0,
+    merged: 0,
+    merchants: 0,
+    aliases: 0,
+  });
 
   const [moved] = await data.asUser(owner, (transaction) =>
     transaction

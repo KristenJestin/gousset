@@ -2,6 +2,7 @@
 // the app's messages (`packages/i18n/messages`, keys `ui*`), written in English and translated
 // into French; this file only gathers them by component family, in one language. A text that
 // names the user's data is given by the page as a prop, never written here.
+import type { CategoryColorKey, CategoryIconKey } from "@gousset/core/category-looks";
 import { m } from "@gousset/i18n/messages";
 import { getLocale } from "@gousset/i18n/runtime";
 import type { Locale } from "@gousset/i18n/runtime";
@@ -22,6 +23,77 @@ function uiMessages(locale: Locale) {
       errorMessage: m.uiErrorMessage({}, options),
       retry: m.uiRetry({}, options),
     },
+    /** Each palette colour's name, said for its swatch (#205). */
+    palette: {
+      red: m.uiColorRed({}, options),
+      orange: m.uiColorOrange({}, options),
+      amber: m.uiColorAmber({}, options),
+      olive: m.uiColorOlive({}, options),
+      green: m.uiColorGreen({}, options),
+      teal: m.uiColorTeal({}, options),
+      cyan: m.uiColorCyan({}, options),
+      blue: m.uiColorBlue({}, options),
+      indigo: m.uiColorIndigo({}, options),
+      violet: m.uiColorViolet({}, options),
+      pink: m.uiColorPink({}, options),
+      grey: m.uiColorGrey({}, options),
+    } satisfies { [Color in CategoryColorKey]: string },
+    /** Each category icon's name, by what it means, said for its choice (#205). */
+    categoryIcons: {
+      housing: m.uiIconHousing({}, options),
+      rent: m.uiIconRent({}, options),
+      energy: m.uiIconEnergy({}, options),
+      insurance: m.uiIconInsurance({}, options),
+      repairs: m.uiIconRepairs({}, options),
+      groceries: m.uiIconGroceries({}, options),
+      supermarket: m.uiIconSupermarket({}, options),
+      market: m.uiIconMarket({}, options),
+      bakery: m.uiIconBakery({}, options),
+      transport: m.uiIconTransport({}, options),
+      fuel: m.uiIconFuel({}, options),
+      train: m.uiIconTrain({}, options),
+      car: m.uiIconCar({}, options),
+      parking: m.uiIconParking({}, options),
+      restaurants: m.uiIconRestaurants({}, options),
+      cafe: m.uiIconCafe({}, options),
+      takeaway: m.uiIconTakeaway({}, options),
+      health: m.uiIconHealth({}, options),
+      doctor: m.uiIconDoctor({}, options),
+      pharmacy: m.uiIconPharmacy({}, options),
+      leisure: m.uiIconLeisure({}, options),
+      sport: m.uiIconSport({}, options),
+      culture: m.uiIconCulture({}, options),
+      travel: m.uiIconTravel({}, options),
+      hobbies: m.uiIconHobbies({}, options),
+      games: m.uiIconGames({}, options),
+      shopping: m.uiIconShopping({}, options),
+      clothes: m.uiIconClothes({}, options),
+      electronics: m.uiIconElectronics({}, options),
+      garden: m.uiIconGarden({}, options),
+      subscriptions: m.uiIconSubscriptions({}, options),
+      phone: m.uiIconPhone({}, options),
+      streaming: m.uiIconStreaming({}, options),
+      software: m.uiIconSoftware({}, options),
+      family: m.uiIconFamily({}, options),
+      children: m.uiIconChildren({}, options),
+      education: m.uiIconEducation({}, options),
+      books: m.uiIconBooks({}, options),
+      gifts: m.uiIconGifts({}, options),
+      pets: m.uiIconPets({}, options),
+      fees: m.uiIconFees({}, options),
+      bank: m.uiIconBank({}, options),
+      taxes: m.uiIconTaxes({}, options),
+      salary: m.uiIconSalary({}, options),
+      pay: m.uiIconPay({}, options),
+      bonus: m.uiIconBonus({}, options),
+      benefits: m.uiIconBenefits({}, options),
+      investments: m.uiIconInvestments({}, options),
+      interest: m.uiIconInterest({}, options),
+      dividends: m.uiIconDividends({}, options),
+      reimbursements: m.uiIconReimbursements({}, options),
+      "expense-claims": m.uiIconExpenseClaims({}, options),
+      other: m.uiIconOther({}, options),
+    } satisfies { [Icon in CategoryIconKey]: string },
     pieces: {
       uncategorised: m.uiUncategorised({}, options),
       month: m.uiMonth({}, options),
@@ -112,6 +184,14 @@ function uiMessages(locale: Locale) {
       bought: (name: string) => m.uiMoneyBought({ name }, options),
       /** What an investment's gain is measured against: its net contributions. */
       putIn: m.uiMoneyPutIn({}, options),
+      /**
+       * Under what was received, the lines that may be refunds (#208), left out of it until the user
+       * answers: "Not in received: €30 that may be a refund (1 line)", the amount and count written.
+       */
+      maybeRefunds: (count: number, written: string, amount: string) =>
+        pluralRules[locale].select(count) === "one"
+          ? m.uiMoneyMaybeRefundsOne({ amount }, options)
+          : m.uiMoneyMaybeRefundsOther({ count: written, amount }, options),
     },
     accounts: {
       /** The "Tracking" column and the settings' value: how the account is followed. */
@@ -286,6 +366,9 @@ function uiMessages(locale: Locale) {
       splitAcross: (count: number) => m.uiOperationsSplitAcross({ count }, options),
       maybeRefund: m.uiOperationsMaybeRefund({}, options),
       maybeRefundDescription: m.uiOperationsMaybeRefundDescription({}, options),
+      /** A line that counts as no income until the user answers (#208). */
+      maybeRefundWaiting: m.uiOperationsMaybeRefundWaiting({}, options),
+      notARefund: m.uiOperationsNotARefund({}, options),
       /** Under a proposed expense: "Eating out · costs €56.00". */
       proposalCosts: (category: string, amount: string) =>
         m.uiOperationsProposalCosts({ category, amount }, options),

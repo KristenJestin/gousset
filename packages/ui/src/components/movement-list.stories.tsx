@@ -39,7 +39,10 @@ const OCTOBER = [
  *
  * Loading: `MovementListSkeleton`, as many rows as the block shows, same heights.
  *
+ * Money back that may be a refund (#208) is flagged "Maybe a refund": no income until answered.
+ *
  * Motion: when the month changes, the amounts roll (200 ms, ease-out); cut under reduced motion.
+ * The "Maybe a refund" chip has none of its own: it comes and goes with its row, at once.
  *
  * Don't: list expenses here, or colour a movement as money in or out.
  */
@@ -58,6 +61,31 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const Default: Story = {};
+
+/** Money back that may cancel a purchase (#208), flagged: no income until the user answers. */
+export const MaybeRefund: Story = {
+  args: {
+    movements: [
+      ...OCTOBER,
+      {
+        id: "pixelplay",
+        from: "PixelPlay",
+        to: "Current account",
+        amount: eur(3000),
+        maybeRefund: true,
+      },
+    ],
+  },
+};
+
+export const MaybeRefundFrench: Story = {
+  args: MaybeRefund.args,
+  render: (args) => (
+    <InFrench>
+      <MovementList {...args} emptyText="Aucun mouvement ce mois-ci." />
+    </InFrench>
+  ),
+};
 
 /** A month without movements: the page's sentence. */
 export const Empty: Story = { args: { movements: [] } };

@@ -1,5 +1,6 @@
 import { readFileSync } from "node:fs";
 
+import { CATEGORY_COLORS } from "@gousset/core/category-looks";
 import { describe, expect, it } from "vite-plus/test";
 
 import {
@@ -9,7 +10,9 @@ import {
   hexToLinearRgb,
   hueDistance,
   measureEdgePairs,
+  measurePalette,
   measureTextPairs,
+  over,
   readDeclarations,
   resolveColor,
   toLinearRgb,
@@ -30,6 +33,13 @@ describe("contrast", () => {
       6.41,
       2,
     );
+  });
+
+  it("blends a colour over a surface as the browser does, in encoded sRGB", () => {
+    // Black at half over white is #808080, not #bcbcbc, the mean of linear light.
+    const half = over(hexToLinearRgb("#000000"), hexToLinearRgb("#ffffff"), 0.5);
+
+    expect(half.r).toBeCloseTo(hexToLinearRgb("#808080").r, 2);
   });
 
   it("converts white and the brand violet to OKLCH and back", () => {
@@ -63,6 +73,22 @@ describe("the theme", () => {
       expect(pair.dark).toBeGreaterThanOrEqual(EDGE_MINIMUM);
     },
   );
+
+  it.each(measurePalette(css, CATEGORY_COLORS))(
+    "draws the palette's $color on $on at 4.5:1 or more",
+    (swatch) => {
+      expect(swatch.light).toBeGreaterThanOrEqual(4.5);
+      expect(swatch.dark).toBeGreaterThanOrEqual(4.5);
+    },
+  );
+
+  it("declares one palette colour per key of the categories' palette, and no other", () => {
+    const declared = [...readDeclarations(css).keys()].flatMap((name) =>
+      name.startsWith("--palette-") ? [name.slice("--palette-".length)] : [],
+    );
+
+    expect(declared).toEqual([...CATEGORY_COLORS]);
+  });
 
   it("gives floating surfaces their own edge and shadow, not the blocks' border", () => {
     const declarations = readDeclarations(css);

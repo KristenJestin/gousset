@@ -1,12 +1,21 @@
+import type { PaletteColor } from "../lib/palette";
 import { Combobox } from "./combobox";
+import type { CategoryIconName } from "./icons";
 import type { ChoiceItem } from "./select";
 import type { FieldProps } from "./text-field";
 
+/** What a category is shown with (#205): its icon, and its own colour or its parent's. */
+export type CategoryLook = {
+  /** None: `other`'s drawing. */
+  icon?: CategoryIconName | null;
+  color?: PaletteColor | null;
+};
+
 /** A category that can be chosen, with its children, in order. */
-export type CategoryChoice = {
+export type CategoryChoice = CategoryLook & {
   id: string;
   name: string;
-  children?: ReadonlyArray<{ id: string; name: string }>;
+  children?: ReadonlyArray<CategoryLook & { id: string; name: string }>;
 };
 
 export type CategoryPickerProps = FieldProps & {
@@ -28,7 +37,9 @@ const PATH = " › ";
 /**
  * One category among the user's, found by typing (a `Combobox`): each top-level category, then its
  * children named with it ("Food › Groceries"), so that typing a parent's name finds its children
- * too. Choosing one calls `onValueChange` with its id; clearing the text chooses nothing.
+ * too, each with its icon in its colour (a child's colour is its parent's unless it has its own:
+ * the page gives the colour each is shown in). Choosing one calls `onValueChange` with its id;
+ * clearing the text chooses nothing.
  *
  * Motion: as `Combobox`, its list fades and grows in 150 ms. Cut under reduced motion.
  */
@@ -39,10 +50,17 @@ export function CategoryPicker({
   ...field
 }: CategoryPickerProps) {
   const items: ReadonlyArray<ChoiceItem> = categories.flatMap((category) => [
-    { value: category.id, label: category.name },
+    {
+      value: category.id,
+      label: category.name,
+      icon: category.icon ?? "other",
+      iconColor: category.color ?? null,
+    },
     ...(category.children ?? []).map((child) => ({
       value: child.id,
       label: `${category.name}${PATH}${child.name}`,
+      icon: child.icon ?? "other",
+      iconColor: child.color ?? null,
     })),
   ]);
 

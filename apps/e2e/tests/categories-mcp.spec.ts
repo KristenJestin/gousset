@@ -347,6 +347,126 @@ test("a user whose currency is USD reads and sets a fixed benchmark in dollars",
   expect(text).toMatch(/\n- Groceries: \d+ entr(y|ies); benchmark: 130\.00 USD a month;/);
 });
 
+/** The line `categories list` writes for a category, by how it starts ("- Name:", "  - Name:"). */
+function listedLine(text: string, start: string): string {
+  return text.split("\n").find((line) => line.startsWith(start)) ?? "";
+}
+
+test("an MCP client sets a category's colour and icon; a child is shown in its parent's colour", async ({
+  userPage,
+  baseURL,
+  mcpClientId,
+}) => {
+  const client = await writer({ userPage, baseURL, mcpClientId });
+  const top = unique("Pets");
+  const child = unique("Vet");
+
+  const made = await callTool(client, "categories", {
+    action: "create",
+    name: top,
+    icon: "pets",
+    color: "green",
+  });
+
+  expect(made.isError, made.text).toBe(false);
+  expect(made.text).toContain(`Created the expense category "${top}"`);
+  expect(made.text).toContain("Shown with icon pets, colour green.");
+
+  const under = await callTool(client, "categories", {
+    action: "create",
+    name: child,
+    parent: top,
+    icon: "doctor",
+  });
+
+  expect(under.isError, under.text).toBe(false);
+  expect(under.text).toContain("Shown with icon doctor, colour green (its parent's).");
+
+  const listed = (await callTool(client, "categories", { action: "list" })).text;
+
+  expect(listedLine(listed, `- ${top}:`)).toMatch(/; icon pets, colour green$/);
+  expect(listedLine(listed, `  - ${child}:`)).toMatch(
+    /; icon doctor, colour green \(its parent's\)$/,
+  );
+
+  // The parent's new colour is the child's; the child's own one wins until cleared.
+  const recoloured = await callTool(client, "categories", {
+    action: "edit",
+    category: top,
+    color: "violet",
+  });
+
+  expect(recoloured.isError, recoloured.text).toBe(false);
+  expect(recoloured.text).toContain("Shown with icon pets, colour violet.");
+
+  const own = await callTool(client, "categories", {
+    action: "edit",
+    category: `${top} > ${child}`,
+    color: "blue",
+    icon: "pharmacy",
+  });
+
+  expect(own.isError, own.text).toBe(false);
+  expect(own.text).toContain("Shown with icon pharmacy, colour blue.");
+
+  const relisted = (await callTool(client, "categories", { action: "list" })).text;
+
+  expect(listedLine(relisted, `- ${top}:`)).toMatch(/; icon pets, colour violet$/);
+  expect(listedLine(relisted, `  - ${child}:`)).toMatch(/; icon pharmacy, colour blue$/);
+
+  const cleared = await callTool(client, "categories", {
+    action: "edit",
+    category: `${top} > ${child}`,
+    color: "none",
+    icon: "none",
+  });
+
+  expect(cleared.isError, cleared.text).toBe(false);
+  expect(cleared.text).toContain("Shown with no icon, colour violet (its parent's).");
+
+  const last = (await callTool(client, "categories", { action: "list" })).text;
+
+  expect(listedLine(last, `  - ${child}:`)).toMatch(/; no icon, colour violet \(its parent's\)$/);
+});
+
+test("a colour off the palette is refused, with the palette and a valid call", async ({
+  userPage,
+  baseURL,
+  mcpClientId,
+}) => {
+  const client = await writer({ userPage, baseURL, mcpClientId });
+  const name = unique("Plants");
+
+  const refused = await callTool(client, "categories", {
+    action: "create",
+    name,
+    icon: "garden",
+    color: "gray",
+  });
+
+  expect(refused.isError).toBe(true);
+  expect(refused.text).toContain('"gray" is no colour of Gousset\'s palette');
+  expect(refused.text).toContain(
+    "red, orange, amber, olive, green, teal, cyan, blue, indigo, violet, pink, grey",
+  );
+  expect(refused.text).toMatch(
+    /\nA valid call: categories \{"action":"create",.*"color":"blue"\}$/,
+  );
+  expect(refused.text.length).toBeLessThan(2000);
+  expect((await callTool(client, "categories", { action: "list" })).text).not.toContain(name);
+
+  // With a colour of the palette, as the refusal says, it is made.
+  const made = await callTool(client, "categories", {
+    action: "create",
+    name,
+    icon: "garden",
+    color: "grey",
+  });
+
+  expect(made.isError, made.text).toBe(false);
+  expect(made.text).toContain("Shown with icon garden, colour grey.");
+});
+
 test("a read-only token's write is refused, saying how to get write", async ({
   userPage,
   baseURL,

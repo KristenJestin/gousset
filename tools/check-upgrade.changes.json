@@ -43,5 +43,349 @@
         "dedup_key": "content:0ed9eec6279a398b247bc1b58a17cbcf76a88d781735c561514156a1691d7558#1"
       }
     }
+  ],
+  "20261125210007_default_category_looks": [
+    {
+      "why": "#205: the default expense category Housing, left as it was, gets the set's icon (its colour is a new column)",
+      "table": "category",
+      "where": { "kind": "expense", "name": "Housing", "parent_id": null, "icon": null },
+      "set": { "icon": "housing" }
+    },
+    {
+      "why": "#205: the default child Rent, left as it was, gets the set's icon",
+      "table": "category",
+      "where": { "kind": "expense", "name": "Rent", "icon": null },
+      "set": { "icon": "rent" }
+    },
+    {
+      "why": "#205: the default child Energy, left as it was, gets the set's icon",
+      "table": "category",
+      "where": { "kind": "expense", "name": "Energy", "icon": null },
+      "set": { "icon": "energy" }
+    },
+    {
+      "why": "#205: the default child Home insurance, left as it was, gets the set's icon",
+      "table": "category",
+      "where": { "kind": "expense", "name": "Home insurance", "icon": null },
+      "set": { "icon": "insurance" }
+    },
+    {
+      "why": "#205: the default child Repairs, left as it was, gets the set's icon",
+      "table": "category",
+      "where": { "kind": "expense", "name": "Repairs", "icon": null },
+      "set": { "icon": "repairs" }
+    },
+    {
+      "why": "#205: the default expense category Groceries, left as it was, gets the set's icon",
+      "table": "category",
+      "where": { "kind": "expense", "name": "Groceries", "parent_id": null, "icon": null },
+      "set": { "icon": "groceries" }
+    },
+    {
+      "why": "#205: the default child Supermarket, left as it was, gets the set's icon",
+      "table": "category",
+      "where": { "kind": "expense", "name": "Supermarket", "icon": null },
+      "set": { "icon": "supermarket" }
+    },
+    {
+      "why": "#205: the default child Market, left as it was, gets the set's icon",
+      "table": "category",
+      "where": { "kind": "expense", "name": "Market", "icon": null },
+      "set": { "icon": "market" }
+    },
+    {
+      "why": "#205: the default child Bakery, left as it was, gets the set's icon",
+      "table": "category",
+      "where": { "kind": "expense", "name": "Bakery", "icon": null },
+      "set": { "icon": "bakery" }
+    },
+    {
+      "why": "#205: the default expense category Transport, left as it was, gets the set's icon",
+      "table": "category",
+      "where": { "kind": "expense", "name": "Transport", "parent_id": null, "icon": null },
+      "set": { "icon": "transport" }
+    },
+    {
+      "why": "#205: the default child Fuel, left as it was, gets the set's icon",
+      "table": "category",
+      "where": { "kind": "expense", "name": "Fuel", "icon": null },
+      "set": { "icon": "fuel" }
+    },
+    {
+      "why": "#205: the default child Public transport, left as it was, gets the set's icon",
+      "table": "category",
+      "where": { "kind": "expense", "name": "Public transport", "icon": null },
+      "set": { "icon": "train" }
+    },
+    {
+      "why": "#205: the default child Car maintenance, left as it was, gets the set's icon",
+      "table": "category",
+      "where": { "kind": "expense", "name": "Car maintenance", "icon": null },
+      "set": { "icon": "car" }
+    },
+    {
+      "why": "#205: the default child Parking and tolls, left as it was, gets the set's icon",
+      "table": "category",
+      "where": { "kind": "expense", "name": "Parking and tolls", "icon": null },
+      "set": { "icon": "parking" }
+    },
+    {
+      "why": "#205: the default expense category Eating out, left as it was, gets the set's icon",
+      "table": "category",
+      "where": { "kind": "expense", "name": "Eating out", "parent_id": null, "icon": null },
+      "set": { "icon": "restaurants" }
+    },
+    {
+      "why": "#205: the default child Restaurants, left as it was, gets the set's icon",
+      "table": "category",
+      "where": { "kind": "expense", "name": "Restaurants", "icon": null },
+      "set": { "icon": "restaurants" }
+    },
+    {
+      "why": "#205: the default child Cafés and bars, left as it was, gets the set's icon",
+      "table": "category",
+      "where": { "kind": "expense", "name": "Cafés and bars", "icon": null },
+      "set": { "icon": "cafe" }
+    },
+    {
+      "why": "#205: the default child Takeaway, left as it was, gets the set's icon",
+      "table": "category",
+      "where": { "kind": "expense", "name": "Takeaway", "icon": null },
+      "set": { "icon": "takeaway" }
+    },
+    {
+      "why": "#205: the default expense category Health, left as it was, gets the set's icon",
+      "table": "category",
+      "where": { "kind": "expense", "name": "Health", "parent_id": null, "icon": null },
+      "set": { "icon": "health" }
+    },
+    {
+      "why": "#205: the default child Doctor, left as it was, gets the set's icon",
+      "table": "category",
+      "where": { "kind": "expense", "name": "Doctor", "icon": null },
+      "set": { "icon": "doctor" }
+    },
+    {
+      "why": "#205: the default child Pharmacy, left as it was, gets the set's icon",
+      "table": "category",
+      "where": { "kind": "expense", "name": "Pharmacy", "icon": null },
+      "set": { "icon": "pharmacy" }
+    },
+    {
+      "why": "#205: the default child Health insurance, left as it was, gets the set's icon",
+      "table": "category",
+      "where": { "kind": "expense", "name": "Health insurance", "icon": null },
+      "set": { "icon": "insurance" }
+    },
+    {
+      "why": "#205: the default expense category Leisure, left as it was, gets the set's icon",
+      "table": "category",
+      "where": { "kind": "expense", "name": "Leisure", "parent_id": null, "icon": null },
+      "set": { "icon": "leisure" }
+    },
+    {
+      "why": "#205: the default child Sport, left as it was, gets the set's icon",
+      "table": "category",
+      "where": { "kind": "expense", "name": "Sport", "icon": null },
+      "set": { "icon": "sport" }
+    },
+    {
+      "why": "#205: the default child Culture, left as it was, gets the set's icon",
+      "table": "category",
+      "where": { "kind": "expense", "name": "Culture", "icon": null },
+      "set": { "icon": "culture" }
+    },
+    {
+      "why": "#205: the default child Travel, left as it was, gets the set's icon",
+      "table": "category",
+      "where": { "kind": "expense", "name": "Travel", "icon": null },
+      "set": { "icon": "travel" }
+    },
+    {
+      "why": "#205: the default child Hobbies, left as it was, gets the set's icon",
+      "table": "category",
+      "where": { "kind": "expense", "name": "Hobbies", "icon": null },
+      "set": { "icon": "hobbies" }
+    },
+    {
+      "why": "#205: the default expense category Shopping, left as it was, gets the set's icon",
+      "table": "category",
+      "where": { "kind": "expense", "name": "Shopping", "parent_id": null, "icon": null },
+      "set": { "icon": "shopping" }
+    },
+    {
+      "why": "#205: the default child Clothing, left as it was, gets the set's icon",
+      "table": "category",
+      "where": { "kind": "expense", "name": "Clothing", "icon": null },
+      "set": { "icon": "clothes" }
+    },
+    {
+      "why": "#205: the default child Electronics, left as it was, gets the set's icon",
+      "table": "category",
+      "where": { "kind": "expense", "name": "Electronics", "icon": null },
+      "set": { "icon": "electronics" }
+    },
+    {
+      "why": "#205: the default child Home and garden, left as it was, gets the set's icon",
+      "table": "category",
+      "where": { "kind": "expense", "name": "Home and garden", "icon": null },
+      "set": { "icon": "garden" }
+    },
+    {
+      "why": "#205: the default expense category Subscriptions, left as it was, gets the set's icon",
+      "table": "category",
+      "where": { "kind": "expense", "name": "Subscriptions", "parent_id": null, "icon": null },
+      "set": { "icon": "subscriptions" }
+    },
+    {
+      "why": "#205: the default child Phone and internet, left as it was, gets the set's icon",
+      "table": "category",
+      "where": { "kind": "expense", "name": "Phone and internet", "icon": null },
+      "set": { "icon": "phone" }
+    },
+    {
+      "why": "#205: the default child Streaming, left as it was, gets the set's icon",
+      "table": "category",
+      "where": { "kind": "expense", "name": "Streaming", "icon": null },
+      "set": { "icon": "streaming" }
+    },
+    {
+      "why": "#205: the default child Software, left as it was, gets the set's icon",
+      "table": "category",
+      "where": { "kind": "expense", "name": "Software", "icon": null },
+      "set": { "icon": "software" }
+    },
+    {
+      "why": "#205: the default expense category Family, left as it was, gets the set's icon",
+      "table": "category",
+      "where": { "kind": "expense", "name": "Family", "parent_id": null, "icon": null },
+      "set": { "icon": "family" }
+    },
+    {
+      "why": "#205: the default child Childcare, left as it was, gets the set's icon",
+      "table": "category",
+      "where": { "kind": "expense", "name": "Childcare", "icon": null },
+      "set": { "icon": "children" }
+    },
+    {
+      "why": "#205: the default child Education, left as it was, gets the set's icon",
+      "table": "category",
+      "where": { "kind": "expense", "name": "Education", "icon": null },
+      "set": { "icon": "education" }
+    },
+    {
+      "why": "#205: the default child Gifts, left as it was, gets the set's icon",
+      "table": "category",
+      "where": { "kind": "expense", "name": "Gifts", "icon": null },
+      "set": { "icon": "gifts" }
+    },
+    {
+      "why": "#205: the default expense category Fees and taxes, left as it was, gets the set's icon",
+      "table": "category",
+      "where": { "kind": "expense", "name": "Fees and taxes", "parent_id": null, "icon": null },
+      "set": { "icon": "fees" }
+    },
+    {
+      "why": "#205: the default child Bank fees, left as it was, gets the set's icon",
+      "table": "category",
+      "where": { "kind": "expense", "name": "Bank fees", "icon": null },
+      "set": { "icon": "bank" }
+    },
+    {
+      "why": "#205: the default child Taxes, left as it was, gets the set's icon",
+      "table": "category",
+      "where": { "kind": "expense", "name": "Taxes", "icon": null },
+      "set": { "icon": "taxes" }
+    },
+    {
+      "why": "#205: the expense fallback Other, left as it was, gets the set's icon",
+      "table": "category",
+      "where": { "kind": "expense", "name": "Other", "parent_id": null, "icon": null },
+      "set": { "icon": "other" }
+    },
+    {
+      "why": "#205: the default income category Salary, left as it was, gets the set's icon",
+      "table": "category",
+      "where": { "kind": "income", "name": "Salary", "parent_id": null, "icon": null },
+      "set": { "icon": "salary" }
+    },
+    {
+      "why": "#205: the default child Pay, left as it was, gets the set's icon",
+      "table": "category",
+      "where": { "kind": "income", "name": "Pay", "icon": null },
+      "set": { "icon": "pay" }
+    },
+    {
+      "why": "#205: the default child Bonus, left as it was, gets the set's icon",
+      "table": "category",
+      "where": { "kind": "income", "name": "Bonus", "icon": null },
+      "set": { "icon": "bonus" }
+    },
+    {
+      "why": "#205: the default income category Benefits, left as it was, gets the set's icon",
+      "table": "category",
+      "where": { "kind": "income", "name": "Benefits", "parent_id": null, "icon": null },
+      "set": { "icon": "benefits" }
+    },
+    {
+      "why": "#205: the default child Family allowance, left as it was, gets the set's icon",
+      "table": "category",
+      "where": { "kind": "income", "name": "Family allowance", "icon": null },
+      "set": { "icon": "family" }
+    },
+    {
+      "why": "#205: the default child Housing aid, left as it was, gets the set's icon",
+      "table": "category",
+      "where": { "kind": "income", "name": "Housing aid", "icon": null },
+      "set": { "icon": "housing" }
+    },
+    {
+      "why": "#205: the default income category Investment income, left as it was, gets the set's icon",
+      "table": "category",
+      "where": { "kind": "income", "name": "Investment income", "parent_id": null, "icon": null },
+      "set": { "icon": "investments" }
+    },
+    {
+      "why": "#205: the default child Interest, left as it was, gets the set's icon",
+      "table": "category",
+      "where": { "kind": "income", "name": "Interest", "icon": null },
+      "set": { "icon": "interest" }
+    },
+    {
+      "why": "#205: the default child Dividends, left as it was, gets the set's icon",
+      "table": "category",
+      "where": { "kind": "income", "name": "Dividends", "icon": null },
+      "set": { "icon": "dividends" }
+    },
+    {
+      "why": "#205: the default income category Reimbursements, left as it was, gets the set's icon",
+      "table": "category",
+      "where": { "kind": "income", "name": "Reimbursements", "parent_id": null, "icon": null },
+      "set": { "icon": "reimbursements" }
+    },
+    {
+      "why": "#205: the default child Health reimbursements, left as it was, gets the set's icon",
+      "table": "category",
+      "where": { "kind": "income", "name": "Health reimbursements", "icon": null },
+      "set": { "icon": "health" }
+    },
+    {
+      "why": "#205: the default child Expense claims, left as it was, gets the set's icon",
+      "table": "category",
+      "where": { "kind": "income", "name": "Expense claims", "icon": null },
+      "set": { "icon": "expense-claims" }
+    },
+    {
+      "why": "#205: the default income category Gifts received, left as it was, gets the set's icon; Camille's, renamed Presents, stays",
+      "table": "category",
+      "where": { "kind": "income", "name": "Gifts received", "parent_id": null, "icon": null },
+      "set": { "icon": "gifts" }
+    },
+    {
+      "why": "#205: the income fallback Other, left as it was, gets the set's icon",
+      "table": "category",
+      "where": { "kind": "income", "name": "Other", "parent_id": null, "icon": null },
+      "set": { "icon": "other" }
+    }
   ]
 }
