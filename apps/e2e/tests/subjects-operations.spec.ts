@@ -9,6 +9,7 @@ import { Effect } from "effect";
 import type { TestUser } from "../src/auth";
 import { detailAtRest, lineDetail, onPhone } from "../src/frame";
 import { importsOn, statementFile } from "../src/imports";
+import { block } from "../src/review";
 import {
   addUser,
   animationsDone,
@@ -22,7 +23,7 @@ import {
 import { openUserData } from "../src/user-data";
 
 // Issue #37 where the subjects meet the money: the operations' filter and column, a line's detail
-// and an account's lines. One test per scenario. Each test has a user of its own: `fullyParallel` runs them in any
+// and its split, and an account's lines. One test per scenario. Each test has a user of its own: `fullyParallel` runs them in any
 // order. Every name, label and amount here is invented.
 
 const TODAY = "2026-11-15";
@@ -157,6 +158,10 @@ async function subjectsOfLine(
 
   return [...byEntry.values()].toSorted((a, b) => a.join().localeCompare(b.join()));
 }
+
+/** The shares' subjects as `subjectsOfLine` gives them: sorted. */
+const sharesOf = (...shares: ReadonlyArray<ReadonlyArray<string>>) =>
+  shares.toSorted((a, b) => a.join().localeCompare(b.join()));
 
 const list = (page: Page) => page.getByRole("list", { name: "Operations" });
 const rows = (page: Page) => list(page).getByRole("listitem");
@@ -395,4 +400,134 @@ test("an income offers no subjects", async ({ page, app, user }) => {
   await expect(sheet.getByRole("group", { name: "Subjects 1" })).toHaveCount(0);
   await page.keyboard.press("Escape");
   await expect(sheet).toHaveCount(0);
+});
+
+/** The split's sheet, open on the line's detail. */
+async function openSplit(page: Page, detail: Locator) {
+  await detail.getByRole("button", { name: "Split", exact: true }).click();
+
+  const sheet = page.getByRole("dialog", { name: "Split across categories" });
+
+  await expect(sheet).toBeVisible();
+
+  return sheet;
+}
+
+/** The share `index` (from 1) of the split's sheet. */
+const share = (sheet: Locator, index: number) =>
+  sheet.locator('[data-slot="split-share"]').nth(index - 1);
+
+/** Adds a share, its category typed and chosen with Enter (a click on a moving list may miss). */
+async function addShare(page: Page, sheet: Locator, index: number, category: string) {
+  await sheet.getByRole("button", { name: "Add a category" }).click();
+
+  const field = sheet.getByRole("combobox", { name: `Category ${index}` });
+
+  await field.pressSequentially(category);
+  await expect(page.getByRole("option", { name: category, exact: true })).toBeVisible();
+  await field.press("Enter");
+  await expect(field).toHaveValue(category);
+}
+
+test("splitting a line between the Van and the trip, with each share counted in its subject on the subject's page", async ({
+  page,
+  app,
+  user,
+}) => {
+  test.setTimeout(60_000);
+
+  const { person, owner } = await personFor(app, user, "subject-ops-split");
+
+  const lines = await imported(owner, [
+    { day: "2026-07-05", minor: -8000, label: "CB FUELSTOP 0507" },
+  ]);
+
+  const van = await subject(owner, { name: "Van" });
+  const alps = await subject(owner, { name: "Alps 2026" });
+  const fuel = lines.of("CB FUELSTOP 0507");
+
+  await attach(owner, van, [fuel.entryId]);
+  await as(page, person, "/operations");
+  await hydrated(page);
+
+  const detail = await openLine(page, "CB FUELSTOP 0507");
+  const sheet = await openSplit(page, detail);
+
+  // How an expense is shared between subjects, said once; the share starts with the line's.
+  await expect(sheet).toContainText("To share an expense between subjects, split it");
+  await expect(
+    share(sheet, 1)
+      .getByRole("group", { name: "Subjects 1" })
+      .locator('[data-slot="subject-chip"]'),
+  ).toHaveText(["Van"]);
+
+  await sheet.getByRole("textbox", { name: "Amount 1" }).fill("50");
+  await addShare(page, sheet, 2, "Groceries");
+
+  // The new share starts with the line's subjects too: the trip's takes the Van's place.
+  const second = share(sheet, 2);
+
+  await expect(second.locator('[data-slot="subject-chip"]')).toHaveText(["Van"]);
+  await second.getByRole("button", { name: "Remove Van" }).click();
+  await addSubject(page, second, "Add a subject to share 2", "Subject for share 2", "Alps 2026");
+  await expect(second.locator('[data-slot="subject-chip"]')).toHaveText(["Alps 2026"]);
+
+  // Refused under its share: the trip archived meanwhile; the sheet stays open.
+  await archive(owner, alps, true);
+  await sheet.getByRole("button", { name: "Save the split" }).click();
+  await expect(second).toContainText("An archived subject takes no more expenses");
+  await expect(share(sheet, 1)).not.toContainText("An archived subject");
+  await expect(sheet).toBeVisible();
+
+  await archive(owner, alps, false);
+  await sheet.getByRole("button", { name: "Save the split" }).click();
+  await expect(sheet).toBeHidden();
+
+  // Each share with its own subject, in the detail and in the data.
+  const shares = detail.getByRole("region", { name: "Split across 2 categories" });
+
+  const shareRow = (amount: string) =>
+    shares.locator('[data-slot="expense-share"]').filter({ hasText: amount });
+
+  await expect(shareRow("€50.00").locator('[data-slot="subject-chip"]')).toHaveText(["Van"]);
+  await expect(shareRow("€30.00").locator('[data-slot="subject-chip"]')).toHaveText(["Alps 2026"]);
+  await expect
+    .poll(async () => subjectsOfLine(owner, fuel.lineId))
+    .toEqual(sharesOf([van], [alps]));
+
+  // On each subject's page, only its share.
+  await visit(page, `/subjects/${van}`);
+  await expect(block(page, "Figures").locator('[data-slot="subject-cost"]')).toContainText("€50");
+  await visit(page, `/subjects/${alps}`);
+  await expect(block(page, "Figures").locator('[data-slot="subject-cost"]')).toContainText("€30");
+});
+
+test("a split that leaves the subjects out keeps the line's", async ({ page, app, user }) => {
+  const { person, owner } = await personFor(app, user, "subject-ops-split-kept");
+
+  const lines = await imported(owner, [
+    { day: "2026-10-14", minor: -9000, label: "CB FUELSTOP 1410" },
+  ]);
+
+  const van = await subject(owner, { name: "Van" });
+  const fuel = lines.of("CB FUELSTOP 1410");
+
+  await attach(owner, van, [fuel.entryId]);
+  await as(page, person, "/operations");
+  await hydrated(page);
+
+  const detail = await openLine(page, "CB FUELSTOP 1410");
+  const sheet = await openSplit(page, detail);
+
+  await sheet.getByRole("textbox", { name: "Amount 1" }).fill("60");
+  await addShare(page, sheet, 2, "Groceries");
+  await sheet.getByRole("button", { name: "Save the split" }).click();
+  await expect(sheet).toBeHidden();
+
+  // Both shares are the Van's, as the line was.
+  await expect.poll(async () => subjectsOfLine(owner, fuel.lineId)).toEqual([[van], [van]]);
+
+  if (!onPhone(page)) {
+    await expect(rowChips(page, "CB FUELSTOP 1410")).toHaveText(["Van"]);
+  }
 });

@@ -1269,6 +1269,18 @@ function expenseRefusal(code: ExpenseRefusalCode | "FAILED"): string {
       return m.operationsSplitRefused();
     }
 
+    case "SPLIT_SUBJECT_UNKNOWN": {
+      return m.operationsSplitRefusedSubjectUnknown();
+    }
+
+    case "SPLIT_SUBJECT_ARCHIVED": {
+      return m.operationsSplitRefusedSubjectArchived();
+    }
+
+    case "SPLIT_SUBJECT_INCOME": {
+      return m.operationsSplitRefusedSubjectIncome();
+    }
+
     case "NOT_LINKED": {
       return m.operationsExpenseNotLinked();
     }
@@ -1277,6 +1289,37 @@ function expenseRefusal(code: ExpenseRefusalCode | "FAILED"): string {
       return m.operationsTransferFailed();
     }
   }
+}
+
+/** Where a refusal is said: under its share when it names one (#37), under the actions otherwise. */
+function placedRefusal(code: ExpenseRefusalCode, index: number | null) {
+  const message = expenseRefusal(code);
+
+  return index === null
+    ? { error: message, share: undefined }
+    : { error: undefined, share: { index, message } };
+}
+
+/**
+ * The shares a split starts from: the line's split, each share with its subjects, or its one
+ * category with the whole amount and its expense's subjects (#37).
+ */
+function splitStart(expenses: LineExpenses, whole: { minor: number }) {
+  const [only, ...others] = expenses.expenses;
+
+  if (only === undefined) {
+    return [];
+  }
+
+  if (others.length === 0) {
+    return [{ categoryId: only.category.id, minor: whole.minor, subjects: only.subjects }];
+  }
+
+  return expenses.expenses.map((each) => ({
+    categoryId: each.category.id,
+    minor: each.net.minor,
+    subjects: each.subjects,
+  }));
 }
 
 /**
@@ -1301,7 +1344,10 @@ function ExpenseOf({
 }) {
   const queryClient = useQueryClient();
   const [error, setError] = useState<string>();
+  // A split's refusal about one of its shares, said under it (#37).
+  const [shareError, setShareError] = useState<{ index: number; message: string }>();
   const [search, setSearch] = useState("");
+  const { data: subjectList } = useQuery(subjectQueries.list());
   // The link dialog's lines are searched once it opens, not for every line shown.
   const [linking, setLinking] = useState(false);
   const kind = line.amount.minor < 0 ? "expense" : "income";
@@ -1326,20 +1372,26 @@ function ExpenseOf({
       invalidateCategories(queryClient),
     ]);
 
-  /** Runs a change: true once done, the refusal shown otherwise. */
+  /** Runs a change: true once done, the refusal shown otherwise, under its share when it names one. */
   const run = async (
-    change: () => Promise<{ ok: true } | { ok: false; code: ExpenseRefusalCode }>,
+    change: () => Promise<
+      { ok: true } | { ok: false; code: ExpenseRefusalCode; index: number | null }
+    >,
   ) => {
     try {
       const answer = await change();
 
       if (!answer.ok) {
-        setError(expenseRefusal(answer.code));
+        const placed = placedRefusal(answer.code, answer.index);
+
+        setError(placed.error);
+        setShareError(placed.share);
 
         return false;
       }
 
       setError(undefined);
+      setShareError(undefined);
       await changed();
 
       return true;
@@ -1365,6 +1417,8 @@ function ExpenseOf({
   const funded = only.fundings.length > 0;
   const digits = minorDigits(line.amount.currency);
   const whole = { minor: Math.abs(line.amount.minor), currency: line.amount.currency };
+  // Only an expense's shares have subjects, chosen among those in use (#37).
+  const shareSubjects = kind === "expense" ? subjectChoices(subjectList, true) : undefined;
 
   const candidates = found.map((row): ExpenseLineView => ({
     id: row.id,
@@ -1394,6 +1448,7 @@ function ExpenseOf({
                 id: each.id,
                 category: categoryPath(each.category),
                 amount: each.net,
+                subjects: each.subjects,
               }))
             : undefined
         }
@@ -1431,15 +1486,10 @@ function ExpenseOf({
               <SplitLine
                 total={whole}
                 categories={tree === undefined ? [] : choicesOf(tree, kind)}
-                initial={
-                  split
-                    ? expenses.expenses.map((each) => ({
-                        categoryId: each.category.id,
-                        minor: each.net.minor,
-                      }))
-                    : [{ categoryId: only.category.id, minor: whole.minor }]
-                }
+                initial={splitStart(expenses, whole)}
                 max={MAX_SHARES}
+                subjects={shareSubjects}
+                lineSubjects={line.subjects}
                 onSplit={(shares) =>
                   run(() =>
                     splitLine({
@@ -1448,12 +1498,14 @@ function ExpenseOf({
                         shares: shares.map((share) => ({
                           categoryId: share.categoryId,
                           amount: toDecimalString(share.minor, digits),
+                          subjectIds: share.subjectIds,
                         })),
                       },
                     }),
                   )
                 }
                 error={error}
+                shareError={shareError}
                 locale={locale}
               />
             )}

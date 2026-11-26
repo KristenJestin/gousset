@@ -236,3 +236,44 @@ test.describe("The operations' subjects", () => {
     }
   });
 });
+
+test.describe("A split's subjects", () => {
+  test("each share has its subjects, a new one the line's, and a refusal under its share", async ({
+    page,
+  }) => {
+    await page.goto(story("operations-lineexpense--split-sheet-by-subject"));
+    await page.getByRole("button", { name: "Split", exact: true }).click();
+
+    const sheet = page.getByRole("dialog", { name: "Split across categories" });
+    const shares = sheet.locator('[data-slot="split-share"]');
+
+    await expect(sheet.locator('[data-slot="split-subjects-hint"]')).toHaveText(
+      "To share an expense between subjects, split it: each share counts only in its own subjects.",
+    );
+    await expect(chips(shares.nth(0).getByRole("group", { name: "Subjects 1" }))).toHaveText([
+      "Van",
+    ]);
+    await expect(shares.nth(1)).toContainText("An archived subject takes no more expenses");
+    await expect(shares.nth(0)).not.toContainText("An archived subject");
+
+    // A share added takes the line's subjects; one is changed in its own share alone.
+    await sheet.getByRole("textbox", { name: "Amount 2" }).fill("20");
+    await sheet.getByRole("button", { name: "Add a category" }).click();
+    await expect(chips(shares.nth(2))).toHaveText(["Van"]);
+    await shares.nth(2).getByRole("button", { name: "Remove Van" }).click();
+    await add(page, shares.nth(2), "Add a subject to share 3", "Subject for share 3", "House");
+    await expect(chips(shares.nth(2))).toHaveText(["House"]);
+    await expect(chips(shares.nth(0))).toHaveText(["Van"]);
+  });
+
+  test("a split line's shares show their subjects", async ({ page }) => {
+    await page.goto(story("operations-lineexpense--split-by-subject"));
+
+    const shares = page.getByRole("region", { name: "Split across 2 categories" });
+
+    await expect(chips(shares.locator('[data-slot="expense-share"]').nth(0))).toHaveText(["Van"]);
+    await expect(chips(shares.locator('[data-slot="expense-share"]').nth(1))).toHaveText([
+      "Alps 2026",
+    ]);
+  });
+});

@@ -362,6 +362,10 @@ function uiMessages(locale: Locale) {
       subjectAddLabel: m.uiOperationsSubjectAddLabel({}, options),
       subjectToAdd: m.uiOperationsSubjectToAdd({}, options),
       subjectPlaceholder: m.uiOperationsSubjectPlaceholder({}, options),
+      shareSubjects: (index: number) => m.uiOperationsShareSubjects({ index }, options),
+      shareSubjectAdd: (index: number) => m.uiOperationsShareSubjectAdd({ index }, options),
+      shareSubjectPicker: (index: number) => m.uiOperationsShareSubjectPicker({ index }, options),
+      splitSubjectsHint: m.uiOperationsSplitSubjectsHint({}, options),
     },
     /** `ReviewProposal`: what Gousset proposes for a line to review, accepted or corrected (#35). */
     review: {
