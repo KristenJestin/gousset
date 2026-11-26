@@ -3,9 +3,11 @@ import {
   DatabaseCategoryStore,
   DatabaseLineStore,
   InvalidIsin,
+  LinkRefused,
   NotAnInvestmentAccount,
   OperationNotFound,
   OperationRefused,
+  SplitRefused,
   Today,
   TransferRefused,
   checkOperation,
@@ -19,6 +21,7 @@ import {
   investmentsLayer,
   isinCheckDigit,
   lineTransferOf,
+  linkLine,
   listMerchants,
   merchantsLayer,
   monthFactsLayer,
@@ -29,6 +32,7 @@ import {
   recogniseMerchants,
   reviewQueue,
   saveImportedOperations,
+  splitLine,
   transfersLayer,
 } from "@gousset/core";
 import type {
@@ -452,6 +456,45 @@ test("the lines to review leave an operation's cash out", async () => {
   expect(queued).not.toContain(purchase.lineId);
   expect(queued).not.toContain(dividend.lineId);
   expect(queued).not.toContain(fee.lineId);
+});
+
+test("an operation's cash joins no expense, as a part or a target, and is not split", async () => {
+  const current = await newAccount("Linking current", "current");
+  const pea = await newAccount("Linking PEA", "investment");
+  const fund = isin("LNK000001");
+
+  const paid = await importLine(current, "linking-current", {
+    bookedOn: "2026-10-03",
+    amountMinor: -4031,
+    label: "CB LINKWORTH STORES 0310",
+  });
+
+  const purchase = await enter(pea, {
+    isin: fund,
+    amountMinor: -20_031,
+    quantity: "2",
+    unitPrice: "100.155",
+  });
+
+  const dividend = await enter(pea, { kind: "dividend", isin: fund, amountMinor: 231 });
+
+  expect(await failure(linkLine(owner, purchase.lineId, paid))).toEqual(
+    new LinkRefused({ reason: "investment_operation", lineId: purchase.lineId }),
+  );
+  expect(await failure(linkLine(owner, paid, dividend.lineId))).toEqual(
+    new LinkRefused({ reason: "investment_operation", lineId: dividend.lineId }),
+  );
+  expect(
+    await failure(
+      splitLine(owner, purchase.lineId, [
+        { categoryId: crypto.randomUUID(), amount: "100" },
+        { categoryId: crypto.randomUUID(), amount: "100.31" },
+      ]),
+    ),
+  ).toEqual(new SplitRefused({ reason: "investment_operation" }));
+
+  // Neither line was given an entry on the way.
+  expect(await entriesOf([purchase.lineId, dividend.lineId])).toEqual([[], []]);
 });
 
 test("the month: received and spent are unchanged, and set aside is the deposit", async () => {

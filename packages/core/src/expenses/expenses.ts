@@ -27,6 +27,7 @@ import {
   SplitRefused,
 } from "../errors";
 import { isId } from "../imports/rows";
+import { operationCash } from "../investments/cash";
 import type { LineAccount } from "../lines";
 import { merchantKey } from "../merchants/labels";
 import type { Money } from "../month";
@@ -229,6 +230,7 @@ const lineColumns = {
   accountName: account.name,
   institution: account.institution,
   currency: account.currency,
+  operationCash,
 };
 
 type ReadLine = {
@@ -243,6 +245,8 @@ type ReadLine = {
   readonly accountName: string;
   readonly institution: string | null;
   readonly currency: string;
+  /** A purchase's, sale's, dividend's or fee's cash (v0.6): no expense's, and never split. */
+  readonly operationCash: boolean;
 };
 
 /** The user's counted or held line booked on or before `day`; undefined for any other. */
@@ -786,7 +790,13 @@ async function lineExpenses(
 function lineRefusal(
   line: ReadLine,
   paired: boolean,
-): "not_counted" | "zero_amount" | "made_from_balance" | "transfer" | undefined {
+):
+  | "not_counted"
+  | "zero_amount"
+  | "made_from_balance"
+  | "investment_operation"
+  | "transfer"
+  | undefined {
   if (line.state !== "counted") {
     return "not_counted";
   }
@@ -797,6 +807,11 @@ function lineRefusal(
 
   if (line.source === "balance") {
     return "made_from_balance";
+  }
+
+  // Money moving inside an investment account (v0.6): it has no entry, and is given none.
+  if (line.operationCash) {
+    return "investment_operation";
   }
 
   return paired ? "transfer" : undefined;
@@ -1007,7 +1022,12 @@ async function splitIn(
 
   const refused = lineRefusal(line, await isTransferSide(transaction, line.id));
 
-  if (refused === "not_counted" || refused === "zero_amount" || refused === "transfer") {
+  if (
+    refused === "not_counted" ||
+    refused === "zero_amount" ||
+    refused === "investment_operation" ||
+    refused === "transfer"
+  ) {
     return splitRefused(refused);
   }
 

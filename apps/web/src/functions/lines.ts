@@ -278,6 +278,7 @@ const LINK_CODES = {
   not_counted: "LINK_OTHER",
   zero_amount: "LINK_OTHER",
   made_from_balance: "LINK_OTHER",
+  investment_operation: "LINK_OTHER",
   transfer: "LINK_TRANSFER",
   split: "LINK_SPLIT",
   linked: "LINK_LINKED",
