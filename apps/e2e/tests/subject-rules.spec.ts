@@ -260,6 +260,53 @@ test("a merchant rule attaches its subject at import", async ({ app, user }) => 
   expect((await run(showRule(owner, made.id))).appliedCount).toBe(1);
 });
 
+test("a subject rule on a merchant sees the merchant a rule set at import", async ({
+  app,
+  user,
+}) => {
+  const owner = await ownerFor(app, user, "subject-rule-set-merchant");
+
+  await importLines(owner, [{ day: "2026-10-01", minor: 5000, label: "CB FUELSTOP 0110" }]);
+
+  const fuelstop = await merchantOf(owner, "CB FUELSTOP 0110");
+  const van = await newSubject(owner, "Van");
+
+  // The label names a merchant of its own; the first rule says it is Fuelstop.
+  await rule(owner, {
+    conditions: {
+      kind: "group",
+      combinator: "and",
+      children: [{ kind: "rule", field: "label", operator: "contains", value: "ROADSIDE" }],
+    },
+    merchantId: fuelstop,
+  });
+  const vanRule = await rule(owner, { conditions: merchantIs(fuelstop), subjectId: van });
+
+  const lines = await importLines(owner, [
+    { day: "2026-10-12", minor: 4800, label: "CB ROADSIDE 1210" },
+  ]);
+
+  const roadside = entryOf(lines, "CB ROADSIDE 1210");
+
+  const [classified] = await data.asUser(owner, (transaction) =>
+    transaction
+      .select({ merchantId: entry.merchantId })
+      .from(entry)
+      .where(eq(entry.id, roadside.entryId)),
+  );
+
+  expect(classified?.merchantId).toBe(fuelstop);
+  expect(await subjectsOf(owner, roadside.entryId)).toEqual([van]);
+
+  // Applied to the past, the rule reads the same merchant: the line is its, with nothing to change;
+  // the first line, there before the rule, waits for it.
+  expect((await run(showRule(owner, vanRule.id))).reach).toEqual({
+    lines: 2,
+    toChange: 1,
+    byHand: 0,
+  });
+});
+
 test("a rule's merchant and subject must be the user's, the subject not archived", async ({
   app,
   user,

@@ -873,24 +873,42 @@ export async function applyRulesToImport(
       ruleId: line.ruleId,
     };
 
-    const row: ConditionRow = conditionRow({
-      ...line,
-      merchantId: merchantOf({ ...line, entryMerchantId: line.merchantId }),
-    });
+    // Each rule's conditions are read once per row: the two parts may ask the same rule.
+    const meetsOn = (row: ConditionRow) => {
+      const met = new Map<string, boolean>();
 
-    // Each rule's conditions are read once per line: the two parts may ask the same rule.
-    const met = new Map<string, boolean>();
+      return (each: (typeof tried)[number]) => {
+        const known = met.get(each.id) ?? each.matches(row);
 
-    const meets = (each: (typeof tried)[number]) => {
-      const known = met.get(each.id) ?? each.matches(row);
+        met.set(each.id, known);
 
-      met.set(each.id, known);
-
-      return known;
+        return known;
+      };
     };
+
+    const meets = meetsOn(
+      conditionRow({
+        ...line,
+        merchantId: merchantOf({ ...line, entryMerchantId: line.merchantId }),
+      }),
+    );
 
     const chosen =
       line.classifiedBy === "default" ? firstApplying(tried, meets, target, facts) : null;
+
+    // The subject part reads the line as the chosen rule leaves it, as applying a rule to the past
+    // reads it: with the merchant that rule set, unless an intermediary (`merchantReader`).
+    const merchantSet = chosen === null ? line.merchantId : chosen.wanted.merchantId;
+
+    const meetsAfter =
+      merchantSet === line.merchantId
+        ? meets
+        : meetsOn(
+            conditionRow({
+              ...line,
+              merchantId: merchantOf({ ...line, entryMerchantId: merchantSet }),
+            }),
+          );
 
     if (chosen !== null) {
       const writes = byRule.get(chosen.rule.id) ?? [];
@@ -901,7 +919,7 @@ export async function applyRulesToImport(
 
     const open = subjects.open;
 
-    for (const each of subjectsAttached(tried, meets, subjectTarget(subjects, target), open)) {
+    for (const each of subjectsAttached(tried, meetsAfter, subjectTarget(subjects, target), open)) {
       const group = attachments.get(each.rule.id) ?? { subjectId: each.subjectId, ids: [] };
 
       group.ids.push(target.id);
