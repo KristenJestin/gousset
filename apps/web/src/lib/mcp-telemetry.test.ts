@@ -4,7 +4,9 @@ import {
   ImportProfiles,
   Imports,
   Merchants,
+  MonthFacts,
   RuleJobs,
+  Subscriptions,
   Transfers,
   memoryAccountStore,
   memoryCategoryStore,
@@ -48,7 +50,7 @@ describe("a call to the MCP door", () => {
       const client = await connectInProcess(
         goussetServer,
         {
-          // The call reaches no import nor export.
+          // The call reaches no import nor export, and reads an empty month.
           run: (effect) =>
             Effect.runPromiseExit(
               Effect.provide(
@@ -65,6 +67,23 @@ describe("a call to the MCP door", () => {
                   Layer.mock(Expenses, {}),
                   Layer.mock(UserData, {}),
                   Layer.mock(RuleJobs, {}),
+                  Layer.mock(Subscriptions, {}),
+                  // A month of nothing: the call reads it, and answers.
+                  Layer.succeed(MonthFacts, {
+                    read: () =>
+                      Effect.succeed({
+                        accounts: [],
+                        categories: [],
+                        parts: [],
+                        transfers: [],
+                        merchants: [],
+                        aliases: [],
+                        firstDay: null,
+                        benefitLines: [],
+                        reach: [],
+                        charges: [],
+                      }),
+                  }),
                 ),
               ),
             ),

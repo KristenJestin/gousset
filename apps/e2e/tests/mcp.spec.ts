@@ -200,6 +200,7 @@ test("both protocol revisions list the same tools in the same order", async ({
     "merchants",
     "categories",
     "rules",
+    "review",
     "e2e_probe",
   ]);
   expect(modernTools).toEqual(legacyTools);
@@ -222,11 +223,11 @@ test("an MCP client reads with read and write, and its write goes through", asyn
   expect(session.tokens()?.scope?.split(" ")).toContain("write");
   expect(session.client.getInstructions()).toContain("`month`");
 
-  // The review is not available yet (#126): month says so, a read like any other.
+  // The month's summary (#32): a read like any other.
   const { text, isError } = await askMonth(session.client);
 
-  expect(isError).toBe(false);
-  expect(text).toContain("The monthly review is not available yet");
+  expect(isError, text).toBe(false);
+  expect(text).toContain("The month 2026-10, in ");
 
   // Read and write: the write goes through.
   expect(await write(session.client)).toEqual({

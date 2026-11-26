@@ -22,8 +22,13 @@ export type BreakdownRow = {
   name: string;
   icon?: IconName;
   amount: Money;
-  /** The 6-month average this month is held against: its mark on the bar, ⚠ once passed. */
+  /**
+   * The benchmark this month is held against (its 6-month average, or an amount the user set):
+   * its mark on the bar, ⚠ once passed by any amount. None, no mark.
+   */
   benchmark?: Money;
+  /** The benchmark is an amount the user set, not the average: it is read so. */
+  benchmarkSet?: boolean;
 };
 
 export type BreakdownProps = {
@@ -119,8 +124,10 @@ function RowContent({
         <Amount value={row.amount} whole size="sm" locale={locale} />
       </span>
       {row.benchmark === undefined ? null : (
-        <span className="sr-only">
-          {messages.benchmark(formatMoney(row.benchmark, { locale, whole: true }))}
+        <span className="sr-only" data-slot="breakdown-benchmark-text">
+          {(row.benchmarkSet === true ? messages.benchmarkSet : messages.benchmark)(
+            formatMoney(row.benchmark, { locale, whole: true }),
+          )}
         </span>
       )}
     </>
@@ -222,7 +229,8 @@ function More({ count, onMore }: { count: number; onMore: (() => void) | undefin
 /**
  * Where the money goes (docs/wireframes, screen 1, block 2): one row per category, merchant or
  * subject, each with its icon, its name, a bar on a scale shared by every row, and its amount.
- * A dark mark on the bar is its benchmark (the 6-month average); ⚠ once it is passed. Cut after
+ * A dark mark on the bar is its benchmark (the 6-month average, or an amount the user set, read as
+ * such); ⚠ once it is passed by any amount; no mark without one. Cut after
  * `limit` rows with "+ N more"; a sentence when there is nothing.
  *
  * With `selectedId`, the chosen row becomes a panel in the list's place: its name, its amount
@@ -352,6 +360,72 @@ export function Breakdown({
         )}
       </AnimatePresence>
     </LayoutGroup>
+  );
+}
+
+/** What an open row's amount is held against: the average, the month before. */
+export type BreakdownComparison = {
+  id: string;
+  /** What it is, short and seen: "Average", "September". */
+  label: string;
+  /** Its amount. */
+  reference: Money;
+  /** What it is in the change's sentence, for screen readers: "your average", "September". */
+  referenceLabel: string;
+};
+
+export type BreakdownFiguresProps = {
+  /** The open row's amount. */
+  value: Money;
+  comparisons: ReadonlyArray<BreakdownComparison>;
+  /** What the figures are, for screen readers: "Groceries against". */
+  label: string;
+  /** Under the figures: the row's chart. */
+  children?: ReactNode;
+  /** The page's language (`<html lang>`) unless given. */
+  locale?: string;
+};
+
+/**
+ * The figures of an open row, for the `detail` of a `Breakdown`: one line per reference it is held
+ * against (its average, the month before), the reference's amount and the change, its amounts
+ * aligned in tabular figures; then `children`, its chart.
+ *
+ * Motion: none of its own; it fades in with the panel's detail, and its amounts roll when the
+ * month changes (`Amount`). Cut under reduced motion.
+ */
+export function BreakdownFigures({
+  value,
+  comparisons,
+  label,
+  children,
+  locale,
+}: BreakdownFiguresProps) {
+  const pageLocale = usePageLanguage();
+  const writtenIn = locale ?? pageLocale;
+
+  return (
+    <div data-slot="breakdown-figures" className="flex flex-col gap-3">
+      <ul aria-label={label} className="flex flex-col divide-y">
+        {comparisons.map((comparison) => (
+          <li key={comparison.id} className="flex h-9 items-center gap-3 text-sm">
+            <span className="min-w-0 flex-1 truncate text-muted-foreground">
+              {comparison.label}
+            </span>
+            <Amount value={comparison.reference} whole size="sm" locale={writtenIn} />
+            <span className="flex w-16 shrink-0 justify-end">
+              <Delta
+                value={value}
+                reference={comparison.reference}
+                referenceLabel={comparison.referenceLabel}
+                locale={writtenIn}
+              />
+            </span>
+          </li>
+        ))}
+      </ul>
+      {children}
+    </div>
   );
 }
 

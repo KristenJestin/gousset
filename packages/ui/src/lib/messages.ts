@@ -88,6 +88,8 @@ function uiMessages(locale: Locale) {
       },
       /** Under the part left when some of it sits on benefit accounts. */
       leftRestricted: (amount: string) => m.uiMoneyLeftRestricted({ amount }, options),
+      /** In place of "set aside" when more came back from savings than went to them. */
+      takenFromSavings: m.uiMoneyTakenFromSavings({}, options),
       /** In place of "left" when more went out than came in. */
       overspent: m.uiMoneyOverspent({}, options),
       /** The month bar's parts, as a group. */
@@ -100,6 +102,8 @@ function uiMessages(locale: Locale) {
       deltaSteady: (reference: string) => m.uiDeltaSteady({ reference }, options),
       overBenchmark: m.uiOverBenchmark({}, options),
       benchmark: (amount: string) => m.uiBenchmark({ amount }, options),
+      /** A benchmark the user set, rather than the average. */
+      benchmarkSet: (amount: string) => m.uiBenchmarkSet({ amount }, options),
       moreRows: (count: number) => m.uiMoreRows({ count }, options),
       /** The button that shows the rows a list leaves out: never "more", the frame's own menu. */
       showOtherRows: (count: number) => m.uiShowOtherRows({ count }, options),
@@ -159,6 +163,24 @@ function uiMessages(locale: Locale) {
       creditsEditExpiryOf: (label: string) => m.uiAccountsCreditsEditExpiryOf({ label }, options),
       creditsUncovered: (amount: string) => m.uiAccountsCreditsUncovered({ amount }, options),
       creditsEmpty: m.uiAccountsCreditsEmpty({}, options),
+    },
+    /** `RecurringCalendar`: what recurs this month, and the marks it draws. */
+    recurring: {
+      views: m.uiRecurringViews({}, options),
+      /** Its month switcher's name, apart from the page's own "Month". */
+      month: m.uiRecurringMonth({}, options),
+      viewMonth: m.uiRecurringViewMonth({}, options),
+      viewAgenda: m.uiRecurringViewAgenda({}, options),
+      paid: m.uiRecurringPaid({}, options),
+      due: m.uiRecurringDue({}, options),
+      stopped: m.uiRecurringStopped({}, options),
+      expiring: m.uiRecurringExpiring({}, options),
+      priceRise: m.uiRecurringPriceRise({}, options),
+      /** Beside a payment that costs more than before: "Price up from €8.99". */
+      priceRiseFrom: (amount: string) => m.uiRecurringPriceRiseFrom({ amount }, options),
+      today: m.uiRecurringToday({}, options),
+      legend: m.uiRecurringLegend({}, options),
+      empty: m.uiRecurringEmpty({}, options),
     },
     jobs: {
       /** A background job's state, beside its title. */
@@ -327,6 +349,23 @@ function uiMessages(locale: Locale) {
       merchantPlaceholder: m.uiOperationsMerchantPlaceholder({}, options),
       merchantNew: m.uiOperationsMerchantNew({}, options),
       merchantAssign: m.uiOperationsMerchantAssign({}, options),
+    },
+    /** `ReviewProposal`: what Gousset proposes for a line to review, accepted or corrected (#35). */
+    review: {
+      proposes: m.uiReviewProposes({}, options),
+      accept: m.uiReviewAccept({}, options),
+      /** The buttons' names, which say the action and the line: "Accept the proposal for CB GREENMARKET". */
+      acceptLabel: (label: string) => m.uiReviewAcceptLabel({ label }, options),
+      correct: m.uiReviewCorrect({}, options),
+      correctLabel: (label: string) => m.uiReviewCorrectLabel({ label }, options),
+      /** A held repeat's correction: it is kept, and needs no dialog. */
+      keep: m.uiReviewKeep({}, options),
+      keepLabel: (label: string) => m.uiReviewKeepLabel({ label }, options),
+      correctTitle: m.uiReviewCorrectTitle({}, options),
+      correctDescription: (label: string) => m.uiReviewCorrectDescription({ label }, options),
+      category: m.uiReviewCategory({}, options),
+      categorySearch: m.uiReviewCategorySearch({}, options),
+      correctSubmit: m.uiReviewCorrectSubmit({}, options),
     },
     categories: {
       columns: {

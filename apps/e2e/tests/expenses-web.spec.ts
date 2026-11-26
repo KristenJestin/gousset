@@ -3,7 +3,7 @@ import { exampleStatement } from "@gousset/fixture";
 import type { Statement, StatementLine } from "@gousset/fixture";
 
 import { addUser } from "../src/auth";
-import { detailAtRest, detailSight, lineDetail, onPhone } from "../src/frame";
+import { detailAtRest, detailSight, lineDetail } from "../src/frame";
 import { importsOn, statementFile } from "../src/imports";
 import { animationsDone, expect, expectAccessible, fixDay, test, visit } from "../src/test";
 import { openUserData } from "../src/user-data";
@@ -217,8 +217,8 @@ test("the operations page proposes a cancellation as a refund, links it once con
   await save.click();
 
   // Saved, the sheet closes: what counts is that the split's sheet does not stay open (ui-sdk takes
-  // `data-open` off as its exit starts), and that the page still answers below. On a phone the
-  // line's detail is itself a sheet, which stays open under it and holds the split's.
+  // `data-open` off as its exit starts), and that the page still answers below. The line's detail
+  // is itself a sheet (#182), which stays open under it and holds the split's.
   const openSheet = page
     .locator('[data-slot="dialog-content"][data-open]')
     .filter({ has: page.locator('[data-slot="split-left"]') })
@@ -238,8 +238,9 @@ test("the operations page proposes a cancellation as a refund, links it once con
   // closed sheet, nor its backdrop, covers it), and the split opens again with its two shares.
   // While its backdrop still fades out (300 ms), ui-sdk swallows a press over it on purpose, so
   // that nothing behind a dimmed page is pressed: the shares are read by then, since the line's
-  // queries came back before the sheet closed, and a click at once would land in that exit.
-  await expect(page.locator('[data-slot="dialog-backdrop"]')).toHaveCount(onPhone(page) ? 1 : 0);
+  // queries came back before the sheet closed, and a click at once would land in that exit. The
+  // detail's own backdrop stays.
+  await expect(page.locator('[data-slot="dialog-backdrop"]')).toHaveCount(1);
   await stores.getByRole("button", { name: "Split", exact: true }).click();
 
   await expect(openSheet).toHaveCount(1);

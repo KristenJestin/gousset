@@ -105,3 +105,51 @@ export function Delta({
     </span>
   );
 }
+
+export type DeltaListItem = DeltaProps & {
+  id: string;
+  /** What it is held against, short and seen after the change: "vs. average". */
+  label: string;
+};
+
+export type DeltaListProps = {
+  /** Before the changes, what changed: "spending". */
+  lead?: string;
+  items: ReadonlyArray<DeltaListItem>;
+};
+
+/**
+ * Several changes of one figure on one line, each followed by what it is held against: "spending
+ * +5% vs. average · −3% vs. September". Each change keeps its label, so a change is never read
+ * alone. Below 768 px, where one line is too narrow for them, each change after the first has a
+ * line of its own, without the dot: always the same lines, whatever the phone's width.
+ *
+ * Motion: each `Delta`'s own (its colour moves in 150 ms); cut under reduced motion.
+ */
+export function DeltaList({ lead, items }: DeltaListProps) {
+  return (
+    <span
+      data-slot="delta-list"
+      className="inline-flex flex-wrap items-center gap-x-2 text-xs whitespace-nowrap text-muted-foreground max-md:w-full"
+    >
+      {lead === undefined ? null : <span>{lead}</span>}
+      {items.map(({ id, label, ...delta }, index) => (
+        <span
+          key={id}
+          className={cn(
+            "inline-flex items-center gap-1 max-md:h-5",
+            index > 0 && "max-md:basis-full",
+          )}
+        >
+          {index === 0 ? null : (
+            <span aria-hidden="true" className="pr-1 max-md:hidden">
+              ·
+            </span>
+          )}
+          <Delta {...delta} />
+          <span aria-hidden="true">{label}</span>
+        </span>
+      ))}
+    </span>
+  );
+}

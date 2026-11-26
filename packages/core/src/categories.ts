@@ -1,6 +1,7 @@
 import type { QueryFailed } from "@gousset/db/user-data";
 import { Clock, Effect, Result } from "effect";
 
+import { monthsCounted } from "./benchmarks";
 import { CategoryStore } from "./category-store";
 import type {
   Benchmark,
@@ -266,9 +267,13 @@ function averageRange(day: string) {
   return { from, to: end.toISOString().slice(0, 10) };
 }
 
-/** `net` summed per currency, then divided by the months, rounded to a whole minor unit. */
+/**
+ * `net` summed per currency, then divided by the months counted (those from the user's first
+ * entry on, `./benchmarks`), rounded to a whole minor unit.
+ */
 function averageOf(
   nets: ReadonlyArray<ReadonlyArray<{ readonly currency: string; readonly minor: number }>>,
+  months: number,
 ): ReadonlyArray<Money> {
   const sums = new Map<string, number>();
 
@@ -280,7 +285,7 @@ function averageOf(
 
   return [...sums]
     .toSorted(([a], [b]) => a.localeCompare(b))
-    .map(([currency, minor]) => ({ currency, minor: Math.round(minor / AVERAGE_MONTHS) }));
+    .map(([currency, minor]) => ({ currency, minor: Math.round(minor / Math.max(months, 1)) }));
 }
 
 /**
@@ -294,6 +299,13 @@ export const listCategories = (owner: string, listing: CategoryListing = {}) =>
     const range = averageRange(day);
     const categories = yield* store.list(owner);
     const use = yield* store.use(owner, range);
+
+    const months = monthsCounted(
+      yield* store.firstEntry(owner),
+      range.from.slice(0, 7),
+      range.to.slice(0, 7),
+    );
+
     const useOf = new Map(use.map((each) => [each.categoryId, each]));
 
     const shown = categories
@@ -315,11 +327,11 @@ export const listCategories = (owner: string, listing: CategoryListing = {}) =>
         fallback: category.fallback,
         benchmark: category.benchmark,
         entries: own?.entries ?? 0,
-        average: averageOf([own?.net ?? []]),
-        averageWithChildren: averageOf([
-          own?.net ?? [],
-          ...childrenOf(categories, category.id).map((child) => netOf(child.id)),
-        ]),
+        average: averageOf([own?.net ?? []], months),
+        averageWithChildren: averageOf(
+          [own?.net ?? [], ...childrenOf(categories, category.id).map((child) => netOf(child.id))],
+          months,
+        ),
         children,
       };
 

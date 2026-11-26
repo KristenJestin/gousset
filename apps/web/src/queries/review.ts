@@ -1,6 +1,6 @@
 import { queryOptions } from "@tanstack/react-query";
 
-import { getStartingPoints } from "@/functions/review";
+import { getQueuedLine, getStartingPoints } from "@/functions/review";
 
 import { reviewKeys } from "./review-keys";
 
@@ -11,5 +11,14 @@ export const reviewQueries = {
     queryOptions({
       queryKey: reviewKeys.startingPoints(),
       queryFn: () => getStartingPoints(),
+    }),
+  /**
+   * A line to review and what Gousset proposes for it (#35); a line the user does not have, or no
+   * longer to review, comes back as `{ ok: false, code }`.
+   */
+  line: (lineId: string) =>
+    queryOptions({
+      queryKey: reviewKeys.line(lineId),
+      queryFn: () => getQueuedLine({ data: { lineId } }),
     }),
 };

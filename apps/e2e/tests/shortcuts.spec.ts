@@ -29,8 +29,13 @@ test("? opens the list of shortcuts, built from their declarations", async ({ pa
     "Show keyboard shortcuts",
     "Show keyboard shortcuts",
     "Search",
+    // The operations' review mode (#35).
+    "Next line to review",
+    "Previous line to review",
+    "Accept the proposal",
+    "Correct the line",
   ]);
-  await expect(dialog.getByRole("definition")).toHaveText(["?", /\/$/, /K$/]);
+  await expect(dialog.getByRole("definition")).toHaveText(["?", /\/$/, /K$/, "J", "K", "A", "C"]);
 
   await page.keyboard.press("Escape");
 
@@ -112,6 +117,10 @@ test.describe("in French", () => {
       "Afficher les raccourcis clavier",
       "Afficher les raccourcis clavier",
       "Rechercher",
+      "Ligne à vérifier suivante",
+      "Ligne à vérifier précédente",
+      "Accepter la proposition",
+      "Corriger la ligne",
     ]);
   });
 });

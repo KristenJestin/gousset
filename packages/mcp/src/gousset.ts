@@ -7,7 +7,9 @@ import type {
   Imports,
   LineStore,
   Merchants,
+  MonthFacts,
   RuleJobs,
+  Subscriptions,
   Transfers,
 } from "@gousset/core";
 import type { UserData } from "@gousset/db/user-data";
@@ -22,12 +24,14 @@ import { importsTool } from "./tools/imports";
 import { linesTool } from "./tools/lines";
 import { merchantsTool } from "./tools/merchants";
 import { monthTool } from "./tools/month";
+import { reviewTool } from "./tools/review";
 import { rulesTool } from "./tools/rules";
 
 /**
  * The services Gousset's tools need (the user's accounts, the imports and their profiles, the
  * export, every line searched across accounts, the transfers between accounts, the merchants, the
- * categories, the rules' database and job, and the expenses made of several lines).
+ * categories, the rules' database and job, the expenses made of several lines, the charges
+ * subscriptions are detected from, and the rows of a month).
  */
 export type GoussetServices =
   | AccountStore
@@ -40,7 +44,9 @@ export type GoussetServices =
   | CategoryStore
   | UserData
   | RuleJobs
-  | Expenses;
+  | Expenses
+  | Subscriptions
+  | MonthFacts;
 
 /**
  * Gousset's tools, in the order `tools/list` gives them: one family per concept
@@ -55,6 +61,7 @@ export const goussetTools: ReadonlyArray<Tool<GoussetServices>> = [
   merchantsTool,
   categoriesTool,
   rulesTool,
+  reviewTool,
 ];
 
 export const goussetServer: ServerDefinition<GoussetServices> = {

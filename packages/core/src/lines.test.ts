@@ -523,4 +523,28 @@ describe("searchLines: to review", () => {
     expect(page.lines.map((each) => [each.id, each.toReview])).toEqual([[unclassified.id, true]]);
     expect(page.total).toBe(1);
   });
+
+  test("leaves out a refund linked to an expense still classified by default: it follows its expense", async () => {
+    const current = accountOf("Refunded current");
+    const fallback = { id: memoryId(), name: "Other", parentName: null, kind: "expense" as const };
+
+    const expense = line(current.id, "2026-11-12", -3150, "CB HILLSIDE PHARMACY", {
+      category: fallback,
+      classifiedBy: "default",
+    });
+
+    const refund = line(current.id, "2026-11-14", 3150, "REFUND HILLSIDE PHARMACY", {
+      category: fallback,
+      classifiedBy: "default",
+      role: "refund",
+    });
+
+    const page = await search(
+      { accounts: [current], lines: [expense, refund] },
+      { toReview: true },
+    );
+
+    expect(page.lines.map((each) => each.id)).toEqual([expense.id]);
+    expect(page.total).toBe(1);
+  });
 });

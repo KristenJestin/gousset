@@ -4,7 +4,7 @@ import { expect, test } from "@playwright/test";
 /**
  * One representative story per component, in light and in dark, screenshotted headless on the
  * desktop Chromium (the issue's "How to verify"), and the month bar's `Phone` story at a phone's
- * width, whose legend must hold on one line (#83). Each component's other stories, its phone
+ * width, whose legend is a list there (#36). Each component's other stories, its phone
  * layout included (its `Phone` story), are covered by its behaviour tests; screenshotting every
  * story in every browser would put over a thousand images in Git. Reduced motion: each story is
  * caught in its final state, never on its way.
@@ -80,10 +80,8 @@ const SHOTS: ReadonlyArray<Shot> = [
   { id: "import-csv-preview--default" },
   { id: "states-emptystate--in-a-block" },
   { id: "states-errorstate--beside-a-working-block" },
-  // The review until it reads real lines (#126): a user with lines, a new user, a phone.
-  { id: "states-reviewcoming--with-data" },
-  { id: "states-reviewcoming--new-user" },
-  { id: "states-reviewcoming--phone", width: 320 },
+  // The review of a user with no line yet (#32): links to the first import and the accounts.
+  { id: "states-emptystate--with-links" },
   { id: "layout-card--with-description" },
   { id: "layout-screen--sign-in" },
   { id: "data-list--loading-beside-loaded" },
@@ -98,14 +96,26 @@ const SHOTS: ReadonlyArray<Shot> = [
   { id: "money-month-bar--default" },
   { id: "money-month-bar--overspent" },
   { id: "money-month-bar--narrow-part" },
-  // The legend on one line at the narrowest phone (#83), Storybook's `mobile1`.
+  // The legend as a list at the narrowest phone (#36), Storybook's `mobile1`.
   { id: "money-month-bar--phone", width: 320 },
+  // The month in another currency, apart (#32).
+  { id: "money-month-bar--other-currencies" },
+  { id: "money-delta--several" },
   { id: "money-breakdown--default" },
   { id: "money-breakdown--loading" },
+  // An open row's figures against its average and the month before (#32).
+  { id: "money-breakdown--detail-figures" },
   { id: "money-amount--counting" },
   { id: "money-movement-list--default" },
   { id: "money-investment-list--loss" },
   { id: "money-review-lines--default" },
+  // The review's first lines, read only, and its link into the review mode (#32).
+  { id: "money-review-lines--read-only" },
+  // The recurring payments' calendar (#34): the month and the agenda, on a desktop and a phone.
+  { id: "money-recurringcalendar--default" },
+  { id: "money-recurringcalendar--agenda-view" },
+  { id: "money-recurringcalendar--phone", width: 390 },
+  { id: "money-recurringcalendar--phone-agenda", width: 390 },
   { id: "data-flag-list--default" },
   { id: "layout-folded--default" },
   { id: "layout-review-layout--desktop" },
@@ -136,6 +146,8 @@ const SHOTS: ReadonlyArray<Shot> = [
   { id: "accounts-benefitcredits--uncovered" },
   { id: "operations-operationslist--default" },
   { id: "operations-linedetail--to-review" },
+  // "To review only" off, then pressed with the others set (#184).
+  { id: "operations-operationsfilters--default" },
   { id: "operations-operationsfilters--set" },
   { id: "operations-operationsfilters--french" },
   // A phone: the search and the Filters button, then the sheet it opens (#127).
@@ -149,7 +161,8 @@ const SHOTS: ReadonlyArray<Shot> = [
   },
   { id: "operations-operationslist--phone", width: 390 },
   { id: "operations-operationslayout--line-open" },
-  // A line's detail beside the list in French, and a sheet over it on a phone (#128).
+  // A line's detail in its side sheet over the list, in French, and a bottom sheet on a phone
+  // (#128, #182).
   { id: "operations-operationslayout--line-open-french" },
   { id: "operations-operationslayout--phone", width: 390 },
   { id: "categories-categorytree--default" },
@@ -173,6 +186,15 @@ const SHOTS: ReadonlyArray<Shot> = [
     trigger: "Change the merchant",
   },
   { id: "operations-linedetail--with-merchant" },
+  // What Gousset proposes for a line to review, at the top of its detail, and Correct's dialog (#35).
+  { id: "operations-reviewproposal--in-detail" },
+  { id: "operations-reviewproposal--duplicate" },
+  {
+    id: "operations-reviewproposal--category",
+    open: "click",
+    trigger: "Correct CB GREENMARKET 2110 RIVERTON",
+    name: "operations-reviewproposal--correcting",
+  },
 ];
 
 async function openPopup(page: Page, open: Shot["open"], name: Shot["trigger"]) {

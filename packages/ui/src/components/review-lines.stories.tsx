@@ -3,6 +3,7 @@ import { useState } from "react";
 
 import { ReviewLines, ReviewLinesSkeleton } from "./review-lines";
 import type { ReviewLine } from "./review-lines";
+import { TextLink } from "./text-link";
 
 const eur = (minor: number) => ({ minor, currency: "EUR" });
 
@@ -71,7 +72,11 @@ function Approving() {
  * made of it (merchant, category, account) and the action that approves it, its name read with the
  * line's label. Cut after `limit` lines; with `onMore`, a button "Show the other N".
  *
- * Loading: `ReviewLinesSkeleton`, as many lines as it shows and the last line, same heights.
+ * Without the approval's props, the lines are read only (the monthly review lists the first ones
+ * and leads, with `footer`, to where they are reviewed).
+ *
+ * Loading: `ReviewLinesSkeleton`, as many lines as it shows and the last line, same heights;
+ * `readOnly` leaves out the action's place.
  *
  * Motion: an approved line fades out (200 ms, ease-out) and the lines under it slide up into its
  * place, by transform; cut under reduced motion.
@@ -102,6 +107,29 @@ export const Default: Story = { render: () => <Approving /> };
 export const All: Story = {};
 
 export const Loading: Story = { render: () => <ReviewLinesSkeleton rows={3} more /> };
+
+/** The first three lines, read only, and a link to where they are reviewed. */
+export const ReadOnly: Story = {
+  render: () => (
+    <div className="max-w-2xl">
+      <ReviewLines
+        lines={LINES.slice(0, 3)}
+        label="To review"
+        locale="en"
+        footer={<TextLink href="#review">Review the month&rsquo;s lines</TextLink>}
+      />
+    </div>
+  ),
+};
+
+/** `ReadOnly` on its way: no action's place. */
+export const ReadOnlyLoading: Story = {
+  render: () => (
+    <div className="max-w-2xl">
+      <ReviewLinesSkeleton rows={3} more readOnly />
+    </div>
+  ),
+};
 
 export const Phone: Story = {
   globals: { viewport: { value: "mobile1", isRotated: false } },

@@ -78,7 +78,7 @@ function Frame({ initial = "review" }: { initial?: string }) {
       <ScreenTransition id={current}>
         <Page
           title={screen.label}
-          actions={<MonthSwitcher value={month} onChange={setMonth} latest={month} />}
+          month={<MonthSwitcher value={month} onChange={setMonth} latest={month} />}
         >
           <ScreenBlock>
             <EmptyState
@@ -95,8 +95,9 @@ function Frame({ initial = "review" }: { initial?: string }) {
 /**
  * The app's frame (docs/wireframes): from 768 px a sidebar, narrow (icons) up to 1024 px and wide
  * after, with the mark (and the wordmark when wide), the screens, then the settings and the user's
- * menu at its foot; below 768 px a tab bar (Review, Operations, Accounts, More). A `Page` inside
- * gives the screen its title and what sits beside it.
+ * menu at its foot; below 768 px a tab bar (Review, Operations, Accounts, More), above an installed
+ * app's home indicator. A `Page` inside gives the screen its title and what sits beside it; a
+ * month's screen its month switcher, across the screen under the title on a phone.
  *
  * Motion: the screen reached fades in (200 ms, ease-out); the current item's background slides to
  * the item reached (shared layout, 200 ms); an empty screen's block fades in. Cut under reduced

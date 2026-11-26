@@ -10,11 +10,11 @@ export function onPhone(page: Page): boolean {
 }
 
 /**
- * A line's open detail on the operations page, named by its label: a panel beside the list on a
- * wide screen, a sheet (a dialog) over it on a phone (#128).
+ * A line's open detail on the operations page, named by its label: a sheet (a dialog) over the
+ * list on every screen (#182), from the right edge on a wide screen, from the bottom on a phone.
  */
 export function lineDetail(page: Page, label: string): Locator {
-  return page.getByRole(onPhone(page) ? "dialog" : "region", { name: label });
+  return page.getByRole("dialog", { name: label });
 }
 
 /**
@@ -24,13 +24,10 @@ export function lineDetail(page: Page, label: string): Locator {
  */
 export type DetailSight = { opacity: number; moving: number };
 
-/**
- * What `lineDetail` shows of its content: the panel's block that fades on a wide screen, the
- * sheet's body on a phone.
- */
+/** What `lineDetail` shows of its content: the sheet's body. */
 export async function detailSight(detail: Locator): Promise<DetailSight> {
   return detail
-    .locator('[data-slot="line-detail-content"], [data-slot="line-detail"]')
+    .locator('[data-slot="line-detail"]')
     .first()
     .evaluate((content) => {
       let opacity = 1;

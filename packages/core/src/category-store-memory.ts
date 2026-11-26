@@ -8,6 +8,7 @@ import type {
   CategoryUse,
   EntryKind,
   LineCategory,
+  MonthlySpending,
 } from "./category-store";
 import { CategoryNotFound, LineNotFound } from "./errors";
 import { defaultCategoryMoves } from "./merchants/default-classification";
@@ -219,6 +220,37 @@ export function memoryCategoryStore(rows: Map<string, MemoryCategoryRows> = new 
                 },
               ];
         }),
+      ),
+
+    spending: (owner, range) =>
+      Effect.sync(() => {
+        const expenses = of(owner).entries.filter((each) => each.kind === "expense");
+        const sums = new Map<string, MonthlySpending>();
+
+        for (const each of expenses) {
+          if (each.happenedOn < range.from || each.happenedOn > range.to) {
+            continue;
+          }
+
+          for (const part of each.parts) {
+            const month = each.happenedOn.slice(0, 7);
+            const key = `${each.categoryId} ${month} ${part.currency}`;
+            const signed = part.role === "payment" ? part.amountMinor : -part.amountMinor;
+            const minor = (sums.get(key)?.minor ?? 0) + signed;
+
+            sums.set(key, { categoryId: each.categoryId, month, currency: part.currency, minor });
+          }
+        }
+
+        return [...sums.values()];
+      }),
+
+    firstEntry: (owner) =>
+      Effect.sync(() =>
+        of(owner).entries.reduce<string | null>(
+          (first, each) => (first === null || each.happenedOn < first ? each.happenedOn : first),
+          null,
+        ),
       ),
 
     change: (owner, decide) =>

@@ -1,11 +1,16 @@
 import { createMiddleware } from "@tanstack/react-start";
 import { getRequestHeaders } from "@tanstack/react-start/server";
-import { Effect } from "effect";
+import { Effect, Schema } from "effect";
 
 import { devLatency } from "@/lib/dev-latency";
 import { usableSession } from "@/lib/session.server";
 
-/** Only a signed-in user reads data, and only their own: the session says whose. */
+import { UserCurrency } from "./currency";
+
+/**
+ * Only a signed-in user reads data, and only their own: the session says whose, and the currency
+ * their months are read in (euros if their account holds no code, as `getViewer` says).
+ */
 export const signedIn = createMiddleware({ type: "function" }).server(async ({ next }) => {
   const { session, refusal } = await usableSession(getRequestHeaders());
 
@@ -14,7 +19,14 @@ export const signedIn = createMiddleware({ type: "function" }).server(async ({ n
     throw new Error(refusal === "SIGN_IN_REQUIRED" ? "Sign in to read your data." : refusal);
   }
 
-  return next({ context: { owner: session.user.id } });
+  const { currency } = session.user;
+
+  return next({
+    context: {
+      owner: session.user.id,
+      currency: Schema.is(UserCurrency)(currency) ? currency : "EUR",
+    },
+  });
 });
 
 /** In development, the latency `GOUSSET_DEV_LATENCY_MS` asks for (`@/lib/dev-latency`). */

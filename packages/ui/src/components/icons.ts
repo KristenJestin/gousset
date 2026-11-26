@@ -34,6 +34,7 @@ import {
   IconGift,
   IconHeartbeat,
   IconHome,
+  IconHourglass,
   IconInbox,
   IconInfoCircle,
   IconKey,
@@ -129,6 +130,9 @@ export const interfaceIcons = {
   signOut: IconLogout,
   // An MCP client asking for access, on the consent screen.
   agent: IconRobot,
+  // The recurring payments' calendar: a payment that recurs, a credit's last day.
+  recurring: IconRepeat,
+  expiring: IconHourglass,
 } as const;
 
 /**
