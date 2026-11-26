@@ -20,10 +20,10 @@ import { goussetServer } from "./gousset";
 import { connectInProcess } from "./test-client";
 
 // The budget of docs/mcp.md ("The budget"). When a guard fails, nobody trims a description to make
-// room: the maintainer decides. The listing's cap was raised from 30,000 (about ten tools of up to
-// 4,000 each), then raised from 40,000 for #32 and #35, confirmed by the maintainer on 2026-11-25.
+// room: the maintainer decides. The tool listing stays under 52,000 characters (Kris, 2026-11-26),
+// to fit subjects and investments.
 const MAX_TOOLS = 15;
-const MAX_LISTING_CHARACTERS = 44_000;
+const MAX_LISTING_CHARACTERS = 52_000;
 const MAX_DESCRIPTION_CHARACTERS = 4000;
 const MAX_INSTRUCTION_WORDS = 600;
 
@@ -68,10 +68,10 @@ describe("the budget", () => {
     expect((await listing()).length).toBeLessThanOrEqual(MAX_TOOLS);
   });
 
-  test(`at most ${MAX_LISTING_CHARACTERS} characters of definitions in the listing`, async () => {
+  test(`under ${MAX_LISTING_CHARACTERS} characters of definitions in the listing`, async () => {
     const size = JSON.stringify(await listing()).length;
 
-    expect(size).toBeLessThanOrEqual(MAX_LISTING_CHARACTERS);
+    expect(size).toBeLessThan(MAX_LISTING_CHARACTERS);
   });
 
   test(`every description under ${MAX_DESCRIPTION_CHARACTERS} characters`, async () => {
