@@ -10,7 +10,7 @@ import { transfer } from "@gousset/db/schema/transfers";
 import { UserData } from "@gousset/db/user-data";
 import type { QueryFailed, UserTransaction } from "@gousset/db/user-data";
 import { minorDigits } from "@gousset/import";
-import { and, asc, desc, eq, gte, inArray, lt, lte, ne, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, gt, gte, inArray, lt, lte, ne, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { Context, Effect, Layer, Result } from "effect";
 
@@ -24,6 +24,7 @@ import {
   LinkRefused,
   NotFunding,
   NotLinked,
+  RefundNotProposed,
   SplitRefused,
 } from "../errors";
 import { isId } from "../imports/rows";
@@ -34,7 +35,7 @@ import { today } from "../today";
 import { shiftDay } from "../transfers/pairing";
 import { FUND_DAYS, fundDecision, fundingCandidates, fundsFromBenefit } from "./funding";
 import type { FundingTarget, FundingTransfer } from "./funding";
-import { REFUND_DAYS, netOf, refundProposals, roleOf, sharesOf } from "./parts";
+import { REFUND_DAYS, netOf, refundProposals, roleOf, sameMerchant, sharesOf } from "./parts";
 import type { EntryKind, PartRole, ProposalLine } from "./parts";
 
 // Expenses paid in several parts, and refunds (#27; docs/vision.md, "An expense is not a bank
@@ -138,6 +139,13 @@ export type LineExpenses = {
    * unasked: the user confirms one by linking the line to it.
    */
   readonly proposals: ReadonlyArray<RefundProposal>;
+  /**
+   * Maybe a refund (#208): a line coming back with proposals, still classified by default and not
+   * answered by the user. It is no income until the user answers: confirmed, it is linked as a
+   * refund; refused (`refuseRefund`), it is an ordinary income. A rule's line keeps its proposals
+   * but counts as the rule says.
+   */
+  readonly maybeRefund: boolean;
   /** A side of a transfer out of a benefit account: what it funds, or may; null for any other. */
   readonly funding: TransferFunding | null;
 };
@@ -203,17 +211,20 @@ export class Expenses extends Context.Service<
       owner: string,
       transferLineId: string,
     ) => Effect.Effect<LineExpenses, LineNotFound | NotFunding | Failure>;
+    /**
+     * The user's answer that a line coming back is no refund (#208): its proposals go, never to come
+     * back, and it is an ordinary income, classified as it was. Answering again changes nothing; a
+     * line with no refund proposed fails with `RefundNotProposed`. Linking it by hand lifts it.
+     */
+    readonly refuseRefund: (
+      owner: string,
+      lineId: string,
+    ) => Effect.Effect<LineExpenses, LineNotFound | RefundNotProposed | Failure>;
   }
 >()("@gousset/core/Expenses") {}
 
 /** How many expenses of a transfer's days are read for the ones it may fund, the nearest first. */
 const FUND_POOL = 100;
-
-/**
- * How many lines before a line coming back are read for its proposals, those of its exact amount
- * first, then the nearest: the merchant is compared once they are read.
- */
-const PROPOSAL_POOL = 500;
 
 const parent = alias(category, "parent");
 
@@ -226,6 +237,7 @@ const lineColumns = {
   counterpartyName: statementLine.counterpartyName,
   state: statementLine.state,
   source: statementLine.source,
+  refundRefused: statementLine.refundRefused,
   accountName: account.name,
   institution: account.institution,
   currency: account.currency,
@@ -240,6 +252,7 @@ type ReadLine = {
   readonly counterpartyName: string | null;
   readonly state: "counted" | "held" | "discarded";
   readonly source: "import" | "manual" | "balance" | "counterpart";
+  readonly refundRefused: boolean;
   readonly accountName: string;
   readonly institution: string | null;
   readonly currency: string;
@@ -486,13 +499,29 @@ async function merchantsOf(
   return new Map(rows.map((row) => [row.alias, row.merchantId]));
 }
 
-/** The expenses a line coming back may cancel (`refundProposals`), read with their category. */
-async function proposalsFor(
+/**
+ * The expenses each line coming back among `lines` may cancel (`refundProposals`), read with their
+ * category, in one pass for them all: each line's purchases are those of its own days (up to
+ * `REFUND_DAYS` before it), currency and amount, and only those of its merchant are read further.
+ */
+async function proposalsOfLines(
   transaction: UserTransaction,
-  line: ReadLine,
-  day: string,
-): Promise<ReadonlyArray<RefundProposal>> {
-  const back = Math.abs(line.amountMinor);
+  lines: ReadonlyArray<ReadLine>,
+): Promise<ReadonlyMap<string, ReadonlyArray<RefundProposal>>> {
+  const back = lines.filter((line) => line.amountMinor > 0);
+
+  if (back.length === 0) {
+    return new Map();
+  }
+
+  const windows = back.map((line) =>
+    and(
+      eq(account.currency, line.currency),
+      sql`abs(${statementLine.amountMinor}) >= ${line.amountMinor}`,
+      gte(statementLine.bookedOn, shiftDay(line.bookedOn, -REFUND_DAYS)),
+      lte(statementLine.bookedOn, line.bookedOn),
+    ),
+  );
 
   const pool = await transaction
     .select(lineColumns)
@@ -502,28 +531,49 @@ async function proposalsFor(
       and(
         eq(statementLine.state, "counted"),
         ne(statementLine.source, "balance"),
-        ne(statementLine.id, line.id),
-        eq(account.currency, line.currency),
         lt(statementLine.amountMinor, 0),
-        sql`abs(${statementLine.amountMinor}) >= ${back}`,
-        gte(statementLine.bookedOn, shiftDay(line.bookedOn, -REFUND_DAYS)),
-        lte(statementLine.bookedOn, line.bookedOn),
-        lte(statementLine.bookedOn, day),
+        or(...windows),
         // A payment of an expense: no side of a transfer, no refund of another one.
         sql`exists (select 1 from entry_part p where p.line_id = ${statementLine.id} and p.role = 'payment')`,
       ),
-    )
-    // The exact amount first, as `refundProposals` orders them, so that a cancellation is read
-    // whatever the user paid since; then the nearest day.
-    .orderBy(
-      sql`abs(${statementLine.amountMinor}) = ${back} desc`,
-      desc(statementLine.bookedOn),
-      desc(statementLine.id),
-    )
-    .limit(PROPOSAL_POOL);
+    );
 
   if (pool.length === 0) {
-    return [];
+    return new Map();
+  }
+
+  const keyOf = (each: ReadLine) => merchantKey(each.label, each.counterpartyName);
+
+  const merchants = await merchantsOf(
+    transaction,
+    [...back, ...pool].flatMap((each) => keyOf(each) ?? []),
+  );
+
+  const proposalLine = (each: ReadLine, netMinor: number): ProposalLine => {
+    const key = keyOf(each);
+
+    return {
+      id: each.id,
+      currency: each.currency,
+      bookedOn: each.bookedOn,
+      amountMinor: each.amountMinor,
+      merchantId: key === null ? null : (merchants.get(key) ?? null),
+      key,
+      netMinor,
+    };
+  };
+
+  const coming = back.map((line) => proposalLine(line, 0));
+
+  // A purchase of no line's merchant is proposed to none: its expense is not read.
+  const named = pool.filter((each) => {
+    const paid = proposalLine(each, 0);
+
+    return coming.some((line) => sameMerchant(line, paid));
+  });
+
+  if (named.length === 0) {
+    return new Map();
   }
 
   // Each line's entries; a split line, or a side of a transfer (which has none), is no purchase.
@@ -533,7 +583,7 @@ async function proposalsFor(
     .where(
       inArray(
         entryPart.lineId,
-        pool.map((each) => each.id),
+        named.map((each) => each.id),
       ),
     );
 
@@ -554,28 +604,7 @@ async function proposalsFor(
   const expenses = await readExpenses(transaction, [...new Set(entryOf.values())]);
   const expenseOf = new Map(expenses.map((expense) => [expense.id, expense]));
 
-  const keyOf = (each: ReadLine) => merchantKey(each.label, each.counterpartyName);
-
-  const merchants = await merchantsOf(
-    transaction,
-    [line, ...pool].flatMap((each) => keyOf(each) ?? []),
-  );
-
-  const proposalLine = (each: ReadLine, netMinor: number): ProposalLine => {
-    const key = keyOf(each);
-
-    return {
-      id: each.id,
-      currency: each.currency,
-      bookedOn: each.bookedOn,
-      amountMinor: each.amountMinor,
-      merchantId: key === null ? null : (merchants.get(key) ?? null),
-      key,
-      netMinor,
-    };
-  };
-
-  const candidates = pool.flatMap((each) => {
+  const candidates = named.flatMap((each) => {
     const expense = expenseOf.get(entryOf.get(each.id) ?? "");
 
     // The line pays an expense: a purchase, not a refund of one, nor an income.
@@ -586,9 +615,9 @@ async function proposalsFor(
       : [proposalLine(each, expense.net.minor)];
   });
 
-  const lineOf = new Map(pool.map((each) => [each.id, each]));
+  const lineOf = new Map(named.map((each) => [each.id, each]));
 
-  return refundProposals(proposalLine(line, 0), candidates).flatMap((proposed) => {
+  const proposalOf = (proposed: ProposalLine): ReadonlyArray<RefundProposal> => {
     const paid = lineOf.get(proposed.id);
     const expense = expenseOf.get(entryOf.get(proposed.id) ?? "");
 
@@ -611,7 +640,52 @@ async function proposalsFor(
             net: expense.net,
           },
         ];
-  });
+  };
+
+  return new Map(
+    coming.map((line) => [line.id, refundProposals(line, candidates).flatMap(proposalOf)]),
+  );
+}
+
+/**
+ * Among `lineIds`, the lines that may be refunds and wait for the user's answer (#208, "Maybe a
+ * refund"): counted, made from no balance, coming back, the only line of their one entry, still
+ * classified by default, not refused by the user (`refund_refused`), with at least one expense they
+ * may cancel. Computed on read, as their proposals are: only the user's answer is stored. Such a
+ * line is no income until it is answered.
+ */
+export async function maybeRefundsAmong(
+  transaction: UserTransaction,
+  lineIds: ReadonlyArray<string>,
+): Promise<ReadonlySet<string>> {
+  const ids = [...new Set(lineIds.filter(isId))];
+
+  if (ids.length === 0) {
+    return new Set();
+  }
+
+  const lines = await transaction
+    .select(lineColumns)
+    .from(statementLine)
+    .innerJoin(account, eq(account.id, statementLine.accountId))
+    .where(
+      and(
+        inArray(statementLine.id, ids),
+        eq(statementLine.state, "counted"),
+        ne(statementLine.source, "balance"),
+        gt(statementLine.amountMinor, 0),
+        eq(statementLine.refundRefused, false),
+        // One part, in an entry still classified by default that has no other line.
+        sql`(select count(*) from entry_part p where p.line_id = ${statementLine.id}) = 1`,
+        sql`exists (select 1 from entry_part p join entry e on e.id = p.entry_id where p.line_id = ${statementLine.id} and e.classified_by = 'default' and not exists (select 1 from entry_part q where q.entry_id = e.id and q.line_id <> p.line_id))`,
+      ),
+    );
+
+  const proposals = await proposalsOfLines(transaction, lines);
+
+  return new Set(
+    lines.flatMap((line) => ((proposals.get(line.id)?.length ?? 0) > 0 ? [line.id] : [])),
+  );
 }
 
 const outLine = alias(statementLine, "out_line");
@@ -749,11 +823,7 @@ async function transferFunding(
 }
 
 /** What `line` is to the expenses, read in `transaction`. */
-async function lineExpenses(
-  transaction: UserTransaction,
-  line: ReadLine,
-  day: string,
-): Promise<LineExpenses> {
+async function lineExpenses(transaction: UserTransaction, line: ReadLine): Promise<LineExpenses> {
   const expenses = await readExpenses(transaction, await entryIdsOf(transaction, line.id));
   const [only, ...others] = expenses;
 
@@ -761,7 +831,7 @@ async function lineExpenses(
     // A line of no expense may be a works council refund's side (#29).
     const funding = only === undefined ? await transferFunding(transaction, line.id) : null;
 
-    return { expenses, role: null, proposals: [], funding };
+    return { expenses, role: null, proposals: [], maybeRefund: false, funding };
   }
 
   const role = only.refunds.some((part) => part.lineId === line.id) ? "refund" : "payment";
@@ -774,12 +844,19 @@ async function lineExpenses(
     alone &&
     line.amountMinor > 0 &&
     only.classifiedBy !== "user" &&
+    !line.refundRefused &&
     line.state === "counted" &&
     line.source !== "balance"
-      ? await proposalsFor(transaction, line, day)
+      ? ((await proposalsOfLines(transaction, [line])).get(line.id) ?? [])
       : [];
 
-  return { expenses, role, proposals, funding: null };
+  return {
+    expenses,
+    role,
+    proposals,
+    maybeRefund: proposals.length > 0 && only.classifiedBy === "default",
+    funding: null,
+  };
 }
 
 /** Why the line cannot be part of an expense with another line, or undefined when it can. */
@@ -923,7 +1000,7 @@ export async function linkIn(
   if (by === "user") {
     await transaction
       .update(statementLine)
-      .set({ linkRefused: false })
+      .set({ linkRefused: false, refundRefused: false })
       .where(inArray(statementLine.id, [line.id, target.id]));
   }
 
@@ -963,10 +1040,13 @@ async function unlinkIn(
     .delete(entryPart)
     .where(and(eq(entryPart.entryId, expense.id), eq(entryPart.lineId, line.id)));
 
-  // The user's "not one expense" holds: the matching of top-ups never links the line again (#28).
+  // The user's "not one expense" holds: the matching of top-ups never links the line again (#28),
+  // and a refund taken out is no refund to propose again (#208).
+  const wasRefund = expense.refunds.some((part) => part.lineId === line.id);
+
   await transaction
     .update(statementLine)
-    .set({ linkRefused: true })
+    .set(wasRefund ? { linkRefused: true, refundRefused: true } : { linkRefused: true })
     .where(eq(statementLine.id, line.id));
 
   // The expense loses this line: with refunds past its payments, it loses them; with no payment
@@ -981,7 +1061,7 @@ async function unlinkIn(
   );
   await entriesForLines(transaction, owner, [line.id]);
 
-  return Result.succeed(await lineExpenses(transaction, line, day));
+  return Result.succeed(await lineExpenses(transaction, line));
 }
 
 const splitRefused = (reason: SplitRefused["reason"], index?: number) =>
@@ -1098,7 +1178,7 @@ async function splitIn(
     });
   }
 
-  return Result.succeed(await lineExpenses(transaction, line, day));
+  return Result.succeed(await lineExpenses(transaction, line));
 }
 
 /** The lines the entries `entryIds` have a part of. */
@@ -1220,7 +1300,37 @@ async function unfundIn(
   // The transfer stays; the expense it funded keeps its cost, as it always did.
   await transaction.update(transfer).set({ fundsEntryId: null }).where(eq(transfer.id, found.id));
 
-  return Result.succeed(await lineExpenses(transaction, side, day));
+  return Result.succeed(await lineExpenses(transaction, side));
+}
+
+async function refuseIn(
+  transaction: UserTransaction,
+  lineId: string,
+  day: string,
+): Promise<Result.Result<LineExpenses, LineNotFound | RefundNotProposed>> {
+  await lockLines(transaction, [lineId]);
+
+  const line = await readLine(transaction, lineId, day);
+
+  if (line === undefined) {
+    return Result.fail(new LineNotFound({ lineId }));
+  }
+
+  if (line.refundRefused) {
+    return Result.succeed(await lineExpenses(transaction, line));
+  }
+
+  if ((await lineExpenses(transaction, line)).proposals.length === 0) {
+    return Result.fail(new RefundNotProposed({ lineId: line.id }));
+  }
+
+  // Only the answer is written: the line's entry stays as it was, an income classified as before.
+  await transaction
+    .update(statementLine)
+    .set({ refundRefused: true })
+    .where(eq(statementLine.id, line.id));
+
+  return Result.succeed(await lineExpenses(transaction, { ...line, refundRefused: true }));
 }
 
 /** What a line is to the expenses (`Expenses.ofLine`). */
@@ -1255,6 +1365,14 @@ export const splitLine = (owner: string, lineId: string, shares: ReadonlyArray<S
     return yield* expenses.split(owner, lineId, shares);
   });
 
+/** The user's answer that a line coming back is no refund (`Expenses.refuseRefund`). */
+export const refuseRefund = (owner: string, lineId: string) =>
+  Effect.gen(function* () {
+    const expenses = yield* Expenses;
+
+    return yield* expenses.refuseRefund(owner, lineId);
+  });
+
 /** Makes a transfer out of a benefit account fund an expense (`Expenses.fund`). */
 export const fundExpense = (owner: string, transferLineId: string, expenseLineId: string) =>
   Effect.gen(function* () {
@@ -1285,7 +1403,7 @@ export const expensesLayer = Layer.effect(
           const found = yield* userData.transaction(owner, async (transaction) => {
             const line = await readLine(transaction, lineId, day);
 
-            return line === undefined ? undefined : lineExpenses(transaction, line, day);
+            return line === undefined ? undefined : lineExpenses(transaction, line);
           });
 
           return found === undefined ? yield* new LineNotFound({ lineId }) : found;
@@ -1337,6 +1455,15 @@ export const expensesLayer = Layer.effect(
 
           return yield* userData
             .transaction(owner, (transaction) => unfundIn(transaction, owner, transferLineId, day))
+            .pipe(Effect.flatMap(Effect.fromResult));
+        }),
+
+      refuseRefund: (owner, lineId) =>
+        Effect.gen(function* () {
+          const day = yield* today;
+
+          return yield* userData
+            .transaction(owner, (transaction) => refuseIn(transaction, lineId, day))
             .pipe(Effect.flatMap(Effect.fromResult));
         }),
     };

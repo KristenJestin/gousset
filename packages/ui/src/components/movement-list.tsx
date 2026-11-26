@@ -1,6 +1,7 @@
 import { useUiMessages } from "../hooks/use-ui-messages";
 import type { Money } from "../lib/money";
 import { Amount, AmountSkeleton } from "./amount";
+import { Chip } from "./chip";
 import { Icon } from "./icon";
 import { Skeleton, SkeletonFrame } from "./skeleton";
 
@@ -15,6 +16,11 @@ export type MovementRow = {
   amount: Money;
   /** The securities it bought on the account it reached, and for how much. */
   bought?: { name: string; amount: Money };
+  /**
+   * Maybe a refund (#208): money back that may cancel a purchase, no income until the user
+   * answers. A "Maybe a refund" chip after the accounts, in place of a note.
+   */
+  maybeRefund?: boolean;
 };
 
 export type MovementListProps = {
@@ -40,12 +46,15 @@ function Arrow() {
  * screen 1, block 3): one "from → to" row each, the account reached in bold, its amount at the
  * end. A row is one line, its names cut short when they do not fit: every row has the same
  * height, so that the skeleton takes their exact place. A transfer followed by a purchase of securities fits on one row: "→ buy World index ETF",
- * its amount "€350 → €335". Neither spending nor income: no colour.
+ * its amount "€350 → €335". Neither spending nor income: no colour. Money back that may be a
+ * refund (#208) is flagged "Maybe a refund": the month's received leaves it out until answered.
  *
  * Motion: when the month changes, the amounts roll (200 ms, ease-out); cut under reduced motion.
+ * The "Maybe a refund" chip has none of its own: it comes and goes with its row, at once.
  */
 export function MovementList({ movements, label, emptyText, locale }: MovementListProps) {
-  const messages = useUiMessages().money;
+  const all = useUiMessages();
+  const messages = all.money;
 
   if (movements.length === 0) {
     return <p className="flex h-10 items-center text-sm text-muted-foreground">{emptyText}</p>;
@@ -68,6 +77,11 @@ export function MovementList({ movements, label, emptyText, locale }: MovementLi
             {movement.note === undefined ? null : (
               <span className="truncate text-muted-foreground">({movement.note})</span>
             )}
+            {movement.maybeRefund === true ? (
+              <span data-slot="maybe-refund" className="flex shrink-0">
+                <Chip>{all.operations.maybeRefund}</Chip>
+              </span>
+            ) : null}
           </span>
           <span className="flex shrink-0 items-center gap-1.5">
             <Amount value={movement.amount} whole size="sm" locale={locale} />

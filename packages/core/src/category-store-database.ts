@@ -10,7 +10,7 @@ import {
 import { transfer } from "@gousset/db/schema/transfers";
 import { UserData } from "@gousset/db/user-data";
 import type { UserTransaction } from "@gousset/db/user-data";
-import { and, count, eq, gte, inArray, lte, min, or, sql } from "drizzle-orm";
+import { and, count, eq, gte, inArray, lte, min, notInArray, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { Effect, Layer, Result } from "effect";
 
@@ -26,6 +26,7 @@ import type {
 } from "./category-store";
 import { takeCategoryTurn } from "./category-turn";
 import { CategoryNotFound, LineNotFound } from "./errors";
+import { maybeRefundsAmong } from "./expenses/expenses";
 import { classifyByMerchants } from "./merchants/default-classification";
 import { MerchantNotFound } from "./merchants/errors";
 
@@ -207,6 +208,21 @@ export const DatabaseCategoryStore = Layer.effect(
             .from(entry)
             .groupBy(entry.categoryId);
 
+          const inRange = and(gte(entry.happenedOn, range.from), lte(entry.happenedOn, range.to));
+
+          // Money coming back that may be a refund is no income until the user answers (#208), as
+          // the month reads it: the range's incomes of one line, weighed as `maybeRefundsAmong` does.
+          const incomes = await transaction
+            .select({ lineId: entryPart.lineId })
+            .from(entry)
+            .innerJoin(entryPart, eq(entryPart.entryId, entry.id))
+            .where(and(inRange, eq(entry.kind, "income"), eq(entryPart.role, "payment")));
+
+          const waiting = await maybeRefundsAmong(
+            transaction,
+            incomes.map((each) => each.lineId),
+          );
+
           const nets = await transaction
             .select({
               categoryId: entry.categoryId,
@@ -220,7 +236,12 @@ export const DatabaseCategoryStore = Layer.effect(
             .innerJoin(entryPart, eq(entryPart.entryId, entry.id))
             .innerJoin(statementLine, eq(statementLine.id, entryPart.lineId))
             .innerJoin(account, eq(account.id, statementLine.accountId))
-            .where(and(gte(entry.happenedOn, range.from), lte(entry.happenedOn, range.to)))
+            .where(
+              and(
+                inRange,
+                waiting.size === 0 ? undefined : notInArray(entryPart.lineId, [...waiting]),
+              ),
+            )
             .groupBy(entry.categoryId, account.currency)
             .orderBy(account.currency);
 

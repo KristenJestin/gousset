@@ -32,6 +32,11 @@ export type MonthBarProps = {
   /** Where the money came from, in the page's words: "salary and meal vouchers". */
   note?: string;
   /**
+   * The lines that may be refunds, not answered yet (#208): no income, left out of `received`, said
+   * apart under it, how much and how many. Nothing is said with none.
+   */
+  maybeRefunds?: { count: number; amount: Money };
+  /**
    * At the end of the first line, on a line of its own on a phone: a `DeltaList` that says what it
    * compares ("spending +5% vs. average"), never a bare change, which under the money received
    * would read as more income.
@@ -229,10 +234,12 @@ const PART_CLASSES =
  * from savings) draws no part, and its key says "taken from savings" with the amount. With
  * `restricted`, the end of the part left is hatched (benefit accounts' money) and its
  * label says how much of it. `notes` adds a quiet line each under the legend (the month in another
- * currency), cut short rather than wrapped.
+ * currency), cut short rather than wrapped. `maybeRefunds` adds a quiet line under what was
+ * received: what may be refunds, left out of it until the user answers (#208).
  *
  * Motion: when the month changes, the parts grow or shrink to their new widths in 200 ms
- * (ease-out) and the amounts roll; cut under reduced motion.
+ * (ease-out) and the amounts roll; cut under reduced motion. The maybe-refunds line has none of its
+ * own: it comes, changes and goes with the month, at once.
  */
 export function MonthBar({
   received,
@@ -241,12 +248,15 @@ export function MonthBar({
   left,
   restricted,
   note,
+  maybeRefunds,
   comparison,
   notes,
   onSelect,
   locale,
 }: MonthBarProps) {
   const messages = useUiMessages().money;
+  const pageLocale = usePageLanguage();
+  const writtenIn = locale ?? pageLocale;
   const layout = monthBarLayout({ received, spent, saved, left, restricted });
   const amounts = { spent, saved, left };
 
@@ -274,6 +284,18 @@ export function MonthBar({
           </span>
         )}
       </div>
+      {maybeRefunds === undefined || maybeRefunds.count === 0 ? null : (
+        <p
+          data-slot="month-bar-maybe-refunds"
+          className="-mt-2 h-4 truncate text-xs text-muted-foreground tabular-nums"
+        >
+          {messages.maybeRefunds(
+            maybeRefunds.count,
+            maybeRefunds.count.toLocaleString(writtenIn),
+            formatMoney(maybeRefunds.amount, { locale: writtenIn, whole: true }),
+          )}
+        </p>
+      )}
       <Bar layout={layout} />
       <div role="group" aria-label={messages.parts} className={LEGEND_CLASSES}>
         {layout.parts.map(({ role }) =>
