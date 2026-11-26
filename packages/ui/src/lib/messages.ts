@@ -399,6 +399,7 @@ function uiMessages(locale: Locale) {
       /** A condition's field, as the editor offers it. */
       fields: {
         label: m.uiRulesFieldLabel({}, options),
+        merchant: m.uiRulesFieldMerchant({}, options),
         account: m.uiRulesFieldAccount({}, options),
         amount: m.uiRulesFieldAmount({}, options),
         direction: m.uiRulesFieldDirection({}, options),
@@ -408,6 +409,7 @@ function uiMessages(locale: Locale) {
       /** A condition's field, as a sentence says it ("label contains…"). */
       says: {
         label: m.uiRulesSaysLabel({}, options),
+        merchant: m.uiRulesSaysMerchant({}, options),
         account: m.uiRulesSaysAccount({}, options),
         amount: m.uiRulesSaysAmount({}, options),
         day: m.uiRulesSaysDay({}, options),
@@ -450,6 +452,7 @@ function uiMessages(locale: Locale) {
       fromOf: (index: number) => m.uiRulesFromOf({ index }, options),
       toOf: (index: number) => m.uiRulesToOf({ index }, options),
       chooseAccount: m.uiRulesChooseAccount({}, options),
+      chooseMerchant: m.uiRulesChooseMerchant({}, options),
       maxConditions: (max: number) => m.uiRulesMaxConditions({ max }, options),
       noCondition: m.uiRulesNoCondition({}, options),
       if: m.uiRulesIf({}, options),
@@ -464,6 +467,13 @@ function uiMessages(locale: Locale) {
       category: m.uiRulesCategory({}, options),
       categoryPlaceholder: m.uiRulesCategoryPlaceholder({}, options),
       categoryArchived: (category: string) => m.uiRulesCategoryArchived({ category }, options),
+      /** The subject a rule attaches (#37), beside the category. */
+      subject: m.uiRulesSubject({}, options),
+      subjectPlaceholder: m.uiRulesSubjectPlaceholder({}, options),
+      subjectNone: m.uiRulesSubjectNone({}, options),
+      subjectArchived: (subject: string) => m.uiRulesSubjectArchived({ subject }, options),
+      /** In the list's "then": "for Van". */
+      forSubject: (subject: string) => m.uiRulesForSubject({ subject }, options),
       enabled: m.uiRulesEnabled({}, options),
       enabledDescription: m.uiRulesEnabledDescription({}, options),
       effect: m.uiRulesEffect({}, options),

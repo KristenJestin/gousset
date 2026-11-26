@@ -11,11 +11,16 @@ export type RuleReachDraft = {
   conditions: Conditions;
   merchantId: string | null;
   categoryId: string | null;
+  /** The subject it attaches (#37); left out, none. */
+  subjectId?: string | null;
 };
 
 /** The queries of the rules page and of a correction's proposal. */
 export const ruleQueries = {
-  /** The rules in the order they are tried, and the accounts their conditions may name. */
+  /**
+   * The rules in the order they are tried, with the accounts their conditions may name, the
+   * merchants they name and the subjects they may attach.
+   */
   list: () => queryOptions({ queryKey: ruleKeys.list(), queryFn: () => getRules() }),
   /** One rule with its reach; one the user does not have comes back as `{ ok: false, code }`. */
   detail: (ruleId: string) =>
@@ -37,7 +42,7 @@ export const ruleQueries = {
    * The rule a correction proposes, setting the category or the merchant (`sets`): its words, and
    * how many lines already there it would change.
    */
-  proposal: (lineId: string, sets: Omit<RuleReachDraft, "conditions">) =>
+  proposal: (lineId: string, sets: Pick<RuleReachDraft, "merchantId" | "categoryId">) =>
     queryOptions({
       queryKey: ruleKeys.proposal(lineId, sets.categoryId, sets.merchantId),
       queryFn: () => getRuleProposal({ data: { lineId, ...sets } }),

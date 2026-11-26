@@ -31,6 +31,19 @@ test.describe("RulesList", () => {
     await expect(page.locator('[data-slot="rule-row"]').nth(3)).toContainText("archived");
   });
 
+  test("a rule that attaches a subject says it, and names the merchant of its condition", async ({
+    page,
+  }) => {
+    await page.goto(story("ruleslist", "subjects"));
+
+    const rows = page.locator('[data-slot="rule-row"]');
+
+    await expect(rows.first()).toContainText("merchant is Fuelstop");
+    await expect(rows.first()).toContainText("for Van");
+    await expect(rows.nth(1)).toContainText("Housing · for House > Garden shed");
+    await expect(rows.nth(2)).toContainText("archived");
+  });
+
   test("pressing a rule opens it", async ({ page }) => {
     await page.goto(story("ruleslist", "default"));
     await page.getByRole("button", { name: "label contains “GREENMARKET”" }).click();
@@ -115,6 +128,18 @@ test.describe("RuleConditionsEditor", () => {
     await expect(page.getByRole("combobox", { name: "Value of condition 1" })).toBeVisible();
   });
 
+  test("a merchant is chosen by typing its name", async ({ page }) => {
+    await page.goto(story("ruleconditionseditor", "merchant"));
+
+    const value = page.getByRole("combobox", { name: "Value of condition 1" });
+
+    await expect(value).toHaveValue("Fuelstop");
+    await value.fill("");
+    await value.pressSequentially("Pixel");
+    await page.getByRole("option", { name: "Pixelplay" }).click();
+    await expect(page.getByTestId("conditions")).toContainText('"value":"pixelplay"');
+  });
+
   test("a condition added slides in in 150 ms, and not under reduced motion", async ({ page }) => {
     await page.goto(story("ruleconditionseditor", "default"));
     await page.getByRole("button", { name: "Add a condition" }).click();
@@ -172,6 +197,26 @@ test.describe("RuleEditor", () => {
       "Food › Old groceries",
     );
     await expect(page.getByText("Food › Old groceries is archived")).toBeVisible();
+  });
+
+  test("a subject is chosen among the subjects, by their paths", async ({ page }) => {
+    await page.goto(story("ruleeditor", "subject"));
+
+    const subject = page.getByRole("combobox", { name: "Subject" });
+
+    await expect(subject).toHaveValue("Van");
+    await expect(page.getByRole("radio", { name: "No category" })).toBeChecked();
+    await subject.fill("");
+    await subject.pressSequentially("shed");
+    await page.getByRole("option", { name: "House > Garden shed" }).click();
+    await page.getByRole("button", { name: "Save" }).click();
+    await expect(page.getByTestId("saved")).toContainText('"subjectId":"garden-shed"');
+  });
+
+  test("an archived subject is named, and kept", async ({ page }) => {
+    await page.goto(story("ruleeditor", "archived-subject"));
+    await expect(page.getByRole("combobox", { name: "Subject" })).toHaveValue("Alps 2027");
+    await expect(page.getByText("Alps 2027 is archived")).toBeVisible();
   });
 
   test("Save sends the draft", async ({ page }) => {

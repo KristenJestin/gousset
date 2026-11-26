@@ -186,6 +186,8 @@ export function ruleRefusalMessage(
       return m.ruleRefusalConditionInvalid({ index: condition });
     case "CONDITION_UNKNOWN_ACCOUNT":
       return m.ruleRefusalUnknownAccount({ index: condition });
+    case "CONDITION_UNKNOWN_MERCHANT":
+      return m.ruleRefusalUnknownMerchant({ index: condition });
     case "NOTHING_SET":
       return m.ruleRefusalNothingSet();
     case "CATEGORY_ARCHIVED":
@@ -196,6 +198,10 @@ export function ruleRefusalMessage(
       return m.ruleRefusalMerchantNotFound();
     case "MERCHANT_INTERMEDIARY":
       return m.ruleRefusalMerchantIntermediary();
+    case "SUBJECT_ARCHIVED":
+      return m.ruleRefusalSubjectArchived();
+    case "SUBJECT_NOT_FOUND":
+      return m.ruleRefusalSubjectNotFound();
     case "TOO_MANY_RULES":
       return m.ruleRefusalTooMany({ max: limit ?? 0 });
     case "JOB_UNAVAILABLE":

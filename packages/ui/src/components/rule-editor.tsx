@@ -35,12 +35,22 @@ export type RuleEditorCategory = {
   archived: boolean;
 };
 
+/** A rule's subject as it is now, archived or not. */
+export type RuleEditorSubject = {
+  id: string;
+  /** Its path, "House > Garden shed". */
+  name: string;
+  archived: boolean;
+};
+
 /** The rule as the editor holds it, sent on each change and on Save. */
 export type RuleDraft = {
   /** As the editor holds them: the page reads them with the server's checks. */
   conditions: RuleConditionsDraft;
   merchantId: string | null;
   categoryId: string | null;
+  /** The subject it attaches to the expenses of the lines it applies to. */
+  subjectId: string | null;
   enabled: boolean;
   /** Lines classified otherwise by hand are changed too when it is applied to the past. */
   includeByHand: boolean;
@@ -70,6 +80,7 @@ export type RuleEditorProps = {
   conditions: RuleConditions | null;
   merchantId: string | null;
   category: RuleEditorCategory | null;
+  subject: RuleEditorSubject | null;
   enabled: boolean;
   /** The most conditions a rule may have, and the longest piece of label: the server's limits. */
   maxConditions: number;
@@ -78,8 +89,13 @@ export type RuleEditorProps = {
   accounts: ReadonlyArray<RuleAccountName>;
   /** The user's currency: how many decimals an amount is typed with. */
   currency: string;
-  /** The merchants it may set, by name; the rule's own among them. */
+  /**
+   * The merchants it may set and its conditions may name, by name; the rule's own and those its
+   * conditions name among them.
+   */
   merchants: ReadonlyArray<{ id: string; name: string }>;
+  /** The subjects it may attach, not archived, by their paths ("House > Garden shed"). */
+  subjects: ReadonlyArray<{ id: string; name: string }>;
   /** The categories in use of each kind, top-level ones with their children. */
   categories: { expense: ReadonlyArray<CategoryChoice>; income: ReadonlyArray<CategoryChoice> };
   reach: RuleReachView;
@@ -111,8 +127,8 @@ const FIRST_CONDITION: RuleConditionsDraft = {
 
 /**
  * A rule, new or saved, in a side sheet (docs/wireframes, screen 9, blocks 3 and 4): "If" its
- * conditions, "Then" the merchant and the category it sets (the kind follows the category), whether
- * it is on, and its "Effect" on the lines already there, before saving: how many it applies to and
+ * conditions, "Then" the merchant and the category it sets (the kind follows the category) and the
+ * subject it attaches, whether it is on, and its "Effect" on the lines already there, before saving: how many it applies to and
  * how many of those were classified otherwise by hand, which it changes only when "Reclassify them
  * too" is ticked. A saved rule is applied to the past from here, the count of the lines changed
  * said once done; a new one asks whether to apply it once made. "Delete" asks first.
@@ -126,20 +142,20 @@ export function RuleEditor(props: RuleEditorProps) {
   const messages = useUiMessages().rules;
   const pageLocale = usePageLanguage();
   const locale = props.locale ?? pageLocale;
-  const { rule, category } = props;
+  const { rule, category, subject } = props;
 
   const [draft, setDraft] = useState<RuleDraft>(() => ({
     conditions: props.conditions ?? FIRST_CONDITION,
     merchantId: props.merchantId,
     categoryId: category?.id ?? null,
+    subjectId: subject?.id ?? null,
     enabled: props.enabled,
     includeByHand: false,
     applyToPast: true,
   }));
 
-  const [kind, setKind] = useState<Kind>(
-    category?.kind ?? (props.merchantId === null ? "expense" : "none"),
-  );
+  // A saved rule of no category says so; a new one starts on an expense's.
+  const [kind, setKind] = useState<Kind>(category?.kind ?? (rule === null ? "expense" : "none"));
 
   // Changed since it opened (a change undone counts too): applying to the past applies the rule
   // as it is saved, so a change waits for Save first.
@@ -215,6 +231,7 @@ export function RuleEditor(props: RuleEditorProps) {
             initial={props.conditions}
             onChange={(conditions) => edit({ conditions })}
             accounts={props.accounts}
+            merchants={props.merchants}
             currency={props.currency}
             maxConditions={props.maxConditions}
             maxLabelText={props.maxLabelText}
@@ -226,7 +243,9 @@ export function RuleEditor(props: RuleEditorProps) {
             draft={draft}
             kind={kind}
             category={category}
+            subject={subject}
             merchants={props.merchants}
+            subjects={props.subjects}
             categories={props.categories}
             onKindChange={(next) => {
               setKind(next);
@@ -254,16 +273,18 @@ export function RuleEditor(props: RuleEditorProps) {
   );
 }
 
-/** "Then": the merchant and the category the rule sets, and whether it is on. */
+/** "Then": the merchant and the category the rule sets, the subject it attaches, and whether it is on. */
 function ThenFields({
   draft,
   kind,
   category,
+  subject,
   merchants,
+  subjects,
   categories,
   onKindChange,
   onEdit,
-}: Pick<RuleEditorProps, "category" | "merchants" | "categories"> & {
+}: Pick<RuleEditorProps, "category" | "subject" | "merchants" | "subjects" | "categories"> & {
   draft: RuleDraft;
   kind: Kind;
   onKindChange: (kind: Kind) => void;
@@ -278,6 +299,10 @@ function ThenFields({
     archived !== null && archived.kind === kind
       ? [...offered, { id: archived.id, name: archived.name }]
       : offered;
+
+  // So does its subject, archived since it was chosen.
+  const keptSubject = subject !== null && subject.archived ? subject : null;
+  const subjectChoices = keptSubject === null ? subjects : [...subjects, keptSubject];
 
   return (
     <>
@@ -313,6 +338,18 @@ function ThenFields({
           }
         />
       )}
+      <Combobox
+        label={messages.subject}
+        description={
+          keptSubject !== null && draft.subjectId === keptSubject.id
+            ? messages.subjectArchived(keptSubject.name)
+            : messages.subjectNone
+        }
+        placeholder={messages.subjectPlaceholder}
+        items={subjectChoices.map((each) => ({ value: each.id, label: each.name }))}
+        value={draft.subjectId}
+        onValueChange={(subjectId) => onEdit({ subjectId })}
+      />
       <Switch
         label={messages.enabled}
         description={messages.enabledDescription}

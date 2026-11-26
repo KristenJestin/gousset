@@ -7,13 +7,22 @@ import type { QueryOf } from "@qnot/core";
 // them, and its type checker holds the two declarations to the same shape.
 
 /** The fields a condition reads, in the order the editor offers them. */
-export const RULE_FIELDS = ["label", "account", "amount", "direction", "day", "date"] as const;
+export const RULE_FIELDS = [
+  "label",
+  "merchant",
+  "account",
+  "amount",
+  "direction",
+  "day",
+  "date",
+] as const;
 
 export type RuleField = (typeof RULE_FIELDS)[number];
 
 /** The operators each field takes, in the order the editor offers them. */
 export const RULE_OPERATORS = {
   label: ["contains", "startsWith", "endsWith", "eq", "notContains"],
+  merchant: ["eq"],
   account: ["eq", "neq"],
   amount: ["eq", "between", "gte", "lte", "gt", "lt", "neq"],
   direction: ["eq"],
@@ -26,14 +35,20 @@ export type RuleOperator = (typeof RULE_OPERATORS)[RuleField][number];
 type Between<Value> = { readonly operator: "between"; readonly value: readonly [Value, Value] };
 
 /**
- * One condition, complete: a piece of label (any case), an account's id, an amount without its
- * sign in its account's units (12.5 for €12.50), money out or in, a day of the month, a booking date
- * (`YYYY-MM-DD`); `between` takes two values, both included.
+ * One condition, complete: a piece of label (any case), a merchant's id (the line's merchant, as the
+ * server reads it), an account's id, an amount without its sign in its account's units (12.5 for
+ * €12.50), money out or in, a day of the month, a booking date (`YYYY-MM-DD`); `between` takes two
+ * values, both included.
  */
 export type RuleCondition = { readonly kind: "rule" } & (
   | {
       readonly field: "label";
       readonly operator: (typeof RULE_OPERATORS)["label"][number];
+      readonly value: string;
+    }
+  | {
+      readonly field: "merchant";
+      readonly operator: (typeof RULE_OPERATORS)["merchant"][number];
       readonly value: string;
     }
   | {
@@ -70,12 +85,17 @@ export type RuleConditions = {
 };
 
 /**
- * The fields as qnot's store holds them, with the user's accounts as the only ones a condition may
- * name. qnot's own checks only mark what is still to fill in; the server's are the rule.
+ * The fields as qnot's store holds them, with the user's accounts and merchants as the only ones a
+ * condition may name. qnot's own checks only mark what is still to fill in; the server's are the
+ * rule.
  */
-export function ruleFields(accountIds: ReadonlyArray<string>) {
+export function ruleFields(accountIds: ReadonlyArray<string>, merchantIds: ReadonlyArray<string>) {
   return defineFields({
     label: f.text({ operators: RULE_OPERATORS.label, minLength: 1 }),
+    merchant: f.enum(
+      merchantIds.map((id) => ({ value: id, label: id })),
+      { operators: RULE_OPERATORS.merchant },
+    ),
     account: f.enum(
       accountIds.map((id) => ({ value: id, label: id })),
       { operators: RULE_OPERATORS.account },

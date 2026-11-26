@@ -3,12 +3,21 @@ import type { RuleCondition, RuleConditions } from "./rule-fields";
 
 // A rule's conditions as one sentence (docs/wireframes, screen 9: rules as "if… then…"): `label
 // contains “GREENMARKET” and day between 3 and 7`. The words come from the ui's messages, the
-// accounts' names from the page.
+// accounts' and merchants' names from the page.
 
 type RuleMessages = UiMessages["rules"];
 
 /** An account a condition may name, as the page calls it. */
 export type RuleAccountName = { readonly id: string; readonly name: string };
+
+/** A merchant a condition may name, by its name. */
+export type RuleMerchantName = { readonly id: string; readonly name: string };
+
+/** What conditions name, as the page calls them: accounts, and merchants. */
+export type RuleNames = {
+  readonly accounts: ReadonlyArray<RuleAccountName>;
+  readonly merchants: ReadonlyArray<RuleMerchantName>;
+};
 
 /** One formatter per language, built once: building one is slow. */
 const numbers = new Map<string, Intl.NumberFormat>();
@@ -57,7 +66,7 @@ export function ruleDay(day: string, locale: string): string {
 export function conditionSentence(
   messages: RuleMessages,
   condition: RuleCondition,
-  accounts: ReadonlyArray<RuleAccountName>,
+  names: RuleNames,
   locale: string,
 ): string {
   const number = (value: number) => numberFormat(locale).format(value);
@@ -72,8 +81,15 @@ export function conditionSentence(
       );
     }
 
+    case "merchant": {
+      const merchant = names.merchants.find((each) => each.id === condition.value);
+
+      // A merchant deleted since: its condition matches no line, and has no name to give.
+      return messages.sentence(says.merchant, operators[condition.operator], merchant?.name ?? "—");
+    }
+
     case "account": {
-      const account = accounts.find((each) => each.id === condition.value);
+      const account = names.accounts.find((each) => each.id === condition.value);
 
       // An account deleted since: its condition matches no line, and has no name to give.
       return messages.sentence(says.account, operators[condition.operator], account?.name ?? "—");
@@ -131,10 +147,10 @@ export function dateOperator(messages: RuleMessages, operator: "eq" | "gte" | "l
 export function conditionsSentence(
   messages: RuleMessages,
   conditions: RuleConditions,
-  accounts: ReadonlyArray<RuleAccountName>,
+  names: RuleNames,
   locale: string,
 ): string {
   return conditions.children
-    .map((each) => conditionSentence(messages, each, accounts, locale))
+    .map((each) => conditionSentence(messages, each, names, locale))
     .join(` ${messages.and} `);
 }
