@@ -54,6 +54,8 @@ export type InvestmentAccount = {
   readonly id: string;
   readonly name: string;
   readonly institution: string | null;
+  /** What it was created as: `pea`, `life_insurance` or `securities`, which names its envelope. */
+  readonly choice: AccountSummary["choice"];
   readonly currency: string;
   readonly mode: AccountSummary["mode"];
   readonly closedOn: string | null;
@@ -618,6 +620,7 @@ export const investmentAccounts = (owner: string) =>
       id: each.id,
       name: each.name,
       institution: each.institution,
+      choice: each.choice,
       currency: each.currency,
       mode: each.mode,
       closedOn: each.closedOn,
