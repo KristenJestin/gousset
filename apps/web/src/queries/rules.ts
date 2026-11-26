@@ -5,6 +5,7 @@ import type { QueryClient } from "@tanstack/react-query";
 import { getRule, getRuleProposal, getRuleReach, getRules } from "@/functions/rules";
 
 import { ruleKeys } from "./rule-keys";
+import { subjectKeys } from "./subject-keys";
 
 /** A rule being written: what its reach is read for. */
 export type RuleReachDraft = {
@@ -51,7 +52,13 @@ export const ruleQueries = {
     }),
 };
 
-/** After a rule is made, changed, moved or deleted: every rules query is read again. */
+/**
+ * After a rule is made, changed, moved or deleted: every rules query is read again, and the
+ * subjects', whose page names the merchants whose rule attaches it (#37).
+ */
 export async function invalidateRules(queryClient: QueryClient): Promise<void> {
-  await queryClient.invalidateQueries({ queryKey: ruleKeys.all });
+  await Promise.all([
+    queryClient.invalidateQueries({ queryKey: ruleKeys.all }),
+    queryClient.invalidateQueries({ queryKey: subjectKeys.all }),
+  ]);
 }

@@ -37,12 +37,19 @@ const Cut = Schema.String.pipe(
  */
 const Typed = Schema.Union([Cut, Schema.Finite]);
 
+/** A subject's id, as the database makes them. */
+const SubjectId = Schema.String.check(
+  Schema.isUUID(undefined, { message: "A subject is named by its id, a UUID." }),
+);
+
 /**
  * The operations page's address: its filters, and the open line, so that an address opens the
  * same list and the same line. `month` is the older address of a month's operations
  * (`?month=2026-10`, which the review links to), read as that month's first to last day.
+ * `subject` is the address a subject's page links to (#37), its expenses' filter to come.
  */
 export const OperationsSearch = Schema.Struct({
+  subject: forgiving(SubjectId),
   q: forgiving(Typed),
   account: forgiving(AccountId),
   from: forgiving(Day),

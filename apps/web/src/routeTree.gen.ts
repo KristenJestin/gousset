@@ -22,7 +22,7 @@ import { Route as AuthedImportRouteImport } from './routes/_authed/import'
 import { Route as AuthedInvestmentsRouteImport } from './routes/_authed/investments'
 import { Route as AuthedOperationsRouteImport } from './routes/_authed/operations'
 import { Route as AuthedSettingsRouteRouteImport } from './routes/_authed/settings/route'
-import { Route as AuthedSubjectsRouteImport } from './routes/_authed/subjects'
+import { Route as AuthedSubjectsRouteRouteImport } from './routes/_authed/subjects/route'
 import { Route as ApiExportRouteImport } from './routes/api/export'
 import { Route as ApiImportsRouteImport } from './routes/api/imports'
 import { Route as E2eTodayRouteImport } from './routes/e2e/today'
@@ -35,6 +35,8 @@ import { Route as AuthedSettingsCategoriesRouteImport } from './routes/_authed/s
 import { Route as AuthedSettingsDataRouteImport } from './routes/_authed/settings/data'
 import { Route as AuthedSettingsRulesRouteImport } from './routes/_authed/settings/rules'
 import { Route as AuthedSettingsUsersRouteImport } from './routes/_authed/settings/users'
+import { Route as AuthedSubjectsIndexRouteImport } from './routes/_authed/subjects/index'
+import { Route as AuthedSubjectsSubjectIdRouteImport } from './routes/_authed/subjects/$subjectId'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as ApiImportUploadsTokenRouteImport } from './routes/api/import-uploads/$token'
 import { Route as AuthedSettingsMerchantsIndexRouteImport } from './routes/_authed/settings/merchants/index'
@@ -105,7 +107,7 @@ const AuthedSettingsRouteRoute = AuthedSettingsRouteRouteImport.update({
   path: '/settings',
   getParentRoute: () => AuthedRoute,
 } as any)
-const AuthedSubjectsRoute = AuthedSubjectsRouteImport.update({
+const AuthedSubjectsRouteRoute = AuthedSubjectsRouteRouteImport.update({
   id: '/subjects',
   path: '/subjects',
   getParentRoute: () => AuthedRoute,
@@ -171,6 +173,16 @@ const AuthedSettingsUsersRoute = AuthedSettingsUsersRouteImport.update({
   path: '/users',
   getParentRoute: () => AuthedSettingsRouteRoute,
 } as any)
+const AuthedSubjectsIndexRoute = AuthedSubjectsIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AuthedSubjectsRouteRoute,
+} as any)
+const AuthedSubjectsSubjectIdRoute = AuthedSubjectsSubjectIdRouteImport.update({
+  id: '/$subjectId',
+  path: '/$subjectId',
+  getParentRoute: () => AuthedSubjectsRouteRoute,
+} as any)
 const ApiAuthSplatRoute = ApiAuthSplatRouteImport.update({
   id: '/api/auth/$',
   path: '/api/auth/$',
@@ -206,13 +218,13 @@ export interface FileRoutesByFullPath {
   '/setup': typeof SetupRoute
   '/sign-in': typeof SignInRoute
   '/settings': typeof AuthedSettingsRouteRouteWithChildren
+  '/subjects': typeof AuthedSubjectsRouteRouteWithChildren
   '/.well-known/$': typeof DotwellKnownSplatRoute
   '/change-password': typeof AuthedChangePasswordRoute
   '/consent': typeof AuthedConsentRoute
   '/import': typeof AuthedImportRoute
   '/investments': typeof AuthedInvestmentsRoute
   '/operations': typeof AuthedOperationsRoute
-  '/subjects': typeof AuthedSubjectsRoute
   '/api/export': typeof ApiExportRoute
   '/api/imports': typeof ApiImportsRoute
   '/e2e/today': typeof E2eTodayRoute
@@ -223,10 +235,12 @@ export interface FileRoutesByFullPath {
   '/settings/data': typeof AuthedSettingsDataRoute
   '/settings/rules': typeof AuthedSettingsRulesRoute
   '/settings/users': typeof AuthedSettingsUsersRoute
+  '/subjects/$subjectId': typeof AuthedSubjectsSubjectIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/import-uploads/$token': typeof ApiImportUploadsTokenRoute
   '/accounts/': typeof AuthedAccountsIndexRoute
   '/settings/': typeof AuthedSettingsIndexRoute
+  '/subjects/': typeof AuthedSubjectsIndexRoute
   '/settings/merchants/$merchantId': typeof AuthedSettingsMerchantsMerchantIdRoute
   '/api/jobs/$jobId/events': typeof ApiJobsJobIdEventsRoute
   '/settings/merchants/': typeof AuthedSettingsMerchantsIndexRoute
@@ -242,7 +256,6 @@ export interface FileRoutesByTo {
   '/import': typeof AuthedImportRoute
   '/investments': typeof AuthedInvestmentsRoute
   '/operations': typeof AuthedOperationsRoute
-  '/subjects': typeof AuthedSubjectsRoute
   '/api/export': typeof ApiExportRoute
   '/api/imports': typeof ApiImportsRoute
   '/e2e/today': typeof E2eTodayRoute
@@ -254,10 +267,12 @@ export interface FileRoutesByTo {
   '/settings/data': typeof AuthedSettingsDataRoute
   '/settings/rules': typeof AuthedSettingsRulesRoute
   '/settings/users': typeof AuthedSettingsUsersRoute
+  '/subjects/$subjectId': typeof AuthedSubjectsSubjectIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/import-uploads/$token': typeof ApiImportUploadsTokenRoute
   '/accounts': typeof AuthedAccountsIndexRoute
   '/settings': typeof AuthedSettingsIndexRoute
+  '/subjects': typeof AuthedSubjectsIndexRoute
   '/settings/merchants/$merchantId': typeof AuthedSettingsMerchantsMerchantIdRoute
   '/api/jobs/$jobId/events': typeof ApiJobsJobIdEventsRoute
   '/settings/merchants': typeof AuthedSettingsMerchantsIndexRoute
@@ -270,13 +285,13 @@ export interface FileRoutesById {
   '/setup': typeof SetupRoute
   '/sign-in': typeof SignInRoute
   '/_authed/settings': typeof AuthedSettingsRouteRouteWithChildren
+  '/_authed/subjects': typeof AuthedSubjectsRouteRouteWithChildren
   '/.well-known/$': typeof DotwellKnownSplatRoute
   '/_authed/change-password': typeof AuthedChangePasswordRoute
   '/_authed/consent': typeof AuthedConsentRoute
   '/_authed/import': typeof AuthedImportRoute
   '/_authed/investments': typeof AuthedInvestmentsRoute
   '/_authed/operations': typeof AuthedOperationsRoute
-  '/_authed/subjects': typeof AuthedSubjectsRoute
   '/api/export': typeof ApiExportRoute
   '/api/imports': typeof ApiImportsRoute
   '/e2e/today': typeof E2eTodayRoute
@@ -288,10 +303,12 @@ export interface FileRoutesById {
   '/_authed/settings/data': typeof AuthedSettingsDataRoute
   '/_authed/settings/rules': typeof AuthedSettingsRulesRoute
   '/_authed/settings/users': typeof AuthedSettingsUsersRoute
+  '/_authed/subjects/$subjectId': typeof AuthedSubjectsSubjectIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/import-uploads/$token': typeof ApiImportUploadsTokenRoute
   '/_authed/accounts/': typeof AuthedAccountsIndexRoute
   '/_authed/settings/': typeof AuthedSettingsIndexRoute
+  '/_authed/subjects/': typeof AuthedSubjectsIndexRoute
   '/_authed/settings/merchants/$merchantId': typeof AuthedSettingsMerchantsMerchantIdRoute
   '/api/jobs/$jobId/events': typeof ApiJobsJobIdEventsRoute
   '/_authed/settings/merchants/': typeof AuthedSettingsMerchantsIndexRoute
@@ -305,13 +322,13 @@ export interface FileRouteTypes {
     | '/setup'
     | '/sign-in'
     | '/settings'
+    | '/subjects'
     | '/.well-known/$'
     | '/change-password'
     | '/consent'
     | '/import'
     | '/investments'
     | '/operations'
-    | '/subjects'
     | '/api/export'
     | '/api/imports'
     | '/e2e/today'
@@ -322,10 +339,12 @@ export interface FileRouteTypes {
     | '/settings/data'
     | '/settings/rules'
     | '/settings/users'
+    | '/subjects/$subjectId'
     | '/api/auth/$'
     | '/api/import-uploads/$token'
     | '/accounts/'
     | '/settings/'
+    | '/subjects/'
     | '/settings/merchants/$merchantId'
     | '/api/jobs/$jobId/events'
     | '/settings/merchants/'
@@ -341,7 +360,6 @@ export interface FileRouteTypes {
     | '/import'
     | '/investments'
     | '/operations'
-    | '/subjects'
     | '/api/export'
     | '/api/imports'
     | '/e2e/today'
@@ -353,10 +371,12 @@ export interface FileRouteTypes {
     | '/settings/data'
     | '/settings/rules'
     | '/settings/users'
+    | '/subjects/$subjectId'
     | '/api/auth/$'
     | '/api/import-uploads/$token'
     | '/accounts'
     | '/settings'
+    | '/subjects'
     | '/settings/merchants/$merchantId'
     | '/api/jobs/$jobId/events'
     | '/settings/merchants'
@@ -368,13 +388,13 @@ export interface FileRouteTypes {
     | '/setup'
     | '/sign-in'
     | '/_authed/settings'
+    | '/_authed/subjects'
     | '/.well-known/$'
     | '/_authed/change-password'
     | '/_authed/consent'
     | '/_authed/import'
     | '/_authed/investments'
     | '/_authed/operations'
-    | '/_authed/subjects'
     | '/api/export'
     | '/api/imports'
     | '/e2e/today'
@@ -386,10 +406,12 @@ export interface FileRouteTypes {
     | '/_authed/settings/data'
     | '/_authed/settings/rules'
     | '/_authed/settings/users'
+    | '/_authed/subjects/$subjectId'
     | '/api/auth/$'
     | '/api/import-uploads/$token'
     | '/_authed/accounts/'
     | '/_authed/settings/'
+    | '/_authed/subjects/'
     | '/_authed/settings/merchants/$merchantId'
     | '/api/jobs/$jobId/events'
     | '/_authed/settings/merchants/'
@@ -507,7 +529,7 @@ declare module '@tanstack/react-router' {
       id: '/_authed/subjects'
       path: '/subjects'
       fullPath: '/subjects'
-      preLoaderRoute: typeof AuthedSubjectsRouteImport
+      preLoaderRoute: typeof AuthedSubjectsRouteRouteImport
       parentRoute: typeof AuthedRoute
     }
     '/api/export': {
@@ -594,6 +616,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthedSettingsUsersRouteImport
       parentRoute: typeof AuthedSettingsRouteRoute
     }
+    '/_authed/subjects/': {
+      id: '/_authed/subjects/'
+      path: '/'
+      fullPath: '/subjects/'
+      preLoaderRoute: typeof AuthedSubjectsIndexRouteImport
+      parentRoute: typeof AuthedSubjectsRouteRoute
+    }
+    '/_authed/subjects/$subjectId': {
+      id: '/_authed/subjects/$subjectId'
+      path: '/$subjectId'
+      fullPath: '/subjects/$subjectId'
+      preLoaderRoute: typeof AuthedSubjectsSubjectIdRouteImport
+      parentRoute: typeof AuthedSubjectsRouteRoute
+    }
     '/api/auth/$': {
       id: '/api/auth/$'
       path: '/api/auth/$'
@@ -658,14 +694,27 @@ const AuthedSettingsRouteRouteChildren: AuthedSettingsRouteRouteChildren = {
 const AuthedSettingsRouteRouteWithChildren =
   AuthedSettingsRouteRoute._addFileChildren(AuthedSettingsRouteRouteChildren)
 
+interface AuthedSubjectsRouteRouteChildren {
+  AuthedSubjectsSubjectIdRoute: typeof AuthedSubjectsSubjectIdRoute
+  AuthedSubjectsIndexRoute: typeof AuthedSubjectsIndexRoute
+}
+
+const AuthedSubjectsRouteRouteChildren: AuthedSubjectsRouteRouteChildren = {
+  AuthedSubjectsSubjectIdRoute: AuthedSubjectsSubjectIdRoute,
+  AuthedSubjectsIndexRoute: AuthedSubjectsIndexRoute,
+}
+
+const AuthedSubjectsRouteRouteWithChildren =
+  AuthedSubjectsRouteRoute._addFileChildren(AuthedSubjectsRouteRouteChildren)
+
 interface AuthedRouteChildren {
   AuthedSettingsRouteRoute: typeof AuthedSettingsRouteRouteWithChildren
+  AuthedSubjectsRouteRoute: typeof AuthedSubjectsRouteRouteWithChildren
   AuthedChangePasswordRoute: typeof AuthedChangePasswordRoute
   AuthedConsentRoute: typeof AuthedConsentRoute
   AuthedImportRoute: typeof AuthedImportRoute
   AuthedInvestmentsRoute: typeof AuthedInvestmentsRoute
   AuthedOperationsRoute: typeof AuthedOperationsRoute
-  AuthedSubjectsRoute: typeof AuthedSubjectsRoute
   AuthedIndexRoute: typeof AuthedIndexRoute
   AuthedAccountsAccountIdRoute: typeof AuthedAccountsAccountIdRoute
   AuthedE2eJobsRoute: typeof AuthedE2eJobsRoute
@@ -674,12 +723,12 @@ interface AuthedRouteChildren {
 
 const AuthedRouteChildren: AuthedRouteChildren = {
   AuthedSettingsRouteRoute: AuthedSettingsRouteRouteWithChildren,
+  AuthedSubjectsRouteRoute: AuthedSubjectsRouteRouteWithChildren,
   AuthedChangePasswordRoute: AuthedChangePasswordRoute,
   AuthedConsentRoute: AuthedConsentRoute,
   AuthedImportRoute: AuthedImportRoute,
   AuthedInvestmentsRoute: AuthedInvestmentsRoute,
   AuthedOperationsRoute: AuthedOperationsRoute,
-  AuthedSubjectsRoute: AuthedSubjectsRoute,
   AuthedIndexRoute: AuthedIndexRoute,
   AuthedAccountsAccountIdRoute: AuthedAccountsAccountIdRoute,
   AuthedE2eJobsRoute: AuthedE2eJobsRoute,

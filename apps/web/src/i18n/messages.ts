@@ -213,6 +213,53 @@ export function ruleRefusalMessage(
   }
 }
 
+/**
+ * A refusal of a subject's read or change (`SubjectRefusalCode`, #37), by its code; `limit` the most
+ * rules, when a subject's merchants would pass it.
+ */
+export function subjectRefusalMessage(code: string, limit: number | null = null): string {
+  switch (code) {
+    case "SUBJECT_NOT_FOUND":
+      return m.subjectRefusalNotFound();
+    case "SUBJECT_NAME":
+      return m.subjectRefusalName();
+    case "SUBJECT_NAME_TAKEN":
+      return m.subjectRefusalNameTaken();
+    case "SUBJECT_PARENT_MISSING":
+      return m.subjectRefusalParentMissing();
+    case "SUBJECT_PARENT_ARCHIVED":
+      return m.subjectRefusalParentArchived();
+    case "SUBJECT_CYCLE":
+      return m.subjectRefusalCycle();
+    case "SUBJECT_VALUE":
+      return m.subjectRefusalValue();
+    case "SUBJECT_LOAN":
+      return m.subjectRefusalLoan();
+    case "SUBJECT_ACCOUNT":
+      return m.subjectRefusalAccount();
+    case "SUBJECT_DATES":
+      return m.subjectRefusalDates();
+    case "SUBJECT_TOO_MANY":
+      return m.subjectRefusalTooMany();
+    case "SUBJECT_ARCHIVED":
+      return m.subjectRefusalArchived();
+    case "SUBJECT_NOT_AN_EXPENSE":
+      return m.subjectRefusalNotAnExpense();
+    case "SUBJECT_ENTRIES":
+      return m.subjectRefusalEntries();
+    case "SUBJECT_PERIOD":
+      return m.subjectRefusalPeriod();
+    case "ENTRY_NOT_FOUND":
+      return m.subjectRefusalEntryNotFound();
+    case "MERCHANT_NOT_FOUND":
+    case "TOO_MANY_RULES":
+      // A subject's merchants are rules: their refusals are the rules'.
+      return ruleRefusalMessage(code, null, limit);
+    default:
+      return m.errorUnknown();
+  }
+}
+
 /** The message for a refusal of better-auth or of Gousset, by its code. */
 export function errorMessage(code: string | undefined): string {
   switch (code) {
