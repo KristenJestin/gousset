@@ -5,7 +5,7 @@ import { eq } from "drizzle-orm";
 import type { WorkerEnvironment } from "../src/app-server";
 import { addUser } from "../src/auth";
 import type { TestUser } from "../src/auth";
-import { lineDetail, onPhone } from "../src/frame";
+import { detailAtRest, lineDetail, onPhone } from "../src/frame";
 import { animationsDone, expect, fixDay, test, visit } from "../src/test";
 import { openUserData } from "../src/user-data";
 
@@ -140,7 +140,7 @@ async function hydrated(page: Page) {
   await expect(page.locator('[data-slot="operation-row"][style*="top"]').first()).toBeAttached();
 }
 
-/** Opens the top-up's detail from the operations page. */
+/** Opens the top-up's detail from the operations page, once it stands still: a click lands (#223). */
 async function openTopUp(page: Page) {
   await visit(page, "/operations");
   await hydrated(page);
@@ -149,6 +149,7 @@ async function openTopUp(page: Page) {
   const detail = lineDetail(page, TOP_UP);
 
   await expect(detail).toBeVisible();
+  await detailAtRest(detail);
 
   return detail;
 }
