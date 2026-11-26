@@ -106,7 +106,8 @@ export function RulesList({
   openId,
   locale,
 }: RulesListProps) {
-  const messages = useUiMessages().rules;
+  const ui = useUiMessages();
+  const messages = ui.rules;
   const pageLocale = usePageLanguage();
   const writtenIn = locale ?? pageLocale;
 
@@ -181,9 +182,9 @@ export function RulesList({
                 >
                   {then}
                 </span>
-                {row.categoryArchived === true || row.subjectArchived === true ? (
-                  <Chip>{messages.archived}</Chip>
-                ) : null}
+                {/* Each its own word: "archivée" agrees with a category, "archivé" with a subject. */}
+                {row.categoryArchived === true ? <Chip>{messages.archived}</Chip> : null}
+                {row.subjectArchived === true ? <Chip>{ui.subjects.archived}</Chip> : null}
               </span>
               <span className={cn(COLUMN.used, "text-sm text-muted-foreground")}>
                 {messages.used(row.used, formatCount(row.used, writtenIn))}

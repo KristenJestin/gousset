@@ -172,6 +172,15 @@ const SHOTS: ReadonlyArray<Shot> = [
   // A works council refund and the expense it funds, each on its side's detail (#29).
   { id: "operations-linefunding--funds" },
   { id: "operations-linefunding--funded-by" },
+  // The subjects (#37): their tree, a subject's figures, its proposals, what attaches it, and its
+  // sheet, on a desktop and a phone.
+  { id: "subjects-subjecttree--default" },
+  { id: "subjects-subjecttree--phone", width: 390 },
+  { id: "subjects-subjectfigures--with-loan" },
+  { id: "subjects-subjectproposals--default" },
+  { id: "subjects-subjectmerchants--with-other-rules" },
+  { id: "subjects-subjecteditor--default" },
+  { id: "subjects-subjecteditor--phone", width: 390 },
   { id: "rules-ruleslist--default" },
   { id: "rules-ruleeditor--default" },
   { id: "rules-ruleproposal--default" },

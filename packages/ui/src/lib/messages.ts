@@ -518,6 +518,73 @@ function uiMessages(locale: Locale) {
         create: m.uiRulesProposalCreate({}, options),
       },
     },
+    /** The subjects (#37): their tree, a subject's figures and proposals, and their sheet. */
+    subjects: {
+      /** Beside an archived subject: its own word, which agrees with "subject" in French. */
+      archived: m.uiSubjectsArchived({}, options),
+      perMonth: m.uiSubjectsPerMonth({}, options),
+      value: m.uiSubjectsValue({}, options),
+      loan: m.uiSubjectsLoan({}, options),
+      loanNone: m.uiSubjectsLoanNone({}, options),
+      /** Under a loan's balance: the account it is. */
+      loanOwed: (name: string) => m.uiSubjectsLoanOwed({ name }, options),
+      noExpense: m.uiSubjectsNoExpense({}, options),
+      /** Amounts in other currencies, already written and joined. */
+      elsewhere: (amounts: string) => m.uiSubjectsElsewhere({ amounts }, options),
+      toConfirm: m.uiSubjectsToConfirm({}, options),
+      proposalsHelp: m.uiSubjectsProposalsHelp({}, options),
+      selectAll: m.uiSubjectsSelectAll({}, options),
+      /** A proposal's names, which say the expense: "Select Fuelstop, 12 Jul.". */
+      selectOne: (expense: string) => m.uiSubjectsSelectOne({ expense }, options),
+      attachSelected: m.uiSubjectsAttachSelected({}, options),
+      attachAll: m.uiSubjectsAttachAll({}, options),
+      declineSelected: m.uiSubjectsDeclineSelected({}, options),
+      attachOne: (expense: string) => m.uiSubjectsAttachOne({ expense }, options),
+      declineOne: (expense: string) => m.uiSubjectsDeclineOne({ expense }, options),
+      proposalsNone: m.uiSubjectsProposalsNone({}, options),
+      merchantsNone: m.uiSubjectsMerchantsNone({}, options),
+      /** After the merchants: how many other rules attach the subject, the count already written. */
+      otherRules: (count: number, written: string) =>
+        pluralRules[locale].select(count) === "one"
+          ? m.uiSubjectsOtherRulesOne({ count: written }, options)
+          : m.uiSubjectsOtherRulesOther({ count: written }, options),
+      newTitle: m.uiSubjectsNewTitle({}, options),
+      editTitle: (name: string) => m.uiSubjectsEditTitle({ name }, options),
+      name: m.uiSubjectsName({}, options),
+      inside: m.uiSubjectsInside({}, options),
+      none: m.uiSubjectsNone({}, options),
+      hasValue: m.uiSubjectsHasValue({}, options),
+      hasValueDescription: m.uiSubjectsHasValueDescription({}, options),
+      valueField: m.uiSubjectsValueField({}, options),
+      currency: m.uiSubjectsCurrency({}, options),
+      loanField: m.uiSubjectsLoanField({}, options),
+      hasDates: m.uiSubjectsHasDates({}, options),
+      hasDatesDescription: m.uiSubjectsHasDatesDescription({}, options),
+      startsOn: m.uiSubjectsStartsOn({}, options),
+      endsOn: m.uiSubjectsEndsOn({}, options),
+      endsOnDescription: m.uiSubjectsEndsOnDescription({}, options),
+      accounts: m.uiSubjectsAccounts({}, options),
+      accountsNone: m.uiSubjectsAccountsNone({}, options),
+      attachAutomatically: m.uiSubjectsAttachAutomatically({}, options),
+      atMerchants: m.uiSubjectsAtMerchants({}, options),
+      noMerchant: m.uiSubjectsNoMerchant({}, options),
+      addMerchant: m.uiSubjectsAddMerchant({}, options),
+      merchantToAdd: m.uiSubjectsMerchantToAdd({}, options),
+      merchantPlaceholder: m.uiSubjectsMerchantPlaceholder({}, options),
+      past: m.uiSubjectsPast({}, options),
+      pastEmpty: m.uiSubjectsPastEmpty({}, options),
+      pastNone: m.uiSubjectsPastNone({}, options),
+      /** What the merchants' past expenses come to: the count and the amount already written. */
+      pastMatch: (count: number, written: string, amount: string) =>
+        pluralRules[locale].select(count) === "one"
+          ? m.uiSubjectsPastMatchOne({ count: written, amount }, options)
+          : m.uiSubjectsPastMatchOther({ count: written, amount }, options),
+      attachThem: m.uiSubjectsAttachThem({}, options),
+      archivedSwitch: m.uiSubjectsArchivedSwitch({}, options),
+      archivedDescription: m.uiSubjectsArchivedDescription({}, options),
+      create: m.uiSubjectsCreate({}, options),
+      save: m.uiSubjectsSave({}, options),
+    },
   };
 }
 
