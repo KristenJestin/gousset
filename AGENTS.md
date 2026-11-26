@@ -189,7 +189,7 @@ The app serves MCP at `/mcp` (`docs/mcp.md`). For every change to its tools:
   when to use it rather than another, its effects and refusals, the important part first, with an
   example call where an argument is easy to get wrong; `readOnlyHint` on reads, `idempotentHint`
   where a repeat is harmless, `destructiveHint` on writes, `openWorldHint: false`.
-- **The guards**: at most 15 tools. The tool listing stays under 52,000 characters (Kris,
+- **The guards**: at most 15 tools. The tool listing stays under 56,000 characters (Kris,
   2026-11-26), to fit subjects and investments. Every description under 4,000 characters. A guard that fails goes to the maintainer; **no description is trimmed to
   make room for another**.
 - **Results** text first, names rather than ids, under 20,000 characters, paged with the next
