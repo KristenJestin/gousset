@@ -1,3 +1,5 @@
+import { readFile } from "node:fs/promises";
+
 import {
   DatabaseAccountStore,
   Today,
@@ -6,10 +8,10 @@ import {
   investmentsLayer,
   isinCheckDigit,
 } from "@gousset/core";
-import type { AccountStore, ImportProfileEntry, Investments } from "@gousset/core";
+import type { AccountStore, Investments } from "@gousset/core";
 import type { UserData } from "@gousset/db/user-data";
 import { account, statementLine } from "@gousset/db/schema/ledger";
-import { encodeWindows1252 } from "@gousset/fixture";
+import { FORTUNEO_HEADER, fortuneoExport } from "@gousset/fixture";
 import { eq } from "drizzle-orm";
 import { Effect, Layer } from "effect";
 
@@ -18,10 +20,12 @@ import { addUser, expect, personOfItsOwn, test } from "../src/test";
 import { openUserData } from "../src/user-data";
 
 // Issue #250, part 2: a broker's export of operations imported into an investment account, through
-// the import's job on the worker's database, as the upload runs it. The Fortuneo file is invented,
-// built from the profile Gousset ships for it (its header and the words of its kinds), and goes
-// into the made-up PEA (`@gousset/fixture`, "Northbank PEA"). Every amount and ISIN is invented; the
-// ISINs are in the country code XX, which no country has. Each test has a user of its own.
+// the import's job on the worker's database, as the upload runs it. Gousset ships no broker's
+// profile: the user imports the library's Fortuneo profile file (`packages/import/profiles/`)
+// through the profile import, then reads the export with it. The Fortuneo file is invented, its
+// header the library's guess, and goes into the made-up PEA (`@gousset/fixture`, "Northbank PEA").
+// Every amount and ISIN is invented; the ISINs are in the country code XX, which no country has.
+// Each test has a user of its own.
 
 const TODAY = "2026-11-30";
 
@@ -53,94 +57,110 @@ const run = <A, E>(effect: Effect.Effect<A, E, Investments | AccountStore | User
     ),
   );
 
-/** The profile Gousset ships for a broker, as the user's list of profiles gives it. */
-async function shipped(owner: string, key: string) {
-  const listed = await imports.withProfiles((service) => service.list(owner));
-  const found = listed.find((entry) => entry.source === "shipped" && entry.key === key);
-  const definition = found?.definition;
+/** The library's Fortuneo profile file, as a user downloads it from the repository. */
+const LIBRARY_FILE = new URL(
+  "../../../packages/import/profiles/operations/fortuneo-operations.json",
+  import.meta.url,
+);
 
-  if (found === undefined || definition === null || definition === undefined) {
-    throw new Error(`No profile is shipped as ${key}.`);
-  }
+/** The library's Fortuneo profile, imported through the profile import as a shared file. */
+async function libraryProfile(owner: string): Promise<string> {
+  const content = await readFile(LIBRARY_FILE, "utf8");
 
-  if (!("reads" in definition)) {
-    throw new Error(`${key} reads no operations.`);
-  }
+  const saved = await imports.withProfiles((service) =>
+    service.importFile(owner, { name: "Fortuneo (library)", institution: "Fortuneo", content }),
+  );
 
-  return { entry: found, definition };
-}
+  expect(saved).toMatchObject({ source: "stored", kind: "operations", header: null });
 
-type Operations = Extract<NonNullable<ImportProfileEntry["definition"]>, { reads: "operations" }>;
-
-/** The word of Fortuneo's kind column for a kind, as its shipped profile maps it. */
-function wordOf(definition: Operations, kind: string): string {
-  const found = definition.kinds.find((each) => each.kind === kind);
-
-  if (found === undefined) {
-    throw new Error(`The profile names no ${kind}.`);
-  }
-
-  return found.word;
+  return saved.source === "stored" ? saved.id : "";
 }
 
 /**
- * An invented Fortuneo export: the shipped header (`Date;Opération;Libellé;Code ISIN;Qté;Prix
- * d'exé;Montant brut;Courtage;Montant net;Devise`), then a deposit, two purchases, a dividend, a
- * sale and a custody fee, in Windows-1252 with semicolons, as the shipped profile reads.
+ * An invented Fortuneo export, under the header the library's profile guesses: a deposit, two
+ * purchases, a dividend, a sale and a custody fee, written with the words of its `Opération`
+ * column, in Windows-1252 with semicolons.
  */
-async function fortuneoFile(owner: string) {
-  const { entry, definition } = await shipped(owner, "fortuneo-operations");
-  const word = (kind: string) => wordOf(definition, kind);
-
-  const rows = [
-    ["02/11/2026", word("deposit"), "VIREMENT", "", "", "", "", "", "600,00", "EUR"],
+const fortuneoFile = () => ({
+  fileName: "fortuneo-2026-11.csv",
+  bytes: fortuneoExport(
     [
-      "03/11/2026",
-      word("purchase"),
-      "FORTUNE WORLD ETF",
-      FUND,
-      "10",
-      "25,10",
-      "",
-      "1,95",
-      "-252,95",
-      "EUR",
+      ["02/11/2026", "Versement espèces", "VIREMENT", "", "", "", "", "", "600,00", "EUR"],
+      [
+        "03/11/2026",
+        "Achat Comptant",
+        "FORTUNE WORLD ETF",
+        FUND,
+        "10",
+        "25,10",
+        "",
+        "1,95",
+        "-252,95",
+        "EUR",
+      ],
+      [
+        "05/11/2026",
+        "Achat Comptant",
+        "FORTUNE WORLD ETF",
+        FUND,
+        "4,5",
+        "26,00",
+        "",
+        "0,99",
+        "-117,99",
+        "EUR",
+      ],
+      [
+        "16/11/2026",
+        "Encaissement dividende",
+        "FORTUNE WORLD ETF",
+        FUND,
+        "",
+        "",
+        "",
+        "0,45",
+        "2,55",
+        "EUR",
+      ],
+      [
+        "20/11/2026",
+        "Vente Comptant",
+        "FORTUNE WORLD ETF",
+        FUND,
+        "2",
+        "27,00",
+        "",
+        "0,99",
+        "53,01",
+        "EUR",
+      ],
+      ["28/11/2026", "Droits de garde", "DROITS DE GARDE", "", "", "", "", "", "-3,00", "EUR"],
     ],
-    [
-      "05/11/2026",
-      word("purchase"),
-      "FORTUNE WORLD ETF",
-      FUND,
-      "4,5",
-      "26,00",
-      "",
-      "0,99",
-      "-117,99",
-      "EUR",
-    ],
-    ["16/11/2026", word("dividend"), "FORTUNE WORLD ETF", FUND, "", "", "", "0,45", "2,55", "EUR"],
-    [
-      "20/11/2026",
-      word("sale"),
-      "FORTUNE WORLD ETF",
-      FUND,
-      "2",
-      "27,00",
-      "",
-      "0,99",
-      "53,01",
-      "EUR",
-    ],
-    ["28/11/2026", word("fee"), "DROITS DE GARDE", "", "", "", "", "", "-3,00", "EUR"],
-  ];
+    FORTUNEO_HEADER,
+  ),
+});
 
-  const header = (entry.header ?? "").split(";");
+/**
+ * Keeps the file for the account and reads it with the user's profile, as the import screen does
+ * when the user chooses it for a file no profile recognised: the import runs to its end.
+ */
+async function importWith(
+  owner: string,
+  accountId: string,
+  profileId: string,
+  file = fortuneoFile(),
+) {
+  const { started, sameFile } = await imports.keep(owner, accountId, file);
 
-  expect(header).toHaveLength(10);
+  await imports.resumeWith(owner, started.id, {
+    accountId: null,
+    csvProfile: null,
+    profile: { kind: "stored", id: profileId },
+  });
 
-  const text = [header, ...rows].map((row) => row.join(";")).join("\r\n");
+  await imports.run(owner, started.id);
 
-  return { fileName: "fortuneo-2026-11.csv", bytes: encodeWindows1252(`${text}\r\n`) };
+  return { ...(await imports.show(owner, started.id)), sameFile: sameFile !== null };
 }
 
 /** The user's account of this name (the made-up data's). */
@@ -165,7 +185,7 @@ const linesOfImport = (owner: string, importId: string) =>
       .where(eq(statementLine.importId, importId)),
   );
 
-/** A user of the test's own, with the made-up data, and their PEA. */
+/** A user of the test's own, with the made-up data, their PEA and the library's profile. */
 async function personWithPea(
   app: { baseURL: string },
   user: Parameters<typeof addUser>[1],
@@ -176,21 +196,25 @@ async function personWithPea(
 
   await data.seed(owner);
 
-  return { owner, pea: await accountNamed(owner, "Northbank PEA") };
+  return {
+    owner,
+    pea: await accountNamed(owner, "Northbank PEA"),
+    profile: await libraryProfile(owner),
+  };
 }
 
-test("import an invented Fortuneo file into the made-up PEA: its operations and positions are there", async ({
+test("import an invented Fortuneo file with the library's profile: its operations and positions are there", async ({
   app,
   user,
 }) => {
-  const { owner, pea } = await personWithPea(app, user, "broker-fortuneo");
+  const { owner, pea, profile } = await personWithPea(app, user, "broker-fortuneo");
   const before = await run(investmentOperations(owner, pea, { limit: 500 }));
-  const file = await fortuneoFile(owner);
-  const done = await imports.importFile(owner, pea, file);
+  const done = await importWith(owner, pea, profile);
 
   expect(done).toMatchObject({
     status: "done",
     reads: "operations",
+    profile: "Fortuneo (library)",
     linesRead: 6,
     linesAdded: 6,
     linesDuplicate: 0,
@@ -198,7 +222,10 @@ test("import an invented Fortuneo file into the made-up PEA: its operations and 
     periodTo: "2026-11-28",
     errorCode: null,
   });
-  expect((await imports.profileOf(owner, done.id))?.shippedProfile).toBe("fortuneo-operations");
+  expect(await imports.profileOf(owner, done.id)).toEqual({
+    profileId: profile,
+    shippedProfile: null,
+  });
 
   const after = await run(investmentOperations(owner, pea, { limit: 500 }));
 
@@ -232,12 +259,18 @@ test("import an invented Fortuneo file into the made-up PEA: its operations and 
   });
 });
 
-test("import the same Fortuneo file again: nothing is added", async ({ app, user }) => {
-  const { owner, pea } = await personWithPea(app, user, "broker-again");
-  const file = await fortuneoFile(owner);
-  const first = await imports.importFile(owner, pea, file);
+test("import the same Fortuneo file again with the library's profile: nothing is added", async ({
+  app,
+  user,
+}) => {
+  const { owner, pea, profile } = await personWithPea(app, user, "broker-again");
+  const first = await importWith(owner, pea, profile);
   const total = (await run(investmentOperations(owner, pea, { limit: 500 }))).total;
-  const again = await imports.importFile(owner, pea, { ...file, fileName: "fortuneo-again.csv" });
+
+  const again = await importWith(owner, pea, profile, {
+    ...fortuneoFile(),
+    fileName: "fortuneo-again.csv",
+  });
 
   expect(first.linesAdded).toBe(6);
   expect(again).toMatchObject({
@@ -253,9 +286,9 @@ test("import the same Fortuneo file again: nothing is added", async ({ app, user
 });
 
 test("undoing a Fortuneo import removes its operations and their lines", async ({ app, user }) => {
-  const { owner, pea } = await personWithPea(app, user, "broker-undo");
+  const { owner, pea, profile } = await personWithPea(app, user, "broker-undo");
   const before = await run(investmentOperations(owner, pea, { limit: 500 }));
-  const done = await imports.importFile(owner, pea, await fortuneoFile(owner));
+  const done = await importWith(owner, pea, profile);
 
   expect(await linesOfImport(owner, done.id)).toHaveLength(6);
 
@@ -273,13 +306,22 @@ test("undoing a Fortuneo import removes its operations and their lines", async (
   expect(listed?.positions.some((each) => each.security.isin === FUND)).toBe(false);
 
   // Its file imported again brings them back.
-  expect((await imports.importFile(owner, pea, await fortuneoFile(owner))).linesAdded).toBe(6);
+  expect((await importWith(owner, pea, profile)).linesAdded).toBe(6);
 });
 
-test("a broker's file dropped on a current account is refused", async ({ app, user }) => {
-  const { owner } = await personWithPea(app, user, "broker-current");
+test("a broker's file read with its profile on a current account is refused", async ({
+  app,
+  user,
+}) => {
+  const { owner, profile } = await personWithPea(app, user, "broker-current");
   const current = await accountNamed(owner, "Current account");
-  const { started } = await imports.keep(owner, current, await fortuneoFile(owner));
+  const { started } = await imports.keep(owner, current, fortuneoFile());
+
+  await imports.resumeWith(owner, started.id, {
+    accountId: null,
+    csvProfile: null,
+    profile: { kind: "stored", id: profile },
+  });
 
   // The job fails for good, as the queue's last attempt would.
   await expect(imports.run(owner, started.id)).rejects.toMatchObject({
@@ -295,4 +337,31 @@ test("a broker's file dropped on a current account is refused", async ({ app, us
     linesAdded: 0,
   });
   expect(await linesOfImport(owner, done.id)).toEqual([]);
+});
+
+test("no broker's profile is shipped: none reads a Fortuneo file until the user has one", async ({
+  app,
+  user,
+}) => {
+  const person = await addUser(app.baseURL, user, personOfItsOwn("broker-none"));
+  const owner = await data.ownerOf(person.email);
+
+  await data.seed(owner);
+
+  const listed = await imports.withProfiles((service) => service.list(owner));
+
+  expect(listed.filter((entry) => entry.kind === "operations")).toEqual([]);
+
+  const pea = await accountNamed(owner, "Northbank PEA");
+  const { started } = await imports.keep(owner, pea, fortuneoFile());
+  const fitting = () => imports.withProfiles((service) => service.forImport(owner, started.id));
+
+  expect((await fitting()).fitting).toEqual([]);
+
+  // Imported from the library, kept with no header: it reads the file by a test read.
+  const profile = await libraryProfile(owner);
+
+  expect((await fitting()).fitting).toEqual([
+    { by: "test-read", profile: expect.objectContaining({ source: "stored", id: profile }) },
+  ]);
 });

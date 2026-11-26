@@ -1,4 +1,5 @@
 import { writeFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
 
 import type { Page, TestInfo } from "@playwright/test";
 import { DatabaseAccountStore, Today, investmentOperations, investmentsLayer } from "@gousset/core";
@@ -11,11 +12,12 @@ import { addUser } from "../src/auth";
 import { animationsDone, expect, test, visit } from "../src/test";
 import { openUserData } from "../src/user-data";
 
-// Issue #250, part 2, on the import screen: a broker's file of operations recognised by its
-// profile and shown with it and its investment account; an unknown broker's file mapped by hand as
-// operations, its kind words mapped, saved as a profile of operations and imported; a broker's
-// file refused on a current account. Each test has a user of its own, with an invented PEA and an
-// everyday account. Every amount and ISIN is invented, the ISINs in the country code XX.
+// Issue #250, part 2, on the import screen. Gousset ships no broker's profile: a Fortuneo file is
+// read with the library's profile file (`packages/import/profiles/`), imported on the screen and
+// shown with its investment account; an unknown broker's file is mapped by hand as operations (its
+// columns, its kind words, its formats), saved as a profile of operations and imported; a broker's
+// file read on a current account is refused. Each test has a user of its own, with an invented PEA
+// and an everyday account. Every amount and ISIN is invented, the ISINs in the country code XX.
 
 const PEA = "Harbour PEA";
 const EVERYDAY = "Everyday account";
@@ -80,7 +82,8 @@ const drop = (page: Page, path: string) =>
 /** Chooses an option of a list named `list`, as a user does. */
 async function choose(page: Page, list: string, option: string | RegExp) {
   await page.getByRole("combobox", { name: list }).click();
-  await page.getByRole("option", { name: option }).click();
+  // Exact: "Fees" is no "Fees' currency", "Amount" no "Amount's currency".
+  await page.getByRole("option", { name: option, exact: true }).click();
   await expect(page.getByRole("listbox")).toBeHidden();
 }
 
@@ -102,10 +105,21 @@ const figure = (page: Page, file: string, name: string) =>
 
 const testRead = (page: Page) => page.getByRole("region", { name: "Test read" });
 
+/** The library's Fortuneo profile file, as a user downloads it from the repository. */
+const LIBRARY_FILE = fileURLToPath(
+  new URL("../../../packages/import/profiles/operations/fortuneo-operations.json", import.meta.url),
+);
+
+/** Imports the library's Fortuneo profile file through the preview's "Import a profile file". */
+async function importLibraryProfile(page: Page) {
+  await page.locator('[data-slot="file-button-input"]').setInputFiles(LIBRARY_FILE);
+  await expect(page.getByText("fortuneo-operations is now one of your profiles.")).toBeVisible();
+}
+
 /**
- * An invented Fortuneo export: the header Gousset's shipped profile reads (`Date;Opération;
+ * An invented Fortuneo export: the header the library's profile guesses (`Date;Opération;
  * Libellé;Code ISIN;Qté;Prix d'exé;Montant brut;Courtage;Montant net;Devise`), a deposit and a
- * purchase, in Windows-1252 with semicolons.
+ * purchase, in Windows-1252 with semicolons; its days, the 12th or before, leave detection unsure.
  */
 async function fortuneoFile(testInfo: TestInfo, fileName: string) {
   const path = testInfo.outputPath(fileName);
@@ -126,8 +140,9 @@ async function fortuneoFile(testInfo: TestInfo, fileName: string) {
 }
 
 /**
- * An invented broker no profile knows, in UTF-8 with semicolons: a deposit, a purchase and a
- * coupon, whose days are all the 12th or before, so that detection asks rather than reads it.
+ * An invented broker no profile knows, in UTF-8 with semicolons, dates with dots and decimal
+ * points: a deposit, a purchase and a coupon, each amount's currency beside it. Its days are all
+ * the 12th or before, so that detection asks rather than reads it.
  */
 async function unknownBroker(testInfo: TestInfo, fileName: string) {
   const path = testInfo.outputPath(fileName);
@@ -135,10 +150,10 @@ async function unknownBroker(testInfo: TestInfo, fileName: string) {
   await writeFile(
     path,
     [
-      "Day;What;ISIN;Name;Units;Price;Fees;Cash",
-      "01/12/2026;Cash in;;;;;;500,00",
-      "02/12/2026;Buy;XX0000000028;NORTHWIND 2030 BOND;10;0,9876;1,00;-10,88",
-      "10/12/2026;Coupon;XX0000000028;NORTHWIND 2030 BOND;;;;0,12",
+      "Day;What;ISIN;Name;Units;Price;Fees;Cash;Cur",
+      "01.12.2026;Cash in;;;;;;500.00;EUR",
+      "02.12.2026;Buy;XX0000000028;NORTHWIND 2030 BOND;10;0.9876;1.00;-10.88;EUR",
+      "10.12.2026;Coupon;XX0000000028;NORTHWIND 2030 BOND;;;;0.12;EUR",
       "",
     ].join("\n"),
   );
@@ -146,7 +161,13 @@ async function unknownBroker(testInfo: TestInfo, fileName: string) {
   return path;
 }
 
-test("a broker's file is read with its profile into the investment account, and says so", async ({
+/** The preview of a dropped file, once it waits for its columns. */
+const preview = (page: Page, file: string) =>
+  expect(page.getByRole("table", { name: `The first lines of ${file}` })).toBeVisible({
+    timeout: 30_000,
+  });
+
+test("a Fortuneo file is read with the library's profile file, imported on the screen", async ({
   app,
   user,
   page,
@@ -157,11 +178,29 @@ test("a broker's file is read with its profile into the investment account, and 
 
   await visit(page, "/import");
   await dropInto(page, await fortuneoFile(testInfo, "fortuneo.csv"), "fortuneo.csv", PEA);
+  await preview(page, "fortuneo.csv");
 
+  // No profile of a broker is shipped: the user imports the library's, which is then chosen.
+  await importLibraryProfile(page);
+  await expect(page.getByRole("combobox", { name: "Read with" })).toContainText(
+    "fortuneo-operations",
+  );
+  await expect(page.getByRole("combobox", { name: "The file holds" })).toContainText(
+    "A broker's operations",
+  );
+  // Its columns are found by their names: the preview shows where the file puts them.
+  await expect(page.getByRole("combobox", { name: "What Code ISIN holds" })).toContainText("ISIN");
+  await expect(page.getByRole("combobox", { name: "What Devise holds" })).toContainText(
+    "Amount's currency",
+  );
+  await expect(testRead(page)).toContainText("Purchase · FORTUNE WORLD ETF");
+  await expect(testRead(page)).toContainText("−€252.95");
+
+  await page.getByRole("button", { name: "Read the file this way" }).click();
   await expect(summaryOf(page, "fortuneo.csv")).toBeVisible({ timeout: 30_000 });
   await expect(summaryOf(page, "fortuneo.csv")).toContainText("Operations read");
   await expect(summaryOf(page, "fortuneo.csv")).toContainText(
-    `Read as a broker's operations with Fortuneo: history of operations, into ${PEA}.`,
+    `Read as a broker's operations with fortuneo-operations, into ${PEA}.`,
   );
   await expect(figure(page, "fortuneo.csv", "added")).toHaveText("2");
 
@@ -184,12 +223,11 @@ test("map an unknown broker's CSV by hand as operations, save it as a profile, a
 
   await visit(page, "/import");
   await dropInto(page, await unknownBroker(testInfo, "harbour.csv"), "harbour.csv", PEA);
-  await expect(page.getByRole("table", { name: "The first lines of harbour.csv" })).toBeVisible({
-    timeout: 30_000,
-  });
+  await preview(page, "harbour.csv");
 
   await choose(page, "The file holds", "A broker's operations");
-  await choose(page, "Date format", "DD/MM/YYYY, as in 03/10/2026");
+  await choose(page, "Date format", "DD.MM.YYYY, as in 03.10.2026");
+  await choose(page, "Decimal mark", "A point, as in 12.34");
   await choose(page, "What Day holds", "Booking date");
   await choose(page, "What What holds", "Kind of operation");
   await choose(page, "What ISIN holds", "ISIN");
@@ -198,6 +236,7 @@ test("map an unknown broker's CSV by hand as operations, save it as a profile, a
   await choose(page, "What Price holds", "Unit price");
   await choose(page, "What Fees holds", "Fees");
   await choose(page, "What Cash holds", "Amount");
+  await choose(page, "What Cur holds", "Amount's currency");
 
   // A word no kind is given yet is refused at its line, never guessed.
   const words = page.getByRole("list", { name: "What each word of What says" });
@@ -241,17 +280,31 @@ test("map an unknown broker's CSV by hand as operations, save it as a profile, a
 
   const [saved] = await data.asUser(owner, (transaction) =>
     transaction
-      .select({ kind: importProfile.kind })
+      .select({ kind: importProfile.kind, definition: importProfile.definition })
       .from(importProfile)
       .where(eq(importProfile.name, "Harbour broker")),
   );
 
-  expect(saved).toEqual({ kind: "operations" });
+  expect(saved).toMatchObject({
+    kind: "operations",
+    definition: {
+      version: 2,
+      reads: "operations",
+      dateFormat: "DD.MM.YYYY",
+      decimalMark: ".",
+      columns: { bookedOn: 1, kind: 2, amount: 8, amountCurrency: 9 },
+      kinds: [
+        { word: "Cash in", kind: "deposit" },
+        { word: "Buy", kind: "purchase" },
+        { word: "Coupon", kind: "dividend" },
+      ],
+    },
+  });
 
   await animationsDone(page);
 });
 
-test("a broker's file dropped on a current account is refused, saying where it goes", async ({
+test("a broker's file read on a current account is refused, saying where it goes", async ({
   app,
   user,
   page,
@@ -261,6 +314,10 @@ test("a broker's file dropped on a current account is refused, saying where it g
   await importer(app, user, page, "current");
   await visit(page, "/import");
   await dropInto(page, await fortuneoFile(testInfo, "on-current.csv"), "on-current.csv", EVERYDAY);
+  await preview(page, "on-current.csv");
+  await importLibraryProfile(page);
+  await expect(testRead(page)).toContainText("Purchase · FORTUNE WORLD ETF");
+  await page.getByRole("button", { name: "Read the file this way" }).click();
 
   await expect(
     page.getByText(
@@ -281,9 +338,7 @@ test("the kind words' motion is cut under reduced motion", async ({
   await page.emulateMedia({ reducedMotion: "reduce" });
   await visit(page, "/import");
   await dropInto(page, await unknownBroker(testInfo, "motion.csv"), "motion.csv", PEA);
-  await expect(page.getByRole("table", { name: "The first lines of motion.csv" })).toBeVisible({
-    timeout: 30_000,
-  });
+  await preview(page, "motion.csv");
 
   await choose(page, "The file holds", "A broker's operations");
   await choose(page, "What What holds", "Kind of operation");
