@@ -1,3 +1,4 @@
+import { madeUpMonth, madeUpSecurities } from "@gousset/fixture";
 import { Result } from "effect";
 import fc from "fast-check";
 import { describe, expect, test } from "vite-plus/test";
@@ -21,6 +22,16 @@ describe("an ISIN", () => {
     expect(isinCheckDigit("XX000000000")).toBe(2);
     expect(parseIsin("XX0000000002")).toEqual(Result.succeed("XX0000000002"));
     expect(Result.isFailure(parseIsin("XX0000000001"))).toBe(true);
+  });
+
+  test("of the made-up data has its check digit, as an import or a hand would refuse it", () => {
+    const named = madeUpMonth("2026-09").lines.flatMap((line) =>
+      line.operation?.isin === null || line.operation === null ? [] : [line.operation.isin],
+    );
+
+    for (const isin of [...madeUpSecurities.map((security) => security.isin), ...named]) {
+      expect(parseIsin(isin), isin).toEqual(Result.succeed(isin));
+    }
   });
 
   test("is read in any case, its spaces left out", () => {
