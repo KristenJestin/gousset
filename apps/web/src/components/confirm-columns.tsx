@@ -5,7 +5,7 @@ import type {
   ImportSummary as Import,
   ProfileChoice,
 } from "@gousset/core/imports";
-import type { OperationKind } from "@gousset/import";
+import type { OperationKind, OperationsProfile } from "@gousset/import";
 import { m } from "@gousset/i18n/messages";
 import { getLocale } from "@gousset/i18n/runtime";
 import { Button } from "@gousset/ui/components/button";
@@ -53,9 +53,10 @@ import {
   remap,
   settingsOf,
   splittingProfile,
+  startedOperations,
   withSettings,
 } from "@/lib/csv-mapping";
-import type { CsvFileSettings, KindWord } from "@/lib/csv-mapping";
+import type { CsvFileSettings, CsvSettingsForm, KindWord } from "@/lib/csv-mapping";
 import { downloadText } from "@/lib/download";
 import { importKeys, importQueries } from "@/queries/imports";
 
@@ -82,6 +83,12 @@ type Holds = "statement" | "operations";
 const OFFERED = { statement: CSV_FIELDS, operations: OPERATION_FIELDS } satisfies {
   readonly [holds in Holds]: ReadonlyArray<CsvField>;
 };
+
+/** The same fields, for the lookup of each column when the kind of file changes. */
+const OFFERED_SETS = {
+  statement: new Set<CsvField>(CSV_FIELDS),
+  operations: new Set<CsvField>(OPERATION_FIELDS),
+} satisfies { readonly [holds in Holds]: ReadonlySet<CsvField> };
 
 /** The kinds a word of a broker's kind column can name, in the order the list offers them. */
 const KINDS: ReadonlyArray<OperationKind> = [
@@ -196,55 +203,283 @@ export function ConfirmColumns({ summary }: { summary: Import }) {
   );
 }
 
-function ColumnsPreview({
-  summary,
-  initialSettings,
-  initialMapping,
-}: {
-  summary: Import;
-  /** What detection proposed, kept as the start: the user changes it from there. */
-  initialSettings: CsvFileSettings;
-  initialMapping: ReadonlyArray<CsvField>;
-}) {
-  const queryClient = useQueryClient();
-  const [settings, setSettings] = useState(initialSettings);
-  const [mapping, setMapping] = useState(initialMapping);
-  // The profile chosen from the list, until the user changes a column or a setting.
-  const [chosen, setChosen] = useState<ProfileChoice | null>(null);
-  // The profile last chosen from the list: while its layout still reads the file, the list names it.
-  const [startedFrom, setStartedFrom] = useState<ProfileChoice | null>(null);
-  const [name, setName] = useState("");
-  const [notice, setNotice] = useState<string>();
-  const [profileRefused, setProfileRefused] = useState<string>();
-  const { resume, refused } = useResume(summary);
-  const [holds, setHolds] = useState<Holds>("statement");
-  const [words, setWords] = useState<ReadonlyArray<KindWord>>([]);
+/** The file's first rows as the preview shows them: its columns' names, and its lines. */
+type Table = {
+  readonly width: number;
+  /** The header row's cells as the file writes them; empty without a header row. */
+  readonly header: ReadonlyArray<string>;
+  readonly columns: ReadonlyArray<string>;
+  readonly lines: ReadonlyArray<ReadonlyArray<string>>;
+};
 
-  const draft =
-    holds === "operations"
-      ? operationsProfileOf(settings, mapping, words)
-      : profileOf(settings, mapping);
-
-  const read = "profile" in draft ? draft.profile : splittingProfile(settings);
-  const { data: preview } = useQuery(importQueries.preview(summary.id, read));
-  const { data: fitting } = useQuery(importQueries.profilesFor(summary.id));
-  const { data: profiles = [] } = useQuery(importQueries.profiles());
-
-  const rows = preview?.rows ?? [];
+function tableOf(rows: ReadonlyArray<ReadonlyArray<string>>, headerRow: boolean): Table {
   const width = Math.max(0, ...rows.map((row) => row.length));
-  const [first, ...rest] = rows;
+  const [first = [], ...rest] = rows;
+  const header = headerRow ? first : [];
 
   const columns = Array.from({ length: width }, (_, index) => {
-    const named = settings.headerRow ? (first?.[index]?.trim() ?? "") : "";
+    const named = header[index]?.trim() ?? "";
 
     return named === "" ? m.importCsvColumn({ number: index + 1 }) : named;
   });
 
-  const lines = settings.headerRow ? rest : rows;
+  return { width, header, columns, lines: headerRow ? rest : rows };
+}
 
-  // The words of the kind column: those mapped, those its first lines write, and one a test read
-  // refused, so that a word further down the file is offered as soon as it is met.
-  const kindAt = mapping.indexOf("kind");
+/**
+ * What the user makes of the file on the preview: its settings, what each column holds, the words
+ * of a broker's kind column, and the profile chosen from the list. A broker's operations profile
+ * chosen is read as it is (its columns at their places or found by their names) until the user
+ * changes a column or a word; a setting changed keeps it.
+ */
+function useColumns(initialSettings: CsvFileSettings, initialMapping: ReadonlyArray<CsvField>) {
+  const [settings, setSettings] = useState(initialSettings);
+  const [mapping, setMapping] = useState(initialMapping);
+  const [holds, setHolds] = useState<Holds>("statement");
+  const [words, setWords] = useState<ReadonlyArray<KindWord>>([]);
+  // The profile chosen from the list, until the user changes a column or a setting.
+  const [chosen, setChosen] = useState<ProfileChoice | null>(null);
+  // The profile last chosen from the list: while it still reads the file its way, the list names it.
+  const [startedFrom, setStartedFrom] = useState<ProfileChoice | null>(null);
+  const [started, setStarted] = useState<OperationsProfile | null>(null);
+
+  const draft =
+    holds === "statement"
+      ? profileOf(settings, mapping)
+      : started === null
+        ? operationsProfileOf(settings, mapping, words)
+        : { profile: startedOperations(started, settings) };
+
+  /** Mapped by hand from now on: `shown`, the mapping as the preview shows it, is the user's. */
+  const byHandNow = (shown: ReadonlyArray<CsvField>) => {
+    setMapping(shown);
+    setSettings(byHand(settings));
+    setStarted(null);
+    setChosen(null);
+  };
+
+  return {
+    settings,
+    holds,
+    words,
+    chosen,
+    draft,
+    /** The profile the list names: the one chosen, or the one still read its own way. */
+    readWith: chosen ?? (settings.layout === undefined && started === null ? null : startedFrom),
+    /** What each column holds, as the preview shows it under the file's header. */
+    shownMapping: (table: Table): ReadonlyArray<CsvField> =>
+      started === null ? mapping : operationsMappingOf(started, table.width, table.header),
+    byHandNow,
+    changeHolds: (next: Holds, shown: ReadonlyArray<CsvField>) => {
+      const offered = OFFERED_SETS[next];
+
+      setHolds(next);
+      // The fields both read (the days, the label, the amount) stay where they were.
+      byHandNow(shown.map((field) => (offered.has(field) ? field : "ignored")));
+    },
+    changeWords: (next: ReadonlyArray<KindWord>, shown: ReadonlyArray<CsvField>) => {
+      setWords(next);
+      byHandNow(shown);
+    },
+    changeSettings: (form: CsvSettingsForm) => {
+      setSettings(withSettings(settings, form));
+      setChosen(null);
+    },
+    saved: (choice: ProfileChoice) => setChosen(choice),
+    startFrom: (entry: ImportProfileEntry, width: number) => {
+      const { definition } = entry;
+
+      if (definition !== null && "reads" in definition) {
+        setHolds("operations");
+        setSettings(operationsSettingsOf(definition));
+        setWords(definition.kinds.map(({ word, kind }) => ({ word, kind })));
+        setStarted(definition);
+      } else if (definition !== null) {
+        setHolds("statement");
+        setSettings(settingsOf(definition));
+        setMapping(mappingOf(definition, width));
+        setStarted(null);
+      }
+
+      setChosen(choiceOf(entry));
+      setStartedFrom(choiceOf(entry));
+    },
+  };
+}
+
+type Columns = ReturnType<typeof useColumns>;
+
+/**
+ * Saving the mapping as a profile, exporting the profile chosen, importing a profile file: what
+ * each said, or why it was refused.
+ */
+function useProfileFiles(columns: Columns, header: string | null) {
+  const queryClient = useQueryClient();
+  const [notice, setNotice] = useState<string>();
+  const [refused, setRefused] = useState<string>();
+
+  const refreshProfiles = () => queryClient.invalidateQueries({ queryKey: importKeys.profiles() });
+
+  return {
+    notice,
+    refused,
+    save: async (name: string) => {
+      if (!("profile" in columns.draft)) {
+        return;
+      }
+
+      const answer = await saveImportProfile({
+        data: { name, institution: null, definition: columns.draft.profile, header },
+      });
+
+      if ("refused" in answer) {
+        setRefused(profileRefusalMessage(answer));
+
+        return;
+      }
+
+      setRefused(undefined);
+      columns.saved(choiceOf(answer.saved));
+      setNotice(m.importCsvSaved({ name: answer.saved.name }));
+      await refreshProfiles();
+    },
+    exportChosen: async () => {
+      if (columns.chosen === null) {
+        return;
+      }
+
+      const answer = await exportImportProfile({ data: { profile: columns.chosen } });
+
+      if ("refused" in answer) {
+        setRefused(profileRefusalMessage(answer));
+
+        return;
+      }
+
+      setRefused(undefined);
+      downloadText(answer.file.fileName, answer.file.content, "application/json");
+    },
+    importFile: async (file: File, width: number) => {
+      const content = await file.text();
+
+      if (content.length > MAX_PROFILE_FILE) {
+        setRefused(m.importRefusedProfileTooLong({ limit: MAX_PROFILE_FILE }));
+
+        return;
+      }
+
+      const answer = await importImportProfile({
+        data: { name: profileNameOf(file.name), institution: null, content },
+      });
+
+      if ("refused" in answer) {
+        setRefused(profileRefusalMessage(answer));
+
+        return;
+      }
+
+      setRefused(undefined);
+      columns.startFrom(answer.saved, width);
+      setNotice(m.importCsvImported({ name: answer.saved.name }));
+      await refreshProfiles();
+    },
+  };
+}
+
+/** Which kind of file it is, the profile it is read with, and the profile files' actions. */
+function ProfileChoices({
+  summary,
+  columns,
+  table,
+  shown,
+  onExport,
+  onImportFile,
+}: {
+  summary: Import;
+  columns: Columns;
+  table: Table;
+  shown: ReadonlyArray<CsvField>;
+  onExport: () => Promise<void>;
+  onImportFile: (file: File) => Promise<void>;
+}) {
+  const { data: fitting } = useQuery(importQueries.profilesFor(summary.id));
+  const { data: profiles = [] } = useQuery(importQueries.profiles());
+
+  // Those that read the file first, then the other profiles that still read.
+  const fits = (fitting?.fitting ?? []).map((fit) => fit.profile);
+  const fitValues = new Set(fits.map((entry) => valueOf(choiceOf(entry))));
+
+  const others = profiles.filter(
+    (entry) => entry.definition !== null && !fitValues.has(valueOf(choiceOf(entry))),
+  );
+
+  const listed = [...fits, ...others];
+  const { readWith } = columns;
+
+  return (
+    <>
+      <Select
+        label={m.importCsvHolds()}
+        size="sm"
+        value={columns.holds}
+        items={[
+          { value: "statement", label: m.importCsvHoldsStatement() },
+          { value: "operations", label: m.importCsvHoldsOperations() },
+        ]}
+        onValueChange={(value) =>
+          columns.changeHolds(value === "operations" ? "operations" : "statement", shown)
+        }
+      />
+      <Select
+        label={m.importCsvProfile()}
+        size="sm"
+        value={readWith === null ? BY_HAND : valueOf(readWith)}
+        items={[
+          { value: BY_HAND, label: m.importCsvProfileByHand() },
+          ...fits.map((entry) => ({
+            value: valueOf(choiceOf(entry)),
+            label: m.importCsvProfileFits({ name: entry.name }),
+          })),
+          ...others.map((entry) => ({ value: valueOf(choiceOf(entry)), label: entry.name })),
+        ]}
+        onValueChange={(value) => {
+          const entry = listed.find((each) => valueOf(choiceOf(each)) === value);
+
+          if (entry === undefined) {
+            columns.byHandNow(shown);
+          } else {
+            columns.startFrom(entry, table.width);
+          }
+        }}
+      />
+      <Button variant="secondary" size="sm" disabled={columns.chosen === null} onClick={onExport}>
+        {m.importCsvExport()}
+      </Button>
+      <FileButton size="sm" icon="import" accept=".json,application/json" onFile={onImportFile}>
+        {m.importCsvImportFile()}
+      </FileButton>
+    </>
+  );
+}
+
+/**
+ * The words of a broker's kind column the user maps: those mapped, those its first lines write,
+ * and one a test read refused, so that a word further down the file is offered as soon as it is met.
+ */
+function KindWordsList({
+  columns,
+  table,
+  shown,
+  preview,
+  title,
+}: {
+  columns: Columns;
+  table: Table;
+  shown: ReadonlyArray<CsvField>;
+  preview: Preview | null | undefined;
+  title: string;
+}) {
+  const kindAt = shown.indexOf("kind");
 
   const refusal =
     preview !== undefined && preview !== null && "refused" in preview.read
@@ -256,189 +491,149 @@ function ColumnsPreview({
       ? [refusal.text]
       : [];
 
-  const shownWords = kindWordsOf(words, [
-    ...(kindAt === -1 ? [] : lines.map((row) => row[kindAt] ?? "")),
+  const shownWords = kindWordsOf(columns.words, [
+    ...(kindAt === -1 ? [] : table.lines.map((row) => row[kindAt] ?? "")),
     ...refusedWord,
   ]);
 
-  const byHandNow = () => {
-    setSettings(byHand(settings));
-    setChosen(null);
-  };
-
-  // Those that read the file first, then the other profiles that still read.
-  const fits = (fitting?.fitting ?? []).map((fit) => fit.profile);
-  const fitValues = new Set(fits.map((entry) => valueOf(choiceOf(entry))));
-
-  const others = profiles.filter(
-    (entry) => entry.definition !== null && !fitValues.has(valueOf(choiceOf(entry))),
+  return (
+    <CsvKindWords
+      label={title}
+      words={kindAt === -1 ? [] : shownWords}
+      kinds={KINDS.map((kind) => ({ value: kind, label: operationKindName(kind) }))}
+      unmapped={m.importCsvKindUnmapped()}
+      empty={m.importCsvKindsEmpty()}
+      onKindChange={(word, kind) =>
+        columns.changeWords(
+          shownWords.map((each) =>
+            each.word === word ? { word, kind: KINDS.find((one) => one === kind) ?? null } : each,
+          ),
+          shown,
+        )
+      }
+      chooseLabel={(word) => m.importCsvKindChoose({ word })}
+    />
   );
+}
 
-  const listed = [...fits, ...others];
-
-  const startFrom = (entry: ImportProfileEntry) => {
-    const { definition } = entry;
-
-    if (definition !== null && "reads" in definition) {
-      setHolds("operations");
-      setSettings(operationsSettingsOf(definition));
-      setMapping(operationsMappingOf(definition, width, settings.headerRow ? (first ?? []) : []));
-      setWords(definition.kinds.map(({ word, kind }) => ({ word, kind })));
-    } else if (definition !== null) {
-      setHolds("statement");
-      setSettings(settingsOf(definition));
-      setMapping(mappingOf(definition, width));
-    }
-
-    setChosen(choiceOf(entry));
-    setStartedFrom(choiceOf(entry));
-  };
-
-  const refreshProfiles = () => queryClient.invalidateQueries({ queryKey: importKeys.profiles() });
-
-  const save = async () => {
-    if (!("profile" in draft)) {
-      return;
-    }
-
-    const answer = await saveImportProfile({
-      data: {
-        name,
-        institution: null,
-        definition: draft.profile,
-        header: preview?.header ?? null,
-      },
-    });
-
-    if ("refused" in answer) {
-      setProfileRefused(profileRefusalMessage(answer));
-
-      return;
-    }
-
-    setProfileRefused(undefined);
-    setChosen(choiceOf(answer.saved));
-    setNotice(m.importCsvSaved({ name: answer.saved.name }));
-    await refreshProfiles();
-  };
-
-  const exportProfile = async () => {
-    if (chosen === null) {
-      return;
-    }
-
-    const answer = await exportImportProfile({ data: { profile: chosen } });
-
-    if ("refused" in answer) {
-      setProfileRefused(profileRefusalMessage(answer));
-
-      return;
-    }
-
-    setProfileRefused(undefined);
-    downloadText(answer.file.fileName, answer.file.content, "application/json");
-  };
-
-  const importFile = async (file: File) => {
-    const content = await file.text();
-
-    if (content.length > MAX_PROFILE_FILE) {
-      setProfileRefused(m.importRefusedProfileTooLong({ limit: MAX_PROFILE_FILE }));
-
-      return;
-    }
-
-    const answer = await importImportProfile({
-      data: { name: profileNameOf(file.name), institution: null, content },
-    });
-
-    if ("refused" in answer) {
-      setProfileRefused(profileRefusalMessage(answer));
-
-      return;
-    }
-
-    setProfileRefused(undefined);
-    startFrom(answer.saved);
-    setNotice(m.importCsvImported({ name: answer.saved.name }));
-    await refreshProfiles();
-  };
-
-  const readWith = chosen ?? (settings.layout === undefined ? null : startedFrom);
-
-  const result = "profile" in draft ? testResult(preview) : null;
-  const readable = result !== null && result.kind === "lines";
+/** The file's settings, each offered from its list; a profile's own date format beside them. */
+function FileSettings({ columns }: { columns: Columns }) {
+  const { settings } = columns;
   const offered = DATE_FORMATS.some((format) => format === settings.dateFormat);
   const dateFormats = offered ? [...DATE_FORMATS] : [...DATE_FORMATS, settings.dateFormat];
+
+  return (
+    <CsvSettings
+      labels={{
+        separator: m.importCsvSeparator(),
+        encoding: m.importCsvEncoding(),
+        skipRows: m.importCsvSkipRows(),
+        headerRow: m.importCsvHeaderRow(),
+        dateFormat: m.importCsvDateFormat(),
+        decimalMark: m.importCsvDecimal(),
+      }}
+      choices={{
+        separator: [
+          { value: ";", label: m.importCsvSemicolon() },
+          { value: ",", label: m.importCsvCommaSeparator() },
+          { value: "\t", label: m.importCsvTab() },
+          { value: "|", label: m.importCsvPipe() },
+        ],
+        encoding: [
+          { value: "utf8", label: m.importCsvUnicode() },
+          { value: "windows-1252", label: m.importCsvWestern() },
+        ],
+        dateFormat: dateFormats.map((format) => ({
+          value: format,
+          label: m.importCsvDateChoice({ format, example: dateExample(format) }),
+        })),
+        decimalMark: [
+          { value: ",", label: m.importCsvComma() },
+          { value: ".", label: m.importCsvPoint() },
+        ],
+      }}
+      value={settings}
+      onChange={columns.changeSettings}
+    />
+  );
+}
+
+/** Saving the mapping as a named profile, once the test read reads the file. */
+function SaveProfile({
+  readable,
+  onSave,
+}: {
+  readable: boolean;
+  onSave: (name: string) => Promise<void>;
+}) {
+  const [name, setName] = useState("");
+
+  return (
+    <>
+      <TextField
+        label={m.importCsvSaveName()}
+        size="sm"
+        maxLength={MAX_PROFILE_NAME}
+        value={name}
+        onChange={(event) => setName(event.currentTarget.value)}
+      />
+      <Button variant="secondary" size="sm" disabled={!readable} onClick={() => onSave(name)}>
+        {m.importCsvSave()}
+      </Button>
+    </>
+  );
+}
+
+function ColumnsPreview({
+  summary,
+  initialSettings,
+  initialMapping,
+}: {
+  summary: Import;
+  /** What detection proposed, kept as the start: the user changes it from there. */
+  initialSettings: CsvFileSettings;
+  initialMapping: ReadonlyArray<CsvField>;
+}) {
+  const columns = useColumns(initialSettings, initialMapping);
+  const { settings, holds, draft } = columns;
+  const read = "profile" in draft ? draft.profile : splittingProfile(settings);
+  const { data: preview } = useQuery(importQueries.preview(summary.id, read));
+  const table = tableOf(preview?.rows ?? [], settings.headerRow);
+  const shown = columns.shownMapping(table);
+  const files = useProfileFiles(columns, preview?.header ?? null);
+  const { resume, refused } = useResume(summary);
+  const result = "profile" in draft ? testResult(preview) : null;
+  const readable = result !== null && result.kind === "lines";
+
+  const kindsTitle = m.importCsvKindsTitle({
+    column: table.columns[shown.indexOf("kind")] ?? m.importCsvFieldKind(),
+  });
 
   return (
     <CsvPreview
       intro={<StatusMessage message={m.importCsvIntro()} />}
       profile={
-        <>
-          <Select
-            label={m.importCsvHolds()}
-            size="sm"
-            value={holds}
-            items={[
-              { value: "statement", label: m.importCsvHoldsStatement() },
-              { value: "operations", label: m.importCsvHoldsOperations() },
-            ]}
-            onValueChange={(value) => {
-              const next: Holds = value === "operations" ? "operations" : "statement";
-              const offered: ReadonlyArray<CsvField> = OFFERED[next];
-
-              setHolds(next);
-              // The fields both read (the days, the label, the amount) stay where they were.
-              setMapping(mapping.map((field) => (offered.includes(field) ? field : "ignored")));
-              byHandNow();
-            }}
-          />
-          <Select
-            label={m.importCsvProfile()}
-            size="sm"
-            value={readWith === null ? BY_HAND : valueOf(readWith)}
-            items={[
-              { value: BY_HAND, label: m.importCsvProfileByHand() },
-              ...fits.map((entry) => ({
-                value: valueOf(choiceOf(entry)),
-                label: m.importCsvProfileFits({ name: entry.name }),
-              })),
-              ...others.map((entry) => ({ value: valueOf(choiceOf(entry)), label: entry.name })),
-            ]}
-            onValueChange={(value) => {
-              const entry = listed.find((each) => valueOf(choiceOf(each)) === value);
-
-              if (entry === undefined) {
-                byHandNow();
-              } else {
-                startFrom(entry);
-              }
-            }}
-          />
-          <Button variant="secondary" size="sm" disabled={chosen === null} onClick={exportProfile}>
-            {m.importCsvExport()}
-          </Button>
-          <FileButton size="sm" icon="import" accept=".json,application/json" onFile={importFile}>
-            {m.importCsvImportFile()}
-          </FileButton>
-        </>
+        <ProfileChoices
+          summary={summary}
+          columns={columns}
+          table={table}
+          shown={shown}
+          onExport={files.exportChosen}
+          onImportFile={(file) => files.importFile(file, table.width)}
+        />
       }
       mapping={
-        preview !== undefined && width === 0 ? (
+        preview !== undefined && table.width === 0 ? (
           <StatusMessage message={m.importCsvNoRows()} />
         ) : (
           <CsvMapping
             label={m.importCsvPreviewLabel({ file: summary.fileName })}
-            columns={columns}
-            rows={lines}
+            columns={table.columns}
+            rows={table.lines}
             fields={holds === "operations" ? operationFieldNames() : csvFieldNames()}
             offered={OFFERED[holds]}
-            mapping={mapping}
-            onMappingChange={(column, field) => {
-              setMapping(remap(mapping, column, field));
-              byHandNow();
-            }}
+            mapping={shown}
+            onMappingChange={(column, field) => columns.byHandNow(remap(shown, column, field))}
             chooseLabel={(column) => m.importCsvColumnHolds({ column })}
           />
         )
@@ -446,71 +641,20 @@ function ColumnsPreview({
       kinds={
         holds === "operations"
           ? {
-              title: m.importCsvKindsTitle({
-                column: columns[kindAt] ?? m.importCsvFieldKind(),
-              }),
+              title: kindsTitle,
               words: (
-                <CsvKindWords
-                  label={m.importCsvKindsTitle({
-                    column: columns[kindAt] ?? m.importCsvFieldKind(),
-                  })}
-                  words={kindAt === -1 ? [] : shownWords}
-                  kinds={KINDS.map((kind) => ({ value: kind, label: operationKindName(kind) }))}
-                  unmapped={m.importCsvKindUnmapped()}
-                  empty={m.importCsvKindsEmpty()}
-                  onKindChange={(word, kind) => {
-                    setWords(
-                      shownWords.map((each) =>
-                        each.word === word
-                          ? { word, kind: KINDS.find((one) => one === kind) ?? null }
-                          : each,
-                      ),
-                    );
-                    byHandNow();
-                  }}
-                  chooseLabel={(word) => m.importCsvKindChoose({ word })}
+                <KindWordsList
+                  columns={columns}
+                  table={table}
+                  shown={shown}
+                  preview={preview}
+                  title={kindsTitle}
                 />
               ),
             }
           : undefined
       }
-      settings={
-        <CsvSettings
-          labels={{
-            separator: m.importCsvSeparator(),
-            encoding: m.importCsvEncoding(),
-            skipRows: m.importCsvSkipRows(),
-            headerRow: m.importCsvHeaderRow(),
-            dateFormat: m.importCsvDateFormat(),
-            decimalMark: m.importCsvDecimal(),
-          }}
-          choices={{
-            separator: [
-              { value: ";", label: m.importCsvSemicolon() },
-              { value: ",", label: m.importCsvCommaSeparator() },
-              { value: "\t", label: m.importCsvTab() },
-              { value: "|", label: m.importCsvPipe() },
-            ],
-            encoding: [
-              { value: "utf8", label: m.importCsvUnicode() },
-              { value: "windows-1252", label: m.importCsvWestern() },
-            ],
-            dateFormat: dateFormats.map((format) => ({
-              value: format,
-              label: m.importCsvDateChoice({ format, example: dateExample(format) }),
-            })),
-            decimalMark: [
-              { value: ",", label: m.importCsvComma() },
-              { value: ".", label: m.importCsvPoint() },
-            ],
-          }}
-          value={settings}
-          onChange={(value) => {
-            setSettings(withSettings(settings, value));
-            setChosen(null);
-          }}
-        />
-      }
+      settings={<FileSettings columns={columns} />}
       testReadTitle={m.importCsvTestRead()}
       testRead={
         "missing" in draft ? (
@@ -519,24 +663,11 @@ function ColumnsPreview({
           <CsvTestRead label={m.importCsvTestRead()} result={result} />
         )
       }
-      save={
-        <>
-          <TextField
-            label={m.importCsvSaveName()}
-            size="sm"
-            maxLength={MAX_PROFILE_NAME}
-            value={name}
-            onChange={(event) => setName(event.currentTarget.value)}
-          />
-          <Button variant="secondary" size="sm" disabled={!readable} onClick={save}>
-            {m.importCsvSave()}
-          </Button>
-        </>
-      }
+      save={<SaveProfile readable={readable} onSave={files.save} />}
       messages={
         <>
-          <StatusMessage message={notice} />
-          <FormMessage message={profileRefused ?? refused} />
+          <StatusMessage message={files.notice} />
+          <FormMessage message={files.refused ?? refused} />
         </>
       }
       actions={
@@ -544,7 +675,7 @@ function ColumnsPreview({
           disabled={!readable}
           onClick={async () => {
             if ("profile" in draft) {
-              await resume(null, chosen === null ? draft.profile : null, chosen);
+              await resume(null, columns.chosen === null ? draft.profile : null, columns.chosen);
             }
           }}
         >
