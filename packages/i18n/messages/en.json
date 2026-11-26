@@ -1063,6 +1063,8 @@
   "uiInvestmentsFieldUnitPrice": "Unit price",
   "uiInvestmentsFieldFees": "Fees",
   "uiInvestmentsFieldTax": "Withholding tax",
+  "uiInvestmentsComputedPurchase": "Quantity × price + fees gives {amount}.",
+  "uiInvestmentsComputedSale": "Quantity × price − fees gives {amount}.",
   "rulesDescription": "Each new line goes to the first rule that applies to it, in this order.",
   "rulesAdd": "Add a rule",
   "rulesList": "Rules, in the order they are tried",

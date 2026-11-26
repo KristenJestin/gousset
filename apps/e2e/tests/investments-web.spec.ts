@@ -174,6 +174,46 @@ test("a purchase entered by hand updates its position", async ({ page, app, user
   await expect(entered).toContainText(eur(-15_099));
 });
 
+test("a purchase's quantity, price and fees fill its amount; one typed otherwise is kept", async ({
+  page,
+  app,
+  user,
+}) => {
+  await personOn(page, app, user, "gaspard");
+  await visit(page, "/investments");
+
+  const pea = seededPea();
+
+  await page.getByRole("button", { name: "Add an operation" }).click();
+
+  const dialog = page.getByRole("dialog", { name: "Add an operation" });
+  const amount = dialog.getByRole("textbox", { name: "Amount" });
+  const fees = dialog.getByRole("textbox", { name: "Fees" });
+
+  await dialog.getByRole("textbox", { name: "ISIN" }).fill(WORLD_INDEX);
+  await dialog.getByRole("textbox", { name: "Quantity" }).fill("2,2");
+  await expect(amount).toHaveValue("");
+  await dialog.getByRole("textbox", { name: "Unit price" }).fill("152.05");
+  // 2.2 × 152.05, exact; then the fees on top.
+  await expect(amount).toHaveValue("334.51");
+  await fees.fill("0.99");
+  await expect(amount).toHaveValue("335.50");
+  await expect(dialog.getByText(/gives/)).toHaveCount(0);
+
+  // The broker's own rounding: kept, and the difference said, not refused.
+  await amount.fill("335.12");
+  await expect(amount).toHaveAccessibleDescription(/Quantity × price \+ fees gives €335\.50\./);
+  await fees.fill("0.98");
+  await expect(amount).toHaveValue("335.12");
+  await expect(dialog.getByText("Quantity × price + fees gives €335.49.")).toBeVisible();
+
+  await dialog.getByRole("button", { name: "Add the operation" }).click();
+  await expect(dialog).toBeHidden();
+  await expect(said(page, "Operation added: Purchase")).toBeVisible();
+  await expect(operations(page).getByRole("listitem").first()).toContainText(eur(-33_512));
+  await expect(worldRow(page)).toContainText(eur(pea.worldCostMinor + 33_512));
+});
+
 test("correcting a purchase and deleting it", async ({ page, app, user }) => {
   await personOn(page, app, user, "berthe");
   await visit(page, "/investments");

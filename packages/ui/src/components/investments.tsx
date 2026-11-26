@@ -514,6 +514,11 @@ export type OperationFormProps = {
   onSubmit: (values: OperationFormValues) => void;
   /** Something was typed: the page takes its refusal away. */
   onInput?: () => void;
+  /**
+   * What a purchase's or a sale's quantity, unit price and fees give as its amount, in minor units
+   * without its sign; null when they give none. Left out, the amount is never prefilled.
+   */
+  tradeAmount?: (values: OperationFormValues) => number | null;
 };
 
 /** What the amount of a kind holds, when it is more than the cash it moved. */
@@ -557,8 +562,14 @@ const namesSecurity = (kind: InvestmentKind) => isTrade(kind) || kind === "divid
  * prices are typed with a comma or a point; the amount without its sign. A refusal shows under its
  * field.
  *
+ * A trade's amount follows what its quantity, price and fees give (`tradeAmount`) until one is
+ * typed: then it is the user's (a broker rounds its own way) and is kept; emptied, it follows again
+ * at the next change. An amount that differs from what they give is said under it, never refused.
+ * An operation corrected starts with its own amount, kept.
+ *
  * Motion: as `Dialog` (fades and grows in 200 ms, rises from the bottom on a phone in 300 ms); the
- * fields of another kind appear at once. Cut under reduced motion.
+ * fields of another kind, the amount prefilled and the difference under it appear at once, with no
+ * motion. Cut under reduced motion.
  */
 export function OperationForm({
   open,
@@ -572,17 +583,50 @@ export function OperationForm({
   sending = false,
   onSubmit,
   onInput,
+  tradeAmount,
 }: OperationFormProps) {
   const messages = useUiMessages().investments;
+  const locale = usePageLanguage();
   const [values, setValues] = useState(initial);
+  // An amount given (typed, or the operation's own when corrected) is kept; none follows the trade.
+  const [amountTyped, setAmountTyped] = useState(initial.amountMinor !== null);
+  // Each prefill writes the amount field anew: its text is its own once mounted (`MoneyField`).
+  const [prefills, setPrefills] = useState(0);
   const { kind } = values;
 
   const change = (next: Partial<OperationFormValues>) => {
-    setValues((current) => ({ ...current, ...next }));
+    const merged = { ...values, ...next };
+    const prefill = amountTyped || !isTrade(merged.kind) ? undefined : tradeAmount?.(merged);
+
+    if (prefill === undefined || prefill === merged.amountMinor) {
+      setValues(merged);
+    } else {
+      setValues({ ...merged, amountMinor: prefill });
+      setPrefills((count) => count + 1);
+    }
+
     onInput?.();
   };
 
-  const amountHelp = amountHelpOf(kind, messages);
+  const typeAmount = (minor: number | null) => {
+    setAmountTyped(minor !== null);
+    setValues((current) => ({ ...current, amountMinor: minor }));
+    onInput?.();
+  };
+
+  const computed = isTrade(kind) ? (tradeAmount?.(values) ?? null) : null;
+
+  const difference =
+    computed === null || values.amountMinor === null || values.amountMinor === computed
+      ? undefined
+      : (kind === "sale" ? messages.computedSale : messages.computedPurchase)(
+          formatMoney({ minor: computed, currency }, { locale }),
+        );
+
+  const help = amountHelpOf(kind, messages);
+
+  const amountHelp =
+    difference === undefined || help === undefined ? help : `${help} ${difference}`;
 
   return (
     <Dialog
@@ -670,11 +714,12 @@ export function OperationForm({
         </>
       ) : null}
       <MoneyField
+        key={prefills}
         label={messages.fields.amount}
         description={amountHelp}
         currency={currency}
         defaultValue={values.amountMinor}
-        onValueChange={(minor) => change({ amountMinor: minor })}
+        onValueChange={typeAmount}
         error={errors.amount}
         required
       />

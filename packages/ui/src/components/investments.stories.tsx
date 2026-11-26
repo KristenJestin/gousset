@@ -299,12 +299,17 @@ const PURCHASE: OperationFormValues = {
   feesMinor: 99,
 };
 
+/** What `PURCHASE`'s figures give, as the page computes it: 2.2 × 152.05 + 0.99. */
+const PURCHASE_GIVES = 33_550;
+
 function FormStory({
   initial,
   errors,
+  tradeAmount,
 }: {
   initial: OperationFormValues;
   errors?: OperationFormErrors;
+  tradeAmount?: (values: OperationFormValues) => number | null;
 }) {
   const [open, setOpen] = useState(true);
 
@@ -320,6 +325,7 @@ function FormStory({
         currency="EUR"
         initial={initial}
         errors={errors}
+        tradeAmount={tradeAmount}
         onSubmit={() => setOpen(false)}
       />
     </>
@@ -361,6 +367,16 @@ export const FormRefused: Story = {
         isin: "This is not an ISIN: two letters, nine letters or digits, then its check digit. Check it for a typo.",
       }}
     />
+  ),
+};
+
+/**
+ * An amount typed otherwise than its quantity, price and fees give (a broker's rounding): kept, and
+ * the difference said under it.
+ */
+export const FormAmountDiffers: Story = {
+  render: () => (
+    <FormStory initial={{ ...PURCHASE, amountMinor: 33_512 }} tradeAmount={() => PURCHASE_GIVES} />
   ),
 };
 

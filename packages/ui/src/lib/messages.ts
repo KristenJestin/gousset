@@ -561,6 +561,9 @@ function uiMessages(locale: Locale) {
         fees: m.uiInvestmentsFieldFees({}, options),
         tax: m.uiInvestmentsFieldTax({}, options),
       },
+      /** Under a trade's amount typed otherwise: what its quantity, price and fees give. */
+      computedPurchase: (amount: string) => m.uiInvestmentsComputedPurchase({ amount }, options),
+      computedSale: (amount: string) => m.uiInvestmentsComputedSale({ amount }, options),
     },
   };
 }

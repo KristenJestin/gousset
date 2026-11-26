@@ -41,7 +41,7 @@ import {
 import { operationRefusalMessage } from "@/i18n/messages";
 import { shortDay } from "@/lib/account-day";
 import { accountEnvelopeLabel } from "@/lib/account-labels";
-import { formValuesOf, operationOf, refusalField } from "@/lib/investment-form";
+import { formValuesOf, operationOf, refusalField, tradeAmountOf } from "@/lib/investment-form";
 import type { OperationRefusal } from "@/lib/investment-form";
 import { whileBusy } from "@/lib/while-busy";
 import { invalidateAccounts } from "@/queries/accounts";
@@ -59,7 +59,8 @@ import { investmentQueries } from "@/queries/investments";
 // deleted (200 ms, ease-out; `Amount`); the operation just entered or corrected slides in from the
 // side and fades in (200 ms, ease-out); the positions' rows fade and slide up on first paint
 // (200 ms, staggered); the form's dialog fades and grows in 200 ms, rising from the bottom on a
-// phone (300 ms); a deleted operation leaves at once. Everything is cut under reduced motion.
+// phone (300 ms); a deleted operation leaves at once, as a trade's amount prefilled and the
+// difference said under one typed otherwise appear. Everything is cut under reduced motion.
 
 /** The account asked for in the address; anything else is dropped, as a typed address may be. */
 const investmentsSearch = Schema.toStandardSchemaV1(
@@ -373,6 +374,7 @@ function AccountInvestments({
           sending={sending}
           onSubmit={(values) => void submit(values)}
           onInput={() => setErrors({})}
+          tradeAmount={(values) => tradeAmountOf(values, account.currency)}
         />
       )}
       <AlertDialog

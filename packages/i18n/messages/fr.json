@@ -1063,6 +1063,8 @@
   "uiInvestmentsFieldUnitPrice": "Prix unitaire",
   "uiInvestmentsFieldFees": "Frais",
   "uiInvestmentsFieldTax": "Retenue à la source",
+  "uiInvestmentsComputedPurchase": "Quantité × prix + frais donne {amount}.",
+  "uiInvestmentsComputedSale": "Quantité × prix − frais donne {amount}.",
   "rulesDescription": "Chaque nouvelle ligne va à la première règle qui s’y applique, dans cet ordre.",
   "rulesAdd": "Ajouter une règle",
   "rulesList": "Règles, dans l’ordre où elles sont essayées",

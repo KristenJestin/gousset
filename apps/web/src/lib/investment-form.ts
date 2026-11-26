@@ -1,5 +1,8 @@
 import type { OperationRead } from "@gousset/core";
+import { parseDecimal, productMinor } from "@gousset/core/decimal";
 import type { OperationFormErrors, OperationFormValues } from "@gousset/ui/components/investments";
+import { minorDigits } from "@gousset/ui/lib/money";
+import { Result } from "effect";
 
 import type { OperationRefusalCode } from "@/functions/investments";
 
@@ -36,6 +39,35 @@ export function operationOf(values: OperationFormValues) {
     unitPrice: trade ? values.unitPrice.trim() : null,
     feesMinor: withFees ? (values.feesMinor ?? 0) : 0,
   };
+}
+
+/**
+ * The amount a purchase's or a sale's quantity, unit price and fees give, without its sign, in the
+ * currency's minor units: the product rounded once, half away from zero, on exact decimals, then
+ * the fees added to a purchase and taken off a sale. Null when there is nothing to give: another
+ * kind, a quantity or a price empty or not a number, a quantity of zero, a sale its fees exceed.
+ */
+export function tradeAmountOf(
+  values: Pick<OperationFormValues, "kind" | "quantity" | "unitPrice" | "feesMinor">,
+  currency: string,
+): number | null {
+  const quantity = parseDecimal(values.quantity);
+  const unitPrice = parseDecimal(values.unitPrice);
+
+  if (
+    !TRADES.has(values.kind) ||
+    Result.isFailure(quantity) ||
+    Result.isFailure(unitPrice) ||
+    quantity.success.scaled === 0n
+  ) {
+    return null;
+  }
+
+  const product = productMinor(quantity.success, unitPrice.success, minorDigits(currency));
+  const fees = values.feesMinor ?? 0;
+  const amount = values.kind === "purchase" ? product + fees : product - fees;
+
+  return amount < 0 ? null : amount;
 }
 
 /** An operation read back into the form, to correct it: its amount without its sign. */
