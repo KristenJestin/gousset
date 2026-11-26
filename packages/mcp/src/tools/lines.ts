@@ -909,6 +909,9 @@ const SPLIT_REFUSALS = {
     'Each share\'s amount is a positive decimal in the account\'s currency, with no more decimals than it has, without sign nor currency ("30", "12.50").',
   kind: "A share's category is of the other kind: money out goes in expense categories, money in in income ones.",
   archived: "A share's category is archived: it can no longer be chosen.",
+  subject_unknown: "A share names a subject that is none of yours.",
+  subject_archived: "A share's subject is archived: it can no longer be chosen.",
+  subject_income: "Only an expense has subjects: a share of money coming in takes none.",
 } as const satisfies { readonly [Reason in SplitRefused["reason"]]: string };
 
 function splitRun(input: LinesInput, owner: string) {

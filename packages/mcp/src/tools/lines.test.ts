@@ -973,6 +973,7 @@ const fundedFuel: Expense = {
     },
   ],
   funded: { minor: 3000, currency: "EUR" },
+  subjects: [],
 };
 
 /** A call on `PERKS` as a writer, the logic answering as a works council refund's side would. */

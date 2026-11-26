@@ -112,6 +112,53 @@ export type {
 } from "./month";
 
 export {
+  MAX_ATTACHED,
+  MAX_SUBJECTS,
+  MAX_SUBJECT_NAME,
+  SUBJECT_EXPENSES_SHOWN,
+  SUBJECT_PROPOSALS_SHOWN,
+  attachSubject,
+  createSubject,
+  editSubject,
+  listSubjects,
+  refuseProposals,
+  showSubject,
+} from "./subjects/subjects";
+
+export type {
+  SubjectAccountBalance,
+  SubjectAttachment,
+  SubjectDetail,
+  SubjectEdit,
+  SubjectExpense,
+  SubjectHeadline,
+  SubjectInput,
+  SubjectList,
+  SubjectListed,
+  SubjectPeriod,
+  SubjectRecord,
+} from "./subjects/subjects";
+
+export {
+  costsOf,
+  countedIn,
+  makesCycle,
+  monthsOf,
+  subtreeOf,
+  sumsOf,
+  treeOrder,
+} from "./subjects/counting";
+
+export type { CostPart, SubjectCost, SubjectName, SubjectNode } from "./subjects/counting";
+
+export {
+  EntryNotFound,
+  SubjectNameTaken,
+  SubjectNotFound,
+  SubjectRefused,
+} from "./subjects/errors";
+
+export {
   accountNamed,
   closeAccount,
   createAccount,
