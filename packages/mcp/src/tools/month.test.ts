@@ -84,6 +84,7 @@ type Month = {
   benefitLines: Array<MonthRows["benefitLines"][number]>;
   reach: Array<MonthRows["reach"][number]>;
   charges: Array<Charge>;
+  maybeRefunds: Array<string>;
 };
 
 const empty = (): Month => ({
@@ -97,6 +98,7 @@ const empty = (): Month => ({
   benefitLines: [],
   reach: [],
   charges: [],
+  maybeRefunds: [],
 });
 
 type Connection = {
@@ -430,6 +432,52 @@ describe("month summary", () => {
     expect(text).toContain("- Savings book: its statements reach 2026-10-15 only.");
     expect(text).not.toMatch(/[\da-f]{8}-[\da-f]{4}-/);
     expect(text.length).toBeLessThan(RESULT_LIMIT);
+  });
+
+  test("a line coming back that may be a refund is not received: counted apart, and flagged among the movements", async () => {
+    const { rows, current } = ada();
+    const other = category(rows, "income", "Other");
+    const back = memoryId();
+
+    rows.parts.push({
+      entryId: memoryId(),
+      kind: "income",
+      happenedOn: "2026-10-04",
+      categoryId: other.id,
+      entryMerchantId: null,
+      role: "payment",
+      amountMinor: 3000,
+      lineId: back,
+      label: "CARD PIXELPLAY STORE",
+      counterpartyName: null,
+      accountId: current.id,
+    });
+    rows.maybeRefunds.push(back);
+
+    const { text, isError } = await month({ action: "summary", month: "2026-10" }, { month: rows });
+
+    expect(isError, text).toBe(false);
+    expect(text).toContain("Received 2,500.00 EUR, from Salary 2,500.00 EUR.");
+    expect(text).toContain(
+      "Not in received: 1 line(s) coming back that may be refunds, 30.00 EUR in all, waiting for the user's answer (each among the movements below). Show one with lines, then link it as a refund or refuse_refund.",
+    );
+    expect(text).toContain("Left 1,655.00 EUR.");
+    expect(text).toContain(
+      "Incomes and transfers in, and lines that may be refunds (3, oldest first):",
+    );
+    expect(text).toContain(
+      `- 2026-10-04, maybe a refund, not counted as income until the user answers: CARD PIXELPLAY STORE → Current account, 30.00 EUR; lines {"action":"show","line":"${back}"}`,
+    );
+    expect(text).not.toContain("income: CARD PIXELPLAY STORE");
+  });
+
+  test("without a maybe refund, the summary says nothing of them", async () => {
+    const { rows } = ada();
+    const { text } = await month({ action: "summary", month: "2026-10" }, { month: rows });
+
+    expect(text).toContain("Incomes and transfers in (2, oldest first):");
+    expect(text).not.toContain("may be refunds");
+    expect(text).not.toContain("maybe a refund");
   });
 
   // Issue #235: a benefit account kept by lines entered by hand, never imported, expects no file.

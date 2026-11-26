@@ -481,6 +481,46 @@ describe("listing", () => {
       },
     });
   });
+
+  test("money coming back that may be a refund counts in no average until the user answers", async () => {
+    const { rows, other, otherIncome, salary } = startingRows();
+
+    entryIn(rows, other, "2026-10-03", 9000);
+    entryIn(rows, salary, "2026-10-05", 250_000);
+
+    const back = entryIn(rows, otherIncome, "2026-10-04", 3000);
+    const [part] = back.parts;
+
+    const waiting = rows.lines.map((each) =>
+      each.id === part?.lineId ? { ...each, maybeRefund: true } : each,
+    );
+
+    const { result: before } = await run({ ...rows, lines: waiting }, listCategories(ADA));
+
+    // Its entry is still one of Other's: only its money waits for the answer.
+    expect(before).toMatchObject({
+      success: {
+        expense: [
+          {},
+          {},
+          { name: "Other", entries: 1, average: [{ currency: "EUR", minor: 9000 }] },
+        ],
+        income: [
+          { name: "Salary", average: [{ currency: "EUR", minor: 250_000 }] },
+          { name: "Other", entries: 1, average: [] },
+        ],
+      },
+    });
+
+    // Answered "not a refund", it is an income like another.
+    const { result: after } = await run(rows, listCategories(ADA));
+
+    expect(after).toMatchObject({
+      success: {
+        income: [{}, { name: "Other", entries: 1, average: [{ currency: "EUR", minor: 3000 }] }],
+      },
+    });
+  });
 });
 
 describe("naming", () => {

@@ -60,6 +60,11 @@ export type FoundLine = {
   readonly category: LineCategory | null;
   /** The movement a noted balance makes (#31): it has no label, the interface names it. */
   readonly fromBalance: boolean;
+  /**
+   * Maybe a refund (#208): a line coming back that may cancel an expense, still classified by
+   * default, that the user has not answered; no income until answered (`maybeRefundsAmong`).
+   */
+  readonly maybeRefund: boolean;
 };
 
 /** A line with all that its detail shows. */

@@ -50,6 +50,7 @@ type Draft = {
   benefitLines: Array<BenefitLine>;
   reach: Array<StatementReach>;
   charges: Array<Charge>;
+  maybeRefunds: Array<string>;
 };
 
 let made = 0;
@@ -72,6 +73,7 @@ function draft(): Draft {
     benefitLines: [],
     reach: [],
     charges: [],
+    maybeRefunds: [],
   };
 }
 
@@ -134,8 +136,8 @@ type EntryDraft = {
   readonly refunds?: ReadonlyArray<number>;
 };
 
-/** An entry of one payment line, and its refunds. */
-function entry(rows: Draft, written: EntryDraft) {
+/** An entry of one payment line, and its refunds; the payment's line. */
+function entry(rows: Draft, written: EntryDraft): string {
   const entryId = nextId("entry");
 
   const part = (role: "payment" | "refund", amountMinor: number): MonthPart => ({
@@ -152,11 +154,15 @@ function entry(rows: Draft, written: EntryDraft) {
     accountId: written.account.id,
   });
 
-  rows.parts.push(part("payment", written.minor));
+  const payment = part("payment", written.minor);
+
+  rows.parts.push(payment);
 
   for (const refund of written.refunds ?? []) {
     rows.parts.push(part("refund", refund));
   }
+
+  return payment.lineId;
 }
 
 function transfer(
@@ -256,6 +262,54 @@ describe("monthSummary", () => {
     expect(summary.elsewhere).toEqual([]);
   });
 
+  test("a line that may be a refund, not answered, is no income: it waits apart", async () => {
+    const { rows, current, salary, groceries } = household();
+    const other = category(rows, "income", "Other");
+
+    entry(rows, {
+      kind: "income",
+      category: salary,
+      account: current,
+      day: "2026-10-01",
+      minor: 250_000,
+    });
+
+    entry(rows, {
+      category: groceries,
+      account: current,
+      day: "2026-10-03",
+      minor: 9000,
+      label: "CARD PIXELPLAY STORE",
+    });
+
+    // PIXELPLAY sends 30.00 back: maybe a refund of the purchase, which still costs it all.
+    rows.maybeRefunds.push(
+      entry(rows, {
+        kind: "income",
+        category: other,
+        account: current,
+        day: "2026-10-04",
+        minor: 3000,
+        label: "CARD PIXELPLAY STORE",
+      }),
+    );
+
+    const summary = await run(monthSummary("ada", "2026-10", "EUR"), rows);
+
+    expect(summary.received).toEqual({ minor: 250_000, currency: "EUR" });
+    expect(summary.receivedFrom.map((row) => row.name)).toEqual(["Salary"]);
+    expect(summary.maybeRefunds).toEqual({ count: 1, amount: { minor: 3000, currency: "EUR" } });
+    expect(summary.spent).toEqual({ minor: 9000, currency: "EUR" });
+    expect(summary.left).toEqual({ minor: 241_000, currency: "EUR" });
+
+    const { movements } = await run(monthMovements("ada", "2026-10", "EUR"), rows);
+
+    expect(movements.map((each) => [each.kind, each.amount.minor, each.note])).toEqual([
+      ["income", 250_000, "Salary"],
+      ["maybe-refund", 3000, null],
+    ]);
+  });
+
   test("a month that takes more back from savings than it puts in sets aside less than nothing", async () => {
     const { rows, current, savings } = household();
 
@@ -325,6 +379,7 @@ describe("monthSummary", () => {
       {
         currency: "USD",
         received: { minor: 0, currency: "USD" },
+        maybeRefunds: { minor: 0, currency: "USD" },
         spent: { minor: 2500, currency: "USD" },
         setAside: { minor: 0, currency: "USD" },
         left: { minor: -2500, currency: "USD" },
@@ -352,6 +407,7 @@ describe("monthSummary", () => {
       {
         entries: { from: "2026-04-01", to: "2026-10-31" },
         transfers: { from: "2026-10-01", to: "2026-10-31" },
+        maybeRefunds: { from: "2026-10-01", to: "2026-10-31" },
         benefitTo: TODAY,
         statementsTo: TODAY,
         charges: null,
@@ -424,6 +480,65 @@ describe("monthSummary", () => {
 
     expect(overspent.left.minor).toBe(-4000);
     expect(overspent.restricted.minor).toBe(0);
+  });
+
+  test("a maybe refund on a benefit card is no more restricted than it is received", async () => {
+    const { rows, current, salary, groceries } = household();
+    const meals = account(rows, "Meal card", "benefit");
+
+    entry(rows, {
+      kind: "income",
+      category: salary,
+      account: current,
+      day: "2026-10-01",
+      minor: 100_000,
+    });
+    entry(rows, {
+      kind: "income",
+      category: salary,
+      account: meals,
+      day: "2026-10-02",
+      minor: 10_000,
+    });
+    entry(rows, {
+      category: groceries,
+      account: meals,
+      day: "2026-10-03",
+      minor: 3000,
+      label: "CARD BISTRO EXEMPLE",
+    });
+
+    const back = entry(rows, {
+      kind: "income",
+      category: salary,
+      account: meals,
+      day: "2026-10-04",
+      minor: 3000,
+      label: "CARD BISTRO EXEMPLE",
+    });
+
+    rows.maybeRefunds.push(back);
+
+    for (const [id, bookedOn, amountMinor] of [
+      ["credit", "2026-10-02", 10_000],
+      ["meal", "2026-10-03", -3000],
+      [back, "2026-10-04", 3000],
+    ] as const) {
+      rows.benefitLines.push({
+        accountId: meals.id,
+        id,
+        bookedOn,
+        amountMinor,
+        label: "MEALS",
+        expiresOn: null,
+      });
+    }
+
+    const summary = await run(monthSummary("ada", "2026-10", "EUR"), rows);
+
+    // Left counts 107,000, of which 7,000 sits on the card: the 30.00 back waits apart.
+    expect(summary.left.minor).toBe(107_000);
+    expect(summary.restricted.minor).toBe(7000);
   });
 
   test("a month to come is refused", async () => {
@@ -526,7 +641,7 @@ describe("monthMovements", () => {
 
     transfer(rows, north, savings, 30_000, "2026-10-03");
 
-    entry(rows, {
+    const payroll = entry(rows, {
       kind: "income",
       category: salary,
       account: south,
@@ -546,6 +661,7 @@ describe("monthMovements", () => {
         from: "ACME PAYROLL",
         to: "Current account (Southbank)",
         note: "Salary",
+        lineId: payroll,
         amount: { minor: 200_000, currency: "EUR" },
       },
       {
@@ -554,6 +670,7 @@ describe("monthMovements", () => {
         from: "Current account (Southbank)",
         to: "Current account (Northbank)",
         note: null,
+        lineId: null,
         amount: { minor: 5000, currency: "EUR" },
       },
       {
@@ -562,6 +679,7 @@ describe("monthMovements", () => {
         from: "Current account (Northbank)",
         to: "Savings book",
         note: null,
+        lineId: null,
         amount: { minor: 30_000, currency: "EUR" },
       },
     ]);
@@ -871,7 +989,12 @@ describe("monthReview", () => {
       color: null,
     };
 
-    const line = (id: string, bookedOn: string, classifiedBy: "default" | "rule") => ({
+    const line = (
+      id: string,
+      bookedOn: string,
+      classifiedBy: "default" | "rule",
+      maybeRefund = false,
+    ) => ({
       id,
       accountId: current.id,
       bookedOn,
@@ -882,12 +1005,14 @@ describe("monthReview", () => {
       counterpartyName: null,
       classifiedBy,
       category: other,
+      maybeRefund,
     });
 
     const lines: MemoryLineRows = {
       accounts: [record],
       lines: [
-        line("early", "2026-10-02", "default"),
+        // Maybe a refund (#208): the review says so.
+        line("early", "2026-10-02", "default", true),
         line("late", "2026-10-20", "default"),
         // A rule's choice is the user's: never to review.
         line("ruled", "2026-10-21", "rule"),
@@ -907,8 +1032,9 @@ describe("monthReview", () => {
         category: other,
         account: expect.objectContaining({ name: "Current account" }),
         amount: { minor: -1500, currency: "EUR" },
+        maybeRefund: false,
       },
-      expect.objectContaining({ id: "early", day: "2026-10-02" }),
+      expect.objectContaining({ id: "early", day: "2026-10-02", maybeRefund: true }),
     ]);
   });
 });

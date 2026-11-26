@@ -10,6 +10,7 @@ import {
   pairEveryLine,
   pairLineWithAccount,
   pairLines,
+  refuseRefund,
   ruleWords,
   searchLines,
   showLine,
@@ -65,9 +66,10 @@ const LinesInput = Schema.Struct({
     "link",
     "unlink",
     "split",
+    "refuse_refund",
   ]).annotate({
     description:
-      "search: the lines that match, across accounts, newest first. show: one line, all that is known of it. pair: two lines as one transfer (writes). classify: what one line is (writes). unpair: undoes a line's transfer (writes). link: a line becomes a payment or a refund of another line's expense; a side of a transfer from a benefit account funds it, which keeps its cost (writes). unlink: a line leaves its expense, or unfunds (writes). split: a line across categories (writes).",
+      "search: the lines that match, across accounts, newest first. show: one line, all that is known of it. pair: two lines as one transfer (writes). classify: what one line is (writes). unpair: undoes a line's transfer (writes). link: a line becomes a payment or a refund of another line's expense; a side of a transfer from a benefit account funds it, which keeps its cost (writes). unlink: a line leaves its expense, or unfunds (writes). split: a line across categories (writes). refuse_refund: a line coming back that show proposes as a refund is none: an ordinary income, counted as received, never proposed again; a maybe refund counts as no income until the user confirms it (link) or refuses it (writes).",
   }),
   text: Schema.optional(
     Schema.String.annotate({
@@ -123,7 +125,7 @@ const LinesInput = Schema.Struct({
   line: Schema.optional(
     Schema.String.annotate({
       description:
-        "show, pair, classify, unpair, link, unlink, split: the line's handle, as search gives it.",
+        "show, pair, classify, unpair, link, unlink, split, refuse_refund: the line's handle, as search gives it.",
     }),
   ),
   other: Schema.optional(
@@ -243,11 +245,15 @@ function filtersText(input: LinesInput, account: string | undefined): string {
   return filters.length === 0 ? `every line ${kind}` : `lines ${kind}, ${filters.join(", ")}`;
 }
 
+/** How a line that may be a refund, not answered yet, is flagged wherever it is listed (#208). */
+export const MAYBE_REFUND = "maybe a refund, not counted as income until the user answers";
+
 function rowText(line: LineRow): string {
   const held = line.toReview ? ", to review" : "";
   const category = line.category === null ? "" : `, in ${pathText(line.category)}`;
+  const maybe = line.maybeRefund ? `, ${MAYBE_REFUND}` : "";
 
-  return `- ${line.bookedOn}, ${named(line.account)}: ${amount(line.amount)}, ${labelOf(line)}${category}${held}; line: ${line.id}`;
+  return `- ${line.bookedOn}, ${named(line.account)}: ${amount(line.amount)}, ${labelOf(line)}${category}${held}${maybe}; line: ${line.id}`;
 }
 
 /** A page of the search: how many match, the filters, the lines, and the call that reads on. */
@@ -483,14 +489,20 @@ function expensesText(lineId: string, found: LineExpenses): Array<string> {
     ];
   }
 
+  // A rule's line keeps its proposals but counts as the rule says: only a default one waits (#208).
+  const counted = found.maybeRefund
+    ? " Not counted as income until the user answers: confirmed, it is linked as a refund; refused, it is an ordinary income."
+    : "";
+
   return [
     [
-      "Maybe a refund: this line may cancel all or part of an expense (a purchase cancelled, an order returned). Never applied unasked: the user confirms.",
+      `Maybe a refund: this line may cancel all or part of an expense (a purchase cancelled, an order returned). Never applied unasked: the user confirms or refuses.${counted}`,
       ...proposals.map(
         (proposal) =>
           `- ${partText(proposal.line)}, in ${pathText(proposal.category)}, costing ${amount(proposal.net)}`,
       ),
       `Confirm one with: ${call({ action: "link", line: lineId, into: first.line.lineId })}`,
+      `If it is no refund: ${call({ action: "refuse_refund", line: lineId })}`,
     ].join("\n"),
   ];
 }
@@ -894,6 +906,48 @@ function unlinkRun(input: LinesInput, owner: string) {
   );
 }
 
+/**
+ * `refuse_refund` (#208): the user's answer that a line coming back is no refund. It is an ordinary
+ * income from then on, classified as it was, and never proposed as a refund again.
+ */
+function refuseRefundRun(input: LinesInput, owner: string) {
+  const line = input.line?.trim() ?? "";
+
+  if (line === "") {
+    return Effect.fail(
+      new ToolRefusal({
+        message:
+          "refuse_refund needs line, the handle of a line coming back that show proposes as a refund, as search gives it.",
+        example: call({ action: "search", to_review: true }),
+      }),
+    );
+  }
+
+  return Effect.gen(function* () {
+    const detail = yield* showLine(owner, line);
+    const answered = yield* refuseRefund(owner, detail.id);
+    const [own] = answered.expenses;
+    const category = own === undefined ? "" : `, in ${pathText(own.category)}`;
+
+    return [
+      `No refund: the line of ${detail.bookedOn}, ${amount(detail.amount)}, ${labelOf(detail)}, is an ordinary income now${category}: counted as received in its month. It will not be proposed as a refund again.`,
+      `Should it be a refund after all, link it by hand: ${call({ action: "link", line: detail.id, into: "<a payment's handle>" })}`,
+    ].join("\n");
+  }).pipe(
+    Effect.catchTags({
+      LineNotFound: () => Effect.fail(UNKNOWN_LINE(line)),
+      RefundNotProposed: () =>
+        Effect.fail(
+          new ToolRefusal({
+            message: `No refund is proposed for the line "${line.slice(0, 80)}", so there is nothing to refuse: it is no line coming back on its own that may cancel an expense (linked or split already, classified by the user, or no purchase it may cancel). Show it to see what it is; to say what it is, classify it.`,
+            example: call({ action: "show", line }),
+          }),
+        ),
+      QueryFailed: Effect.die,
+    }),
+  );
+}
+
 const SPLIT_REFUSALS = {
   not_counted:
     "This line is held for review as a near duplicate (or thrown away): it is no expense nor income to split.",
@@ -1170,8 +1224,8 @@ function classifyAction(owner: string, input: LinesInput, kind: EntryKind | unde
 
 /**
  * The lines family (docs/mcp.md, "Tools"): searched and read; put in a category (#23), paired as
- * transfers (#26), linked into expenses of several parts and split across categories (#27), with
- * the write scope.
+ * transfers (#26), linked into expenses of several parts and split across categories (#27), a
+ * refund proposed refused (#208), with the write scope.
  */
 export const linesTool = defineTool<
   LinesInput,
@@ -1193,6 +1247,7 @@ export const linesTool = defineTool<
     link: "write",
     unlink: "write",
     split: "write",
+    refuse_refund: "write",
   },
   run: (input, caller) => {
     switch (input.action) {
@@ -1327,6 +1382,10 @@ export const linesTool = defineTool<
 
       case "split": {
         return splitRun(input, caller.userId);
+      }
+
+      case "refuse_refund": {
+        return refuseRefundRun(input, caller.userId);
       }
     }
   },

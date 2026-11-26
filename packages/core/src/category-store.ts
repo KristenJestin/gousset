@@ -73,7 +73,9 @@ export type CategoryUse = {
   readonly entries: number;
   /**
    * The net amount of its own entries that happened in the range, per currency of their lines'
-   * accounts: payments less refunds, in minor units, positive the entry's way.
+   * accounts: payments less refunds, in minor units, positive the entry's way. The money of a
+   * line coming back that may be a refund, which the user has not answered, is no income until
+   * then (#208, `maybeRefundsAmong`): it is left out, its entry still counted in `entries`.
    */
   readonly net: ReadonlyArray<{ readonly currency: string; readonly minor: number }>;
 };

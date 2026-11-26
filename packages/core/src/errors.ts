@@ -102,6 +102,18 @@ export class NotFunding extends Schema.TaggedError<NotFunding>()("NotFunding", {
   lineId: Schema.String,
 }) {}
 
+/**
+ * No refund is proposed for the line (#208): it is not a line coming back on its own that may cancel
+ * an expense (linked, split, classified by the user, or with no expense it may cancel), so there is
+ * nothing to refuse.
+ */
+export class RefundNotProposed extends Schema.TaggedError<RefundNotProposed>()(
+  "RefundNotProposed",
+  {
+    lineId: Schema.String,
+  },
+) {}
+
 /** The line is the only line of its expense: there is nothing to unlink it from. */
 export class NotLinked extends Schema.TaggedError<NotLinked>()("NotLinked", {
   lineId: Schema.String,

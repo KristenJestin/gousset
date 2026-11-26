@@ -14,6 +14,7 @@ import { Effect, Layer } from "effect";
 
 import { categoriesOfLines } from "./category-store-database";
 import type { LineCategory } from "./category-store";
+import { maybeRefundsAmong } from "./expenses/expenses";
 import { LineStore } from "./line-store";
 import { linesWithSeveralCandidates } from "./transfers/pair-lines";
 import type { FoundLine, FoundLineDetail, LineQuery } from "./line-store";
@@ -141,7 +142,7 @@ type LineColumns = {
 };
 
 /** A row of `lineColumns`, with its category; a discarded one is never asked for. */
-function found(row: LineColumns, category: LineCategory | null): FoundLine {
+function found(row: LineColumns, category: LineCategory | null, maybeRefund: boolean): FoundLine {
   return {
     id: row.id,
     bookedOn: row.bookedOn,
@@ -159,6 +160,7 @@ function found(row: LineColumns, category: LineCategory | null): FoundLine {
     },
     category,
     fromBalance: row.source === "balance",
+    maybeRefund,
   };
 }
 
@@ -216,6 +218,11 @@ async function search(transaction: UserTransaction, query: LineQuery) {
     rows.map((row) => row.id),
   );
 
+  const maybeRefunds = await maybeRefundsAmong(
+    transaction,
+    rows.flatMap((row) => (row.amountMinor > 0 && row.state === "counted" ? [row.id] : [])),
+  );
+
   // Every line's account is the user's (a composite foreign key) and so among those just read.
   const lines = rows.flatMap((row) => {
     const owned = accountOf.get(row.accountId);
@@ -231,6 +238,7 @@ async function search(transaction: UserTransaction, query: LineQuery) {
               currency: owned.currency,
             },
             categories.get(row.id) ?? null,
+            maybeRefunds.has(row.id),
           ),
         ];
   });
@@ -287,9 +295,10 @@ async function show(
   }
 
   const categories = await categoriesOfLines(transaction, [row.id]);
+  const maybeRefunds = await maybeRefundsAmong(transaction, [row.id]);
 
   return {
-    ...found(row, categories.get(row.id) ?? null),
+    ...found(row, categories.get(row.id) ?? null, maybeRefunds.has(row.id)),
     source: row.source,
     originalAmountMinor: row.originalAmountMinor,
     originalCurrency: row.originalCurrency,
