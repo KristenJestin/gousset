@@ -714,6 +714,11 @@ export const subject = pgTable.withRLS(
     endsOn: day("ends_on"),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
+    // "Paid back" (#217): who pays it back, free text; the option is on when it is set. The day the
+    // user asked, and the day they marked it paid back by hand.
+    paybackFrom: text("payback_from"),
+    paybackAskedOn: day("payback_asked_on"),
+    paybackSettledOn: day("payback_settled_on"),
   },
   (table) => [
     unique("subject_user_id_id_key").on(table.userId, table.id),
@@ -729,6 +734,10 @@ export const subject = pgTable.withRLS(
     ),
     check("subject_value_currency_iso_4217", sql`${table.valueCurrency} ~ '^[A-Z]{3}$'`),
     check("subject_ends_after_start", sql`${table.endsOn} >= ${table.startsOn}`),
+    check(
+      "subject_payback_days_need_payer",
+      sql`${table.paybackFrom} is not null or (${table.paybackAskedOn} is null and ${table.paybackSettledOn} is null)`,
+    ),
     ownRowsOnly("subject"),
   ],
 );
@@ -813,5 +822,36 @@ export const subjectEntryRefused = pgTable.withRLS(
     // A deleted entry's refusals go with it.
     index("subject_entry_refused_entry_id_idx").on(table.entryId),
     ownRowsOnly("subject_entry_refused"),
+  ],
+);
+
+/**
+ * A line coming in that pays back a subject (#217): a work trip's expense report, a friend settling a
+ * shared holiday. A line pays back one subject at most, whole; it has no entry then, as a transfer's
+ * side has none (packages/core's `subjects/payback.ts` keeps that). An undone import takes its lines'
+ * attachments with them.
+ */
+export const subjectPayback = pgTable.withRLS(
+  "subject_payback",
+  {
+    lineId: uuid("line_id").primaryKey(),
+    subjectId: uuid("subject_id").notNull(),
+    userId: owner(),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    foreignKey({
+      name: "subject_payback_line_fk",
+      columns: [table.userId, table.lineId],
+      foreignColumns: [statementLine.userId, statementLine.id],
+    }).onDelete("cascade"),
+    foreignKey({
+      name: "subject_payback_subject_fk",
+      columns: [table.userId, table.subjectId],
+      foreignColumns: [subject.userId, subject.id],
+    }).onDelete("cascade"),
+    // A subject's payback lines.
+    index("subject_payback_subject_id_idx").on(table.subjectId),
+    ownRowsOnly("subject_payback"),
   ],
 );
