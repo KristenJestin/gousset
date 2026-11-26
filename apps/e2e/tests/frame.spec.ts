@@ -283,8 +283,11 @@ test("on a phone, a tab bar holds review, operations, accounts and more", async 
   await expect(menu.getByRole("group")).toContainText(user.email);
 
   await menu.getByRole("menuitem", { name: "Subjects" }).click();
-  await expect(userPage).toHaveURL(/\/subjects$/);
   await expect(userPage.getByRole("heading", { level: 1, name: "Subjects" })).toBeVisible();
+  // Read once the screen is drawn: the address is `/subjects` while it loads, then the screen opens
+  // on the first open subject when there is one (the worker's user has some once another test
+  // seeded them), on the empty state otherwise.
+  await expect(userPage).toHaveURL(/\/subjects(\/[^/?]+)?$/);
   // The menu fades out and the screen in: axe checks the screen once they are drawn.
   await animationsDone(userPage);
 });
