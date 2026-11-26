@@ -1,0 +1,713 @@
+{
+  "type": "diff",
+  "version": "10",
+  "dialect": "postgres",
+  "id": "796147d5-82f0-407c-a076-f5c7a7dedac4",
+  "prevIds": ["a2ba2485-068b-4fad-87bd-9ca9cafeecd2", "d6bd10e9-3ae0-46af-bfa5-da8beb31ec49"],
+  "footprints": [
+    {
+      "statementType": "create_enum",
+      "statementTarget": ["enum", "public", "operation_kind"],
+      "writes": [
+        "s|enum|public.operation_kind",
+        "n|enum|public.operation_kind",
+        "e|enum|public.operation_kind",
+        "n|type|public.operation_kind"
+      ],
+      "reads": ["n|sch|public"]
+    },
+    {
+      "statementType": "create_table",
+      "statementTarget": ["table", "public", "investment_operation"],
+      "writes": [
+        "s|tbl|public.investment_operation",
+        "n|tbl|public.investment_operation",
+        "e|tbl|public.investment_operation",
+        "n|rel|public.investment_operation",
+        "n|type|public.investment_operation",
+        "n|rel|public.investment_operation_pkey",
+        "n|rel|public.investment_operation_user_id_id_key",
+        "n|rel|public.investment_operation_line_id_key"
+      ],
+      "reads": ["n|sch|public", "n|enum|public.operation_kind"]
+    },
+    {
+      "statementType": "create_table",
+      "statementTarget": ["table", "public", "security"],
+      "writes": [
+        "s|tbl|public.security",
+        "n|tbl|public.security",
+        "e|tbl|public.security",
+        "n|rel|public.security",
+        "n|type|public.security",
+        "n|rel|public.security_pkey",
+        "n|rel|public.security_user_id_id_key",
+        "n|rel|public.security_user_id_isin_key"
+      ],
+      "reads": ["n|sch|public"]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": [
+        "index",
+        "public",
+        "investment_operation",
+        "investment_operation_security_id_idx"
+      ],
+      "writes": [
+        "s|idx|public.investment_operation_security_id_idx",
+        "n|idx|public.investment_operation_security_id_idx",
+        "e|idx|public.investment_operation_security_id_idx",
+        "n|rel|public.investment_operation_security_id_idx"
+      ],
+      "reads": [
+        "n|tbl|public.investment_operation",
+        "n|sch|public",
+        "n|col|public.investment_operation.security_id"
+      ]
+    },
+    {
+      "statementType": "create_fk",
+      "statementTarget": ["table", "public", "investment_operation"],
+      "writes": [
+        "s|fk|public.investment_operation.investment_operation_user_id_auth_user_id_fkey",
+        "n|fk|public.investment_operation.investment_operation_user_id_auth_user_id_fkey",
+        "e|fk|public.investment_operation.investment_operation_user_id_auth_user_id_fkey",
+        "n|con|public.investment_operation.investment_operation_user_id_auth_user_id_fkey"
+      ],
+      "reads": [
+        "n|tbl|public.investment_operation",
+        "n|sch|public",
+        "n|tbl|public.auth_user",
+        "n|sch|public",
+        "n|col|public.investment_operation.user_id",
+        "n|col|public.auth_user.id",
+        "e|uniqueness|public.auth_user.id"
+      ]
+    },
+    {
+      "statementType": "create_fk",
+      "statementTarget": ["table", "public", "investment_operation"],
+      "writes": [
+        "s|fk|public.investment_operation.investment_operation_line_fk",
+        "n|fk|public.investment_operation.investment_operation_line_fk",
+        "e|fk|public.investment_operation.investment_operation_line_fk",
+        "n|con|public.investment_operation.investment_operation_line_fk"
+      ],
+      "reads": [
+        "n|tbl|public.investment_operation",
+        "n|sch|public",
+        "n|tbl|public.statement_line",
+        "n|sch|public",
+        "n|col|public.investment_operation.user_id",
+        "n|col|public.investment_operation.line_id",
+        "n|col|public.statement_line.user_id",
+        "n|col|public.statement_line.id",
+        "e|uniqueness|public.statement_line.id.user_id"
+      ]
+    },
+    {
+      "statementType": "create_fk",
+      "statementTarget": ["table", "public", "security"],
+      "writes": [
+        "s|fk|public.security.security_user_id_auth_user_id_fkey",
+        "n|fk|public.security.security_user_id_auth_user_id_fkey",
+        "e|fk|public.security.security_user_id_auth_user_id_fkey",
+        "n|con|public.security.security_user_id_auth_user_id_fkey"
+      ],
+      "reads": [
+        "n|tbl|public.security",
+        "n|sch|public",
+        "n|tbl|public.auth_user",
+        "n|sch|public",
+        "n|col|public.security.user_id",
+        "n|col|public.auth_user.id",
+        "e|uniqueness|public.auth_user.id"
+      ]
+    },
+    {
+      "statementType": "create_policy",
+      "statementTarget": ["table", "public", "investment_operation"],
+      "writes": [
+        "s|pol|public.investment_operation.investment_operation_own_rows_only",
+        "n|pol|public.investment_operation.investment_operation_own_rows_only",
+        "e|pol|public.investment_operation.investment_operation_own_rows_only"
+      ],
+      "reads": [
+        "n|tbl|public.investment_operation",
+        "n|sch|public",
+        "e|rls|public.investment_operation"
+      ]
+    },
+    {
+      "statementType": "create_policy",
+      "statementTarget": ["table", "public", "security"],
+      "writes": [
+        "s|pol|public.security.security_own_rows_only",
+        "n|pol|public.security.security_own_rows_only",
+        "e|pol|public.security.security_own_rows_only"
+      ],
+      "reads": ["n|tbl|public.security", "n|sch|public", "e|rls|public.security"]
+    }
+  ],
+  "deltas": [
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "name": "investment_operation",
+        "isRlsEnabled": true,
+        "entityType": "tables"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "name": "security",
+        "isRlsEnabled": true,
+        "entityType": "tables"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "name": "operation_kind",
+        "values": ["deposit", "withdrawal", "purchase", "sale", "dividend", "fee"],
+        "entityType": "enums"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "investment_operation",
+        "name": "id",
+        "type": "uuid",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "uuidv7()",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "investment_operation",
+        "name": "user_id",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "investment_operation",
+        "name": "line_id",
+        "type": "uuid",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "investment_operation",
+        "name": "kind",
+        "type": "operation_kind",
+        "typeSchema": "public",
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "investment_operation",
+        "name": "security_id",
+        "type": "uuid",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "investment_operation",
+        "name": "quantity",
+        "type": "numeric",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "investment_operation",
+        "name": "unit_price",
+        "type": "numeric",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "investment_operation",
+        "name": "fees_minor",
+        "type": "bigint",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "0",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "investment_operation",
+        "name": "created_at",
+        "type": "timestamp with time zone",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "now()",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "investment_operation",
+        "name": "updated_at",
+        "type": "timestamp with time zone",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "now()",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "security",
+        "name": "id",
+        "type": "uuid",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "uuidv7()",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "security",
+        "name": "user_id",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "security",
+        "name": "isin",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "security",
+        "name": "name",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "security",
+        "name": "currency",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "security",
+        "name": "created_at",
+        "type": "timestamp with time zone",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "now()",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "security",
+        "name": "updated_at",
+        "type": "timestamp with time zone",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "now()",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "investment_operation",
+        "name": "investment_operation_security_id_idx",
+        "nameExplicit": true,
+        "columns": [
+          {
+            "value": "security_id",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          }
+        ],
+        "isUnique": false,
+        "where": null,
+        "with": "",
+        "method": "btree",
+        "entityType": "indexes"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "investment_operation",
+        "name": "investment_operation_user_id_auth_user_id_fkey",
+        "nameExplicit": false,
+        "columns": ["user_id"],
+        "schemaTo": "public",
+        "tableTo": "auth_user",
+        "columnsTo": ["id"],
+        "onUpdate": "NO ACTION",
+        "onDelete": "CASCADE",
+        "entityType": "fks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "investment_operation",
+        "name": "investment_operation_line_fk",
+        "nameExplicit": true,
+        "columns": ["user_id", "line_id"],
+        "schemaTo": "public",
+        "tableTo": "statement_line",
+        "columnsTo": ["user_id", "id"],
+        "onUpdate": "NO ACTION",
+        "onDelete": "CASCADE",
+        "entityType": "fks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "security",
+        "name": "security_user_id_auth_user_id_fkey",
+        "nameExplicit": false,
+        "columns": ["user_id"],
+        "schemaTo": "public",
+        "tableTo": "auth_user",
+        "columnsTo": ["id"],
+        "onUpdate": "NO ACTION",
+        "onDelete": "CASCADE",
+        "entityType": "fks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "investment_operation",
+        "name": "investment_operation_pkey",
+        "columns": ["id"],
+        "nameExplicit": false,
+        "entityType": "pks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "security",
+        "name": "security_pkey",
+        "columns": ["id"],
+        "nameExplicit": false,
+        "entityType": "pks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "investment_operation",
+        "name": "investment_operation_user_id_id_key",
+        "nameExplicit": true,
+        "columns": ["user_id", "id"],
+        "nullsNotDistinct": false,
+        "entityType": "uniques"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "investment_operation",
+        "name": "investment_operation_line_id_key",
+        "nameExplicit": true,
+        "columns": ["line_id"],
+        "nullsNotDistinct": false,
+        "entityType": "uniques"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "security",
+        "name": "security_user_id_id_key",
+        "nameExplicit": true,
+        "columns": ["user_id", "id"],
+        "nullsNotDistinct": false,
+        "entityType": "uniques"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "security",
+        "name": "security_user_id_isin_key",
+        "nameExplicit": true,
+        "columns": ["user_id", "isin"],
+        "nullsNotDistinct": false,
+        "entityType": "uniques"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "investment_operation",
+        "name": "investment_operation_quantity_positive",
+        "value": "\"quantity\" > 0",
+        "entityType": "checks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "investment_operation",
+        "name": "investment_operation_unit_price_not_negative",
+        "value": "\"unit_price\" >= 0",
+        "entityType": "checks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "investment_operation",
+        "name": "investment_operation_fees_not_negative",
+        "value": "\"fees_minor\" >= 0",
+        "entityType": "checks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "investment_operation",
+        "name": "investment_operation_quantity_of_trades",
+        "value": "(\"kind\" in ('purchase', 'sale')) = (\"quantity\" is not null)",
+        "entityType": "checks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "investment_operation",
+        "name": "investment_operation_unit_price_of_trades",
+        "value": "(\"kind\" in ('purchase', 'sale')) = (\"unit_price\" is not null)",
+        "entityType": "checks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "investment_operation",
+        "name": "investment_operation_security_of_trades",
+        "value": "\"kind\" not in ('purchase', 'sale', 'dividend') or \"security_id\" is not null",
+        "entityType": "checks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "investment_operation",
+        "name": "investment_operation_no_security_of_cash",
+        "value": "\"kind\" not in ('deposit', 'withdrawal') or \"security_id\" is null",
+        "entityType": "checks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "security",
+        "name": "security_isin_format",
+        "value": "\"isin\" ~ '^[A-Z]{2}[A-Z0-9]{9}[0-9]$'",
+        "entityType": "checks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "security",
+        "name": "security_currency_iso_4217",
+        "value": "\"currency\" ~ '^[A-Z]{3}$'",
+        "entityType": "checks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "investment_operation",
+        "name": "investment_operation_own_rows_only",
+        "as": "PERMISSIVE",
+        "for": "ALL",
+        "roles": ["public"],
+        "using": "\"user_id\" = current_setting('gousset.user_id', true)",
+        "withCheck": "\"user_id\" = current_setting('gousset.user_id', true)",
+        "entityType": "policies"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "security",
+        "name": "security_own_rows_only",
+        "as": "PERMISSIVE",
+        "for": "ALL",
+        "roles": ["public"],
+        "using": "\"user_id\" = current_setting('gousset.user_id', true)",
+        "withCheck": "\"user_id\" = current_setting('gousset.user_id', true)",
+        "entityType": "policies"
+      }
+    }
+  ]
+}

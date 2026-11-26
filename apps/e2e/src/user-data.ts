@@ -20,7 +20,7 @@ import { databaseUrl } from "./database";
 export type UserTable = { name: string; key: string; rows: string };
 
 /**
- * Every table holding a user's rows (docs/data-model.md, v0.2 and v0.3). A table added later must be listed
+ * Every table holding a user's rows (docs/data-model.md, v0.2, v0.3 and v0.6). A table added later must be listed
  * here: the isolation spec fails until it is, then tries every rule on it.
  */
 export const ACCOUNTS: UserTable = { name: "account", key: "id", rows: "accounts" };
@@ -40,6 +40,8 @@ export const USER_TABLES: ReadonlyArray<UserTable> = [
   { name: "merchant", key: "id", rows: "merchants" },
   { name: "merchant_alias", key: "id", rows: "merchants' cleaned labels" },
   { name: "rule", key: "id", rows: "rules" },
+  { name: "security", key: "id", rows: "securities" },
+  { name: "investment_operation", key: "id", rows: "investment operations" },
 ];
 
 /**
