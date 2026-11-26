@@ -57,34 +57,54 @@ export async function invalidateAccounts(queryClient: QueryClient): Promise<void
 /**
  * After a subject is made or changed, or expenses attached to it or declined (#37): every subjects
  * query is read again (a parent counts its children's), the rules (its merchants are rules), the
- * operations (they name each expense's subjects) and every month (its "by subject").
+ * operations and the accounts' pages (their lines name each expense's subjects) and every month
+ * (its "by subject").
  */
 export async function invalidateSubjects(queryClient: QueryClient): Promise<void> {
   await Promise.all([
     queryClient.invalidateQueries({ queryKey: subjectKeys.all }),
     queryClient.invalidateQueries({ queryKey: ruleKeys.all }),
     queryClient.invalidateQueries({ queryKey: lineKeys.all }),
+    queryClient.invalidateQueries({ queryKey: accountKeys.all }),
     queryClient.invalidateQueries({ queryKey: monthKeys.all }),
+  ]);
+}
+
+/**
+ * After a change of the categories or of a line's category: the categories' figures and lines,
+ * each line's category (the operations name it), the months' spending by category, and the
+ * merchants' default categories (a merge moves them, an archive marks them) may all have changed,
+ * so each is read again; and the subjects, whose pages give their cost by category (#37).
+ */
+export async function invalidateCategories(queryClient: QueryClient): Promise<void> {
+  await Promise.all([
+    queryClient.invalidateQueries({ queryKey: categoryKeys.all }),
+    queryClient.invalidateQueries({ queryKey: lineKeys.all }),
+    queryClient.invalidateQueries({ queryKey: monthKeys.all }),
+    queryClient.invalidateQueries({ queryKey: merchantKeys.all }),
+    queryClient.invalidateQueries({ queryKey: subjectKeys.all }),
   ]);
 }
 
 /**
  * After a rename: the lists (names, order) and the merchants' pages may all have changed, so every
  * merchants query is read again, and every month, which names the merchants and their
- * intermediaries. A merge, a label moved or a default category set move entries too:
- * `invalidateMerchantEntries`.
+ * intermediaries, and the subjects, whose pages name their merchants (#37). A merge, a label moved
+ * or a default category set move entries too: `invalidateMerchantEntries`.
  */
 export async function invalidateMerchants(queryClient: QueryClient): Promise<void> {
   await Promise.all([
     queryClient.invalidateQueries({ queryKey: merchantKeys.all }),
     queryClient.invalidateQueries({ queryKey: monthKeys.all }),
+    queryClient.invalidateQueries({ queryKey: subjectKeys.all }),
   ]);
 }
 
 /**
  * Invalidates what a merchant's merge, a cleaned label moved or a default category set changes:
  * the merchants, and the entries the server moved to a merchant's default category (#23), which
- * the operations, the months' spending and the categories' figures show.
+ * the operations, the months' spending and the categories' figures show, and the subjects' pages,
+ * which give their merchants and their cost by category (#37).
  */
 export async function invalidateMerchantEntries(queryClient: QueryClient): Promise<void> {
   await Promise.all([
@@ -92,5 +112,6 @@ export async function invalidateMerchantEntries(queryClient: QueryClient): Promi
     queryClient.invalidateQueries({ queryKey: lineKeys.all }),
     queryClient.invalidateQueries({ queryKey: monthKeys.all }),
     queryClient.invalidateQueries({ queryKey: categoryKeys.all }),
+    queryClient.invalidateQueries({ queryKey: subjectKeys.all }),
   ]);
 }

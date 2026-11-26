@@ -8,6 +8,7 @@ import { accountKeys } from "./account-keys";
 import { categoryKeys } from "./category-keys";
 import {
   invalidateAccounts,
+  invalidateCategories,
   invalidateMerchantEntries,
   invalidateMerchants,
   invalidateSubjects,
@@ -154,6 +155,16 @@ describe("invalidateSubjects", () => {
       expect(isInvalidated(client, queryKey), JSON.stringify(queryKey)).toBe(true);
     }
   });
+
+  test("reads the accounts' pages again: an account's lines name their subjects", async () => {
+    const page = accountKeys.detail("2c4e6a8b-0d1f-4a3c-9e5b-7d9f1b3c5e70");
+    const client = clientWith([ACCOUNTS, page]);
+
+    await invalidateSubjects(client);
+
+    expect(isInvalidated(client, ACCOUNTS)).toBe(true);
+    expect(isInvalidated(client, page)).toBe(true);
+  });
 });
 
 describe("invalidateMerchants", () => {
@@ -166,6 +177,16 @@ describe("invalidateMerchants", () => {
       expect(isInvalidated(client, queryKey), JSON.stringify(queryKey)).toBe(true);
     }
   });
+
+  test("reads the subjects again: a subject's page names its merchants", async () => {
+    const page = subjectKeys.detail("5e4d3c2b-1a09-4f8e-8d7c-6b5a4f3e2d1c", 2026);
+    const client = clientWith([subjectKeys.list(), page]);
+
+    await invalidateMerchants(client);
+
+    expect(isInvalidated(client, subjectKeys.list())).toBe(true);
+    expect(isInvalidated(client, page)).toBe(true);
+  });
 });
 
 describe("invalidateMerchantEntries", () => {
@@ -177,6 +198,29 @@ describe("invalidateMerchantEntries", () => {
     await invalidateMerchantEntries(client);
 
     for (const queryKey of [MERCHANTS, MERCHANT, SEARCH, DETAIL, october, categories]) {
+      expect(isInvalidated(client, queryKey), JSON.stringify(queryKey)).toBe(true);
+    }
+  });
+
+  test("reads the subjects again: a subject's page gives its merchants and its categories", async () => {
+    const page = subjectKeys.detail("5e4d3c2b-1a09-4f8e-8d7c-6b5a4f3e2d1c", "all");
+    const client = clientWith([subjectKeys.list(), page]);
+
+    await invalidateMerchantEntries(client);
+
+    expect(isInvalidated(client, subjectKeys.list())).toBe(true);
+    expect(isInvalidated(client, page)).toBe(true);
+  });
+});
+
+describe("invalidateCategories", () => {
+  test("reads the subjects again: a subject's page gives its cost by category", async () => {
+    const page = subjectKeys.detail("5e4d3c2b-1a09-4f8e-8d7c-6b5a4f3e2d1c", 2026);
+    const client = clientWith([subjectKeys.list(), page, categoryKeys.list(), SEARCH]);
+
+    await invalidateCategories(client);
+
+    for (const queryKey of [subjectKeys.list(), page, categoryKeys.list(), SEARCH]) {
       expect(isInvalidated(client, queryKey), JSON.stringify(queryKey)).toBe(true);
     }
   });
