@@ -84,7 +84,8 @@ describe("an exact decimal", () => {
 
     fc.assert(
       fc.property(kept, kept, (a, b) => {
-        expect(compareDecimals(a, b)).toBe(-compareDecimals(b, a));
+        // A sum rather than a negation: the negation of 0 is -0, which `toBe` tells from 0.
+        expect(compareDecimals(a, b) + compareDecimals(b, a)).toBe(0);
         expect(compareDecimals(a, b) === 0).toBe(formatDecimal(a) === formatDecimal(b));
       }),
     );
