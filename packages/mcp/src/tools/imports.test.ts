@@ -448,6 +448,37 @@ describe("imports upload", () => {
     expect(text).toContain("currency is not its account's");
   });
 
+  test("a broker's operations are counted as operations, with the profile that read them", async () => {
+    const state = fake({
+      started: summary({
+        fileName: "fortuneo.csv",
+        format: "csv",
+        reads: "operations",
+        profile: "Fortuneo: history of operations",
+        linesRead: 6,
+        linesAdded: 4,
+        linesDuplicate: 2,
+      }),
+    });
+
+    const { text, isError } = await imports(state, upload());
+
+    expect(isError).toBe(false);
+    expect(text).toContain("Read as a broker's operations with Fortuneo: history of operations.");
+    expect(text).toContain("6 operations read: 4 added, 2 already known (duplicates).");
+    expect(text).not.toContain("held for review");
+  });
+
+  test("a broker's file on another account than an investment one says where it goes", async () => {
+    const state = fake({
+      started: summary({ status: "failed", errorCode: "NOT_AN_INVESTMENT_ACCOUNT", linesAdded: 0 }),
+    });
+
+    const { text } = await imports(state, upload());
+
+    expect(text).toContain("go only into an investment account kept by its lines");
+  });
+
   test("an import still running after the wait says how to follow it", async () => {
     const state = fake({ started: summary({ status: "reading", linesRead: 0 }) });
     const { text, isError } = await imports(state, upload(), writer, runnerWithTime(state));

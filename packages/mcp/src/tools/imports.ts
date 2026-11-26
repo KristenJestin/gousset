@@ -93,7 +93,7 @@ const ImportsInput = Schema.Struct({
 
 type ImportsInput = typeof ImportsInput.Type;
 
-const DESCRIPTION = `Imports bank statement files into the user's accounts, without duplicates, and lists, follows and undoes imports. Use it when the user gives a statement file (OFX, QFX, QIF, CAMT.053, MT940, CSV) or asks what was imported.
+const DESCRIPTION = `Imports bank statement files into the user's accounts, without duplicates, and lists, follows and undoes imports. Use it when the user gives a statement file (OFX, QFX, QIF, CAMT.053, MT940, CSV) or asks what was imported. A broker's CSV of operations (Fortuneo, Degiro, or one mapped on the import screen) goes the same way into an investment account, its summary counting operations.
 
 A file you can reach from a shell, larger than a few tens of kilobytes, goes through a file upload, so that its bytes never pass through the conversation: {"action":"create_upload","file_name":"2024-2026.ofx","size":1048576} (its exact size in bytes), then, from that shell, curl -sS -F 'file=@2024-2026.ofx' <the address it gave>, then {"action":"upload","file_upload":"<the id it gave>"}. A smaller file goes in the call itself: {"action":"upload","file_name":"october.ofx","content":"OFXHEADER:100..."}
 
@@ -141,6 +141,10 @@ function accountName(summary: ImportSummary): string {
 }
 
 function counts(summary: ImportSummary): string {
+  if (summary.reads === "operations") {
+    return `${summary.linesRead} operations read: ${summary.linesAdded} added, ${summary.linesDuplicate} already known (duplicates)`;
+  }
+
   return `${summary.linesRead} lines read: ${summary.linesAdded} added, ${summary.linesDuplicate} already known (duplicates), ${summary.linesHeld} held for review as near duplicates`;
 }
 
@@ -193,6 +197,16 @@ function failureText(code: string | null): string {
   switch (code) {
     case "CURRENCY_MISMATCH": {
       return "The file's currency is not its account's. Upload it again naming, with account, an account in the file's currency.";
+    }
+
+    case "NOT_AN_INVESTMENT_ACCOUNT": {
+      return "A broker's operations go only into an investment account kept by its lines. Upload the file again naming, with account, the user's investment account (a PEA, a securities account).";
+    }
+
+    case "OperationRefused":
+    case "InvalidIsin":
+    case "InvalidQuantity": {
+      return `A row of the broker's file is no operation Gousset can keep (${code}): an ISIN whose check digit is wrong, a quantity or an amount it cannot hold. Check the file is the broker's export, unchanged; then upload it again.`;
     }
 
     case "QUEUE_UNAVAILABLE": {
@@ -258,8 +272,11 @@ function waitingText(
 }
 
 function doneText(summary: ImportSummary): string {
+  const readWith = summary.profile === null ? "" : ` with ${clip(summary.profile, 100)}`;
+
   return [
     `Imported ${summary.fileName} into ${accountName(summary)}, ${period(summary)}.`,
+    summary.reads === "operations" ? `Read as a broker's operations${readWith}.` : "",
     `${counts(summary)}.`,
     summary.linesHeld > 0
       ? "The lines held wait for the user's review: they count only once confirmed."
@@ -860,7 +877,7 @@ function profilesText(entries: ReadonlyArray<ImportProfileEntry>): string {
   );
 
   return [
-    "CSV import profiles, the user's first, then those shipped with Gousset. On upload, a CSV file is read with the first profile whose header row it has, or, for PayPal activity, whose header row names PayPal's mandatory columns among any others.",
+    "CSV import profiles, the user's first, then those shipped with Gousset. On upload, a CSV file is read with the first profile whose header row it has, or, for PayPal activity, whose header row names PayPal's mandatory columns among any others. A broker's export is recognised by the columns its broker writes, wherever they stand.",
     ...lines,
     "",
     `Which of them read one CSV import's file: ${PROFILES_OF_IMPORT}`,
@@ -881,10 +898,14 @@ function profilesForText(found: ProfilesForImport): string {
   const fileName = clip(found.fileName, 100);
 
   const lines = found.fitting.map(({ profile, by }) => {
+    const layout = profile.definition?.layout;
+
     const header =
-      profile.definition?.layout === "paypal-activity"
+      layout === "paypal-activity"
         ? "the file's header row names PayPal's mandatory columns"
-        : "its header row is the file's";
+        : layout === undefined
+          ? "its header row is the file's"
+          : "the file's header row names the broker's columns";
 
     return `- ${profileName(profile)}: ${by === "header" ? header : "a test read of the file's first lines succeeds"}.`;
   });
