@@ -285,7 +285,7 @@ function ColumnsPreview({
     if (definition !== null && "reads" in definition) {
       setHolds("operations");
       setSettings(operationsSettingsOf(definition));
-      setMapping(operationsMappingOf(definition, width));
+      setMapping(operationsMappingOf(definition, width, settings.headerRow ? (first ?? []) : []));
       setWords(definition.kinds.map(({ word, kind }) => ({ word, kind })));
       setBrokerLayout(definition.layout);
     } else if (definition !== null) {

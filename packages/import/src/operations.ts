@@ -4,8 +4,7 @@ import { Effect } from "effect";
 import { invalidField, minorDigits, readAmount, readDecimal } from "./amount";
 import type { FieldText } from "./amount";
 import { BROKERS } from "./brokers";
-import { placesIn, plainName } from "./brokers/columns";
-import type { OperationField, OperationPlaces } from "./brokers/columns";
+import { placesIn as layoutPlacesIn } from "./brokers/columns";
 import { cellAt, csvFile, currencyOf, readRows, SAMPLE } from "./csv";
 import type { CsvFile } from "./csv";
 import { dateExample, dayReader } from "./csv-profile";
@@ -13,6 +12,8 @@ import type { DayReader } from "./csv-profile";
 import type { CsvRow, ParseLimit } from "./csv-parse";
 import { MalformedFile, MissingField, UnsupportedContent } from "./errors";
 import type { InvalidField, ReadError } from "./errors";
+import { findsColumnsByName, placesIn, plainName } from "./operations-columns";
+import type { OperationField, OperationPlaces } from "./operations-columns";
 import { lastOperationColumn } from "./operations-profile";
 import type { OperationKind, OperationsProfile } from "./operations-profile";
 import { cleanValue, quote } from "./text";
@@ -374,13 +375,16 @@ const readOperation = (row: CsvRow, reading: Reading): Effect.Effect<OperationRo
     };
   });
 
-/** Where each field stands: by the columns' names for a broker's layout, else as the profile says. */
+/**
+ * Where each field stands: by the columns' names for a broker's layout, else as the profile says,
+ * at a place or found by a name in the header row.
+ */
 const placesFor = (
   profile: OperationsProfile,
   header: CsvRow | undefined,
   line: number,
 ): Effect.Effect<OperationPlaces, MalformedFile> => {
-  const { columns, layout } = profile;
+  const { layout } = profile;
 
   if (layout !== undefined) {
     if (header === undefined) {
@@ -392,7 +396,7 @@ const placesFor = (
       );
     }
 
-    const found = placesIn(
+    const found = layoutPlacesIn(
       BROKERS[layout],
       header.cells.map((cell) => cell.text),
     );
@@ -405,6 +409,16 @@ const placesFor = (
             problem: `No column ${quote(found.missing)}: the file is another broker's export, or its columns are named in another language.`,
           }),
         );
+  }
+
+  if (findsColumnsByName(profile) && header === undefined) {
+    return Effect.fail(
+      new MalformedFile({
+        line,
+        problem:
+          "No header row: the profile finds columns by their names, which a header row gives.",
+      }),
+    );
   }
 
   if (profile.headerRow && header !== undefined) {
@@ -420,20 +434,19 @@ const placesFor = (
     }
   }
 
-  return Effect.succeed({
-    bookedOn: columns.bookedOn,
-    valueOn: columns.valueOn ?? undefined,
-    kind: columns.kind ?? undefined,
-    isin: columns.isin ?? undefined,
-    securityName: columns.securityName ?? undefined,
-    securityCurrency: columns.securityCurrency ?? undefined,
-    quantity: columns.quantity ?? undefined,
-    unitPrice: columns.unitPrice ?? undefined,
-    fees: columns.fees ?? undefined,
-    amount: columns.amount,
-    label: columns.label ?? undefined,
-    reference: columns.reference ?? undefined,
-  });
+  const found = placesIn(
+    profile,
+    (header?.cells ?? []).map((cell) => cell.text),
+  );
+
+  return found.missing === null || header === undefined
+    ? Effect.succeed(found.places)
+    : Effect.fail(
+        new MalformedFile({
+          line: header.line,
+          problem: `No column ${quote(found.missing)}: the file is another broker's export, or its columns are named in another language.`,
+        }),
+      );
 };
 
 /** The operations of the file, or of its top with `limit`. */

@@ -36,9 +36,14 @@ const AmountColumns = Schema.Union([
  */
 export const MAX_SKIP_ROWS = 100;
 
+/** The longest description a profile carries: where its knowledge comes from, in a few lines. */
+export const MAX_DESCRIPTION = 500;
+
 /** An import profile's definition, version 1. */
 export const CsvProfile = Schema.Struct({
   version: Schema.Literal(1),
+  /** Where its knowledge comes from, whether it was checked on a real export: for a shared file. */
+  description: Schema.optionalKey(Schema.String.check(Schema.isMaxLength(MAX_DESCRIPTION))),
   /** What separates the values of a row. A value holding it is quoted (`"A; B"`). */
   separator: Schema.Literals([";", ",", "\t", "|"]),
   /**

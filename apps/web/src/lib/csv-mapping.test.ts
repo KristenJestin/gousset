@@ -179,7 +179,7 @@ describe("a CSV profile as the preview maps its columns", () => {
 
 /** A broker's export mapped by hand: its day, kind, ISIN, quantity, price, fees and cash. */
 const operations: OperationsProfile = {
-  version: 1,
+  version: 2,
   reads: "operations",
   separator: ";",
   encoding: "utf8",
@@ -200,6 +200,10 @@ const operations: OperationsProfile = {
     amount: 8,
     label: null,
     reference: 9,
+    amountCurrency: null,
+    feesCurrency: null,
+    priceCurrency: null,
+    value: null,
   },
   kinds: [
     { word: "Buy", kind: "purchase" },
@@ -210,7 +214,7 @@ const operations: OperationsProfile = {
 
 describe("a broker's operations as the preview maps their columns", () => {
   test("gives back the profile it was made from, its mapped words only", () => {
-    const mapping = operationsMappingOf(operations, 9);
+    const mapping = operationsMappingOf(operations, 9, []);
 
     expect(mapping).toEqual([
       "bookedOn",
@@ -238,7 +242,7 @@ describe("a broker's operations as the preview maps their columns", () => {
     expect(
       operationsProfileOf(
         operationsSettingsOf(operations),
-        operationsMappingOf(operations, 9),
+        operationsMappingOf(operations, 9, []),
         operations.kinds,
         "fortuneo",
       ),

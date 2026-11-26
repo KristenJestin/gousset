@@ -1,31 +1,11 @@
-import { cleanValue } from "../text";
+import { plainName } from "../operations-columns";
+import type { OperationField, OperationPlaces } from "../operations-columns";
 
 // A broker's export whose columns are found by their names (README, "Brokers' operations"), as
 // PayPal's activity's are: a header is the broker's when it names every column the layout needs,
 // wherever they stand and whatever else stands beside them.
 
-/** What a row of a broker's operations holds, and where the reader looks for it. */
-export type OperationField =
-  | "bookedOn"
-  | "valueOn"
-  | "kind"
-  | "isin"
-  | "securityName"
-  | "securityCurrency"
-  | "quantity"
-  | "unitPrice"
-  | "fees"
-  | "amount"
-  | "label"
-  | "reference"
-  /** The currency the amount is written in, checked against the account's. */
-  | "amountCurrency"
-  /** The currency the fees are written in, checked against the account's. */
-  | "feesCurrency"
-  /** The currency the unit price is written in: another than the account's is read from `value`. */
-  | "priceCurrency"
-  /** What the trade was worth in the account's currency, fees aside (Degiro's `Value`). */
-  | "value";
+export type { OperationField } from "../operations-columns";
 
 const FIELDS: ReadonlyArray<OperationField> = [
   "bookedOn",
@@ -46,9 +26,6 @@ const FIELDS: ReadonlyArray<OperationField> = [
   "value",
 ];
 
-/** Where each field stands in a header, counted from 1, as the errors and the preview count. */
-export type OperationPlaces = { readonly [field in OperationField]?: number };
-
 /** Where a header names each field, and the first name of a required field it lacks, if any. */
 export type FoundPlaces = { readonly places: OperationPlaces; readonly missing: string | null };
 
@@ -61,15 +38,6 @@ export type BrokerColumns = {
   /** A currency written in the column right after another's, which has no name (Degiro). */
   readonly currencyAfter?: { readonly [field in OperationField]?: OperationField };
 };
-
-/** A name as compared: trimmed, lower case, accents and inner spaces gone. */
-export function plainName(text: string): string {
-  return cleanValue(text)
-    .normalize("NFD")
-    .replaceAll(/\p{M}/gu, "")
-    .toLowerCase()
-    .replaceAll(/\s+/g, " ");
-}
 
 /**
  * Where a header names each field, the first column of each name; `missing`, the first name of

@@ -80,7 +80,7 @@ function shippedColumn(field: keyof typeof FORTUNEO.names): number {
 
 /** Fortuneo's profile, as shipped: its columns where its header puts them. */
 export const FORTUNEO_PROFILE: OperationsProfile = {
-  version: 1,
+  version: 2,
   reads: "operations",
   separator: FORTUNEO.separator,
   encoding: FORTUNEO.encoding,
@@ -101,6 +101,10 @@ export const FORTUNEO_PROFILE: OperationsProfile = {
     amount: shippedColumn("amount"),
     label: shippedColumn("label"),
     reference: null,
+    amountCurrency: null,
+    feesCurrency: null,
+    priceCurrency: null,
+    value: null,
   },
   kinds: FORTUNEO.kinds,
   referenceUnique: false,

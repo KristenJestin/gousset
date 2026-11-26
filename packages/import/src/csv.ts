@@ -6,6 +6,7 @@ import type { AmountSyntax, FieldText } from "./amount";
 import { isLayoutHeader } from "./brokers";
 import { dateExample, dayReader, lastColumn } from "./csv-profile";
 import type { CsvProfile, DayReader } from "./csv-profile";
+import { findsColumnsByName, namesEveryColumn } from "./operations-columns";
 import { readsOperations } from "./operations-profile";
 import type { CsvDefinition } from "./operations-profile";
 import { decodeCsv, parseRows, skipLines } from "./csv-parse";
@@ -303,7 +304,8 @@ export type CsvCandidate = { readonly header: string | null; readonly profile: C
 /**
  * Whether a file's header row, as the candidate's profile reads it (`readCsvHeader`), is the one
  * the candidate recognises: its `header`, or, for PayPal's activity and a broker's export
- * (`layout`), any header that names the columns that layout needs, wherever they stand.
+ * (`layout`), any header that names the columns that layout needs, wherever they stand, as for an
+ * operations profile that finds its columns by their names.
  */
 export function headerMatches(candidate: CsvCandidate, header: string | null): boolean {
   if (candidate.header === null || header === null) {
@@ -313,9 +315,13 @@ export function headerMatches(candidate: CsvCandidate, header: string | null): b
   const { profile } = candidate;
 
   if (readsOperations(profile)) {
-    return profile.layout === undefined
-      ? header === candidate.header
-      : isLayoutHeader(profile.layout, header);
+    if (profile.layout !== undefined) {
+      return isLayoutHeader(profile.layout, header);
+    }
+
+    return findsColumnsByName(profile)
+      ? namesEveryColumn(profile, header)
+      : header === candidate.header;
   }
 
   return profile.layout === "paypal-activity"

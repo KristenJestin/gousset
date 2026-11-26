@@ -287,7 +287,7 @@ describe("Degiro's Transactions.csv", () => {
 
 /** A profile mapped by hand, as the import screen makes one and a user shares it. */
 const HAND_MAPPED: OperationsProfile = {
-  version: 1,
+  version: 2,
   reads: "operations",
   separator: ";",
   encoding: "utf8",
@@ -308,6 +308,10 @@ const HAND_MAPPED: OperationsProfile = {
     amount: 9,
     label: null,
     reference: 10,
+    amountCurrency: null,
+    feesCurrency: null,
+    priceCurrency: null,
+    value: null,
   },
   kinds: [
     { word: "Buy", kind: "purchase" },
@@ -377,6 +381,135 @@ describe("a profile mapped by hand", () => {
     const tried = Effect.runSync(testReadOperations(csvFile(bytes), HAND_MAPPED, null));
 
     expect(tried.operations.map((each) => each.amountMinor)).toEqual([5_000_000]);
+  });
+});
+
+const decodeShared = Schema.decodeUnknownSync(Schema.fromJsonString(CsvDefinition));
+
+/** A profile of version 2 whose columns are found by their names, as a shared file writes it. */
+const BY_NAME = {
+  version: 2,
+  reads: "operations",
+  description: "Guessed: a made-up broker's export, for the tests.",
+  separator: ";",
+  encoding: "utf8",
+  skipRows: 0,
+  headerRow: true,
+  dateFormat: "YYYY-MM-DD",
+  decimalMark: ",",
+  columns: {
+    bookedOn: { names: ["Trade date", "Day"] },
+    kind: { names: ["What"] },
+    isin: { names: ["ISIN"] },
+    securityName: { names: ["Name"] },
+    quantity: { names: ["Units"] },
+    unitPrice: { names: ["Price"] },
+    priceCurrency: { after: ["Price"] },
+    value: { names: ["Value"], optional: true },
+    fees: { names: ["Fees"], optional: true },
+    amount: { names: ["Cash"] },
+    amountCurrency: { after: ["Cash"] },
+  },
+  kinds: [
+    { word: "Buy", kind: "purchase" },
+    { word: "Cash in", kind: "deposit" },
+  ],
+  referenceUnique: false,
+};
+
+const byName = (lines: ReadonlyArray<string>) => utf8.encode(`${lines.join("\n")}\n`);
+
+describe("a profile of version 2", () => {
+  const profile = decodeShared(JSON.stringify(BY_NAME));
+
+  if (!readsOperations(profile)) {
+    throw new Error("The profile reads no operations.");
+  }
+
+  test("finds its columns by their names, wherever they stand, a currency right after one", () => {
+    const ordered = byName([
+      "Day;What;ISIN;Name;Units;Price;;Value;Fees;Cash;",
+      "2026-10-01;Cash in;;;;;;;;500,00;EUR",
+      "2026-10-02;Buy;XX0000000028;NORTHWIND 2030 BOND;10;0,9876;EUR;;1,00;-10,88;EUR",
+    ]);
+
+    const shuffled = byName([
+      "Cash;;Fees;Price;;Units;Name;ISIN;What;Day;Value",
+      "500,00;EUR;;;;;;;Cash in;2026-10-01;",
+      "-10,88;EUR;1,00;0,9876;EUR;10;NORTHWIND 2030 BOND;XX0000000028;Buy;2026-10-02;",
+    ]);
+
+    const expected = [
+      operation(2, "deposit", "2026-10-01", 50_000),
+      operation(3, "purchase", "2026-10-02", -1088, {
+        isin: BOND,
+        securityName: "NORTHWIND 2030 BOND",
+        quantity: "10",
+        unitPrice: "0.9876",
+        feesMinor: 100,
+      }),
+    ];
+
+    expect(read(ordered, profile)).toEqual(expected);
+    expect(read(shuffled, profile)).toEqual(expected);
+  });
+
+  test("reads a file without its optional columns, and refuses one without a required one", () => {
+    const lean = byName(["Day;What;ISIN;Name;Units;Price;Cash", "2026-10-01;Cash in;;;;;500,00"]);
+
+    const without = byName(["Day;What;ISIN;Name;Units;Cash", "2026-10-01;Cash in;;;;500,00"]);
+    const cause = failed(without, profile);
+
+    expect(read(lean, profile)).toEqual([operation(2, "deposit", "2026-10-01", 50_000)]);
+    expect(cause).toContain('"_tag":"MalformedFile"');
+    expect(cause).toContain(String.raw`No column \"Price\"`);
+    expect(
+      failed(byName(["2026-10-01;Cash in;;;;;500,00"]), { ...profile, headerRow: false }),
+    ).toContain('"_tag":"MalformedFile"');
+  });
+
+  test("refuses an amount in another currency than the account's", () => {
+    const dollars = byName([
+      "Day;What;ISIN;Name;Units;Price;Cash;",
+      "2026-10-01;Cash in;;;;;500,00;USD",
+    ]);
+
+    const cause = failed(dollars, profile);
+
+    expect(cause).toContain('"_tag":"UnsupportedContent"');
+    expect(cause).toContain('"line":2');
+  });
+
+  test("prices a trade quoted in another currency from its value in the account's", () => {
+    const bytes = byName([
+      "Day;What;ISIN;Name;Units;Price;;Value;Cash;",
+      "2026-10-07;Buy;XX0000000010;SOUTHWIND HOLDINGS;2;150,00;USD;-275,03;-276,03;EUR",
+    ]);
+
+    expect(read(bytes, profile)).toEqual([
+      operation(2, "purchase", "2026-10-07", -27_603, {
+        isin: SHARE,
+        securityName: "SOUTHWIND HOLDINGS",
+        quantity: "2",
+        unitPrice: "137.515",
+      }),
+    ]);
+  });
+
+  test("is written back as shared, its columns left out written as null", () => {
+    const written = Schema.encodeSync(CsvDefinition)(profile);
+
+    expect(written).toMatchObject({ ...BY_NAME, columns: { ...BY_NAME.columns, label: null } });
+    expect(decodeShared(JSON.stringify(written))).toEqual(profile);
+  });
+
+  test("a profile saved in version 1 reads as version 2, with no column version 2 adds", () => {
+    const { amountCurrency, feesCurrency, priceCurrency, value, ...columns } = HAND_MAPPED.columns;
+    const saved = JSON.stringify({ ...HAND_MAPPED, version: 1, columns });
+
+    expect([amountCurrency, feesCurrency, priceCurrency, value]).toEqual([null, null, null, null]);
+    expect(decodeShared(saved)).toEqual(HAND_MAPPED);
+    expect(Schema.encodeSync(CsvDefinition)(decodeShared(saved))).toMatchObject({ version: 2 });
   });
 });
 

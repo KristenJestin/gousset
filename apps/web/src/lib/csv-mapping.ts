@@ -1,3 +1,4 @@
+import { operationPlaces } from "@gousset/import";
 import type { BrokerLayout, CsvProfile, OperationKind, OperationsProfile } from "@gousset/import";
 import type { CsvField } from "@gousset/ui/lib/csv-fields";
 
@@ -302,7 +303,7 @@ export function operationsProfileOf(
   const { layout: _statementLayout, ...table } = settings;
 
   const profile: OperationsProfile = {
-    version: 1,
+    version: 2,
     reads: "operations",
     ...table,
     columns: {
@@ -318,6 +319,10 @@ export function operationsProfileOf(
       amount,
       label: placeOf(mapping, "label"),
       reference: placeOf(mapping, "reference"),
+      amountCurrency: null,
+      feesCurrency: null,
+      priceCurrency: null,
+      value: null,
     },
     kinds: words.flatMap(({ word, kind }) => (kind === null ? [] : [{ word, kind }])),
     // Nothing on the screen says a broker's reference is unique to its row: keyed by content.
@@ -339,24 +344,34 @@ export function operationsSettingsOf(profile: OperationsProfile): CsvFileSetting
   };
 }
 
-/** What each column holds under a broker's operations profile, from the first, as `mappingOf`. */
-export function operationsMappingOf(profile: OperationsProfile, width: number): Array<CsvField> {
-  const { columns } = profile;
+/** A place found, or `null` for a field the file has no column for. */
+const at = (place: number | undefined) => place ?? null;
+
+/**
+ * What each column holds under a broker's operations profile, from the first, as `mappingOf`: a
+ * column the profile finds by its name where the preview's `header` names it.
+ */
+export function operationsMappingOf(
+  profile: OperationsProfile,
+  width: number,
+  header: ReadonlyArray<string>,
+): Array<CsvField> {
+  const { places } = operationPlaces(profile, header);
 
   const held: Array<[number | null, CsvField]> = [
-    [columns.bookedOn, "bookedOn"],
-    [columns.valueOn, "valueOn"],
-    [columns.kind, "kind"],
-    [columns.isin, "isin"],
-    [columns.securityName, "securityName"],
-    [columns.securityCurrency, "securityCurrency"],
-    [columns.quantity, "quantity"],
-    [columns.unitPrice, "unitPrice"],
-    [columns.fees, "fees"],
-    [columns.amount, "amount"],
+    [at(places.bookedOn), "bookedOn"],
+    [at(places.valueOn), "valueOn"],
+    [at(places.kind), "kind"],
+    [at(places.isin), "isin"],
+    [at(places.securityName), "securityName"],
+    [at(places.securityCurrency), "securityCurrency"],
+    [at(places.quantity), "quantity"],
+    [at(places.unitPrice), "unitPrice"],
+    [at(places.fees), "fees"],
+    [at(places.amount), "amount"],
     // A broker's label is often its security's name, in the same column: the name is shown.
-    [columns.label === columns.securityName ? null : columns.label, "label"],
-    [columns.reference, "reference"],
+    [places.label === places.securityName ? null : at(places.label), "label"],
+    [at(places.reference), "reference"],
   ];
 
   const last = Math.max(width, ...held.map(([column]) => column ?? 0));

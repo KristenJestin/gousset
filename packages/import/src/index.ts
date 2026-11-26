@@ -27,14 +27,20 @@ export type { CsvCandidate, CsvFile, CsvOptions, CsvTable } from "./csv";
 
 export {
   BROKER_LAYOUTS,
+  ColumnPlace,
   CsvDefinition,
   OPERATION_KINDS,
   OperationKind,
   OperationsProfile,
+  isPlace,
   readsOperations,
 } from "./operations-profile";
 
 export type { BrokerLayout } from "./operations-profile";
+
+export { findsColumnsByName, placesIn as operationPlaces } from "./operations-columns";
+
+export type { OperationField, OperationPlaces } from "./operations-columns";
 
 export { readOperations, testReadOperations } from "./operations";
 
@@ -61,7 +67,7 @@ export { detectCsvProfile } from "./csv-detect";
 
 export type { CsvProposal, CsvUnsure } from "./csv-detect";
 
-export { CsvProfile } from "./csv-profile";
+export { CsvProfile, MAX_DESCRIPTION } from "./csv-profile";
 
 export type { CsvLayout } from "./csv-profile";
 

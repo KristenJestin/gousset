@@ -18,6 +18,7 @@ import type {
   Started,
   Undone,
 } from "@gousset/core";
+import { isPlace } from "@gousset/import";
 import { Duration, Effect, Exit, Schema } from "effect";
 
 import { ToolRefusal, defineTool } from "../tool";
@@ -817,6 +818,19 @@ function tableText(profile: Definition): ReadonlyArray<string> {
   ];
 }
 
+type Place = OperationsProfile["columns"]["amount"];
+
+/** Where a profile finds a column: at its place, or by its name. */
+function placeText(place: Place): string {
+  if (isPlace(place)) {
+    return `column ${place}`;
+  }
+
+  return "names" in place
+    ? `the column named ${clip(place.names[0] ?? "", 40)}`
+    : `the column after ${clip(place.after[0] ?? "", 40)}`;
+}
+
 /** How a broker's operations profile reads a file: into an investment account only. */
 function operationsText(profile: OperationsProfile): string {
   if (profile.layout !== undefined) {
@@ -828,13 +842,13 @@ function operationsText(profile: OperationsProfile): string {
   const kinds =
     kind === null
       ? "each row a purchase or a sale by its quantity's sign"
-      : `the kind in column ${kind}, ${profile.kinds.map((each) => `${clip(each.word, 40)} as ${each.kind}`).join(", ")}`;
+      : `the kind in ${placeText(kind)}, ${profile.kinds.map((each) => `${clip(each.word, 40)} as ${each.kind}`).join(", ")}`;
 
   return [
     "a broker's operations, into an investment account",
     ...tableText(profile),
     kinds,
-    `the amount in column ${amount}`,
+    `the amount in ${placeText(amount)}`,
   ].join(", ");
 }
 

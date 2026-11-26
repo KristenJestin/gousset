@@ -60,7 +60,7 @@ export const DEGIRO_COLUMNS: BrokerColumns = {
 
 /** Degiro's profile, as shipped: its columns where its header puts them. */
 export const DEGIRO_PROFILE: OperationsProfile = {
-  version: 1,
+  version: 2,
   reads: "operations",
   separator: DEGIRO.separator,
   encoding: DEGIRO.encoding,
@@ -83,6 +83,10 @@ export const DEGIRO_PROFILE: OperationsProfile = {
     label: 3,
     // An order executed in several parts gives each its row, with the same id: not unique.
     reference: 19,
+    amountCurrency: null,
+    feesCurrency: null,
+    priceCurrency: null,
+    value: null,
   },
   kinds: [],
   referenceUnique: false,
