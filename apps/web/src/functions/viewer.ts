@@ -1,10 +1,12 @@
+import { settleDefaultNames } from "@gousset/core/default-categories";
+import { getLocale } from "@gousset/i18n/runtime";
 import { createServerFn } from "@tanstack/react-start";
 import { getCookie, getRequestHeaders } from "@tanstack/react-start/server";
 import { Effect, Schema } from "effect";
 
 import { monthOfDay } from "@/lib/month";
 import { E2E_DAY_COOKIE, localDay, today } from "@/lib/today";
-import { auth } from "@/services";
+import { auth, runCore } from "@/services";
 
 import { ColorSchemeChoice } from "./color-scheme";
 import { UserCurrency } from "./currency";
@@ -23,6 +25,15 @@ export const getViewer = createServerFn({ method: "GET" }).handler(() =>
       if (session) {
         const { user } = session;
         const day = yield* today(getCookie(E2E_DAY_COOKIE));
+
+        // A user made before #195, or by the administrator: the defaults they never touched take
+        // the language of this page, once (packages/core, `settleDefaultNames`). A failure leaves
+        // them as they are, for the next page to try again; the page itself opens.
+        if (user.defaultCategoriesSettled !== true) {
+          yield* Effect.promise(() =>
+            runCore(settleDefaultNames(user.id, getLocale())).catch(() => undefined),
+          );
+        }
 
         return {
           hasUsers: true,

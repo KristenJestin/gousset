@@ -1,0 +1,335 @@
+import type { Client } from "@modelcontextprotocol/client";
+import type { Page } from "@playwright/test";
+import { DatabaseLineStore, Today, lineTransferOf, transfersLayer } from "@gousset/core";
+import type { LineStore, Transfers } from "@gousset/core";
+import { account, entry, entryPart, statementLine } from "@gousset/db/schema/ledger";
+import { transfer } from "@gousset/db/schema/transfers";
+import { exampleStatement, paypalActivity, writeStatement } from "@gousset/fixture";
+import type { StatementLine } from "@gousset/fixture";
+import { and, asc, eq, inArray, or } from "drizzle-orm";
+import { Effect, Layer } from "effect";
+
+import type { TestUser } from "../src/auth";
+import { lineDetail } from "../src/frame";
+import { importsOn, statementFile } from "../src/imports";
+import { addUser, connectMcp, expect, fixDay, personOfItsOwn, test, visit } from "../src/test";
+import { openUserData } from "../src/user-data";
+
+// Issue #201, "How to verify": a bank statement whose PayPal lines name nobody, then PayPal's own
+// activity imported as an account of its own, through the import job and through the MCP door.
+// Each bank line pairs with the money PayPal took from the bank as a transfer; each purchase is an
+// expense at its merchant, on the PayPal account; nothing is counted twice. The bank statement and
+// the export (`@gousset/fixture`, `paypalActivity`) are invented, but PayPal's name. Each test has
+// a user of its own.
+
+const TODAY = "2026-11-15";
+
+let data: ReturnType<typeof openUserData>;
+let imports: ReturnType<typeof importsOn>;
+
+test.beforeAll(({ app }) => {
+  data = openUserData(app.database);
+  imports = importsOn(data);
+});
+
+test.afterAll(async () => {
+  await data.close();
+});
+
+/** The bank's October: two lines through PayPal, which name no one, and a shop paid by card. */
+const BANK_LINES: ReadonlyArray<StatementLine> = [
+  { bookedOn: "2026-10-05", amountMinor: -1999, label: "PRLV SEPA PAYPAL EUROPE", reference: "B1" },
+  {
+    bookedOn: "2026-10-07",
+    amountMinor: -2760,
+    label: "CB PAYPAL *EXAMPLETRAVEL 05/10",
+    reference: "B2",
+  },
+  { bookedOn: "2026-10-09", amountMinor: -4210, label: "CB GREENMARKET 08/10", reference: "B3" },
+];
+
+const bankStatement = {
+  ...exampleStatement,
+  from: "2026-10-01",
+  to: "2026-10-31",
+  lines: [...BANK_LINES],
+};
+
+/** A new account of the user's in euros, at an institution. */
+async function newAccount(owner: string, name: string, institution: string): Promise<string> {
+  const [created] = await data.asUser(owner, (transaction) =>
+    transaction
+      .insert(account)
+      .values({ userId: owner, name, kind: "current", currency: "EUR", institution })
+      .returning({ id: account.id }),
+  );
+
+  if (created === undefined) {
+    throw new Error("The account was not created.");
+  }
+
+  return created.id;
+}
+
+/** The account's lines, oldest first. */
+const linesOf = (owner: string, accountId: string) =>
+  data.asUser(owner, (transaction) =>
+    transaction
+      .select({
+        id: statementLine.id,
+        amountMinor: statementLine.amountMinor,
+        label: statementLine.label,
+        originalAmountMinor: statementLine.originalAmountMinor,
+        originalCurrency: statementLine.originalCurrency,
+      })
+      .from(statementLine)
+      .where(eq(statementLine.accountId, accountId))
+      .orderBy(asc(statementLine.bookedOn), asc(statementLine.id)),
+  );
+
+/** The id of the account's one line of this amount. */
+async function lineOf(owner: string, accountId: string, amountMinor: number): Promise<string> {
+  const found = (await linesOf(owner, accountId)).filter(
+    (line) => line.amountMinor === amountMinor,
+  );
+
+  expect(found, `the line of ${String(amountMinor)}`).toHaveLength(1);
+
+  return found[0]?.id ?? "";
+}
+
+/** Each line's entries' kinds: none for a side of a transfer. */
+const entriesOf = (owner: string, lineIds: ReadonlyArray<string>) =>
+  data.asUser(owner, async (transaction) => {
+    const parts = await transaction
+      .select({ lineId: entryPart.lineId, kind: entry.kind })
+      .from(entryPart)
+      .innerJoin(entry, eq(entry.id, entryPart.entryId))
+      .where(inArray(entryPart.lineId, [...lineIds]));
+
+    return lineIds.map((lineId) =>
+      parts.flatMap((part) => (part.lineId === lineId ? [part.kind] : [])),
+    );
+  });
+
+/** What the user's expenses cost, every account together: each payment counted once. */
+const spent = (owner: string) =>
+  data.asUser(owner, async (transaction) => {
+    const parts = await transaction
+      .select({ amountMinor: entryPart.amountMinor })
+      .from(entryPart)
+      .innerJoin(entry, eq(entry.id, entryPart.entryId))
+      .where(and(eq(entry.kind, "expense"), eq(entryPart.role, "payment")));
+
+    return parts.reduce((sum, part) => sum + part.amountMinor, 0);
+  });
+
+/** The transfers between the user's lines, as out and in pairs. */
+const transfersOf = (owner: string, lineIds: ReadonlyArray<string>) =>
+  data.asUser(owner, (transaction) =>
+    transaction
+      .select({ out: transfer.outLineId, into: transfer.inLineId })
+      .from(transfer)
+      .where(
+        or(inArray(transfer.outLineId, [...lineIds]), inArray(transfer.inLineId, [...lineIds])),
+      ),
+  );
+
+/** Runs the transfers' logic on the worker's database, with `TODAY` as today. */
+const run = <A, E>(effect: Effect.Effect<A, E, Transfers | LineStore>) =>
+  Effect.runPromise(
+    effect.pipe(
+      Effect.provide(
+        Layer.mergeAll(transfersLayer, DatabaseLineStore).pipe(Layer.provide(data.layer)),
+      ),
+      Effect.provideService(Today, { day: Effect.succeed(TODAY) }),
+    ),
+  );
+
+/** The page, signed in as `person`, on the fixed day, at `path` (checked by axe). */
+async function as(page: Page, person: TestUser, path: string) {
+  await page.context().addCookies([...person.cookies]);
+  await fixDay(page, TODAY);
+  await visit(page, path);
+}
+
+test("import an invented bank statement with two PayPal lines, then the invented PayPal export: each bank line is a transfer to PayPal, each purchase an expense at its merchant, nothing counted twice", async ({
+  page,
+  app,
+  user,
+}) => {
+  test.setTimeout(60_000);
+
+  const person = await addUser(app.baseURL, user, personOfItsOwn("paypal-import"));
+  const owner = await data.ownerOf(person.email);
+  const everyday = await imports.createAccount(owner, "Everyday");
+  const paypal = await newAccount(owner, "PayPal", "PayPal");
+
+  const bank = await imports.importFile(
+    owner,
+    everyday,
+    statementFile("ofx", bankStatement, "everyday-2026-10.ofx"),
+  );
+
+  expect(bank.status).toBe("done");
+
+  const funded = await lineOf(owner, everyday, -1999);
+  const byCard = await lineOf(owner, everyday, -2760);
+  const greenmarket = await lineOf(owner, everyday, -4210);
+
+  // Before PayPal's side is in, the bank's PayPal lines are expenses, as on any account.
+  expect(await entriesOf(owner, [funded, byCard])).toEqual([["expense"], ["expense"]]);
+
+  const activity = await imports.importFile(owner, paypal, paypalActivity.english);
+
+  expect(activity.status).toBe("done");
+  expect(activity.linesRead).toBe(7);
+  expect(activity.linesAdded).toBe(7);
+  expect((await imports.profileOf(owner, activity.id))?.shippedProfile).toBe("paypal-activity");
+
+  const pixelPlay = await lineOf(owner, paypal, -1999);
+  const fromBank = await lineOf(owner, paypal, 1999);
+  const travel = await lineOf(owner, paypal, -2760);
+  const fromCard = await lineOf(owner, paypal, 2760);
+  const received = await lineOf(owner, paypal, 4825);
+  const books = await lineOf(owner, paypal, -1250);
+  const refund = await lineOf(owner, paypal, 1250);
+
+  // Each bank line is a transfer to the PayPal account: its other side, the money PayPal took.
+  for (const [out, into] of [
+    [funded, fromBank],
+    [byCard, fromCard],
+  ] as const) {
+    const { paired } = await run(lineTransferOf(owner, out));
+
+    expect(paired).toMatchObject({
+      direction: "out",
+      other: { id: into, account: { id: paypal } },
+    });
+  }
+
+  expect(await transfersOf(owner, [funded, byCard, fromBank, fromCard])).toHaveLength(2);
+
+  // The transfers' sides are no expense; each purchase is one, on the PayPal side; the money
+  // received and the refund came in.
+  expect(
+    await entriesOf(owner, [funded, byCard, fromBank, fromCard, pixelPlay, travel, books]),
+  ).toEqual([[], [], [], [], ["expense"], ["expense"], ["expense"]]);
+
+  expect(await entriesOf(owner, [received, refund, greenmarket])).toEqual([
+    ["income"],
+    ["income"],
+    ["expense"],
+  ]);
+
+  // Nothing counted twice: what was spent is each purchase once, wherever it was paid from.
+  expect(await spent(owner)).toBe(1999 + 2760 + 1250 + 4210);
+
+  // The payment in dollars is the euros its conversion took, the dollars kept beside them.
+  expect((await linesOf(owner, paypal)).find((line) => line.id === travel)).toMatchObject({
+    label: "Example Travel Ltd",
+    originalAmountMinor: -3000,
+    originalCurrency: "USD",
+  });
+
+  // On the operations page: the purchase names its merchant, asking nothing.
+  await as(page, person, `/operations?line=${pixelPlay}`);
+
+  const merchant = page.locator('[data-slot="line-merchant"]');
+
+  await expect(merchant).toHaveAttribute("data-state", "known");
+  await expect(merchant).toContainText(/pixel play games/i);
+  await expect(merchant).not.toContainText("Who was really paid?");
+
+  // The bank's line is a transfer to PayPal, no expense through an intermediary any more.
+  await visit(page, `/operations?line=${funded}`);
+  await expect(lineDetail(page, "PRLV SEPA PAYPAL EUROPE")).toContainText("Transfer to PayPal");
+});
+
+const allowReadAndWrite = (page: Page) =>
+  page.getByRole("button", { name: "Allow read and write" }).click();
+
+/** The text of a tool's answer, and whether it is an error. */
+async function callText(client: Client, name: string, args: { [key: string]: string }) {
+  const result = await client.callTool({ name, arguments: args });
+  const [first] = result.content ?? [];
+
+  return { text: first?.type === "text" ? first.text : "", isError: result.isError === true };
+}
+
+/** The id of the import an upload's answer names. */
+const importIdOf = (text: string) => /Import id: ([\da-f-]{36})/.exec(text)?.[1] ?? "";
+
+test("an agent imports PayPal's activity through the MCP door, read by the PayPal profile, and its bank lines pair", async ({
+  app,
+  user,
+  page,
+  baseURL,
+  mcpClientId,
+}) => {
+  // Two uploads, each waiting for the app's import job.
+  test.setTimeout(90_000);
+
+  const person = await addUser(app.baseURL, user, personOfItsOwn("paypal-mcp"));
+  const owner = await data.ownerOf(person.email);
+  const everyday = await imports.createAccount(owner, "Everyday account");
+  const paypal = await newAccount(owner, "PayPal", "PayPal");
+
+  await page.context().addCookies([...person.cookies]);
+
+  const session = await connectMcp({
+    baseURL: baseURL ?? "",
+    page,
+    consent: allowReadAndWrite,
+    scope: "read write",
+    clientId: mcpClientId,
+  });
+
+  const listed = await callText(session.client, "imports", { action: "profiles" });
+
+  expect(listed.isError, listed.text).toBe(false);
+  expect(listed.text).toContain(
+    "- PayPal activity, shipped with Gousset: PayPal's activity export, its columns found by their names",
+  );
+
+  const statement = writeStatement("ofx", bankStatement);
+
+  const bank = await callText(session.client, "imports", {
+    action: "upload",
+    file_name: "everyday-2026-10.ofx",
+    content: statement.contents,
+    account: "Everyday account",
+  });
+
+  expect(bank.isError, bank.text).toBe(false);
+  expect(bank.text).toContain("3 lines read: 3 added");
+
+  const activity = await callText(session.client, "imports", {
+    action: "upload",
+    file_name: paypalActivity.french.fileName,
+    content_base64: Buffer.from(paypalActivity.french.bytes).toString("base64"),
+    account: "PayPal",
+  });
+
+  expect(activity.isError, activity.text).toBe(false);
+  expect(activity.text).toContain("7 lines read: 7 added");
+
+  const profiles = await callText(session.client, "imports", {
+    action: "profiles",
+    import: importIdOf(activity.text),
+  });
+
+  expect(profiles.isError, profiles.text).toBe(false);
+  expect(profiles.text).toContain("This import read its file with PayPal activity.");
+
+  // The bank's two PayPal lines are transfers to the PayPal account.
+  const bankSide = [await lineOf(owner, everyday, -1999), await lineOf(owner, everyday, -2760)];
+  const paypalSide = [await lineOf(owner, paypal, 1999), await lineOf(owner, paypal, 2760)];
+
+  expect(await transfersOf(owner, bankSide)).toEqual(
+    expect.arrayContaining([
+      { out: bankSide[0], into: paypalSide[0] },
+      { out: bankSide[1], into: paypalSide[1] },
+    ]),
+  );
+});
