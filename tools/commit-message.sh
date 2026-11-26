@@ -68,9 +68,17 @@ check() { # <subject> <where> <Git's own subjects pass: yes|no>
     return 1
   fi
 
-  # GitHub adds " (#n)" to a squashed pull request's title: it does not count.
-  length=${subject% (#[0-9]*)}
-  length=${#length}
+  # A title may end with its issue's " (#n)", and GitHub adds the pull request's " (#n)" to the
+  # squashed subject: one number at the end of a title does not count, two at the end of a commit's
+  # subject, so that a title that passes gives a squashed subject that passes. No more: numbers
+  # never pad a subject past the limit.
+  local bare=$subject numbers=1 dropped=0
+  [ "$3" = no ] || numbers=2
+  while [ "$dropped" -lt "$numbers" ] && [[ $bare =~ ^(.*)\ \(#[0-9]+\)$ ]]; do
+    bare=${BASH_REMATCH[1]}
+    dropped=$((dropped + 1))
+  done
+  length=${#bare}
   if [ "$length" -gt 72 ]; then
     echo "$where: the subject is $length characters, 72 at most" >&2
     return 1

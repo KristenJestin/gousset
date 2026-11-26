@@ -7,6 +7,7 @@ import {
   entryPart,
   merchant,
   merchantAlias,
+  statementImport,
   statementLine,
 } from "@gousset/db/schema/ledger";
 import { transfer } from "@gousset/db/schema/transfers";
@@ -242,6 +243,77 @@ test("month summary reads the user's own month", async ({ page, app, user, mcpCl
 
   expect(toCome.isError).toBe(true);
   expect(toCome.text).toContain("is a month to come");
+});
+
+// Issue #235, "How to verify", through the MCP door: a benefit account kept by lines entered by
+// hand expects no statement; the everyday account, imported once, still does.
+test("a benefit account kept by hand is never said not imported", async ({
+  page,
+  app,
+  user,
+  mcpClientId,
+}) => {
+  const person = await personWithMonth(page, app, user, "perceval");
+  const owner = await data.ownerOf(person.email);
+
+  // The day before last month's first: the everyday account's statements stop there.
+  const reached = new Date(Date.parse(`${LAST_MONTH}-01T00:00:00Z`) - 86_400_000)
+    .toISOString()
+    .slice(0, 10);
+
+  await data.asUser(owner, async (transaction) => {
+    const [everyday] = await transaction
+      .select({ id: account.id })
+      .from(account)
+      .where(eq(account.name, "Everyday account"));
+
+    const [perks] = await transaction
+      .insert(account)
+      .values({ userId: owner, name: "PerksHub", kind: "benefit", currency: "EUR" })
+      .returning({ id: account.id });
+
+    if (everyday === undefined || perks === undefined) {
+      throw new Error("The accounts were not found.");
+    }
+
+    await transaction.insert(statementImport).values({
+      userId: owner,
+      accountId: everyday.id,
+      fileName: "everyday.ofx",
+      fileSha256: "e2e-month-mcp-everyday-sha256",
+      format: "ofx",
+      status: "done",
+      periodFrom: `${TWO_MONTHS_AGO}-01`,
+      periodTo: reached,
+    });
+
+    await transaction.insert(statementLine).values(
+      [
+        { bookedOn: `${LAST_MONTH}-01`, amountMinor: 15_000, label: "PERKSHUB CREDIT" },
+        { bookedOn: `${LAST_MONTH}-09`, amountMinor: -1200, label: "PERKSHUB LUNCH" },
+      ].map((line) => ({ ...line, userId: owner, accountId: perks.id, source: "manual" as const })),
+    );
+  });
+
+  const { client } = await connectMcp({
+    baseURL: app.baseURL,
+    page,
+    consent: allowReadOnly,
+    scope: "read write",
+    clientId: mcpClientId,
+  });
+
+  const { text, isError } = await callTool(client, "month", {
+    action: "summary",
+    month: LAST_MONTH,
+  });
+
+  expect(isError, text).toBe(false);
+  // Counted: the everyday account alone; the savings account and PerksHub are kept by hand.
+  expect(text).toContain("Imported: 0 of 1 account(s) have statements reaching");
+  expect(text).toContain(`- Everyday account: reaches ${reached}.`);
+  expect(text).toContain(`- Everyday account: its statements reach ${reached} only.`);
+  expect(text).not.toContain("PerksHub");
 });
 
 test("month spending by category and merchant against the average and the previous month", async ({

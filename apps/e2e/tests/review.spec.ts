@@ -1,4 +1,5 @@
 import type { Page } from "@playwright/test";
+import { account, statementLine } from "@gousset/db/schema/ledger";
 
 import type { TestUser } from "../src/auth";
 import { onPhone } from "../src/frame";
@@ -9,6 +10,7 @@ import {
   monthSwitcher,
   openBlock,
   seedReviewMonths,
+  seedTwoStoppedPlans,
 } from "../src/review";
 import {
   addUser,
@@ -173,8 +175,9 @@ test("the month bar reads received, spent, set aside and left", async ({ page, a
   await expect(page.getByRole("heading", { level: 1, name: "Monthly review" })).toBeVisible();
   await expect(monthSwitcher(page)).toContainText("October 2026");
 
-  // The state line: no statement imported (the lines were written by hand), the line to review.
-  await expect(page.getByText("0 of 3 accounts imported")).toBeVisible();
+  // The state line: the everyday account's statements stop in September (the two others are kept by
+  // hand, and expect none), the line to review.
+  await expect(page.getByText("0 of 1 account imported")).toBeVisible();
   await expect(page.getByRole("link", { name: "1 line to review" })).toHaveAttribute(
     "href",
     "#to-review",
@@ -336,15 +339,102 @@ test("what is flagged", async ({ page, app, user }) => {
   const flagged = await openBlock(page, "Flagged");
   const flags = flagged.getByRole("list", { name: "Flagged" });
 
-  // Leisure drifts above the €40 the user set; the accounts were never imported.
+  // Leisure drifts above the €40 the user set; the everyday account is imported up to September.
   await expect(flags).toContainText("Leisure: €60 spent, above its benchmark of €40");
-  await expect(flags).toContainText("Everyday account has no statement imported");
+  await expect(flags).toContainText("Everyday account is imported only up to");
   await closeBlock(page);
 
   // The recurring payments' calendar, under the flags.
   const calendar = await openBlock(page, "Recurring payments");
 
   await expect(calendar.locator('[data-slot="recurring-calendar"]')).toBeVisible();
+  await closeBlock(page);
+  await animationsDone(page);
+});
+
+// Issue #235, "How to verify": a benefit account without a file, kept by lines entered by hand,
+// expects no statement; the everyday account, imported once, still does.
+test("a benefit account kept by hand is never flagged as not imported", async ({
+  page,
+  app,
+  user,
+}) => {
+  const person = await signedInWithMonths(page, app, user, "perrine");
+  const owner = await data.ownerOf(person.email);
+
+  await data.asUser(owner, async (transaction) => {
+    const [perks] = await transaction
+      .insert(account)
+      .values({ userId: owner, name: "PerksHub", kind: "benefit", currency: "EUR" })
+      .returning({ id: account.id });
+
+    if (perks === undefined) {
+      throw new Error("The account was not made.");
+    }
+
+    await transaction.insert(statementLine).values(
+      [
+        { bookedOn: "2026-10-01", amountMinor: 15_000, label: "PERKSHUB CREDIT" },
+        { bookedOn: "2026-10-09", amountMinor: -1200, label: "PERKSHUB LUNCH" },
+      ].map((line) => ({ ...line, userId: owner, accountId: perks.id, source: "manual" as const })),
+    );
+  });
+
+  await visit(page, OCTOBER);
+
+  // Counted: the everyday account alone.
+  await expect(page.getByText("0 of 1 account imported")).toBeVisible();
+
+  const flagged = await openBlock(page, "Flagged");
+  const flags = flagged.getByRole("list", { name: "Flagged" });
+
+  await expect(flags).toContainText("Everyday account is imported only up to");
+  await expect(flags).not.toContainText("PerksHub");
+  await closeBlock(page);
+  await animationsDone(page);
+});
+
+// Issue #234: one merchant's subscriptions are flagged each on its own row, kept apart when the
+// list changes.
+test("two stopped plans of one merchant are two flags", async ({ page, app, user }) => {
+  const person = await signedInWithMonths(page, app, user, "leonie", true);
+
+  await seedTwoStoppedPlans(data, await data.ownerOf(person.email));
+  await visit(page, OCTOBER);
+
+  const stopped = async () => {
+    const flagged = await openBlock(page, "Flagged");
+
+    return flagged
+      .getByRole("list", { name: "Flagged" })
+      .getByRole("listitem")
+      .filter({ hasText: "Streamly was expected on" });
+  };
+
+  const october = await stopped();
+
+  await expect(october).toHaveCount(2);
+  await expect(october.filter({ hasText: "last paid €9.99" })).toHaveCount(1);
+  await expect(october.filter({ hasText: "last paid €4.99" })).toHaveCount(1);
+  await closeBlock(page);
+
+  // September flags none; back to October, both rows again, neither dropped nor repeated.
+  await monthSwitcher(page).getByRole("button", { name: "Previous month" }).click();
+  await expect(monthSwitcher(page)).toContainText("September 2026");
+  await expect(await stopped()).toHaveCount(0);
+  // The list stays on screen: the account, imported up to May, is still flagged.
+  await expect(page.getByRole("list", { name: "Flagged" })).toContainText(
+    "Everyday account is imported only up to",
+  );
+  await closeBlock(page);
+  await monthSwitcher(page).getByRole("button", { name: "Next month" }).click();
+  await expect(monthSwitcher(page)).toContainText("October 2026");
+
+  const again = await stopped();
+
+  await expect(again).toHaveCount(2);
+  await expect(again.filter({ hasText: "last paid €9.99" })).toHaveCount(1);
+  await expect(again.filter({ hasText: "last paid €4.99" })).toHaveCount(1);
   await closeBlock(page);
   await animationsDone(page);
 });

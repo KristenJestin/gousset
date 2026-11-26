@@ -1,7 +1,7 @@
 import type { CsvProfile } from "@gousset/import";
 import { describe, expect, test } from "vite-plus/test";
 
-import { mappingOf, profileOf, remap, settingsOf, withSettings } from "./csv-mapping";
+import { byHand, mappingOf, profileOf, remap, settingsOf, withSettings } from "./csv-mapping";
 
 const profile: CsvProfile = {
   version: 1,
@@ -43,6 +43,42 @@ describe("a CSV profile as the preview maps its columns", () => {
 
   test("gives back the profile it was made from", () => {
     expect(profileOf(settingsOf(profile), mappingOf(profile, 5))).toEqual({ profile });
+  });
+
+  test("keeps a profile's layout: PayPal's activity is read by its columns' names, whatever is changed", () => {
+    const paypal: CsvProfile = { ...profile, separator: ",", layout: "paypal-activity" };
+    const settings = settingsOf(paypal);
+
+    expect(profileOf(settings, mappingOf(paypal, 5))).toEqual({ profile: paypal });
+
+    // The file saved by a spreadsheet with semicolons: the separator changes, the layout stays.
+    const semicolons = withSettings(settings, {
+      separator: ";",
+      encoding: "utf8",
+      skipRows: 3,
+      headerRow: true,
+      dateFormat: "DD/MM/YYYY",
+      decimalMark: ",",
+    });
+
+    expect(profileOf(semicolons, mappingOf(paypal, 5))).toEqual({
+      profile: { ...paypal, separator: ";", encoding: "utf8" },
+    });
+
+    // A plain profile has none, and gains none.
+    expect("layout" in settingsOf(profile)).toBe(false);
+  });
+
+  test("columns mapped by hand drop the layout: the profile reads the columns it shows", () => {
+    const paypal: CsvProfile = { ...profile, separator: ",", layout: "paypal-activity" };
+    const mapped = byHand(settingsOf(paypal));
+
+    expect("layout" in mapped).toBe(false);
+    expect(mapped).toEqual(settingsOf({ ...profile, separator: "," }));
+
+    expect(profileOf(mapped, mappingOf(paypal, 5))).toEqual({
+      profile: { ...profile, separator: "," },
+    });
   });
 
   test("a field is held by one column: mapping it again moves it", () => {

@@ -580,9 +580,9 @@ describe("monthImportState", () => {
     account(rows, "Later account", "current", { openedOn: "2026-11-02" });
 
     rows.reach.push(
-      { accountId: current.id, importedTo: "2026-11-03", statementTo: null },
-      { accountId: card.id, importedTo: null, statementTo: "2026-10-20" },
-      { accountId: fresh.id, importedTo: null, statementTo: null },
+      { accountId: current.id, importedTo: "2026-11-03", statementTo: null, keptByHand: false },
+      { accountId: card.id, importedTo: null, statementTo: "2026-10-20", keptByHand: false },
+      { accountId: fresh.id, importedTo: null, statementTo: null, keptByHand: false },
     );
 
     const state = await run(monthImportState("ada", "2026-10", "EUR"), rows);
@@ -599,7 +599,12 @@ describe("monthImportState", () => {
     });
 
     // In the month under way, statements reach today.
-    rows.reach.splice(0, 1, { accountId: current.id, importedTo: TODAY, statementTo: null });
+    rows.reach.splice(0, 1, {
+      accountId: current.id,
+      importedTo: TODAY,
+      statementTo: null,
+      keptByHand: false,
+    });
 
     const underway = await run(monthImportState("ada", "2026-11", "EUR"), rows);
 
@@ -615,7 +620,12 @@ describe("monthImportState", () => {
     const rows = draft();
     const closing = account(rows, "Closed account", "current", { closedOn: "2026-10-15" });
 
-    rows.reach.push({ accountId: closing.id, importedTo: "2026-10-15", statementTo: null });
+    rows.reach.push({
+      accountId: closing.id,
+      importedTo: "2026-10-15",
+      statementTo: null,
+      keptByHand: false,
+    });
 
     const state = await run(monthImportState("ada", "2026-10", "EUR"), rows);
 
@@ -627,12 +637,49 @@ describe("monthImportState", () => {
       partial: [],
     });
 
-    rows.reach.splice(0, 1, { accountId: closing.id, importedTo: "2026-10-14", statementTo: null });
+    rows.reach.splice(0, 1, {
+      accountId: closing.id,
+      importedTo: "2026-10-14",
+      statementTo: null,
+      keptByHand: false,
+    });
 
     const short = await run(monthImportState("ada", "2026-10", "EUR"), rows);
 
     expect(short.partial).toEqual([
       { accountId: closing.id, account: "Closed account", reached: "2026-10-14" },
+    ]);
+  });
+
+  // Issue #235: a benefit account without a file is kept by lines entered by hand; no file will
+  // ever come for it.
+  test("an account kept by hand, never imported, expects no statement; one with an import still does", async () => {
+    const rows = draft();
+    const perks = account(rows, "PerksHub", "benefit");
+    const meals = account(rows, "Meal card", "benefit");
+    const current = account(rows, "Current account", "current");
+
+    rows.reach.push(
+      { accountId: perks.id, importedTo: null, statementTo: null, keptByHand: true },
+      // Imported once, then kept by hand too: it still expects its statements.
+      { accountId: meals.id, importedTo: "2026-09-30", statementTo: null, keptByHand: false },
+      { accountId: current.id, importedTo: "2026-10-31", statementTo: null, keptByHand: false },
+    );
+
+    const state = await run(monthImportState("ada", "2026-10", "EUR"), rows);
+
+    expect(state).toEqual({
+      month: "2026-10",
+      expected: "2026-10-31",
+      accounts: 2,
+      imported: 1,
+      partial: [{ accountId: meals.id, account: "Meal card", reached: "2026-09-30" }],
+    });
+
+    const { flags } = await run(monthFlags("ada", "2026-10", "EUR"), rows);
+
+    expect(flags).toEqual([
+      { kind: "not-imported", accountId: meals.id, account: "Meal card", reached: "2026-09-30" },
     ]);
   });
 });
@@ -687,9 +734,9 @@ describe("monthFlags", () => {
     );
 
     rows.reach.push(
-      { accountId: current.id, importedTo: "2026-10-31", statementTo: null },
-      { accountId: meals.id, importedTo: "2026-10-31", statementTo: null },
-      { accountId: savings.id, importedTo: null, statementTo: "2026-10-15" },
+      { accountId: current.id, importedTo: "2026-10-31", statementTo: null, keptByHand: false },
+      { accountId: meals.id, importedTo: "2026-10-31", statementTo: null, keptByHand: false },
+      { accountId: savings.id, importedTo: null, statementTo: "2026-10-15", keptByHand: false },
     );
 
     const asked: Array<MonthScope> = [];
@@ -712,6 +759,7 @@ describe("monthFlags", () => {
     });
     expect(flags).toContainEqual({
       kind: "price-rise",
+      subscriptionId: expect.any(String),
       merchant: "Streamly",
       from: { minor: 949, currency: "EUR" },
       to: { minor: 1099, currency: "EUR" },
@@ -730,6 +778,43 @@ describe("monthFlags", () => {
       account: "Savings book",
       reached: "2026-10-15",
     });
+  });
+
+  // Issue #234: a merchant keeps up to three subscriptions; each is its own flag, told apart.
+  test("two plans of one merchant are two flags, each with its subscription's id", async () => {
+    const { rows } = household();
+
+    const plan = (merchantName: string, days: ReadonlyArray<string>, amountMinor: number) =>
+      days.map((day) => charge(merchantName, day, amountMinor));
+
+    rows.charges.push(
+      // Two plans of Streamly due on the 5th and the 20th of October: neither came.
+      ...plan("Streamly", ["2026-06-05", "2026-07-05", "2026-08-05", "2026-09-05"], 999),
+      ...plan("Streamly", ["2026-06-20", "2026-07-20", "2026-08-20", "2026-09-20"], 499),
+      // Two plans of Fitclub whose prices both rose in October.
+      ...plan("Fitclub", ["2026-07-03", "2026-08-03", "2026-09-03"], 2900),
+      charge("Fitclub", "2026-10-03", 3200),
+      ...plan("Fitclub", ["2026-07-17", "2026-08-17", "2026-09-17"], 1500),
+      charge("Fitclub", "2026-10-17", 1700),
+    );
+
+    const keys = async () => {
+      const { flags } = await run(monthFlags("ada", "2026-10", "EUR"), rows, TODAY, []);
+
+      return flags.flatMap((flag) =>
+        flag.kind === "stopped" || flag.kind === "price-rise"
+          ? [`${flag.kind}:${flag.merchant}:${flag.subscriptionId}`]
+          : [],
+      );
+    };
+
+    const first = await keys();
+
+    expect(first.filter((key) => key.startsWith("stopped:Streamly:"))).toHaveLength(2);
+    expect(first.filter((key) => key.startsWith("price-rise:Fitclub:"))).toHaveLength(2);
+    expect(new Set(first).size).toBe(4);
+    // The same rows read again give the same ids.
+    expect(await keys()).toEqual(first);
   });
 });
 
