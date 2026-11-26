@@ -1,5 +1,5 @@
 import { operationPlaces } from "@gousset/import";
-import type { BrokerLayout, CsvProfile, OperationKind, OperationsProfile } from "@gousset/import";
+import type { CsvProfile, OperationKind, OperationsProfile } from "@gousset/import";
 import type { CsvField } from "@gousset/ui/lib/csv-fields";
 
 // The import screen's CSV preview (#19): a profile as the user makes it there, a list of what each
@@ -274,14 +274,12 @@ function placeOf(mapping: ReadonlyArray<CsvField>, field: CsvField): number | nu
 
 /**
  * The profile of a broker's operations the settings, the mapping and the kind words make (v0.6), or
- * the fields it still lacks: a day and an amount. `layout`, for a broker's profile chosen from the
- * list: its columns are then found by their names, as long as the mapping is left as it came.
+ * the fields it still lacks: a day and an amount.
  */
 export function operationsProfileOf(
   settings: CsvFileSettings,
   mapping: ReadonlyArray<CsvField>,
   words: ReadonlyArray<KindWord>,
-  layout: BrokerLayout | undefined,
 ): { profile: OperationsProfile } | { missing: Array<RequiredField> } {
   const bookedOn = placeOf(mapping, "bookedOn");
   const amount = placeOf(mapping, "amount");
@@ -329,7 +327,7 @@ export function operationsProfileOf(
     referenceUnique: false,
   };
 
-  return { profile: layout === undefined ? profile : { ...profile, layout } };
+  return { profile };
 }
 
 /** A broker's operations profile's settings, as the form shows them. */

@@ -40,11 +40,6 @@ const KindWord = Schema.Struct({
   kind: OperationKind,
 });
 
-/** A broker whose export is read with its columns found by their names (README). */
-export const BROKER_LAYOUTS = ["fortuneo", "degiro-transactions"] as const;
-
-export type BrokerLayout = (typeof BROKER_LAYOUTS)[number];
-
 /** The names a header gives a column, compared trimmed, in any case, accents aside. */
 const ColumnNames = Schema.Array(
   Schema.String.check(Schema.isMinLength(1), Schema.isMaxLength(MAX_COLUMN_NAME)),
@@ -119,12 +114,6 @@ export const OperationsProfile = Schema.Struct({
   kinds: Schema.Array(KindWord).check(Schema.isMaxLength(MAX_KIND_WORDS)),
   /** Whether the broker makes `reference` unique to each row: the import then keys by it. */
   referenceUnique: Schema.Boolean,
-  /**
-   * A broker's export whose columns are found by their names (README, "Brokers' operations"):
-   * `columns` then say where they stand in the header the profile ships with. Left out for a table
-   * read by its columns' places.
-   */
-  layout: Schema.optionalKey(Schema.Literals(BROKER_LAYOUTS)),
 });
 
 export type OperationsProfile = typeof OperationsProfile.Type;
@@ -155,7 +144,6 @@ const OperationsProfileV1 = Schema.Struct({
   }),
   kinds: Schema.Array(KindWord).check(Schema.isMaxLength(MAX_KIND_WORDS)),
   referenceUnique: Schema.Boolean,
-  layout: Schema.optionalKey(Schema.Literals(BROKER_LAYOUTS)),
 });
 
 /**

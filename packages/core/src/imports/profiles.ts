@@ -3,14 +3,12 @@ import { UserData } from "@gousset/db/user-data";
 import type { QueryFailed, UserTransaction } from "@gousset/db/user-data";
 import {
   CsvDefinition,
-  SHIPPED_OPERATIONS_PROFILES,
   SHIPPED_PROFILES,
   csvFile,
   headerMatches,
   matchCsvHeader,
   readCsvHeader,
   readsOperations,
-  shippedOperationsProfile,
   shippedProfile,
   testReadCsv,
   testReadOperations,
@@ -93,11 +91,8 @@ function shippedEntry(shipped: ShippedProfile): ShippedEntry {
   };
 }
 
-/** Every profile shipped: the statements' styles, then the brokers' operations. */
-const SHIPPED: ReadonlyArray<ShippedProfile> = [
-  ...SHIPPED_PROFILES,
-  ...SHIPPED_OPERATIONS_PROFILES,
-];
+/** Every profile shipped: the statements' styles; no broker's (#250, the library is a file's). */
+const SHIPPED: ReadonlyArray<ShippedProfile> = SHIPPED_PROFILES;
 
 const SHIPPED_ENTRIES: ReadonlyArray<ShippedEntry> = SHIPPED.map(shippedEntry);
 
@@ -124,7 +119,7 @@ const storedProfiles = (transaction: UserTransaction): Promise<ReadonlyArray<Sto
 
 /**
  * The profiles a CSV file is matched against, in order: the user's that still decode, the most
- * recently updated first, then the shipped ones, the statements' styles before the brokers'.
+ * recently updated first, then the shipped ones.
  */
 export async function profileCandidates(
   transaction: UserTransaction,
@@ -311,7 +306,7 @@ const showProfile = (
     return findStored(owner, choice.id);
   }
 
-  const shipped = shippedProfile(choice.key) ?? shippedOperationsProfile(choice.key);
+  const shipped = shippedProfile(choice.key);
 
   return shipped === undefined
     ? Effect.fail(new ProfileNotFound({ profile: choice.key }))

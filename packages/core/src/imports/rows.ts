@@ -1,7 +1,7 @@
 import { investmentOperation } from "@gousset/db/schema/investments";
 import { account, importProfile, statementImport, statementLine } from "@gousset/db/schema/ledger";
 import type { UserTransaction } from "@gousset/db/user-data";
-import { SHIPPED_OPERATIONS_PROFILES, SHIPPED_PROFILES } from "@gousset/import";
+import { SHIPPED_PROFILES } from "@gousset/import";
 import { eq, sql } from "drizzle-orm";
 
 import type { ImportSummary } from "./summary";
@@ -12,23 +12,18 @@ import type { ImportSummary } from "./summary";
 export const isId = (id: string) =>
   /^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i.test(id);
 
-const SHIPPED_OPERATIONS_KEYS = SHIPPED_OPERATIONS_PROFILES.map((each) => each.key);
-
 /** Each shipped profile's name, by its key. */
 const SHIPPED_NAMES: ReadonlyMap<string, string> = new Map(
-  [...SHIPPED_PROFILES, ...SHIPPED_OPERATIONS_PROFILES].map((each) => [each.key, each.name]),
+  SHIPPED_PROFILES.map((each) => [each.key, each.name]),
 );
 
 /**
- * Whether the import reads a broker's operations (v0.6): its profile is of the kind `operations`,
- * the user's or a shipped one, or its lines are operations' cash (a definition given by hand,
+ * Whether the import reads a broker's operations (v0.6): its profile, the user's, is of the kind
+ * `operations` (none is shipped), or its lines are operations' cash (a definition given by hand,
  * which the import does not record).
  */
 const readsOperations =
-  sql<boolean>`(${importProfile.kind} = 'operations' or ${statementImport.shippedProfile} in (${sql.join(
-    SHIPPED_OPERATIONS_KEYS.map((key) => sql`${key}`),
-    sql`, `,
-  )}) or exists (select 1 from ${statementLine} inner join ${investmentOperation} on ${investmentOperation.lineId} = ${statementLine.id} where ${statementLine.importId} = ${statementImport.id}))`.mapWith(
+  sql<boolean>`(${importProfile.kind} = 'operations' or exists (select 1 from ${statementLine} inner join ${investmentOperation} on ${investmentOperation.lineId} = ${statementLine.id} where ${statementLine.importId} = ${statementImport.id}))`.mapWith(
     Boolean,
   );
 

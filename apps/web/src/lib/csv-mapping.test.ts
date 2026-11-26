@@ -229,30 +229,17 @@ describe("a broker's operations as the preview maps their columns", () => {
     ]);
 
     expect(
-      operationsProfileOf(
-        operationsSettingsOf(operations),
-        mapping,
-        [...operations.kinds, { word: "Coupon", kind: null }],
-        undefined,
-      ),
+      operationsProfileOf(operationsSettingsOf(operations), mapping, [
+        ...operations.kinds,
+        { word: "Coupon", kind: null },
+      ]),
     ).toEqual({ profile: operations });
   });
 
-  test("keeps a broker's layout, chosen from the list", () => {
-    expect(
-      operationsProfileOf(
-        operationsSettingsOf(operations),
-        operationsMappingOf(operations, 9, []),
-        operations.kinds,
-        "fortuneo",
-      ),
-    ).toEqual({ profile: { ...operations, layout: "fortuneo" } });
-  });
-
   test("names what it still lacks: a day and an amount, no label", () => {
-    expect(
-      operationsProfileOf(operationsSettingsOf(operations), ["ignored", "kind"], [], undefined),
-    ).toEqual({ missing: ["bookedOn", "amount"] });
+    expect(operationsProfileOf(operationsSettingsOf(operations), ["ignored", "kind"], [])).toEqual({
+      missing: ["bookedOn", "amount"],
+    });
   });
 
   test("offers each word of the kind column once, mapped first, in any case", () => {

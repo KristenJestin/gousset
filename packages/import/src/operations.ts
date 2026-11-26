@@ -3,8 +3,6 @@ import { Effect } from "effect";
 
 import { invalidField, minorDigits, readAmount, readDecimal } from "./amount";
 import type { FieldText } from "./amount";
-import { BROKERS } from "./brokers";
-import { placesIn as layoutPlacesIn } from "./brokers/columns";
 import { cellAt, csvFile, currencyOf, readRows, SAMPLE } from "./csv";
 import type { CsvFile } from "./csv";
 import { dateExample, dayReader } from "./csv-profile";
@@ -375,42 +373,12 @@ const readOperation = (row: CsvRow, reading: Reading): Effect.Effect<OperationRo
     };
   });
 
-/**
- * Where each field stands: by the columns' names for a broker's layout, else as the profile says,
- * at a place or found by a name in the header row.
- */
+/** Where each field stands, as the profile says: at a place, or found by a name in the header row. */
 const placesFor = (
   profile: OperationsProfile,
   header: CsvRow | undefined,
   line: number,
 ): Effect.Effect<OperationPlaces, MalformedFile> => {
-  const { layout } = profile;
-
-  if (layout !== undefined) {
-    if (header === undefined) {
-      return Effect.fail(
-        new MalformedFile({
-          line,
-          problem: "No header row: a broker's export starts with the names of its columns.",
-        }),
-      );
-    }
-
-    const found = layoutPlacesIn(
-      BROKERS[layout],
-      header.cells.map((cell) => cell.text),
-    );
-
-    return found.missing === null
-      ? Effect.succeed(found.places)
-      : Effect.fail(
-          new MalformedFile({
-            line: header.line,
-            problem: `No column ${quote(found.missing)}: the file is another broker's export, or its columns are named in another language.`,
-          }),
-        );
-  }
-
   if (findsColumnsByName(profile) && header === undefined) {
     return Effect.fail(
       new MalformedFile({

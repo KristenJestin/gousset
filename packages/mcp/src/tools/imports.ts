@@ -18,7 +18,7 @@ import type {
   Started,
   Undone,
 } from "@gousset/core";
-import { isPlace } from "@gousset/import";
+import { findsColumnsByName, isPlace } from "@gousset/import";
 import { Duration, Effect, Exit, Schema } from "effect";
 
 import { ToolRefusal, defineTool } from "../tool";
@@ -94,7 +94,7 @@ const ImportsInput = Schema.Struct({
 
 type ImportsInput = typeof ImportsInput.Type;
 
-const DESCRIPTION = `Imports bank statement files into the user's accounts, without duplicates, and lists, follows and undoes imports. Use it when the user gives a statement file (OFX, QFX, QIF, CAMT.053, MT940, CSV) or asks what was imported. A broker's CSV of operations (Fortuneo, Degiro, or one mapped on the import screen) goes the same way into an investment account, its summary counting operations.
+const DESCRIPTION = `Imports bank statement files into the user's accounts, without duplicates, and lists, follows and undoes imports. Use it when the user gives a statement file (OFX, QFX, QIF, CAMT.053, MT940, CSV) or asks what was imported. A broker's CSV of operations, read with an operations profile of the user's, goes the same way into an investment account, its summary counting operations.
 
 A file you can reach from a shell, larger than a few tens of kilobytes, goes through a file upload, so that its bytes never pass through the conversation: {"action":"create_upload","file_name":"2024-2026.ofx","size":1048576} (its exact size in bytes), then, from that shell, curl -sS -F 'file=@2024-2026.ofx' <the address it gave>, then {"action":"upload","file_upload":"<the id it gave>"}. A smaller file goes in the call itself: {"action":"upload","file_name":"october.ofx","content":"OFXHEADER:100..."}
 
@@ -800,11 +800,6 @@ const SEPARATORS = {
   "|": "pipes",
 } satisfies { readonly [separator in Definition["separator"]]: string };
 
-const BROKERS = {
-  fortuneo: "Fortuneo's history of operations",
-  "degiro-transactions": "Degiro's Transactions.csv",
-} satisfies { readonly [layout in NonNullable<OperationsProfile["layout"]>]: string };
-
 /** How a table is split and its values written, in a few words. */
 function tableText(profile: Definition): ReadonlyArray<string> {
   const header = profile.headerRow ? "a header row" : "no header row";
@@ -833,10 +828,6 @@ function placeText(place: Place): string {
 
 /** How a broker's operations profile reads a file: into an investment account only. */
 function operationsText(profile: OperationsProfile): string {
-  if (profile.layout !== undefined) {
-    return `a broker's operations, ${BROKERS[profile.layout]}, its columns found by their names, into an investment account`;
-  }
-
   const { kind, amount } = profile.columns;
 
   const kinds =
@@ -891,7 +882,7 @@ function profilesText(entries: ReadonlyArray<ImportProfileEntry>): string {
   );
 
   return [
-    "CSV import profiles, the user's first, then those shipped with Gousset. On upload, a CSV file is read with the first profile whose header row it has, or, for PayPal activity, whose header row names PayPal's mandatory columns among any others. A broker's export is recognised by the columns its broker writes, wherever they stand.",
+    "CSV import profiles, the user's first, then those shipped with Gousset. On upload, a CSV file is read with the first profile whose header row it has, or, for PayPal activity and a profile that finds its columns by their names, whose header row names those columns among any others.",
     ...lines,
     "",
     `Which of them read one CSV import's file: ${PROFILES_OF_IMPORT}`,
@@ -908,18 +899,26 @@ function usedText(found: ProfilesForImport): string {
     : `No profile has read it yet (it is ${found.status}).`;
 }
 
+/** How a profile recognises a file by its header row. */
+function headerText(definition: Definition): string {
+  if ("reads" in definition) {
+    return findsColumnsByName(definition)
+      ? "the file's header row names the profile's columns"
+      : "its header row is the file's";
+  }
+
+  return definition.layout === "paypal-activity"
+    ? "the file's header row names PayPal's mandatory columns"
+    : "its header row is the file's";
+}
+
 function profilesForText(found: ProfilesForImport): string {
   const fileName = clip(found.fileName, 100);
 
   const lines = found.fitting.map(({ profile, by }) => {
-    const layout = profile.definition?.layout;
+    const { definition } = profile;
 
-    const header =
-      layout === "paypal-activity"
-        ? "the file's header row names PayPal's mandatory columns"
-        : layout === undefined
-          ? "its header row is the file's"
-          : "the file's header row names the broker's columns";
+    const header = definition === null ? "its header row is the file's" : headerText(definition);
 
     return `- ${profileName(profile)}: ${by === "header" ? header : "a test read of the file's first lines succeeds"}.`;
   });

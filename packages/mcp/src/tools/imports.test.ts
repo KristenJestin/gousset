@@ -1099,7 +1099,7 @@ describe("imports profiles", () => {
     // Its user chooses the export's columns: a file is PayPal's by the names of those it always has.
     expect(text).not.toContain("A CSV file whose header row is a profile's is read with it");
     expect(text).toContain(
-      "or, for PayPal activity, whose header row names PayPal's mandatory columns among any others.",
+      "or, for PayPal activity and a profile that finds its columns by their names, whose header row names those columns among any others.",
     );
 
     const fitting = await imports(

@@ -26,7 +26,6 @@ export {
 export type { CsvCandidate, CsvFile, CsvOptions, CsvTable } from "./csv";
 
 export {
-  BROKER_LAYOUTS,
   ColumnPlace,
   CsvDefinition,
   OPERATION_KINDS,
@@ -36,8 +35,6 @@ export {
   readsOperations,
 } from "./operations-profile";
 
-export type { BrokerLayout } from "./operations-profile";
-
 export { findsColumnsByName, placesIn as operationPlaces } from "./operations-columns";
 
 export type { OperationField, OperationPlaces } from "./operations-columns";
@@ -46,22 +43,9 @@ export { readOperations, testReadOperations } from "./operations";
 
 export type { OperationRow, Operations } from "./operations";
 
-export { DEGIRO } from "./brokers/degiro";
+export { SHIPPED_PROFILES, shippedProfile } from "./csv-shipped";
 
-export { FORTUNEO } from "./brokers/fortuneo";
-
-export {
-  SHIPPED_OPERATIONS_PROFILES,
-  SHIPPED_PROFILES,
-  shippedOperationsProfile,
-  shippedProfile,
-} from "./csv-shipped";
-
-export type {
-  ShippedOperationsProfile,
-  ShippedProfile,
-  ShippedStatementProfile,
-} from "./csv-shipped";
+export type { ShippedProfile } from "./csv-shipped";
 
 export { detectCsvProfile } from "./csv-detect";
 

@@ -1,8 +1,4 @@
-import { DEGIRO, DEGIRO_PROFILE } from "./brokers/degiro";
-import { FORTUNEO, FORTUNEO_PROFILE } from "./brokers/fortuneo";
-import { normalizeHeader } from "./csv";
 import type { CsvProfile } from "./csv-profile";
-import type { OperationsProfile } from "./operations-profile";
 
 // The import profiles shipped with Gousset (docs/data-model.md, "Import profiles"): a few common
 // styles of bank export, in code, so that a fix to one arrives with an update. Each is named by a
@@ -11,34 +7,23 @@ import type { OperationsProfile } from "./operations-profile";
 // day first and month first, and columns named "Paid out" and "Paid in" say no direction detection
 // knows. A file in a style detection settles needs no shipped profile. PayPal's activity is the one
 // named by its institution (#201): a payment service, not a bank's style, whose export is no table
-// of one line per row (`layout`, README, "PayPal's activity"). Brokers' exports of operations are
-// named by their broker too (`kind: "operations"`, README, "Brokers' operations"): each broker
-// writes its own, and their columns are found by their names.
+// of one line per row (`layout`, README, "PayPal's activity"). No broker's export of operations is
+// shipped (#250): the user maps one by hand, or imports a profile file of the library
+// (`profiles/`, README, "Brokers' operations").
 
-type Shipped = {
+/** A statement's profile shipped with Gousset, in the shape a user's own profile has. */
+export type ShippedProfile = {
   /** Stable: an import keeps it (`import.shipped_profile`) to say which profile read its file. */
   readonly key: string;
   readonly name: string;
+  readonly kind: "statement";
   /** The header row of its files, normalised (`normalizeHeader`), past the lines it skips. */
   readonly header: string;
-};
-
-/** A statement's profile shipped with Gousset, in the shape a user's own profile has. */
-export type ShippedStatementProfile = Shipped & {
-  readonly kind: "statement";
   readonly profile: CsvProfile;
 };
 
-/** A broker's operations profile shipped with Gousset. */
-export type ShippedOperationsProfile = Shipped & {
-  readonly kind: "operations";
-  readonly profile: OperationsProfile;
-};
-
-export type ShippedProfile = ShippedStatementProfile | ShippedOperationsProfile;
-
 /** The styles shipped, in the order a file is matched against them. */
-export const SHIPPED_PROFILES: ReadonlyArray<ShippedStatementProfile> = [
+export const SHIPPED_PROFILES: ReadonlyArray<ShippedProfile> = [
   {
     key: "fr-debit-credit",
     name: "French style: debit and credit columns",
@@ -168,34 +153,10 @@ export const SHIPPED_PROFILES: ReadonlyArray<ShippedStatementProfile> = [
   },
 ];
 
-/** The brokers' exports shipped, in the order a file is matched against them, after the styles. */
-export const SHIPPED_OPERATIONS_PROFILES: ReadonlyArray<ShippedOperationsProfile> = [
-  {
-    key: "fortuneo-operations",
-    name: "Fortuneo: history of operations",
-    kind: "operations",
-    // Recognised by its columns' names (`layout`): this header is the one the profile shows.
-    header: normalizeHeader(FORTUNEO.header),
-    profile: FORTUNEO_PROFILE,
-  },
-  {
-    key: "degiro-transactions",
-    name: "Degiro: Transactions.csv",
-    kind: "operations",
-    header: normalizeHeader(DEGIRO.header),
-    profile: DEGIRO_PROFILE,
-  },
-];
-
 /**
  * The statement profile shipped under `key`, or `undefined` when none is (an older release's key,
  * say).
  */
-export function shippedProfile(key: string): ShippedStatementProfile | undefined {
+export function shippedProfile(key: string): ShippedProfile | undefined {
   return SHIPPED_PROFILES.find((each) => each.key === key);
-}
-
-/** The broker's operations profile shipped under `key`, or `undefined` when none is. */
-export function shippedOperationsProfile(key: string): ShippedOperationsProfile | undefined {
-  return SHIPPED_OPERATIONS_PROFILES.find((each) => each.key === key);
 }

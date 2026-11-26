@@ -5,7 +5,7 @@ import type {
   ImportSummary as Import,
   ProfileChoice,
 } from "@gousset/core/imports";
-import type { BrokerLayout, OperationKind } from "@gousset/import";
+import type { OperationKind } from "@gousset/import";
 import { m } from "@gousset/i18n/messages";
 import { getLocale } from "@gousset/i18n/runtime";
 import { Button } from "@gousset/ui/components/button";
@@ -219,12 +219,10 @@ function ColumnsPreview({
   const { resume, refused } = useResume(summary);
   const [holds, setHolds] = useState<Holds>("statement");
   const [words, setWords] = useState<ReadonlyArray<KindWord>>([]);
-  // A broker's profile chosen from the list: its columns are found by their names.
-  const [brokerLayout, setBrokerLayout] = useState<BrokerLayout>();
 
   const draft =
     holds === "operations"
-      ? operationsProfileOf(settings, mapping, words, brokerLayout)
+      ? operationsProfileOf(settings, mapping, words)
       : profileOf(settings, mapping);
 
   const read = "profile" in draft ? draft.profile : splittingProfile(settings);
@@ -265,7 +263,6 @@ function ColumnsPreview({
 
   const byHandNow = () => {
     setSettings(byHand(settings));
-    setBrokerLayout(undefined);
     setChosen(null);
   };
 
@@ -287,12 +284,10 @@ function ColumnsPreview({
       setSettings(operationsSettingsOf(definition));
       setMapping(operationsMappingOf(definition, width, settings.headerRow ? (first ?? []) : []));
       setWords(definition.kinds.map(({ word, kind }) => ({ word, kind })));
-      setBrokerLayout(definition.layout);
     } else if (definition !== null) {
       setHolds("statement");
       setSettings(settingsOf(definition));
       setMapping(mappingOf(definition, width));
-      setBrokerLayout(undefined);
     }
 
     setChosen(choiceOf(entry));
@@ -369,8 +364,7 @@ function ColumnsPreview({
     await refreshProfiles();
   };
 
-  const readWith =
-    chosen ?? (settings.layout === undefined && brokerLayout === undefined ? null : startedFrom);
+  const readWith = chosen ?? (settings.layout === undefined ? null : startedFrom);
 
   const result = "profile" in draft ? testResult(preview) : null;
   const readable = result !== null && result.kind === "lines";

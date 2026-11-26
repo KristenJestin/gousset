@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs";
+
 import {
   BROKER_ISINS,
   DEGIRO_ROWS,
@@ -11,10 +13,8 @@ import { Effect, Exit, Schema } from "effect";
 import fc from "fast-check";
 import { describe, expect, test } from "vite-plus/test";
 
-import { DEGIRO_PROFILE } from "./brokers/degiro";
-import { FORTUNEO_PROFILE } from "./brokers/fortuneo";
-import { csvFile, matchCsvHeader, readCsvHeader } from "./csv";
-import { SHIPPED_OPERATIONS_PROFILES, SHIPPED_PROFILES } from "./csv-shipped";
+import { csvFile, matchCsvHeader, normalizeHeader } from "./csv";
+import { SHIPPED_PROFILES } from "./csv-shipped";
 import { CsvDefinition, readsOperations } from "./operations-profile";
 import type { OperationKind, OperationsProfile } from "./operations-profile";
 import { readOperations, testReadOperations } from "./operations";
@@ -38,6 +38,25 @@ const WORDS = {
 } as const;
 
 const word = (kind: keyof typeof WORDS) => WORDS[kind];
+
+const decodeShared = Schema.decodeUnknownSync(Schema.fromJsonString(CsvDefinition));
+
+/** A profile of the library (`profiles/`), decoded as the profile import decodes a shared file. */
+function library(path: string): OperationsProfile {
+  const profile = decodeShared(
+    readFileSync(new URL(`../profiles/${path}`, import.meta.url), "utf8"),
+  );
+
+  if (!readsOperations(profile)) {
+    throw new Error(`${path} reads no operations.`);
+  }
+
+  return profile;
+}
+
+const FORTUNEO_PROFILE = library("operations/fortuneo-operations.json");
+
+const DEGIRO_PROFILE = library("operations/degiro-transactions.json");
 
 const read = (bytes: Uint8Array, profile: OperationsProfile, currency = "EUR") =>
   Effect.runSync(readOperations(bytes, profile, { currency })).operations;
@@ -89,7 +108,7 @@ function operation(
   };
 }
 
-describe("Fortuneo's history of operations", () => {
+describe("Fortuneo's history of operations, with the library's profile", () => {
   test("reads each kind of operation, signed by its kind, never through a float", () => {
     expect(read(fortuneoFile(FORTUNEO_ROWS), FORTUNEO_PROFILE)).toEqual([
       operation(2, "deposit", "2026-10-05", 100_000, { label: "VIREMENT" }),
@@ -119,26 +138,22 @@ describe("Fortuneo's history of operations", () => {
     ]);
   });
 
-  test("is recognised by its columns' names, wherever they stand", () => {
+  test("saved with a header, recognises its columns by their names, wherever they stand", () => {
     const shuffled = [...FORTUNEO_HEADER].reverse();
     const rows = FORTUNEO_ROWS.map((row) => [...row].reverse());
     const bytes = fortuneoFile(rows, shuffled);
 
-    const matched = Effect.runSync(
-      matchCsvHeader(csvFile(bytes), [...SHIPPED_PROFILES, ...SHIPPED_OPERATIONS_PROFILES]),
-    );
+    const saved = {
+      key: "saved",
+      header: normalizeHeader(FORTUNEO_HEADER),
+      profile: FORTUNEO_PROFILE,
+    };
 
-    expect(matched?.key).toBe("fortuneo-operations");
+    const matched = Effect.runSync(matchCsvHeader(csvFile(bytes), [...SHIPPED_PROFILES, saved]));
+
+    expect(matched?.key).toBe("saved");
     expect(read(bytes, FORTUNEO_PROFILE)).toEqual(
       read(fortuneoFile(FORTUNEO_ROWS), FORTUNEO_PROFILE),
-    );
-  });
-
-  test("its shipped header is the table's, as a profile keeps it", () => {
-    const shipped = SHIPPED_OPERATIONS_PROFILES.find((each) => each.key === "fortuneo-operations");
-
-    expect(Effect.runSync(readCsvHeader(csvFile(fortuneoFile([])), FORTUNEO_PROFILE))).toBe(
-      shipped?.header,
     );
   });
 
@@ -221,7 +236,7 @@ describe("Fortuneo's history of operations", () => {
   });
 });
 
-describe("Degiro's Transactions.csv", () => {
+describe("Degiro's Transactions.csv, with the library's profile", () => {
   test("reads a purchase and a sale by the quantity's sign, a foreign price from its value", () => {
     expect(read(degiroFile(DEGIRO_ROWS), DEGIRO_PROFILE)).toEqual([
       operation(2, "purchase", "2026-10-06", -30_050, {
@@ -258,15 +273,14 @@ describe("Degiro's Transactions.csv", () => {
     ]);
   });
 
-  test("is recognised by its columns' names", () => {
+  test("saved with a header, recognises its columns by their names", () => {
+    const saved = { key: "saved", header: "date;product", profile: DEGIRO_PROFILE };
+
     const matched = Effect.runSync(
-      matchCsvHeader(csvFile(degiroFile(DEGIRO_ROWS)), [
-        ...SHIPPED_PROFILES,
-        ...SHIPPED_OPERATIONS_PROFILES,
-      ]),
+      matchCsvHeader(csvFile(degiroFile(DEGIRO_ROWS)), [...SHIPPED_PROFILES, saved]),
     );
 
-    expect(matched?.key).toBe("degiro-transactions");
+    expect(matched?.key).toBe("saved");
   });
 
   test("refuses a total in another currency than the account's", () => {
@@ -383,8 +397,6 @@ describe("a profile mapped by hand", () => {
     expect(tried.operations.map((each) => each.amountMinor)).toEqual([5_000_000]);
   });
 });
-
-const decodeShared = Schema.decodeUnknownSync(Schema.fromJsonString(CsvDefinition));
 
 /** A profile of version 2 whose columns are found by their names, as a shared file writes it. */
 const BY_NAME = {
@@ -509,6 +521,10 @@ describe("a profile of version 2", () => {
 
     expect([amountCurrency, feesCurrency, priceCurrency, value]).toEqual([null, null, null, null]);
     expect(decodeShared(saved)).toEqual(HAND_MAPPED);
+    // Part 2's brokers' layouts are gone: a profile that named one reads its columns at their places.
+    expect(decodeShared(JSON.stringify({ ...JSON.parse(saved), layout: "fortuneo" }))).toEqual(
+      HAND_MAPPED,
+    );
     expect(Schema.encodeSync(CsvDefinition)(decodeShared(saved))).toMatchObject({ version: 2 });
   });
 });
