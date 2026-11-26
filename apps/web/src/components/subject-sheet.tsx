@@ -104,8 +104,11 @@ function draftOf(subject: SubjectDetail | null, currency: string): SubjectDraft 
   };
 }
 
-/** What the sheet sends: what an option left unticked holds is sent as none. */
-function inputOf(draft: SubjectDraft) {
+/**
+ * What the sheet sends: what an option left unticked holds is sent as none. The past is attached
+ * only when a merchant is added to those it `had`, where the sheet offers it.
+ */
+function inputOf(draft: SubjectDraft, had: ReadonlySet<string>) {
   const valued = draft.hasValue && draft.valueMinor !== null;
 
   return {
@@ -118,7 +121,7 @@ function inputOf(draft: SubjectDraft) {
     endsOn: draft.hasDates ? draft.endsOn : null,
     accountIds: [...draft.accountIds],
     merchantIds: [...draft.merchantIds],
-    attachPast: draft.attachPast,
+    attachPast: draft.attachPast && draft.merchantIds.some((id) => !had.has(id)),
   };
 }
 
@@ -140,9 +143,10 @@ export type SubjectSheetProps = {
 /**
  * A subject in its side sheet (#37; docs/wireframes, screen 8): a new one, or one of the user's to
  * change. It offers the subjects it may go inside (a cycle is the server's to refuse, under
- * "Inside"), the loan accounts, the accounts and the merchants; the past expenses of the merchants
- * added are read as they are added. A refusal is said under its field; once accepted, the sheet
- * closes and every subjects query is read again.
+ * "Inside"), the loan accounts, the accounts and the merchants; once a merchant is added, the past
+ * expenses saving attaches are read: every merchant's the subject has not yet, a declined pair
+ * aside. A refusal is said under its field; once accepted, the sheet closes and every subjects query
+ * is read again.
  */
 export function SubjectSheet({
   open,
@@ -160,10 +164,10 @@ export function SubjectSheet({
   const [errors, setErrors] = useState<SubjectEditorErrors>({});
   const { data: accounts } = useQuery(accountQueries.list());
   const { data: merchants = [] } = useQuery(merchantQueries.choices());
-  // Only the merchants added have their past to attach: those it had are attached already.
+  // A merchant added offers the past: saved, every merchant's is attached, those it had too.
   const had = new Set(initial.merchantIds);
-  const added = merchantIds.filter((id) => !had.has(id));
-  const preview = useQuery(subjectQueries.preview(added));
+  const adding = merchantIds.some((id) => !had.has(id));
+  const preview = useQuery(subjectQueries.preview(adding ? merchantIds : [], subject?.id ?? null));
 
   const openAccounts = accounts?.groups.flatMap((group) => group.accounts) ?? [];
   const linked = subject?.accounts ?? [];
@@ -201,10 +205,10 @@ export function SubjectSheet({
       : [{ id: each.id, name: paths.get(each.id) ?? each.name }],
   );
 
-  const past = pastOf(added, preview.data, locale);
+  const past = pastOf(adding, preview.data, locale);
 
   async function save(draft: SubjectDraft) {
-    const input = inputOf(draft);
+    const input = inputOf(draft, had);
 
     const answer = await answerOf(
       subject === null
@@ -252,13 +256,13 @@ export function SubjectSheet({
   );
 }
 
-/** What the sheet says of the past expenses of the merchants added. */
+/** What the sheet says of the past expenses saving attaches, once a merchant is `adding`. */
 function pastOf(
-  added: ReadonlyArray<string>,
+  adding: boolean,
   read: Awaited<ReturnType<typeof getSubjectMerchantsPreview>> | undefined,
   locale: string,
 ): SubjectPastView {
-  if (added.length === 0) {
+  if (!adding) {
     return { state: "none" };
   }
 

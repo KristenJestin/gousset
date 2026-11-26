@@ -127,17 +127,28 @@ export const getSubject = createServerFn({ method: "GET" })
     ),
   );
 
-/** What the past expenses of some merchants come to, before a subject gets them. */
+/**
+ * What the past expenses of some merchants come to, before a subject gets them: for a subject that
+ * exists, those it has not yet nor declined, what saving with "Attach them" attaches.
+ */
 export const getSubjectMerchantsPreview = createServerFn({ method: "POST" })
   .middleware([signedIn, slowedInDevelopment])
   .validator(
     Schema.toStandardSchemaV1(
-      Schema.Struct({ merchantIds: Schema.Array(Id).check(Schema.isMaxLength(MAX_ATTACHED)) }),
+      Schema.Struct({
+        merchantIds: Schema.Array(Id).check(Schema.isMaxLength(MAX_ATTACHED)),
+        subjectId: Schema.NullOr(SubjectId),
+      }),
     ),
   )
   .handler(({ data, context }) =>
     runCore(
-      subjectMerchantsPreview(context.owner, data.merchantIds, context.currency).pipe(
+      subjectMerchantsPreview(
+        context.owner,
+        data.merchantIds,
+        context.currency,
+        data.subjectId,
+      ).pipe(
         Effect.map((preview) => ({ ok: true as const, preview })),
         Effect.catchTags({ MerchantNotFound: () => refused("MERCHANT_NOT_FOUND") }),
       ),

@@ -10,7 +10,7 @@ export const subjectKeys = {
   /** A subject's page, for a year or all time. */
   detail: (subjectId: string, period: number | "all") =>
     [...subjectKeys.all, "detail", subjectId, period] as const,
-  /** What the past expenses of some merchants come to, by their ids in order. */
-  preview: (merchantIds: ReadonlyArray<string>) =>
-    [...subjectKeys.all, "preview", ...merchantIds] as const,
+  /** What the past expenses of some merchants come to, for a subject (null: a new one), by ids. */
+  preview: (merchantIds: ReadonlyArray<string>, subjectId: string | null) =>
+    [...subjectKeys.all, "preview", subjectId, ...merchantIds] as const,
 };

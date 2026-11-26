@@ -35,7 +35,7 @@ export type SubjectDraft = {
   accountIds: ReadonlyArray<string>;
   /** Each becomes a rule "merchant is", attaching the subject. */
   merchantIds: ReadonlyArray<string>;
-  /** The past expenses of the merchants added are attached once saved. */
+  /** Once a merchant is added, the merchants' past expenses are attached once saved. */
   attachPast: boolean;
   archived: boolean;
 };
@@ -52,7 +52,7 @@ export type SubjectEditorErrors = {
   form?: string;
 };
 
-/** What the past expenses of the merchants added come to, as the page last read it. */
+/** What the past expenses saving attaches come to, as the page last read it. */
 export type SubjectPastView =
   | { state: "none" }
   | { state: "loading" }

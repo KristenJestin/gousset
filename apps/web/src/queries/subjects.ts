@@ -21,13 +21,15 @@ export const subjectQueries = {
       queryFn: () => getSubject({ data: { subjectId, period } }),
     }),
   /**
-   * What the past expenses of the merchants `merchantIds` come to; the last answer stays on screen
+   * What the past expenses of the merchants `merchantIds` come to for the subject `subjectId`, those
+   * it has and those declined for it aside (null for a new one); the last answer stays on screen
    * while the next one loads.
    */
-  preview: (merchantIds: ReadonlyArray<string>) =>
+  preview: (merchantIds: ReadonlyArray<string>, subjectId: string | null) =>
     queryOptions({
-      queryKey: subjectKeys.preview(merchantIds),
-      queryFn: () => getSubjectMerchantsPreview({ data: { merchantIds: [...merchantIds] } }),
+      queryKey: subjectKeys.preview(merchantIds, subjectId),
+      queryFn: () =>
+        getSubjectMerchantsPreview({ data: { merchantIds: [...merchantIds], subjectId } }),
       enabled: merchantIds.length > 0,
       placeholderData: keepPreviousData,
     }),

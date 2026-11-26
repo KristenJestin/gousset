@@ -1,10 +1,11 @@
 import type { Locator, Page } from "@playwright/test";
-import { attachSubject, createSubject } from "@gousset/core";
+import { attachSubject, createSubject, refuseProposals } from "@gousset/core";
 import type { SubjectInput } from "@gousset/core";
 import {
   account,
   entryPart,
   entrySubject,
+  merchant,
   statementLine,
   subjectEntryRefused,
 } from "@gousset/db/schema/ledger";
@@ -291,6 +292,49 @@ test("create with merchants and attach the past", async ({ page, app, user }) =>
   expect(van).toBeDefined();
   expect(await subjectsOf(owner, entryOf(entries, "CB FUELSTOP 1209"))).toEqual([van]);
   expect(await subjectsOf(owner, entryOf(entries, "CB BAKEHOUSE 0410"))).toEqual([]);
+});
+
+test("a merchant added: the past offered is every merchant's not attached yet", async ({
+  page,
+  app,
+  user,
+}) => {
+  const { person, owner } = await personFor(app, user, "subjects-merchants-edit");
+
+  const entries = await expenses(owner, [
+    { day: "2026-09-12", minor: 5000, label: "CB FUELSTOP 1209" },
+    { day: "2026-10-03", minor: 6200, label: "CB FUELSTOP 0310" },
+    { day: "2026-10-05", minor: 30_000, label: "CB TYREHOUSE 0510" },
+  ]);
+
+  const [fuelstop] = await data.asUser(owner, (transaction) =>
+    transaction.select({ id: merchant.id }).from(merchant).where(eq(merchant.name, "Fuelstop")),
+  );
+
+  // Made from Fuelstop without its past; one of its expenses declined since.
+  const van = await subject(owner, { name: "Van", merchantIds: [fuelstop?.id ?? ""] });
+  const declined = entryOf(entries, "CB FUELSTOP 1209");
+
+  await Effect.runPromise(refuseProposals(owner, van, [declined]).pipe(Effect.provide(data.layer)));
+  await as(page, person, `/subjects/${van}`);
+
+  const sheet = await edit(page, "Van");
+
+  await sheet.getByRole("button", { name: "Merchant", exact: true }).click();
+  await sheet.getByRole("combobox", { name: "Merchant to attach" }).pressSequentially("Tyre");
+  await page.getByRole("option", { name: "Tyrehouse", exact: true }).click();
+
+  // What saving attaches: Tyrehouse's, and Fuelstop's it does not have yet, the declined one aside.
+  await expect(sheet.locator('[data-slot="subject-past"]')).toHaveText(
+    "2 expenses match (€362.00).",
+  );
+  await expect(sheet.getByRole("checkbox", { name: "Attach them" })).toBeChecked();
+  await sheet.getByRole("button", { name: "Save" }).click();
+  await expect(sheet).toBeHidden();
+
+  expect(await subjectsOf(owner, entryOf(entries, "CB FUELSTOP 0310"))).toEqual([van]);
+  expect(await subjectsOf(owner, entryOf(entries, "CB TYREHOUSE 0510"))).toEqual([van]);
+  expect(await subjectsOf(owner, declined)).toEqual([]);
 });
 
 test("edit and move; a cycle is refused under its field", async ({ page, app, user }) => {
