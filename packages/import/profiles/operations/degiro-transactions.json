@@ -1,0 +1,94 @@
+{
+  "version": 2,
+  "reads": "operations",
+  "description": "Guessed: Degiro's Transactions.csv in English, as remembered from Degiro's public help pages, never checked on a real export. Purchases and sales only, told by the quantity's sign; each amount's currency is in the unnamed column after it, and a price in another currency is read from the trade's value in the account's.",
+  "separator": ",",
+  "encoding": "utf8",
+  "skipRows": 0,
+  "headerRow": true,
+  "dateFormat": "DD-MM-YYYY",
+  "decimalMark": ".",
+  "columns": {
+    "bookedOn": {
+      "names": [
+        "Date"
+      ]
+    },
+    "valueOn": null,
+    "kind": null,
+    "isin": {
+      "names": [
+        "ISIN"
+      ]
+    },
+    "securityName": {
+      "names": [
+        "Product"
+      ]
+    },
+    "securityCurrency": {
+      "after": [
+        "Price"
+      ]
+    },
+    "quantity": {
+      "names": [
+        "Quantity"
+      ]
+    },
+    "unitPrice": {
+      "names": [
+        "Price"
+      ]
+    },
+    "fees": {
+      "names": [
+        "Transaction and/or third",
+        "Transaction and/or third party fees",
+        "Transaction costs"
+      ],
+      "optional": true
+    },
+    "amount": {
+      "names": [
+        "Total"
+      ]
+    },
+    "label": {
+      "names": [
+        "Product"
+      ],
+      "optional": true
+    },
+    "reference": {
+      "names": [
+        "Order ID"
+      ],
+      "optional": true
+    },
+    "amountCurrency": {
+      "after": [
+        "Total"
+      ]
+    },
+    "feesCurrency": {
+      "after": [
+        "Transaction and/or third",
+        "Transaction and/or third party fees",
+        "Transaction costs"
+      ]
+    },
+    "priceCurrency": {
+      "after": [
+        "Price"
+      ]
+    },
+    "value": {
+      "names": [
+        "Value"
+      ]
+    }
+  },
+  "kinds": [],
+  "referenceUnique": false
+}

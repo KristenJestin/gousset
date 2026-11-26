@@ -162,8 +162,16 @@ export default defineConfig({
     },
   },
   fmt: {
-    // The product documents and the brand files are written by hand and kept as they are.
-    ignorePatterns: [...GENERATED, ...VENDORED, ...AGENT_TOOLING, "docs/**", "brand/**"],
+    // The product documents and the brand files are written by hand and kept as they are. The
+    // library's profile files are the JSON a profile's export writes, byte for byte (its README).
+    ignorePatterns: [
+      ...GENERATED,
+      ...VENDORED,
+      ...AGENT_TOOLING,
+      "docs/**",
+      "brand/**",
+      "packages/import/profiles/**/*.json",
+    ],
     singleQuote: false,
     semi: true,
     sortPackageJson: true,
