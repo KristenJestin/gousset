@@ -26,6 +26,16 @@ const shouldWarnIgnoredForward = createIgnoredForwardWarning();
 /** Attempts at a password, signing in or changing it, counted in this process. */
 const passwordAttempts = createSignInLimits();
 
+/**
+ * The authorization requests one address may make in a minute, as the app was started with. The
+ * environment is passed whole: written `ENV.MCP_AUTHORIZE_PER_MINUTE`, a public variable is
+ * replaced by its build-time value (`security.ts` says the same), and the limit stayed 30 whatever
+ * the app was given (#244).
+ */
+function authorizePerMinute(env: { readonly MCP_AUTHORIZE_PER_MINUTE?: number }): number {
+  return env.MCP_AUTHORIZE_PER_MINUTE ?? 30;
+}
+
 const AUTHORIZE_PATH = "/api/auth/oauth2/authorize";
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
@@ -35,7 +45,7 @@ const HOUR = 60 * MINUTE;
  * document and write a client, before anyone signs in. A person connecting agents makes a few;
  * MCP_AUTHORIZE_PER_MINUTE raises it where many clients share one address (the end-to-end tests).
  */
-const authorizeRequests = createRequestLimit(ENV.MCP_AUTHORIZE_PER_MINUTE ?? 30, MINUTE);
+const authorizeRequests = createRequestLimit(authorizePerMinute(ENV), MINUTE);
 
 let lastClientCleanup = 0;
 
