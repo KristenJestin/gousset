@@ -6,6 +6,8 @@ import {
   formatMoney,
   formatMoneyInput,
   formatPercent,
+  formatQuantity,
+  formatUnitAmount,
   breakdownBars,
   isSteady,
   minorDigits,
@@ -160,6 +162,44 @@ describe("formatting money", () => {
 
         expect(parts.map((part) => part.value).join("")).toBe(formatMoney(money, { locale }));
       }),
+    );
+  });
+});
+
+describe("quantities and unit prices of securities", () => {
+  it("writes a quantity exactly, with the locale's separators and no trailing zero", () => {
+    expect(formatQuantity("27.4", "en")).toBe("27.4");
+    expect(formatQuantity("2.9791", "fr")).toBe("2,9791");
+    expect(formatQuantity("1234.0347", "en")).toBe("1,234.0347");
+    expect(formatQuantity("0.0000000001", "en")).toBe("0.0000000001");
+    expect(formatQuantity("12", "en")).toBe("12");
+  });
+
+  it("writes an incomplete position's quantity below zero with a true minus", () => {
+    expect(formatQuantity("-1.5", "en")).toBe(`${MINUS}1.5`);
+  });
+
+  it("keeps every digit of any quantity Gousset holds", () => {
+    fc.assert(
+      fc.property(
+        fc.bigInt({ min: 0n, max: 10n ** 15n - 1n }),
+        fc.bigInt({ min: 1n, max: 10n ** 10n - 1n }),
+        (units, fraction) => {
+          const decimals = String(fraction).padStart(10, "0").replace(/0+$/, "");
+          const written = formatQuantity(`${String(units)}.${decimals}`, "en");
+
+          expect(written.replaceAll(",", "")).toBe(`${String(units)}.${decimals}`);
+        },
+      ),
+    );
+  });
+
+  it("writes a unit price with its currency, to the currency's decimals at least and four at most", () => {
+    expect(formatUnitAmount({ value: "142.27", currency: "EUR" }, "en")).toBe("€142.27");
+    expect(formatUnitAmount({ value: "142.2712345678", currency: "EUR" }, "en")).toBe("€142.2712");
+    expect(formatUnitAmount({ value: "112.45195", currency: "EUR" }, "en")).toBe("€112.452");
+    expect(formatUnitAmount({ value: "10", currency: "EUR" }, "fr")).toBe(
+      `10,00${NO_BREAK_SPACE}€`,
     );
   });
 });

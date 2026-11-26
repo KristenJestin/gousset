@@ -508,6 +508,60 @@ function uiMessages(locale: Locale) {
         create: m.uiRulesProposalCreate({}, options),
       },
     },
+    investments: {
+      /** The figures of an investment account, at cost until prices come (#251). */
+      cash: m.uiInvestmentsCash({}, options),
+      positionsAtCost: m.uiInvestmentsPositionsAtCost({}, options),
+      totalAtCost: m.uiInvestmentsTotalAtCost({}, options),
+      /** The positions' columns. */
+      position: m.uiInvestmentsPosition({}, options),
+      isin: m.uiInvestmentsIsin({}, options),
+      units: m.uiInvestmentsUnits({}, options),
+      averageCost: m.uiInvestmentsAverageCost({}, options),
+      cost: m.uiInvestmentsCost({}, options),
+      /** A position that sold more than it held (docs/data-model.md, v0.6). */
+      incomplete: m.uiInvestmentsIncomplete({}, options),
+      noPosition: m.uiInvestmentsNoPosition({}, options),
+      kinds: {
+        deposit: m.uiInvestmentsKindDeposit({}, options),
+        withdrawal: m.uiInvestmentsKindWithdrawal({}, options),
+        purchase: m.uiInvestmentsKindPurchase({}, options),
+        sale: m.uiInvestmentsKindSale({}, options),
+        dividend: m.uiInvestmentsKindDividend({}, options),
+        fee: m.uiInvestmentsKindFee({}, options),
+      },
+      /** A trade: "2.9791 units of World index ETF"; `count` reads the quantity's plural. */
+      unitsOf: (count: number, quantity: string, name: string) =>
+        pluralRules[locale].select(count) === "one"
+          ? m.uiInvestmentsUnitsOfOne({ quantity, name }, options)
+          : m.uiInvestmentsUnitsOfOther({ quantity, name }, options),
+      /** A dividend's withholding tax, after its security. */
+      tax: (amount: string) => m.uiInvestmentsTax({ amount }, options),
+      /** A deposit or a withdrawal paired with the other account's line. */
+      betweenAccounts: m.uiInvestmentsBetweenAccounts({}, options),
+      noOperation: m.uiInvestmentsNoOperation({}, options),
+      showOlder: m.uiInvestmentsShowOlder({}, options),
+      correct: m.uiInvestmentsCorrect({}, options),
+      delete: m.uiInvestmentsDelete({}, options),
+      fields: {
+        kind: m.uiInvestmentsFieldKind({}, options),
+        day: m.uiInvestmentsFieldDay({}, options),
+        amount: m.uiInvestmentsFieldAmount({}, options),
+        amountPaid: m.uiInvestmentsFieldAmountPaid({}, options),
+        amountReceived: m.uiInvestmentsFieldAmountReceived({}, options),
+        amountDividend: m.uiInvestmentsFieldAmountDividend({}, options),
+        isin: m.uiInvestmentsFieldIsin({}, options),
+        isinHelp: m.uiInvestmentsFieldIsinHelp({}, options),
+        isinOptional: m.uiInvestmentsFieldIsinOptional({}, options),
+        securityName: m.uiInvestmentsFieldSecurityName({}, options),
+        securityNameHelp: m.uiInvestmentsFieldSecurityNameHelp({}, options),
+        quantity: m.uiInvestmentsFieldQuantity({}, options),
+        decimalHelp: m.uiInvestmentsFieldDecimalHelp({}, options),
+        unitPrice: m.uiInvestmentsFieldUnitPrice({}, options),
+        fees: m.uiInvestmentsFieldFees({}, options),
+        tax: m.uiInvestmentsFieldTax({}, options),
+      },
+    },
   };
 }
 

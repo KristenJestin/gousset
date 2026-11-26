@@ -105,6 +105,43 @@ export function moneyParts(money: Money, format: MoneyFormat): Array<Intl.Number
   return trueMinus(formatter.formatToParts(asNumeric(toDecimalString(money.minor, digits))));
 }
 
+/** An exact amount for one unit of a security, in a currency's units: `112.4519` EUR. */
+export type UnitAmount = { value: string; currency: string };
+
+/** How many decimals a unit price shows at most: a fund's price is written to four. */
+const UNIT_PRICE_DECIMALS = 4;
+
+/**
+ * A quantity of a security as Gousset holds it (an exact decimal, `2.9791`), in the locale's
+ * separators, every digit kept and none added: `2,9791` in French. Below zero (an incomplete
+ * position) it takes a true minus.
+ */
+export function formatQuantity(quantity: string, locale: string): string {
+  return trueMinus(cached(locale, { maximumFractionDigits: 10 }).formatToParts(asNumeric(quantity)))
+    .map((part) => part.value)
+    .join("");
+}
+
+/**
+ * What one unit cost (an average cost, a unit price), with its currency: as many decimals as the
+ * currency has at least, four at most, rounded half away from zero: `€142.2712`.
+ */
+export function formatUnitAmount(unit: UnitAmount, locale: string): string {
+  const digits = minorDigits(unit.currency);
+
+  return trueMinus(
+    cached(locale, {
+      style: "currency",
+      currency: safeCurrencyCode(unit.currency),
+      minimumFractionDigits: digits,
+      maximumFractionDigits: Math.max(digits, UNIT_PRICE_DECIMALS),
+      roundingMode: "halfExpand",
+    }).formatToParts(asNumeric(unit.value)),
+  )
+    .map((part) => part.value)
+    .join("");
+}
+
 /** An amount as text: `€1,234.50` in English, `1 234,50 €` in French, `−€80.00` when negative. */
 export function formatMoney(money: Money, format: MoneyFormat): string {
   return moneyParts(money, format)
