@@ -1045,6 +1045,7 @@
   "uiSubjectsMerchantPlaceholder": "Chercher un marchand",
   "uiSubjectsPast": "Dépenses passées",
   "uiSubjectsPastEmpty": "Ajoutez un marchand pour retrouver ses dépenses passées.",
+  "uiSubjectsPastArchived": "Un sujet archivé ne prend plus de nouveau marchand. Décochez Archivé pour en ajouter un.",
   "uiSubjectsPastNone": "Aucune dépense passée chez ces marchands.",
   "uiSubjectsPastMatchOne": "{count} dépense correspond ({amount}).",
   "uiSubjectsPastMatchOther": "{count} dépenses correspondent ({amount}).",

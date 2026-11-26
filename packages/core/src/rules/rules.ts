@@ -1591,8 +1591,9 @@ async function merchantChangesIn(
 /**
  * The past expenses of the merchants `merchantIds` that their rules would attach to `subjectId`
  * now, with each one's merchant: those of one whole line each whose line's merchant is one of them,
- * neither attached to the subject already nor declined for it, the subject not archived. Every one
- * of them for a subject not made yet (null).
+ * neither attached to the subject already nor declined for it. An archived subject counts as an
+ * open one: what restoring it with these merchants attaches; no merchant is added to one that stays
+ * archived (`editIn`). Every one of them for a subject not made yet (null).
  */
 export async function merchantPastIn(
   transaction: UserTransaction,
@@ -1606,9 +1607,10 @@ export async function merchantPastIn(
   }
 
   const subjects = await subjectFacts(transaction, [subjectId]);
+  const open = new Set([subjectId]);
 
   return expenses.filter(
-    (each) => subjectPart(subjectId, subjectTarget(subjects, each), subjects.open) === "attaches",
+    (each) => subjectPart(subjectId, subjectTarget(subjects, each), open) === "attaches",
   );
 }
 

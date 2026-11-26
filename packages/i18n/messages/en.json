@@ -1045,6 +1045,7 @@
   "uiSubjectsMerchantPlaceholder": "Search a merchant",
   "uiSubjectsPast": "Past expenses",
   "uiSubjectsPastEmpty": "Add a merchant to find its past expenses.",
+  "uiSubjectsPastArchived": "An archived subject takes no new merchant. Untick Archived to add one.",
   "uiSubjectsPastNone": "No past expense at these merchants.",
   "uiSubjectsPastMatchOne": "{count} expense matches ({amount}).",
   "uiSubjectsPastMatchOther": "{count} expenses match ({amount}).",

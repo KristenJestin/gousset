@@ -52,9 +52,13 @@ export type SubjectEditorErrors = {
   form?: string;
 };
 
-/** What the past expenses saving attaches come to, as the page last read it. */
+/**
+ * What the past expenses saving attaches come to, as the page last read it; `archived` while the
+ * draft is, which takes no new merchant.
+ */
 export type SubjectPastView =
   | { state: "none" }
+  | { state: "archived" }
   | { state: "loading" }
   | { state: "known"; expenses: number; total: string };
 
@@ -403,6 +407,8 @@ function PastExpenses({
   switch (past.state) {
     case "none":
       return <p className="text-sm text-muted-foreground">{messages.pastEmpty}</p>;
+    case "archived":
+      return <p className="text-sm text-muted-foreground">{messages.pastArchived}</p>;
     case "loading":
       return (
         <p className="flex h-5 items-center gap-2 text-sm text-muted-foreground">

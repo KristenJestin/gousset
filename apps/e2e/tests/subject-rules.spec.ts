@@ -655,6 +655,58 @@ test("an edit with attachPast attaches the past of every merchant it names, thos
   ).toBe(0);
 });
 
+test("an archived subject's preview counts what restoring it with its merchants attaches", async ({
+  app,
+  user,
+}) => {
+  const owner = await ownerFor(app, user, "subject-rule-archived-past");
+
+  const lines = await importLines(owner, [
+    { day: "2026-08-02", minor: 5000, label: "CB FUELSTOP 0208" },
+    { day: "2026-08-20", minor: 4500, label: "CB FUELSTOP 2008" },
+    { day: "2026-08-21", minor: 30_000, label: "CB TYREHOUSE 2108" },
+  ]);
+
+  const fuelstop = await merchantOf(owner, "CB FUELSTOP 0208");
+  const tyrehouse = await merchantOf(owner, "CB TYREHOUSE 2108");
+  const declined = entryOf(lines, "CB FUELSTOP 2008");
+  const van = await run(createSubject(owner, { name: "Van", merchantIds: [fuelstop] }));
+
+  await run(refuseProposals(owner, van.id, [declined.entryId]));
+  await run(editSubject(owner, van.id, { archived: true }));
+
+  // Archived, it is counted as if it were open: what restoring it with these merchants attaches.
+  expect(await run(subjectMerchantsPreview(owner, [fuelstop, tyrehouse], "EUR", van.id))).toEqual({
+    expenses: 2,
+    total: eur(35_000),
+    elsewhere: [],
+  });
+
+  // Kept archived, it gets no merchant, nor its past: nothing is written.
+  expect(
+    await refusalOf(
+      editSubject(owner, van.id, { merchantIds: [fuelstop, tyrehouse], attachPast: true }),
+    ),
+  ).toMatchObject({ reason: "archived" });
+  expect(
+    (await run(editSubject(owner, van.id, { merchantIds: [fuelstop], attachPast: true }))).attached,
+  ).toBe(0);
+  expect(await subjectsOf(owner, entryOf(lines, "CB FUELSTOP 0208").entryId)).toEqual([]);
+
+  const restored = await run(
+    editSubject(owner, van.id, {
+      archived: false,
+      merchantIds: [fuelstop, tyrehouse],
+      attachPast: true,
+    }),
+  );
+
+  expect(restored.attached).toBe(2);
+  expect(await subjectsOf(owner, entryOf(lines, "CB FUELSTOP 0208").entryId)).toEqual([van.id]);
+  expect(await subjectsOf(owner, entryOf(lines, "CB TYREHOUSE 2108").entryId)).toEqual([van.id]);
+  expect(await subjectsOf(owner, declined.entryId)).toEqual([]);
+});
+
 /** The rules that attach `subjectId`, in their order: their id, conditions and count. */
 async function rulesOf(owner: string, subjectId: string) {
   return (await run(listRules(owner))).rules.flatMap((each) =>

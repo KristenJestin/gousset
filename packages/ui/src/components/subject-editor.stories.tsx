@@ -67,9 +67,13 @@ function Editing({ editing, initial, errors }: EditingProps) {
   const [opened, setOpened] = useState(0);
   const [saved, setSaved] = useState<SubjectDraft>();
   const [merchants, setMerchants] = useState(initial.merchantIds.length);
+  const [archived, setArchived] = useState(initial.archived);
 
-  const past: SubjectPastView =
-    merchants === 0 ? { state: "none" } : { state: "known", expenses: 9, total: "€486" };
+  const past: SubjectPastView = archived
+    ? { state: "archived" }
+    : merchants === 0
+      ? { state: "none" }
+      : { state: "known", expenses: 9, total: "€486" };
 
   return (
     <div className="flex flex-col items-start gap-3">
@@ -97,7 +101,10 @@ function Editing({ editing, initial, errors }: EditingProps) {
         merchants={MERCHANTS}
         past={past}
         errors={errors}
-        onDraftChange={(draft) => setMerchants(draft.merchantIds.length)}
+        onDraftChange={(draft) => {
+          setMerchants(draft.merchantIds.length);
+          setArchived(draft.archived);
+        }}
         onSave={async (draft) => {
           await new Promise((resolve) => {
             setTimeout(resolve, 400);
@@ -153,6 +160,14 @@ export const Saved: Story = {
       endsOn: "2028-07-17",
       accountIds: ["current"],
     },
+  },
+};
+
+/** An archived van: it takes no new merchant, and offers no past until restored. */
+export const Archived: Story = {
+  args: {
+    editing: "Van",
+    initial: { ...EMPTY, name: "Van", merchantIds: ["fuelstop"], archived: true },
   },
 };
 

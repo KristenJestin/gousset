@@ -1241,15 +1241,15 @@ async function editIn(
     return Result.fail(problem);
   }
 
+  // An archived subject gets no expense: no merchant is added to it, though one may go.
+  const archived = edit.archived ?? row.archivedAt !== null;
+
   if (edit.merchantIds !== undefined) {
     const checked = await subjectMerchantsProblemIn(transaction, row.id, edit.merchantIds);
 
     if (Result.isFailure(checked)) {
       return Result.fail(checked.failure);
     }
-
-    // An archived subject gets no expense: no merchant is added to it, though one may go.
-    const archived = edit.archived ?? row.archivedAt !== null;
 
     if (archived && checked.success.length > 0) {
       return refused("archived", { subjectId: row.id });
@@ -1287,7 +1287,8 @@ async function editIn(
           owner,
           row.id,
           edit.merchantIds,
-          edit.attachPast === true,
+          // Nor the past of the merchants it keeps.
+          edit.attachPast === true && !archived,
         );
 
   return Result.succeed({ ...(await recordIn(transaction, row.id)), attached });
@@ -1562,7 +1563,8 @@ export const refuseProposals = (
  * What the past expenses of the merchants `merchantIds` come to, before a subject is made from them
  * (`subjectId` null) or given them: those of one whole line each whose line's merchant is one of
  * them (its entry's, else its label's), and for a subject that exists, neither attached to it yet
- * nor declined for it: what `attachPast` would attach. How many, and their cost in the user's
+ * nor declined for it, archived or not: what `attachPast` would attach, an archived subject once
+ * restored. How many, and their cost in the user's
  * `currency`, others apart. Refused for a merchant the user does not have (`MerchantNotFound`).
  */
 export const subjectMerchantsPreview = (

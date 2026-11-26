@@ -590,6 +590,7 @@ function uiMessages(locale: Locale) {
       merchantPlaceholder: m.uiSubjectsMerchantPlaceholder({}, options),
       past: m.uiSubjectsPast({}, options),
       pastEmpty: m.uiSubjectsPastEmpty({}, options),
+      pastArchived: m.uiSubjectsPastArchived({}, options),
       pastNone: m.uiSubjectsPastNone({}, options),
       /** What the merchants' past expenses come to: the count and the amount already written. */
       pastMatch: (count: number, written: string, amount: string) =>

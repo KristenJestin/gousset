@@ -1,5 +1,5 @@
 import type { Locator, Page } from "@playwright/test";
-import { attachSubject, createSubject, refuseProposals } from "@gousset/core";
+import { attachSubject, createSubject, editSubject, refuseProposals } from "@gousset/core";
 import type { SubjectInput } from "@gousset/core";
 import {
   account,
@@ -335,6 +335,54 @@ test("a merchant added: the past offered is every merchant's not attached yet", 
   expect(await subjectsOf(owner, entryOf(entries, "CB FUELSTOP 0310"))).toEqual([van]);
   expect(await subjectsOf(owner, entryOf(entries, "CB TYREHOUSE 0510"))).toEqual([van]);
   expect(await subjectsOf(owner, declined)).toEqual([]);
+});
+
+test("an archived subject restored with a merchant: its past is offered, then attached", async ({
+  page,
+  app,
+  user,
+}) => {
+  const { person, owner } = await personFor(app, user, "subjects-merchants-archived");
+
+  const entries = await expenses(owner, [
+    { day: "2026-09-12", minor: 5000, label: "CB FUELSTOP 1209" },
+    { day: "2026-10-03", minor: 6200, label: "CB FUELSTOP 0310" },
+    { day: "2026-10-05", minor: 30_000, label: "CB TYREHOUSE 0510" },
+  ]);
+
+  const van = await subject(owner, { name: "Van" });
+
+  await Effect.runPromise(
+    editSubject(owner, van, { archived: true }).pipe(Effect.provide(data.layer)),
+  );
+  await as(page, person, `/subjects/${van}`);
+
+  const sheet = await edit(page, "Van");
+  const archived = sheet.getByRole("checkbox", { name: "Archived" });
+
+  await expect(archived).toBeChecked();
+  await sheet.getByRole("button", { name: "Merchant", exact: true }).click();
+  await sheet.getByRole("combobox", { name: "Merchant to attach" }).pressSequentially("Fuel");
+  await page.getByRole("option", { name: "Fuelstop", exact: true }).click();
+
+  // Kept archived, it takes no merchant: the sheet says so, and offers no past.
+  await expect(
+    sheet.getByText("An archived subject takes no new merchant. Untick Archived to add one."),
+  ).toBeVisible();
+  await expect(sheet.getByRole("checkbox", { name: "Attach them" })).toHaveCount(0);
+
+  // Restored, what saving attaches is shown, and may be declined.
+  await archived.click();
+  await expect(sheet.locator('[data-slot="subject-past"]')).toHaveText(
+    "2 expenses match (€112.00).",
+  );
+  await expect(sheet.getByRole("checkbox", { name: "Attach them" })).toBeChecked();
+  await sheet.getByRole("button", { name: "Save" }).click();
+  await expect(sheet).toBeHidden();
+
+  expect(await subjectsOf(owner, entryOf(entries, "CB FUELSTOP 1209"))).toEqual([van]);
+  expect(await subjectsOf(owner, entryOf(entries, "CB FUELSTOP 0310"))).toEqual([van]);
+  expect(await subjectsOf(owner, entryOf(entries, "CB TYREHOUSE 0510"))).toEqual([]);
 });
 
 test("edit and move; a cycle is refused under its field", async ({ page, app, user }) => {

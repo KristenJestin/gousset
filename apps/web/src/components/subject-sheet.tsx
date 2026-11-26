@@ -49,6 +49,8 @@ function fieldOf(code: string): keyof SubjectEditorErrors {
       return "accounts";
     case "SUBJECT_DATES":
       return "dates";
+    // An edit refuses an archived subject only for a merchant added to it.
+    case "SUBJECT_ARCHIVED":
     case "MERCHANT_NOT_FOUND":
     case "TOO_MANY_RULES":
       return "merchants";
@@ -106,7 +108,8 @@ function draftOf(subject: SubjectDetail | null, currency: string): SubjectDraft 
 
 /**
  * What the sheet sends: what an option left unticked holds is sent as none. The past is attached
- * only when a merchant is added to those it `had`, where the sheet offers it.
+ * only when a merchant is added to those it `had` and the draft is not archived, where the sheet
+ * offers it.
  */
 function inputOf(draft: SubjectDraft, had: ReadonlySet<string>) {
   const valued = draft.hasValue && draft.valueMinor !== null;
@@ -121,7 +124,7 @@ function inputOf(draft: SubjectDraft, had: ReadonlySet<string>) {
     endsOn: draft.hasDates ? draft.endsOn : null,
     accountIds: [...draft.accountIds],
     merchantIds: [...draft.merchantIds],
-    attachPast: draft.attachPast && draft.merchantIds.some((id) => !had.has(id)),
+    attachPast: draft.attachPast && !draft.archived && draft.merchantIds.some((id) => !had.has(id)),
   };
 }
 
@@ -161,12 +164,14 @@ export function SubjectSheet({
   const locale = usePageLanguage();
   const [initial] = useState(() => draftOf(subject, currency));
   const [merchantIds, setMerchantIds] = useState(initial.merchantIds);
+  const [archived, setArchived] = useState(initial.archived);
   const [errors, setErrors] = useState<SubjectEditorErrors>({});
   const { data: accounts } = useQuery(accountQueries.list());
   const { data: merchants = [] } = useQuery(merchantQueries.choices());
-  // A merchant added offers the past: saved, every merchant's is attached, those it had too.
+  // A merchant added offers the past: saved, every merchant's is attached, those it had too. An
+  // archived draft takes none: the past is offered once it is unticked.
   const had = new Set(initial.merchantIds);
-  const adding = merchantIds.some((id) => !had.has(id));
+  const adding = !archived && merchantIds.some((id) => !had.has(id));
   const preview = useQuery(subjectQueries.preview(adding ? merchantIds : [], subject?.id ?? null));
 
   const openAccounts = accounts?.groups.flatMap((group) => group.accounts) ?? [];
@@ -205,7 +210,9 @@ export function SubjectSheet({
       : [{ id: each.id, name: paths.get(each.id) ?? each.name }],
   );
 
-  const past = pastOf(adding, preview.data, locale);
+  const past: SubjectPastView = archived
+    ? { state: "archived" }
+    : pastOf(adding, preview.data, locale);
 
   async function save(draft: SubjectDraft) {
     const input = inputOf(draft, had);
@@ -248,6 +255,7 @@ export function SubjectSheet({
       onDraftChange={(draft) => {
         setErrors({});
         setMerchantIds(draft.merchantIds);
+        setArchived(draft.archived);
       }}
       onSave={save}
       locale={locale}
