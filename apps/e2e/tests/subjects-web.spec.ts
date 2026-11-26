@@ -13,7 +13,7 @@ import { eq } from "drizzle-orm";
 import { Effect, Schema } from "effect";
 
 import type { TestUser } from "../src/auth";
-import { onPhone } from "../src/frame";
+import { onPhone, sheetGone } from "../src/frame";
 import { importsOn, statementFile } from "../src/imports";
 import {
   addUser,
@@ -312,8 +312,8 @@ test("edit and move; a cycle is refused under its field", async ({ page, app, us
   await expect(heading(page).getByRole("button", { name: "Edit" })).toBeFocused();
   await expect(heading(page)).toContainText("Camper van");
   await expect(treeRow(page, "Camper van")).toHaveAttribute("data-depth", "1");
-  // The page behind takes clicks again once the sheet has left.
-  await animationsDone(page);
+  // A press over the backdrop is ui-sdk's while the sheet leaves: the tree once it is gone.
+  await sheetGone(page);
 
   // House inside its own shed: refused, said under "Inside", the sheet left open.
   await treeRow(page, "House").click();
