@@ -5,6 +5,7 @@ import { and, eq, inArray, ne, sql } from "drizzle-orm";
 import { Effect } from "effect";
 
 import { takeCategoryTurn } from "../category-turn";
+import { conditionMerchantsIn } from "../rules/rules";
 import { formerMerchantKey, merchantKey, merchantName } from "./labels";
 import { recogniseIn } from "./merchants";
 import type { Recognised } from "./merchants";
@@ -64,7 +65,7 @@ async function staleAliases(transaction: UserTransaction): Promise<ReadonlySet<s
  * since the operation prefixes, each only when the user never touched it: every cleaned label it
  * has is such a one, and it still has the name recognition gave it from one of them; it has no
  * default category, is no intermediary, was never changed (a rename, a mark, a merge into it), and
- * no rule nor entry names it. Any other is left as it is. Gives how many went; their cleaned labels
+ * no rule (what it sets or a condition) nor entry names it. Any other is left as it is. Gives how many went; their cleaned labels
  * go with them. Safe to run again: a second run finds none.
  */
 export async function forgetOperationMerchantsIn(transaction: UserTransaction): Promise<number> {
@@ -75,6 +76,7 @@ export async function forgetOperationMerchantsIn(transaction: UserTransaction): 
   }
 
   const owners = new Set<string>();
+  const conditioned = await conditionMerchantsIn(transaction);
 
   for (const part of chunked([...stale])) {
     const rows = await transaction
@@ -121,7 +123,7 @@ export async function forgetOperationMerchantsIn(transaction: UserTransaction): 
       .from(entry)
       .where(inArray(entry.merchantId, ids));
 
-    const named = new Set([...ruled, ...paid].map((row) => row.id));
+    const named = new Set([...[...ruled, ...paid].map((row) => row.id), ...conditioned]);
     const aliasesOf = new Map<string, Array<string>>();
 
     for (const row of aliases) {

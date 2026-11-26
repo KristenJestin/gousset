@@ -1,10 +1,11 @@
 import { describe, expect, test } from "vite-plus/test";
 
-import { changes, firstApplying, targetOf } from "./effect";
-import type { EffectFacts, RuleEntry, RuleSets } from "./effect";
+import { changes, firstApplying, subjectPart, subjectsAttached, targetOf } from "./effect";
+import type { EffectFacts, RuleEntry, RuleSets, SubjectTarget } from "./effect";
 
 // What a rule makes of an entry (#25): the category and merchant it sets, when its category is of
-// the entry's kind and not archived; a merchant alone brings the merchant's default category.
+// the entry's kind and not archived; a merchant alone brings the merchant's default category. And
+// the subject it attaches (#37), by every rule a line meets rather than the first.
 
 const FACTS: EffectFacts = {
   categories: new Map([
@@ -113,5 +114,71 @@ describe("the rule that classifies an entry", () => {
 
   test("is none when the line meets none", () => {
     expect(firstApplying(rules, () => false, entry(), FACTS)).toBeNull();
+  });
+
+  test("is never one that only attaches a subject", () => {
+    const subjectFirst = [{ id: "van", ...sets({}), attachSubjectId: "van" }, ...rules];
+
+    expect(firstApplying(subjectFirst, () => true, entry(), FACTS)?.rule.id).toBe("second");
+  });
+});
+
+const OPEN = new Set(["van", "trip"]);
+
+const expense = (change: Partial<SubjectTarget> = {}): SubjectTarget => ({
+  kind: "expense",
+  attached: new Set(),
+  refused: new Set(),
+  ...change,
+});
+
+describe("a rule's subject", () => {
+  test("attaches to an expense that does not have it yet", () => {
+    expect(subjectPart("van", expense(), OPEN)).toBe("attaches");
+    expect(subjectPart("van", expense({ attached: new Set(["van"]) }), OPEN)).toBe("kept");
+  });
+
+  test("does not apply to an income, a pair the user declined, nor an archived subject", () => {
+    expect(subjectPart("van", expense({ kind: "income" }), OPEN)).toBe("none");
+    expect(subjectPart("van", expense({ refused: new Set(["van"]) }), OPEN)).toBe("none");
+    expect(subjectPart("shed", expense(), OPEN)).toBe("none");
+    expect(subjectPart(null, expense(), OPEN)).toBe("none");
+  });
+});
+
+describe("the subjects the rules attach", () => {
+  const rules = [
+    { id: "fuel", attachSubjectId: null },
+    { id: "van", attachSubjectId: "van" },
+    { id: "van-again", attachSubjectId: "van" },
+    { id: "trip", attachSubjectId: "trip" },
+    { id: "shed", attachSubjectId: "shed" },
+  ];
+
+  test("are every met rule's, each subject once, by the first rule that has it", () => {
+    expect(
+      subjectsAttached(rules, () => true, expense(), OPEN).map((each) => [
+        each.rule.id,
+        each.subjectId,
+      ]),
+    ).toEqual([
+      ["van", "van"],
+      ["trip", "trip"],
+    ]);
+  });
+
+  test("leave out the rules the line does not meet, and the subjects it has", () => {
+    expect(
+      subjectsAttached(
+        rules,
+        (rule) => rule.id !== "van",
+        expense({ attached: new Set(["trip"]) }),
+        OPEN,
+      ).map((each) => each.rule.id),
+    ).toEqual(["van-again"]);
+  });
+
+  test("are none for an income", () => {
+    expect(subjectsAttached(rules, () => true, expense({ kind: "income" }), OPEN)).toEqual([]);
   });
 });

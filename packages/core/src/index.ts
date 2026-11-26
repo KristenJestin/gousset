@@ -128,6 +128,8 @@ export {
   listSubjects,
   refuseProposals,
   showSubject,
+  subjectMerchantsPreview,
+  subjectNamed,
 } from "./subjects/subjects";
 
 export type {
@@ -140,8 +142,11 @@ export type {
   SubjectInput,
   SubjectList,
   SubjectListed,
+  NamedSubject,
+  SubjectMerchantsPreview,
   SubjectPeriod,
   SubjectRecord,
+  SubjectSaved,
 } from "./subjects/subjects";
 
 export {
@@ -149,6 +154,7 @@ export {
   countedIn,
   makesCycle,
   monthsOf,
+  pathOf,
   subtreeOf,
   sumsOf,
   treeOrder,
@@ -158,7 +164,9 @@ export type { CostPart, SubjectCost, SubjectName, SubjectNode } from "./subjects
 
 export {
   EntryNotFound,
+  SubjectNameAmbiguous,
   SubjectNameTaken,
+  SubjectNameUnknown,
   SubjectNotFound,
   SubjectRefused,
 } from "./subjects/errors";
@@ -524,8 +532,11 @@ export type {
   RuleInput,
   RuleJobOutcome,
   RuleList,
+  RuleMerchant,
+  RuleNames,
   RuleOrigin,
   RuleReach,
+  RuleSubject,
   RuleSummary,
 } from "./rules/rules";
 

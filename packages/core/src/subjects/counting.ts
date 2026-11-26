@@ -100,6 +100,25 @@ export function treeOrder<Node extends SubjectNode>(
   return ordered;
 }
 
+/**
+ * A subject's name with its ancestors', the top first: "House > Garden shed", as a name alone is not
+ * enough where subjects are chosen (a name holds no `>`). Its own name when its parents are not
+ * among `nodes`.
+ */
+export function pathOf(nodes: ReadonlyArray<SubjectNode>, id: string): string {
+  const byId = new Map(nodes.map((node) => [node.id, node]));
+  const names: Array<string> = [];
+  const walked = new Set<string>();
+
+  for (let at = byId.get(id); at !== undefined && !walked.has(at.id);) {
+    walked.add(at.id);
+    names.unshift(at.name);
+    at = at.parentId === null ? undefined : byId.get(at.parentId);
+  }
+
+  return names.join(" > ");
+}
+
 /** A subject and every one of its descendants, at any depth. */
 export function subtreeOf(nodes: ReadonlyArray<SubjectNode>, id: string): ReadonlySet<string> {
   const children = childrenOf(nodes);

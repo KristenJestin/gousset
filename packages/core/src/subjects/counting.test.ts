@@ -1,6 +1,15 @@
 import { describe, expect, test } from "vite-plus/test";
 
-import { costsOf, countedIn, makesCycle, monthsOf, subtreeOf, sumsOf, treeOrder } from "./counting";
+import {
+  costsOf,
+  countedIn,
+  makesCycle,
+  monthsOf,
+  pathOf,
+  subtreeOf,
+  sumsOf,
+  treeOrder,
+} from "./counting";
 import type { CostPart, SubjectNode } from "./counting";
 
 // The subjects' counting rule (#37): every made-up subject and expense here is invented.
@@ -36,6 +45,12 @@ describe("the tree", () => {
     expect([...subtreeOf(nodes, "house")].toSorted()).toEqual(["house", "roof", "shed"]);
     expect([...subtreeOf(nodes, "shed")].toSorted()).toEqual(["roof", "shed"]);
     expect([...subtreeOf(nodes, "van")]).toEqual(["van"]);
+  });
+
+  test("a subject is named with its ancestors, the top first", () => {
+    expect(pathOf(nodes, "roof")).toBe("House > Garden shed > roof");
+    expect(pathOf(nodes, "van")).toBe("Van");
+    expect(pathOf(nodes, "gone")).toBe("");
   });
 });
 

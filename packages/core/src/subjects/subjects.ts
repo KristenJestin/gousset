@@ -25,12 +25,38 @@ import { takeCategoryTurn } from "../category-turn";
 import type { LineCategory } from "../category-store";
 import { isId } from "../imports/rows";
 import type { LineAccount } from "../lines";
+import type { MerchantNotFound } from "../merchants/errors";
 import { merchantKey } from "../merchants/labels";
+import type { NamedMerchant } from "../merchants/line-merchant";
 import type { Money } from "../month";
+import type { TooManyRules } from "../rules/errors";
+import {
+  merchantExpensesIn,
+  setSubjectMerchantsIn,
+  subjectMerchantsProblemIn,
+  subjectRulesIn,
+  unknownMerchantIn,
+} from "../rules/rules";
 import { today } from "../today";
-import { costsOf, countedIn, makesCycle, monthsOf, subtreeOf, sumsOf, treeOrder } from "./counting";
+import {
+  costsOf,
+  countedIn,
+  makesCycle,
+  monthsOf,
+  pathOf,
+  subtreeOf,
+  sumsOf,
+  treeOrder,
+} from "./counting";
 import type { CostPart, SubjectCost } from "./counting";
-import { EntryNotFound, SubjectNameTaken, SubjectNotFound, SubjectRefused } from "./errors";
+import {
+  EntryNotFound,
+  SubjectNameAmbiguous,
+  SubjectNameTaken,
+  SubjectNameUnknown,
+  SubjectNotFound,
+  SubjectRefused,
+} from "./errors";
 
 // The subjects (v0.5, #37; docs/vision.md, "Subjects"; docs/data-model.md, "v0.5: Subjects"): what
 // the money is spent for, beside the category. Created by the user, nested at any depth, archived
@@ -40,6 +66,10 @@ import { EntryNotFound, SubjectNameTaken, SubjectNotFound, SubjectRefused } from
 // A subject "with dates" proposes the expenses of its period that are not attached to it yet; the
 // maintainer's decision (#37): none is attached without the user's yes (`attachSubject`), and one
 // the user declines is never proposed for it again (`refuseProposals`).
+//
+// A subject made from merchants (the fuel station → Van) is a rule per merchant, "merchant is",
+// attaching it (`../rules/rules`): its expenses to come are attached as they are imported, and its
+// past ones when the user asks (`attachPast`).
 
 /** The most subjects a user may have, archived ones included. */
 export const MAX_SUBJECTS = 200;
@@ -177,6 +207,10 @@ export type SubjectDetail = Omit<SubjectRecord, "accounts" | "loan"> & {
     readonly expenses: ReadonlyArray<SubjectExpense>;
     readonly more: number;
   } | null;
+  /** The merchants whose rule ("merchant is", and nothing else) attaches it, by name. */
+  readonly merchants: ReadonlyArray<NamedMerchant>;
+  /** How many other rules attach it. */
+  readonly otherRules: number;
 };
 
 /** A new subject. Every field but the name may be left out. */
@@ -193,10 +227,30 @@ export type SubjectInput = {
   readonly endsOn?: string | null;
   /** The accounts linked to it, all of them. */
   readonly accountIds?: ReadonlyArray<string>;
+  /** Its merchants: a rule "merchant is" each attaches it (`setSubjectMerchantsIn`). */
+  readonly merchantIds?: ReadonlyArray<string>;
+  /** With `merchantIds`: the past expenses of the merchants added are attached to it at once. */
+  readonly attachPast?: boolean;
 };
 
-/** A subject's change: each field left out stays as it is. `accountIds` replaces the links. */
+/**
+ * A subject's change: each field left out stays as it is. `accountIds` replaces the links, and
+ * `merchantIds` its merchants.
+ */
 export type SubjectEdit = Partial<SubjectInput> & { readonly archived?: boolean };
+
+/** A subject just written, with how many past expenses its new merchants' rules attached. */
+export type SubjectSaved = SubjectRecord & { readonly attached: number };
+
+/** What the past expenses of some merchants come to, before they are a subject's. */
+export type SubjectMerchantsPreview = {
+  /** How many expenses of one whole line each name one of the merchants. */
+  readonly expenses: number;
+  /** What they cost, in the user's currency. */
+  readonly total: Money;
+  /** What they cost in other currencies, never converted. */
+  readonly elsewhere: ReadonlyArray<Money>;
+};
 
 /** What an attachment, a removal or a refusal did. */
 export type SubjectAttachment = {
@@ -860,6 +914,7 @@ async function showIn(
   };
 
   const latest = await expensesOf(transaction, newestFirst.slice(0, SUBJECT_EXPENSES_SHOWN), netOf);
+  const rules = await subjectRulesIn(transaction, row.id);
 
   return Result.succeed({
     ...record,
@@ -878,6 +933,8 @@ async function showIn(
       row.startsOn === null
         ? null
         : await proposalsOf(transaction, { ...row, startsOn: row.startsOn }, subtree, day),
+    merchants: rules.merchants.map((each) => ({ id: each.id, name: each.name })),
+    otherRules: rules.others,
   });
 }
 
@@ -1040,13 +1097,23 @@ async function recordIn(transaction: UserTransaction, subjectId: string): Promis
   return recordOf(row, rows, accounts, await linksOf(transaction));
 }
 
-type CreateProblem = SettingsProblem;
+type MerchantsProblem = MerchantNotFound | TooManyRules;
+
+type CreateProblem = SettingsProblem | MerchantsProblem;
 
 async function createIn(
   transaction: UserTransaction,
   owner: string,
   input: SubjectInput,
-): Promise<Result.Result<SubjectRecord, CreateProblem>> {
+): Promise<Result.Result<SubjectSaved, CreateProblem>> {
+  const merchantIds = input.merchantIds ?? [];
+
+  // Its merchants' past expenses are attached in the categories' turn, which a split takes: taken
+  // before the subjects' turn, by every change that takes both.
+  if (merchantIds.length > 0) {
+    await takeCategoryTurn(transaction, owner);
+  }
+
   await takeSubjectTurn(transaction, owner);
 
   const rows = await subjectRows(transaction);
@@ -1080,6 +1147,12 @@ async function createIn(
     return refused("too_many");
   }
 
+  const merchantsChecked = await subjectMerchantsProblemIn(transaction, null, merchantIds);
+
+  if (Result.isFailure(merchantsChecked)) {
+    return Result.fail(merchantsChecked.failure);
+  }
+
   const [made] = await transaction
     .insert(subject)
     .values({
@@ -1100,7 +1173,18 @@ async function createIn(
 
   await writeLinks(transaction, owner, made.id, input.accountIds ?? []);
 
-  return Result.succeed(await recordIn(transaction, made.id));
+  const attached =
+    merchantIds.length === 0
+      ? 0
+      : await setSubjectMerchantsIn(
+          transaction,
+          owner,
+          made.id,
+          merchantIds,
+          input.attachPast === true,
+        );
+
+  return Result.succeed({ ...(await recordIn(transaction, made.id)), attached });
 }
 
 async function editIn(
@@ -1108,7 +1192,11 @@ async function editIn(
   owner: string,
   subjectId: string,
   edit: SubjectEdit,
-): Promise<Result.Result<SubjectRecord, SubjectNotFound | SettingsProblem>> {
+): Promise<Result.Result<SubjectSaved, SubjectNotFound | SettingsProblem | MerchantsProblem>> {
+  if (edit.merchantIds !== undefined) {
+    await takeCategoryTurn(transaction, owner);
+  }
+
   await takeSubjectTurn(transaction, owner);
 
   const rows = await subjectRows(transaction);
@@ -1147,6 +1235,21 @@ async function editIn(
     return Result.fail(problem);
   }
 
+  if (edit.merchantIds !== undefined) {
+    const checked = await subjectMerchantsProblemIn(transaction, row.id, edit.merchantIds);
+
+    if (Result.isFailure(checked)) {
+      return Result.fail(checked.failure);
+    }
+
+    // An archived subject gets no expense: no merchant is added to it, though one may go.
+    const archived = edit.archived ?? row.archivedAt !== null;
+
+    if (archived && checked.success.length > 0) {
+      return refused("archived", { subjectId: row.id });
+    }
+  }
+
   await transaction
     .update(subject)
     .set({
@@ -1170,7 +1273,18 @@ async function editIn(
     await writeLinks(transaction, owner, row.id, edit.accountIds);
   }
 
-  return Result.succeed(await recordIn(transaction, row.id));
+  const attached =
+    edit.merchantIds === undefined
+      ? 0
+      : await setSubjectMerchantsIn(
+          transaction,
+          owner,
+          row.id,
+          edit.merchantIds,
+          edit.attachPast === true,
+        );
+
+  return Result.succeed({ ...(await recordIn(transaction, row.id)), attached });
 }
 
 type AttachProblem = SubjectNotFound | SubjectRefused | EntryNotFound;
@@ -1353,11 +1467,14 @@ export const showSubject = (
   });
 
 /**
- * Makes a subject. Refused: a name empty, over 100 characters or holding `>` (`SubjectRefused`
- * `name`), or a sibling's already (`SubjectNameTaken`, any case); a parent missing or archived; a
- * value without its currency, or the other way; a loan that is none of the user's `loan`
- * accounts; a linked account that is none of the user's; an end before the start, or without one;
- * `MAX_SUBJECTS` reached.
+ * Makes a subject; with `merchantIds`, a rule "merchant is" per merchant attaches it, and with
+ * `attachPast` their past expenses are attached in the same transaction (`attached` says how
+ * many). Refused: a name empty, over 100 characters or holding `>` (`SubjectRefused` `name`), or a
+ * sibling's already (`SubjectNameTaken`, any case); a parent missing or archived; a value without
+ * its currency, or the other way; a loan that is none of the user's `loan` accounts; a linked
+ * account that is none of the user's; an end before the start, or without one; `MAX_SUBJECTS`
+ * reached; a merchant the user does not have (`MerchantNotFound`), `MAX_RULES` passed
+ * (`TooManyRules`).
  */
 export const createSubject = (owner: string, input: SubjectInput) =>
   Effect.gen(function* () {
@@ -1371,10 +1488,12 @@ export const createSubject = (owner: string, input: SubjectInput) =>
   });
 
 /**
- * Changes a subject: each field left out stays as it is, `accountIds` replaces its links, and
- * `archived` archives or restores it (it keeps its expenses; an archived subject can no longer be
- * chosen as a parent nor get expenses). A move refuses a cycle (`SubjectRefused` `cycle`): the new
- * parent's ancestors are walked in the transaction that moves it. Refused otherwise as
+ * Changes a subject: each field left out stays as it is, `accountIds` replaces its links,
+ * `merchantIds` its merchants (the rule of a merchant left out is deleted, what it attached stays;
+ * `attachPast` attaches the past expenses of those added), and `archived` archives or restores it
+ * (it keeps its expenses; an archived subject can no longer be chosen as a parent nor get expenses,
+ * nor a merchant: `SubjectRefused` `archived`). A move refuses a cycle (`SubjectRefused` `cycle`):
+ * the new parent's ancestors are walked in the transaction that moves it. Refused otherwise as
  * `createSubject` refuses it, and `SubjectNotFound`.
  */
 export const editSubject = (owner: string, subjectId: string, edit: SubjectEdit) =>
@@ -1429,6 +1548,115 @@ export const refuseProposals = (
     );
 
     return yield* Effect.fromResult(done);
+  });
+
+/**
+ * What the past expenses of the merchants `merchantIds` come to, before a subject is made from them
+ * (or given them): those of one whole line each whose line's merchant is one of them (its entry's,
+ * else its label's), how many, and their cost in the user's `currency`, others apart. Refused for a
+ * merchant the user does not have (`MerchantNotFound`).
+ */
+export const subjectMerchantsPreview = (
+  owner: string,
+  merchantIds: ReadonlyArray<string>,
+  currency: string,
+) =>
+  Effect.gen(function* () {
+    const userData = yield* UserData;
+
+    const read = yield* userData.transaction(
+      owner,
+      async (transaction): Promise<Result.Result<SubjectMerchantsPreview, MerchantNotFound>> => {
+        // Only a merchant missing refuses a preview: the limit of rules is the save's.
+        const missing = await unknownMerchantIn(transaction, merchantIds);
+
+        if (missing !== null) {
+          return Result.fail(missing);
+        }
+
+        const expenses = await merchantExpensesIn(transaction, merchantIds);
+
+        const sums = sumsOf(
+          expenses.map((each) => ({ currency: each.currency, minor: Math.abs(each.amountMinor) })),
+          currency,
+        );
+
+        return Result.succeed({
+          expenses: expenses.length,
+          total: money(sums.own, currency),
+          elsewhere: moneyElsewhere(sums.elsewhere),
+        });
+      },
+    );
+
+    return yield* Effect.fromResult(read);
+  });
+
+/** A subject as a name finds it. */
+export type NamedSubject = {
+  readonly id: string;
+  readonly name: string;
+  /** Its name with its ancestors', the top first: "House > Garden shed". */
+  readonly path: string;
+  readonly archived: boolean;
+};
+
+/** How many close paths a name that finds no subject gives. */
+const CLOSE_NAMES = 5;
+
+/** A name or a path as it is compared: its parts trimmed, in any case. */
+const pathKey = (text: string) =>
+  text
+    .split(">")
+    .map((part) => part.trim().replaceAll(/\s+/g, " ").toLowerCase())
+    .join(" > ");
+
+/**
+ * The subject `name` gives, archived or not: the one of that path ("House > Garden shed", any case),
+ * else the only one of that name. Fails with `SubjectNameAmbiguous` (several of that name, under
+ * other parents) or `SubjectNameUnknown` (with the paths that contain it).
+ */
+export const subjectNamed = (owner: string, name: string) =>
+  Effect.gen(function* () {
+    const userData = yield* UserData;
+    const rows = yield* userData.transaction(owner, subjectRows);
+    const nodes = nodesOf(rows);
+    const key = pathKey(name);
+    const archived = new Set(rows.flatMap((row) => (row.archivedAt === null ? [] : [row.id])));
+
+    const named: ReadonlyArray<NamedSubject> = treeOrder(nodes).map((node) => ({
+      id: node.id,
+      name: node.name,
+      path: pathOf(nodes, node.id),
+      archived: archived.has(node.id),
+    }));
+
+    const byPath = named.find((each) => pathKey(each.path) === key);
+    const byName = named.filter((each) => pathKey(each.name) === key);
+    const [only] = byName;
+
+    if (byPath !== undefined) {
+      return byPath;
+    }
+
+    if (byName.length > 1) {
+      return yield* Effect.fail(
+        new SubjectNameAmbiguous({ name, matches: byName.map((each) => each.path) }),
+      );
+    }
+
+    if (only !== undefined) {
+      return only;
+    }
+
+    return yield* Effect.fail(
+      new SubjectNameUnknown({
+        name,
+        close: named
+          .flatMap((each) => (pathKey(each.path).includes(key) ? [each.path] : []))
+          .slice(0, CLOSE_NAMES),
+      }),
+    );
   });
 
 /** A condition on a line's entries: one is attached to any of `subjectIds` (`../lines`). */

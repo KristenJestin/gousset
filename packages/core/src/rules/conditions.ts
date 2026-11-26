@@ -9,6 +9,10 @@ import { Schema } from "effect";
 // parameterized SQL for applying it to the past (`conditionsQuery`, bound in `./sql`). The browser
 // imports this file (`@gousset/core/rule-values`): no database here. Only what both sides read alike
 // is offered: one group, all of its conditions to be met, no nesting nor negated group.
+//
+// The merchant condition (#37) is the one SQL cannot read: a line's merchant is its entry's, else
+// the one its label cleans to (`../merchants/line-merchant`), and the label is cleaned in code. It
+// is evaluated in JavaScript on both sides, after the SQL of the other conditions over the past.
 
 /** The most conditions a rule may have. */
 export const MAX_CONDITIONS = 10;
@@ -17,13 +21,22 @@ export const MAX_CONDITIONS = 10;
 export const MAX_LABEL_TEXT = 200;
 
 /** The fields a condition reads, in the order the editor offers them. */
-export const CONDITION_FIELDS = ["label", "account", "amount", "direction", "day", "date"] as const;
+export const CONDITION_FIELDS = [
+  "label",
+  "merchant",
+  "account",
+  "amount",
+  "direction",
+  "day",
+  "date",
+] as const;
 
 export type ConditionField = (typeof CONDITION_FIELDS)[number];
 
 /** The operators each field takes, in the order the editor offers them. */
 export const OPERATORS_OF = {
   label: ["contains", "startsWith", "endsWith", "eq", "notContains"],
+  merchant: ["eq"],
   account: ["eq", "neq"],
   amount: ["eq", "between", "gte", "lte", "gt", "lt", "neq"],
   direction: ["eq"],
@@ -57,12 +70,14 @@ const condition = <
 
 /**
  * One condition, as qnot writes it: `{ kind: "rule", field, operator, value }`. A label is looked
- * for in any case; an amount is the line's, without its sign, in its account's currency (12.5 for
+ * for in any case; a merchant is one of the user's, by id, met by a line whose merchant it is (its
+ * entry's, else its label's, never an intermediary); an amount is the line's, without its sign, in its account's currency (12.5 for
  * €12.50); a direction is `out` (money leaves) or `in`; a day is the day of the month of the line's
  * booking; a date is its booking date, `YYYY-MM-DD`. `between` takes two values, both included.
  */
 export const Condition = Schema.Union([
   condition("label", OPERATORS_OF.label, LabelText),
+  condition("merchant", OPERATORS_OF.merchant, Schema.String),
   condition("account", OPERATORS_OF.account, Schema.String),
   condition("amount", ["eq", "gte", "lte", "gt", "lt", "neq"], Amount),
   condition("amount", ["between"], Schema.Tuple([Amount, Amount])),
@@ -74,6 +89,11 @@ export const Condition = Schema.Union([
 ]);
 
 export type Condition = typeof Condition.Type;
+
+type MerchantCondition = Extract<Condition, { readonly field: "merchant" }>;
+
+const isMerchantCondition = (each: Condition): each is MerchantCondition =>
+  each.field === "merchant";
 
 /** A rule's conditions: one group, every condition of which a line must meet. */
 export const Conditions = Schema.Struct({
@@ -87,6 +107,8 @@ export type Conditions = typeof Conditions.Type;
 /** What a line is, as a condition reads it. */
 export type ConditionRow = {
   readonly label: string;
+  /** The line's merchant's id (`../merchants/line-merchant`); null for none known. */
+  readonly merchant: string | null;
   readonly account: string;
   readonly amount: number;
   readonly direction: "out" | "in";
@@ -97,6 +119,7 @@ export type ConditionRow = {
 /** A line as the import holds it, before it is read as a condition does. */
 export type LineFacts = {
   readonly label: string;
+  readonly merchantId: string | null;
   readonly accountId: string;
   readonly amountMinor: number;
   readonly currency: string;
@@ -107,6 +130,7 @@ export type LineFacts = {
 export function conditionRow(line: LineFacts): ConditionRow {
   return {
     label: line.label,
+    merchant: line.merchantId,
     account: line.accountId,
     amount: Math.abs(line.amountMinor) / 10 ** minorDigits(line.currency),
     direction: line.amountMinor < 0 ? "out" : "in",
@@ -115,10 +139,17 @@ export function conditionRow(line: LineFacts): ConditionRow {
   };
 }
 
-/** The fields, declared once, with the user's accounts as the only ones a condition may name. */
-function fieldsOf(accountIds: ReadonlyArray<string>) {
+/**
+ * The fields, declared once, with the user's accounts and merchants as the only ones a condition
+ * may name.
+ */
+function fieldsOf(accountIds: ReadonlyArray<string>, merchantIds: ReadonlyArray<string>) {
   return defineFields({
     label: f.text({ operators: OPERATORS_OF.label, minLength: 1, maxLength: MAX_LABEL_TEXT }),
+    merchant: f.enum(
+      merchantIds.map((id) => ({ value: id, label: id })),
+      { operators: OPERATORS_OF.merchant },
+    ),
     account: f.enum(
       accountIds.map((id) => ({ value: id, label: id })),
       { operators: OPERATORS_OF.account },
@@ -143,6 +174,7 @@ function goesDownwards(each: Condition): boolean {
     }
 
     case "label":
+    case "merchant":
     case "account":
     case "direction": {
       return false;
@@ -170,16 +202,18 @@ function namesNoDay(each: Condition): boolean {
 export type ConditionsProblem =
   | { readonly reason: "empty" | "too_many" }
   | { readonly reason: "invalid"; readonly index: number }
-  | { readonly reason: "unknown_account"; readonly index: number };
+  | { readonly reason: "unknown_account"; readonly index: number }
+  | { readonly reason: "unknown_merchant"; readonly index: number };
 
 /**
- * What is wrong with conditions already decoded, against the user's accounts; null when nothing.
- * qnot checks each value for its field (an account the user has, a day of the month); a date must
- * also exist, and a range go upwards.
+ * What is wrong with conditions already decoded, against the user's accounts and merchants; null
+ * when nothing. qnot checks each value for its field (an account or a merchant the user has, a day
+ * of the month); a date must also exist, and a range go upwards.
  */
 export function conditionsProblem(
   conditions: Conditions,
   accountIds: ReadonlyArray<string>,
+  merchantIds: ReadonlyArray<string>,
 ): ConditionsProblem | null {
   if (conditions.children.length === 0) {
     return { reason: "empty" };
@@ -189,7 +223,7 @@ export function conditionsProblem(
     return { reason: "too_many" };
   }
 
-  const issues = validateQuery(fieldsOf(accountIds), conditions).filter(
+  const issues = validateQuery(fieldsOf(accountIds, merchantIds), conditions).filter(
     (issue) => issue.severity === "error",
   );
 
@@ -198,9 +232,19 @@ export function conditionsProblem(
   if (first !== undefined) {
     const index = first.path[0] ?? 0;
 
-    return conditions.children[index]?.field === "account"
-      ? { reason: "unknown_account", index }
-      : { reason: "invalid", index };
+    switch (conditions.children[index]?.field) {
+      case "account": {
+        return { reason: "unknown_account", index };
+      }
+
+      case "merchant": {
+        return { reason: "unknown_merchant", index };
+      }
+
+      default: {
+        return { reason: "invalid", index };
+      }
+    }
   }
 
   const wrong = conditions.children.findIndex((each) => goesDownwards(each) || namesNoDay(each));
@@ -208,23 +252,61 @@ export function conditionsProblem(
   return wrong === -1 ? null : { reason: "invalid", index: wrong };
 }
 
-/**
- * The test of a line, compiled once. Conditions that passed `conditionsProblem` never meet a
- * condition qnot cannot read; one that would (an account deleted since) matches no line.
- */
-export function matcherOf(conditions: Conditions): (row: ConditionRow) => boolean {
-  const accounts = conditions.children.flatMap((each) =>
-    each.field === "account" ? [each.value] : [],
-  );
-
-  return compile(fieldsOf(accounts), conditions, { incompleteRules: false, invalidRules: false });
+/** The merchants the conditions name, each once. */
+export function merchantsNamed(conditions: Conditions): ReadonlyArray<string> {
+  return [
+    ...new Set(
+      conditions.children.flatMap((each) => (isMerchantCondition(each) ? [each.value] : [])),
+    ),
+  ];
 }
 
-/** The conditions as qnot's SQL, with `$n` placeholders and their values (`./sql` binds them). */
+/** Whether the conditions read a line's merchant, which only JavaScript can tell. */
+export const readsMerchant = (conditions: Conditions) =>
+  conditions.children.some(isMerchantCondition);
+
+/** The conditions but those on the merchant: what qnot reads, in JavaScript and in SQL alike. */
+const withoutMerchant = (conditions: Conditions): Conditions => ({
+  ...conditions,
+  children: conditions.children.filter((each) => !isMerchantCondition(each)),
+});
+
+const accountsNamed = (conditions: Conditions) =>
+  conditions.children.flatMap((each) => (each.field === "account" ? [each.value] : []));
+
+/**
+ * Whether a line's merchant meets the merchant conditions: it is each one named. A line of no
+ * merchant meets none; a merchant deleted since is no line's, and its condition matches nothing.
+ */
+export function meetsMerchants(conditions: Conditions, merchantId: string | null): boolean {
+  return conditions.children.filter(isMerchantCondition).every((each) => each.value === merchantId);
+}
+
+/**
+ * The test of a line, compiled once. Conditions that passed `conditionsProblem` never meet a
+ * condition qnot cannot read; one that would (an account deleted since) matches no line. The
+ * merchant conditions are tested here, apart from qnot's.
+ */
+export function matcherOf(conditions: Conditions): (row: ConditionRow) => boolean {
+  const others = withoutMerchant(conditions);
+
+  const meets =
+    others.children.length === 0
+      ? () => true
+      : compile(fieldsOf(accountsNamed(others), []), others, {
+          incompleteRules: false,
+          invalidRules: false,
+        });
+
+  return (row) => meetsMerchants(conditions, row.merchant) && meets(row);
+}
+
+/**
+ * The conditions but the merchant's as qnot's SQL, with `$n` placeholders and their values (`./sql`
+ * binds them): every line meets none of them, and none an empty group of no merchant either.
+ */
 export function conditionsQuery(conditions: Conditions) {
-  const accounts = conditions.children.flatMap((each) =>
-    each.field === "account" ? [each.value] : [],
-  );
+  const others = withoutMerchant(conditions);
 
   return encode(
     sqlFormat({
@@ -232,9 +314,22 @@ export function conditionsQuery(conditions: Conditions) {
       params: "numbered",
       quoteIdentifiers: true,
       caseInsensitive: true,
-      emptyQuery: "none",
+      emptyQuery: readsMerchant(conditions) ? "all" : "none",
     }),
-    conditions,
-    fieldsOf(accounts),
+    others,
+    fieldsOf(accountsNamed(others), []),
   );
+}
+
+/**
+ * The conditions once the merchant `from` was merged into `into`: each condition naming `from`
+ * names `into`. The same conditions when none names `from`.
+ */
+export function mergedMerchant(conditions: Conditions, from: string, into: string): Conditions {
+  return {
+    ...conditions,
+    children: conditions.children.map((each) =>
+      isMerchantCondition(each) && each.value === from ? { ...each, value: into } : each,
+    ),
+  };
 }

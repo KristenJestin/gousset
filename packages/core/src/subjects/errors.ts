@@ -10,6 +10,21 @@ export class SubjectNameTaken extends Schema.TaggedError<SubjectNameTaken>()("Su
   name: Schema.String,
 }) {}
 
+/**
+ * No subject of the user's has this name nor this path ("House > Garden shed"), in any case;
+ * `close`, the paths that contain it.
+ */
+export class SubjectNameUnknown extends Schema.TaggedError<SubjectNameUnknown>()(
+  "SubjectNameUnknown",
+  { name: Schema.String, close: Schema.Array(Schema.String) },
+) {}
+
+/** Several subjects of the user's have this name, under other parents: `matches`, their paths. */
+export class SubjectNameAmbiguous extends Schema.TaggedError<SubjectNameAmbiguous>()(
+  "SubjectNameAmbiguous",
+  { name: Schema.String, matches: Schema.Array(Schema.String) },
+) {}
+
 /** No entry of the user's has this id. */
 export class EntryNotFound extends Schema.TaggedError<EntryNotFound>()("EntryNotFound", {
   entryId: Schema.String,
