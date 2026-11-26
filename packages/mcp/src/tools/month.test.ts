@@ -350,8 +350,8 @@ function ada() {
   });
 
   rows.reach.push(
-    { accountId: current.id, importedTo: "2026-10-31", statementTo: null },
-    { accountId: savings.id, importedTo: null, statementTo: "2026-10-15" },
+    { accountId: current.id, importedTo: "2026-10-31", statementTo: null, keptByHand: false },
+    { accountId: savings.id, importedTo: null, statementTo: "2026-10-15", keptByHand: false },
   );
 
   return { rows, current, groceries };
@@ -423,6 +423,32 @@ describe("month summary", () => {
     expect(text).toContain("- Savings book: its statements reach 2026-10-15 only.");
     expect(text).not.toMatch(/[\da-f]{8}-[\da-f]{4}-/);
     expect(text.length).toBeLessThan(RESULT_LIMIT);
+  });
+
+  // Issue #235: a benefit account kept by lines entered by hand, never imported, expects no file.
+  test("an account kept by hand, never imported, is neither counted nor flagged as not imported", async () => {
+    const { rows, current } = ada();
+    const perks = account(rows, "PerksHub", "benefit");
+
+    rows.reach.push({ accountId: perks.id, importedTo: null, statementTo: null, keptByHand: true });
+
+    const { text, isError } = await month(
+      { action: "summary", month: "2026-10" },
+      { month: rows, lines: toReview(current) },
+    );
+
+    expect(isError, text).toBe(false);
+    expect(text).toContain("Imported: 1 of 2 account(s) have statements reaching 2026-10-31.");
+    expect(text).not.toContain("PerksHub");
+
+    // Alone, it leaves no account that expects a statement.
+    const alone = { ...rows, accounts: [perks] };
+    const read = await month({ action: "summary", month: "2026-10" }, { month: alone });
+
+    expect(read.text).toContain(
+      "Imported: no account that expects statements was open in the month; one kept by hand, never imported, expects none.",
+    );
+    expect(read.text).toContain("Nothing flagged.");
   });
 
   test("a user with nothing yet reads an empty month", async () => {

@@ -8,6 +8,7 @@ import {
   entryPart,
   merchant,
   merchantAlias,
+  statementImport,
   statementLine,
 } from "@gousset/db/schema/ledger";
 import { transfer } from "@gousset/db/schema/transfers";
@@ -89,7 +90,9 @@ async function categoryNamed(
  * entry, the transfer's two sides with none. A salary each month; groceries at a market (€120 in
  * September, €80 in October); a game paid through an intermediary, Payflow, in Leisure, whose
  * benchmark the user set at €40 (€60); a payment still in "Other", waiting to be reviewed (€15);
- * €500 moved to savings; and $25 spent on a dollar account. Every name and amount is invented.
+ * €500 moved to savings; and $25 spent on a dollar account. The lines are written by hand; the
+ * everyday account had September's statement imported, so that it expects October's, which the two
+ * others, kept by hand and never imported, do not (#235). Every name and amount is invented.
  */
 export function seedReviewMonths(data: ReturnType<typeof openUserData>, owner: string) {
   return data.asUser(owner, async (transaction) => {
@@ -105,6 +108,17 @@ export function seedReviewMonths(data: ReturnType<typeof openUserData>, owner: s
     if (everyday === undefined || savings === undefined || dollars === undefined) {
       throw new Error("The accounts were not made.");
     }
+
+    await transaction.insert(statementImport).values({
+      userId: owner,
+      accountId: everyday.id,
+      fileName: "everyday-september.ofx",
+      fileSha256: "e2e-review-everyday-september-sha256",
+      format: "ofx",
+      status: "done",
+      periodFrom: "2026-09-01",
+      periodTo: "2026-09-30",
+    });
 
     const groceries = await categoryNamed(transaction, "expense", "Groceries");
     const leisure = await categoryNamed(transaction, "expense", "Leisure");
@@ -262,6 +276,19 @@ export function seedTwoStoppedPlans(data: ReturnType<typeof openUserData>, owner
     if (everyday === undefined || streamly === undefined) {
       throw new Error("The account or the merchant was not made.");
     }
+
+    // Imported up to May only: the account expects its statements (#235), so September and October
+    // each keep a "not imported" flag, and the flag list stays on screen as the month changes.
+    await transaction.insert(statementImport).values({
+      userId: owner,
+      accountId: everyday.id,
+      fileName: "everyday-may.ofx",
+      fileSha256: "e2e-review-two-plans-may-sha256",
+      format: "ofx",
+      status: "done",
+      periodFrom: "2026-05-01",
+      periodTo: "2026-05-31",
+    });
 
     const leisure = await categoryNamed(transaction, "expense", "Leisure");
 
