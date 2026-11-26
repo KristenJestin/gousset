@@ -114,6 +114,24 @@
   /* Money apart (restricted, expiring, refunded) is hatched, not coloured: a neutral stroke. */
   --money-restricted: light-dark(oklch(0.5 0.01 75), oklch(0.7 0.01 80));
 
+  /* The palette a user tints their own data with (a category's colour, #205): data, not a state
+     nor a money role. Its keys are packages/core's (`category-looks.ts`), never renamed. Hues
+     around the circle, then a grey; each holds 4.5:1 or more on the page, the blocks, a muted band
+     and its own tile (15 % of it over a block or a popover), in both schemes
+     (`src/lib/contrast.test.ts`; the "Theme/Tokens" story lists the figures). */
+  --palette-red: light-dark(oklch(0.51 0.17 25), oklch(0.76 0.13 25));
+  --palette-orange: light-dark(oklch(0.505 0.13 50), oklch(0.76 0.13 50));
+  --palette-amber: light-dark(oklch(0.5 0.1 75), oklch(0.76 0.12 75));
+  --palette-olive: light-dark(oklch(0.495 0.095 105), oklch(0.76 0.11 105));
+  --palette-green: light-dark(oklch(0.48 0.13 145), oklch(0.76 0.14 145));
+  --palette-teal: light-dark(oklch(0.485 0.085 180), oklch(0.76 0.1 180));
+  --palette-cyan: light-dark(oklch(0.485 0.085 215), oklch(0.76 0.1 215));
+  --palette-blue: light-dark(oklch(0.495 0.14 250), oklch(0.76 0.12 250));
+  --palette-indigo: light-dark(oklch(0.505 0.15 275), oklch(0.76 0.12 275));
+  --palette-violet: light-dark(oklch(0.51 0.15 305), oklch(0.76 0.13 305));
+  --palette-pink: light-dark(oklch(0.515 0.16 350), oklch(0.76 0.13 350));
+  --palette-grey: light-dark(oklch(0.5 0.01 75), oklch(0.76 0.01 75));
+
   /* Charts: Bklit's names. Series follow the money roles, the rest follows the interface. */
   --chart-1: var(--money-spent);
   --chart-2: var(--money-saved);
@@ -196,6 +214,18 @@
   --color-money-income: var(--money-income);
   --color-amount-in: var(--amount-in);
   --color-money-restricted: var(--money-restricted);
+  --color-palette-red: var(--palette-red);
+  --color-palette-orange: var(--palette-orange);
+  --color-palette-amber: var(--palette-amber);
+  --color-palette-olive: var(--palette-olive);
+  --color-palette-green: var(--palette-green);
+  --color-palette-teal: var(--palette-teal);
+  --color-palette-cyan: var(--palette-cyan);
+  --color-palette-blue: var(--palette-blue);
+  --color-palette-indigo: var(--palette-indigo);
+  --color-palette-violet: var(--palette-violet);
+  --color-palette-pink: var(--palette-pink);
+  --color-palette-grey: var(--palette-grey);
   --color-chart-1: var(--chart-1);
   --color-chart-2: var(--chart-2);
   --color-chart-3: var(--chart-3);

@@ -68,6 +68,8 @@ const groceries: LineCategory = {
   name: "Groceries",
   parentName: null,
   kind: "expense",
+  icon: null,
+  color: null,
 };
 
 const otherExpense: LineCategory = {
@@ -75,6 +77,8 @@ const otherExpense: LineCategory = {
   name: "Other",
   parentName: null,
   kind: "expense",
+  icon: null,
+  color: null,
 };
 
 const otherIncome: LineCategory = {
@@ -82,6 +86,8 @@ const otherIncome: LineCategory = {
   name: "Other",
   parentName: null,
   kind: "income",
+  icon: null,
+  color: null,
 };
 
 function line(

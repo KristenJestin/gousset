@@ -65,6 +65,16 @@ export const EDGE_PAIRS = [
 /** The least contrast of a floating surface's edge, in both schemes. */
 export const EDGE_MINIMUM = 1.7;
 
+/**
+ * What a palette colour (`--palette-<key>`, a category's colour) is drawn on: the page, a block, a
+ * muted band (a hovered row), a floating surface (a list, a dialog); and its own tile, the colour
+ * at `PALETTE_TILE_ALPHA` over a block or a floating surface.
+ */
+export const PALETTE_SURFACES = ["--background", "--card", "--muted", "--popover"] as const;
+
+/** The opacity of a palette colour's tile (`bg-palette-<key>/15`). */
+export const PALETTE_TILE_ALPHA = 0.15;
+
 /** The colours of money, which the accent must never be read as. */
 export const MONEY_COLORS = [
   "--money-spent",
@@ -190,6 +200,26 @@ export function hexToLinearRgb(hex: string): LinearRgb {
   return { r: linearize(r), g: linearize(g), b: linearize(b) };
 }
 
+function encode(channel: number): number {
+  return channel <= 0.0031308 ? 12.92 * channel : 1.055 * channel ** (1 / 2.4) - 0.055;
+}
+
+function decode(channel: number): number {
+  return channel <= 0.04045 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+}
+
+/** `color` at `alpha` over `surface`, blended as the browser blends it: in encoded sRGB. */
+export function over(color: LinearRgb, surface: LinearRgb, alpha: number): LinearRgb {
+  const blend = (top: number, bottom: number) =>
+    decode(alpha * encode(top) + (1 - alpha) * encode(bottom));
+
+  return {
+    r: blend(color.r, surface.r),
+    g: blend(color.g, surface.g),
+    b: blend(color.b, surface.b),
+  };
+}
+
 /** WCAG relative luminance. */
 export function luminance(color: LinearRgb): number {
   return 0.2126 * color.r + 0.7152 * color.g + 0.0722 * color.b;
@@ -224,6 +254,52 @@ export function measureTextPairs(css: string): ReadonlyArray<MeasuredPair> {
 /** The contrast of a floating surface's edge on every surface around it, in both schemes. */
 export function measureEdgePairs(css: string): ReadonlyArray<MeasuredPair> {
   return measurePairs(css, EDGE_PAIRS);
+}
+
+/** A palette colour's contrast on one surface, or on its tile there, in both schemes. */
+export type MeasuredSwatch = {
+  readonly color: string;
+  /** A surface's token, or "tile on" one. */
+  readonly on: string;
+  readonly light: number;
+  readonly dark: number;
+};
+
+/**
+ * The contrast of each palette colour `--palette-<key>` of `keys` on every surface it is drawn on,
+ * and on its own tile over a block and over a floating surface, in both schemes.
+ */
+export function measurePalette(
+  css: string,
+  keys: ReadonlyArray<string>,
+): ReadonlyArray<MeasuredSwatch> {
+  const declarations = readDeclarations(css);
+
+  const rgb = (token: string, scheme: ColorScheme) =>
+    toLinearRgb(resolveColor(declarations, token, scheme));
+
+  return keys.flatMap((key) => {
+    const color = `--palette-${key}`;
+
+    const plain = PALETTE_SURFACES.map((surface) => ({
+      color,
+      on: surface,
+      light: contrastRatio(rgb(color, "light"), rgb(surface, "light")),
+      dark: contrastRatio(rgb(color, "dark"), rgb(surface, "dark")),
+    }));
+
+    const tile = (["--card", "--popover"] as const).map((surface) => {
+      const ratio = (scheme: ColorScheme) =>
+        contrastRatio(
+          rgb(color, scheme),
+          over(rgb(color, scheme), rgb(surface, scheme), PALETTE_TILE_ALPHA),
+        );
+
+      return { color, on: `tile on ${surface}`, light: ratio("light"), dark: ratio("dark") };
+    });
+
+    return [...plain, ...tile];
+  });
 }
 
 function measurePairs(

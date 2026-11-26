@@ -197,7 +197,18 @@ export type {
   MonthBenchmarks,
 } from "./benchmarks";
 
-export { CategoryStore } from "./category-store";
+export {
+  CATEGORY_COLORS,
+  CATEGORY_ICONS,
+  isCategoryColor,
+  isCategoryIcon,
+  shownColor,
+  shownIcon,
+} from "./category-looks";
+
+export type { CategoryColorKey, CategoryIconKey } from "./category-looks";
+
+export { CategoryStore, lineCategoryOf } from "./category-store";
 
 export type { Benchmark, CategoryRecord, EntryKind, LineCategory } from "./category-store";
 

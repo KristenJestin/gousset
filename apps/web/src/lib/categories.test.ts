@@ -14,6 +14,8 @@ function node(
     kind: "expense",
     name: id,
     icon: null,
+    color: null,
+    shownColor: null,
     position: 0,
     parentId: null,
     archivedAt: null,
@@ -31,7 +33,10 @@ const ARCHIVED = "2026-11-01T10:00:00.000Z";
 
 const TREE: CategoryTree = {
   expense: [
-    node("Housing", {}, [node("Rent"), node("Old flat", { archivedAt: ARCHIVED })]),
+    node("Housing", { icon: "housing", color: "blue", shownColor: "blue" }, [
+      node("Rent", { icon: "rent", shownColor: "blue" }),
+      node("Old flat", { archivedAt: ARCHIVED }),
+    ]),
     node("Hobbies", { archivedAt: ARCHIVED }, [node("Kites", { archivedAt: ARCHIVED })]),
     node("Other", { fallback: true }),
   ],
@@ -57,18 +62,35 @@ describe("rowsOf", () => {
 describe("choicesOf", () => {
   test("a kind's categories in use, but the one left out", () => {
     expect(choicesOf(TREE, "expense", "Rent")).toEqual([
-      { id: "Housing", name: "Housing", children: [] },
-      { id: "Other", name: "Other", children: [] },
+      { id: "Housing", name: "Housing", icon: "housing", color: "blue", children: [] },
+      { id: "Other", name: "Other", icon: null, color: null, children: [] },
     ]);
     expect(choicesOf(TREE, "income")).toEqual([
-      { id: "Salary", name: "Salary", children: [{ id: "Pay", name: "Pay" }] },
+      {
+        id: "Salary",
+        name: "Salary",
+        icon: null,
+        color: null,
+        children: [{ id: "Pay", name: "Pay", icon: null, color: null }],
+      },
+    ]);
+  });
+
+  test("each with its icon and the colour it is shown in: a child's parent's (#205)", () => {
+    expect(choicesOf(TREE, "expense")[0]?.children).toEqual([
+      { id: "Rent", name: "Rent", icon: "rent", color: "blue" },
     ]);
   });
 });
 
 describe("parentsOf", () => {
   test("the top-level categories in use a category may go under, never itself", () => {
-    expect(parentsOf(TREE, "expense", "Housing")).toEqual([{ id: "Other", name: "Other" }]);
+    expect(parentsOf(TREE, "expense", "Housing")).toEqual([
+      { id: "Other", name: "Other", color: null },
+    ]);
+    expect(parentsOf(TREE, "expense", "Other")).toEqual([
+      { id: "Housing", name: "Housing", color: "blue" },
+    ]);
   });
 });
 

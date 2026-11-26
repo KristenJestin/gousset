@@ -24,6 +24,8 @@ const ROWS: ReadonlyArray<CategoryTreeRow> = [
   {
     id: "housing",
     name: "Housing",
+    icon: "housing",
+    color: "blue",
     average: eur(69_000),
     benchmark: "automatic · €690",
     entries: 24,
@@ -33,6 +35,8 @@ const ROWS: ReadonlyArray<CategoryTreeRow> = [
     id: "rent",
     name: "Rent",
     child: true,
+    icon: "rent",
+    color: "blue",
     average: eur(61_000),
     benchmark: "automatic",
     entries: 6,
@@ -42,6 +46,9 @@ const ROWS: ReadonlyArray<CategoryTreeRow> = [
     id: "energy",
     name: "Energy",
     child: true,
+    icon: "energy",
+    // Its own colour, not its parent's.
+    color: "amber",
     average: eur(8000),
     benchmark: "automatic",
     entries: 18,
@@ -50,6 +57,8 @@ const ROWS: ReadonlyArray<CategoryTreeRow> = [
   {
     id: "groceries",
     name: "Groceries",
+    icon: "groceries",
+    color: "green",
     average: eur(58_000),
     benchmark: "automatic · €580",
     entries: 205,
@@ -59,6 +68,8 @@ const ROWS: ReadonlyArray<CategoryTreeRow> = [
     id: "eating-out",
     name: "Restaurants",
     child: true,
+    icon: "restaurants",
+    color: "green",
     average: eur(14_500),
     benchmark: "set · €130",
     benchmarkSet: true,
@@ -68,6 +79,8 @@ const ROWS: ReadonlyArray<CategoryTreeRow> = [
   {
     id: "leisure",
     name: "Leisure",
+    icon: "leisure",
+    color: "violet",
     average: [
       { minor: 16_000, currency: "EUR" },
       { minor: 4000, currency: "USD" },
@@ -76,6 +89,7 @@ const ROWS: ReadonlyArray<CategoryTreeRow> = [
     entries: 41,
     actions: ACTIONS,
   },
+  // No colour of its own nor a parent's, nor an icon: a neutral tile with `other`'s drawing.
   { id: "other", name: "Other", average: [], benchmark: "automatic", entries: 0, actions: ACTIONS },
 ];
 
@@ -89,6 +103,8 @@ function Adding() {
         {
           id: "pets",
           name: "Pets",
+          icon: "pets",
+          color: "teal",
           average: [],
           benchmark: "automatic",
           entries: 0,
@@ -112,7 +128,8 @@ function Adding() {
 
 /**
  * A kind's categories on two levels (docs/wireframes, screen 10): each top-level category, then its
- * children indented under it, with the six-month average (one figure per currency, never
+ * children indented under it, each with its icon on a tile of the colour it is shown in (its own,
+ * else its parent's, #205; a neutral tile without one), the six-month average (one figure per currency, never
  * converted), the benchmark as the page words it (one set by the user in bold), the lines it holds
  * and a ⋮ menu of the page's actions, named after the category ("Actions on Groceries").
  *

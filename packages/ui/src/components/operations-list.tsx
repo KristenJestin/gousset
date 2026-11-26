@@ -11,10 +11,14 @@ import { useUiMessages } from "../hooks/use-ui-messages";
 import type { Money } from "../lib/money";
 import { transition } from "../lib/motion";
 import { asksNextPage, rowsMark } from "../lib/next-page";
+import { paletteText } from "../lib/palette";
+import type { PaletteColor } from "../lib/palette";
 import { cn } from "../lib/utils";
 import { Amount, AmountSkeleton } from "./amount";
 import { Chip } from "./chip";
 import { EmptyState } from "./empty-state";
+import { Icon } from "./icon";
+import type { CategoryIconName } from "./icons";
 import { Loader } from "./loader";
 import { Skeleton, SkeletonFrame } from "./skeleton";
 
@@ -31,6 +35,10 @@ export type OperationRow = {
   toReview?: boolean;
   /** Its category's name, already worded ("Food › Groceries"); shown with `withCategory`. */
   category?: string;
+  /** Its category's icon (none: `other`'s), shown before its name in its colour (#205). */
+  categoryIcon?: CategoryIconName | null;
+  /** The colour its category is shown in; none: the muted text's. */
+  categoryColor?: PaletteColor | null;
   /**
    * Maybe a refund (#208), no income until the user answers: a "Maybe a refund" chip beside the
    * label, and no category, which would read as an income of it.
@@ -166,7 +174,7 @@ const COLUMN = {
   // Shown while the list has room for them: a narrow list (a phone, a small window) gives them up,
   // the category first, never the amounts.
   account: "hidden w-40 shrink-0 truncate @xl:block",
-  category: "hidden w-40 shrink-0 truncate @3xl:block",
+  category: "hidden w-40 shrink-0 truncate @3xl:flex",
   amount: "flex w-28 shrink-0 justify-end",
 };
 
@@ -474,8 +482,23 @@ function RowButton({
         ) : null}
       </span>
       {withCategory ? (
-        <span className={cn(COLUMN.category, "text-muted-foreground")}>
-          {row.maybeRefund === true ? null : row.category}
+        <span className={cn(COLUMN.category, "items-center gap-1.5 text-muted-foreground")}>
+          {row.category === undefined || row.maybeRefund === true ? null : (
+            <span
+              data-slot="operation-category-icon"
+              data-icon={row.categoryIcon ?? "other"}
+              data-color={row.categoryColor ?? undefined}
+              className={cn(
+                "flex shrink-0",
+                row.categoryColor === undefined || row.categoryColor === null
+                  ? undefined
+                  : paletteText[row.categoryColor],
+              )}
+            >
+              <Icon name={row.categoryIcon ?? "other"} size="sm" />
+            </span>
+          )}
+          <span className="truncate">{row.maybeRefund === true ? null : row.category}</span>
         </span>
       ) : null}
       <span className={cn(COLUMN.account, "text-muted-foreground")}>{row.account}</span>

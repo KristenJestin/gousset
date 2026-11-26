@@ -980,7 +980,14 @@ describe("monthReview", () => {
       topUpCapMinor: null,
     };
 
-    const other = { id: "other", name: "Other", parentName: null, kind: "expense" as const };
+    const other = {
+      id: "other",
+      name: "Other",
+      parentName: null,
+      kind: "expense" as const,
+      icon: null,
+      color: null,
+    };
 
     const line = (
       id: string,

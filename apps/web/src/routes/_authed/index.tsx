@@ -20,7 +20,6 @@ import type { DeltaListItem } from "@gousset/ui/components/delta";
 import { EmptyState } from "@gousset/ui/components/empty-state";
 import { FlagList, FlagListSkeleton } from "@gousset/ui/components/flag-list";
 import { Folded } from "@gousset/ui/components/folded";
-import { isIconName } from "@gousset/ui/components/icons";
 import type { IconName } from "@gousset/ui/components/icons";
 import { MonthBar, MonthBarSkeleton } from "@gousset/ui/components/month-bar";
 import { MovementList, MovementListSkeleton } from "@gousset/ui/components/movement-list";
@@ -413,7 +412,9 @@ function categoryRow(category: CategorySpending): BreakdownRow {
   return {
     id: category.id,
     name: category.name,
-    icon: category.icon !== null && isIconName(category.icon) ? category.icon : undefined,
+    icon: category.icon ?? "other",
+    // Its colour, else its parent's (#205): its icon and its bar are drawn in it.
+    color: category.color,
     amount: category.spent,
     benchmark:
       benchmark.mode === "none" || benchmark.amount === null ? undefined : benchmark.amount,

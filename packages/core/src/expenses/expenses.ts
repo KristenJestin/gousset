@@ -14,6 +14,7 @@ import { and, asc, desc, eq, gt, gte, inArray, lt, lte, ne, or, sql } from "driz
 import { alias } from "drizzle-orm/pg-core";
 import { Context, Effect, Layer, Result } from "effect";
 
+import { lineCategoryOf } from "../category-store";
 import type { LineCategory } from "../category-store";
 import { takeCategoryTurn } from "../category-turn";
 import { entriesForLines, settleEntries } from "../entries";
@@ -410,6 +411,9 @@ async function readExpenses(
       categoryName: category.name,
       parentName: parent.name,
       categoryKind: category.kind,
+      categoryIcon: category.icon,
+      categoryColor: category.color,
+      parentColor: parent.color,
       role: entryPart.role,
       partMinor: entryPart.amountMinor,
       lineId: statementLine.id,
@@ -453,12 +457,15 @@ async function readExpenses(
       id: entryId,
       kind: head.kind,
       happenedOn: head.happenedOn,
-      category: {
+      category: lineCategoryOf({
         id: head.categoryId,
         name: head.categoryName,
-        parentName: head.parentName,
         kind: head.categoryKind,
-      },
+        icon: head.categoryIcon,
+        color: head.categoryColor,
+        parentName: head.parentName,
+        parentColor: head.parentColor,
+      }),
       classifiedBy: head.classifiedBy,
       payments: own.flatMap((row) => (row.role === "payment" ? [partOf(row)] : [])),
       refunds: own.flatMap((row) => (row.role === "refund" ? [partOf(row)] : [])),

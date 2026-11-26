@@ -554,7 +554,14 @@ function movementOf(amountMinor: number): MemoryLineDetail {
 
 const movement: MemoryLineDetail = {
   ...movementOf(-9000),
-  category: { id: memoryId(), name: "Meal vouchers", parentName: "Food", kind: "expense" },
+  category: {
+    id: memoryId(),
+    name: "Meal vouchers",
+    parentName: "Food",
+    kind: "expense",
+    icon: null,
+    color: null,
+  },
 };
 
 const NOTED: MemoryLineRows = {
