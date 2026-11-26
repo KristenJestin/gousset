@@ -189,7 +189,7 @@ export {
 
 export { fixDay } from "./clock";
 
-export { slowServerFunctions } from "./latency";
+export { slowServerFunctions, slowServerWrites } from "./latency";
 
 export { SKELETON, animationsDone, watchLoading } from "./loading";
 
