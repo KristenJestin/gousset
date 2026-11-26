@@ -119,7 +119,7 @@ They are not a number to trim to. **A tool keeps the description and the example
 
 ### Server instructions
 
-15. **Under 600 words**: what Gousset is, its words (expense, payment, refund, transfer, benefit account, subject, benchmark: see [`vision.md`](vision.md#words)), which tool answers what. A test checks that every tool they name exists.
+15. **Under 750 words (Kris, 2026-11-26), to fit subjects and investments**: what Gousset is, its words (expense, payment, refund, transfer, benefit account, subject, benchmark: see [`vision.md`](vision.md#words)), which tool answers what. A test checks that every tool they name exists.
 
 ### Telemetry
 
