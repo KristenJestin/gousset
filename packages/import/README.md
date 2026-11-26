@@ -145,7 +145,10 @@ is the file a user exports to share a profile, decoded by the `CsvProfile` schem
 - `columns`, each counted from 1, as the preview and the errors number them: `bookedOn`, `label`
   and `amount`, required; `valueOn`, `memo`, `bankId` and `currency`, or `null`. `amount` is
   `{ kind: "signed", column }`, negative for money out, or
-  `{ kind: "debit-credit", debit, credit }`.
+  `{ kind: "debit-credit", debit, credit }`;
+- `layout`, left out for a plain table of one line per row: `"paypal-activity"` reads PayPal's
+  activity, its columns found by their names ([PayPal's activity](#paypals-activity)). A profile
+  made from it on the import screen, or saved there, keeps it.
 
 The name, the institution and the kind (`statement`, or a broker's `operations` from v0.6) are the
 table's columns, not the definition's. `normalizeHeader` and `readCsvHeader` give the header row as
@@ -232,14 +235,23 @@ account's country writes them (`MM/DD/YYYY` for the US).
   the profile's `header` and `columns` describe the mandatory columns, in their order, for the
   import screen and the MCP door to show.
 - **A row counts when it moved the balance**: its `Status` is `Completed` (`Terminé`), and its
-  `Balance Impact`, when the file has the column, is not `Memo` (an authorisation, a cart's item
-  rows). Pending, denied, reversed or voided rows are left out.
+  `Balance Impact` is not `Memo`. Pending, denied, reversed or voided rows are left out. PayPal's
+  report says no more of a memo than "the impact of the transaction on the account balance:
+  `Debit`, `Credit`, or `Memo`"; its list of event codes (T-codes) names the events that move no
+  money: an authorisation, a reauthorisation and its void (`T13`), a display-only row (`T9800`).
+  Such a row is `Completed` like a payment, and its `Type` is the event's description in the
+  account's language, which no list of the reader's would follow: only `Balance Impact` tells it.
+  So an export without that column, which PayPal selects by default, is refused
+  (`MalformedFile`, naming it): a voided authorisation would otherwise be read as money received.
 - **In the account's currency**: a row in another moves another balance, and is left out. A payment
   in another currency is taken from this one by its conversion, a row in the account's currency
   that names nobody and refers to the payment (`Reference Txn ID`): when the payment it refers to is
   in another currency and moves money the same way, the conversion is the line, labelled with the
-  payment's `Name`, and the payment's amount is its `original`. With no account chosen (a test
-  read), every row is read, in its own currency.
+  payment's `Name`, and the payment's amount is its `original`. The payment is another balance's:
+  when its `Net` cannot be read, the conversion is still read, labelled with its `Type` and without
+  an `original`, rather than failing the file. So is it when the payment's `Currency`, which the line
+  would keep, is no ISO 4217 code (`US$`, `€`, nothing). With no account chosen (a test read),
+  every row is read, in its own currency.
 - **A line** is booked on `Date` (the day PayPal completed it; its time is read past, its zone
   only for the order of the day's numbers, below),
   its amount the `Net` (`Gross` less PayPal's fee: the fee is folded, as the balance moved), its
