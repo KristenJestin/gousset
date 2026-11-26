@@ -769,40 +769,76 @@ function undoText({
     .join("\n");
 }
 
-/** How a profile reads a file: `@gousset/import`'s `CsvProfile`, as core lists it. */
-type CsvProfile = NonNullable<ImportProfileEntry["definition"]>;
+/** How a profile reads a file: `@gousset/import`'s `CsvDefinition`, as core lists it. */
+type Definition = NonNullable<ImportProfileEntry["definition"]>;
+
+/** A broker's operations' profile (`OperationsProfile`). */
+type OperationsProfile = Extract<Definition, { readonly reads: "operations" }>;
 
 const SEPARATORS = {
   ";": "semicolons",
   ",": "commas",
   "\t": "tabs",
   "|": "pipes",
-} satisfies { readonly [separator in CsvProfile["separator"]]: string };
+} satisfies { readonly [separator in Definition["separator"]]: string };
+
+const BROKERS = {
+  fortuneo: "Fortuneo's history of operations",
+  "degiro-transactions": "Degiro's Transactions.csv",
+} satisfies { readonly [layout in NonNullable<OperationsProfile["layout"]>]: string };
+
+/** How a table is split and its values written, in a few words. */
+function tableText(profile: Definition): ReadonlyArray<string> {
+  const header = profile.headerRow ? "a header row" : "no header row";
+
+  return [
+    `separated by ${SEPARATORS[profile.separator]}`,
+    `encoded ${profile.encoding}`,
+    profile.skipRows === 0 ? header : `${profile.skipRows} lines skipped above ${header}`,
+    `dates ${profile.dateFormat}`,
+    profile.decimalMark === "," ? "decimal comma" : "decimal point",
+  ];
+}
+
+/** How a broker's operations profile reads a file: into an investment account only. */
+function operationsText(profile: OperationsProfile): string {
+  if (profile.layout !== undefined) {
+    return `a broker's operations, ${BROKERS[profile.layout]}, its columns found by their names, into an investment account`;
+  }
+
+  const { kind, amount } = profile.columns;
+
+  const kinds =
+    kind === null
+      ? "each row a purchase or a sale by its quantity's sign"
+      : `the kind in column ${kind}, ${profile.kinds.map((each) => `${clip(each.word, 40)} as ${each.kind}`).join(", ")}`;
+
+  return [
+    "a broker's operations, into an investment account",
+    ...tableText(profile),
+    kinds,
+    `the amount in column ${amount}`,
+  ].join(", ");
+}
 
 /** How a profile reads a file, in a few words: what an agent needs to choose one. */
-function readsText(profile: CsvProfile): string {
+function readsText(profile: Definition): string {
+  if ("reads" in profile) {
+    return operationsText(profile);
+  }
+
   if (profile.layout === "paypal-activity") {
     return "PayPal's activity export, its columns found by their names in English or French, the completed rows that moved the balance in the account's currency, a payment in another currency by its conversion; days and amounts read as the file writes them";
   }
 
   const { amount } = profile.columns;
-  const header = profile.headerRow ? "a header row" : "no header row";
-
-  const top = profile.skipRows === 0 ? header : `${profile.skipRows} lines skipped above ${header}`;
 
   const amounts =
     amount.kind === "signed"
       ? `one signed amount in column ${amount.column}`
       : `debit in column ${amount.debit} and credit in column ${amount.credit}`;
 
-  return [
-    `separated by ${SEPARATORS[profile.separator]}`,
-    `encoded ${profile.encoding}`,
-    top,
-    `dates ${profile.dateFormat}`,
-    profile.decimalMark === "," ? "decimal comma" : "decimal point",
-    amounts,
-  ].join(", ");
+  return [...tableText(profile), amounts].join(", ");
 }
 
 /** A profile by its name: whose it is, and the institution it reads. */

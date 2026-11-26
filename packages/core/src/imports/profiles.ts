@@ -2,14 +2,18 @@ import { account, importFile, importProfile, statementImport } from "@gousset/db
 import { UserData } from "@gousset/db/user-data";
 import type { QueryFailed, UserTransaction } from "@gousset/db/user-data";
 import {
-  CsvProfile,
+  CsvDefinition,
+  SHIPPED_OPERATIONS_PROFILES,
   SHIPPED_PROFILES,
   csvFile,
   headerMatches,
   matchCsvHeader,
   readCsvHeader,
+  readsOperations,
+  shippedOperationsProfile,
   shippedProfile,
   testReadCsv,
+  testReadOperations,
 } from "@gousset/import";
 import type { CsvFile, ShippedProfile } from "@gousset/import";
 import { and, asc, count, desc, eq } from "drizzle-orm";
@@ -37,16 +41,17 @@ import type {
 
 // Import profiles (#19, docs/data-model.md, "Import profiles"): the user's own, kept in
 // `import_profile`, and those shipped with Gousset (`@gousset/import`), listed together for the
-// import screen and the MCP door. A stored definition is decoded by `CsvProfile` on its way out:
-// one that no longer reads is listed as such, never thrown.
+// import screen and the MCP door. A stored definition is decoded by `CsvDefinition` on its way
+// out (a statement's `CsvProfile` or a broker's `OperationsProfile`): one that no longer reads is
+// listed as such, never thrown.
 
 type StoredEntry = Extract<ImportProfileEntry, { source: "stored" }>;
 
 type ShippedEntry = Extract<ImportProfileEntry, { source: "shipped" }>;
 
-const decodeDefinition = Schema.decodeUnknownOption(CsvProfile);
+const decodeDefinition = Schema.decodeUnknownOption(CsvDefinition);
 
-const ProfileJson = Schema.fromJsonString(CsvProfile);
+const ProfileJson = Schema.fromJsonString(CsvDefinition);
 
 const decodeFile = Schema.decodeUnknownExit(ProfileJson);
 
@@ -88,37 +93,43 @@ function shippedEntry(shipped: ShippedProfile): ShippedEntry {
   };
 }
 
-const SHIPPED_ENTRIES: ReadonlyArray<ShippedEntry> = SHIPPED_PROFILES.map(shippedEntry);
+/** Every profile shipped: the statements' styles, then the brokers' operations. */
+const SHIPPED: ReadonlyArray<ShippedProfile> = [
+  ...SHIPPED_PROFILES,
+  ...SHIPPED_OPERATIONS_PROFILES,
+];
+
+const SHIPPED_ENTRIES: ReadonlyArray<ShippedEntry> = SHIPPED.map(shippedEntry);
 
 /** A profile that may read a file, and what an import records of it once it does. */
 export type ProfileCandidate = {
   readonly header: string | null;
-  readonly profile: CsvProfile;
+  readonly profile: CsvDefinition;
   readonly profileId: string | null;
   readonly shippedProfile: string | null;
 };
 
 /**
- * The user's profiles that read statements, in the order a CSV file is matched against them: the
- * most recently updated first. At most `MAX_PROFILES`, which saving keeps them under: the limit
- * here bounds the profiles tried on a file even past two saves made at once.
+ * The user's profiles, statements' and brokers' operations' alike, in the order a CSV file is
+ * matched against them: the most recently updated first. At most `MAX_PROFILES`, which saving
+ * keeps them under: the limit here bounds the profiles tried on a file even past two saves made at
+ * once.
  */
-const statementProfiles = (transaction: UserTransaction): Promise<ReadonlyArray<StoredRow>> =>
+const storedProfiles = (transaction: UserTransaction): Promise<ReadonlyArray<StoredRow>> =>
   transaction
     .select(storedColumns)
     .from(importProfile)
-    .where(eq(importProfile.kind, "statement"))
     .orderBy(desc(importProfile.updatedAt), desc(importProfile.id))
     .limit(MAX_PROFILES);
 
 /**
- * The profiles a CSV statement is matched against, in order: the user's that read statements and
- * still decode, the most recently updated first, then the shipped ones.
+ * The profiles a CSV file is matched against, in order: the user's that still decode, the most
+ * recently updated first, then the shipped ones, the statements' styles before the brokers'.
  */
 export async function profileCandidates(
   transaction: UserTransaction,
 ): Promise<ReadonlyArray<ProfileCandidate>> {
-  const rows = await statementProfiles(transaction);
+  const rows = await storedProfiles(transaction);
 
   const stored = rows.flatMap((row): Array<ProfileCandidate> => {
     const definition = decodeDefinition(row.definition);
@@ -128,7 +139,7 @@ export async function profileCandidates(
       : [];
   });
 
-  const shipped = SHIPPED_PROFILES.map((each): ProfileCandidate => ({
+  const shipped = SHIPPED.map((each): ProfileCandidate => ({
     header: each.header,
     profile: each.profile,
     profileId: null,
@@ -300,7 +311,7 @@ const showProfile = (
     return findStored(owner, choice.id);
   }
 
-  const shipped = shippedProfile(choice.key);
+  const shipped = shippedProfile(choice.key) ?? shippedOperationsProfile(choice.key);
 
   return shipped === undefined
     ? Effect.fail(new ProfileNotFound({ profile: choice.key }))
@@ -370,7 +381,7 @@ export const importProfilesLayer = Layer.effect(
               userId: owner,
               name,
               institution,
-              kind: "statement",
+              kind: readsOperations(draft.definition) ? "operations" : "statement",
               definition: draft.definition,
               header,
             })
@@ -452,7 +463,7 @@ export const importProfilesLayer = Layer.effect(
       exportFile: (owner, choice) =>
         Effect.map(definitionOf(owner, choice), ({ entry, definition }) => ({
           fileName: fileNameOf(entry.name),
-          content: `${JSON.stringify(Schema.encodeSync(CsvProfile)(definition), null, 2)}\n`,
+          content: `${JSON.stringify(Schema.encodeSync(CsvDefinition)(definition), null, 2)}\n`,
         })),
 
       importFile: (owner, shared) =>
@@ -504,7 +515,7 @@ export const importProfilesLayer = Layer.effect(
               return undefined;
             }
 
-            const stored = await statementProfiles(transaction);
+            const stored = await storedProfiles(transaction);
 
             return { row, stored: stored.map(storedEntry) };
           });
@@ -569,7 +580,11 @@ const fits = (
     );
   }
 
-  return testReadCsv(file, definition, currency).pipe(
+  const tried = readsOperations(definition)
+    ? Effect.asVoid(testReadOperations(file, definition, currency))
+    : Effect.asVoid(testReadCsv(file, definition, currency));
+
+  return tried.pipe(
     Effect.match({
       onFailure: () => undefined,
       onSuccess: () => ({ profile: entry, by: "test-read" }),

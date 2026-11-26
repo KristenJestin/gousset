@@ -216,7 +216,7 @@ function ColumnsPreview({
   const listed = [...fits, ...others];
 
   const startFrom = (entry: ImportProfileEntry) => {
-    if (entry.definition !== null) {
+    if (entry.definition !== null && !("reads" in entry.definition)) {
       setSettings(settingsOf(entry.definition));
       setMapping(mappingOf(entry.definition, width));
     }

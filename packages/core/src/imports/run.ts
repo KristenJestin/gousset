@@ -7,7 +7,7 @@ import {
 } from "@gousset/db/schema/ledger";
 import { UserData } from "@gousset/db/user-data";
 import type { QueryFailed, UserTransaction } from "@gousset/db/user-data";
-import { CsvProfile, detectCsvProfile } from "@gousset/import";
+import { CsvDefinition, detectCsvProfile, readsOperations } from "@gousset/import";
 import {
   and,
   asc,
@@ -22,20 +22,25 @@ import {
   or,
   sql,
 } from "drizzle-orm";
-import { Effect, Schema } from "effect";
+import { Effect, Result, Schema } from "effect";
 
 import { remakeBalanceLines } from "../balance-lines";
 import { balanceAt, looksEmpty } from "../balances";
 import { takeCategoryTurn } from "../category-turn";
 import { entriesForLines } from "../entries";
 import { matchTopUpsIn } from "../expenses/top-ups";
+import { saveImportedOperations } from "../investments/import-operations";
+import type { ImportedOperation } from "../investments/import-operations";
+import { checkOperation } from "../investments/operation-input";
+import { investmentAccountIn } from "../investments/rows";
 import { recogniseIn } from "../merchants/merchants";
 import { applyRulesToImport } from "../rules/rules";
 import { ImportFailed } from "./errors";
 import { dedupKeys, NEAR_DAYS, nearDuplicates } from "./keys";
 import type { ExistingLine, ImportFormat, ReadLine } from "./keys";
+import { operationDedupKeys } from "./operation-keys";
 import { StatementReader } from "./read";
-import type { ReadStatement } from "./read";
+import type { ReadOperation, ReadStatement } from "./read";
 import { matchProfile, profileCandidates } from "./profiles";
 import { pairTransfers } from "../transfers/pair-lines";
 import { isId } from "./rows";
@@ -46,10 +51,13 @@ import type { ImportStep } from "./summary";
 // every step is safe to run twice: what an earlier attempt saved is the import's own and is kept,
 // and the counts are read back from the lines, never added up.
 
-/** What the job is sent: the import, and how to read its CSV once the user said so. */
+/**
+ * What the job is sent: the import, and how to read its CSV once the user said so, as a statement
+ * or as a broker's operations.
+ */
 export const ImportJobInput = Schema.Struct({
   importId: Schema.String,
-  csvProfile: Schema.NullOr(CsvProfile),
+  csvProfile: Schema.NullOr(CsvDefinition),
 });
 
 export type ImportJobInput = typeof ImportJobInput.Type;
@@ -276,6 +284,79 @@ export function runImport(
 
     const wait = setStatus({ status: "waiting", errorCode: null }).pipe(Effect.as(nothing));
 
+    /**
+     * A broker's operations (v0.6): each checked as one entered by hand is (a refusal fails the
+     * import with its tag), keyed over the whole file so that occurrences hold across chunks, then
+     * saved a chunk at a time with their lines, as a statement's lines are.
+     */
+    const saveOperations = (rows: ReadonlyArray<ReadOperation>, accountId: string) =>
+      Effect.gen(function* () {
+        const checked: Array<Omit<ImportedOperation, "dedupKey"> & { referenceUnique: boolean }> =
+          [];
+
+        for (const row of rows) {
+          const result = checkOperation({
+            kind: row.kind,
+            bookedOn: row.bookedOn,
+            valueOn: row.valueOn,
+            amountMinor: row.amountMinor,
+            isin: row.isin,
+            securityName: row.securityName,
+            securityCurrency: row.securityCurrency,
+            quantity: row.quantity,
+            unitPrice: row.unitPrice,
+            feesMinor: row.feesMinor,
+            label: row.label,
+          });
+
+          if (Result.isFailure(result)) {
+            return yield* fail(result.failure._tag, false);
+          }
+
+          checked.push({
+            ...result.success,
+            reference: row.reference,
+            referenceUnique: row.referenceUnique,
+          });
+        }
+
+        const keys = operationDedupKeys(
+          checked.map((each) => ({
+            bookedOn: each.bookedOn,
+            kind: each.kind,
+            isin: each.security?.isin ?? null,
+            quantity: each.quantity,
+            unitPrice: each.unitPrice,
+            amountMinor: each.amountMinor,
+            reference: each.reference,
+            referenceUnique: each.referenceUnique,
+          })),
+        );
+
+        const keyed: ReadonlyArray<ImportedOperation> = checked.map((each, index) => ({
+          ...each,
+          dedupKey: keys[index] ?? "",
+        }));
+
+        // The key decides at the insert (`on conflict do nothing`): nothing to compare before.
+        yield* progress("deduplicate", { done: keyed.length, total: keyed.length });
+        yield* progress("save", { done: 0, total: keyed.length });
+        yield* setStatus({ status: "saving" });
+
+        for (let start = 0; start < keyed.length; start += CHUNK) {
+          const chunk = keyed.slice(start, start + CHUNK);
+
+          yield* whileRunning((transaction) =>
+            saveImportedOperations(transaction, owner, { accountId, importId }, chunk),
+          );
+
+          yield* progress("save", {
+            done: Math.min(start + CHUNK, keyed.length),
+            total: keyed.length,
+          });
+        }
+      });
+
     const loaded = isId(importId)
       ? yield* inTransaction((transaction) => load(transaction, importId))
       : undefined;
@@ -332,6 +413,20 @@ export function runImport(
       csvProfile = proposal.profile;
     }
 
+    // A broker's operations go into an investment account kept by its lines, and nowhere else.
+    if (csvProfile !== null && readsOperations(csvProfile)) {
+      const into = loaded.account;
+
+      const found =
+        into === undefined
+          ? undefined
+          : yield* inTransaction((transaction) => investmentAccountIn(transaction, into.id));
+
+      if (found === undefined || !("account" in found)) {
+        return yield* fail("NOT_AN_INVESTMENT_ACCOUNT", false);
+      }
+    }
+
     const statement = yield* reader
       .read({
         format: loaded.format,
@@ -353,160 +448,173 @@ export function runImport(
       return yield* fail("CURRENCY_MISMATCH", false);
     }
 
-    const days = statement.lines.map((line) => line.bookedOn).toSorted();
+    const { operations } = statement;
+    const linesRead = operations?.length ?? statement.lines.length;
+
+    const days = [...(operations ?? []), ...statement.lines]
+      .map((each) => each.bookedOn)
+      .toSorted();
+
     const periodFrom = days[0] ?? statement.balance?.on ?? null;
     const periodTo = days.at(-1) ?? statement.balance?.on ?? null;
 
     yield* setStatus({
       accountId: target.id,
-      linesRead: statement.lines.length,
+      linesRead,
       periodFrom,
       periodTo,
     });
 
-    const keys = dedupKeys(loaded.format, statement.lines, csvProfile?.layout);
+    if (operations === null) {
+      const layout =
+        csvProfile === null || readsOperations(csvProfile) ? undefined : csvProfile.layout;
 
-    const keyed: ReadonlyArray<Keyed> = statement.lines.map((line, order) => ({
-      ...line,
-      dedupKey: keys[order] ?? "",
-      order,
-    }));
+      const keys = dedupKeys(loaded.format, statement.lines, layout);
 
-    yield* progress("deduplicate", { done: 0, total: keyed.length });
+      const keyed: ReadonlyArray<Keyed> = statement.lines.map((line, order) => ({
+        ...line,
+        dedupKey: keys[order] ?? "",
+        order,
+      }));
 
-    // Which keys the account has already, and whether they are this import's own (an earlier
-    // attempt saved them) or another's (a duplicate).
-    const known = new Map<string, string | null>();
+      yield* progress("deduplicate", { done: 0, total: keyed.length });
 
-    for (let start = 0; start < keys.length; start += CHUNK) {
-      const chunk = keys.slice(start, start + CHUNK);
+      // Which keys the account has already, and whether they are this import's own (an earlier
+      // attempt saved them) or another's (a duplicate).
+      const known = new Map<string, string | null>();
 
-      const found = yield* inTransaction((transaction) =>
-        transaction
-          .select({ dedupKey: statementLine.dedupKey, importId: statementLine.importId })
-          .from(statementLine)
-          .where(
-            and(eq(statementLine.accountId, target.id), inArray(statementLine.dedupKey, chunk)),
-          ),
-      );
+      for (let start = 0; start < keys.length; start += CHUNK) {
+        const chunk = keys.slice(start, start + CHUNK);
 
-      for (const row of found) {
-        if (row.dedupKey !== null) {
-          known.set(row.dedupKey, row.importId);
+        const found = yield* inTransaction((transaction) =>
+          transaction
+            .select({ dedupKey: statementLine.dedupKey, importId: statementLine.importId })
+            .from(statementLine)
+            .where(
+              and(eq(statementLine.accountId, target.id), inArray(statementLine.dedupKey, chunk)),
+            ),
+        );
+
+        for (const row of found) {
+          if (row.dedupKey !== null) {
+            known.set(row.dedupKey, row.importId);
+          }
         }
       }
-    }
 
-    const fresh = keyed.filter((line) => !known.has(line.dedupKey));
+      const fresh = keyed.filter((line) => !known.has(line.dedupKey));
 
-    const candidates: ReadonlyArray<ExistingLine> =
-      fresh.length === 0 || periodFrom === null || periodTo === null
-        ? []
-        : yield* inTransaction((transaction) =>
-            transaction
-              .select({
-                id: statementLine.id,
-                bookedOn: statementLine.bookedOn,
-                amountMinor: statementLine.amountMinor,
-                label: statementLine.label,
-                dedupKey: statementLine.dedupKey,
-              })
-              .from(statementLine)
-              .where(
-                and(
-                  eq(statementLine.accountId, target.id),
-                  eq(statementLine.state, "counted"),
-                  // A side the app made for a transfer is replaced by the file's line, never held
-                  // against it (the pairing below).
-                  ne(statementLine.source, "counterpart"),
-                  gte(statementLine.bookedOn, shiftDay(periodFrom, -NEAR_DAYS)),
-                  lte(statementLine.bookedOn, shiftDay(periodTo, NEAR_DAYS)),
-                  or(isNull(statementLine.importId), ne(statementLine.importId, importId)),
+      const candidates: ReadonlyArray<ExistingLine> =
+        fresh.length === 0 || periodFrom === null || periodTo === null
+          ? []
+          : yield* inTransaction((transaction) =>
+              transaction
+                .select({
+                  id: statementLine.id,
+                  bookedOn: statementLine.bookedOn,
+                  amountMinor: statementLine.amountMinor,
+                  label: statementLine.label,
+                  dedupKey: statementLine.dedupKey,
+                })
+                .from(statementLine)
+                .where(
+                  and(
+                    eq(statementLine.accountId, target.id),
+                    eq(statementLine.state, "counted"),
+                    // A side the app made for a transfer is replaced by the file's line, never held
+                    // against it (the pairing below).
+                    ne(statementLine.source, "counterpart"),
+                    gte(statementLine.bookedOn, shiftDay(periodFrom, -NEAR_DAYS)),
+                    lte(statementLine.bookedOn, shiftDay(periodTo, NEAR_DAYS)),
+                    or(isNull(statementLine.importId), ne(statementLine.importId, importId)),
+                  ),
                 ),
-              ),
-          );
+            );
 
-    // A known line an earlier attempt already held one of this import's lines against stays
-    // taken: it is the near duplicate of one read line at most, across attempts too.
-    const taken =
-      candidates.length === 0
-        ? []
-        : yield* inTransaction((transaction) =>
-            transaction
-              .select({ id: statementLine.duplicateOfLineId })
-              .from(statementLine)
-              .where(
-                and(
-                  eq(statementLine.importId, importId),
-                  isNotNull(statementLine.duplicateOfLineId),
+      // A known line an earlier attempt already held one of this import's lines against stays
+      // taken: it is the near duplicate of one read line at most, across attempts too.
+      const taken =
+        candidates.length === 0
+          ? []
+          : yield* inTransaction((transaction) =>
+              transaction
+                .select({ id: statementLine.duplicateOfLineId })
+                .from(statementLine)
+                .where(
+                  and(
+                    eq(statementLine.importId, importId),
+                    isNotNull(statementLine.duplicateOfLineId),
+                  ),
                 ),
-              ),
+            );
+
+      const takenIds = new Set(taken.map((row) => row.id));
+
+      const near = nearDuplicates(
+        fresh.map((line): ReadLine => line),
+        candidates.filter((candidate) => !takenIds.has(candidate.id)),
+      );
+
+      yield* progress("deduplicate", { done: keyed.length, total: keyed.length });
+
+      // Oldest first, the file's order kept within a day: ids follow creation, so the account's
+      // order is the statement's.
+      const planned: ReadonlyArray<Planned> = fresh
+        .map((line, index) => ({ ...line, duplicateOf: near.get(index) ?? null }))
+        .toSorted((a, b) => a.bookedOn.localeCompare(b.bookedOn) || a.order - b.order);
+
+      yield* progress("save", { done: 0, total: planned.length });
+      yield* setStatus({ status: "saving" });
+
+      for (let start = 0; start < planned.length; start += CHUNK) {
+        const chunk = planned.slice(start, start + CHUNK);
+
+        yield* whileRunning(async (transaction) => {
+          const added = await transaction
+            .insert(statementLine)
+            .values(
+              chunk.map((line) => ({
+                userId: owner,
+                accountId: target.id,
+                importId,
+                source: "import" as const,
+                state: line.duplicateOf === null ? ("counted" as const) : ("held" as const),
+                bookedOn: line.bookedOn,
+                valueOn: line.valueOn,
+                amountMinor: line.amountMinor,
+                label: line.label,
+                memo: line.memo,
+                counterpartyName: line.counterparty?.name ?? null,
+                counterpartyIban: line.counterparty?.iban ?? null,
+                // A payment in another currency, as the file gives it (PayPal's conversions, #201).
+                originalAmountMinor: line.original?.amountMinor ?? null,
+                originalCurrency: line.original?.currency ?? null,
+                bankId: line.bankId,
+                dedupKey: line.dedupKey,
+                duplicateOfLineId: line.duplicateOf,
+              })),
+            )
+            // Another import running at once may have added the same line meanwhile: it is a
+            // duplicate, counted as one below.
+            .onConflictDoNothing({ target: [statementLine.accountId, statementLine.dedupKey] })
+            .returning({ id: statementLine.id });
+
+          // Each counted line this chunk added gets its entry in the same transaction: no line is
+          // ever counted without one, and an attempt run again adds neither twice.
+          await entriesForLines(
+            transaction,
+            owner,
+            added.map((line) => line.id),
           );
+        });
 
-    const takenIds = new Set(taken.map((row) => row.id));
-
-    const near = nearDuplicates(
-      fresh.map((line): ReadLine => line),
-      candidates.filter((candidate) => !takenIds.has(candidate.id)),
-    );
-
-    yield* progress("deduplicate", { done: keyed.length, total: keyed.length });
-
-    // Oldest first, the file's order kept within a day: ids follow creation, so the account's
-    // order is the statement's.
-    const planned: ReadonlyArray<Planned> = fresh
-      .map((line, index) => ({ ...line, duplicateOf: near.get(index) ?? null }))
-      .toSorted((a, b) => a.bookedOn.localeCompare(b.bookedOn) || a.order - b.order);
-
-    yield* progress("save", { done: 0, total: planned.length });
-    yield* setStatus({ status: "saving" });
-
-    for (let start = 0; start < planned.length; start += CHUNK) {
-      const chunk = planned.slice(start, start + CHUNK);
-
-      yield* whileRunning(async (transaction) => {
-        const added = await transaction
-          .insert(statementLine)
-          .values(
-            chunk.map((line) => ({
-              userId: owner,
-              accountId: target.id,
-              importId,
-              source: "import" as const,
-              state: line.duplicateOf === null ? ("counted" as const) : ("held" as const),
-              bookedOn: line.bookedOn,
-              valueOn: line.valueOn,
-              amountMinor: line.amountMinor,
-              label: line.label,
-              memo: line.memo,
-              counterpartyName: line.counterparty?.name ?? null,
-              counterpartyIban: line.counterparty?.iban ?? null,
-              // A payment in another currency, as the file gives it (PayPal's conversions, #201).
-              originalAmountMinor: line.original?.amountMinor ?? null,
-              originalCurrency: line.original?.currency ?? null,
-              bankId: line.bankId,
-              dedupKey: line.dedupKey,
-              duplicateOfLineId: line.duplicateOf,
-            })),
-          )
-          // Another import running at once may have added the same line meanwhile: it is a
-          // duplicate, counted as one below.
-          .onConflictDoNothing({ target: [statementLine.accountId, statementLine.dedupKey] })
-          .returning({ id: statementLine.id });
-
-        // Each counted line this chunk added gets its entry in the same transaction: no line is
-        // ever counted without one, and an attempt run again adds neither twice.
-        await entriesForLines(
-          transaction,
-          owner,
-          added.map((line) => line.id),
-        );
-      });
-
-      yield* progress("save", {
-        done: Math.min(start + CHUNK, planned.length),
-        total: planned.length,
-      });
+        yield* progress("save", {
+          done: Math.min(start + CHUNK, planned.length),
+          total: planned.length,
+        });
+      }
+    } else {
+      yield* saveOperations(operations, target.id);
     }
 
     yield* whileRunning(async (transaction) => {
@@ -590,7 +698,7 @@ export function runImport(
           errorCode: null,
           linesAdded: added,
           linesHeld: held,
-          linesDuplicate: Math.max(statement.lines.length - added - held, 0),
+          linesDuplicate: Math.max(linesRead - added - held, 0),
           balanceIgnored,
           finishedAt: new Date(),
         })

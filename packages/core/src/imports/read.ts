@@ -1,5 +1,15 @@
-import { CsvProfile, readCamt053, readCsv, readMt940, readOfx, readQif } from "@gousset/import";
-import type { ReadError, Statement } from "@gousset/import";
+import {
+  CsvDefinition,
+  OperationKind,
+  readCamt053,
+  readCsv,
+  readMt940,
+  readOfx,
+  readOperations,
+  readQif,
+  readsOperations,
+} from "@gousset/import";
+import type { Operations, ReadError, Statement } from "@gousset/import";
 import { Context, Effect, Layer, Schema } from "effect";
 
 // Reading a file with its format's reader. The readers are synchronous: a crafted file can hold
@@ -8,14 +18,14 @@ import { Context, Effect, Layer, Schema } from "effect";
 
 /**
  * What the import asks a reader: the file, its format, and what the format does not say itself:
- * the account's currency (QIF and CSV name none) and how to read a CSV file. What crosses to the
- * worker thread.
+ * the account's currency (QIF and CSV name none) and how to read a CSV file: as a statement, or as
+ * a broker's operations. What crosses to the worker thread.
  */
 export const ReadRequest = Schema.Struct({
   format: Schema.Literals(["ofx", "qfx", "qif", "camt053", "mt940", "csv"]),
   bytes: Schema.Uint8Array,
   currency: Schema.NullOr(Schema.String),
-  csvProfile: Schema.NullOr(CsvProfile),
+  csvProfile: Schema.NullOr(CsvDefinition),
 });
 
 export type ReadRequest = typeof ReadRequest.Type;
@@ -33,7 +43,30 @@ export class ReadFailed extends Schema.TaggedError<ReadFailed>()("ReadFailed", {
 const Text = Schema.NullOr(Schema.String);
 const Balance = Schema.NullOr(Schema.Struct({ amountMinor: Schema.Number, on: Schema.String }));
 
-/** A statement as the import keeps it from a reader: what crosses from the worker thread. */
+/** An operation of a broker's file, as `@gousset/import` reads it (`OperationRow`). */
+const ReadOperation = Schema.Struct({
+  line: Schema.Number,
+  kind: OperationKind,
+  bookedOn: Schema.String,
+  valueOn: Text,
+  amountMinor: Schema.Number,
+  isin: Text,
+  securityName: Text,
+  securityCurrency: Text,
+  quantity: Text,
+  unitPrice: Text,
+  feesMinor: Schema.Number,
+  label: Text,
+  reference: Text,
+  referenceUnique: Schema.Boolean,
+});
+
+export type ReadOperation = typeof ReadOperation.Type;
+
+/**
+ * A statement as the import keeps it from a reader: what crosses from the worker thread. A
+ * broker's file has no lines but its `operations`, `null` for any other file.
+ */
 export const ReadStatement = Schema.Struct({
   currency: Schema.String,
   lines: Schema.Array(
@@ -53,6 +86,7 @@ export const ReadStatement = Schema.Struct({
   openingBalance: Balance,
   balance: Balance,
   account: Schema.NullOr(Schema.Struct({ iban: Text, number: Text })),
+  operations: Schema.NullOr(Schema.Array(ReadOperation)),
 });
 
 export type ReadStatement = typeof ReadStatement.Type;
@@ -85,6 +119,19 @@ function keep(statement: Statement): ReadStatement {
     openingBalance: statement.openingBalance,
     balance: statement.balance,
     account: statement.account,
+    operations: null,
+  };
+}
+
+/** A broker's file as the import keeps it: its operations, in the account's currency. */
+function keepOperations(read: Operations): ReadStatement {
+  return {
+    currency: read.currency,
+    lines: [],
+    openingBalance: null,
+    balance: null,
+    account: null,
+    operations: read.operations,
   };
 }
 
@@ -95,33 +142,39 @@ function currencyOf(request: ReadRequest): Effect.Effect<string, ReadFailed> {
     : Effect.succeed(request.currency);
 }
 
-function read(request: ReadRequest): Effect.Effect<Statement, ReadError | ReadFailed> {
+function read(request: ReadRequest): Effect.Effect<ReadStatement, ReadError | ReadFailed> {
   const { bytes, csvProfile } = request;
 
   switch (request.format) {
     case "ofx":
     case "qfx": {
-      return readOfx(bytes);
+      return Effect.map(readOfx(bytes), keep);
     }
 
     case "camt053": {
-      return readCamt053(bytes);
+      return Effect.map(readCamt053(bytes), keep);
     }
 
     case "mt940": {
-      return readMt940(bytes);
+      return Effect.map(readMt940(bytes), keep);
     }
 
     case "qif": {
-      return Effect.flatMap(currencyOf(request), (currency) => readQif(bytes, { currency }));
+      return Effect.flatMap(currencyOf(request), (currency) =>
+        Effect.map(readQif(bytes, { currency }), keep),
+      );
     }
 
     case "csv": {
-      return csvProfile === null
-        ? Effect.fail(failedAt("NEEDS_PROFILE", null))
-        : Effect.flatMap(currencyOf(request), (currency) =>
-            readCsv(bytes, csvProfile, { currency }),
-          );
+      if (csvProfile === null) {
+        return Effect.fail(failedAt("NEEDS_PROFILE", null));
+      }
+
+      return Effect.flatMap(currencyOf(request), (currency) =>
+        readsOperations(csvProfile)
+          ? Effect.map(readOperations(bytes, csvProfile, { currency }), keepOperations)
+          : Effect.map(readCsv(bytes, csvProfile, { currency }), keep),
+      );
     }
   }
 }
@@ -129,7 +182,6 @@ function read(request: ReadRequest): Effect.Effect<Statement, ReadError | ReadFa
 /** Reads a file with its format's reader, in this thread. */
 export function readStatement(request: ReadRequest): Effect.Effect<ReadStatement, ReadFailed> {
   return read(request).pipe(
-    Effect.map(keep),
     // The reader's tag is the code; its words, which quote the file, stay behind.
     Effect.catchTags({
       NotAStatement: () => Effect.fail(failedAt("NotAStatement", null)),
