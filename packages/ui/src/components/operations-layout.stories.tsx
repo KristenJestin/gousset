@@ -3,6 +3,7 @@ import { useState } from "react";
 
 import { InFrench } from "../stories/in-french";
 import { ACCOUNTS, madeUpOperations } from "../stories/made-up";
+import { Button } from "./button";
 import { LineDetail, LineDetailSkeleton } from "./line-detail";
 import { NO_OPERATIONS_FILTERS } from "../lib/operations";
 import type { OperationsFilterValues } from "../lib/operations";
@@ -30,12 +31,17 @@ function matching(values: OperationsFilterValues) {
   );
 }
 
-/** The screen as the page composes it: filters, count, list and the open line's detail. */
-function Screen({ start }: { start?: string }) {
+/**
+ * The screen as the page composes it: filters, count, list and the open line's detail; `stepping`,
+ * the detail opens the next line from its top, as the review does once a line is reviewed.
+ */
+function Screen({ start, stepping = false }: { start?: string; stepping?: boolean }) {
   const [values, setValues] = useState(NO_OPERATIONS_FILTERS);
   const [openId, setOpenId] = useState<string | undefined>(start);
   const rows = matching(values);
-  const open = ROWS.find((row) => row.id === openId);
+  const index = ROWS.findIndex((row) => row.id === openId);
+  const open = ROWS[index];
+  const next = ROWS[index + 1];
 
   return (
     <OperationsLayout
@@ -62,6 +68,13 @@ function Screen({ start }: { start?: string }) {
         open === undefined ? undefined : (
           <LineDetail
             key={open.id}
+            review={
+              stepping && next !== undefined ? (
+                <Button variant="secondary" onClick={() => setOpenId(next.id)}>
+                  Next line
+                </Button>
+              ) : undefined
+            }
             label={open.label}
             amount={open.amount}
             account={open.account}
@@ -84,22 +97,20 @@ function Screen({ start }: { start?: string }) {
 /**
  * The operations screen's places (screen 2): the filters, the count of lines that match (with
  * "Clear filters" at the end of its line, once one is set), the list
- * in a block filling the screen's height with its own scroller, and the open line's detail in a
- * 360 px column at its right, from Tailwind's `lg` on: the list makes room, its account column
- * giving way when it runs short, never its amounts. Below `lg` the detail is a modal sheet over
- * the list (from the bottom on a phone, from the side on a tablet), which keeps its scroll under
- * it. The page composes it, and
- * writes no layout class of its own.
+ * in a block filling the screen's height with its own scroller, and the open line's detail in the
+ * shared side sheet over the list, on every screen (#182): from the right edge from Tailwind's
+ * `md` on, from the bottom on a phone. The list keeps its width and its scroll under it. One sheet
+ * holds the lines opened one after the other, and stays open from one to the next. The page
+ * composes it, and writes no layout class of its own.
  *
  * Loading: `OperationsListSkeleton` in `list`, `LineDetailSkeleton` in `detail`, no `count`.
  *
  * Motion: filtering, the rows that stay slide and the others fade (200 ms). Opening a line, the
- * detail's column widens in 300 ms (ease-out) and its content fades in once it has room; closing,
- * the content fades out first (150 ms), then the column closes (150 ms, ease-in). A width moves, never a
- * scale. The sheet rises in 300 ms and goes back down in 200 ms. Cut under reduced motion.
+ * sheet slides in from its edge in 300 ms (ease-out) and back out in 200 ms (ease-in), its
+ * backdrop fading in and out; from one line to the next it stays still. Cut under reduced motion.
  *
- * Don't: put the list in a block of the page's own, or render the detail without its key (the
- * line's id): a new line's content must fade in anew.
+ * Don't: put the list in a block of the page's own, open the detail beside the list, or render the
+ * detail without its key (the line's id): each line's content is its own.
  */
 const meta = {
   title: "Operations/OperationsLayout",
@@ -141,7 +152,7 @@ export const Loading: Story = {
           />
         }
         list={<OperationsListSkeleton />}
-        detail={<LineDetailSkeleton />}
+        detail={<LineDetailSkeleton onClose={() => undefined} />}
       />
     </div>
   ),
@@ -157,7 +168,7 @@ export const French: Story = {
   ),
 };
 
-/** A line open, in French: its words fit the column. */
+/** A line open, in French: its words fit the sheet. */
 export const LineOpenFrench: Story = {
   render: () => (
     <InFrench>
@@ -165,6 +176,31 @@ export const LineOpenFrench: Story = {
         <Screen start="line-3" />
       </div>
     </InFrench>
+  ),
+};
+
+/**
+ * From one line to the next (the review's "Next line"): the side sheet stays open and still, the
+ * next line's content in the last one's place.
+ */
+export const NextLine: Story = {
+  render: () => (
+    <div className="p-4 md:p-8">
+      <Screen start="line-3" stepping />
+    </div>
+  ),
+};
+
+/**
+ * On a phone, from one line to the next (the review's "Next line"): the sheet stays open and
+ * still, the next line's content in the last one's place.
+ */
+export const PhoneNextLine: Story = {
+  globals: { viewport: { value: "mobile1", isRotated: false } },
+  render: () => (
+    <div className="p-4">
+      <Screen start="line-3" stepping />
+    </div>
   ),
 };
 

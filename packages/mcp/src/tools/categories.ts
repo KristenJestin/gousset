@@ -90,7 +90,7 @@ type CategoriesInput = typeof CategoriesInput.Type;
 
 type CategoriesCall = typeof CategoriesInput.Encoded;
 
-const DESCRIPTION = `The user's categories, on two levels (a top-level category and its children), one tree for expenses and one for income; every expense has exactly one. \`list\` gives both trees with each category's entries, benchmark and monthly average over the six full months before this one, marks the fallback ("Other", where unclassified lines go) and, with \`archived: true\`, adds the archived ones. \`create\` makes one; \`edit\` renames it, moves it under another top-level category (\`parent\`) or to the top (\`top_level: true\`), or sets its benchmark; \`merge\` moves every entry of \`category\`, and every merchant's default category on it, into \`into\` (its children go under \`into\`, or into \`into\`'s child of the same name) and deletes it; \`archive\` hides it from choices while its entries keep it, \`restore: true\` brings it back. To put a line in a category, use \`lines\` with \`classify\`; for where the money went in a month, \`month\`.
+const DESCRIPTION = `The user's categories, on two levels (a top-level category and its children), one tree for expenses and one for income; every expense has exactly one. \`list\` gives both trees with each category's entries, benchmark and monthly average over the six full months before this one (counting only those from the user's first entry on, as an automatic benchmark does), marks the fallback ("Other", where unclassified lines go) and, with \`archived: true\`, adds the archived ones. \`create\` makes one; \`edit\` renames it, moves it under another top-level category (\`parent\`) or to the top (\`top_level: true\`), or sets its benchmark; \`merge\` moves every entry of \`category\`, and every merchant's default category on it, into \`into\` (its children go under \`into\`, or into \`into\`'s child of the same name) and deletes it; \`archive\` hides it from choices while its entries keep it, \`restore: true\` brings it back. To put a line in a category, use \`lines\` with \`classify\`; for where the money went in a month, \`month\`.
 
 Name a category as \`list\` writes it (any case): a name alone is the top-level category of that name, else the one child of that name; "Parent > Child" names a child. Add \`kind\` when an expense and an income category share it. A benchmark is "automatic", "none", or a decimal amount a month in the user's currency.
 
@@ -431,7 +431,7 @@ function listText(tree: CategoryTree, input: CategoriesInput, currency: string):
       : 'Archived categories are left out: add "archived":true to see them.';
 
   return [
-    `The user's categories, on two levels (children indented under their parent). Each: its entries (all time), its benchmark, and its monthly average from ${tree.averageFrom} to ${tree.averageTo}, per currency. Name a child "Parent > Child" when its name alone is shared. ${archived}`,
+    `The user's categories, on two levels (children indented under their parent). Each: its entries (all time), its benchmark, and its monthly average from ${tree.averageFrom} to ${tree.averageTo}, per currency, counting only the months from the user's first entry on (an automatic benchmark's figure). Name a child "Parent > Child" when its name alone is shared. ${archived}`,
     ...kinds.map((kind) =>
       treeText(
         kind === "expense" ? "Expense categories" : "Income categories",

@@ -296,14 +296,6 @@
   }
 }
 
-/* The width alone moves, as Tailwind's own `transition-*` do theirs: a column that opens beside a
-   list (`OperationsLayout`, #128). */
-@utility transition-width {
-  transition-property: width;
-  transition-timing-function: var(--tw-ease, var(--default-transition-timing-function));
-  transition-duration: var(--tw-duration, var(--default-transition-duration));
-}
-
 /* A square of the text's size: the loader and inline marks follow the text they sit in. */
 @utility size-em {
   width: 1em;
@@ -329,6 +321,28 @@
   grid-template-columns: minmax(0, 1fr) 5.5rem 7rem 11rem;
 }
 
+/* A phone's own edges (#36). The page reaches under them (`viewport-fit=cover`): an installed
+   app's home indicator along the bottom, a notch at a side in landscape. What runs along the
+   bottom edge keeps its content above the indicator, its surface under it: the tab bar, a sheet,
+   a dialog rising there, and the page's end, which scrolls clear of the tab bar. What is fixed
+   at a side keeps its content clear of the notch there: the side sheet (`pr-safe`) and the
+   toasts. Each inset is 0 in a browser's tab and on a screen without them. */
+@utility pr-safe {
+  padding-right: env(safe-area-inset-right, 0px);
+}
+
+@utility pb-safe {
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+@utility pb-safe-6 {
+  padding-bottom: calc(var(--spacing) * 6 + env(safe-area-inset-bottom, 0px));
+}
+
+@utility pb-safe-16 {
+  padding-bottom: calc(var(--spacing) * 16 + env(safe-area-inset-bottom, 0px));
+}
+
 @layer base {
   * {
     @apply border-border outline-ring;
@@ -345,6 +359,9 @@
 
   body {
     @apply bg-background text-foreground;
+
+    /* A phone held sideways: its notch on either side, for what flows in the page. */
+    padding-inline: env(safe-area-inset-left, 0px) env(safe-area-inset-right, 0px);
   }
 
   ::selection {
@@ -409,7 +426,9 @@
     --toast-peek: 0.625rem;
 
     position: fixed;
-    inset-inline: 1rem;
+    /* Clear of a sideways phone's notch, as the page is. */
+    inset-inline: calc(1rem + env(safe-area-inset-left, 0px))
+      calc(1rem + env(safe-area-inset-right, 0px));
     width: auto;
     height: var(--toast-front-height, 0px);
     transition: height 300ms var(--default-transition-timing-function);
@@ -417,7 +436,7 @@
 
   @media (width >= 40rem) {
     [data-slot="toast-region"] {
-      inset-inline: auto 1.5rem;
+      inset-inline: auto calc(1.5rem + env(safe-area-inset-right, 0px));
       width: 22rem;
     }
   }

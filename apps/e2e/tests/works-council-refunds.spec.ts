@@ -28,7 +28,7 @@ import { Effect, Layer } from "effect";
 
 import { addUser } from "../src/auth";
 import type { TestUser } from "../src/auth";
-import { lineDetail, onPhone } from "../src/frame";
+import { detailAtRest, lineDetail, onPhone } from "../src/frame";
 import { importsOn, statementFile } from "../src/imports";
 import {
   animationsDone,
@@ -289,15 +289,21 @@ async function hydrated(page: Page) {
   await expect(page.locator('[data-slot="operation-row"][style*="top"]').first()).toBeAttached();
 }
 
-/** Opens the line of this label from the operations page: its detail. */
-async function openLine(page: Page, label: string) {
-  await rows(page).filter({ hasText: label }).first().getByRole("button").click();
-
+/** The open detail of the line of this label, once it stands still: a click in it lands (#223). */
+async function restingDetail(page: Page, label: string) {
   const detail = lineDetail(page, label);
 
   await expect(detail).toBeVisible();
+  await detailAtRest(detail);
 
   return detail;
+}
+
+/** Opens the line of this label from the operations page: its detail, once it stands still. */
+async function openLine(page: Page, label: string) {
+  await rows(page).filter({ hasText: label }).first().getByRole("button").click();
+
+  return restingDetail(page, label);
 }
 
 test("the link shows on both sides", async ({ page, app, user }) => {
@@ -347,7 +353,7 @@ test("the link shows on both sides", async ({ page, app, user }) => {
   // The other side: the expense's detail, funded by the refund, at its whole cost.
   await funded.click();
 
-  const expense = lineDetail(page, SPORTS_CLUB);
+  const expense = await restingDetail(page, SPORTS_CLUB);
   const fundedBy = expense.getByRole("region", { name: "Funded by" });
 
   await expect(fundedBy).toBeVisible();
@@ -362,7 +368,7 @@ test("the link shows on both sides", async ({ page, app, user }) => {
   // Back to the refund from its funding, and unfunded there: the transfer stays.
   await fundedBy.getByRole("button", { name: new RegExp(REFUND) }).click();
 
-  const again = lineDetail(page, REFUND);
+  const again = await restingDetail(page, REFUND);
   const block2 = again.getByRole("region", { name: "Funds an expense" });
 
   await block2.getByRole("button", { name: "Unfund" }).click();
@@ -386,6 +392,16 @@ test("the link shows on both sides", async ({ page, app, user }) => {
 
 test("the month's spending does not count the refund as income", async ({ app, user }) => {
   const { owner } = await ownUser(app, user, "noa.works-council-month");
+
+  // The user's data starts in April, before the six months averaged (May to October): each of them
+  // counts, so a category's average is what it cost over six (#33).
+  await importInto(
+    owner,
+    await newAccount(owner, "Before the window", "current"),
+    "before-the-window",
+    [{ bookedOn: "2026-04-15", amountMinor: -1200, label: "CB BRIGHTMILL BAKERY 1504 RIVERTON" }],
+  );
+
   const made = await worksCouncil(owner);
   const [refund] = made.refunds;
 

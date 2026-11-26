@@ -131,18 +131,42 @@ export class SplitRefused extends Schema.TaggedError<SplitRefused>()("SplitRefus
   index: Schema.optional(Schema.Number),
 }) {}
 
-/** A month too far from today to be read: more than ten years before or after it. */
-export class MonthOutOfRange extends Schema.TaggedError<MonthOutOfRange>()("MonthOutOfRange", {
-  month: Schema.String,
-  earliest: Schema.String,
-  latest: Schema.String,
-}) {}
+/**
+ * A month after the current one (`current`): what is detected of the subscriptions (#34) is read up
+ * to today, and a month to come has nothing paid nor stopped yet; nor has it any figure (#32).
+ */
+export class FutureMonthRefused extends Schema.TaggedError<FutureMonthRefused>()(
+  "FutureMonthRefused",
+  { month: Schema.String, current: Schema.String },
+) {}
 
 /** The line was already reviewed: in another tab, by a rule, or by the MCP door. */
 export class LineAlreadyReviewed extends Schema.TaggedError<LineAlreadyReviewed>()(
   "LineAlreadyReviewed",
   { lineId: Schema.String },
 ) {}
+
+/**
+ * A line to review's proposal is no longer the one the user saw (#35): its transfer's candidates,
+ * its refund proposals or its category changed meanwhile. Nothing was done; read it again.
+ */
+export class ProposalChanged extends Schema.TaggedError<ProposalChanged>()("ProposalChanged", {
+  lineId: Schema.String,
+}) {}
+
+/**
+ * A line to review needs the category it goes in (#35): a correction, for every line to review but
+ * a held one, which is kept as it is without one; and accepting a line in no category, which has
+ * none to keep: it is corrected instead.
+ */
+export class CategoryRequired extends Schema.TaggedError<CategoryRequired>()("CategoryRequired", {
+  lineId: Schema.String,
+}) {}
+
+/** The line is not held as a near duplicate: there is nothing to keep or discard (#35). */
+export class NotHeld extends Schema.TaggedError<NotHeld>()("NotHeld", {
+  lineId: Schema.String,
+}) {}
 
 /** No account of the user's has this id. */
 export class AccountNotFound extends Schema.TaggedError<AccountNotFound>()("AccountNotFound", {

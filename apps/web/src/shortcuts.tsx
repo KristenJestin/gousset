@@ -24,6 +24,11 @@ export const appHotkeys = defineAppHotkeys({
   // The same list behind a modifier, for whoever turned the single-key shortcuts off.
   "shortcuts.showWithModifier": { hotkey: "Mod+/", meta: { name: "Show keyboard shortcuts" } },
   "search.open": { hotkey: "Mod+K", meta: { name: "Search" } },
+  // The operations' review mode (#35), its line open: the operations page listens to them.
+  "review.next": { hotkey: "J", meta: { name: "Next line to review" } },
+  "review.previous": { hotkey: "K", meta: { name: "Previous line to review" } },
+  "review.accept": { hotkey: "A", meta: { name: "Accept the proposal" } },
+  "review.correct": { hotkey: "C", meta: { name: "Correct the line" } },
 });
 
 declare module "@tanstack/react-hotkeys" {
@@ -37,6 +42,10 @@ const hotkeyLabels = {
   "shortcuts.show": m.shortcutShow,
   "shortcuts.showWithModifier": m.shortcutShow,
   "search.open": m.shortcutSearch,
+  "review.next": m.shortcutReviewNext,
+  "review.previous": m.shortcutReviewPrevious,
+  "review.accept": m.shortcutReviewAccept,
+  "review.correct": m.shortcutReviewCorrect,
 } satisfies { [id in keyof typeof appHotkeys]: () => string };
 
 /**

@@ -221,7 +221,10 @@ export type MonthBarLayout = {
   parts: Array<{ role: MoneyRole; x: number; width: number }>;
   /** The restricted end of the part left (benefit accounts), hatched; null when there is none. */
   restricted: { x: number; width: number } | null;
-  /** Where the money received ends, when more went out than came in; null otherwise. */
+  /**
+   * Where the money in ends (received, and what was taken back from savings), when the month is
+   * overspent; null otherwise.
+   */
   receivedMark: number | null;
   overspent: boolean;
 };
@@ -229,7 +232,9 @@ export type MonthBarLayout = {
 /**
  * The month bar's geometry. The bar is the money received, cut into spent, set aside and left.
  * When more went out than came in, the bar stretches to what went out, the part left is empty,
- * and a mark shows where the money received ended.
+ * and a mark shows where the money received ended. Money taken back from savings (set aside below
+ * zero) draws no part: it widens the bar beside the money received, and the month is overspent
+ * only when `left` is below zero.
  */
 export function monthBarLayout(figures: {
   received: Money;
@@ -243,9 +248,10 @@ export function monthBarLayout(figures: {
   const saved = Math.max(0, figures.saved.minor);
   const left = Math.max(0, figures.left.minor);
   const received = Math.max(0, figures.received.minor);
-  const out = spent + saved;
-  const overspent = out > received;
-  const whole = Math.max(received, out + left);
+  // Money taken back from savings came in this month, beside the money received.
+  const takenBack = Math.max(0, -figures.saved.minor);
+  const overspent = figures.left.minor < 0;
+  const whole = Math.max(received + takenBack, spent + saved + left);
   const spentWidth = share(spent, whole);
   const savedWidth = share(saved, whole);
   const leftWidth = share(left, whole);
@@ -261,7 +267,7 @@ export function monthBarLayout(figures: {
       restrictedWidth > 0
         ? { x: spentWidth + savedWidth + leftWidth - restrictedWidth, width: restrictedWidth }
         : null,
-    receivedMark: overspent ? share(received, whole) : null,
+    receivedMark: overspent ? share(received + takenBack, whole) : null,
     overspent,
   };
 }

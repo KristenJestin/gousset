@@ -1,9 +1,11 @@
 import { infiniteQueryOptions, keepPreviousData, queryOptions } from "@tanstack/react-query";
-import type { QueryClient } from "@tanstack/react-query";
 
 import { getMerchant, getMerchants } from "@/functions/merchants";
 
 import { merchantKeys } from "./merchant-keys";
+
+// Kept in `invalidate`, which loads no server function, so that it can be tested alone.
+export { invalidateMerchants } from "./invalidate";
 
 /** Merchants a page: a long screen of rows; "Show more" reads the next. */
 const PAGE_MERCHANTS = 50;
@@ -69,12 +71,3 @@ export const merchantQueries = {
       queryFn: () => getMerchant({ data: { merchantId } }),
     }),
 };
-
-/**
- * After a rename: the lists (names, order) and the merchants' pages may all have changed, so every
- * merchants query is read again. A merge, a label moved or a default category set move entries
- * too: `invalidateMerchantEntries`.
- */
-export async function invalidateMerchants(queryClient: QueryClient): Promise<void> {
-  await queryClient.invalidateQueries({ queryKey: merchantKeys.all });
-}

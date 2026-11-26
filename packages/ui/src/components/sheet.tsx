@@ -7,7 +7,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@ui-sdk/react/dialog";
-import { useSyncExternalStore } from "react";
+import { useRef, useSyncExternalStore } from "react";
 import type { FormEvent, ReactElement, ReactNode } from "react";
 
 import { useUiMessages } from "../hooks/use-ui-messages";
@@ -84,7 +84,9 @@ export type SheetProps = {
  * A panel over the page, on ui-sdk's `Dialog`: from the right on a wide screen, from the bottom on
  * a phone. A line's detail, a filter, a long form (`onSubmit`). Modal: focus stays inside, the page
  * behind is dimmed by the backdrop; Escape, the close button or a press on the backdrop closes it
- * (not while its form is `sending`), and focus returns to what opened it.
+ * (not while its form is `sending`), and focus returns to what opened it. Without a form, focus
+ * starts on the sheet itself, or on a part of its body marked `data-autofocus` (a line's proposal
+ * to review).
  *
  * Its body scrolls between the header and the actions, its padding inside the scroller, so that a
  * focused field's ring is never clipped (#122).
@@ -106,22 +108,10 @@ export function Sheet({
   size = "md",
   appear = true,
 }: SheetProps) {
-  const wide = useWideScreen();
-
   const body = (
     <>
       {children === undefined ? null : (
-        <div
-          data-slot="sheet-body"
-          className={cn(
-            // At least 4 px around every field inside the scroller, and as much kept when a field
-            // is scrolled into view: room for its ring (2 px, 2 px away), never clipped (#122).
-            "min-h-0 flex-1 scroll-py-1 overflow-y-auto px-4 pt-1 pb-4 text-sm md:px-6 md:pb-6",
-            onSubmit !== undefined && "flex flex-col gap-5",
-          )}
-        >
-          {children}
-        </div>
+        <SheetBody form={onSubmit !== undefined}>{children}</SheetBody>
       )}
       {onSubmit === undefined ? (
         actions === undefined ? null : (
@@ -137,16 +127,77 @@ export function Sheet({
   );
 
   return (
+    <SheetFrame
+      open={open}
+      onOpenChange={onOpenChange}
+      trigger={trigger}
+      size={size}
+      appear={appear}
+      sending={sending}
+      startsOnField={onSubmit !== undefined}
+    >
+      <SheetHeader title={title} description={description} sending={sending} />
+      {onSubmit === undefined ? (
+        body
+      ) : (
+        <form
+          className="flex min-h-0 flex-1 flex-col"
+          onSubmit={onSubmit}
+          onInput={() => onInput?.()}
+        >
+          {body}
+        </form>
+      )}
+    </SheetFrame>
+  );
+}
+
+export type SheetFrameProps = Pick<
+  SheetProps,
+  "trigger" | "open" | "onOpenChange" | "size" | "appear" | "sending"
+> & {
+  /** The whole sheet: its `SheetHeader`, then its `SheetBody`. */
+  children: ReactNode;
+  /** Focus starts on its first field (a form's), rather than on the sheet. */
+  startsOnField?: boolean;
+};
+
+/**
+ * `Sheet`'s frame alone (its backdrop, its surface along its edge, its motion and its focus), whose
+ * content draws the rest: a `SheetHeader`, then a `SheetBody`. For a sheet kept open while its
+ * content changes, each content saying its own head: a line's detail, from one line to the next
+ * (`OperationsLayout`). Anywhere else, `Sheet`.
+ */
+export function SheetFrame({
+  children,
+  trigger,
+  open,
+  onOpenChange,
+  size = "md",
+  appear = true,
+  sending = false,
+  startsOnField = false,
+}: SheetFrameProps) {
+  const wide = useWideScreen();
+  const content = useRef<HTMLDivElement>(null);
+
+  // Without a form, the part of the body that asks for the focus first (`data-autofocus`: a line's
+  // proposal to review), or else the sheet itself.
+  const startOn = () =>
+    content.current?.querySelector<HTMLElement>("[data-autofocus]") ?? content.current;
+
+  return (
     <DialogRoot open={open} dismissible={!sending} onOpenChange={(next) => onOpenChange?.(next)}>
       {trigger === undefined ? null : <DialogTrigger render={trigger} />}
       <DialogBackdrop
         className={cn(backdropClasses, !appear && "data-starting-style:opacity-100!")}
       />
-      {/* A form starts on its first field; otherwise focus starts on the sheet itself, reading
-          from the title, and Escape closes it at once (on the close button, its tooltip would
-          take the first Escape). */}
+      {/* A form starts on its first field; otherwise focus starts on the part of the body that
+          asks for it, or on the sheet itself, reading from the title, and Escape closes it at once
+          (on the close button, its tooltip would take the first Escape). */}
       <DialogContent
-        initialFocus={onSubmit === undefined ? "content" : FIRST_FIELD}
+        ref={content}
+        initialFocus={startsOnField ? FIRST_FIELD : startOn}
         data-side={wide ? "right" : "bottom"}
         className={cn(
           sheetClasses,
@@ -154,20 +205,29 @@ export function Sheet({
           !appear && "data-starting-style:translate-none!",
         )}
       >
-        <SheetHeader title={title} description={description} sending={sending} />
-        {onSubmit === undefined ? (
-          body
-        ) : (
-          <form
-            className="flex min-h-0 flex-1 flex-col"
-            onSubmit={onSubmit}
-            onInput={() => onInput?.()}
-          >
-            {body}
-          </form>
-        )}
+        {children}
       </DialogContent>
     </DialogRoot>
+  );
+}
+
+/**
+ * A sheet's body, under its head: it scrolls when long, its padding inside the scroller; a form's
+ * (`form`) holds its fields one under the other.
+ */
+export function SheetBody({ form = false, children }: { form?: boolean; children: ReactNode }) {
+  return (
+    <div
+      data-slot="sheet-body"
+      className={cn(
+        // At least 4 px around every field inside the scroller, and as much kept when a field is
+        // scrolled into view: room for its ring (2 px, 2 px away), never clipped (#122).
+        "min-h-0 flex-1 scroll-py-1 overflow-y-auto px-4 pt-1 pb-4 text-sm md:px-6 md:pb-6",
+        form && "flex flex-col gap-5",
+      )}
+    >
+      {children}
+    </div>
   );
 }
 
@@ -195,14 +255,18 @@ function SheetActions({ children }: { children: ReactNode }) {
   );
 }
 
-function SheetHeader({
+/**
+ * A sheet's head: its title, a sentence or an amount under it, and its close button (off while its
+ * form is `sending`).
+ */
+export function SheetHeader({
   title,
   description,
-  sending,
+  sending = false,
 }: {
   title: string;
   description?: ReactNode;
-  sending: boolean;
+  sending?: boolean;
 }) {
   const messages = useUiMessages();
 

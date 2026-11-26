@@ -13,6 +13,7 @@ import { m } from "@gousset/i18n/messages";
 import { getLocale } from "@gousset/i18n/runtime";
 import { Toaster } from "@gousset/ui/components/toaster";
 import { ThemeProvider } from "@gousset/ui/components/theme-provider";
+import { ThemeColor } from "@gousset/ui/components/theme-color";
 
 import { getViewer } from "@/functions/viewer";
 
@@ -51,12 +52,18 @@ export const Route = createRootRouteWithContext<RouterContext>()({
         charSet: "utf-8",
       },
       {
+        // The page reaches the screen's edges, under an installed app's home indicator: what runs
+        // along an edge keeps clear of it (`pb-safe` and the like, globals.css).
         name: "viewport",
-        content: "width=device-width, initial-scale=1",
+        content: "width=device-width, initial-scale=1, viewport-fit=cover",
       },
       {
         title: m.appName(),
       },
+      // Installed on a phone's home screen (the manifest, below): its own window and its name.
+      { name: "mobile-web-app-capable", content: "yes" },
+      { name: "apple-mobile-web-app-capable", content: "yes" },
+      { name: "apple-mobile-web-app-title", content: m.appName() },
     ],
     links: [
       {
@@ -86,6 +93,8 @@ function RootDocument() {
     <html lang={getLocale()} suppressHydrationWarning>
       <head>
         <HeadContent />
+        {/* Written here: `head` keeps one meta of a name, and there is one per scheme. */}
+        <ThemeColor accountScheme={viewer.user?.colorScheme} />
       </head>
       <body>
         <ThemeProvider

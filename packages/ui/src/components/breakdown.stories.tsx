@@ -1,12 +1,14 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { useState } from "react";
 
+import { useHydrated } from "../hooks/use-hydrated";
 import { InFrench } from "../stories/in-french";
-import { CATEGORIES, MERCHANTS, PREVIOUS_CATEGORIES } from "../stories/made-up";
+import { CATEGORIES, DAILY_SPENDING, MERCHANTS, PREVIOUS_CATEGORIES } from "../stories/made-up";
 import type { MadeUpCategory } from "../stories/made-up";
-import { Breakdown, BreakdownSkeleton } from "./breakdown";
+import { Breakdown, BreakdownFigures, BreakdownSkeleton } from "./breakdown";
 import type { BreakdownRow } from "./breakdown";
 import { Button } from "./button";
+import { SpendingChart } from "./spending-chart";
 
 function rowsOf(categories: ReadonlyArray<MadeUpCategory>): Array<BreakdownRow> {
   return categories.map((category) => ({
@@ -54,6 +56,59 @@ function Opening() {
         onClose={() => setOpen(null)}
         benchmarkLabel="average"
         detail={<p className="text-sm text-muted-foreground">What it cost, day by day.</p>}
+      />
+    </div>
+  );
+}
+
+/**
+ * A row's detail with its figures: against its average and the month before. Open once the page
+ * has hydrated: a panel opens on a click in the app, never in the server's markup.
+ */
+function OpenWithFigures() {
+  const hydrated = useHydrated();
+  const [chosen, setChosen] = useState<string | null>("groceries");
+  const open = hydrated ? chosen : null;
+  const row = october.find((each) => each.id === open);
+
+  return (
+    <div className="max-w-xl">
+      <Breakdown
+        rows={october}
+        limit={5}
+        onSelect={setChosen}
+        selectedId={open}
+        onClose={() => setChosen(null)}
+        detail={
+          row === undefined ? null : (
+            <BreakdownFigures
+              value={row.amount}
+              label={`${row.name} against`}
+              comparisons={[
+                {
+                  id: "average",
+                  label: "Average",
+                  reference: { minor: 39_500, currency: "EUR" },
+                  referenceLabel: "your average",
+                },
+                {
+                  id: "previous",
+                  label: "September",
+                  reference: { minor: 45_210, currency: "EUR" },
+                  referenceLabel: "September",
+                },
+              ]}
+            >
+              <SpendingChart
+                days={DAILY_SPENDING}
+                currency="EUR"
+                label={`${row.name} in October, against September`}
+                currentLabel="October"
+                previousLabel="September"
+              />
+            </BreakdownFigures>
+          )
+        }
       />
     </div>
   );
@@ -121,6 +176,48 @@ export const Merchants: Story = {
   },
 };
 
+/**
+ * Each kind of benchmark (#33): the average (Groceries, passed: ⚠), an amount the user set
+ * (Leisure, passed: ⚠; Transport, reached, so not passed), none (Gifts: no mark), and a category
+ * with nothing to average yet (Pets: no mark). A set benchmark is read "benchmark €100, set".
+ */
+export const Benchmarks: Story = {
+  args: {
+    rows: [
+      {
+        id: "groceries",
+        name: "Groceries",
+        icon: "groceries",
+        amount: { minor: 43_000, currency: "EUR" },
+        benchmark: { minor: 39_500, currency: "EUR" },
+      },
+      {
+        id: "leisure",
+        name: "Leisure",
+        icon: "leisure",
+        amount: { minor: 12_000, currency: "EUR" },
+        benchmark: { minor: 10_000, currency: "EUR" },
+        benchmarkSet: true,
+      },
+      {
+        id: "transport",
+        name: "Transport",
+        icon: "transport",
+        amount: { minor: 9000, currency: "EUR" },
+        benchmark: { minor: 9000, currency: "EUR" },
+        benchmarkSet: true,
+      },
+      {
+        id: "gifts",
+        name: "Gifts",
+        icon: "gifts",
+        amount: { minor: 6000, currency: "EUR" },
+      },
+      { id: "pets", name: "Pets", icon: "pets", amount: { minor: 2500, currency: "EUR" } },
+    ],
+  },
+};
+
 /** Nothing spent: the sentence. */
 export const Empty: Story = { args: { rows: [] } };
 
@@ -131,6 +228,12 @@ export const EmptyWithText: Story = {
 
 /** A click opens the row into its detail: the row grows into the panel, the detail fades in. */
 export const OpeningADetail: Story = { render: () => <Opening /> };
+
+/**
+ * An open row's figures (`BreakdownFigures`): each reference it is held against, its amount and
+ * the change, aligned; the chart under them.
+ */
+export const DetailFigures: Story = { render: () => <OpenWithFigures /> };
 
 /** The month changes: the bars grow to their new lengths. */
 export const ChangingMonth: Story = { render: () => <SwitchingMonths /> };

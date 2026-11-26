@@ -466,6 +466,21 @@ describe("listing", () => {
       },
     });
   });
+
+  test("a new user's average counts only the months from their first entry on, as their benchmark", async () => {
+    const { rows, groceries, salary } = startingRows();
+
+    entryIn(rows, salary, "2026-09-28", 250_000); // Their data starts in September.
+    entryIn(rows, groceries, "2026-10-03", 30_000);
+
+    const { result } = await run(rows, listCategories(ADA));
+
+    expect(result).toMatchObject({
+      success: {
+        expense: [{}, { name: "Groceries", average: [{ currency: "EUR", minor: 15_000 }] }, {}],
+      },
+    });
+  });
 });
 
 describe("naming", () => {

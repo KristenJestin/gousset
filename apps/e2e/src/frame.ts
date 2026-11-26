@@ -1,3 +1,4 @@
+import { expect } from "@playwright/test";
 import type { Locator, Page } from "@playwright/test";
 
 /** Below this width the frame shows the tab bar instead of the sidebar (`AppShell`). */
@@ -9,11 +10,11 @@ export function onPhone(page: Page): boolean {
 }
 
 /**
- * A line's open detail on the operations page, named by its label: a panel beside the list on a
- * wide screen, a sheet (a dialog) over it on a phone (#128).
+ * A line's open detail on the operations page, named by its label: a sheet (a dialog) over the
+ * list on every screen (#182), from the right edge on a wide screen, from the bottom on a phone.
  */
 export function lineDetail(page: Page, label: string): Locator {
-  return page.getByRole(onPhone(page) ? "dialog" : "region", { name: label });
+  return page.getByRole("dialog", { name: label });
 }
 
 /**
@@ -23,13 +24,10 @@ export function lineDetail(page: Page, label: string): Locator {
  */
 export type DetailSight = { opacity: number; moving: number };
 
-/**
- * What `lineDetail` shows of its content: the panel's block that fades on a wide screen, the
- * sheet's body on a phone.
- */
+/** What `lineDetail` shows of its content: the sheet's body. */
 export async function detailSight(detail: Locator): Promise<DetailSight> {
   return detail
-    .locator('[data-slot="line-detail-content"], [data-slot="line-detail"]')
+    .locator('[data-slot="line-detail"]')
     .first()
     .evaluate((content) => {
       let opacity = 1;
@@ -49,6 +47,32 @@ export async function detailSight(detail: Locator): Promise<DetailSight> {
 
       return { opacity, moving };
     });
+}
+
+/**
+ * Waits until a line's open detail stands still: its column no longer widens, its content no longer
+ * slides in, its sheet no longer rises (`detailSight`'s `moving`). Playwright presses a button where
+ * it stood when found stable, which Firefox may judge before the opening has begun to move; the
+ * button moving on, the release lands beside it and the click is lost (#223). Click in a detail
+ * once it rests.
+ *
+ * A phone's sheet rises once ui-sdk takes its `data-starting-style` off, a frame after it shows:
+ * until then nothing moves yet, so the wait also holds while the sheet still carries it.
+ */
+export async function detailAtRest(detail: Locator): Promise<void> {
+  await expect
+    .poll(async () => {
+      // Read first: taken off after this, its rise is under way when `moving` is read.
+      const starting = await detail
+        .locator('[data-slot="line-detail-content"], [data-slot="line-detail"]')
+        .first()
+        .evaluate((content) => content.closest("[data-starting-style]") !== null);
+
+      const { moving } = await detailSight(detail);
+
+      return moving === 0 && !starting;
+    })
+    .toBe(true);
 }
 
 /** What the eye gets of a text: whether it is drawn on top, and its contrast with what is under. */

@@ -23,3 +23,24 @@ export async function slowServerFunctions(page: Page, milliseconds: number) {
     await page.unroute(SERVER_FUNCTIONS, handler);
   };
 }
+
+/**
+ * Holds the browser's server function writes (POST) for `milliseconds` before they leave, and only
+ * them: the reads a save then waits for (the data read again) go at once. For a setting whose save
+ * must outlast a reload made too early. Returns how to take the latency off again.
+ */
+export async function slowServerWrites(page: Page, milliseconds: number) {
+  const handler = async (route: Route) => {
+    if (route.request().method() === "POST") {
+      await sleep(milliseconds);
+    }
+
+    await route.fallback();
+  };
+
+  await page.route(SERVER_FUNCTIONS, handler);
+
+  return async () => {
+    await page.unroute(SERVER_FUNCTIONS, handler);
+  };
+}

@@ -4,7 +4,9 @@ import {
   ImportProfiles,
   Imports,
   Merchants,
+  MonthFacts,
   RuleJobs,
+  Subscriptions,
   Transfers,
   memoryAccountStore,
   memoryCategoryStore,
@@ -103,6 +105,8 @@ async function connect(rows: MemoryRows = ROWS, caller: Caller = writer) {
       Layer.mock(Expenses, {}),
       Layer.mock(UserData, {}),
       Layer.mock(RuleJobs, {}),
+      Layer.mock(Subscriptions, {}),
+      Layer.mock(MonthFacts, {}),
       TestClock.layer(),
     ),
   );

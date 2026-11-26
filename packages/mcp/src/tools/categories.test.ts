@@ -4,7 +4,9 @@ import {
   ImportProfiles,
   Imports,
   Merchants,
+  MonthFacts,
   RuleJobs,
+  Subscriptions,
   Transfers,
   memoryAccountStore,
   memoryCategory,
@@ -105,6 +107,8 @@ function onToday(rows: Map<string, MemoryCategoryRows>): Runner<GoussetServices>
     Layer.mock(Expenses, {}),
     Layer.mock(UserData, {}),
     Layer.mock(RuleJobs, {}),
+    Layer.mock(Subscriptions, {}),
+    Layer.mock(MonthFacts, {}),
     Layer.mock(Merchants, {}),
     TestClock.layer(),
   );
@@ -607,6 +611,7 @@ describe("the categories tool", () => {
       "merchants",
       "categories",
       "rules",
+      "review",
     ]);
     expect(tool?.title).toBe("Categories");
     expect(tool?.annotations).toEqual({

@@ -1,8 +1,10 @@
+import { writeFile } from "node:fs/promises";
+
 import type { Client } from "@modelcontextprotocol/client";
-import type { Page } from "@playwright/test";
+import type { Page, TestInfo } from "@playwright/test";
 import { DatabaseLineStore, Today, lineTransferOf, transfersLayer } from "@gousset/core";
 import type { LineStore, Transfers } from "@gousset/core";
-import { account, entry, entryPart, statementLine } from "@gousset/db/schema/ledger";
+import { account, entry, entryPart, importProfile, statementLine } from "@gousset/db/schema/ledger";
 import { transfer } from "@gousset/db/schema/transfers";
 import { exampleStatement, paypalActivity, writeStatement } from "@gousset/fixture";
 import type { StatementLine } from "@gousset/fixture";
@@ -12,7 +14,16 @@ import { Effect, Layer } from "effect";
 import type { TestUser } from "../src/auth";
 import { lineDetail } from "../src/frame";
 import { importsOn, statementFile } from "../src/imports";
-import { addUser, connectMcp, expect, fixDay, personOfItsOwn, test, visit } from "../src/test";
+import {
+  addUser,
+  animationsDone,
+  connectMcp,
+  expect,
+  fixDay,
+  personOfItsOwn,
+  test,
+  visit,
+} from "../src/test";
 import { openUserData } from "../src/user-data";
 
 // Issue #201, "How to verify": a bank statement whose PayPal lines name nobody, then PayPal's own
@@ -244,6 +255,136 @@ test("import an invented bank statement with two PayPal lines, then the invented
   // The bank's line is a transfer to PayPal, no expense through an intermediary any more.
   await visit(page, `/operations?line=${funded}`);
   await expect(lineDetail(page, "PRLV SEPA PAYPAL EUROPE")).toContainText("Transfer to PayPal");
+});
+
+/**
+ * The invented English export cut to the 12th, as a spreadsheet saves it again with semicolons:
+ * no profile recognises its header, and its days read day first and month first, so the import
+ * waits for the user to say how to read it.
+ */
+async function semicolonExport(testInfo: TestInfo, fileName: string) {
+  const path = testInfo.outputPath(fileName);
+  const text = new TextDecoder().decode(paypalActivity.english.bytes);
+
+  await writeFile(path, text.split("\r\n").slice(0, 9).join("\r\n").replaceAll('","', '";"'));
+
+  return path;
+}
+
+/** Chooses an option of a list named `list`, as a user does. */
+async function choose(page: Page, list: string, option: string | RegExp) {
+  await page.getByRole("combobox", { name: list }).click();
+  await page.getByRole("option", { name: option }).click();
+  await expect(page.getByRole("listbox")).toBeHidden();
+}
+
+// Issue #220: PayPal activity chosen on the import screen keeps reading the file as PayPal's
+// activity once a setting is changed and the profile saved.
+test("choose PayPal activity on the import screen for an export saved with semicolons: its test read, its saved profile and its import read it as PayPal's activity", async ({
+  page,
+  app,
+  user,
+}, testInfo) => {
+  test.setTimeout(120_000);
+
+  const person = await addUser(app.baseURL, user, personOfItsOwn("paypal-screen"));
+  const owner = await data.ownerOf(person.email);
+  const paypal = await newAccount(owner, "PayPal", "PayPal");
+  const file = "paypal-semicolons.csv";
+
+  await as(page, person, "/import");
+  await page
+    .locator('[data-slot="file-drop-input"]')
+    .setInputFiles(await semicolonExport(testInfo, file));
+  await expect(page.getByRole("cell", { name: "Account to choose" })).toBeVisible({
+    timeout: 30_000,
+  });
+  await choose(page, `Account of ${file}`, "PayPal");
+  await page.getByRole("button", { name: "Import into this account" }).click();
+  await expect(page.getByRole("table", { name: `The first lines of ${file}` })).toBeVisible({
+    timeout: 30_000,
+  });
+
+  // PayPal's profile, then the file's separator: the rows read are PayPal's, the payment in
+  // dollars by its conversion, named by who was paid.
+  await choose(page, "Read with", /^PayPal activity/);
+  await choose(page, "Separator", "Semicolon (;)");
+
+  const testRead = page.getByRole("region", { name: "Test read" });
+
+  const paypalRead = async () => {
+    await expect(testRead).toContainText("Pixel Play Games");
+    await expect(testRead).toContainText("Example Travel Ltd");
+    await expect(testRead).toContainText("−€27.60");
+  };
+
+  // Read as the plain table its columns say, the dollar purchase is a line in another currency.
+  const plainRead = () => expect(testRead).toContainText("Line 4, column 7");
+
+  // The list names what reads the file: PayPal activity, though a setting changed since.
+  const readWith = page.getByRole("combobox", { name: "Read with" });
+
+  await paypalRead();
+  await expect(readWith).toContainText("PayPal activity");
+
+  // The columns as mapped below, or one of them mapped again: the mapping shown is what reads.
+  await choose(page, "Read with", "The columns as mapped below");
+  await plainRead();
+  await expect(readWith).toContainText("The columns as mapped below");
+
+  await choose(page, "Read with", /^PayPal activity/);
+  await choose(page, "Separator", "Semicolon (;)");
+  await paypalRead();
+  await expect(readWith).toContainText("PayPal activity");
+
+  await choose(page, "What Gross holds", "Amount (signed)");
+  await plainRead();
+  await expect(readWith).toContainText("The columns as mapped below");
+
+  await choose(page, "Read with", /^PayPal activity/);
+  await choose(page, "Separator", "Semicolon (;)");
+  await paypalRead();
+
+  await page.getByRole("textbox", { name: "Name of the profile" }).fill("PayPal, semicolons");
+  await page.getByRole("button", { name: "Save as a profile" }).click();
+  await expect(page.getByText("Saved as PayPal, semicolons")).toBeVisible();
+
+  await page.getByRole("button", { name: "Read the file this way" }).click();
+
+  const summary = page.getByRole("region", { name: `What ${file} brought` }).first();
+
+  await expect(summary).toBeVisible({ timeout: 30_000 });
+  await expect(summary.locator('[data-figure="added"] dd .sr-only')).toHaveText("6");
+
+  // The profile saved reads by PayPal's layout, and the lines are keyed by their transaction id.
+  const [saved] = await data.asUser(owner, (transaction) =>
+    transaction
+      .select({ definition: importProfile.definition })
+      .from(importProfile)
+      .where(eq(importProfile.name, "PayPal, semicolons")),
+  );
+
+  expect(saved?.definition).toMatchObject({ separator: ";", layout: "paypal-activity" });
+
+  const keys = await data.asUser(owner, (transaction) =>
+    transaction
+      .select({ dedupKey: statementLine.dedupKey })
+      .from(statementLine)
+      .where(eq(statementLine.accountId, paypal))
+      .orderBy(asc(statementLine.dedupKey)),
+  );
+
+  expect(keys.map((each) => each.dedupKey)).toEqual(
+    [1, 2, 5, 6, 7, 8].map((n) => `bank:0PPEXAMPLE${String(n).padStart(7, "0")}`),
+  );
+
+  expect((await linesOf(owner, paypal)).find((line) => line.amountMinor === -2760)).toMatchObject({
+    label: "Example Travel Ltd",
+    originalAmountMinor: -3000,
+    originalCurrency: "USD",
+  });
+
+  await animationsDone(page);
 });
 
 const allowReadAndWrite = (page: Page) =>

@@ -1,12 +1,14 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { useState } from "react";
 
+import { ButtonLink } from "./button-link";
 import { Card } from "./card";
 import { EmptyState } from "./empty-state";
 
 /**
  * What a block shows when it has nothing to show: an icon (`empty` by default), a title in the
- * page's words, one line of help and at most one action. `block` fills a block, centred;
+ * page's words, one line of help and at most one action, or the links (`ButtonLink`s) to the pages
+ * where it gets filled, the main one first. `block` fills a block, centred;
  * `compact` is one row, for a list or a small block. It draws no block of its own.
  *
  * Motion: none of its own; its action is a `Button` (colours in 150 ms, a slight press), cut
@@ -47,6 +49,30 @@ export const WithAction: Story = {
       </div>
     );
   },
+};
+
+/** Links to the pages where it gets filled: the monthly review of a user with no line yet. */
+export const WithLinks: Story = {
+  args: {
+    icon: "import",
+    title: "Your review starts with your first import",
+    description: "Import a statement from your bank: the review reads its lines month by month.",
+  },
+  render: (args) => (
+    <Card title="Monthly review">
+      <EmptyState
+        {...args}
+        links={
+          <>
+            <ButtonLink href="#import">Import a statement</ButtonLink>
+            <ButtonLink href="#accounts" variant="secondary">
+              Accounts
+            </ButtonLink>
+          </>
+        }
+      />
+    </Card>
+  ),
 };
 
 /** A telling icon instead of the inbox. */

@@ -4,7 +4,7 @@ import { useState } from "react";
 import { InFrench } from "../stories/in-french";
 import { MONTH_FIGURES } from "../stories/made-up";
 import { Button } from "./button";
-import { Delta } from "./delta";
+import { Delta, DeltaList } from "./delta";
 
 const average = { minor: 193_400, currency: "EUR" };
 
@@ -113,6 +113,34 @@ export const French: Story = {
     <InFrench>
       <Delta {...args} />
     </InFrench>
+  ),
+};
+
+/**
+ * One figure against two references, on one line (`DeltaList`): spending against its average and
+ * against the month before, each followed by its label. On a phone they wrap between the changes.
+ */
+export const Several: Story = {
+  render: () => (
+    <DeltaList
+      lead="spending"
+      items={[
+        {
+          id: "average",
+          label: "vs. average",
+          value: MONTH_FIGURES.spent,
+          reference: average,
+          referenceLabel: "your average",
+        },
+        {
+          id: "previous",
+          label: "vs. September",
+          value: MONTH_FIGURES.spent,
+          reference: { minor: 210_000, currency: "EUR" },
+          referenceLabel: "September",
+        },
+      ]}
+    />
   ),
 };
 

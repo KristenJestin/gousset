@@ -81,9 +81,10 @@ function GeneralSettings() {
 
 /**
  * Turns the single-key shortcuts off or on again (WCAG 2.2, 2.1.4 Character Key Shortcuts), kept
- * on the account. The switch moves at once and shows the value being saved; one save at a time,
- * so that two quick toggles cannot land out of order. Otherwise it shows what the account holds:
- * a refusal puts it back to that, and says so.
+ * on the account. The switch moves at once and shows the value being saved, pending until the save
+ * ends (#224): a reload before then would not find it; one save at a time, so that two quick
+ * toggles cannot land out of order. Otherwise it shows what the account holds: a refusal puts it
+ * back to that, and says so.
  */
 function ShortcutSettings() {
   const router = useRouter();
@@ -117,6 +118,7 @@ function ShortcutSettings() {
         label={m.settingsSingleKeyShortcuts()}
         description={m.settingsSingleKeyShortcutsDescription({ keys: formatForDisplay("Mod+/") })}
         checked={saving ?? user.singleKeyShortcuts}
+        pending={saving !== undefined}
         onCheckedChange={(next) => void turn(next)}
       />
       <FormMessage message={error} />

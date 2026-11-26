@@ -1,16 +1,13 @@
-import { use, useEffect, useRef, useState } from "react";
-import type { KeyboardEvent, ReactNode } from "react";
+import { use, useEffect, useLayoutEffect, useRef, useState } from "react";
+import type { ReactNode } from "react";
 
 import { useHydrated } from "../hooks/use-hydrated";
-import { useLargeScreen } from "../hooks/use-large-screen";
 import { usePageLanguage } from "../hooks/use-page-language";
 import { useUiMessages } from "../hooks/use-ui-messages";
-import { DetailCameWithPage, DetailClosing } from "../lib/detail-closing";
+import { DetailCameWithPage, DetailClosing, DetailSheetClose } from "../lib/detail-closing";
 import type { Money } from "../lib/money";
-import { cn } from "../lib/utils";
 import { Amount, AmountSkeleton } from "./amount";
-import { IconButton } from "./icon-button";
-import { Sheet } from "./sheet";
+import { Sheet, SheetBody, SheetFrame, SheetHeader } from "./sheet";
 import { Skeleton, SkeletonFrame } from "./skeleton";
 
 /** The import a line came from, already worded. */
@@ -24,7 +21,7 @@ export type LineImport = {
 };
 
 export type LineDetailProps = {
-  /** The line's label, the panel's title. */
+  /** The line's label, the sheet's title. */
   label: string;
   amount: Money;
   /** The account's name, already worded. */
@@ -52,6 +49,11 @@ export type LineDetailProps = {
    * out, "Entered by hand".
    */
   origin?: string;
+  /**
+   * In review mode (#35), what Gousset proposes for the line (`ReviewProposal`), at the very top;
+   * the focus goes to it rather than to the sheet when the line opens.
+   */
+  review?: ReactNode;
   /** Its category, to see and change: a `CategoryPicker`; left out for a line with none. */
   category?: ReactNode;
   /** Who the line paid (`LineMerchant`), under its category; left out for a line with none. */
@@ -118,16 +120,13 @@ function BankWords({
  * made it from (`origin`); first, its category, through the control the page gives (`category`),
  * and who it paid (`merchant`, a `LineMerchant`). Every text comes worded from the page. The close
  * button or Escape closes it; the focus goes into it when it opens.
- * From Tailwind's `lg` on it is a panel, which `OperationsLayout` sets in a column beside the list;
- * below, a modal `Sheet` over the list (from the bottom on a phone, from the side on a tablet),
- * its label and amount at its top.
+ * On every screen (#182) it is the shared modal side `Sheet` over the list (from the right edge
+ * from Tailwind's `md` on, from the bottom on a phone), its label and amount at its top:
+ * `OperationsLayout`'s own, kept open from one line to the next (it draws that sheet's head and
+ * body, and the focus goes back to the sheet), or one of its own elsewhere.
  *
- * Motion (#128): the panel's content, laid out at its full width from the start, fades in and
- * slides 8 px from the right (180 ms, ease-out) once its column has room for it (after 120 ms);
- * closing, it fades out (150 ms, ease-in) before the column closes (`DetailClosing`). Nothing in
- * it ever scales, so no text is squashed. The sheet rises from its edge in 300 ms and goes back
- * down in 200 ms. A detail the server drew (a line opened from the address) shows as it is. Cut
- * under reduced motion.
+ * Motion: the sheet slides in from its edge in 300 ms and back out in 200 ms. A detail that came
+ * with the page (a line opened from the address) shows at once. Cut under reduced motion.
  */
 export function LineDetail({
   label,
@@ -143,6 +142,7 @@ export function LineDetail({
   looksLike,
   importedFrom,
   origin,
+  review,
   category,
   merchant,
   transfer,
@@ -150,34 +150,50 @@ export function LineDetail({
   onClose,
   locale,
 }: LineDetailProps) {
-  const messages = useUiMessages();
-  const words = messages.operations;
+  const words = useUiMessages().operations;
   const pageLocale = usePageLanguage();
   const writtenIn = locale ?? pageLocale;
-  const panel = useRef<HTMLElement>(null);
-  const large = useLargeScreen();
+  const proposal = useRef<HTMLDivElement>(null);
   const closing = use(DetailClosing);
   const cameWithPage = use(DetailCameWithPage);
   // Opened by the user once the page runs: it moves. Drawn by the server: it stays still.
   const hydrated = useHydrated();
   const [moves] = useState(hydrated);
+  // In the layout's sheet, which stays open from one line to the next: what closing it does.
+  const sheetClose = use(DetailSheetClose);
+  const body = useRef<HTMLDivElement>(null);
 
-  // The focus goes into the panel when the user opens it, so that Escape and Tab start there.
+  // Before the sheet can be closed: closing it closes this line.
+  useLayoutEffect(() => {
+    sheetClose?.({ onClose });
+  }, [sheetClose, onClose]);
+
+  // The focus goes into the sheet when the user opens a line, so that Escape and Tab start there
+  // (the last line's content may have held it); in review mode, onto the proposal, so that the
+  // next line's is read and acted on at once. Never from a dialog opened over it meanwhile (#164:
+  // the list of shortcuts asked for as the next line opens).
   useEffect(() => {
-    if (moves) {
-      panel.current?.focus();
+    const target = proposal.current ?? dialogOf(body.current);
+
+    if (moves && target !== null && target !== undefined && !dialogAbove(target)) {
+      target.focus();
     }
   }, [moves]);
 
-  const onKeyDown = (event: KeyboardEvent<HTMLElement>) => {
-    if (event.key === "Escape") {
-      event.stopPropagation();
-      onClose();
-    }
-  };
-
   const content = (
     <>
+      {review === undefined ? null : (
+        <div
+          ref={proposal}
+          tabIndex={-1}
+          // Where its sheet starts when it opens on this line.
+          data-autofocus=""
+          data-slot="line-review"
+          className="rounded-md outline-none focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
+        >
+          {review}
+        </div>
+      )}
       {category === undefined ? null : <div data-slot="line-category">{category}</div>}
       {merchant}
       {looksLike === undefined ? null : (
@@ -215,61 +231,53 @@ export function LineDetail({
     </>
   );
 
+  const shown = (
+    <div ref={body} data-slot="line-detail" className="flex flex-col gap-4">
+      {content}
+    </div>
+  );
+
   const amountShown = <Amount value={amount} size="lg" roll={false} locale={writtenIn} />;
 
-  if (!large) {
-    // A phone, a tablet: a sheet over the list, which goes back down before it is taken away.
+  if (sheetClose !== undefined) {
+    // The layout's sheet holds it: its head and body are this line's, on the server too.
     return (
-      <Sheet
-        open={!closing}
-        onOpenChange={(open) => {
-          if (!open) {
-            onClose();
-          }
-        }}
-        title={label}
-        description={amountShown}
-        // Opened from the address: there at once, never rising on its own.
-        appear={moves && !cameWithPage}
-      >
-        <div data-slot="line-detail" className="flex flex-col gap-4">
-          {content}
-        </div>
-      </Sheet>
+      <>
+        <SheetHeader title={label} description={amountShown} />
+        <SheetBody>{shown}</SheetBody>
+      </>
     );
   }
 
+  // A sheet of its own over the page, which leaves before it is taken away.
   return (
-    <section
-      ref={panel}
-      tabIndex={-1}
-      aria-label={label}
-      data-slot="line-detail"
-      className="flex h-full min-h-0 w-full flex-col overflow-hidden rounded-lg border bg-card outline-none"
-      onKeyDown={onKeyDown}
+    <Sheet
+      open={!closing}
+      onOpenChange={(open) => {
+        if (!open) {
+          onClose();
+        }
+      }}
+      title={label}
+      description={amountShown}
+      // Opened from the address: there at once, never sliding in on its own.
+      appear={moves && !cameWithPage}
     >
-      {/* What fades: the panel's block stays, revealed by its column's width. */}
-      <div
-        data-slot="line-detail-content"
-        data-closing={closing ? "" : undefined}
-        className={cn(
-          "flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4",
-          "transition delay-120 duration-180 ease-out",
-          moves && "starting:translate-x-2 starting:opacity-0",
-          "data-closing:opacity-0 data-closing:delay-0 data-closing:duration-150 data-closing:ease-in",
-        )}
-      >
-        <div className="flex items-start gap-3">
-          <div className="flex min-w-0 flex-1 flex-col gap-1">
-            <h2 className="text-base font-semibold break-words">{label}</h2>
-            {amountShown}
-          </div>
-          <IconButton icon="close" label={messages.overlays.close} size="sm" onClick={onClose} />
-        </div>
-        {content}
-      </div>
-    </section>
+      {shown}
+    </Sheet>
   );
+}
+
+/** Whether a dialog is open over the page that does not hold `own`: one over the detail. */
+function dialogAbove(own: Element) {
+  return [
+    ...document.querySelectorAll('[role="dialog"][data-open], [role="alertdialog"][data-open]'),
+  ].some((dialog) => !dialog.contains(own));
+}
+
+/** The dialog an element sits in: a sheet's, to give it the focus. */
+function dialogOf(element: HTMLElement | null) {
+  return element?.closest<HTMLElement>('[role="dialog"]');
 }
 
 function RowSkeleton() {
@@ -281,28 +289,61 @@ function RowSkeleton() {
   );
 }
 
-/** `LineDetail` on its way: its title, amount and three groups of rows, at the same heights. */
-export function LineDetailSkeleton() {
-  return (
-    <SkeletonFrame>
-      <div className="flex h-full min-h-0 w-full flex-col gap-4 rounded-lg border bg-card p-4">
-        <div className="flex items-start gap-3">
-          <div className="flex flex-1 flex-col gap-1">
+/**
+ * `LineDetail` on its way, in its sheet: its title and amount in the sheet's head, and three groups
+ * of rows, at the same heights. In `OperationsLayout`'s sheet, or in one of its own elsewhere.
+ * `onClose`: what the close button, Escape or a press on the backdrop does, as `LineDetail`'s.
+ */
+export function LineDetailSkeleton({ onClose }: { onClose: () => void }) {
+  const sheetClose = use(DetailSheetClose);
+  const inLayout = sheetClose !== undefined;
+
+  // Before the sheet can be closed: closing it closes the line on its way.
+  useLayoutEffect(() => {
+    sheetClose?.({ onClose });
+  }, [sheetClose, onClose]);
+
+  const drawn = (
+    <>
+      <SheetHeader
+        title=""
+        description={
+          <span className="flex flex-col gap-1">
             <span className="flex h-6 items-center">
               <Skeleton className="h-4 w-40" />
             </span>
             <AmountSkeleton size="lg" />
-          </div>
-          <Skeleton className="size-8" />
-        </div>
-        {[3, 2, 3].map((rows, group) => (
-          <div key={group} className="flex flex-col gap-2 border-t pt-4">
-            {Array.from({ length: rows }, (_, row) => (
-              <RowSkeleton key={row} />
+          </span>
+        }
+      />
+      <SheetBody>
+        <SkeletonFrame>
+          <div className="flex flex-col gap-4">
+            {[3, 2, 3].map((rows, group) => (
+              <div key={group} className="flex flex-col gap-2 border-t pt-4">
+                {Array.from({ length: rows }, (_, row) => (
+                  <RowSkeleton key={row} />
+                ))}
+              </div>
             ))}
           </div>
-        ))}
-      </div>
-    </SkeletonFrame>
+        </SkeletonFrame>
+      </SheetBody>
+    </>
+  );
+
+  return inLayout ? (
+    drawn
+  ) : (
+    <SheetFrame
+      open
+      onOpenChange={(open) => {
+        if (!open) {
+          onClose();
+        }
+      }}
+    >
+      {drawn}
+    </SheetFrame>
   );
 }

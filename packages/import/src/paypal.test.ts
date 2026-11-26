@@ -14,6 +14,13 @@ import { MalformedFile } from "./errors";
 
 const utf8 = new TextEncoder();
 
+/** The report's mandatory columns and Balance Impact, as an English and a French export name them. */
+const HEADER_EN =
+  "Date,Time,TimeZone,Name,Type,Status,Currency,Gross,Fee,Net,From Email Address,To Email Address,Transaction ID,Reference Txn ID,Receipt ID,Balance Impact";
+
+const HEADER_FR =
+  "Date,Heure,Fuseau horaire,Nom,Type,État,Devise,Brut,Frais,Net,De l'adresse email,À l'adresse email,Numéro de transaction,Numéro de transaction de référence,Numéro de reçu,Impact sur le solde";
+
 function paypal() {
   const found = shippedProfile("paypal-activity");
 
@@ -29,6 +36,16 @@ const read = (bytes: Uint8Array, currency = "EUR") =>
 
 const matched = (bytes: Uint8Array) =>
   Effect.runSync(matchCsvHeader(csvFile(bytes), SHIPPED_PROFILES))?.key;
+
+/** A euro conversion for a payment whose Currency cell (line 2, column 7) holds `currency`. */
+const conversionFor = (currency: string) =>
+  utf8.encode(
+    [
+      HEADER_EN,
+      `05/10/2026,19:41:02,CEST,Example Travel Ltd,Express Checkout Payment,Completed,${currency},-30.00,0.00,-30.00,,,0PPEXAMPLE0000061,,,Debit`,
+      "05/10/2026,19:41:02,CEST,,General Currency Conversion,Completed,EUR,-27.60,0.00,-27.60,,,0PPEXAMPLE0000062,0PPEXAMPLE0000061,,Debit",
+    ].join("\n"),
+  );
 
 type Expected = {
   bookedOn: string;
@@ -148,11 +165,11 @@ describe("PayPal's activity", () => {
     expect(matched(paypalActivity.english.bytes)).toBe("paypal-activity");
     expect(matched(paypalActivity.french.bytes)).toBe("paypal-activity");
 
-    // The mandatory columns alone, in another order: still PayPal's.
+    // The mandatory columns and Balance Impact alone, in another order: still PayPal's.
     const fewer = utf8.encode(
       [
-        '"Transaction ID","Date","Time","TimeZone","Name","Type","Status","Currency","Gross","Fee","Net","From Email Address","To Email Address","Reference Txn ID","Receipt ID"',
-        '"0PPEXAMPLE0000021","10/21/2026","10:00:00","PDT","Example Diner","Express Checkout Payment","Completed","USD","-1,234.50","0.00","-1,234.50","noa@example.com","diner@example.org","",""',
+        '"Transaction ID","Balance Impact","Date","Time","TimeZone","Name","Type","Status","Currency","Gross","Fee","Net","From Email Address","To Email Address","Reference Txn ID","Receipt ID"',
+        '"0PPEXAMPLE0000021","Debit","10/21/2026","10:00:00","PDT","Example Diner","Express Checkout Payment","Completed","USD","-1,234.50","0.00","-1,234.50","noa@example.com","diner@example.org","",""',
       ].join("\n"),
     );
 
@@ -173,15 +190,15 @@ describe("PayPal's activity", () => {
   test("reads days the file leaves ambiguous month first in English, day first in French", () => {
     const english = utf8.encode(
       [
-        "Date,Time,TimeZone,Name,Type,Status,Currency,Gross,Fee,Net,From Email Address,To Email Address,Transaction ID,Reference Txn ID,Receipt ID",
-        "10/02/2026,10:00:00,PDT,Example Diner,Express Checkout Payment,Completed,USD,-5.00,0.00,-5.00,,,0PPEXAMPLE0000031,,",
+        HEADER_EN,
+        "10/02/2026,10:00:00,PDT,Example Diner,Express Checkout Payment,Completed,USD,-5.00,0.00,-5.00,,,0PPEXAMPLE0000031,,,Debit",
       ].join("\n"),
     );
 
     const french = utf8.encode(
       [
-        "Date,Heure,Fuseau horaire,Nom,Type,État,Devise,Brut,Frais,Net,De l'adresse email,À l'adresse email,Numéro de transaction,Numéro de transaction de référence,Numéro de reçu",
-        '10/02/2026,10:00:00,Europe/Paris,Exemple Bistrot,Paiement Express Checkout,Terminé,EUR,"-5,00","0,00","-5,00",,,0PPEXAMPLE0000032,,',
+        HEADER_FR,
+        '10/02/2026,10:00:00,Europe/Paris,Exemple Bistrot,Paiement Express Checkout,Terminé,EUR,"-5,00","0,00","-5,00",,,0PPEXAMPLE0000032,,,Débit',
       ].join("\n"),
     );
 
@@ -205,8 +222,8 @@ describe("PayPal's activity", () => {
 
     const london = utf8.encode(
       [
-        "Date,Time,TimeZone,Name,Type,Status,Currency,Gross,Fee,Net,From Email Address,To Email Address,Transaction ID,Reference Txn ID,Receipt ID",
-        "10/02/2026,10:00:00,Europe/London,Example Diner,Express Checkout Payment,Completed,GBP,-5.00,0.00,-5.00,,,0PPEXAMPLE0000033,,",
+        HEADER_EN,
+        "10/02/2026,10:00:00,Europe/London,Example Diner,Express Checkout Payment,Completed,GBP,-5.00,0.00,-5.00,,,0PPEXAMPLE0000033,,,Debit",
       ].join("\n"),
     );
 
@@ -216,8 +233,8 @@ describe("PayPal's activity", () => {
   test("refuses an English export whose days nothing tells day first or month first", () => {
     const unzoned = utf8.encode(
       [
-        "Date,Time,Name,Type,Status,Currency,Gross,Fee,Net,From Email Address,To Email Address,Transaction ID,Reference Txn ID,Receipt ID",
-        "10/02/2026,10:00:00,Example Diner,Express Checkout Payment,Completed,USD,-5.00,0.00,-5.00,,,0PPEXAMPLE0000034,,",
+        "Date,Time,Name,Type,Status,Currency,Gross,Fee,Net,From Email Address,To Email Address,Transaction ID,Reference Txn ID,Receipt ID,Balance Impact",
+        "10/02/2026,10:00:00,Example Diner,Express Checkout Payment,Completed,USD,-5.00,0.00,-5.00,,,0PPEXAMPLE0000034,,,Debit",
       ].join("\n"),
     );
 
@@ -229,6 +246,77 @@ describe("PayPal's activity", () => {
     expect(failed).toMatchObject({
       problem: expect.stringContaining("day first or month first"),
     });
+  });
+
+  test("refuses an export without Balance Impact, whose memo rows nothing else tells", () => {
+    // A voided authorisation is completed, and moved no money: only its Balance Impact says so.
+    const unmarked = utf8.encode(
+      [
+        "Date,Time,TimeZone,Name,Type,Status,Currency,Gross,Fee,Net,From Email Address,To Email Address,Transaction ID,Reference Txn ID,Receipt ID",
+        "24/10/2026,09:00:12,CEST,Corner Bakery Online,Void of Authorization,Completed,EUR,8.40,0.00,8.40,,,0PPEXAMPLE0000041,0PPEXAMPLE0000040,",
+      ].join("\n"),
+    );
+
+    // Still PayPal's activity, so that the refusal says what to do.
+    expect(matched(unmarked)).toBe("paypal-activity");
+
+    const failed = Effect.runSync(
+      Effect.flip(readCsv(unmarked, paypal().profile, { currency: "EUR" })),
+    );
+
+    expect(failed).toBeInstanceOf(MalformedFile);
+    expect(failed).toMatchObject({
+      line: 1,
+      problem: expect.stringContaining("Balance Impact"),
+    });
+  });
+
+  test("reads a conversion whose payment in another currency has a Net it cannot read, named by its type", () => {
+    // The dollar payment is another balance's: its unreadable Net fails nothing in euros.
+    const unreadable = utf8.encode(
+      [
+        HEADER_EN,
+        "05/10/2026,19:41:02,CEST,Example Travel Ltd,Express Checkout Payment,Completed,USD,-30.00,0.00,n/a,,,0PPEXAMPLE0000051,,,Debit",
+        "05/10/2026,19:41:02,CEST,,General Currency Conversion,Completed,USD,30.00,0.00,30.00,,,0PPEXAMPLE0000052,0PPEXAMPLE0000051,,Credit",
+        "05/10/2026,19:41:02,CEST,,General Currency Conversion,Completed,EUR,-27.60,0.00,-27.60,,,0PPEXAMPLE0000053,0PPEXAMPLE0000051,,Debit",
+      ].join("\n"),
+    );
+
+    expect(read(unreadable)).toEqual([
+      line({
+        bookedOn: "2026-10-05",
+        amountMinor: -2760,
+        label: "General Currency Conversion",
+        memo: null,
+        bankId: "0PPEXAMPLE0000053",
+      }),
+    ]);
+  });
+
+  test("keeps a payment's currency as the conversion's original only when it is an ISO 4217 code", () => {
+    const conversion = line({
+      bookedOn: "2026-10-05",
+      amountMinor: -2760,
+      label: "General Currency Conversion",
+      memo: null,
+      bankId: "0PPEXAMPLE0000062",
+    });
+
+    // A code: the conversion is the payment, named and in its currency.
+    expect(read(conversionFor("USD"))).toEqual([
+      {
+        ...conversion,
+        label: "Example Travel Ltd",
+        memo: "General Currency Conversion",
+        original: { amountMinor: -3000, currency: "USD" },
+      },
+    ]);
+
+    // Another text, or none: the payment is another balance's, and fails nothing. The conversion
+    // is read without it, as when its Net cannot be read.
+    for (const written of ["US$", "€", "usd dollars", ""]) {
+      expect(read(conversionFor(written)), written).toEqual([conversion]);
+    }
   });
 
   test("into an account in dollars, reads the dollar rows: the purchase and its conversion", () => {
@@ -269,19 +357,22 @@ describe("PayPal's activity", () => {
 // Property tests (AGENTS.md, "Testing"): made-up exports of any rows, in either language, either
 // day order and either decimal mark, read back as written; and any file read without a defect.
 
-const HEADER_EN =
-  "Date,Time,TimeZone,Name,Type,Status,Currency,Gross,Fee,Net,From Email Address,To Email Address,Transaction ID,Reference Txn ID,Receipt ID";
-
-const HEADER_FR =
-  "Date,Heure,Fuseau horaire,Nom,Type,État,Devise,Brut,Frais,Net,De l'adresse email,À l'adresse email,Numéro de transaction,Numéro de transaction de référence,Numéro de reçu";
-
 /** How an export writes its days and amounts. */
 const STYLES = [
-  { header: HEADER_EN, zone: "PDT", status: "Completed", monthFirst: true, mark: ".", group: "," },
+  {
+    header: HEADER_EN,
+    zone: "PDT",
+    status: "Completed",
+    impact: "Debit",
+    monthFirst: true,
+    mark: ".",
+    group: ",",
+  },
   {
     header: HEADER_EN,
     zone: "CEST",
     status: "Completed",
+    impact: "Credit",
     monthFirst: false,
     mark: ".",
     group: ",",
@@ -290,6 +381,7 @@ const STYLES = [
     header: HEADER_FR,
     zone: "Europe/Paris",
     status: "Terminé",
+    impact: "Débit",
     monthFirst: false,
     mark: ",",
     group: " ",
@@ -357,6 +449,7 @@ describe("PayPal's activity, any export", () => {
             id,
             "",
             "",
+            style.impact,
           ]
             .map((cell) => `"${cell}"`)
             .join(",");

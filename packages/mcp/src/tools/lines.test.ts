@@ -6,8 +6,10 @@ import {
   Imports,
   LinkRefused,
   Merchants,
+  MonthFacts,
   NotLinked,
   RuleJobs,
+  Subscriptions,
   TransferRefused,
   Transfers,
   memoryAccountStore,
@@ -230,6 +232,8 @@ function onToday(
     PAID,
     Layer.mock(UserData, {}),
     Layer.mock(RuleJobs, {}),
+    Layer.mock(Subscriptions, {}),
+    Layer.mock(MonthFacts, {}),
     transfers,
     expenses,
     TestClock.layer(),
@@ -1099,6 +1103,7 @@ describe("the lines tool", () => {
       "merchants",
       "categories",
       "rules",
+      "review",
     ]);
     expect(tool?.title).toBe("Lines");
 

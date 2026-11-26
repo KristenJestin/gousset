@@ -19,7 +19,7 @@ type AssigningProps = Omit<LineMerchantProps, "onAssign" | "error"> & {
 };
 
 /**
- * The row as the operations page holds it, in the column the page gives the detail (340 px): an
+ * The row as the operations page holds it, 340 px wide (about a phone's detail sheet): an
  * assignment takes half a second, long enough to see the button busy, then the line has its merchant.
  */
 function Assigning({ refusal, ...props }: AssigningProps) {

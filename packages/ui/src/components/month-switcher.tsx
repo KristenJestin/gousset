@@ -18,6 +18,10 @@ export type MonthSwitcherProps = {
   onChange: (month: YearMonth) => void;
   /** The last month it may reach: the current month by default, since the future has no lines. */
   latest?: YearMonth;
+  /** The first month it may reach; none by default, the past being open. */
+  earliest?: YearMonth;
+  /** Its name for assistive technologies: "Month" by default; another when a page has two. */
+  label?: string;
 };
 
 // The label slides in from the side the month comes from, and the old one out the other way.
@@ -29,13 +33,21 @@ const slide = {
 
 /**
  * ‹ October 2026 ›: the month on screen, with the previous and next months a press away. The
- * month is written in the page's language (`<html lang>`). Next is disabled on the latest month.
- * With the focus on either button, the Left and Right arrows move too.
+ * month is written in the page's language (`<html lang>`). Next is disabled on the latest month,
+ * Previous on the earliest one when it is given.
+ * With the focus on either button, the Left and Right arrows move too. In a `Page`'s `month`, on a
+ * phone, it spans its own line, its arrows at the line's ends (the `mobile` wireframe).
  *
  * Motion: the label slides out and the new one slides in from the side it comes from, 200 ms,
  * easing out; cut under reduced motion.
  */
-export function MonthSwitcher({ value, onChange, latest }: MonthSwitcherProps) {
+export function MonthSwitcher({
+  value,
+  onChange,
+  latest,
+  earliest,
+  label: name,
+}: MonthSwitcherProps) {
   const messages = useUiMessages();
   const language = usePageLanguage();
   const index = monthIndex(value);
@@ -59,10 +71,11 @@ export function MonthSwitcher({ value, onChange, latest }: MonthSwitcherProps) {
 
   // Until the bound is known (on the server, without `latest`), Next leads nowhere.
   const canGoNext = bound !== undefined && index < monthIndex(bound);
+  const canGoBack = earliest === undefined || index > monthIndex(earliest);
   const label = formatMonth(value, language);
 
   const step = (steps: number) => {
-    if (steps < 0 || canGoNext) {
+    if (steps < 0 ? canGoBack : canGoNext) {
       onChange(addMonths(value, steps));
     }
   };
@@ -77,12 +90,18 @@ export function MonthSwitcher({ value, onChange, latest }: MonthSwitcherProps) {
   return (
     <div
       role="group"
-      aria-label={messages.pieces.month}
+      aria-label={name ?? messages.pieces.month}
       data-slot="month-switcher"
       className="inline-flex items-center gap-1"
       onKeyDown={onKeyDown}
     >
-      <IconButton icon="previous" label={messages.pieces.previousMonth} onClick={() => step(-1)} />
+      <IconButton
+        icon="previous"
+        label={messages.pieces.previousMonth}
+        disabled={!canGoBack}
+        focusableWhenDisabled
+        onClick={() => step(-1)}
+      />
       {/* Said once per change; the sliding labels, old and new, are only drawn. */}
       <span aria-live="polite" className="sr-only">
         {label}

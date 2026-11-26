@@ -44,6 +44,10 @@ id keeps two runs on one Postgres (two worktrees on `pnpm db:start`) apart. Data
 dropped when their worker and the run end; a run killed before its teardown leaves its
 `gousset_e2e_<run>_*` databases behind, safe to drop by hand.
 
+Every database the harness makes logs a lock wait past a second, with who holds it
+(`log_lock_waits`, set on each database as the harness's superuser): a test stalled on a lock
+leaves its cause in the server's log, which CI prints at the end of each job.
+
 The harness's own role runs the migrations, as the tables' owner, then lets `gousset_app` log in
 with the password derived from the harness's (`docs/data-model.md`, "Ownership and isolation"):
 every worker's app is given the harness's URL and logs in as `gousset_app`, as an installation's
@@ -79,6 +83,7 @@ Import `test` and `expect` from `src/test.ts`, never from `@playwright/test`.
 | `expectAccessible(page)`                    | axe (WCAG 2.2 A and AA) on the screen as it is, after a client-side change.                                                                                                       |
 | `fixDay(page, "2026-10-15")`                | Fixes the browser's clock to noon UTC that day, and the server's day for this page's context (below).                                                                             |
 | `slowServerFunctions(page, ms)`             | Holds the browser's server function calls, for loading and skeleton scenarios.                                                                                                    |
+| `slowServerWrites(page, ms)`                | Holds only the browser's server function writes (POST): a save outlasts a reload made too early, and the reads it then waits for go at once.                                      |
 | `connectMcp({ baseURL, page, … })`          | The official MCP client through the real OAuth flow. Not run yet: `/mcp` comes with #39.                                                                                          |
 | `openUserData(app.database)`                | A worker's database through `UserData`, as a user's transaction sees it; `seed` writes the made-up data, `attempt` tries a write and rolls it back (`src/user-data.ts`).          |
 | `recoverAdministrator(app.database, email)` | Runs the image's `recover-admin` against the worker's database, as the tables' owner: the built command, or `E2E_APP_IMAGE`'s; its exit code and output (`src/recover-admin.ts`). |

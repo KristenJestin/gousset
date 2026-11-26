@@ -1,0 +1,37 @@
+{
+  "type": "diff",
+  "version": "10",
+  "dialect": "postgres",
+  "id": "d6bd10e9-3ae0-46af-bfa5-da8beb31ec49",
+  "prevIds": ["c3ee363f-ee9e-4146-9a44-e0276cde8ab0"],
+  "footprints": [
+    {
+      "statementType": "add_column",
+      "statementTarget": ["column", "public", "merchant", "subscription_dismissed"],
+      "writes": [
+        "s|col|public.merchant.subscription_dismissed",
+        "n|col|public.merchant.subscription_dismissed",
+        "e|col|public.merchant.subscription_dismissed"
+      ],
+      "reads": ["n|tbl|public.merchant", "n|sch|public"]
+    }
+  ],
+  "deltas": [
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "merchant",
+        "name": "subscription_dismissed",
+        "type": "boolean",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "false",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    }
+  ]
+}
