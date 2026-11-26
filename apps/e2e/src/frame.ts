@@ -58,9 +58,24 @@ export async function detailSight(detail: Locator): Promise<DetailSight> {
  * it stood when found stable, which Firefox may judge before the opening has begun to move; the
  * button moving on, the release lands beside it and the click is lost (#223). Click in a detail
  * once it rests.
+ *
+ * A phone's sheet rises once ui-sdk takes its `data-starting-style` off, a frame after it shows:
+ * until then nothing moves yet, so the wait also holds while the sheet still carries it.
  */
 export async function detailAtRest(detail: Locator): Promise<void> {
-  await expect.poll(async () => (await detailSight(detail)).moving).toBe(0);
+  await expect
+    .poll(async () => {
+      // Read first: taken off after this, its rise is under way when `moving` is read.
+      const starting = await detail
+        .locator('[data-slot="line-detail-content"], [data-slot="line-detail"]')
+        .first()
+        .evaluate((content) => content.closest("[data-starting-style]") !== null);
+
+      const { moving } = await detailSight(detail);
+
+      return moving === 0 && !starting;
+    })
+    .toBe(true);
 }
 
 /** What the eye gets of a text: whether it is drawn on top, and its contrast with what is under. */
