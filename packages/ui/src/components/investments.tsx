@@ -27,14 +27,7 @@ import { TextField } from "./text-field";
 // are three.
 
 /** What an operation is, in the order the form offers them. */
-const INVESTMENT_KINDS = [
-  "deposit",
-  "withdrawal",
-  "purchase",
-  "sale",
-  "dividend",
-  "fee",
-] as const;
+const INVESTMENT_KINDS = ["deposit", "withdrawal", "purchase", "sale", "dividend", "fee"] as const;
 
 export type InvestmentKind = (typeof INVESTMENT_KINDS)[number];
 
