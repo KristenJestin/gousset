@@ -1,103 +1,43 @@
-import { encodeWindows1252 } from "@gousset/fixture";
+import {
+  BROKER_ISINS,
+  DEGIRO_ROWS,
+  FORTUNEO_HEADER,
+  FORTUNEO_ROWS,
+  degiroExport,
+  fortuneoExport,
+  fortuneoRow,
+} from "@gousset/fixture";
 import { Effect, Exit, Schema } from "effect";
 import fc from "fast-check";
 import { describe, expect, test } from "vite-plus/test";
 
-import { DEGIRO, DEGIRO_PROFILE } from "./brokers/degiro";
-import { FORTUNEO, FORTUNEO_PROFILE } from "./brokers/fortuneo";
+import { DEGIRO_PROFILE } from "./brokers/degiro";
+import { FORTUNEO_PROFILE } from "./brokers/fortuneo";
 import { csvFile, matchCsvHeader, readCsvHeader } from "./csv";
 import { SHIPPED_OPERATIONS_PROFILES, SHIPPED_PROFILES } from "./csv-shipped";
 import { CsvDefinition, readsOperations } from "./operations-profile";
 import type { OperationKind, OperationsProfile } from "./operations-profile";
 import { readOperations, testReadOperations } from "./operations";
 
-// Invented brokers' files only: the ISINs are made up, with a check digit that holds.
-const FUND = "XX0000000002";
-const SHARE = "XX0000000010";
-const BOND = "XX0000000028";
+// Invented brokers' files only (`@gousset/fixture`): the ISINs are made up, with a check digit that
+// holds.
+const { fund: FUND, share: SHARE, bond: BOND } = BROKER_ISINS;
 
 const utf8 = new TextEncoder();
 
-/** A Fortuneo export built from its table: its separator, encoding and header. */
-function fortuneoFile(
-  rows: ReadonlyArray<ReadonlyArray<string>>,
-  header: ReadonlyArray<string> = FORTUNEO.header,
-): Uint8Array {
-  const text = [header, ...rows].map((row) => row.join(FORTUNEO.separator)).join("\r\n");
+const fortuneoFile = fortuneoExport;
 
-  return encodeWindows1252(`${text}\r\n`);
-}
+const degiroFile = degiroExport;
 
-/** A Fortuneo row in the header's order, from the fields it fills. */
-function fortuneoRow(fields: {
-  date: string;
-  kind: string;
-  name: string;
-  isin?: string;
-  quantity?: string;
-  price?: string;
-  fees?: string;
-  amount: string;
-  currency?: string;
-}): Array<string> {
-  return [
-    fields.date,
-    fields.kind,
-    fields.name,
-    fields.isin ?? "",
-    fields.quantity ?? "",
-    fields.price ?? "",
-    "",
-    fields.fees ?? "",
-    fields.amount,
-    fields.currency ?? "EUR",
-  ];
-}
+/** The words of Fortuneo's kind column the invented rows write, by kind. */
+const WORDS = {
+  deposit: "Versement espèces",
+  purchase: "Achat Comptant",
+  sale: "Vente Comptant",
+  fee: "Droits de garde",
+} as const;
 
-const word = (kind: OperationKind) => {
-  const found = FORTUNEO.kinds.find((each) => each.kind === kind);
-
-  if (found === undefined) {
-    throw new Error(`Fortuneo's table names no ${kind}.`);
-  }
-
-  return found.word;
-};
-
-const FORTUNEO_ROWS = [
-  fortuneoRow({ date: "05/10/2026", kind: word("deposit"), name: "VIREMENT", amount: "1 000,00" }),
-  fortuneoRow({
-    date: "06/10/2026",
-    kind: word("purchase"),
-    name: "NORTHWIND WORLD ETF",
-    isin: FUND,
-    quantity: "10",
-    price: "25,1234",
-    fees: "-1,95",
-    amount: "-253,18",
-  }),
-  fortuneoRow({
-    date: "20/10/2026",
-    kind: word("dividend"),
-    name: "NORTHWIND WORLD ETF",
-    isin: FUND,
-    // A dividend's count of shares is no trade's quantity: read past.
-    quantity: "10",
-    fees: "0,63",
-    amount: "3,57",
-  }),
-  fortuneoRow({
-    date: "03/11/2026",
-    kind: word("sale"),
-    name: "NORTHWIND WORLD ETF",
-    isin: FUND,
-    quantity: "4",
-    price: "27,50",
-    fees: "1,95",
-    amount: "108,05",
-  }),
-  fortuneoRow({ date: "30/11/2026", kind: word("fee"), name: "DROITS DE GARDE", amount: "2,00" }),
-];
+const word = (kind: keyof typeof WORDS) => WORDS[kind];
 
 const read = (bytes: Uint8Array, profile: OperationsProfile, currency = "EUR") =>
   Effect.runSync(readOperations(bytes, profile, { currency })).operations;
@@ -180,7 +120,7 @@ describe("Fortuneo's history of operations", () => {
   });
 
   test("is recognised by its columns' names, wherever they stand", () => {
-    const shuffled = [...FORTUNEO.header].reverse();
+    const shuffled = [...FORTUNEO_HEADER].reverse();
     const rows = FORTUNEO_ROWS.map((row) => [...row].reverse());
     const bytes = fortuneoFile(rows, shuffled);
 
@@ -280,83 +220,6 @@ describe("Fortuneo's history of operations", () => {
     expect(cause).toContain('"_tag":"MalformedFile"');
   });
 });
-
-/** A Degiro `Transactions.csv`, every value quoted as Degiro writes them. */
-function degiroFile(rows: ReadonlyArray<ReadonlyArray<string>>): Uint8Array {
-  const quoted = [DEGIRO.header, ...rows].map((row) =>
-    row.map((value) => `"${value}"`).join(DEGIRO.separator),
-  );
-
-  return utf8.encode(`${quoted.join("\n")}\n`);
-}
-
-// Date, Time, Product, ISIN, Reference exchange, Venue, Quantity, Price, currency, Local value,
-// currency, Value, currency, Exchange rate, Fees, currency, Total, currency, Order ID.
-const DEGIRO_ROWS = [
-  [
-    "06-10-2026",
-    "09:05",
-    "NORTHWIND WORLD ETF",
-    FUND,
-    "EAM",
-    "XAMS",
-    "3",
-    "99.5000",
-    "EUR",
-    "-298.50",
-    "EUR",
-    "-298.50",
-    "EUR",
-    "",
-    "-2.00",
-    "EUR",
-    "-300.50",
-    "EUR",
-    "a1b2c3d4-0000-4000-8000-000000000001",
-  ],
-  [
-    "07-10-2026",
-    "15:31",
-    "SOUTHWIND HOLDINGS",
-    SHARE,
-    "NDQ",
-    "XNAS",
-    "2",
-    "150.00",
-    "USD",
-    "-300.00",
-    "USD",
-    "-275.03",
-    "EUR",
-    "1.0908",
-    "-1.00",
-    "EUR",
-    "-276.03",
-    "EUR",
-    "a1b2c3d4-0000-4000-8000-000000000002",
-  ],
-  [
-    "03-11-2026",
-    "10:12",
-    "NORTHWIND WORLD ETF",
-    FUND,
-    "EAM",
-    "XAMS",
-    "-1",
-    "101.2500",
-    "EUR",
-    "101.25",
-    "EUR",
-    "101.25",
-    "EUR",
-    "",
-    "-2.00",
-    "EUR",
-    "99.25",
-    "EUR",
-    "a1b2c3d4-0000-4000-8000-000000000003",
-  ],
-];
 
 describe("Degiro's Transactions.csv", () => {
   test("reads a purchase and a sale by the quantity's sign, a foreign price from its value", () => {

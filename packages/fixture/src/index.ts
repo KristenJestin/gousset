@@ -39,6 +39,17 @@ export { csvSamples } from "./statements/csv-samples";
 
 export { paypalActivity } from "./statements/paypal";
 
+export {
+  BROKER_ISINS,
+  DEGIRO_HEADER,
+  DEGIRO_ROWS,
+  FORTUNEO_HEADER,
+  FORTUNEO_ROWS,
+  degiroExport,
+  fortuneoExport,
+  fortuneoRow,
+} from "./statements/brokers";
+
 export { ibanWithCheckDigits } from "./statements/iban";
 
 export { encodeWindows1252, statementSamples } from "./statements/samples";
