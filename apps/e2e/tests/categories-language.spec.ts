@@ -4,7 +4,14 @@ import { LANGUAGE_COOKIE, defaultRows } from "@gousset/core";
 import { category } from "@gousset/db/schema/ledger";
 import { and, asc, eq, isNull } from "drizzle-orm";
 
-import { CHANGE_PASSWORD_PATH, CREATE_USER_PATH, SIGN_IN_PATH, personOfItsOwn } from "../src/auth";
+import { startWorkerEnvironment } from "../src/app-server";
+import {
+  CHANGE_PASSWORD_PATH,
+  CREATE_USER_PATH,
+  SIGN_IN_PATH,
+  SIGN_UP_PATH,
+  personOfItsOwn,
+} from "../src/auth";
 import type { TestUser } from "../src/auth";
 import { expect, test } from "../src/test";
 import { openUserData } from "../src/user-data";
@@ -95,9 +102,12 @@ async function browserOf(
   return context;
 }
 
-/** A user's categories as rows of the default set: kind, parent's name, name, position, fallback. */
-async function categoriesOf(owner: string) {
-  const rows = await data.asUser(owner, (transaction) =>
+/**
+ * A user's categories as rows of the default set: kind, parent's name, name, position, fallback;
+ * from the worker's database, or from `from`.
+ */
+async function categoriesOf(owner: string, from = data) {
+  const rows = await from.asUser(owner, (transaction) =>
     transaction.select().from(category).orderBy(asc(category.id)),
   );
 
@@ -131,6 +141,84 @@ const sameOrder = (rows: ReturnType<typeof defaultRows>) =>
   );
 
 const settled = (email: string) => data.defaultsSettled(email);
+
+test("the administrator signing up gets the set of the language chosen, settled", async ({
+  app,
+  browser,
+}, testInfo) => {
+  test.setTimeout(120_000);
+
+  // Sign-up opens only on a fresh install: an app of the test's own.
+  const fresh = await startWorkerEnvironment(
+    app.slot + 600,
+    testInfo.outputPath("categories-sign-up.log"),
+  );
+
+  const freshData = openUserData(fresh.database);
+
+  try {
+    const person = personOfItsOwn("anouk");
+
+    // The language chosen in the interface, French, over a browser that speaks English.
+    const asNew = await request.newContext({
+      baseURL: fresh.baseURL,
+      extraHTTPHeaders: { Origin: fresh.baseURL, "Accept-Language": "en-US,en;q=0.9" },
+      storageState: {
+        cookies: [
+          {
+            name: LANGUAGE_COOKIE,
+            value: "fr",
+            domain: new URL(fresh.baseURL).hostname,
+            path: "/",
+            expires: -1,
+            httpOnly: false,
+            secure: false,
+            sameSite: "Lax",
+          },
+        ],
+        origins: [],
+      },
+    });
+
+    let administrator: TestUser;
+
+    try {
+      const answer = await asNew.post(SIGN_UP_PATH, { data: person });
+
+      expect(answer.ok(), await answer.text()).toBe(true);
+
+      const { cookies } = await asNew.storageState();
+
+      administrator = { ...person, cookies };
+    } finally {
+      await asNew.dispose();
+    }
+
+    const owner = await freshData.ownerOf(person.email);
+
+    // The French set, and nothing left to rename: no page of theirs opened yet.
+    expect(await categoriesOf(owner, freshData)).toEqual(sameOrder(defaultRows("fr")));
+    expect(await freshData.defaultsSettled(person.email)).toBe(true);
+
+    // A page in English translates nothing: the names are theirs from sign-up.
+    const english = await browserOf(browser, fresh.baseURL, administrator, "en-US", "en");
+
+    try {
+      const page = await english.newPage();
+
+      await page.goto("/settings/categories");
+      await expect(page.locator("html")).toHaveAttribute("lang", "en");
+      await expect(page.getByText("Logement", { exact: true }).first()).toBeVisible();
+    } finally {
+      await english.close();
+    }
+
+    expect(await categoriesOf(owner, freshData)).toEqual(sameOrder(defaultRows("fr")));
+  } finally {
+    await freshData.close();
+    await fresh.stop();
+  }
+});
 
 test("a user signing up in French sees the French default set", async ({ app, user, browser }) => {
   // Created by an administrator whose browser speaks English: the English set, not settled.
@@ -263,5 +351,61 @@ test("an untouched default is renamed into the user's language, a renamed one ke
   expect(named("Sorties au restaurant", "Bakery")).toBe(true);
   expect(named("Loisirs", "Travel")).toBe(true);
   expect(after).toHaveLength(defaultRows("fr").length);
+  expect(await settled(person.email)).toBe(true);
+});
+
+test("a default renamed by hand to the other language's name is kept", async ({
+  app,
+  user,
+  browser,
+}) => {
+  // Issue #218: created by an administrator whose browser speaks French, the French set.
+  const person = await created(app.baseURL, user, "ines", "fr-FR,fr;q=0.9");
+
+  // Before their first page, the user named two defaults in English: a top-level category, and a
+  // child under one they left as it was.
+  await data.asUser(person.id, async (transaction) => {
+    const [health] = await transaction
+      .select({ id: category.id })
+      .from(category)
+      .where(and(eq(category.name, "Santé"), isNull(category.parentId)));
+
+    await transaction
+      .update(category)
+      .set({ name: "Groceries" })
+      .where(and(eq(category.name, "Courses"), isNull(category.parentId)));
+    await transaction
+      .update(category)
+      .set({ name: "Pharmacy" })
+      .where(and(eq(category.name, "Pharmacie"), eq(category.parentId, health?.id ?? "")));
+  });
+
+  // Their first page, in French, the set's own language.
+  const context = await browserOf(browser, app.baseURL, person, "fr-FR");
+
+  try {
+    const page = await context.newPage();
+
+    await page.goto("/settings/categories");
+    await expect(page.locator("html")).toHaveAttribute("lang", "fr");
+    await expect(page.getByText("Groceries", { exact: true }).first()).toBeVisible();
+  } finally {
+    await context.close();
+  }
+
+  // Their names stay theirs; everything else is the French set, as it was.
+  const expected = sameOrder(defaultRows("fr")).map((row) => {
+    if (row.parent === null && row.name === "Courses") {
+      return { ...row, name: "Groceries" };
+    }
+
+    if (row.parent === "Courses") {
+      return { ...row, parent: "Groceries" };
+    }
+
+    return row.parent === "Santé" && row.name === "Pharmacie" ? { ...row, name: "Pharmacy" } : row;
+  });
+
+  expect(await categoriesOf(person.id)).toEqual(sameOrder(expected));
   expect(await settled(person.email)).toBe(true);
 });

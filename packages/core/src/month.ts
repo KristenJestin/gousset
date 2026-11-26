@@ -91,6 +91,11 @@ export type StatementReach = {
   readonly accountId: string;
   readonly importedTo: string | null;
   readonly statementTo: string | null;
+  /**
+   * Kept by hand: no import ever done, no statement balance, and lines entered by hand (a benefit
+   * account without a file, #235). It expects no statement.
+   */
+  readonly keptByHand: boolean;
 };
 
 /** What one read of the month asks for, every range decided by the logic. */
@@ -313,7 +318,7 @@ export type ImportState = {
   readonly month: string;
   /** The day they should reach: the month's last, or today in the month under way. */
   readonly expected: string;
-  /** The open accounts kept by their lines that existed in the month. */
+  /** The open accounts kept by their lines that existed in the month, but those kept by hand. */
   readonly accounts: number;
   /** Those whose statements reach `expected`. */
   readonly imported: number;
@@ -972,10 +977,12 @@ function importStateOf(reading: Reading): ImportState {
   const expected = earlier(last, reading.today);
   const reach = new Map(reading.rows.reach.map((row) => [row.accountId, row]));
 
-  // The open accounts kept by their lines, opened by the month's end and not closed before it.
+  // The open accounts kept by their lines, opened by the month's end and not closed before it;
+  // one kept by hand, never imported, expects no file (#235).
   const counted = reading.rows.accounts.filter(
     (account) =>
       account.mode === "lines" &&
+      reach.get(account.id)?.keptByHand !== true &&
       (account.openedOn === null || account.openedOn <= last) &&
       (account.closedOn === null || account.closedOn >= first),
   );
