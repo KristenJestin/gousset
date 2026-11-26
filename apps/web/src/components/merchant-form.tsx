@@ -1,4 +1,4 @@
-import type { EntryKind, MerchantDetail, MerchantSummary } from "@gousset/core";
+import type { CategoryTree, EntryKind, MerchantDetail, MerchantSummary } from "@gousset/core";
 import type { Look, LookColor } from "@gousset/core/look";
 import { m } from "@gousset/i18n/messages";
 import { Button } from "@gousset/ui/components/button";
@@ -14,7 +14,7 @@ import { TextListField } from "@gousset/ui/components/text-list-field";
 import { automaticColorOf } from "@gousset/ui/lib/automatic-color";
 import { notify } from "@gousset/ui/lib/notify";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 import { createMerchant, editMerchant } from "@/functions/merchants";
 import type { MerchantRefusalCode } from "@/functions/merchants";
@@ -125,6 +125,152 @@ function writeLogo(merchantId: string, logo: LogoChange): Promise<LogoAnswer | u
   }
 }
 
+/** Where the logo shown comes from: the file picked, none once removed, or the saved one. */
+function logoSrcOf(logo: LogoChange, saved: Saved | undefined): string | undefined {
+  if (logo.kind === "picked") {
+    return logo.preview;
+  }
+
+  return logo.kind === "removed" || saved === undefined
+    ? undefined
+    : merchantLogoSrc(saved.id, saved.look);
+}
+
+/** The default category to send, from what is chosen and whether it was changed. */
+function categorySent(changed: boolean, choice: DefaultChoice, id: string | null): CategorySent {
+  if (!changed) {
+    return { kind: "unchanged" };
+  }
+
+  if (choice === "none") {
+    return { kind: "set", id: null };
+  }
+
+  return id === null ? { kind: "missing" } : { kind: "set", id };
+}
+
+/** The merchant's fields as the form holds them, the default category aside. */
+type Draft = {
+  name: string;
+  intermediary: boolean;
+  color: LookColor | null;
+  labels: ReadonlyArray<string>;
+};
+
+/** Writes the merchant: made the first time, edited with what changed from `saved` afterwards. */
+function writeMerchant(saved: Saved | undefined, draft: Draft, category: CategorySent) {
+  if (saved === undefined) {
+    return answerOf(
+      createMerchant({
+        data: {
+          name: draft.name,
+          defaultCategoryId: category.kind === "set" ? category.id : null,
+          intermediary: draft.intermediary,
+          color: draft.color,
+          labels: [...draft.labels],
+        },
+      }),
+    );
+  }
+
+  return answerOf(
+    editMerchant({
+      data: {
+        merchantId: saved.id,
+        name: draft.name === saved.name ? undefined : draft.name,
+        defaultCategoryId: category.kind === "set" ? category.id : undefined,
+        intermediary: draft.intermediary === saved.intermediary ? undefined : draft.intermediary,
+        color: draft.color === saved.look.color ? undefined : draft.color,
+        labels: draft.labels.length === 0 ? undefined : [...draft.labels],
+      },
+    }),
+  );
+}
+
+/**
+ * The default category's fields: none, or a kind then a category in use of it. The category is
+ * sent only once changed, so that an archived one, shown on the page and never offered here, is
+ * kept until another is chosen; whether it changed is read only when the form is sent.
+ */
+function useDefaultCategory(current: MerchantDetail["defaultCategory"]) {
+  const [choice, setChoice] = useState<DefaultChoice>(current?.kind ?? "none");
+
+  // An archived category is shown on the page, never offered: the picker starts empty then.
+  const [categoryId, setCategoryId] = useState(
+    current === null || current.archived ? null : current.id,
+  );
+
+  const changed = useRef(false);
+
+  return {
+    choice,
+    categoryId,
+    choose: (next: DefaultChoice) => {
+      setChoice(next);
+      changed.current = true;
+      // A category of the other kind cannot be kept.
+      setCategoryId(next === current?.kind && !current.archived ? current.id : null);
+    },
+    pick: (next: string) => {
+      setCategoryId(next);
+      changed.current = true;
+    },
+    toSend: () => categorySent(changed.current, choice, categoryId),
+    /** Written: what is chosen is now the merchant's own. */
+    written: () => {
+      changed.current = false;
+    },
+  };
+}
+
+type DefaultCategory = ReturnType<typeof useDefaultCategory>;
+
+function DefaultCategoryFields({
+  category,
+  tree,
+  error,
+  onChange,
+}: {
+  category: DefaultCategory;
+  tree: CategoryTree | undefined;
+  error: string | undefined;
+  /** A kind or a category was chosen: its refusal no longer holds. */
+  onChange: () => void;
+}) {
+  const { choice } = category;
+
+  return (
+    <>
+      <SegmentedChoice
+        label={m.merchantDefaultTitle()}
+        value={choice}
+        choices={[
+          { value: "expense", label: m.categoriesKindExpense() },
+          { value: "income", label: m.categoriesKindIncome() },
+          { value: "none", label: m.merchantDefaultNone() },
+        ]}
+        onChange={(next) => {
+          category.choose(next);
+          onChange();
+        }}
+      />
+      {choice === "none" ? (
+        <FormMessage message={error} />
+      ) : (
+        <CategoryPicker
+          label={m.operationsCategory()}
+          placeholder={m.categoriesSearch()}
+          categories={tree === undefined ? [] : choicesOf(tree, choice)}
+          value={category.categoryId}
+          onValueChange={category.pick}
+          error={error}
+          required
+        />
+      )}
+    </>
+  );
+}
+
 export type MerchantFormProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -151,7 +297,7 @@ export type MerchantFormProps = {
 export function MerchantForm({ open, onOpenChange, merchant, onSaved }: MerchantFormProps) {
   const queryClient = useQueryClient();
   const { data: tree } = useQuery(categoryQueries.list());
-  const current = merchant?.defaultCategory ?? null;
+  const category = useDefaultCategory(merchant?.defaultCategory ?? null);
 
   const [saved, setSaved] = useState<Saved | undefined>(
     merchant === undefined
@@ -165,15 +311,6 @@ export function MerchantForm({ open, onOpenChange, merchant, onSaved }: Merchant
   );
 
   const [name, setName] = useState(merchant?.name ?? "");
-  const [choice, setChoice] = useState<DefaultChoice>(current?.kind ?? "none");
-
-  // An archived category is shown on the page, never offered: the picker starts empty then.
-  const [categoryId, setCategoryId] = useState(
-    current === null || current.archived ? null : current.id,
-  );
-
-  // The category is sent only once changed: an archived one is kept until another is chosen.
-  const [categoryChanged, setCategoryChanged] = useState(false);
   const [intermediary, setIntermediary] = useState(merchant?.intermediary ?? false);
   const [labels, setLabels] = useState<ReadonlyArray<string>>([]);
   const [color, setColor] = useState<LookColor | null>(merchant?.look.color ?? null);
@@ -181,59 +318,10 @@ export function MerchantForm({ open, onOpenChange, merchant, onSaved }: Merchant
   const [refusals, setRefusals] = useState<Refusals>({});
   const [busy, setBusy] = useState(false);
 
-  const logoSrc =
-    logo.kind === "picked"
-      ? logo.preview
-      : logo.kind === "removed" || saved === undefined
-        ? undefined
-        : merchantLogoSrc(saved.id, saved.look);
-
-  const categoryToSend = (): CategorySent => {
-    if (!categoryChanged) {
-      return { kind: "unchanged" };
-    }
-
-    if (choice === "none") {
-      return { kind: "set", id: null };
-    }
-
-    return categoryId === null ? { kind: "missing" } : { kind: "set", id: categoryId };
-  };
-
-  /** Writes the merchant: made the first time, edited with what changed afterwards. */
-  const writeMerchant = (category: CategorySent) => {
-    if (saved === undefined) {
-      return answerOf(
-        createMerchant({
-          data: {
-            name,
-            defaultCategoryId: category.kind === "set" ? category.id : null,
-            intermediary,
-            color,
-            labels: [...labels],
-          },
-        }),
-      );
-    }
-
-    return answerOf(
-      editMerchant({
-        data: {
-          merchantId: saved.id,
-          name: name === saved.name ? undefined : name,
-          defaultCategoryId: category.kind === "set" ? category.id : undefined,
-          intermediary: intermediary === saved.intermediary ? undefined : intermediary,
-          color: color === saved.look.color ? undefined : color,
-          labels: labels.length === 0 ? undefined : [...labels],
-        },
-      }),
-    );
-  };
-
   async function save() {
-    const category = categoryToSend();
+    const sent = category.toSend();
 
-    if (category.kind === "missing") {
+    if (sent.kind === "missing") {
       setRefusals({ category: m.merchantDefaultChoose() });
 
       return;
@@ -242,7 +330,7 @@ export function MerchantForm({ open, onOpenChange, merchant, onSaved }: Merchant
     const creating = saved === undefined;
 
     const written = await whileBusy(setBusy, async () => {
-      const answer = await writeMerchant(category);
+      const answer = await writeMerchant(saved, { name, intermediary, color, labels }, sent);
 
       if (!answer.ok) {
         return { answer, logo: undefined };
@@ -260,7 +348,7 @@ export function MerchantForm({ open, onOpenChange, merchant, onSaved }: Merchant
     const { merchant: summary } = written.answer;
 
     // Written: what is saved is now the merchant's own, and the sheet edits it from here on.
-    setCategoryChanged(false);
+    category.written();
     setLabels([]);
 
     const look =
@@ -323,38 +411,12 @@ export function MerchantForm({ open, onOpenChange, merchant, onSaved }: Merchant
         autoComplete="off"
         required
       />
-      <SegmentedChoice
-        label={m.merchantDefaultTitle()}
-        value={choice}
-        choices={[
-          { value: "expense", label: m.categoriesKindExpense() },
-          { value: "income", label: m.categoriesKindIncome() },
-          { value: "none", label: m.merchantDefaultNone() },
-        ]}
-        onChange={(next) => {
-          setChoice(next);
-          setCategoryChanged(true);
-          // A category of the other kind cannot be kept.
-          setCategoryId(next === current?.kind && !current.archived ? current.id : null);
-          setRefusals({ ...refusals, category: undefined });
-        }}
+      <DefaultCategoryFields
+        category={category}
+        tree={tree}
+        error={refusals.category}
+        onChange={() => setRefusals({ ...refusals, category: undefined })}
       />
-      {choice === "none" ? (
-        <FormMessage message={refusals.category} />
-      ) : (
-        <CategoryPicker
-          label={m.operationsCategory()}
-          placeholder={m.categoriesSearch()}
-          categories={tree === undefined ? [] : choicesOf(tree, choice)}
-          value={categoryId}
-          onValueChange={(next) => {
-            setCategoryId(next);
-            setCategoryChanged(true);
-          }}
-          error={refusals.category}
-          required
-        />
-      )}
       <Switch
         label={m.merchantIntermediary()}
         description={m.merchantIntermediaryDescription()}
@@ -378,7 +440,7 @@ export function MerchantForm({ open, onOpenChange, merchant, onSaved }: Merchant
         label={m.merchantFormLogo()}
         name={name}
         color={color}
-        src={logoSrc}
+        src={logoSrcOf(logo, saved)}
         description={m.merchantFormLogoDescription()}
         error={refusals.logo}
         disabled={busy}
