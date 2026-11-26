@@ -418,7 +418,8 @@ test("moving between screens fades the screen, the current item slides, empty st
   userPage,
 }) => {
   test.skip(onPhone(userPage), "The sidebar is the desktop's.");
-  await visit(userPage, "/investments");
+  // Subjects is still a screen with nothing to show (#250 filled Investments).
+  await visit(userPage, "/subjects");
 
   // The empty state fades in through CSS, 200 ms.
   const block = userPage.locator('[data-slot="screen-block"]');
@@ -428,9 +429,9 @@ test("moving between screens fades the screen, the current item slides, empty st
 
   // The screen reached fades in, and the current item's mark slides from the item left to it:
   // 200 ms each, so a few frames in between, all within 400 ms of each other.
-  const moved = await moveTo(userPage, "Subjects");
+  const moved = await moveTo(userPage, "Investments");
 
-  await expect(userPage.getByRole("link", { name: "Subjects" })).toHaveAttribute(
+  await expect(userPage.getByRole("link", { name: "Investments" })).toHaveAttribute(
     "aria-current",
     "page",
   );
@@ -442,9 +443,9 @@ test("moving between screens fades the screen, the current item slides, empty st
   // Cut under reduced motion: the screen shows at once, the mark is at once on its item.
   await userPage.emulateMedia({ reducedMotion: "reduce" });
 
-  const cut = await moveTo(userPage, "Investments");
+  const cut = await moveTo(userPage, "Subjects");
 
-  await expect(userPage.getByRole("link", { name: "Investments" })).toHaveAttribute(
+  await expect(userPage.getByRole("link", { name: "Subjects" })).toHaveAttribute(
     "aria-current",
     "page",
   );

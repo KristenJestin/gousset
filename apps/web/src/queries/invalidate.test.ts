@@ -12,6 +12,7 @@ import {
   invalidateMerchants,
   invalidateTouched,
 } from "./invalidate";
+import { investmentKeys } from "./investment-keys";
 import { lineKeys } from "./line-keys";
 import { merchantKeys } from "./merchant-keys";
 import { monthKeys } from "./month-keys";
@@ -38,6 +39,8 @@ const ACCOUNTS = accountKeys.list();
 const COUNTS = reviewKeys.startingPoints();
 const MERCHANTS = merchantKeys.list("");
 const MERCHANT = merchantKeys.detail("0b6e3f9a-4c2d-4e8b-9f1a-7d5c3b2e1a90");
+const INVESTMENTS = investmentKeys.list();
+const OPERATIONS = investmentKeys.operations("5c1d7e2a-3b4f-4a6c-8d9e-1f2a3b4c5d6e", null);
 
 /** A query of a month's, as a job's end reads it. */
 const touched = (month: string) => [...monthKeys.of(month), "e2e-touched"];
@@ -93,6 +96,15 @@ describe("invalidateTouched", () => {
     }
   });
 
+  test("reads the investments again: an import of a broker's operations moves positions and cash", async () => {
+    const client = clientWith([INVESTMENTS, OPERATIONS]);
+
+    await invalidateTouched(client, { months: ["2026-10"] });
+
+    expect(isInvalidated(client, INVESTMENTS)).toBe(true);
+    expect(isInvalidated(client, OPERATIONS)).toBe(true);
+  });
+
   test("a rule applied to the past reads the categories' figures again: its lines moved", async () => {
     const client = clientWith([categoryKeys.list()]);
 
@@ -121,6 +133,15 @@ describe("invalidateAccounts", () => {
     for (const queryKey of [ACCOUNTS, SEARCH, COUNTS, ...MONTHS]) {
       expect(isInvalidated(client, queryKey), JSON.stringify(queryKey)).toBe(true);
     }
+  });
+
+  test("reads the investments again: they name the accounts and show their cash", async () => {
+    const client = clientWith([INVESTMENTS, OPERATIONS]);
+
+    await invalidateAccounts(client);
+
+    expect(isInvalidated(client, INVESTMENTS)).toBe(true);
+    expect(isInvalidated(client, OPERATIONS)).toBe(true);
   });
 });
 

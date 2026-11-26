@@ -282,5 +282,46 @@ export function refusalMessage(
   return refusal?.field === field ? refusal?.message : undefined;
 }
 
+/**
+ * An operation's refusal (`OperationRefusalCode`), by its code; `isPrice` when an invalid quantity
+ * is the unit price typed, which may be zero.
+ */
+export function operationRefusalMessage(code: string, isPrice = false): string {
+  switch (code) {
+    case "ACCOUNT_NOT_FOUND":
+      return m.investmentsRefusalAccountNotFound();
+    case "NOT_AN_INVESTMENT_ACCOUNT":
+      return m.investmentsRefusalNotInvestment();
+    case "KEPT_BY_BALANCE":
+      return m.investmentsRefusalKeptByBalance();
+    case "OPERATION_NOT_FOUND":
+      return m.investmentsRefusalOperationNotFound();
+    case "INVALID_ISIN":
+      return m.investmentsRefusalInvalidIsin();
+    case "INVALID_QUANTITY":
+      return isPrice ? m.investmentsRefusalInvalidPrice() : m.investmentsRefusalInvalidQuantity();
+    case "SIGN":
+      return m.investmentsRefusalSign();
+    case "AMOUNT":
+      return m.investmentsRefusalAmount();
+    case "FEES":
+      return m.investmentsRefusalFees();
+    case "DAY":
+      return m.investmentsRefusalDay();
+    case "QUANTITY_REQUIRED":
+      return m.investmentsRefusalQuantityRequired();
+    case "QUANTITY_NOT_ALLOWED":
+      return m.investmentsRefusalQuantityNotAllowed();
+    case "SECURITY_REQUIRED":
+      return m.investmentsRefusalSecurityRequired();
+    case "SECURITY_NOT_ALLOWED":
+      return m.investmentsRefusalSecurityNotAllowed();
+    case "CURRENCY":
+      return m.investmentsRefusalCurrency();
+    default:
+      return m.errorUnknown();
+  }
+}
+
 /** What a field that chooses a password says before a submit. */
 export const passwordRules = () => m.passwordRules(PASSWORD_LENGTH);
