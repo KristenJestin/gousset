@@ -2,12 +2,14 @@ import {
   account,
   entry,
   entryPart,
+  entrySubject,
   statementImport,
   statementLine,
+  subject,
 } from "@gousset/db/schema/ledger";
 import { UserData } from "@gousset/db/user-data";
 import type { UserTransaction } from "@gousset/db/user-data";
-import { and, desc, eq, exists, gte, inArray, lte, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, exists, gte, inArray, lte, or, sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { Effect, Layer } from "effect";
@@ -15,6 +17,9 @@ import { Effect, Layer } from "effect";
 import { categoriesOfLines } from "./category-store-database";
 import type { LineCategory } from "./category-store";
 import { LineStore } from "./line-store";
+import { subtreeOf } from "./subjects/counting";
+import type { SubjectName } from "./subjects/counting";
+import { attachedToAny, subjectNodesIn } from "./subjects/subjects";
 import { linesWithSeveralCandidates } from "./transfers/pair-lines";
 import type { FoundLine, FoundLineDetail, LineQuery } from "./line-store";
 
@@ -80,7 +85,11 @@ const byDefault = exists(
   sql`(select 1 from ${entryPart} inner join ${entry} on ${entry.id} = ${entryPart.entryId} where ${entryPart.lineId} = ${statementLine.id} and ${entryPart.role} = 'payment' and ${entry.classifiedBy} = 'default' and not (${statementLine.source} = 'balance' and coalesce(${entry.categoryId} = (select ${account.balanceCategoryId} from ${account} where ${account.id} = ${statementLine.accountId}), false)))`,
 );
 
-function conditions(accounts: ReadonlyArray<AccountColumns>, query: LineQuery) {
+function conditions(
+  accounts: ReadonlyArray<AccountColumns>,
+  query: LineQuery,
+  subtree: ReadonlyArray<string> | null,
+) {
   const ofState = eq(statementLine.state, query.state);
   const ids = query.alsoLineIds.filter(isId);
   const only = query.onlyLineIds?.filter(isId);
@@ -98,6 +107,7 @@ function conditions(accounts: ReadonlyArray<AccountColumns>, query: LineQuery) {
     lte(statementLine.bookedOn, query.to),
     query.from === null ? undefined : gte(statementLine.bookedOn, query.from),
     query.accountId === null ? undefined : eq(statementLine.accountId, query.accountId),
+    subtree === null ? undefined : attachedToAny(sql`${statementLine.id}`, subtree),
     query.text === null ? undefined : sql`${searched} ilike ${substring(query.text)}`,
     query.amount === null ? undefined : amountCondition(accounts, query.amount),
     only === undefined
@@ -140,8 +150,38 @@ type LineColumns = {
   readonly source: "import" | "manual" | "balance" | "counterpart";
 };
 
-/** A row of `lineColumns`, with its category; a discarded one is never asked for. */
-function found(row: LineColumns, category: LineCategory | null): FoundLine {
+/** Each line's entries' subjects, each once, by name (#37). */
+async function subjectsOfLines(
+  transaction: UserTransaction,
+  lineIds: ReadonlyArray<string>,
+): Promise<ReadonlyMap<string, ReadonlyArray<SubjectName>>> {
+  if (lineIds.length === 0) {
+    return new Map();
+  }
+
+  const rows = await transaction
+    .selectDistinct({ lineId: entryPart.lineId, id: subject.id, name: subject.name })
+    .from(entryPart)
+    .innerJoin(entrySubject, eq(entrySubject.entryId, entryPart.entryId))
+    .innerJoin(subject, eq(subject.id, entrySubject.subjectId))
+    .where(inArray(entryPart.lineId, [...lineIds]))
+    .orderBy(asc(subject.name), asc(subject.id));
+
+  const byLine = new Map<string, Array<SubjectName>>();
+
+  for (const row of rows) {
+    byLine.set(row.lineId, [...(byLine.get(row.lineId) ?? []), { id: row.id, name: row.name }]);
+  }
+
+  return byLine;
+}
+
+/** A row of `lineColumns`, with its category and subjects; a discarded one is never asked for. */
+function found(
+  row: LineColumns,
+  category: LineCategory | null,
+  subjects: ReadonlyArray<SubjectName>,
+): FoundLine {
   return {
     id: row.id,
     bookedOn: row.bookedOn,
@@ -159,6 +199,7 @@ function found(row: LineColumns, category: LineCategory | null): FoundLine {
     },
     category,
     fromBalance: row.source === "balance",
+    subjects,
   };
 }
 
@@ -166,9 +207,18 @@ function found(row: LineColumns, category: LineCategory | null): FoundLine {
 // each account's lines in turn, about three times the pages of reading the user's lines once by
 // `user_id` (measured for #21 on 30,000 lines: 60 ms against 22 ms for a text search).
 async function search(transaction: UserTransaction, query: LineQuery) {
-  if (query.accountId !== null && !isId(query.accountId)) {
+  if (
+    (query.accountId !== null && !isId(query.accountId)) ||
+    (query.subjectId !== null && !isId(query.subjectId))
+  ) {
     return { lines: [], total: 0 };
   }
+
+  // A subject's lines are its descendants' too (#37): the user has 200 subjects at most.
+  const subtree =
+    query.subjectId === null
+      ? null
+      : [...subtreeOf(await subjectNodesIn(transaction), query.subjectId)];
 
   const accounts = await transaction
     .select({
@@ -180,7 +230,7 @@ async function search(transaction: UserTransaction, query: LineQuery) {
     .from(account);
 
   const accountOf = new Map(accounts.map((each) => [each.id, each]));
-  const where = conditions(accounts, query);
+  const where = conditions(accounts, query, subtree);
   const { after } = query;
 
   const older =
@@ -216,6 +266,11 @@ async function search(transaction: UserTransaction, query: LineQuery) {
     rows.map((row) => row.id),
   );
 
+  const subjects = await subjectsOfLines(
+    transaction,
+    rows.map((row) => row.id),
+  );
+
   // Every line's account is the user's (a composite foreign key) and so among those just read.
   const lines = rows.flatMap((row) => {
     const owned = accountOf.get(row.accountId);
@@ -231,6 +286,7 @@ async function search(transaction: UserTransaction, query: LineQuery) {
               currency: owned.currency,
             },
             categories.get(row.id) ?? null,
+            subjects.get(row.id) ?? [],
           ),
         ];
   });
@@ -287,9 +343,10 @@ async function show(
   }
 
   const categories = await categoriesOfLines(transaction, [row.id]);
+  const subjects = await subjectsOfLines(transaction, [row.id]);
 
   return {
-    ...found(row, categories.get(row.id) ?? null),
+    ...found(row, categories.get(row.id) ?? null, subjects.get(row.id) ?? []),
     source: row.source,
     originalAmountMinor: row.originalAmountMinor,
     originalCurrency: row.originalCurrency,

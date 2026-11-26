@@ -77,6 +77,7 @@ export {
   monthMovements,
   monthReview,
   monthSpending,
+  monthSubjectSpending,
   monthSummary,
   spendingDays,
 } from "./month";
@@ -85,6 +86,7 @@ export type {
   BenefitLine,
   CategorySpending,
   CategorySpendingRead,
+  DaysBy,
   ImportState,
   LineToReview,
   MerchantSpending,
@@ -101,6 +103,7 @@ export type {
   MonthRows,
   MonthScope,
   MonthSpending,
+  MonthSubject,
   MonthSummary,
   MonthTransfer,
   Movement,
@@ -109,6 +112,8 @@ export type {
   SpendingDay,
   SpendingDays,
   StatementReach,
+  SubjectSpending,
+  SubjectSpendingRead,
 } from "./month";
 
 export {

@@ -83,6 +83,8 @@ type Month = {
   firstDay: string | null;
   benefitLines: Array<MonthRows["benefitLines"][number]>;
   reach: Array<MonthRows["reach"][number]>;
+  subjects: Array<MonthRows["subjects"][number]>;
+  entrySubjects: Array<MonthRows["entrySubjects"][number]>;
   charges: Array<Charge>;
 };
 
@@ -96,6 +98,8 @@ const empty = (): Month => ({
   firstDay: null,
   benefitLines: [],
   reach: [],
+  subjects: [],
+  entrySubjects: [],
   charges: [],
 });
 

@@ -3,6 +3,7 @@ import {
   accountBalance,
   entry,
   entryPart,
+  entrySubject,
   merchant,
   merchantAlias,
   statementImport,
@@ -15,6 +16,7 @@ import { alias } from "drizzle-orm/pg-core";
 
 import { readAll } from "./category-store-database";
 import type { MonthRows, MonthScope, StatementReach } from "./month";
+import { subjectNodesIn } from "./subjects/subjects";
 import { chargesIn } from "./subscriptions/charges";
 
 // The raw rows of a month (#32), read in one transaction of the user's (`MonthFacts`): what the
@@ -140,6 +142,15 @@ export async function monthRowsIn(
     .from(statementLine)
     .where(eq(statementLine.source, "manual"));
 
+  // The subjects (#37), and those of the entries the scope reads, for "by subject".
+  const subjects = await subjectNodesIn(transaction);
+
+  const entrySubjects = await transaction
+    .select({ entryId: entrySubject.entryId, subjectId: entrySubject.subjectId })
+    .from(entrySubject)
+    .innerJoin(entry, eq(entry.id, entrySubject.entryId))
+    .where(and(gte(entry.happenedOn, scope.entries.from), lte(entry.happenedOn, scope.entries.to)));
+
   const importedOf = new Map(imported.map((row) => [row.accountId, row.to]));
   const statementOf = new Map(statements.map((row) => [row.accountId, row.to]));
   const byHand = new Set(manual.map((row) => row.accountId));
@@ -161,6 +172,8 @@ export async function monthRowsIn(
     firstDay: first?.day ?? null,
     benefitLines,
     reach,
+    subjects,
+    entrySubjects,
     charges: scope.charges === null ? [] : await chargesIn(transaction, scope.charges),
   };
 }

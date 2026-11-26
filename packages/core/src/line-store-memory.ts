@@ -5,6 +5,8 @@ import type { LineCategory } from "./category-store";
 import type { ImportFormat } from "./imports/summary";
 import { LineStore } from "./line-store";
 import type { FoundLine, FoundLineDetail, LineQuery } from "./line-store";
+import { subtreeOf } from "./subjects/counting";
+import type { SubjectName, SubjectNode } from "./subjects/counting";
 import { candidateFinder } from "./transfers/pairing";
 
 // An in-memory `LineStore`, for tests: the same reads as the database's, on the rows an in-memory
@@ -25,6 +27,8 @@ export type MemoryLineDetail = MemoryLine & {
   readonly classifiedBy?: "default" | "rule" | "user";
   /** Its part in its entry: `refund` when linked to an expense, whose entry it then follows. */
   readonly role?: "payment" | "refund";
+  /** Its entries' subjects (#37). */
+  readonly subjects?: ReadonlyArray<SubjectName>;
 };
 
 /** An import of the memory store, as a line's detail names it. */
@@ -41,6 +45,8 @@ export type MemoryLineImport = MemoryImport & {
 export type MemoryLineRows = Omit<MemoryRows, "lines" | "imports"> & {
   readonly lines?: ReadonlyArray<MemoryLineDetail>;
   readonly imports?: ReadonlyArray<MemoryLineImport>;
+  /** The user's subjects, whose tree a search by subject reads (#37). */
+  readonly subjects?: ReadonlyArray<SubjectNode>;
 };
 
 /** The text a search reads, as the database's (`label || ' ' || coalesce(memo, '') || …`). */
@@ -51,7 +57,12 @@ const searchedOf = (line: MemoryLineDetail) =>
 const newestFirst = (a: MemoryLineDetail, b: MemoryLineDetail) =>
   b.bookedOn.localeCompare(a.bookedOn) || b.id.localeCompare(a.id);
 
-function matches(line: MemoryLineDetail, currency: string, query: LineQuery): boolean {
+function matches(
+  line: MemoryLineDetail,
+  currency: string,
+  query: LineQuery,
+  subtree: ReadonlySet<string> | null,
+): boolean {
   const { after } = query;
   const absolute = Math.abs(line.amountMinor);
   const bounds = query.amount === null ? undefined : query.amount(currency);
@@ -68,6 +79,7 @@ function matches(line: MemoryLineDetail, currency: string, query: LineQuery): bo
     (query.onlyLineIds === undefined || query.onlyLineIds.includes(line.id)) &&
     (query.from === null || line.bookedOn >= query.from) &&
     (query.accountId === null || line.accountId === query.accountId) &&
+    (subtree === null || (line.subjects ?? []).some((each) => subtree.has(each.id))) &&
     (query.text === null || searchedOf(line).includes(query.text.toLowerCase())) &&
     (bounds === undefined ||
       (bounds !== null &&
@@ -105,6 +117,7 @@ function withAccount(own: MemoryLineRows, line: MemoryLineDetail): FoundLine | u
     },
     category: line.category ?? null,
     fromBalance: sourceOf(line) === "balance",
+    subjects: line.subjects ?? [],
   };
 }
 
@@ -146,19 +159,22 @@ export function memoryLineStore(rows: ReadonlyMap<string, MemoryLineRows> = new 
       Effect.sync(() => {
         const own = of(owner);
 
+        const subtree =
+          query.subjectId === null ? null : subtreeOf(own.subjects ?? [], query.subjectId);
+
         const everyMatch = (own.lines ?? [])
           .flatMap((line) => {
             const shown = withAccount(own, line);
 
             return shown !== undefined &&
-              matches(line, shown.account.currency, { ...query, after: null })
+              matches(line, shown.account.currency, { ...query, after: null }, subtree)
               ? [{ line, shown }]
               : [];
           })
           .sort((a, b) => newestFirst(a.line, b.line));
 
         const page = everyMatch
-          .filter(({ line, shown }) => matches(line, shown.account.currency, query))
+          .filter(({ line, shown }) => matches(line, shown.account.currency, query, subtree))
           .slice(0, query.limit)
           .map(({ shown }) => shown);
 
