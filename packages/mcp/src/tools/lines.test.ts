@@ -1105,6 +1105,7 @@ describe("the lines tool", () => {
       "categories",
       "rules",
       "review",
+      "subjects",
     ]);
     expect(tool?.title).toBe("Lines");
 

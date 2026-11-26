@@ -125,7 +125,7 @@ describe("the rules tool", () => {
     const { tools } = await client.listTools();
     const tool = tools.find((each) => each.name === "rules");
 
-    expect(tools.map((each) => each.name).slice(-2)).toEqual(["rules", "review"]);
+    expect(tools.map((each) => each.name).slice(-3, -1)).toEqual(["rules", "review"]);
     expect(tool?.title).toBe("Rules");
     expect(tool?.annotations).toEqual({
       readOnlyHint: false,

@@ -201,6 +201,7 @@ test("both protocol revisions list the same tools in the same order", async ({
     "categories",
     "rules",
     "review",
+    "subjects",
     "e2e_probe",
   ]);
   expect(modernTools).toEqual(legacyTools);
