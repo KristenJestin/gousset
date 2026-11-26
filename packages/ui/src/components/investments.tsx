@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 
 import { useUiMessages } from "../hooks/use-ui-messages";
 import { usePageLanguage } from "../hooks/use-page-language";
@@ -554,6 +554,76 @@ const isTrade = (kind: InvestmentKind) => kind === "purchase" || kind === "sale"
 const namesSecurity = (kind: InvestmentKind) => isTrade(kind) || kind === "dividend";
 
 /**
+ * What the amount's field says under it: what the amount of its kind holds, then, for a trade whose
+ * amount differs from what its quantity, price and fees give, what they give.
+ */
+function useAmountHelp(
+  values: OperationFormValues,
+  currency: string,
+  tradeAmount: OperationFormProps["tradeAmount"],
+): string | undefined {
+  const messages = useUiMessages().investments;
+  const locale = usePageLanguage();
+  const { kind, amountMinor } = values;
+  const computed = isTrade(kind) ? (tradeAmount?.(values) ?? null) : null;
+  const help = amountHelpOf(kind, messages);
+
+  if (computed === null || amountMinor === null || amountMinor === computed || help === undefined) {
+    return help;
+  }
+
+  const said = kind === "sale" ? messages.computedSale : messages.computedPurchase;
+
+  return `${help} ${said(formatMoney({ minor: computed, currency }, { locale }))}`;
+}
+
+type TradeFieldsProps = {
+  values: OperationFormValues;
+  errors: OperationFormErrors;
+  onChange: (next: Partial<OperationFormValues>) => void;
+};
+
+/** A purchase's or a sale's own fields: the security's name, the quantity and the unit price. */
+function TradeFields({ values, errors, onChange }: TradeFieldsProps) {
+  const messages = useUiMessages().investments;
+
+  return (
+    <>
+      <TextField
+        label={messages.fields.securityName}
+        description={messages.fields.securityNameHelp}
+        value={values.securityName}
+        onChange={(event) => onChange({ securityName: event.target.value })}
+        autoComplete="off"
+        maxLength={200}
+      />
+      <div className="grid gap-4 sm:grid-cols-2">
+        <TextField
+          label={messages.fields.quantity}
+          description={messages.fields.decimalHelp}
+          value={values.quantity}
+          onChange={(event) => onChange({ quantity: event.target.value })}
+          error={errors.quantity}
+          inputMode="decimal"
+          autoComplete="off"
+          required
+        />
+        <TextField
+          label={messages.fields.unitPrice}
+          description={messages.fields.decimalHelp}
+          value={values.unitPrice}
+          onChange={(event) => onChange({ unitPrice: event.target.value })}
+          error={errors.unitPrice}
+          inputMode="decimal"
+          autoComplete="off"
+          required
+        />
+      </div>
+    </>
+  );
+}
+
+/**
  * An operation entered or corrected by hand, in a dialog (docs/design.md, "Actions and forms"):
  * its kind first, and the fields that kind takes. A deposit and a withdrawal take a day and an
  * amount; a purchase and a sale the security's ISIN and name, the quantity, the unit price, the
@@ -586,17 +656,19 @@ export function OperationForm({
   tradeAmount,
 }: OperationFormProps) {
   const messages = useUiMessages().investments;
-  const locale = usePageLanguage();
   const [values, setValues] = useState(initial);
   // An amount given (typed, or the operation's own when corrected) is kept; none follows the trade.
-  const [amountTyped, setAmountTyped] = useState(initial.amountMinor !== null);
+  // Read only when a field changes, never drawn: a ref, not a state.
+  const amountTyped = useRef(initial.amountMinor !== null);
   // Each prefill writes the amount field anew: its text is its own once mounted (`MoneyField`).
   const [prefills, setPrefills] = useState(0);
   const { kind } = values;
 
   const change = (next: Partial<OperationFormValues>) => {
     const merged = { ...values, ...next };
-    const prefill = amountTyped || !isTrade(merged.kind) ? undefined : tradeAmount?.(merged);
+
+    const prefill =
+      amountTyped.current || !isTrade(merged.kind) ? undefined : tradeAmount?.(merged);
 
     if (prefill === undefined || prefill === merged.amountMinor) {
       setValues(merged);
@@ -609,24 +681,12 @@ export function OperationForm({
   };
 
   const typeAmount = (minor: number | null) => {
-    setAmountTyped(minor !== null);
+    amountTyped.current = minor !== null;
     setValues((current) => ({ ...current, amountMinor: minor }));
     onInput?.();
   };
 
-  const computed = isTrade(kind) ? (tradeAmount?.(values) ?? null) : null;
-
-  const difference =
-    computed === null || values.amountMinor === null || values.amountMinor === computed
-      ? undefined
-      : (kind === "sale" ? messages.computedSale : messages.computedPurchase)(
-          formatMoney({ minor: computed, currency }, { locale }),
-        );
-
-  const help = amountHelpOf(kind, messages);
-
-  const amountHelp =
-    difference === undefined || help === undefined ? help : `${help} ${difference}`;
+  const amountHelp = useAmountHelp(values, currency, tradeAmount);
 
   return (
     <Dialog
@@ -679,40 +739,7 @@ export function OperationForm({
           maxLength={20}
         />
       )}
-      {isTrade(kind) ? (
-        <>
-          <TextField
-            label={messages.fields.securityName}
-            description={messages.fields.securityNameHelp}
-            value={values.securityName}
-            onChange={(event) => change({ securityName: event.target.value })}
-            autoComplete="off"
-            maxLength={200}
-          />
-          <div className="grid gap-4 sm:grid-cols-2">
-            <TextField
-              label={messages.fields.quantity}
-              description={messages.fields.decimalHelp}
-              value={values.quantity}
-              onChange={(event) => change({ quantity: event.target.value })}
-              error={errors.quantity}
-              inputMode="decimal"
-              autoComplete="off"
-              required
-            />
-            <TextField
-              label={messages.fields.unitPrice}
-              description={messages.fields.decimalHelp}
-              value={values.unitPrice}
-              onChange={(event) => change({ unitPrice: event.target.value })}
-              error={errors.unitPrice}
-              inputMode="decimal"
-              autoComplete="off"
-              required
-            />
-          </div>
-        </>
-      ) : null}
+      {isTrade(kind) ? <TradeFields values={values} errors={errors} onChange={change} /> : null}
       <MoneyField
         key={prefills}
         label={messages.fields.amount}
