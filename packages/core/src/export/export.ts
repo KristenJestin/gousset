@@ -39,12 +39,31 @@ const decodeCount = Schema.decodeUnknownSync(
 );
 
 /**
+ * What a table's rows are read from: the table itself, every column, a later one included; or, for
+ * a table with exact decimals (v0.6), its columns as the export describes them, those decimals as
+ * their text, which JSON would otherwise give as numbers a reader may round.
+ */
+function sourceOf(table: ExportTable) {
+  if (!table.columns.some((column) => column.exact === true)) {
+    return sql`${sql.identifier(table.table)}`;
+  }
+
+  const columns = table.columns.map((column) =>
+    column.exact === true
+      ? sql`${sql.identifier(column.name)}::text as ${sql.identifier(column.name)}`
+      : sql.identifier(column.name),
+  );
+
+  return sql`(select ${sql.join(columns, sql`, `)} from ${sql.identifier(table.table)})`;
+}
+
+/**
  * Every row of the table the transaction sees, in the order rows were made, as Postgres writes
- * them in JSON: every column, a later one included, by its name.
+ * them in JSON, by its columns' names.
  */
 async function rowsOf(transaction: UserTransaction, table: ExportTable): Promise<ExportedTable> {
   const result = await transaction.execute(
-    sql`select coalesce(json_agg(t order by t.id), '[]'::json) as rows from ${sql.identifier(table.table)} t`,
+    sql`select coalesce(json_agg(t order by t.id), '[]'::json) as rows from ${sourceOf(table)} t`,
   );
 
   return { table, rows: decodeRows(result).rows[0]?.rows ?? [] };

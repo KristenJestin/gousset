@@ -1,4 +1,5 @@
-import { madeUpAccounts, madeUpMonth } from "@gousset/fixture";
+import { madeUpAccounts, madeUpMonth, madeUpSecurities } from "@gousset/fixture";
+import type { Line } from "@gousset/fixture";
 import { Schema } from "effect";
 import fc from "fast-check";
 import { strFromU8, strToU8, unzipSync } from "fflate";
@@ -23,9 +24,11 @@ import {
   EXPORT_TABLES,
   IMPORTS,
   IMPORT_PROFILES,
+  INVESTMENT_OPERATIONS,
   MERCHANTS,
   MERCHANT_ALIASES,
   RULES,
+  SECURITIES,
   STATEMENT_LINES,
   TRANSFERS,
 } from "./tables";
@@ -50,6 +53,12 @@ function row(table: ExportTable, values: ExportRow): ExportRow {
     table.columns.map((column) => [column.name, values[column.name] ?? null]),
   );
 }
+
+/** A purchase's, a sale's, a dividend's or a fee's cash: money moving inside its account (v0.6). */
+const movesInside = (line: Line) =>
+  line.operation !== null &&
+  line.operation.kind !== "deposit" &&
+  line.operation.kind !== "withdrawal";
 
 /** The shared made-up data of two months, as rows of a user's tables, as the seed writes it. */
 function madeUpExport(): ExportData {
@@ -139,8 +148,8 @@ function madeUpExport(): ExportData {
 
         lineIds.set(line.id, lineId);
 
-        // A side of a transfer has no entry: it is the transfer.
-        if (line.counterpartLineId === null) {
+        // A side of a transfer has no entry: it is the transfer; nor has an operation's cash.
+        if (line.counterpartLineId === null && !movesInside(line)) {
           const entryId = nextId();
 
           entries.push(
@@ -217,6 +226,46 @@ function madeUpExport(): ExportData {
     }
   }
 
+  // The securities the PEA's operations name, and an operation beside each of its lines.
+  const securityIds = new Map(madeUpSecurities.map((each) => [each.isin, nextId()]));
+
+  const securities = madeUpSecurities.map((each) =>
+    row(SECURITIES, {
+      id: securityIds.get(each.isin) ?? null,
+      user_id: OWNER,
+      isin: each.isin,
+      name: each.name,
+      currency: each.currency,
+      created_at: "2026-09-28T10:00:00+00:00",
+      updated_at: "2026-09-28T10:00:00+00:00",
+    }),
+  );
+
+  const operations = MONTHS.flatMap((month) =>
+    madeUpMonth(month).lines.flatMap((line) =>
+      line.operation === null
+        ? []
+        : [
+            row(INVESTMENT_OPERATIONS, {
+              id: nextId(),
+              user_id: OWNER,
+              line_id: lineIds.get(line.id) ?? null,
+              kind: line.operation.kind,
+              security_id:
+                line.operation.isin === null
+                  ? null
+                  : (securityIds.get(line.operation.isin) ?? null),
+              // Exact decimals, as the export writes them: their text.
+              quantity: line.operation.quantity,
+              unit_price: line.operation.unitPrice,
+              fees_minor: line.operation.feesMinor,
+              created_at: `${month}-28T10:00:00+00:00`,
+              updated_at: `${month}-28T10:00:00+00:00`,
+            }),
+          ],
+    ),
+  );
+
   const profiles = [
     row(IMPORT_PROFILES, {
       id: nextId(),
@@ -284,6 +333,8 @@ function madeUpExport(): ExportData {
     [MERCHANTS, merchants],
     [MERCHANT_ALIASES, aliases],
     [RULES, rules],
+    [SECURITIES, securities],
+    [INVESTMENT_OPERATIONS, operations],
   ]);
 
   return {

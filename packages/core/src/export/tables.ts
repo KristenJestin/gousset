@@ -3,8 +3,16 @@
 // added later (docs/data-model.md, "What later milestones add") is one more entry here; the
 // end-to-end test of the export checks that every column of every user table is described.
 
-/** A column of an exported table: its name in the files, and what it holds. */
-export type ExportColumn = { readonly name: string; readonly holds: string };
+/**
+ * A column of an exported table: its name in the files, and what it holds. `exact`: a `numeric`
+ * (v0.6, a quantity or a unit price), written as its text, so that no reader of the JSON rounds it
+ * to a floating point number.
+ */
+export type ExportColumn = {
+  readonly name: string;
+  readonly holds: string;
+  readonly exact?: boolean;
+};
 
 /** A table of a user's data as an export writes it: `<file>.json` and `<file>.csv`. */
 export type ExportTable = {
@@ -364,6 +372,58 @@ export const RULES: ExportTable = {
   ],
 };
 
+export const SECURITIES: ExportTable = {
+  table: "security",
+  file: "securities",
+  holds: "the securities you hold or held, one per ISIN, whichever account holds them",
+  columns: [
+    ID,
+    OWNER,
+    { name: "isin", holds: "its ISIN; empty for a holding without one" },
+    { name: "name", holds: "its name, as the broker or you gave it" },
+    { name: "currency", holds: "the ISO 4217 code it is quoted in" },
+    CREATED_AT,
+    UPDATED_AT,
+  ],
+};
+
+export const INVESTMENT_OPERATIONS: ExportTable = {
+  table: "investment_operation",
+  file: "investment-operations",
+  holds:
+    "what each line of an investment account was: a deposit, a withdrawal, a purchase, a sale, a dividend or a fee",
+  columns: [
+    ID,
+    OWNER,
+    {
+      name: "line_id",
+      holds: "its line (statement-lines.id), whose day and amount are the operation's",
+    },
+    { name: "kind", holds: "deposit, withdrawal, purchase, sale, dividend or fee" },
+    {
+      name: "security_id",
+      holds: "its security (securities.id); empty for a deposit, a withdrawal or a custody fee",
+    },
+    {
+      name: "quantity",
+      holds: "a purchase's or a sale's number of units, an exact decimal written as text",
+      exact: true,
+    },
+    {
+      name: "unit_price",
+      holds:
+        "a purchase's or a sale's price of one unit in the account's currency, as the broker wrote it, an exact decimal written as text",
+      exact: true,
+    },
+    {
+      name: "fees_minor",
+      holds: "its fees, or a dividend's withholding tax, in minor units of the account's currency",
+    },
+    CREATED_AT,
+    UPDATED_AT,
+  ],
+};
+
 /** Every table an export writes, in the manifest's order. */
 export const EXPORT_TABLES: ReadonlyArray<ExportTable> = [
   ACCOUNTS,
@@ -378,6 +438,8 @@ export const EXPORT_TABLES: ReadonlyArray<ExportTable> = [
   MERCHANTS,
   MERCHANT_ALIASES,
   RULES,
+  SECURITIES,
+  INVESTMENT_OPERATIONS,
 ];
 
 /** Where the files imported go: one folder per import, named by its id. */
