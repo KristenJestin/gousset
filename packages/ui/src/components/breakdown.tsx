@@ -29,7 +29,12 @@ export type BreakdownRow = {
   benchmark?: Money;
   /** The benchmark is an amount the user set, not the average: it is read so. */
   benchmarkSet?: boolean;
+  /** Its place in a tree (a subject's, #37): 0 at the top; a child's name is indented. */
+  depth?: number;
 };
+
+/** How far a row's name is indented, by its depth; deeper ones stay at the last step. */
+const INDENT = ["", "ps-3", "ps-6", "ps-9"] as const;
 
 export type BreakdownProps = {
   rows: ReadonlyArray<BreakdownRow>;
@@ -111,7 +116,12 @@ function RowContent({
       <span className="flex size-4 shrink-0 text-muted-foreground">
         {row.icon === undefined ? null : <Icon name={row.icon} />}
       </span>
-      <span className="flex w-28 shrink-0 items-center gap-1 text-sm">
+      <span
+        className={cn(
+          "flex w-28 shrink-0 items-center gap-1 text-sm",
+          INDENT[Math.min(row.depth ?? 0, INDENT.length - 1)],
+        )}
+      >
         <span className="truncate">{row.name}</span>
         {bar.over ? (
           <span className="flex shrink-0 text-destructive" data-slot="breakdown-over">
@@ -228,7 +238,8 @@ function More({ count, onMore }: { count: number; onMore: (() => void) | undefin
 
 /**
  * Where the money goes (docs/wireframes, screen 1, block 2): one row per category, merchant or
- * subject, each with its icon, its name, a bar on a scale shared by every row, and its amount.
+ * subject, each with its icon, its name, a bar on a scale shared by every row, and its amount; a
+ * row of a tree (`depth`, the subjects') has its name indented under its parent's.
  * A dark mark on the bar is its benchmark (the 6-month average, or an amount the user set, read as
  * such); ⚠ once it is passed by any amount; no mark without one. Cut after
  * `limit` rows with "+ N more"; a sentence when there is nothing.
@@ -301,7 +312,7 @@ export function Breakdown({
         const bar = bars[index] ?? { width: 0, mark: null, over: false };
 
         return (
-          <li key={row.id} className="h-10">
+          <li key={row.id} data-slot="breakdown-row" data-depth={row.depth ?? 0} className="h-10">
             {onSelect === undefined ? (
               <div className={ROW_CLASSES}>
                 <RowContent row={row} bar={bar} locale={writtenIn} />

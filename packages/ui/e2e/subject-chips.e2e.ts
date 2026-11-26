@@ -277,3 +277,26 @@ test.describe("A split's subjects", () => {
     ]);
   });
 });
+
+test.describe("Where the money goes, by subject", () => {
+  test("a child is indented under its parent, and the note says the totals do not add up", async ({
+    page,
+  }) => {
+    await page.goto(story("money-breakdown--subjects"));
+
+    const row = (name: string) =>
+      page.locator('[data-slot="breakdown-row"]').filter({ hasText: name });
+
+    await expect(row("Garden shed")).toHaveAttribute("data-depth", "1");
+    await expect(row("House")).toHaveAttribute("data-depth", "0");
+
+    const indent = async (name: string) =>
+      row(name)
+        .locator("span.truncate")
+        .evaluate((node) => node.getBoundingClientRect().left);
+
+    expect(await indent("Garden shed")).toBeGreaterThan(await indent("House"));
+    await expect(page.locator('[data-slot="breakdown-benchmark"]')).toHaveCount(0);
+    await expect(page.getByText("these totals don't add up")).toBeVisible();
+  });
+});

@@ -1,4 +1,4 @@
-import type { SpendingBy } from "@gousset/core";
+import type { DaysBy } from "@gousset/core";
 
 /**
  * The month domain's query keys, from one factory (docs/architecture.md, "Data loading and
@@ -12,7 +12,7 @@ export const monthKeys = {
   of: (month: string) => [...monthKeys.all, month] as const,
   /** Every block of the month's review, and its recurring payments' calendar. */
   review: (month: string) => [...monthKeys.of(month), "review"] as const,
-  /** A row's spending day by day; `id` null for the merchants' row of none. */
-  spendingDays: (month: string, by: SpendingBy, id: string | null) =>
+  /** A row's spending day by day; `id` null for the merchants' row of none. A subject's too. */
+  spendingDays: (month: string, by: DaysBy, id: string | null) =>
     [...monthKeys.of(month), "spending-days", by, id] as const,
 };

@@ -4,12 +4,12 @@ import type { SubjectInput } from "@gousset/core";
 import { entryPart, entrySubject, statementLine } from "@gousset/db/schema/ledger";
 import { exampleStatement } from "@gousset/fixture";
 import { asc, eq } from "drizzle-orm";
-import { Effect } from "effect";
+import { Effect, Schema } from "effect";
 
 import type { TestUser } from "../src/auth";
 import { detailAtRest, lineDetail, onPhone } from "../src/frame";
 import { importsOn, statementFile } from "../src/imports";
-import { block } from "../src/review";
+import { block, monthSwitcher } from "../src/review";
 import {
   addUser,
   animationsDone,
@@ -23,7 +23,8 @@ import {
 import { openUserData } from "../src/user-data";
 
 // Issue #37 where the subjects meet the money: the operations' filter and column, a line's detail
-// and its split, and an account's lines. One test per scenario. Each test has a user of its own: `fullyParallel` runs them in any
+// and its split, an account's lines, and the review's "by subject". One test per scenario, plus
+// the phone and the motion. Each test has a user of its own: `fullyParallel` runs them in any
 // order. Every name, label and amount here is invented.
 
 const TODAY = "2026-11-15";
@@ -531,3 +532,259 @@ test("a split that leaves the subjects out keeps the line's", async ({ page, app
     await expect(rowChips(page, "CB FUELSTOP 1410")).toHaveText(["Van"]);
   }
 });
+
+/** October's and September's expenses for the house: one on House and Garden shed both. */
+async function houseMonths(owner: string) {
+  const lines = await imported(owner, [
+    { day: "2026-09-20", minor: -10_000, label: "CB PAINTSHOP 2009" },
+    { day: "2026-10-08", minor: -21_500, label: "CB TIMBERYARD 0810" },
+    { day: "2026-10-12", minor: -10_000, label: "CB PAINTSHOP 1210" },
+  ]);
+
+  const house = await subject(owner, { name: "House" });
+  const shed = await subject(owner, { name: "Garden shed", parentId: house });
+  const planks = lines.of("CB TIMBERYARD 0810").entryId;
+
+  // On the shed and on the house: counted once in the house.
+  await attach(owner, shed, [planks, lines.of("CB PAINTSHOP 2009").entryId]);
+  await attach(owner, house, [planks, lines.of("CB PAINTSHOP 1210").entryId]);
+
+  return { house, shed };
+}
+
+const spending = (page: Page) => block(page, "Where the money goes");
+
+test("the review's Subjects tab counts an expense on House and Garden shed once in House, compares with the previous month, and links to the filtered operations", async ({
+  page,
+  app,
+  user,
+}) => {
+  const { person, owner } = await personFor(app, user, "subject-ops-review");
+  const { house } = await houseMonths(owner);
+
+  await as(page, person, "/?month=2026-10");
+  await spending(page).getByRole("tab", { name: "Subjects" }).click();
+
+  const panel = spending(page).getByRole("tabpanel");
+  const subjectRows = panel.getByRole("button");
+
+  // In tree order, the shed under the house; the planks once in House: €215 + €100.
+  await expect(subjectRows).toHaveCount(2);
+  await expect(subjectRows.nth(0)).toContainText("House");
+  await expect(subjectRows.nth(0)).toContainText("€315");
+  await expect(subjectRows.nth(1)).toContainText("Garden shed");
+  await expect(subjectRows.nth(1)).toContainText("€215");
+  await expect(panel.locator('[data-slot="breakdown-row"][data-depth="1"]')).toContainText(
+    "Garden shed",
+  );
+  // No benchmark, and a word on why they do not add up.
+  await expect(panel.locator('[data-slot="breakdown-benchmark"]')).toHaveCount(0);
+  await expect(panel).toContainText("An expense can count in several subjects");
+
+  // Its detail: against September (the shed's €100 counts in House), and its operations.
+  await subjectRows.nth(0).click();
+
+  const detail = spending(page).getByRole("group", { name: "House" });
+  const figures = detail.getByRole("list", { name: "House against" }).getByRole("listitem");
+
+  await expect(figures.filter({ hasText: "September" })).toContainText("€100");
+  await expect(
+    detail.getByRole("figure", { name: "House: spending in October, against September" }),
+  ).toBeVisible();
+
+  const link = detail.getByRole("link", { name: "See the month's expenses in Operations" });
+
+  await expect(link).toHaveAttribute("href", new RegExp(`subject=${house}`));
+  await link.click();
+  await expect(page).toHaveURL(/month=2026-10/);
+  await hydrated(page);
+  await expect(count(page)).toHaveText("2 lines");
+  await expect(row(page, "CB PAINTSHOP 2009")).toHaveCount(0);
+});
+
+test("the review's Subjects tab with no subject leads to Subjects", async ({ page, app, user }) => {
+  const { person, owner } = await personFor(app, user, "subject-ops-review-none");
+
+  await imported(owner, [{ day: "2026-10-12", minor: -900, label: "CB BAKEHOUSE 1210" }]);
+  await as(page, person, "/?month=2026-10");
+  await spending(page).getByRole("tab", { name: "Subjects" }).click();
+
+  const panel = spending(page).getByRole("tabpanel");
+
+  await expect(panel).toContainText("No subject yet");
+  await panel.getByRole("link", { name: "Subjects" }).click();
+  await expect(page).toHaveURL(/\/subjects/);
+});
+
+test("the phone layout", async ({ page, app, user }) => {
+  test.skip(!onPhone(page), "A phone's width only");
+
+  const { person, owner } = await personFor(app, user, "subject-ops-phone");
+
+  await houseAndVan(owner);
+  await as(page, person, "/operations");
+  await hydrated(page);
+
+  // As the category, the subjects leave the narrow list; the filter folds with the others.
+  await expect(rowChips(page, "CB TIMBERYARD 0810")).toBeHidden();
+  await inFilters(page, (fields) => choose(page, fields, "Subject", "Van"));
+  await expect(count(page)).toHaveText("1 line");
+
+  // The detail, from the bottom, has them with "+ Add".
+  const detail = await openLine(page, "CB FUELSTOP 1410");
+  const subjects = detail.getByRole("region", { name: "Subjects" });
+
+  await expect(subjects.locator('[data-slot="subject-chip"]')).toHaveText(["Van"]);
+  await expect(subjects.getByRole("button", { name: "Add a subject" })).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(detail).toHaveCount(0);
+
+  // The review's tab, nothing wider than the screen.
+  await visit(page, "/?month=2026-10");
+  await spending(page).getByRole("tab", { name: "Subjects" }).click();
+  await expect(spending(page).getByRole("tabpanel").getByRole("button")).toHaveCount(3);
+
+  const overflow = await page.evaluate(
+    () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+  );
+
+  expect(overflow).toBeLessThanOrEqual(0);
+  await animationsDone(page);
+});
+
+/**
+ * Samples, each animation frame until stopped, what `reader` (a page script's function, returning
+ * a text) reads. Install before the action that moves what it reads.
+ */
+async function sample(page: Page, reader: string) {
+  await page.evaluate(`(() => {
+    window.__e2eFrames = [];
+    window.__e2eStop = false;
+    const read = ${reader};
+    const tick = () => {
+      window.__e2eFrames.push(read());
+
+      if (!window.__e2eStop) {
+        requestAnimationFrame(tick);
+      }
+    };
+
+    requestAnimationFrame(tick);
+  })()`);
+
+  return {
+    stop: async () => {
+      await page.evaluate("window.__e2eStop = true");
+
+      return Schema.decodeUnknownSync(Schema.Array(Schema.String))(
+        await page.evaluate("window.__e2eFrames"),
+      );
+    },
+  };
+}
+
+/** The opacity of the detail's chip named `name`, or "gone". */
+const chipOpacity = (name: string) => `() => {
+  const chip = [...document.querySelectorAll('[role="dialog"] [data-slot="subject-chip"]')].find(
+    (each) => (each.textContent ?? "").includes(${JSON.stringify(name)}),
+  );
+
+  return chip === undefined ? "gone" : getComputedStyle(chip).opacity;
+}`;
+
+/** The width of the second bar of the open tab's rows (the shed's), as drawn. */
+const SHED_BAR = `() => {
+  const fills = document.querySelectorAll('[role="tabpanel"] [data-slot="breakdown-fill"]');
+  const fill = fills[1];
+
+  return fill === undefined ? "none" : fill.getAttribute("width") ?? "none";
+}`;
+
+for (const reduced of [false, true]) {
+  const how = reduced ? "cut under reduced motion" : "in full";
+
+  test(`motion: a subject's chip fades in and out, the tab's bars move with the month; ${how}`, async ({
+    page,
+    app,
+    user,
+  }) => {
+    test.setTimeout(60_000);
+
+    if (reduced) {
+      await page.emulateMedia({ reducedMotion: "reduce" });
+    }
+
+    const { person, owner } = await personFor(app, user, `subject-ops-motion-${String(reduced)}`);
+
+    await houseMonths(owner);
+    await subject(owner, { name: "Van" });
+
+    // A line opened: a chip added fades in, removed fades out.
+    await as(page, person, "/operations?q=paintshop%201210");
+    await hydrated(page);
+    await expect(page.locator("html")).toHaveAttribute("data-motion", reduced ? "reduced" : "full");
+
+    const detail = await openLine(page, "CB PAINTSHOP 1210");
+    const subjects = detail.getByRole("region", { name: "Subjects" });
+    const coming = await sample(page, chipOpacity("Van"));
+
+    await addSubject(page, subjects, "Add a subject", "Subject to add", "Van");
+    await expect(
+      subjects.locator('[data-slot="subject-chip"]').filter({ hasText: "Van" }),
+    ).toBeVisible();
+    await animationsDone(page);
+
+    const fadingIn = (await coming.stop()).filter(
+      (opacity) => opacity !== "gone" && Number(opacity) > 0 && Number(opacity) < 1,
+    );
+
+    const leaving = await sample(page, chipOpacity("Van"));
+
+    await subjects.getByRole("button", { name: "Remove Van" }).click();
+    await expect(
+      subjects.locator('[data-slot="subject-chip"]').filter({ hasText: "Van" }),
+    ).toHaveCount(0);
+    await animationsDone(page);
+
+    const fadingOut = (await leaving.stop()).filter(
+      (opacity) => opacity !== "gone" && Number(opacity) > 0 && Number(opacity) < 1,
+    );
+
+    if (reduced) {
+      expect(fadingIn).toEqual([]);
+      expect(fadingOut).toEqual([]);
+    } else {
+      expect(fadingIn.length).toBeGreaterThan(1);
+      expect(fadingOut.length).toBeGreaterThan(1);
+    }
+
+    // The review's Subjects tab: its selection slides as the other tabs'; changing month, the
+    // shed's bar grows from October's share of the house's to September's whole.
+    await visit(page, "/?month=2026-10");
+    await spending(page).getByRole("tab", { name: "Subjects" }).click();
+    await expect(spending(page).getByRole("tabpanel").getByRole("button")).toHaveCount(2);
+    await animationsDone(page);
+
+    const bars = await sample(page, SHED_BAR);
+
+    await monthSwitcher(page).getByRole("button", { name: "Previous month" }).click();
+    await expect(monthSwitcher(page)).toContainText("September 2026");
+    await expect(spending(page).getByRole("tab", { name: "Subjects" })).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    await animationsDone(page);
+
+    // October's width, then September's: and in full, the widths on the way between them.
+    const widths = [...new Set((await bars.stop()).filter((width) => width !== "none"))];
+    const between = widths.slice(1, -1);
+
+    expect(widths.at(-1)).not.toBe(widths.at(0));
+
+    if (reduced) {
+      expect(between).toEqual([]);
+    } else {
+      expect(between.length).toBeGreaterThan(1);
+    }
+  });
+}

@@ -45,7 +45,7 @@ export const getMonthReview = createServerFn({ method: "GET" })
 
 /**
  * A row of "where the money goes", day by day against the month before, for its detail: a
- * category's id, a merchant's, or null for the merchants' row of none.
+ * category's id, a merchant's, or null for the merchants' row of none, or a subject's (#37).
  */
 export const getSpendingDays = createServerFn({ method: "GET" })
   .middleware([signedIn, slowedInDevelopment])
@@ -53,7 +53,7 @@ export const getSpendingDays = createServerFn({ method: "GET" })
     Schema.toStandardSchemaV1(
       Schema.Struct({
         month: Month,
-        by: Schema.Literals(["category", "merchant"]),
+        by: Schema.Literals(["category", "merchant", "subject"]),
         id: Schema.NullOr(Schema.String),
       }),
     ),

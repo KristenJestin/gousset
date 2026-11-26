@@ -182,7 +182,7 @@ const SHOTS: ReadonlyArray<Shot> = [
   { id: "subjects-subjecteditor--default" },
   { id: "subjects-subjecteditor--phone", width: 390 },
   // Where the subjects meet the money (#37): a line's chips and "+ Add", the operations' column and
-  // filter, an account's lines, a split by subject.
+  // filter, an account's lines, a split by subject and the review's "by subject".
   { id: "subjects-subjectchips--in-detail" },
   { id: "operations-linedetail--with-subjects" },
   { id: "operations-operationslist--with-subjects" },
@@ -201,6 +201,7 @@ const SHOTS: ReadonlyArray<Shot> = [
     open: "click",
     trigger: "Split",
   },
+  { id: "money-breakdown--subjects" },
   { id: "rules-ruleslist--default" },
   { id: "rules-ruleeditor--default" },
   { id: "rules-ruleproposal--default" },
