@@ -81,7 +81,12 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
         `app-${workerInfo.project.name}-worker-${slot}.log`,
       );
 
-      const app = await startWorkerEnvironment(slot, logFile, appEnvironment);
+      // Every MCP client of the worker authorizes from one address, more than the 30 a minute a
+      // person's address is allowed; the limit itself is tested on an installation of its own.
+      const app = await startWorkerEnvironment(slot, logFile, {
+        MCP_AUTHORIZE_PER_MINUTE: "1000",
+        ...appEnvironment,
+      });
 
       try {
         await provide(app);
@@ -184,7 +189,7 @@ export {
 
 export { fixDay } from "./clock";
 
-export { slowServerFunctions } from "./latency";
+export { slowServerFunctions, slowServerWrites } from "./latency";
 
 export { SKELETON, animationsDone, watchLoading } from "./loading";
 

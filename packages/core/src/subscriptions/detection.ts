@@ -95,6 +95,17 @@ export type CalendarItem = {
   readonly priceRise: { readonly beforeMinor: number } | null;
 };
 
+/**
+ * A subscription's id: its merchant, currency, cadence and first charge. Unique among a user's
+ * subscriptions (a charge belongs to one series), and the same from one read of the same charges to
+ * the next.
+ */
+export function subscriptionId(subscription: Subscription): string {
+  const { merchantId, currency, cadence, charges } = subscription;
+
+  return `${merchantId}:${currency}:${cadence}:${charges[0]?.id ?? ""}`;
+}
+
 /** How many days, at least and at most, one step of each cadence spans before its tolerance. */
 const STEP_DAYS = {
   weekly: [7, 7],
@@ -664,7 +675,7 @@ export function calendarDays(
   for (const subscription of subscriptions) {
     const { merchant, merchantId, currency, cadence, charges, priceRise } = subscription;
     const last = charges.at(-1);
-    const series = `${merchantId}:${currency}:${cadence}:${charges[0]?.id ?? ""}`;
+    const series = subscriptionId(subscription);
 
     const item = (id: string, day: string, kind: CalendarItem["kind"], minor: number) => ({
       id,

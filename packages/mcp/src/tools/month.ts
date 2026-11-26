@@ -403,7 +403,7 @@ function importedOf(review: MonthReview): string {
   const state = review.importState;
 
   if (state.accounts === 0) {
-    return "Imported: no account kept by its lines was open in the month.";
+    return "Imported: no account that expects statements was open in the month; one kept by hand, never imported, expects none.";
   }
 
   return [

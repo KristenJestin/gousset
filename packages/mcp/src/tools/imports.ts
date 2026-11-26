@@ -781,6 +781,10 @@ const SEPARATORS = {
 
 /** How a profile reads a file, in a few words: what an agent needs to choose one. */
 function readsText(profile: CsvProfile): string {
+  if (profile.layout === "paypal-activity") {
+    return "PayPal's activity export, its columns found by their names in English or French, the completed rows that moved the balance in the account's currency, a payment in another currency by its conversion; days and amounts read as the file writes them";
+  }
+
   const { amount } = profile.columns;
   const header = profile.headerRow ? "a header row" : "no header row";
 
@@ -820,7 +824,7 @@ function profilesText(entries: ReadonlyArray<ImportProfileEntry>): string {
   );
 
   return [
-    "CSV import profiles, the user's first, then those shipped with Gousset. A CSV file whose header row is a profile's is read with it on upload.",
+    "CSV import profiles, the user's first, then those shipped with Gousset. On upload, a CSV file is read with the first profile whose header row it has, or, for PayPal activity, whose header row names PayPal's mandatory columns among any others.",
     ...lines,
     "",
     `Which of them read one CSV import's file: ${PROFILES_OF_IMPORT}`,
@@ -840,10 +844,14 @@ function usedText(found: ProfilesForImport): string {
 function profilesForText(found: ProfilesForImport): string {
   const fileName = clip(found.fileName, 100);
 
-  const lines = found.fitting.map(
-    ({ profile, by }) =>
-      `- ${profileName(profile)}: ${by === "header" ? "its header row is the file's" : "a test read of the file's first lines succeeds"}.`,
-  );
+  const lines = found.fitting.map(({ profile, by }) => {
+    const header =
+      profile.definition?.layout === "paypal-activity"
+        ? "the file's header row names PayPal's mandatory columns"
+        : "its header row is the file's";
+
+    return `- ${profileName(profile)}: ${by === "header" ? header : "a test read of the file's first lines succeeds"}.`;
+  });
 
   return [
     lines.length === 0

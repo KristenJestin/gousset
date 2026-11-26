@@ -66,6 +66,13 @@ export type ImportRun = { readonly months: ReadonlyArray<string> };
 /** How many lines one insert writes, and the screen's progress moves by. */
 const CHUNK = 200;
 
+/**
+ * The name an import's transactions give their connection (`application_name`, for the
+ * transaction only): what a save that lasts finds them by in `pg_stat_activity` (#241). Its id
+ * alone, never what the file holds.
+ */
+export const importConnectionName = (importId: string) => `gousset-import:${importId}`;
+
 const nothing: ImportRun = { months: [] };
 
 /**
@@ -238,7 +245,13 @@ export function runImport(
     const reader = yield* StatementReader;
 
     const inTransaction = <A>(work: (transaction: UserTransaction) => Promise<A>) =>
-      userData.transaction(owner, work);
+      userData.transaction(owner, async (transaction) => {
+        await transaction.execute(
+          sql`select set_config('application_name', ${importConnectionName(importId)}, true)`,
+        );
+
+        return work(transaction);
+      });
 
     /** Runs `work` on the import while it is still the job's; stops the run otherwise. */
     const whileRunning = <A>(work: (transaction: UserTransaction) => Promise<A>) =>
@@ -351,7 +364,7 @@ export function runImport(
       periodTo,
     });
 
-    const keys = dedupKeys(loaded.format, statement.lines);
+    const keys = dedupKeys(loaded.format, statement.lines, csvProfile?.layout);
 
     const keyed: ReadonlyArray<Keyed> = statement.lines.map((line, order) => ({
       ...line,
@@ -468,6 +481,9 @@ export function runImport(
               memo: line.memo,
               counterpartyName: line.counterparty?.name ?? null,
               counterpartyIban: line.counterparty?.iban ?? null,
+              // A payment in another currency, as the file gives it (PayPal's conversions, #201).
+              originalAmountMinor: line.original?.amountMinor ?? null,
+              originalCurrency: line.original?.currency ?? null,
               bankId: line.bankId,
               dedupKey: line.dedupKey,
               duplicateOfLineId: line.duplicateOf,
