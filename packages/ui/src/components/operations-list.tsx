@@ -31,6 +31,11 @@ export type OperationRow = {
   toReview?: boolean;
   /** Its category's name, already worded ("Food › Groceries"); shown with `withCategory`. */
   category?: string;
+  /**
+   * Maybe a refund (#208), no income until the user answers: a "Maybe a refund" chip beside the
+   * label, and no category, which would read as an income of it.
+   */
+  maybeRefund?: boolean;
 };
 
 export type OperationsListProps = {
@@ -167,7 +172,8 @@ const COLUMN = {
 
 /**
  * The operations (docs/wireframes, screen 2, block 2): every statement line, newest first, one row
- * each: its day, its raw label (with a "To review" chip on a held line), its category
+ * each: its day, its raw label (with a "To review" chip on a held line, a "Maybe a refund" one on a
+ * line that may be a refund, whose category it leaves out), its category
  * (`withCategory`), its account and its amount, coloured by its direction: money in in `--amount-in` with a plus, money out in the text's
  * colour with a minus. A row opens the line (`onOpen`), by press or keyboard. Virtualised with ui-sdk's
  * `createVirtualizer`: only the rows in view (and a few around) are in the page, each 48 px, in a
@@ -183,7 +189,8 @@ const COLUMN = {
  * (ease-out). Rows that enter or leave the view by scrolling neither fade nor slide. The line just
  * reviewed (`foldingId`) folds away instead: its height to 0 in 200 ms, ease-out, as the rows
  * under it slide up. Cut under reduced motion. When nothing matches, the rows that were there fade
- * out over the empty state.
+ * out over the empty state. A row's chips have no motion of their own: they come and go with it.
+ * A line answered (#208) loses its "Maybe a refund" chip at once, when the list is read again.
  *
  * The account column shows while the list is at least 576 px wide, the category column while it
  * is at least 768 px wide (container queries): a narrower list gives them up, never the amounts.
@@ -460,9 +467,16 @@ function RowButton({
             <Chip>{messages.toReview}</Chip>
           </span>
         ) : null}
+        {row.maybeRefund === true ? (
+          <span data-slot="maybe-refund" className="flex shrink-0">
+            <Chip>{messages.maybeRefund}</Chip>
+          </span>
+        ) : null}
       </span>
       {withCategory ? (
-        <span className={cn(COLUMN.category, "text-muted-foreground")}>{row.category}</span>
+        <span className={cn(COLUMN.category, "text-muted-foreground")}>
+          {row.maybeRefund === true ? null : row.category}
+        </span>
       ) : null}
       <span className={cn(COLUMN.account, "text-muted-foreground")}>{row.account}</span>
       <span className={COLUMN.amount}>

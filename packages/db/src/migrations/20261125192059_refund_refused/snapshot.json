@@ -1,0 +1,37 @@
+{
+  "type": "diff",
+  "version": "10",
+  "dialect": "postgres",
+  "id": "a81bf5ad-ee72-4dae-a40c-354eb4a16a9a",
+  "prevIds": ["d6bd10e9-3ae0-46af-bfa5-da8beb31ec49"],
+  "footprints": [
+    {
+      "statementType": "add_column",
+      "statementTarget": ["column", "public", "statement_line", "refund_refused"],
+      "writes": [
+        "s|col|public.statement_line.refund_refused",
+        "n|col|public.statement_line.refund_refused",
+        "e|col|public.statement_line.refund_refused"
+      ],
+      "reads": ["n|tbl|public.statement_line", "n|sch|public"]
+    }
+  ],
+  "deltas": [
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "statement_line",
+        "name": "refund_refused",
+        "type": "boolean",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "false",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    }
+  ]
+}
