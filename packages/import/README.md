@@ -341,7 +341,10 @@ columns:
   most), compared trimmed, in any case, accents aside. **A word the profile does not map is
   refused at its line and column** (`InvalidField`, `kind`), never guessed. With no `kind`
   column, every row is a purchase or a sale, told by its quantity's sign (negative sold);
-- `referenceUnique`: whether the broker makes `reference` unique to each row.
+- `referenceUnique`: whether the broker makes `reference` unique to each row. The import then keys
+  an operation by `bank:` and its reference rather than by its content: a row whose reference is
+  already known is a duplicate, whatever its other values. Off by default; the import screen offers
+  it once a reference column is mapped.
 
 A profile of version 1 (#250's first: every column at its place, none of the currencies' nor
 `value`) is read as version 2, the same columns and none of the new ones; Gousset writes version 2.
@@ -363,7 +366,9 @@ each field (the days, the kind, the ISIN, the security's name and currency, the 
 unit price and its currency, the trade's value, the fees and their currency, the amount and its
 currency, the label, the reference), which words of the kind column name which kind (purchase,
 sale, dividend, fee, deposit, withdrawal), and the file's settings (separator, encoding, lines
-to skip, header row, date format, decimal mark). A test read shows the first operations as the
+to skip, header row, date format, decimal mark), and, once a reference column is mapped, whether
+each row's reference is unique (`referenceUnique`, off by default). A test read shows the first
+operations as the
 profile reads them, or the line and column it refuses, before the profile is saved or the file
 imported. Saved, it is the user's profile of the kind `operations`, kept with the file's header
 so that the next such file is read with it, and it is the JSON the user exports and imports

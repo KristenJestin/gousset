@@ -180,6 +180,15 @@ async function unknownBroker(testInfo: TestInfo, fileName: string) {
   return path;
 }
 
+/** An invented broker that gives each row a reference of its own, in UTF-8 with semicolons. */
+async function referencedBroker(testInfo: TestInfo, fileName: string, rows: ReadonlyArray<string>) {
+  const path = testInfo.outputPath(fileName);
+
+  await writeFile(path, ["Day;What;Name;Cash;Cur;Ref", ...rows, ""].join("\n"));
+
+  return path;
+}
+
 /** The preview of a dropped file, once it waits for its columns. */
 const preview = (page: Page, file: string) =>
   expect(page.getByRole("table", { name: `The first lines of ${file}` })).toBeVisible({
@@ -362,6 +371,99 @@ test("map an unknown broker's CSV by hand as operations, save it as a profile, a
       ],
     },
   });
+
+  await animationsDone(page);
+});
+
+test("a file mapped with each row's reference unique, imported again with a row changed but its reference kept, adds nothing for that row", async ({
+  app,
+  user,
+  page,
+}, testInfo) => {
+  test.setTimeout(120_000);
+
+  const { owner, pea } = await importer(app, user, page, "reference");
+
+  const first = [
+    "01.12.2026;Cash in;TRANSFER;500.00;EUR;R-1",
+    "02.12.2026;Fee;CUSTODY;-2.00;EUR;R-2",
+  ];
+
+  await visit(page, "/import");
+  await dropInto(page, await referencedBroker(testInfo, "refs.csv", first), "refs.csv", PEA);
+  await preview(page, "refs.csv");
+
+  await choose(page, "The file holds", "A broker's operations");
+  await choose(page, "Date format", "DD.MM.YYYY, as in 03.10.2026");
+  await choose(page, "Decimal mark", "A point, as in 12.34");
+  await choose(page, "What Day holds", "Booking date");
+  await choose(page, "What What holds", "Kind of operation");
+  await choose(page, "What Name holds", "Label");
+  await choose(page, "What Cash holds", "Amount");
+  await choose(page, "What Cur holds", "Amount's currency");
+  await choose(page, "What Cash in means", "Deposit");
+  await choose(page, "What Fee means", "Fee");
+
+  // Offered once a reference column is mapped, off at first, saying what it changes.
+  const unique = page.getByRole("checkbox", { name: "Each row's reference is unique" });
+
+  await expect(unique).toHaveCount(0);
+  await choose(page, "What Ref holds", "Broker's reference");
+  await expect(unique).not.toBeChecked();
+  await expect(
+    page.getByText(
+      "A row whose reference is already known is a duplicate, whatever its other values.",
+    ),
+  ).toBeVisible();
+  // Motion: none of its own; the box ticks in 150 ms, as every checkbox does, cut under reduced
+  // motion.
+  await expect(unique).toHaveCSS("transition-duration", "0.15s");
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await expect(unique).toHaveCSS("transition-duration", "0s");
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await unique.click();
+  await expect(unique).toBeChecked();
+  await expect(testRead(page)).toContainText("Deposit · TRANSFER");
+
+  await page.getByRole("textbox", { name: "Name of the profile" }).fill("Referenced broker");
+  await page.getByRole("button", { name: "Save as a profile" }).click();
+  await expect(page.getByText("Saved as Referenced broker")).toBeVisible();
+  await page.getByRole("button", { name: "Read the file this way" }).click();
+  await expect(figure(page, "refs.csv", "added")).toHaveText("2", { timeout: 30_000 });
+
+  const [saved] = await data.asUser(owner, (transaction) =>
+    transaction
+      .select({ definition: importProfile.definition })
+      .from(importProfile)
+      .where(eq(importProfile.name, "Referenced broker")),
+  );
+
+  expect(saved?.definition).toMatchObject({ columns: { reference: 6 }, referenceUnique: true });
+
+  // R-1 again, its day, amount and label changed: a duplicate by its reference. R-3 is new.
+  const again = [
+    "03.12.2026;Cash in;TRANSFER CORRECTED;450.00;EUR;R-1",
+    "05.12.2026;Cash in;TRANSFER;20.00;EUR;R-3",
+  ];
+
+  await dropInto(
+    page,
+    await referencedBroker(testInfo, "refs-again.csv", again),
+    "refs-again.csv",
+    PEA,
+  );
+  await expect(summaryOf(page, "refs-again.csv")).toContainText(
+    `Read as a broker's operations with Referenced broker, into ${PEA}.`,
+    { timeout: 30_000 },
+  );
+  await expect(figure(page, "refs-again.csv", "added")).toHaveText("1");
+  await expect(figure(page, "refs-again.csv", "known")).toHaveText("1");
+
+  expect(await operationsOf(owner, pea)).toEqual([
+    ["deposit", 2000],
+    ["fee", -200],
+    ["deposit", 50_000],
+  ]);
 
   await animationsDone(page);
 });

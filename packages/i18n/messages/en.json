@@ -432,6 +432,8 @@
   "importCsvKindsEmpty": "Choose the column that says what each row is: a purchase, a sale, a dividend… Its words are listed here, to say which is which. Without one, each row is a purchase or a sale by the sign of its quantity.",
   "importCsvKindUnmapped": "Not mapped",
   "importCsvKindChoose": "What {word} means",
+  "importCsvReferenceUnique": "Each row's reference is unique",
+  "importCsvReferenceUniqueHint": "A row whose reference is already known is a duplicate, whatever its other values.",
   "importOperationKindDeposit": "Deposit",
   "importOperationKindWithdrawal": "Withdrawal",
   "importOperationKindPurchase": "Purchase",

@@ -300,6 +300,27 @@ describe("a broker's operations as the preview maps their columns", () => {
     });
   });
 
+  test("says each row's reference is unique only when asked, with a reference column mapped", () => {
+    const settings = operationsSettingsOf(operations);
+    const mapping = operationsMappingOf(operations, 9, []);
+    const noReference = mapping.map((field) => (field === "reference" ? "ignored" : field));
+    const unmapped = operationsProfileOf(settings, noReference, operations.kinds, true);
+
+    expect(operationsProfileOf(settings, mapping, operations.kinds, true)).toEqual({
+      profile: { ...operations, referenceUnique: true },
+    });
+    expect(operationsProfileOf(settings, mapping, operations.kinds, false)).toEqual({
+      profile: operations,
+    });
+    expect("profile" in unmapped ? unmapped.profile.referenceUnique : unmapped).toBe(false);
+  });
+
+  test("a profile chosen from the list keeps whether its reference is unique", () => {
+    const unique = { ...operations, referenceUnique: true };
+
+    expect(startedOperations(unique, operationsSettingsOf(operations))).toEqual(unique);
+  });
+
   test("names what it still lacks: a day and an amount, no label", () => {
     expect(operationsProfileOf(operationsSettingsOf(operations), ["ignored", "kind"], [])).toEqual({
       missing: ["bookedOn", "amount"],

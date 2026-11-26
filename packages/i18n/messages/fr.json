@@ -432,6 +432,8 @@
   "importCsvKindsEmpty": "Choisissez la colonne qui dit ce qu'est chaque ligne : un achat, une vente, un dividende… Ses mots sont listés ici, pour dire lequel est lequel. Sans elle, chaque ligne est un achat ou une vente selon le signe de sa quantité.",
   "importCsvKindUnmapped": "Non associé",
   "importCsvKindChoose": "Ce que signifie {word}",
+  "importCsvReferenceUnique": "La référence de chaque ligne est unique",
+  "importCsvReferenceUniqueHint": "Une ligne dont la référence est déjà connue est un doublon, quelles que soient ses autres valeurs.",
   "importOperationKindDeposit": "Versement",
   "importOperationKindWithdrawal": "Retrait",
   "importOperationKindPurchase": "Achat",

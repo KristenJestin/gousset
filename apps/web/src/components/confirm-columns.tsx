@@ -9,6 +9,7 @@ import type { OperationKind, OperationsProfile } from "@gousset/import";
 import { m } from "@gousset/i18n/messages";
 import { getLocale } from "@gousset/i18n/runtime";
 import { Button } from "@gousset/ui/components/button";
+import { Checkbox } from "@gousset/ui/components/checkbox";
 import { CsvKindWords } from "@gousset/ui/components/csv-kind-words";
 import { CsvMapping } from "@gousset/ui/components/csv-mapping";
 import { CsvPreview } from "@gousset/ui/components/csv-preview";
@@ -242,12 +243,14 @@ function useColumns(initialSettings: CsvFileSettings, initialMapping: ReadonlyAr
   // The profile last chosen from the list: while it still reads the file its way, the list names it.
   const [startedFrom, setStartedFrom] = useState<ProfileChoice | null>(null);
   const [started, setStarted] = useState<OperationsProfile | null>(null);
+  // Whether the user says each row's broker's reference is unique: the import then keys by it.
+  const [referenceUnique, setReferenceUnique] = useState(false);
 
   const draft =
     holds === "statement"
       ? profileOf(settings, mapping)
       : started === null
-        ? operationsProfileOf(settings, mapping, words)
+        ? operationsProfileOf(settings, mapping, words, referenceUnique)
         : { profile: startedOperations(started, settings) };
 
   /** Mapped by hand from now on: `shown`, the mapping as the preview shows it, is the user's. */
@@ -264,6 +267,7 @@ function useColumns(initialSettings: CsvFileSettings, initialMapping: ReadonlyAr
     words,
     chosen,
     draft,
+    referenceUnique,
     /** The profile the list names: the one chosen, or the one still read its own way. */
     readWith: chosen ?? (settings.layout === undefined && started === null ? null : startedFrom),
     /** What each column holds, as the preview shows it under the file's header. */
@@ -285,6 +289,12 @@ function useColumns(initialSettings: CsvFileSettings, initialMapping: ReadonlyAr
       setSettings(withSettings(settings, form));
       setChosen(null);
     },
+    /** A profile chosen from the list keeps its columns, as a setting changed does. */
+    changeReferenceUnique: (next: boolean) => {
+      setReferenceUnique(next);
+      setStarted(started === null ? null : { ...started, referenceUnique: next });
+      setChosen(null);
+    },
     saved: (choice: ProfileChoice) => setChosen(choice),
     startFrom: (entry: ImportProfileEntry, width: number) => {
       const { definition } = entry;
@@ -293,6 +303,7 @@ function useColumns(initialSettings: CsvFileSettings, initialMapping: ReadonlyAr
         setHolds("operations");
         setSettings(operationsSettingsOf(definition));
         setWords(definition.kinds.map(({ word, kind }) => ({ word, kind })));
+        setReferenceUnique(definition.referenceUnique);
         setStarted(definition);
       } else if (definition !== null) {
         setHolds("statement");
@@ -653,6 +664,16 @@ function ColumnsPreview({
               ),
             }
           : undefined
+      }
+      options={
+        holds === "operations" && shown.includes("reference") ? (
+          <Checkbox
+            label={m.importCsvReferenceUnique()}
+            description={m.importCsvReferenceUniqueHint()}
+            checked={columns.referenceUnique}
+            onCheckedChange={columns.changeReferenceUnique}
+          />
+        ) : undefined
       }
       settings={<FileSettings columns={columns} />}
       testReadTitle={m.importCsvTestRead()}

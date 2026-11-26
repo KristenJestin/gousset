@@ -277,12 +277,14 @@ function placeOf(mapping: ReadonlyArray<CsvField>, field: CsvField): number | nu
 
 /**
  * The profile of a broker's operations the settings, the mapping and the kind words make (v0.6), or
- * the fields it still lacks: a day and an amount.
+ * the fields it still lacks: a day and an amount. `referenceUnique`, the user's word that each row's
+ * reference is unique, counts only with a reference column mapped.
  */
 export function operationsProfileOf(
   settings: CsvFileSettings,
   mapping: ReadonlyArray<CsvField>,
   words: ReadonlyArray<KindWord>,
+  referenceUnique = false,
 ): { profile: OperationsProfile } | { missing: Array<RequiredField> } {
   const bookedOn = placeOf(mapping, "bookedOn");
   const amount = placeOf(mapping, "amount");
@@ -302,6 +304,7 @@ export function operationsProfileOf(
   }
 
   const { layout: _statementLayout, ...table } = settings;
+  const reference = placeOf(mapping, "reference");
 
   const profile: OperationsProfile = {
     version: 2,
@@ -319,15 +322,15 @@ export function operationsProfileOf(
       fees: placeOf(mapping, "fees"),
       amount,
       label: placeOf(mapping, "label"),
-      reference: placeOf(mapping, "reference"),
+      reference,
       amountCurrency: placeOf(mapping, "currency"),
       feesCurrency: placeOf(mapping, "feesCurrency"),
       priceCurrency: placeOf(mapping, "priceCurrency"),
       value: placeOf(mapping, "value"),
     },
     kinds: words.flatMap(({ word, kind }) => (kind === null ? [] : [{ word, kind }])),
-    // Nothing on the screen says a broker's reference is unique to its row: keyed by content.
-    referenceUnique: false,
+    // Keyed by its reference only when the user says the broker makes it unique; else by content.
+    referenceUnique: referenceUnique && reference !== null,
   };
 
   return { profile };
