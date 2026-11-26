@@ -3,9 +3,25 @@
 Profile files for exports Gousset does not read on its own, to take or leave: Gousset ships no
 broker's profile and recognises no broker by itself (#250). A user who has one of these exports
 imports the file through the profile import of the import screen ("Import a profile file"), names
-it, and chooses it for the file; an agent does the same with the `imports` tool of the MCP door.
+it, and chooses it for the file. An agent does the same with the `imports` tool of the MCP door:
+
+1. it uploads the export into the investment account (`upload`, the account named with `account`);
+   no profile of the user's reads it yet, so the import waits for its columns and the answer gives
+   its id;
+2. it reads the library file and passes its text, unchanged, as `profile_json` to `save_profile`,
+   with `import` (the waiting import's id) and `name` (the profile's name, for the user):
+   `{"action":"save_profile","import":"<the id>","name":"Fortuneo (library)","profile_json":"<the file's text>"}`.
+   It test-reads the waiting file with it first and is refused if that read fails (`test_profile`,
+   with `import` and `profile_json`, shows that read without keeping anything), then keeps it as
+   the user's, with that file's header row;
+3. it imports the waiting file with it: `confirm`, with `import` and `profile` (the name it gave).
+   `confirm` with `profile_json` instead imports the file with the library's profile without
+   keeping it.
+
 From then on, the user's next export is read with it on its own: these profiles find their columns
-by their names, and recognise any file whose header names those they need.
+by their names, and recognise any file whose header names those they need. Only a file going into
+an investment account is tried with them, so that a bank statement whose header happens to name
+the same columns is still read as a statement.
 Nothing in the app lists this folder yet: shipping the library inside Gousset is #258's.
 
 Each file is **exactly the JSON a user exports from Gousset** ("Export the profile" on the import
