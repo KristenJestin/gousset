@@ -3,7 +3,11 @@ import { m } from "@gousset/i18n/messages";
 import { Page, ScreenBlock } from "@gousset/ui/components/app-shell";
 import { Button } from "@gousset/ui/components/button";
 import { EmptyState } from "@gousset/ui/components/empty-state";
-import { SubjectTree, SubjectsLayout } from "@gousset/ui/components/subject-tree";
+import {
+  SUBJECT_TREE_ACTION,
+  SubjectTree,
+  SubjectsLayout,
+} from "@gousset/ui/components/subject-tree";
 import { usePageLanguage } from "@gousset/ui/hooks/use-page-language";
 import { formatMoney } from "@gousset/ui/lib/money";
 import { useSuspenseQuery } from "@tanstack/react-query";
@@ -59,6 +63,9 @@ function Subjects() {
       subject={null}
       subjects={list.subjects}
       currency={currency}
+      // Back to the tree's "New": the button that opened it, or, from the empty state, the one that
+      // takes its place once the first subject is made (docs/design.md, "Actions and forms").
+      finalFocus={SUBJECT_TREE_ACTION}
       onSaved={(saved) => {
         // Shown at once when no subject was: the new one is in the tree otherwise.
         if (matchRoute({ to: "/subjects/$subjectId" }) === false) {

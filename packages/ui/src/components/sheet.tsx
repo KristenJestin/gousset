@@ -66,6 +66,12 @@ export type SheetProps = {
    * backdrop, Escape, the close button, Cancel), so that the answer lands on the form that sent it.
    */
   sending?: boolean;
+  /**
+   * Where focus goes once it closes, tried before what opened it: a selector, for an opener that may
+   * be gone by then (an empty state's button, replaced by what the form made). Nothing found, focus
+   * goes back to what opened it, as without it.
+   */
+  finalFocus?: string;
   /** The element that opens it, forwarding its props and ref (a `Button`); or control `open`. */
   trigger?: ReactElement;
   open?: boolean;
@@ -102,6 +108,7 @@ export function Sheet({
   onSubmit,
   onInput,
   sending = false,
+  finalFocus,
   trigger,
   open,
   onOpenChange,
@@ -134,6 +141,7 @@ export function Sheet({
       size={size}
       appear={appear}
       sending={sending}
+      finalFocus={finalFocus}
       startsOnField={onSubmit !== undefined}
     >
       <SheetHeader title={title} description={description} sending={sending} />
@@ -154,7 +162,7 @@ export function Sheet({
 
 export type SheetFrameProps = Pick<
   SheetProps,
-  "trigger" | "open" | "onOpenChange" | "size" | "appear" | "sending"
+  "trigger" | "open" | "onOpenChange" | "size" | "appear" | "sending" | "finalFocus"
 > & {
   /** The whole sheet: its `SheetHeader`, then its `SheetBody`. */
   children: ReactNode;
@@ -176,6 +184,7 @@ export function SheetFrame({
   size = "md",
   appear = true,
   sending = false,
+  finalFocus,
   startsOnField = false,
 }: SheetFrameProps) {
   const wide = useWideScreen();
@@ -198,6 +207,7 @@ export function SheetFrame({
       <DialogContent
         ref={content}
         initialFocus={startsOnField ? FIRST_FIELD : startOn}
+        finalFocus={finalFocus}
         data-side={wide ? "right" : "bottom"}
         className={cn(
           sheetClasses,

@@ -83,6 +83,8 @@ export type SubjectEditorProps = {
   errors?: SubjectEditorErrors;
   /** The page's language (`<html lang>`) unless given. */
   locale?: string;
+  /** Where focus goes once it closes, before what opened it (`Sheet`'s `finalFocus`). */
+  finalFocus?: string;
 };
 
 const TOP = "top";
@@ -133,6 +135,7 @@ export function SubjectEditor(props: SubjectEditorProps) {
       onOpenChange={props.onOpenChange}
       title={props.editing === null ? messages.newTitle : messages.editTitle(props.editing)}
       sending={saving}
+      finalFocus={props.finalFocus}
       onSubmit={(event) => {
         event.preventDefault();
         void save();

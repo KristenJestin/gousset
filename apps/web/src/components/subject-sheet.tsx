@@ -133,6 +133,8 @@ export type SubjectSheetProps = {
   currency: string;
   /** Once accepted, as the sheet closes. */
   onSaved?: (saved: SubjectSaved) => void;
+  /** Where focus goes once it closes, before what opened it (`Sheet`'s `finalFocus`). */
+  finalFocus?: string;
 };
 
 /**
@@ -149,6 +151,7 @@ export function SubjectSheet({
   subjects,
   currency,
   onSaved,
+  finalFocus,
 }: SubjectSheetProps) {
   const queryClient = useQueryClient();
   const locale = usePageLanguage();
@@ -244,6 +247,7 @@ export function SubjectSheet({
       }}
       onSave={save}
       locale={locale}
+      finalFocus={finalFocus}
     />
   );
 }

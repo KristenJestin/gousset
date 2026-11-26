@@ -280,6 +280,8 @@ test("create with merchants and attach the past", async ({ page, app, user }) =>
 
   // The first subject is shown at once.
   await expect(heading(page)).toContainText("Van");
+  // The empty state's "New" left with it: the focus goes to the tree's, which took its place.
+  await expect(tree(page).getByRole("button", { name: "New" })).toBeFocused();
   await expect(block(page, "Attached automatically")).toContainText("Fuelstop");
   await expect(block(page, "Expenses")).toContainText("2 expenses");
   await expect(block(page, "Figures").locator('[data-slot="subject-cost"]')).toContainText("€112");

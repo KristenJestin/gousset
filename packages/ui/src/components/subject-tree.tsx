@@ -49,6 +49,12 @@ export function SubjectHeading({ name, tags = [], actions }: SubjectHeadingProps
   );
 }
 
+/**
+ * The tree's action ("New"), for a sheet it opened to send focus back to once the button that
+ * opened it is gone: the empty state's, which the first subject replaces with the tree.
+ */
+export const SUBJECT_TREE_ACTION = '[data-slot="subject-tree-action"] button';
+
 export type SubjectTreeProps = {
   /** What the tree is, its heading and its navigation's name ("Your subjects"). */
   label: string;
@@ -72,7 +78,11 @@ export function SubjectTree({ label, action, children }: SubjectTreeProps) {
     >
       <div className="flex min-h-8 items-center justify-between gap-2 ps-2">
         <h2 className="text-sm font-semibold">{label}</h2>
-        {action}
+        {action === undefined ? null : (
+          <div data-slot="subject-tree-action" className="flex">
+            {action}
+          </div>
+        )}
       </div>
       <ul className="flex flex-col gap-0.5">{children}</ul>
     </nav>
