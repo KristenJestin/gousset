@@ -122,7 +122,7 @@ const SubjectsInput = Schema.Struct({
   attach_past: Schema.optional(
     Schema.Boolean.annotate({
       description:
-        "create, edit, with merchants: true attaches the past expenses of the merchants added too.",
+        "create, edit, with merchants: true attaches the past expenses of each merchant given too, those it had included.",
     }),
   ),
   archived: Schema.optional(
@@ -530,7 +530,8 @@ function namesOf(owner: string, input: SubjectsInput, caller: Caller, encoded: E
       valueMinor: value?.valueMinor,
       valueCurrency: value?.valueCurrency,
       startsOn: input.starts_on,
-      endsOn: input.ends_on,
+      // starts_on null clears its dates, the end with them unless it is given (and then refused).
+      endsOn: input.starts_on === null && input.ends_on === undefined ? null : input.ends_on,
       attachPast: input.attach_past,
     };
   });
@@ -708,10 +709,12 @@ function savedText(
       return `${described}\n${rules} ${saved.attached} past expense(s) of theirs attached now.`;
     }
 
+    // What the call below would attach: neither the subject's already, nor declined for it.
     const preview = yield* subjectMerchantsPreview(
       owner,
       merchants.map((each) => each.id),
       benchmarkCurrency(caller),
+      saved.id,
     );
 
     return `${described}\n${rules} Their past expenses stay as they are: ${preview.expenses} of them, ${amount(preview.total)}${elsewhereText(preview.elsewhere)}. To attach them too: ${call({ action: "edit", subject: path, merchants: names, attach_past: true })}`;

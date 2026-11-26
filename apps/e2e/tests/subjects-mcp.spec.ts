@@ -290,12 +290,20 @@ test("create a subject inside another, with merchants and attach_past", async ({
   expect(without).toContain(
     "Their past expenses stay as they are: 2 of them, 97.00 EUR. To attach them too: subjects ",
   );
-  expect(callAfter(without, "To attach them too: subjects ")).toEqual({
+  const suggested = callAfter(without, "To attach them too: subjects ");
+
+  expect(suggested).toEqual({
     action: "edit",
     subject: "Fuel log",
     merchants: ["Fuelstop"],
     attach_past: true,
   });
+
+  // The call it suggests does what it says: the merchant's past expenses are the subject's now.
+  expect(await subjects(suggested)).toContain("2 past expense(s) of theirs attached now.");
+  expect(await subjects({ action: "show", subject: "Fuel log", period: "all" })).toContain(
+    "Cost: 97.00 EUR",
+  );
 });
 
 test("show its costs, where a parent counts an expense once", async ({
@@ -448,6 +456,19 @@ test("edit and a cycle refused with its example", async ({ page, app, user, mcpC
   expect(archived.text).toContain(
     'A valid call: subjects {"action":"edit","subject":"Camper van","archived":false}',
   );
+
+  // Its dates cleared with starts_on alone, as the description says null does.
+  await subjects({
+    action: "create",
+    name: "Alps 2026",
+    starts_on: `${LAST_MONTH}-15`,
+    ends_on: `${LAST_MONTH}-24`,
+  });
+
+  const undated = await subjects({ action: "edit", subject: "Alps 2026", starts_on: null });
+
+  expect(undated).toContain("Changed the subject Alps 2026.");
+  expect(await subjects({ action: "show", subject: "Alps 2026" })).not.toContain("Dates:");
 
   const taken = await call("subjects", { action: "create", name: "vehicles" });
 
