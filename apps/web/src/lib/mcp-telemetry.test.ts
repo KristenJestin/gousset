@@ -3,6 +3,7 @@ import {
   Expenses,
   ImportProfiles,
   Imports,
+  Investments,
   Merchants,
   MonthFacts,
   RuleJobs,
@@ -68,6 +69,7 @@ describe("a call to the MCP door", () => {
                   Layer.mock(UserData, {}),
                   Layer.mock(RuleJobs, {}),
                   Layer.mock(Subscriptions, {}),
+                  Layer.mock(Investments, {}),
                   // A month of nothing: the call reads it, and answers.
                   Layer.succeed(MonthFacts, {
                     read: () =>

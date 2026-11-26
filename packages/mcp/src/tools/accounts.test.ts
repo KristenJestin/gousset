@@ -3,6 +3,7 @@ import {
   Expenses,
   ImportProfiles,
   Imports,
+  Investments,
   Merchants,
   MonthFacts,
   RuleJobs,
@@ -148,6 +149,7 @@ function onToday(rows: MemoryRows, lineRows: MemoryLineRows = {}): Runner<Gousse
     Layer.mock(RuleJobs, {}),
     Layer.mock(Subscriptions, {}),
     Layer.mock(MonthFacts, {}),
+    Layer.mock(Investments, {}),
     TestClock.layer(),
   );
 
@@ -738,6 +740,7 @@ describe("the accounts tool", () => {
       "categories",
       "rules",
       "review",
+      "investments",
     ]);
     expect(tool?.title).toBe("Accounts");
     expect(tool?.description).toContain("it makes the day's movement line, in its `category`");

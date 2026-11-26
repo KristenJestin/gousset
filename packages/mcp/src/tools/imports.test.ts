@@ -12,6 +12,7 @@ import {
   ImportProfiles,
   ImportUnavailable,
   Imports,
+  Investments,
   Merchants,
   ProfileNameMissing,
   MonthFacts,
@@ -329,6 +330,7 @@ function runnerOf(state: Fake): Runner<GoussetServices> {
           Layer.mock(RuleJobs, {}),
           Layer.mock(Subscriptions, {}),
           Layer.mock(MonthFacts, {}),
+          Layer.mock(Investments, {}),
         ),
       ),
     );
@@ -362,6 +364,7 @@ function runnerWithTime(state: Fake): Runner<GoussetServices> {
             Layer.mock(RuleJobs, {}),
             Layer.mock(Subscriptions, {}),
             Layer.mock(MonthFacts, {}),
+            Layer.mock(Investments, {}),
             TestClock.layer(),
           ),
         ),
