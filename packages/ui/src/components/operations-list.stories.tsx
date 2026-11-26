@@ -136,7 +136,9 @@ function NewSearch() {
  *
  * Motion: when the rows change, the rows that stay slide to their new place, new ones fade in and
  * gone ones fade out (200 ms, ease-out); scrolling moves nothing but the scroll. Opening a line,
- * its `LineDetail` grows out of the row (`operationLayoutId`). Cut under reduced motion.
+ * its `LineDetail` grows out of the row (`operationLayoutId`). Cut under reduced motion. A row's
+ * chips ("To review", "Maybe a refund") have no motion of their own: they come and go with the row,
+ * and an answered line's chip goes at once when the list is read again.
  *
  * Don't: give it every line at once from the server (page it with `onEnd`), set its height on the
  * list itself (its parent's), or animate the rows a scroll brings.
@@ -203,6 +205,47 @@ export const WithAvatars: Story = {
 export const WithAvatarsOnPhone: Story = {
   ...WithAvatars,
   globals: { viewport: { value: "mobile1", isRotated: false } },
+};
+
+/** Rows with their category, and a purchase's refund that may be one (#208). */
+const MAYBE_REFUND_ROWS: ReadonlyArray<OperationRow> = [
+  {
+    id: "line-refund",
+    day: "Oct 4",
+    label: "CARD PIXELPLAY STORE",
+    account: "Current account",
+    amount: { minor: 3000, currency: "EUR" },
+    category: "Other",
+    maybeRefund: true,
+  },
+  {
+    id: "line-purchase",
+    day: "Oct 3",
+    label: "CARD PIXELPLAY STORE",
+    account: "Current account",
+    amount: { minor: -9000, currency: "EUR" },
+    category: "Leisure › Games",
+  },
+  ...ROWS.slice(0, 6).map((row) => ({ ...row, category: "Groceries › Supermarket" })),
+];
+
+/**
+ * Maybe a refund (#208): a line coming back that may cancel a purchase, not answered yet. It is no
+ * income: a "Maybe a refund" chip beside its label, and no category, which would read as one.
+ */
+export const MaybeRefund: Story = {
+  args: { withCategory: true, rows: MAYBE_REFUND_ROWS, total: MAYBE_REFUND_ROWS.length },
+};
+
+export const MaybeRefundFrench: Story = {
+  args: MaybeRefund.args,
+  render: (args) => (
+    <InFrench>
+      <Frame>
+        <OperationsList {...args} />
+      </Frame>
+    </InFrench>
+  ),
 };
 
 /** A line open: its row is marked and kept in the page wherever the list is scrolled. */

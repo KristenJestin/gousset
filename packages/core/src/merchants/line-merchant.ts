@@ -11,6 +11,7 @@ import { eq, inArray, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { Result } from "effect";
 
+import { lineCategoryOf } from "../category-store";
 import type { LineCategory } from "../category-store";
 import { takeCategoryTurn } from "../category-turn";
 import { LineNotFound } from "../errors";
@@ -335,6 +336,9 @@ async function defaultCategoryFor(
       name: category.name,
       parentName: parentCategory.name,
       kind: category.kind,
+      icon: category.icon,
+      color: category.color,
+      parentColor: parentCategory.color,
       archivedAt: category.archivedAt,
     })
     .from(merchant)
@@ -352,9 +356,7 @@ async function defaultCategoryFor(
     defaults: new Map([[merchantId, row.id]]),
   });
 
-  return target?.categoryId === row.id && row.id !== whole.categoryId
-    ? { id: row.id, name: row.name, parentName: row.parentName, kind: row.kind }
-    : null;
+  return target?.categoryId === row.id && row.id !== whole.categoryId ? lineCategoryOf(row) : null;
 }
 
 type Refusal = LineNotFound | LineMerchantRefused;

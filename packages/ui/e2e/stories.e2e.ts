@@ -38,8 +38,9 @@ const SHOTS: ReadonlyArray<Shot> = [
   { id: "forms-select--in-a-card", open: "click" },
   { id: "forms-combobox--chosen" },
   { id: "forms-namefield--typed" },
-  // The palette with its choice of none (#205).
+  // A category's colour and icon (#205): the palette with its choice of none, the icons' grid.
   { id: "forms-colorswatches--parents-colour" },
+  { id: "forms-categoryiconchoice--default" },
   { id: "forms-checkbox--checked" },
   { id: "forms-switch--on" },
   { id: "forms-datepicker--chosen" },
@@ -92,6 +93,8 @@ const SHOTS: ReadonlyArray<Shot> = [
   { id: "data-list--loading-beside-loaded" },
   { id: "data-list--links" },
   { id: "data-categoryicon--in-rows" },
+  // Every palette colour on its tile, on a block and on the page (#205).
+  { id: "data-categoryicon--every-colour" },
   { id: "data-avatar--in-rows" },
   // Every colour of the palette, initials on their tile, in both schemes (#204).
   { id: "data-avatar--palette" },

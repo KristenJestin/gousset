@@ -6,6 +6,7 @@ import {
   MAX_KEY_LENGTH,
   assignMerchants,
   formerMerchantKey,
+  isCardPayment,
   merchantKey,
   merchantName,
   nameKey,
@@ -336,6 +337,34 @@ describe("merchant key of a label", () => {
   });
 });
 
+describe("a card payment's label", () => {
+  test.each([
+    "CB GREENMARKET 2110 RIVERTON",
+    "CARTE 21/10/26 PIZZA NOVA RIVERTON",
+    "CARTE X1234 21/10 PIZZA NOVA RIVERTON",
+    "PAIEMENT PAR CARTE GREENMARKET RIVERTON 21/10",
+    "ANN CARTE SHOPLY 12/10",
+    "CB*4821 GREENMARKET 21/10",
+    "CARD PAYMENT TO CORNER CAFE ON 21-10-2026",
+    "CONTACTLESS CORNER CAFE RIVERTON",
+    "POS 21OCT GREENMARKET RIVERTON GB",
+    "VISA DEBIT GREENMARKET 21/10 RIVERTON",
+    "KARTENZAHLUNG BAECKEREI MUSTER RIVERTON",
+  ])("%s is a card payment", (label) => {
+    expect(isCardPayment(label)).toBe(true);
+  });
+
+  test.each([
+    "PRLV SEPA STREAMFLIX ABONNEMENT",
+    "VIR SEPA RECU /DE CAMILLE EXEMPLE",
+    "COTISATION CARTE VISA CLASSIC",
+    "CORNER CAFE RIVERTON",
+    "CBX MARKET",
+  ])("%s is no card payment", (label) => {
+    expect(isCardPayment(label)).toBe(false);
+  });
+});
+
 describe("operation of a label", () => {
   test.each([
     ["CB SHOPLY 10/10", "card"],
@@ -601,6 +630,77 @@ describe("assigning keys to merchants", () => {
       { alias: "NORTHWIND", merchant: { id: "m4" } },
       { alias: "GREENMARKET RIVERTON", merchant: { id: "m1" } },
     ]);
+  });
+
+  // #193: a card label's town (`./towns`) is no part of its merchant.
+  const PIZZA_NOVA = new Map([
+    ["PIZZA NOVA RIVERTON", "PIZZA NOVA"],
+    ["PIZZA NOVA LAKESIDE", "PIZZA NOVA"],
+    ["PIZZA NOVA HILLCREST", "PIZZA NOVA"],
+    ["BOULANGERIE RIVERTON", "BOULANGERIE"],
+  ]);
+
+  const shopOf = (key: string) => PIZZA_NOVA.get(key);
+
+  test("one shop in three towns becomes one merchant, named without its town", () => {
+    expect(
+      assignMerchants(
+        ["PIZZA NOVA RIVERTON", "PIZZA NOVA LAKESIDE", "PIZZA NOVA HILLCREST"],
+        [],
+        undefined,
+        shopOf,
+      ),
+    ).toEqual([
+      { alias: "PIZZA NOVA HILLCREST", merchant: { name: "Pizza Nova" } },
+      { alias: "PIZZA NOVA LAKESIDE", merchant: { name: "Pizza Nova" } },
+      { alias: "PIZZA NOVA RIVERTON", merchant: { name: "Pizza Nova" } },
+    ]);
+  });
+
+  test("a label without its town joins the merchant whose label has the same shop", () => {
+    const known: Array<KnownKey> = [{ key: "PIZZA NOVA RIVERTON", merchantId: "m1" }];
+
+    expect(assignMerchants(["PIZZA NOVA LAKESIDE"], known, undefined, shopOf)).toEqual([
+      { alias: "PIZZA NOVA LAKESIDE", merchant: { id: "m1" } },
+    ]);
+  });
+
+  test("a label without its town joins the merchant named as its shop", () => {
+    const known: Array<KnownKey> = [{ key: nameKey("Pizza Nova"), merchantId: "m1" }];
+
+    expect(assignMerchants(["PIZZA NOVA HILLCREST"], known, undefined, shopOf)).toEqual([
+      { alias: "PIZZA NOVA HILLCREST", merchant: { id: "m1" } },
+    ]);
+  });
+
+  test("a shop found by dropping a town takes no longer label of another shop", () => {
+    const known: Array<KnownKey> = [
+      { key: "BOULANGERIE RIVERTON", merchantId: "bakery" },
+      { key: nameKey("Boulangerie"), merchantId: "bakery", whole: true },
+    ];
+
+    expect(assignMerchants(["BOULANGERIE DUPONT"], known, undefined, shopOf)).toEqual([
+      { alias: "BOULANGERIE DUPONT", merchant: { name: "Boulangerie Dupont" } },
+    ]);
+  });
+
+  test("a key equal to a merchant's name that is the shop of its labels goes to it", () => {
+    const markets = new Map([
+      ["CARREFOUR MARKET RIVERTON", "CARREFOUR MARKET"],
+      ["CARREFOUR MARKET LAKESIDE", "CARREFOUR MARKET"],
+    ]);
+
+    const known: Array<KnownKey> = [
+      { key: "CARREFOUR", merchantId: "carrefour" },
+      { key: nameKey("Carrefour"), merchantId: "carrefour" },
+      { key: "CARREFOUR MARKET RIVERTON", merchantId: "market" },
+      { key: "CARREFOUR MARKET LAKESIDE", merchantId: "market" },
+      { key: nameKey("Carrefour Market"), merchantId: "market", whole: true },
+    ];
+
+    expect(
+      assignMerchants(["CARREFOUR MARKET"], known, undefined, (key) => markets.get(key)),
+    ).toEqual([{ alias: "CARREFOUR MARKET", merchant: { id: "market" } }]);
   });
 
   test("a key given twice is assigned once", () => {

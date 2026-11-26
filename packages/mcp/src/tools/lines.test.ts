@@ -8,6 +8,7 @@ import {
   Merchants,
   MonthFacts,
   NotLinked,
+  RefundNotProposed,
   RuleJobs,
   Subscriptions,
   TransferRefused,
@@ -23,6 +24,7 @@ import type {
   CategoryRecord,
   Expense,
   FundedExpense,
+  LineExpenses,
   LineTransfer,
   MemoryCategoryRows,
   MemoryLineDetail,
@@ -62,6 +64,8 @@ const lineCategory = (category: CategoryRecord) => ({
   name: category.name,
   parentName: null,
   kind: category.kind,
+  icon: null,
+  color: null,
 });
 
 function account(name: string, change: Partial<AccountRecord> = {}): AccountRecord {
@@ -210,7 +214,14 @@ const PAID = Layer.mock(Merchants, {
  * expenses-mcp.spec).
  */
 const NO_EXPENSE = Layer.mock(Expenses, {
-  ofLine: () => Effect.succeed({ expenses: [], role: null, proposals: [], funding: null }),
+  ofLine: () =>
+    Effect.succeed({
+      expenses: [],
+      role: null,
+      proposals: [],
+      maybeRefund: false,
+      funding: null,
+    }),
 });
 
 function onToday(
@@ -791,7 +802,14 @@ const giftCard = account("Gift card", {
 /** The movement Gousset made of a balance noted on the gift card: no label of its own. */
 const movement = line(giftCard.id, "2026-10-31", -9000, "", {
   source: "balance",
-  category: { id: memoryId(), name: "Meal vouchers", parentName: "Food", kind: "expense" },
+  category: {
+    id: memoryId(),
+    name: "Meal vouchers",
+    parentName: "Food",
+    kind: "expense",
+    icon: null,
+    color: null,
+  },
 });
 
 const KEPT: MemoryLineRows = {
@@ -985,6 +1003,7 @@ async function refundCall(args: Arguments, funded = false) {
         expenses: [],
         role: null,
         proposals: [],
+        maybeRefund: false,
         funding:
           lineId === perksOut.id
             ? { funds: funded ? fuelExpense : null, candidates: funded ? [] : [fuelExpense] }
@@ -1002,7 +1021,13 @@ async function refundCall(args: Arguments, funded = false) {
     unfund: (_owner, transferLineId) => {
       calls.push(`unfund ${transferLineId}`);
 
-      return Effect.succeed({ expenses: [], role: null, proposals: [], funding: null });
+      return Effect.succeed({
+        expenses: [],
+        role: null,
+        proposals: [],
+        maybeRefund: false,
+        funding: null,
+      });
     },
   });
 
@@ -1073,6 +1098,191 @@ describe("lines and works council refunds", () => {
   });
 });
 
+// Maybe a refund (#208): a 90.00 purchase at PixelPlay, then 30.00 coming back from it, not answered
+// yet. What the database does is tried end to end (maybe-refund-mcp.spec); here, what `lines` says
+// and which of the logic's calls it makes.
+const pixelplay = line(current.id, "2026-10-03", -9000, "CARD PIXELPLAY STORE");
+
+const pixelBack = line(current.id, "2026-10-04", 3000, "CARD PIXELPLAY STORE", {
+  category: lineCategory(otherIncome),
+  classifiedBy: "default",
+  maybeRefund: true,
+});
+
+const PIXEL: MemoryLineRows = { ...ROWS, lines: [salary, fuel, pixelplay, pixelBack] };
+
+const pixelProposal = {
+  line: {
+    lineId: pixelplay.id,
+    bookedOn: pixelplay.bookedOn,
+    label: pixelplay.label,
+    account: { id: current.id, name: current.name, institution: current.institution },
+    amount: { minor: 9000, currency: "EUR" },
+  },
+  category: lineCategory(otherExpense),
+  net: { minor: 9000, currency: "EUR" },
+};
+
+const pixelIncome: Expense = {
+  id: memoryId(),
+  kind: "income",
+  happenedOn: pixelBack.bookedOn,
+  category: lineCategory(otherIncome),
+  classifiedBy: "default",
+  payments: [
+    {
+      ...pixelProposal.line,
+      lineId: pixelBack.id,
+      bookedOn: pixelBack.bookedOn,
+      amount: { minor: 3000, currency: "EUR" },
+    },
+  ],
+  refunds: [],
+  net: { minor: 3000, currency: "EUR" },
+  fundings: [],
+  funded: { minor: 0, currency: "EUR" },
+};
+
+/** A call on `PIXEL`, the logic answering as for a line that may be a refund; `rule`: a rule's. */
+async function pixelCall(args: Arguments, caller = writer, rule = false) {
+  const calls: Array<string> = [];
+
+  const ofLine = (lineId: string): LineExpenses => ({
+    expenses: lineId === pixelBack.id ? [pixelIncome] : [],
+    role: lineId === pixelBack.id ? "payment" : null,
+    proposals: lineId === pixelBack.id ? [pixelProposal] : [],
+    maybeRefund: lineId === pixelBack.id && !rule,
+    funding: null,
+  });
+
+  const expenses = Layer.mock(Expenses, {
+    ofLine: (_owner, lineId) => Effect.succeed(ofLine(lineId)),
+    refuseRefund: (_owner, lineId) => {
+      calls.push(`refuse ${lineId}`);
+
+      return lineId === pixelBack.id
+        ? Effect.succeed({ ...ofLine(lineId), proposals: [], maybeRefund: false })
+        : Effect.fail(new RefundNotProposed({ lineId }));
+    },
+  });
+
+  const client = await connectInProcess(
+    goussetServer,
+    { run: onToday(PIXEL, new Map(), NO_TRANSFER, expenses) },
+    caller,
+    "2025-11-25",
+  );
+
+  const result = await client.callTool({ name: "lines", arguments: args });
+  const [first] = result.content ?? [];
+
+  return {
+    text: first?.type === "text" ? first.text : "",
+    isError: result.isError === true,
+    calls,
+  };
+}
+
+describe("lines and maybe refunds", () => {
+  test("search flags a line that may be a refund, and only that one", async () => {
+    const { text, isError } = await pixelCall({ action: "search", text: "pixelplay" });
+
+    expect(isError, text).toBe(false);
+    expect(text).toContain(
+      `- 2026-10-04, Current account (Riverside Bank): 30.00 EUR, "CARD PIXELPLAY STORE", in Other, maybe a refund, not counted as income until the user answers; line: ${pixelBack.id}`,
+    );
+    expect(text).toContain(
+      `- 2026-10-03, Current account (Riverside Bank): -90.00 EUR, "CARD PIXELPLAY STORE"; line: ${pixelplay.id}`,
+    );
+    expect(handlesOf(text)).toEqual([pixelBack.id, pixelplay.id]);
+  });
+
+  test("show says it is no income until answered, and writes both answers", async () => {
+    const { text, isError } = await pixelCall({ action: "show", line: pixelBack.id }, reader);
+
+    expect(isError, text).toBe(false);
+    expect(text).toContain(
+      "Maybe a refund: this line may cancel all or part of an expense (a purchase cancelled, an order returned). Never applied unasked: the user confirms or refuses. Not counted as income until the user answers: confirmed, it is linked as a refund; refused, it is an ordinary income.",
+    );
+    expect(text).toContain(
+      `- 90.00 EUR on 2026-10-03, Current account (Riverside Bank), "CARD PIXELPLAY STORE"; line: ${pixelplay.id}, in Other, costing 90.00 EUR`,
+    );
+    expect(writtenCall(text, "Confirm one with: ")).toEqual({
+      action: "link",
+      line: pixelBack.id,
+      into: pixelplay.id,
+    });
+    expect(writtenCall(text, "If it is no refund: ")).toEqual({
+      action: "refuse_refund",
+      line: pixelBack.id,
+    });
+  });
+
+  test("show of a rule's line keeps its proposals, but never says it is no income", async () => {
+    const { text } = await pixelCall({ action: "show", line: pixelBack.id }, reader, true);
+
+    expect(text).toContain("Maybe a refund: this line may cancel all or part of an expense");
+    expect(text).not.toContain("Not counted as income");
+    expect(writtenCall(text, "If it is no refund: ")).toEqual({
+      action: "refuse_refund",
+      line: pixelBack.id,
+    });
+  });
+
+  test("refuse_refund makes it an ordinary income, never proposed again", async () => {
+    const { text, isError, calls } = await pixelCall({
+      action: "refuse_refund",
+      line: pixelBack.id,
+    });
+
+    expect(isError, text).toBe(false);
+    expect(calls).toEqual([`refuse ${pixelBack.id}`]);
+    expect(text).toContain(
+      'No refund: the line of 2026-10-04, 30.00 EUR, "CARD PIXELPLAY STORE", is an ordinary income now, in Other: counted as received in its month. It will not be proposed as a refund again.',
+    );
+    expect(writtenCall(text, "Should it be a refund after all, link it by hand: ")).toEqual({
+      action: "link",
+      line: pixelBack.id,
+      into: "<a payment's handle>",
+    });
+  });
+
+  test("refuse_refund refuses a line with no refund proposed, saying what to do with a valid call", async () => {
+    const { text, isError } = await pixelCall({ action: "refuse_refund", line: pixelplay.id });
+
+    expect(isError).toBe(true);
+    expect(text).toContain("No refund is proposed for the line");
+    expect(writtenCall(text, "A valid call: ")).toEqual({ action: "show", line: pixelplay.id });
+    await expectValidExample(text, PIXEL);
+  });
+
+  test("refuse_refund refuses an unknown handle and a missing one, with a valid call", async () => {
+    const wrong: ReadonlyArray<Arguments> = [
+      { action: "refuse_refund", line: "not-a-line" },
+      { action: "refuse_refund" },
+    ];
+
+    for (const args of wrong) {
+      const { text, isError, calls } = await pixelCall(args);
+
+      expect(isError, text).toBe(true);
+      expect(calls).toEqual([]);
+      await expectValidExample(text, PIXEL);
+    }
+  });
+
+  test("refuse_refund needs the write scope, and says how to get it", async () => {
+    const { text, isError, calls } = await pixelCall(
+      { action: "refuse_refund", line: pixelBack.id },
+      reader,
+    );
+
+    expect(isError).toBe(true);
+    expect(text).toContain("choose Read and write on Gousset's consent page");
+    expect(calls).toEqual([]);
+  });
+});
+
 describe("the lines tool", () => {
   test("pairs, classifies and unpairs only with the write scope, and says how to get it", async () => {
     for (const action of ["pair", "classify", "unpair"]) {
@@ -1125,6 +1335,11 @@ describe("the lines tool", () => {
     ]) {
       expect(description, said).toContain(said);
     }
+
+    // refuse_refund (#208) is described where its arguments are: the description is at its guard.
+    expect(JSON.stringify(tool?.inputSchema)).toContain(
+      "refuse_refund: a line coming back that show proposes as a refund is none",
+    );
 
     expect(description).not.toContain("(Other)");
     expect(tool?.annotations).toEqual({

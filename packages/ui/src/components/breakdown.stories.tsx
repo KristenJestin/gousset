@@ -21,6 +21,7 @@ function rowsOf(categories: ReadonlyArray<MadeUpCategory>): Array<BreakdownRow> 
     id: category.id,
     name: category.name,
     icon: category.icon,
+    color: category.color,
     amount: category.spent,
     benchmark: category.benchmark,
   }));
@@ -145,6 +146,9 @@ function SwitchingMonths() {
  * button's name: the frame's menu is "More"); with `onSelect`, each row is a button.
  * Without rows, a sentence (the page's own with `emptyText`).
  *
+ * A category's row draws its icon and its bar in the category's colour (its own, else its
+ * parent's, #205); a row with none (a merchant) has a muted icon and spent's bar.
+ *
  * Loading: `BreakdownSkeleton`, as many rows as the block shows, same heights.
  *
  * Motion: when the month changes, each bar grows or shrinks to its new length and its mark
@@ -170,7 +174,7 @@ export const Default: Story = { render: () => <Choosing limit={5} /> };
 /** Every row, nothing to click. */
 export const ReadOnly: Story = {};
 
-/** Merchants: no benchmark, so no mark. */
+/** Merchants: no benchmark, so no mark; no colour, so their bars are spent's. */
 export const Merchants: Story = {
   args: {
     rows: MERCHANTS.map((merchant) => ({

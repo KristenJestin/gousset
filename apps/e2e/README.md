@@ -20,6 +20,9 @@ each night on `dev`, by hand, and on a head commit with the trailer line `E2E-Ma
 (`AGENTS.md`, "Testing"): a failure seen only there is fixed at once. There are no
 retries: a test that passes only on retry is a bug. On failure the trace, the video and the
 screenshots are kept in `test-results/`, with each worker's app log (`app-<project>-worker-<n>.log`).
+A failed test also prints, with its failure, the warnings and errors its worker's app logged while it
+ran (a save that lasts, a job's attempt that ended unfinished, a crash's trace; the last 40 lines),
+so that the job log shows them without the artifact.
 
 ## Environment
 
@@ -45,8 +48,10 @@ dropped when their worker and the run end; a run killed before its teardown leav
 `gousset_e2e_<run>_*` databases behind, safe to drop by hand.
 
 Every database the harness makes logs a lock wait past a second, with who holds it
-(`log_lock_waits`, set on each database as the harness's superuser): a test stalled on a lock
-leaves its cause in the server's log, which CI prints at the end of each job.
+(`log_lock_waits`), and a statement that runs past five seconds, with its duration
+(`log_min_duration_statement`), both set on each database as the harness's superuser: a test
+stalled on a lock or on a slow query leaves its cause in the server's log, which CI prints at the
+end of each job.
 
 The harness's own role runs the migrations, as the tables' owner, then lets `gousset_app` log in
 with the password derived from the harness's (`docs/data-model.md`, "Ownership and isolation"):

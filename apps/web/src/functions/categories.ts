@@ -35,6 +35,7 @@ export type CategoryRefusalCode =
   | "CATEGORY_TOO_MANY"
   | "CATEGORY_BENCHMARK"
   | "CATEGORY_ICON"
+  | "CATEGORY_COLOR"
   | "CATEGORY_POSITION";
 
 /** A refusal's code, with the fallback it names when it is about one, as the user called it. */
@@ -52,6 +53,7 @@ const REASON_CODES = {
   too_many: "CATEGORY_TOO_MANY",
   benchmark: "CATEGORY_BENCHMARK",
   icon: "CATEGORY_ICON",
+  color: "CATEGORY_COLOR",
   position: "CATEGORY_POSITION",
 } as const satisfies { [Reason in CategoryRefused["reason"]]: CategoryRefusalCode };
 
@@ -76,6 +78,12 @@ const Name = Schema.String.check(Schema.isMaxLength(MAX_CATEGORY_NAME * 4));
 
 const Kind = Schema.Literals(["expense", "income"]);
 
+/**
+ * A key of the icons or of the palette, or null for none (#205): the core refuses one that is no
+ * key with a code. The bound only keeps a page of text from the server.
+ */
+const LookKey = Schema.NullOr(Schema.String.check(Schema.isMaxLength(64)));
+
 /** A benchmark: the six-month average, a fixed amount in minor units, or none. */
 export const BenchmarkInput = Schema.Union([
   Schema.Struct({ mode: Schema.Literal("automatic") }),
@@ -93,7 +101,13 @@ export const createCategory = createServerFn({ method: "POST" })
   .middleware([signedIn, slowedInDevelopment])
   .validator(
     Schema.toStandardSchemaV1(
-      Schema.Struct({ kind: Kind, name: Name, parentId: Schema.NullOr(CategoryId) }),
+      Schema.Struct({
+        kind: Kind,
+        name: Name,
+        parentId: Schema.NullOr(CategoryId),
+        icon: Schema.optional(LookKey),
+        color: Schema.optional(LookKey),
+      }),
     ),
   )
   .handler(({ data, context }) =>
@@ -105,7 +119,10 @@ export const createCategory = createServerFn({ method: "POST" })
     ),
   );
 
-/** Renames a category, moves it (`parentId`, null for the top level) or sets its benchmark. */
+/**
+ * Renames a category, moves it (`parentId`, null for the top level), sets its benchmark, or its
+ * icon and colour (null clears them).
+ */
 export const editCategory = createServerFn({ method: "POST" })
   .middleware([signedIn, slowedInDevelopment])
   .validator(
@@ -115,6 +132,8 @@ export const editCategory = createServerFn({ method: "POST" })
         name: Schema.optional(Name),
         parentId: Schema.optional(Schema.NullOr(CategoryId)),
         benchmark: Schema.optional(BenchmarkInput),
+        icon: Schema.optional(LookKey),
+        color: Schema.optional(LookKey),
       }),
     ),
   )

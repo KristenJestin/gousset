@@ -11,12 +11,16 @@ import { useUiMessages } from "../hooks/use-ui-messages";
 import type { Money } from "../lib/money";
 import { transition } from "../lib/motion";
 import { asksNextPage, rowsMark } from "../lib/next-page";
+import { paletteText } from "../lib/palette";
+import type { PaletteColor } from "../lib/palette";
 import { cn } from "../lib/utils";
 import { Amount, AmountSkeleton } from "./amount";
 import { Avatar } from "./avatar";
 import type { AvatarFace } from "./avatar";
 import { Chip } from "./chip";
 import { EmptyState } from "./empty-state";
+import { Icon } from "./icon";
+import type { CategoryIconName } from "./icons";
 import { Loader } from "./loader";
 import { Skeleton, SkeletonFrame } from "./skeleton";
 
@@ -35,6 +39,15 @@ export type OperationRow = {
   category?: string;
   /** Who it paid (#204), by logo or initials before its label; shown with `withAvatars`. */
   avatar?: AvatarFace;
+  /** Its category's icon (none: `other`'s), shown before its name in its colour (#205). */
+  categoryIcon?: CategoryIconName | null;
+  /** The colour its category is shown in; none: the muted text's. */
+  categoryColor?: PaletteColor | null;
+  /**
+   * Maybe a refund (#208), no income until the user answers: a "Maybe a refund" chip beside the
+   * label, and no category, which would read as an income of it.
+   */
+  maybeRefund?: boolean;
 };
 
 export type OperationsListProps = {
@@ -170,13 +183,14 @@ const COLUMN = {
   // Shown while the list has room for them: a narrow list (a phone, a small window) gives them up,
   // the category first, never the amounts.
   account: "hidden w-40 shrink-0 truncate @xl:block",
-  category: "hidden w-40 shrink-0 truncate @3xl:block",
+  category: "hidden w-40 shrink-0 truncate @3xl:flex",
   amount: "flex w-28 shrink-0 justify-end",
 };
 
 /**
  * The operations (docs/wireframes, screen 2, block 2): every statement line, newest first, one row
- * each: its day, its raw label (with a "To review" chip on a held line), its category
+ * each: its day, its raw label (with a "To review" chip on a held line, a "Maybe a refund" one on a
+ * line that may be a refund, whose category it leaves out), its category
  * (`withCategory`), its account and its amount, coloured by its direction: money in in `--amount-in` with a plus, money out in the text's
  * colour with a minus. A row opens the line (`onOpen`), by press or keyboard. Virtualised with ui-sdk's
  * `createVirtualizer`: only the rows in view (and a few around) are in the page, each 48 px, in a
@@ -192,7 +206,8 @@ const COLUMN = {
  * (ease-out). Rows that enter or leave the view by scrolling neither fade nor slide. The line just
  * reviewed (`foldingId`) folds away instead: its height to 0 in 200 ms, ease-out, as the rows
  * under it slide up. Cut under reduced motion. When nothing matches, the rows that were there fade
- * out over the empty state.
+ * out over the empty state. A row's chips have no motion of their own: they come and go with it.
+ * A line answered (#208) loses its "Maybe a refund" chip at once, when the list is read again.
  *
  * With `withAvatars`, who each line paid shows before its label: its logo or initials, 24 px, hidden
  * from screen readers (the label names it); it does not move but with its row.
@@ -488,9 +503,31 @@ function RowButton({
             <Chip>{messages.toReview}</Chip>
           </span>
         ) : null}
+        {row.maybeRefund === true ? (
+          <span data-slot="maybe-refund" className="flex shrink-0">
+            <Chip>{messages.maybeRefund}</Chip>
+          </span>
+        ) : null}
       </span>
       {withCategory ? (
-        <span className={cn(COLUMN.category, "text-muted-foreground")}>{row.category}</span>
+        <span className={cn(COLUMN.category, "items-center gap-1.5 text-muted-foreground")}>
+          {row.category === undefined || row.maybeRefund === true ? null : (
+            <span
+              data-slot="operation-category-icon"
+              data-icon={row.categoryIcon ?? "other"}
+              data-color={row.categoryColor ?? undefined}
+              className={cn(
+                "flex shrink-0",
+                row.categoryColor === undefined || row.categoryColor === null
+                  ? undefined
+                  : paletteText[row.categoryColor],
+              )}
+            >
+              <Icon name={row.categoryIcon ?? "other"} size="sm" />
+            </span>
+          )}
+          <span className="truncate">{row.maybeRefund === true ? null : row.category}</span>
+        </span>
       ) : null}
       <span className={cn(COLUMN.account, "text-muted-foreground")}>{row.account}</span>
       <span className={COLUMN.amount}>

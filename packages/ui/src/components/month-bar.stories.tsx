@@ -90,7 +90,8 @@ function SwitchingMonths() {
  * `onSelect`, each key is a button (Tab,
  * Enter) that opens the operations behind it. When more went out than came in, the bar stretches to
  * what went out, a dark mark shows where the money received ended, and the last part says by how
- * much the month is overspent, in red.
+ * much the month is overspent, in red. Money back that may be a refund, not answered yet (#208),
+ * is no income: a quiet line under the total says how much waits so, and how many lines.
  *
  * Loading: `MonthBarSkeleton`, the same lines at the same heights, the phone's rows on a phone.
  * It holds the comparison's lines a month has from the user's second on, both of them on a phone:
@@ -98,7 +99,8 @@ function SwitchingMonths() {
  *
  * Motion: when the month changes, the parts grow or shrink to their new widths in 200 ms
  * (ease-out) and the amounts roll; cut under reduced motion. Widths are SVG attributes, so the
- * server's markup draws the bar with no style attribute.
+ * server's markup draws the bar with no style attribute. The maybe-refunds line has no motion of
+ * its own: it comes, changes and goes with the month, at once.
  *
  * Don't: put it in a block inside a block, add a fourth part, or reorder the parts (they read in
  * the order money goes).
@@ -134,6 +136,31 @@ export const NarrowPart: Story = {
     note: "salary and meal vouchers",
     onSelect: () => undefined,
   },
+};
+
+/**
+ * A purchase's money back that may be a refund (#208), not answered: left out of what was received,
+ * said apart under it.
+ */
+export const MaybeRefunds: Story = {
+  args: {
+    note: "salary and meal vouchers",
+    maybeRefunds: { count: 1, amount: { minor: 3000, currency: "EUR" } },
+    onSelect: () => undefined,
+  },
+};
+
+/** Several lines waiting, in French. */
+export const MaybeRefundsFrench: Story = {
+  args: {
+    note: "salaire et titres-restaurant",
+    maybeRefunds: { count: 2, amount: { minor: 7450, currency: "EUR" } },
+  },
+  render: (args) => (
+    <InFrench>
+      <MonthBar {...args} />
+    </InFrench>
+  ),
 };
 
 /** More went out than came in. */

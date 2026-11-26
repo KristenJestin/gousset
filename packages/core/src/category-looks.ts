@@ -1,7 +1,7 @@
 // How a category is shown (#205): its icon and its colour, each a key of a closed list. The keys
 // are what a category stores (`category.icon`, `category.color`), so a key is never renamed nor
 // removed once released; a drawing or a colour may change behind it. packages/ui draws each key
-// (`icons.ts`, and `--category-<key>` in `globals.css`), and its tests keep both lists equal to
+// (`icons.ts`, and `--palette-<key>` in `globals.css`), and its tests keep both lists equal to
 // these. This file imports nothing: the browser reads it as `@gousset/core/category-looks`.
 
 /** The icons a category may take, in the order they are offered. */

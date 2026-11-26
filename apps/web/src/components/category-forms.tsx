@@ -1,8 +1,10 @@
-import type { Benchmark, EntryKind } from "@gousset/core";
+import type { Benchmark, CategoryColorKey, CategoryIconKey, EntryKind } from "@gousset/core";
 import { m } from "@gousset/i18n/messages";
 import { Button } from "@gousset/ui/components/button";
+import { CategoryIconChoice } from "@gousset/ui/components/category-icon-choice";
 import { CategoryPicker } from "@gousset/ui/components/category-picker";
 import type { CategoryChoice } from "@gousset/ui/components/category-picker";
+import { ColorSwatches } from "@gousset/ui/components/color-swatches";
 import { Dialog } from "@gousset/ui/components/dialog";
 import { FormMessage } from "@gousset/ui/components/form-message";
 import { MoneyField } from "@gousset/ui/components/money-field";
@@ -130,6 +132,49 @@ function NameField({
   );
 }
 
+/** A top-level category one may go under, with its colour, which a child without its own takes. */
+type Parent = { id: string; name: string; color: CategoryColorKey | null };
+
+/** A category's icon and colour, as chosen in a form (#205). */
+type Look = { icon: CategoryIconKey | null; color: CategoryColorKey | null };
+
+/**
+ * The colour and the icon of a category (#205): the palette (no colour first: "As Housing" under a
+ * parent, whose colour it then takes), then the icons, the chosen one drawn as it will be shown.
+ */
+function LookFields({
+  look,
+  onChange,
+  parent,
+}: {
+  look: Look;
+  onChange: (look: Look) => void;
+  /** Its parent, for a child: no colour of its own means the parent's. */
+  parent: Parent | undefined;
+}) {
+  return (
+    <>
+      <ColorSwatches
+        label={m.categoriesFieldColor()}
+        value={look.color}
+        onChange={(color) => onChange({ ...look, color })}
+        noneLabel={
+          parent === undefined
+            ? m.categoriesColorNone()
+            : m.categoriesColorParent({ parent: parent.name })
+        }
+        noneColor={parent?.color ?? null}
+      />
+      <CategoryIconChoice
+        label={m.categoriesFieldIcon()}
+        value={look.icon}
+        onChange={(icon) => onChange({ ...look, icon })}
+        color={look.color ?? parent?.color ?? null}
+      />
+    </>
+  );
+}
+
 /** "At the top level", then each top-level category one may go under. */
 function parentItems(parents: ReadonlyArray<{ id: string; name: string }>) {
   return [
@@ -153,16 +198,20 @@ export function CreateCategoryDialog({
 }: Opened & {
   initialKind: EntryKind;
   /** The top-level categories in use of each kind. */
-  parentsOfKind: (kind: EntryKind) => ReadonlyArray<{ id: string; name: string }>;
-  onCreate: (input: {
-    kind: EntryKind;
-    name: string;
-    parentId: string | null;
-  }) => Promise<CategoryAnswer>;
+  parentsOfKind: (kind: EntryKind) => ReadonlyArray<Parent>;
+  onCreate: (
+    input: {
+      kind: EntryKind;
+      name: string;
+      parentId: string | null;
+    } & Look,
+  ) => Promise<CategoryAnswer>;
 }) {
   const [kind, setKind] = useState<EntryKind>(initialKind);
   const [name, setName] = useState("");
   const [parent, setParent] = useState(TOP);
+  const [look, setLook] = useState<Look>({ icon: null, color: null });
+  const parents = parentsOfKind(kind);
 
   const kindItems: ReadonlyArray<ChoiceItem> = KINDS.map((value) => ({
     value,
@@ -174,7 +223,7 @@ export function CreateCategoryDialog({
       {...opened}
       title={m.categoriesCreateTitle()}
       submitLabel={m.categoriesCreateSubmit()}
-      onSubmit={() => onCreate({ kind, name, parentId: parent === TOP ? null : parent })}
+      onSubmit={() => onCreate({ kind, name, parentId: parent === TOP ? null : parent, ...look })}
     >
       {(nameError) => (
         <>
@@ -194,13 +243,47 @@ export function CreateCategoryDialog({
           <NameField value={name} onChange={setName} error={nameError} />
           <Select
             label={m.categoriesFieldParent()}
-            items={parentItems(parentsOfKind(kind))}
+            items={parentItems(parents)}
             value={parent}
             onValueChange={(value) => setParent(value ?? TOP)}
             required
           />
+          <LookFields
+            look={look}
+            onChange={setLook}
+            parent={parents.find((each) => each.id === parent)}
+          />
         </>
       )}
+    </CategoryDialog>
+  );
+}
+
+/** "Colour and icon": what the category is shown with, wherever it is named (#205). */
+export function LookCategoryDialog({
+  name,
+  initial,
+  parent,
+  onSave,
+  ...opened
+}: Opened & {
+  name: string;
+  initial: Look;
+  /** Its parent, for a child: no colour of its own means the parent's. */
+  parent: Parent | undefined;
+  onSave: (look: Look) => Promise<CategoryAnswer>;
+}) {
+  const [look, setLook] = useState(initial);
+
+  return (
+    <CategoryDialog
+      {...opened}
+      title={m.categoriesLookTitle({ name })}
+      description={m.categoriesLookDescription()}
+      submitLabel={m.categoriesLookSubmit()}
+      onSubmit={() => onSave(look)}
+    >
+      {() => <LookFields look={look} onChange={setLook} parent={parent} />}
     </CategoryDialog>
   );
 }
@@ -235,7 +318,7 @@ export function MoveCategoryDialog({
 }: Opened & {
   name: string;
   parentId: string | null;
-  parents: ReadonlyArray<{ id: string; name: string }>;
+  parents: ReadonlyArray<Parent>;
   onMove: (parentId: string | null) => Promise<CategoryAnswer>;
 }) {
   const [parent, setParent] = useState(parentId ?? TOP);

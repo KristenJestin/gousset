@@ -2,6 +2,8 @@ import type { QueryFailed } from "@gousset/db/user-data";
 import { Clock, Effect, Result } from "effect";
 
 import { monthsCounted } from "./benchmarks";
+import { isCategoryColor, isCategoryIcon, shownColor } from "./category-looks";
+import type { CategoryColorKey, CategoryIconKey } from "./category-looks";
 import { CategoryStore } from "./category-store";
 import type {
   Benchmark,
@@ -39,9 +41,6 @@ export const AVERAGE_MONTHS = 6;
 
 const MAX_POSITION = 1_000_000;
 
-/** A key of the icons shipped with packages/ui. */
-const ICON = /^[a-z\d-]{1,64}$/;
-
 /** "Parent > Child": how a child is named where a name alone is not enough. */
 const PATH_SEPARATOR = ">";
 
@@ -50,7 +49,12 @@ export type CategoryNode = {
   readonly id: string;
   readonly kind: EntryKind;
   readonly name: string;
-  readonly icon: string | null;
+  /** Its icon, a key of `CATEGORY_ICONS`; null for none. */
+  readonly icon: CategoryIconKey | null;
+  /** Its own colour, a key of `CATEGORY_COLORS`; null to take its parent's (#205). */
+  readonly color: CategoryColorKey | null;
+  /** The colour it is shown in: its own, else its parent's; null for none. */
+  readonly shownColor: CategoryColorKey | null;
   readonly position: number;
   /** Null for a top-level category. */
   readonly parentId: string | null;
@@ -95,7 +99,10 @@ export type CategoryInput = {
   readonly name: string;
   /** A top-level category of the same kind to go under; none for a top-level one. */
   readonly parentId?: string | null;
+  /** A key of `CATEGORY_ICONS`; none by default. */
   readonly icon?: string | null;
+  /** A key of `CATEGORY_COLORS`; none by default: a child then takes its parent's. */
+  readonly color?: string | null;
   /** Automatic by default. */
   readonly benchmark?: Benchmark;
   /** Last among its siblings by default. */
@@ -107,7 +114,10 @@ export type CategoryEdit = {
   readonly name?: string;
   /** A top-level category of the same kind to go under, or null for the top. */
   readonly parentId?: string | null;
+  /** A key of `CATEGORY_ICONS`, or null for none. */
   readonly icon?: string | null;
+  /** A key of `CATEGORY_COLORS`, or null for none (a child then takes its parent's). */
+  readonly color?: string | null;
   readonly benchmark?: Benchmark;
   /** Among its siblings, ordered by (position, id); last among new siblings on a move. */
   readonly position?: number;
@@ -174,7 +184,11 @@ function benchmarkOf(benchmark: Benchmark): Result.Result<Benchmark, CategoryRef
 }
 
 function iconOf(icon: string | null): Result.Result<string | null, CategoryRefused> {
-  return icon === null || ICON.test(icon) ? Result.succeed(icon) : refused("icon");
+  return icon === null || isCategoryIcon(icon) ? Result.succeed(icon) : refused("icon");
+}
+
+function colorOf(color: string | null): Result.Result<string | null, CategoryRefused> {
+  return color === null || isCategoryColor(color) ? Result.succeed(color) : refused("color");
 }
 
 function positionOf(position: number): Result.Result<number, CategoryRefused> {
@@ -315,12 +329,15 @@ export const listCategories = (owner: string, listing: CategoryListing = {}) =>
     const nodeOf = (category: CategoryRecord, children: ReadonlyArray<CategoryNode>) => {
       const own = useOf.get(category.id);
       const netOf = (id: string) => useOf.get(id)?.net ?? [];
+      const parent = categories.find((each) => each.id === category.parentId);
 
       const node: CategoryNode = {
         id: category.id,
         kind: category.kind,
         name: category.name,
-        icon: category.icon,
+        icon: category.icon !== null && isCategoryIcon(category.icon) ? category.icon : null,
+        color: shownColor(category.color, null),
+        shownColor: shownColor(category.color, parent?.color),
         position: category.position,
         parentId: category.parentId,
         archivedAt: category.archivedAt,
@@ -362,7 +379,7 @@ export const listCategories = (owner: string, listing: CategoryListing = {}) =>
  * Creates a category, at the top or under a top-level category of its kind, last among its
  * siblings unless a position is given. Fails with `CategoryNotFound` (the parent),
  * `CategoryNameTaken` or `CategoryRefused` (`third_level`, `parent_kind`, `archived`, `name`,
- * `too_many`, `benchmark`, `icon`, `position`).
+ * `too_many`, `benchmark`, `icon`, `color`, `position`).
  */
 export const createCategory = (owner: string, input: CategoryInput) =>
   Effect.gen(function* () {
@@ -383,6 +400,7 @@ export const createCategory = (owner: string, input: CategoryInput) =>
 
             const benchmark = yield* benchmarkOf(input.benchmark ?? { mode: "automatic" });
             const icon = yield* iconOf(input.icon ?? null);
+            const color = yield* colorOf(input.color ?? null);
             const parentId = input.parentId ?? null;
 
             if (categories.length >= MAX_CATEGORIES) {
@@ -413,6 +431,7 @@ export const createCategory = (owner: string, input: CategoryInput) =>
                 kind: input.kind,
                 name,
                 icon,
+                color,
                 position,
                 benchmark,
                 fallback: false,
@@ -435,10 +454,10 @@ export const createCategory = (owner: string, input: CategoryInput) =>
 
 /**
  * Changes a category: its name, its place (at the top, or under a top-level category of its kind;
- * one with children stays at the top), its benchmark, its icon, its position among its siblings.
- * The fallback may be renamed and moved too. Fails with `CategoryNotFound`, `CategoryNameTaken` or
- * `CategoryRefused` (`third_level`, `parent_kind`, `itself`, `archived`, `name`, `benchmark`,
- * `icon`, `position`).
+ * one with children stays at the top), its benchmark, its icon, its colour, its position among its
+ * siblings. The fallback may be renamed and moved too. Fails with `CategoryNotFound`,
+ * `CategoryNameTaken` or `CategoryRefused` (`third_level`, `parent_kind`, `itself`, `archived`,
+ * `name`, `benchmark`, `icon`, `color`, `position`).
  */
 export const editCategory = (owner: string, categoryId: string, edit: CategoryEdit) =>
   Effect.gen(function* () {
@@ -489,6 +508,7 @@ export const editCategory = (owner: string, categoryId: string, edit: CategoryEd
               parentId,
               position,
               icon: edit.icon === undefined ? category.icon : yield* iconOf(edit.icon),
+              color: edit.color === undefined ? category.color : yield* colorOf(edit.color),
               benchmark:
                 edit.benchmark === undefined
                   ? category.benchmark

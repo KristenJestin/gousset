@@ -13,6 +13,8 @@ const groceries: LineCategory = {
   id: "c-groceries",
   name: "Groceries",
   parentName: null,
+  icon: null,
+  color: null,
   kind: "expense",
 };
 

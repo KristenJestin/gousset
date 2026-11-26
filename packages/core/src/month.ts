@@ -107,6 +107,8 @@ export type MonthScope = {
   readonly entries: Range;
   /** The transfers with a side booked in it: the month. */
   readonly transfers: Range;
+  /** The incomes that happened in it that may be refunds (#208): the month. */
+  readonly maybeRefunds: Range;
   /** The counted lines of benefit accounts booked up to this day, oldest first. */
   readonly benefitTo: string;
   /** The statement balances given for this day or before: today. */
@@ -130,6 +132,11 @@ export type MonthRows = {
   readonly reach: ReadonlyArray<StatementReach>;
   /** Empty when the scope asked for none. */
   readonly charges: ReadonlyArray<Charge>;
+  /**
+   * The lines of the scope's incomes that may be refunds the user has not answered (#208,
+   * `maybeRefundsAmong`): no income until answered.
+   */
+  readonly maybeRefunds: ReadonlyArray<string>;
 };
 
 /** Where a month's rows are read. The live layer (`monthFactsLayer`) goes through `UserData`. */
@@ -170,8 +177,13 @@ export type MonthSummary = Against & {
   readonly month: string;
   /** The user's currency: the one every figure is in; the others are given apart. */
   readonly currency: string;
-  /** The income entries that happened in the month, each at its net. */
+  /**
+   * The income entries that happened in the month, each at its net; a line that may be a refund,
+   * not answered yet, is not among them (#208).
+   */
   readonly received: Money;
+  /** The lines coming back that may be refunds, waiting for the user's answer: apart (#208). */
+  readonly maybeRefunds: { readonly count: number; readonly amount: Money };
   /** Where it came from: the incomes' categories, the largest first. */
   readonly receivedFrom: ReadonlyArray<{
     readonly categoryId: string;
@@ -195,6 +207,7 @@ export type MonthSummary = Against & {
   readonly elsewhere: ReadonlyArray<{
     readonly currency: string;
     readonly received: Money;
+    readonly maybeRefunds: Money;
     readonly spent: Money;
     readonly setAside: Money;
     readonly left: Money;
@@ -270,17 +283,23 @@ export type SpendingDays = {
   readonly days: ReadonlyArray<SpendingDay>;
 };
 
-/** Money that came in from outside, or moved from one account of the user's to another. */
+/**
+ * Money that came in from outside, or moved from one account of the user's to another; or a line
+ * coming back that may be a refund, not answered yet (`maybe-refund`, #208): shown apart, it is no
+ * income until answered.
+ */
 export type Movement = {
-  readonly kind: "income" | "transfer";
+  readonly kind: "income" | "maybe-refund" | "transfer";
   /** An income's day, or the day the side in was booked. */
   readonly day: string;
   /** Who paid (an income), or the account the money left. */
   readonly from: string;
   /** The account it arrived on: the name, the institution too when two share a name. */
   readonly to: string;
-  /** An income's category ("Parent > Child"); null for a transfer. */
+  /** An income's category ("Parent > Child"); null for a transfer and a maybe refund. */
   readonly note: string | null;
+  /** The line it came on: an income's first payment, a maybe refund's own; null for a transfer. */
+  readonly lineId: string | null;
   readonly amount: Money;
 };
 
@@ -298,6 +317,8 @@ export type LineToReview = {
   readonly category: LineCategory | null;
   readonly account: LineAccount;
   readonly amount: Money;
+  /** Maybe a refund (#208): no income until the user answers. */
+  readonly maybeRefund: boolean;
 };
 
 /** The lines to review (#35's queue), booked in the month. */
@@ -412,9 +433,12 @@ type EntryNet = {
   /** Payments less refunds, positive the entry's way. */
   readonly minor: number;
   /** Its first payment's line, for an income's movement. */
+  readonly lineId: string;
   readonly accountId: string;
   readonly label: string;
   readonly counterpartyName: string | null;
+  /** An income whose one line may be a refund, not answered yet (#208): no income until then. */
+  readonly maybeRefund: boolean;
 };
 
 /** The rows of a month, with what every block is computed from. */
@@ -491,6 +515,7 @@ function entriesOf(
   merchants: ReadonlyMap<string, MonthMerchant>,
 ): ReadonlyArray<EntryNet> {
   const lineMerchant = lineMerchants(rows);
+  const maybeRefunds = new Set(rows.maybeRefunds);
   const byEntry = new Map<string, Array<MonthPart>>();
 
   for (const part of rows.parts) {
@@ -536,9 +561,11 @@ function entriesOf(
       merchantId,
       currency,
       minor,
+      lineId: first.lineId,
       accountId: first.accountId,
       label: first.label,
       counterpartyName: first.counterpartyName,
+      maybeRefund: first.kind === "income" && parts.length === 1 && maybeRefunds.has(first.lineId),
     }));
   });
 }
@@ -609,12 +636,24 @@ function accountName(reading: Reading, id: string): string {
   return shared && found.institution !== null ? `${found.name} (${found.institution})` : found.name;
 }
 
-/** What the month's figures need from what was read: spent and received by currency. */
-function sumsOf(reading: Reading, kind: EntryKind, month: string): Map<string, number> {
+/**
+ * What the month's figures need from what was read: spent and received by currency, a line that
+ * may be a refund left out of received (#208); or those lines alone (`maybe-refund`).
+ */
+function sumsOf(
+  reading: Reading,
+  kind: EntryKind | "maybe-refund",
+  month: string,
+): Map<string, number> {
   const sums = new Map<string, number>();
 
   for (const entry of reading.entries) {
-    if (entry.kind === kind && entry.month === month) {
+    const counted =
+      kind === "maybe-refund"
+        ? entry.maybeRefund
+        : entry.kind === kind && !(kind === "income" && entry.maybeRefund);
+
+    if (counted && entry.month === month) {
       add(sums, entry.currency, entry.minor);
     }
   }
@@ -650,14 +689,18 @@ function setAsideOf(reading: Reading): Map<string, number> {
 function summaryOf(reading: Reading): MonthSummary {
   const { month, currency } = reading;
   const received = sumsOf(reading, "income", month);
+  const maybeRefunds = sumsOf(reading, "maybe-refund", month);
   const spent = sumsOf(reading, "expense", month);
   const setAside = setAsideOf(reading);
   const own = (sums: ReadonlyMap<string, number>) => sums.get(currency) ?? 0;
   const left = own(received) - own(spent) - own(setAside);
   let onBenefit = 0;
+  // A line that may be a refund is not in left (#208): nor is it in its restricted part.
+  const waitingLines = new Set(reading.rows.maybeRefunds);
 
   for (const line of reading.rows.benefitLines) {
     if (
+      !waitingLines.has(line.id) &&
       line.bookedOn.slice(0, 7) === month &&
       reading.accounts.get(line.accountId)?.currency === currency
     ) {
@@ -668,7 +711,12 @@ function summaryOf(reading: Reading): MonthSummary {
   const sources = new Map<string, number>();
 
   for (const entry of reading.entries) {
-    if (entry.kind === "income" && entry.month === month && entry.currency === currency) {
+    if (
+      entry.kind === "income" &&
+      !entry.maybeRefund &&
+      entry.month === month &&
+      entry.currency === currency
+    ) {
       add(sources, entry.categoryId, entry.minor);
     }
   }
@@ -695,15 +743,22 @@ function summaryOf(reading: Reading): MonthSummary {
       0,
     );
 
-  const others = [...new Set([...received.keys(), ...spent.keys(), ...setAside.keys()])]
+  const others = [
+    ...new Set([...received.keys(), ...maybeRefunds.keys(), ...spent.keys(), ...setAside.keys()]),
+  ]
     .filter((other) => other !== currency)
     .toSorted();
+
+  const waiting = reading.entries.filter(
+    (entry) => entry.maybeRefund && entry.month === month && entry.currency === currency,
+  );
 
   return {
     month,
     currency,
     ...againstOf(reading),
     received: money(own(received), currency),
+    maybeRefunds: { count: waiting.length, amount: money(own(maybeRefunds), currency) },
     receivedFrom,
     spent: money(own(spent), currency),
     averageSpent:
@@ -720,8 +775,8 @@ function summaryOf(reading: Reading): MonthSummary {
     left: money(left, currency),
     restricted: money(Math.max(0, Math.min(left, onBenefit)), currency),
     elsewhere: others.flatMap((other) => {
-      const figures = [received, spent, setAside].map((sums) => sums.get(other) ?? 0);
-      const [inMinor = 0, outMinor = 0, asideMinor = 0] = figures;
+      const figures = [received, spent, setAside, maybeRefunds].map((sums) => sums.get(other) ?? 0);
+      const [inMinor = 0, outMinor = 0, asideMinor = 0, waitingMinor = 0] = figures;
 
       return figures.every((minor) => minor === 0)
         ? []
@@ -729,6 +784,7 @@ function summaryOf(reading: Reading): MonthSummary {
             {
               currency: other,
               received: money(inMinor, other),
+              maybeRefunds: money(waitingMinor, other),
               spent: money(outMinor, other),
               setAside: money(asideMinor, other),
               left: money(inMinor - outMinor - asideMinor, other),
@@ -947,11 +1003,12 @@ function movementsOf(reading: Reading): MonthMovements {
 
     return [
       {
-        kind: "income",
+        kind: entry.maybeRefund ? "maybe-refund" : "income",
         day: entry.happenedOn,
         from: merchant?.name ?? entry.counterpartyName ?? entry.label,
         to: accountName(reading, entry.accountId),
-        note: categoryPath(reading.rows.categories, entry.categoryId),
+        note: entry.maybeRefund ? null : categoryPath(reading.rows.categories, entry.categoryId),
+        lineId: entry.lineId,
         amount: money(entry.minor, entry.currency),
       },
     ];
@@ -969,6 +1026,7 @@ function movementsOf(reading: Reading): MonthMovements {
             from: accountName(reading, transfer.outAccountId),
             to: accountName(reading, into.id),
             note: null,
+            lineId: null,
             amount: money(transfer.inMinor, into.currency),
           },
         ];
@@ -1131,6 +1189,7 @@ const readMonth = (owner: string, month: string, currency: string, withCharges: 
     const rows = yield* facts.read(owner, {
       entries: { from: `${averageFrom}-01`, to: last },
       transfers: { from: `${month}-01`, to: last },
+      maybeRefunds: { from: `${month}-01`, to: last },
       benefitTo: earlier(lastDayOf(addMonths(month, 1)), day),
       statementsTo: day,
       charges: withCharges ? chargeRange(earlier(last, day)) : null,
@@ -1200,6 +1259,7 @@ export const monthLinesToReview = (owner: string, month: string) =>
         category: line.category,
         account: line.account,
         amount: line.amount,
+        maybeRefund: line.maybeRefund,
       })),
     };
 

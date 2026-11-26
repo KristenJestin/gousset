@@ -120,6 +120,9 @@ async function categoriesOf(owner: string, from = data) {
       name: row.name,
       position: row.position,
       fallback: row.isFallback,
+      // The set's icon and colour (#205), the same in both languages: a rename keeps them.
+      icon: row.icon,
+      color: row.color,
     }))
     .toSorted(
       (a, b) =>

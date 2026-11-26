@@ -10,12 +10,16 @@ export type MerchantKey = string;
 
 /**
  * What is known already: each alias's key, and each merchant's name key, with the merchant's id;
- * `intermediary` when the merchant is a payment intermediary (#30), whose keys match only exactly.
+ * `intermediary` when the merchant is a payment intermediary (#30), whose keys match only exactly;
+ * `whole` for a merchant's name that is the shop of its own cleaned labels, their town dropped
+ * (#193, `./towns`), which compares only whole: `BOULANGERIE` from `BOULANGERIE RIVERTON` never
+ * takes `BOULANGERIE DUPONT`.
  */
 export type KnownKey = {
   readonly key: MerchantKey;
   readonly merchantId: string;
   readonly intermediary?: boolean;
+  readonly whole?: boolean;
 };
 
 export type Assignment = {
@@ -116,6 +120,34 @@ const PAYMENT_PHRASES: ReadonlyArray<string> = [
   "KAUF",
   "KAUF DIENSTLEISTUNG",
   "KARTENNUMMER",
+];
+
+/**
+ * The words a card payment's label starts with (#193): its trailing town is no part of its
+ * merchant. `ANN CARTE`, a card's cancellation, is one too (`./operations`).
+ */
+const CARD_PHRASES: ReadonlyArray<string> = [
+  "CB",
+  "CARTE",
+  "PAIEMENT CB",
+  "PAIEMENT CARTE",
+  "PAIEMENT PAR CARTE",
+  "PAIEMENT AVEC LA CARTE",
+  "ACHAT CB",
+  "ACHAT CARTE",
+  "FACTURE CARTE",
+  "CARD",
+  "DEBIT CARD",
+  "CHECKCARD",
+  "POS",
+  "CONTACTLESS",
+  "VISA",
+  "MASTERCARD",
+  "MAESTRO",
+  "BANCONTACT",
+  "GIROCARD",
+  "KARTENZAHLUNG",
+  "EC KARTE",
 ];
 
 /** Phrases as words, the longest first. */
@@ -418,11 +450,44 @@ function keyOf(text: string, prefixes = PREFIXES): MerchantKey | null {
     length += 1 + token.text.length;
   }
 
-  while (name.length > 1 && TRAILING.has(name.at(-1) ?? "")) {
-    name.pop();
+  const trimmed = endTrimmed(name);
+
+  return trimmed.length === 0 ? null : trimmed.join(" ");
+}
+
+/**
+ * A name's words with what ends a name trimmed (rule 11), one word at a time while more than one is
+ * left: a country, a US state, a legal form, a card word.
+ */
+export function endTrimmed(words: ReadonlyArray<string>): ReadonlyArray<string> {
+  let end = words.length;
+
+  while (end > 1 && TRAILING.has(words[end - 1] ?? "")) {
+    end -= 1;
   }
 
-  return name.length === 0 ? null : name.join(" ");
+  return words.slice(0, end);
+}
+
+const CARD_WORDS = phrases(CARD_PHRASES);
+
+/**
+ * Whether the label is a card payment's (#193), or its cancellation's: it starts with a card's words
+ * (`CB`, `CARTE`, `PAIEMENT PAR CARTE`, `CARD PAYMENT`, `CONTACTLESS`, `POS`, `KARTENZAHLUNG`…),
+ * whole, or `ANN CARTE`. Only such a label ends with the town where the card was used.
+ */
+export function isCardPayment(label: string): boolean {
+  const operation = operationOf(label);
+
+  if (operation === "card" || operation === "card_cancellation") {
+    return true;
+  }
+
+  const words = normalized(label)
+    .split(/[^A-Z0-9&']+/)
+    .filter((word) => word !== "");
+
+  return CARD_WORDS.some((phrase) => phrase.every((word, index) => words[index] === word));
 }
 
 /**
@@ -539,7 +604,7 @@ export function nameKey(name: string): MerchantKey {
 }
 
 /** A key as keys compare: letters and digits only, so GREEN MARKET is GREENMARKET. */
-function compactOf(key: MerchantKey): string {
+export function compactOf(key: MerchantKey): string {
   return key.replaceAll(/[^A-Z0-9]/g, "");
 }
 
@@ -555,12 +620,14 @@ function prefixesOf(key: MerchantKey): ReadonlyArray<string> {
  * each key's compact form and by each of its word prefixes: a key is matched by lookups, never by
  * reading every known key, so that a recognition of tens of thousands of keys stays linear. An
  * intermediary's keys are only in `exact`: `LYDIA` never takes `LYDIA MARTIN`, a person, nor joins
- * it.
+ * it. A shop, a card label without its town (#193), is only in `shops`, matched whole: `BOULANGERIE`
+ * of `BOULANGERIE RIVERTON` never takes `BOULANGERIE DUPONT`.
  */
 type Known = {
   readonly byCompact: Map<string, Set<string>>;
   readonly byPrefix: Map<string, Set<string>>;
   readonly exact: Map<string, Set<string>>;
+  readonly shops: Map<string, Set<string>>;
 };
 
 function add(index: Map<string, Set<string>>, form: string, owner: string): void {
@@ -595,14 +662,33 @@ function ownersOf(index: Map<string, Set<string>>, form: string): ReadonlyArray<
 const MIN_PREFIX = 4;
 
 /**
+ * The owner whose key or shop is the shop of a card label (#193), its town dropped, compared whole;
+ * the smallest when several are.
+ */
+function ownerOfShop(shop: MerchantKey, known: Known): string | undefined {
+  const compact = compactOf(shop);
+
+  const [same] = [
+    ...new Set([...ownersOf(known.byCompact, compact), ...ownersOf(known.shops, compact)]),
+  ].toSorted();
+
+  return same;
+}
+
+/**
  * The owner a key goes to among the known keys, or undefined for a new merchant; an intermediary's
  * key (`intermediary`) only to the same compact form.
  */
 function ownerOf(key: MerchantKey, known: Known, intermediary: boolean): string | undefined {
   const compact = compactOf(key);
 
+  // A shop counts here (#193): a key equal to it, a town or none, is its merchant's.
   const [equal] = [
-    ...new Set([...ownersOf(known.byCompact, compact), ...ownersOf(known.exact, compact)]),
+    ...new Set([
+      ...ownersOf(known.byCompact, compact),
+      ...ownersOf(known.exact, compact),
+      ...ownersOf(known.shops, compact),
+    ]),
   ].toSorted();
 
   if (equal !== undefined || intermediary) {
@@ -656,25 +742,50 @@ function shortestFirst(a: MerchantKey, b: MerchantKey): number {
  * Which merchant each new key goes to: an existing one, or a new one by name; new keys given in
  * any order, duplicates ignored. One assignment per distinct key, shortest key first.
  * Deterministic. A key of an intermediary (a known one flagged, a new one `isIntermediary` says is
- * one, and every key of the merchant it makes) matches only the same compact form.
+ * one, and every key of the merchant it makes) matches only the same compact form. A card label's
+ * key that `shopOf` gives a shop, its town dropped (#193, `./towns`), goes first to the merchant
+ * whose key or shop is that shop, compared whole, and a new merchant is named after the shop.
  */
 export function assignMerchants(
   keys: ReadonlyArray<MerchantKey>,
   known: ReadonlyArray<KnownKey>,
   isIntermediary: (key: MerchantKey) => boolean = () => false,
+  shopOf: (key: MerchantKey) => MerchantKey | undefined = () => undefined,
 ): ReadonlyArray<Assignment> {
-  const index: Known = { byCompact: new Map(), byPrefix: new Map(), exact: new Map() };
+  const index: Known = {
+    byCompact: new Map(),
+    byPrefix: new Map(),
+    exact: new Map(),
+    shops: new Map(),
+  };
+
   // The owners whose keys match only exactly: intermediaries, known or made in this run.
   const exactOwners = new Set<string>();
 
-  for (const { key, merchantId, intermediary } of known) {
+  /** The shop of a key, but for an intermediary's, which matches only exactly. */
+  const shopOfKey = (key: MerchantKey): MerchantKey | undefined => {
+    const shop = shopOf(key);
+
+    return shop === undefined || isIntermediary(key) || isIntermediary(shop) ? undefined : shop;
+  };
+
+  for (const { key, merchantId, intermediary, whole } of known) {
     const owner = `id:${merchantId}`;
+    const shop = intermediary === true ? undefined : shopOfKey(key);
 
     if (intermediary === true) {
       exactOwners.add(owner);
     }
 
-    learn(index, key, owner, intermediary === true);
+    if (whole === true && intermediary !== true) {
+      add(index.shops, compactOf(key), owner);
+    } else {
+      learn(index, key, owner, intermediary === true);
+    }
+
+    if (shop !== undefined) {
+      add(index.shops, compactOf(shop), owner);
+    }
   }
 
   const merchants = new Map<string, Assignment["merchant"]>(
@@ -684,8 +795,14 @@ export function assignMerchants(
   const assignments: Array<Assignment> = [];
 
   for (const key of [...new Set(keys)].toSorted(shortestFirst)) {
-    const name = merchantName(key);
-    const owner = ownerOf(key, index, isIntermediary(key)) ?? `new:${name}`;
+    const shop = shopOfKey(key);
+    const name = merchantName(shop ?? key);
+
+    const owner =
+      (shop === undefined ? undefined : ownerOfShop(shop, index)) ??
+      ownerOf(key, index, isIntermediary(key)) ??
+      `new:${name}`;
+
     const merchant = merchants.get(owner) ?? { name };
 
     if (isIntermediary(key) && !merchants.has(owner)) {
@@ -695,6 +812,11 @@ export function assignMerchants(
     // Each key assigned is known for the next, as it will be once its alias is written.
     merchants.set(owner, merchant);
     learn(index, key, owner, exactOwners.has(owner));
+
+    if (shop !== undefined && !exactOwners.has(owner)) {
+      add(index.shops, compactOf(shop), owner);
+    }
+
     assignments.push({ alias: key, merchant });
   }
 

@@ -33,7 +33,11 @@ The rest of the stack is in [`architecture.md`](architecture.md).
 
 ### Neutral interface, coloured data
 
-The interface stays neutral and the data carries the colour. Text and surfaces are warm greys. Colour is used only for chart series and for states (drifting, to review).
+The interface stays neutral and the data carries the colour. Text and surfaces are warm greys. Colour is used only for chart series, for states (drifting, to review), and for the colours the user gives their own data.
+
+### The user's colours
+
+A category's colour (#205) is the user's data: it tints the category's own tile and icon, and its bar in the review's breakdown, wherever the category is named. It is chosen in a fixed palette of twelve, `--palette-<key>` (red, orange, amber, olive, green, teal, cyan, blue, indigo, violet, pink, grey), whose keys are `packages/core`'s (`category-looks.ts`). Each colour holds 4.5:1 or more on the page, a block, a muted band, a floating surface and its own tile (15 % of it), in both schemes, which `src/lib/contrast.test.ts` measures and the "Theme/Tokens" story lists. A child without a colour of its own takes its parent's. The rest of the page keeps the theme's colours: the month bar keeps its money roles, never split by category. `ColorSwatches` is the one way to choose a colour, for whatever else the user tints.
 
 ### One colour per role
 
@@ -136,7 +140,7 @@ The logo files are in [`brand/`](../brand/README.md): a G in one stroke whose ba
 **Tabler Icons** (`@tabler/icons-react`), outline style, stroke 1.5. It covers every category a budget needs (groceries, fuel, health, travel, pets…), takes `currentColor`, a size and a stroke width, and is tree-shaken.
 
 - **Pages never import Tabler directly.** `packages/ui` exports the icons Gousset uses under its own names (`icons.ts`: `ImportIcon`, `TransferIcon`, `CategoryIcons.groceries`…), through one `Icon` wrapper that sets the size and the stroke. Changing the stroke, a drawing or the whole library touches that file only.
-- Category icons are chosen once, in that file, and the user picks among them; no emoji.
+- Category icons are chosen once, in that file, and the user picks among them (`CategoryIconChoice`); no emoji. Their keys are `packages/core`'s (`category-looks.ts`), never renamed once released.
 
 ## Loading
 

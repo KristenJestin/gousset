@@ -16,6 +16,7 @@ import { categoriesOfLines } from "./category-store-database";
 import { merchantsOfLines } from "./merchants/line-merchant";
 import type { NamedMerchant } from "./merchants/line-merchant";
 import type { LineCategory } from "./category-store";
+import { maybeRefundsAmong } from "./expenses/expenses";
 import { LineStore } from "./line-store";
 import { linesWithSeveralCandidates } from "./transfers/pair-lines";
 import type { FoundLine, FoundLineDetail, LineQuery } from "./line-store";
@@ -147,6 +148,7 @@ function found(
   row: LineColumns,
   category: LineCategory | null,
   merchant: NamedMerchant | null,
+  maybeRefund: boolean,
 ): FoundLine {
   return {
     id: row.id,
@@ -166,6 +168,7 @@ function found(
     category,
     merchant,
     fromBalance: row.source === "balance",
+    maybeRefund,
   };
 }
 
@@ -225,6 +228,11 @@ async function search(transaction: UserTransaction, query: LineQuery) {
 
   const merchants = await merchantsOfLines(transaction, rows);
 
+  const maybeRefunds = await maybeRefundsAmong(
+    transaction,
+    rows.flatMap((row) => (row.amountMinor > 0 && row.state === "counted" ? [row.id] : [])),
+  );
+
   // Every line's account is the user's (a composite foreign key) and so among those just read.
   const lines = rows.flatMap((row) => {
     const owned = accountOf.get(row.accountId);
@@ -241,6 +249,7 @@ async function search(transaction: UserTransaction, query: LineQuery) {
             },
             categories.get(row.id) ?? null,
             merchants.get(row.id) ?? null,
+            maybeRefunds.has(row.id),
           ),
         ];
   });
@@ -298,9 +307,15 @@ async function show(
 
   const categories = await categoriesOfLines(transaction, [row.id]);
   const merchants = await merchantsOfLines(transaction, [row]);
+  const maybeRefunds = await maybeRefundsAmong(transaction, [row.id]);
 
   return {
-    ...found(row, categories.get(row.id) ?? null, merchants.get(row.id) ?? null),
+    ...found(
+      row,
+      categories.get(row.id) ?? null,
+      merchants.get(row.id) ?? null,
+      maybeRefunds.has(row.id),
+    ),
     source: row.source,
     originalAmountMinor: row.originalAmountMinor,
     originalCurrency: row.originalCurrency,

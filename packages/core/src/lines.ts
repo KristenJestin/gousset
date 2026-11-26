@@ -78,6 +78,12 @@ export type LineRow = {
   readonly merchant: NamedMerchant | null;
   /** The movement a noted balance makes (#31): it has no label, the interface names it. */
   readonly fromBalance: boolean;
+  /**
+   * Maybe a refund (#208): a line coming back that may cancel an expense, still classified by
+   * default, that the user has not answered. It counts as no income until answered: confirmed, it
+   * is linked as a refund; refused, it is an ordinary income.
+   */
+  readonly maybeRefund: boolean;
 };
 
 export type LinePage = {
@@ -289,6 +295,7 @@ export function rowOf(line: FoundLine, reviewing = false): LineRow {
     category: line.category,
     merchant: line.merchant,
     fromBalance: line.fromBalance,
+    maybeRefund: line.maybeRefund,
   };
 }
 

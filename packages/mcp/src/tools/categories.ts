@@ -1,4 +1,6 @@
 import {
+  CATEGORY_COLORS,
+  CATEGORY_ICONS,
   archiveCategory,
   categoryNamed,
   createCategory,
@@ -6,6 +8,7 @@ import {
   listCategories,
   mergeCategory,
   restoreCategory,
+  shownColor,
 } from "@gousset/core";
 import type {
   Benchmark,
@@ -38,7 +41,7 @@ const Kind = Schema.Literals(["expense", "income"]);
 const CategoriesInput = Schema.Struct({
   action: Schema.Literals(["list", "create", "edit", "merge", "archive"]).annotate({
     description:
-      "list: every category, two levels per kind. create: a new one. edit: rename, move or change its benchmark. merge: move every entry of one into another, then delete it. archive: hide one from choices, keeping its history (restore: true brings it back).",
+      "list: every category, two levels per kind. create: a new one. edit: rename, move, or change its benchmark, icon or colour. merge: move every entry of one into another, then delete it. archive: hide one from choices, keeping its history (restore: true brings it back).",
   }),
   kind: Schema.optional(
     Kind.annotate({
@@ -78,6 +81,16 @@ const CategoriesInput = Schema.Struct({
         'create, edit: "automatic" (the six-month average; the default), "none", or a fixed monthly amount in the user\'s currency, a decimal ("450", "85.50").',
     }),
   ),
+  icon: Schema.optional(
+    Schema.NullOr(Schema.String).annotate({
+      description: `create, edit: its icon, one of: ${CATEGORY_ICONS.join(", ")}. "none" or null: no icon.`,
+    }),
+  ),
+  color: Schema.optional(
+    Schema.NullOr(Schema.String).annotate({
+      description: `create, edit: its colour, one of: ${CATEGORY_COLORS.join(", ")}. "none" or null: none of its own, a child then shown in its parent's.`,
+    }),
+  ),
   archived: Schema.optional(
     Schema.Boolean.annotate({ description: "list: true adds the archived categories, marked." }),
   ),
@@ -90,13 +103,13 @@ type CategoriesInput = typeof CategoriesInput.Type;
 
 type CategoriesCall = typeof CategoriesInput.Encoded;
 
-const DESCRIPTION = `The user's categories, on two levels (a top-level category and its children), one tree for expenses and one for income; every expense has exactly one. \`list\` gives both trees with each category's entries, benchmark and monthly average over the six full months before this one (counting only those from the user's first entry on, as an automatic benchmark does), marks the fallback ("Other", where unclassified lines go) and, with \`archived: true\`, adds the archived ones. \`create\` makes one; \`edit\` renames it, moves it under another top-level category (\`parent\`) or to the top (\`top_level: true\`), or sets its benchmark; \`merge\` moves every entry of \`category\`, and every merchant's default category on it, into \`into\` (its children go under \`into\`, or into \`into\`'s child of the same name) and deletes it; \`archive\` hides it from choices while its entries keep it, \`restore: true\` brings it back. To put a line in a category, use \`lines\` with \`classify\`; for where the money went in a month, \`month\`.
+const DESCRIPTION = `The user's categories, on two levels (a top-level category and its children), one tree for expenses and one for income; every expense has exactly one. \`list\` gives both trees with each category's entries, benchmark, icon, colour and monthly average over the six full months before this one (counting only those from the user's first entry on, as an automatic benchmark does), marks the fallback ("Other", where unclassified lines go) and, with \`archived: true\`, adds the archived ones. \`create\` makes one; \`edit\` renames it, moves it under another top-level category (\`parent\`) or to the top (\`top_level: true\`), or sets its benchmark, \`icon\` or \`color\`; \`merge\` moves every entry of \`category\`, and every merchant's default category on it, into \`into\` (its children go under \`into\`, or into \`into\`'s child of the same name) and deletes it; \`archive\` hides it from choices while its entries keep it, \`restore: true\` brings it back. To put a line in a category, use \`lines\` with \`classify\`; for where the money went in a month, \`month\`.
 
-Name a category as \`list\` writes it (any case): a name alone is the top-level category of that name, else the one child of that name; "Parent > Child" names a child. Add \`kind\` when an expense and an income category share it. A benchmark is "automatic", "none", or a decimal amount a month in the user's currency.
+Name a category as \`list\` writes it (any case): a name alone is the top-level category of that name, else the one child of that name; "Parent > Child" names a child. Add \`kind\` when an expense and an income category share it. A benchmark is "automatic", "none", or a decimal amount a month in the user's currency. An icon and a colour are keys of closed lists (the arguments give them; colours: ${CATEGORY_COLORS.join(", ")}); "none" clears one, and a child with no colour of its own is shown in its parent's.
 
-Refused, with what to do: a third level (a category under a child, or one with children under a parent), a parent or merge target of the other kind, a name its siblings already have or holding ">", archiving or merging away the fallback, an archived parent or target, a benchmark that is no decimal from 0. Every action but list needs the write scope.
+Refused, with what to do: a third level (a category under a child, or one with children under a parent), a parent or merge target of the other kind, a name its siblings already have or holding ">", archiving or merging away the fallback, an archived parent or target, a benchmark that is no decimal from 0, an icon or a colour off its list. Every action but list needs the write scope.
 
-Examples: {"action":"list"} · {"action":"create","name":"Water","parent":"Housing"} · {"action":"edit","category":"Groceries > Bakery","parent":"Eating out","benchmark":"40"} · {"action":"merge","category":"Market","into":"Groceries > Supermarket"} · {"action":"archive","category":"Family","restore":true}`;
+Examples: {"action":"list"} · {"action":"create","name":"Water","parent":"Housing"} · {"action":"create","name":"Pets","icon":"pets","color":"green"} · {"action":"edit","category":"Housing > Rent","icon":"rent","color":"none"} · {"action":"edit","category":"Groceries > Bakery","parent":"Eating out","benchmark":"40"} · {"action":"merge","category":"Market","into":"Groceries > Supermarket"} · {"action":"archive","category":"Family","restore":true}`;
 
 const call = (input: CategoriesCall) => `categories ${JSON.stringify(input)}`;
 
@@ -106,8 +119,41 @@ const refusal = (message: string, example: string) =>
   Effect.fail(new ToolRefusal({ message, example }));
 
 /** "Parent > Child" for a child, its name for a top-level category: how a person names it. */
-export function pathText(category: LineCategory): string {
+export function pathText(category: Pick<LineCategory, "name" | "parentName">): string {
   return category.parentName === null ? category.name : `${category.parentName} > ${category.name}`;
+}
+
+/**
+ * An icon or a colour as the caller writes it, any case: undefined when left out, null for none
+ * ("none" or null), else the key, which the core checks against its list.
+ */
+function lookOf(written: string | null | undefined): string | null | undefined {
+  if (written === undefined || written === null) {
+    return written;
+  }
+
+  const key = written.trim().toLowerCase();
+
+  return key === "none" ? null : key;
+}
+
+/** How a category is shown: its icon, its own colour, and the colour it is shown in. */
+type Looks = {
+  readonly icon: string | null;
+  readonly color: string | null;
+  readonly shownColor: string | null;
+};
+
+/** "icon pets, colour blue"; a colour taken from the parent says so. */
+function looksText(looks: Looks): string {
+  const icon = looks.icon === null ? "no icon" : `icon ${looks.icon}`;
+
+  const color =
+    looks.shownColor === null
+      ? "no colour"
+      : `colour ${looks.shownColor}${looks.color === null ? " (its parent's)" : ""}`;
+
+  return `${icon}, ${color}`;
 }
 
 /** A sum per currency, never converted. */
@@ -256,6 +302,24 @@ function pathOf(owner: string, category: CategoryRecord) {
   );
 }
 
+/** A category's path and how it is shown, read from the user's categories, archived ones too. */
+function shownOf(owner: string, category: CategoryRecord) {
+  return listCategories(owner, { archived: true }).pipe(
+    Effect.map((tree) => {
+      const parent = tree[category.kind].find((top) => top.id === category.parentId);
+
+      return {
+        path: pathText({ ...category, parentName: parent?.name ?? null }),
+        looks: looksText({
+          icon: category.icon,
+          color: category.color,
+          shownColor: shownColor(category.color, parent?.color),
+        }),
+      };
+    }),
+  );
+}
+
 /** What a refused change of the categories names: the categories the call gave, as written. */
 type Named = {
   readonly category?: string;
@@ -352,8 +416,21 @@ function reasonRefusal(
       );
     }
 
-    // The tool sets neither an icon nor a position.
-    case "icon":
+    case "icon": {
+      return refusal(
+        `"${input.icon ?? ""}" is no icon of Gousset's. icon is one of: ${CATEGORY_ICONS.join(", ")}; or "none" for no icon.`,
+        call({ ...input, icon: "other" }),
+      );
+    }
+
+    case "color": {
+      return refusal(
+        `"${input.color ?? ""}" is no colour of Gousset's palette. color is one of: ${CATEGORY_COLORS.join(", ")}; or "none" for none of its own (a child is then shown in its parent's).`,
+        call({ ...input, color: "blue" }),
+      );
+    }
+
+    // The tool sets no position.
     case "position": {
       return Effect.die(
         new Error(`A category refused for its ${reason}, which the tool never sets.`),
@@ -403,7 +480,7 @@ function nodeText(node: CategoryNode, currency: string, indent: string): string 
 
   const marked = marks.length === 0 ? "" : ` (${marks.join("; ")})`;
 
-  return `${indent}- ${node.name}${marked}: ${node.entries} entr${node.entries === 1 ? "y" : "ies"}; ${benchmarkText(node.benchmark, currency)}; average ${average}${withChildren}`;
+  return `${indent}- ${node.name}${marked}: ${node.entries} entr${node.entries === 1 ? "y" : "ies"}; ${benchmarkText(node.benchmark, currency)}; average ${average}${withChildren}; ${looksText(node)}`;
 }
 
 function treeText(title: string, nodes: ReadonlyArray<CategoryNode>, currency: string): string {
@@ -431,7 +508,7 @@ function listText(tree: CategoryTree, input: CategoriesInput, currency: string):
       : 'Archived categories are left out: add "archived":true to see them.';
 
   return [
-    `The user's categories, on two levels (children indented under their parent). Each: its entries (all time), its benchmark, and its monthly average from ${tree.averageFrom} to ${tree.averageTo}, per currency, counting only the months from the user's first entry on (an automatic benchmark's figure). Name a child "Parent > Child" when its name alone is shared. ${archived}`,
+    `The user's categories, on two levels (children indented under their parent). Each: its entries (all time), its benchmark, and its monthly average from ${tree.averageFrom} to ${tree.averageTo}, per currency, counting only the months from the user's first entry on (an automatic benchmark's figure); then its icon and colour (a child with no colour of its own is shown in its parent's, so marked). Name a child "Parent > Child" when its name alone is shared. ${archived}`,
     ...kinds.map((kind) =>
       treeText(
         kind === "expense" ? "Expense categories" : "Income categories",
@@ -477,10 +554,25 @@ function createAction(caller: Caller, input: CategoriesInput) {
           );
 
     const kind = input.kind ?? parent?.kind ?? "expense";
-    const made = yield* createCategory(owner, { kind, name, parentId: parent?.id, benchmark });
+
+    const made = yield* createCategory(owner, {
+      kind,
+      name,
+      parentId: parent?.id,
+      benchmark,
+      icon: lookOf(input.icon),
+      color: lookOf(input.color),
+    });
+
     const path = pathText({ ...made, parentName: parent?.name ?? null });
 
-    return `Created the ${kind} category "${path}", ${benchmarkText(made.benchmark, currency)}. Lines are put in it with lines classify.`;
+    const looks = looksText({
+      icon: made.icon,
+      color: made.color,
+      shownColor: shownColor(made.color, parent?.color),
+    });
+
+    return `Created the ${kind} category "${path}", ${benchmarkText(made.benchmark, currency)}. Shown with ${looks}. Lines are put in it with lines classify.`;
   }).pipe(
     Effect.catchTags({
       ...changeRefusals(owner, input, { parent: input.parent, name }, () => parent),
@@ -514,10 +606,12 @@ function editAction(caller: Caller, input: CategoriesInput) {
     input.name === undefined &&
     input.parent === undefined &&
     input.top_level !== true &&
-    input.benchmark === undefined
+    input.benchmark === undefined &&
+    input.icon === undefined &&
+    input.color === undefined
   ) {
     return missing(
-      "edit changes the name, the place (parent or top_level) or the benchmark: give one.",
+      "edit changes the name, the place (parent or top_level), the benchmark, the icon or the colour: give one.",
       {
         action: "edit",
         category,
@@ -551,12 +645,14 @@ function editAction(caller: Caller, input: CategoriesInput) {
       name: input.name,
       parentId: input.top_level === true ? null : parent?.id,
       benchmark,
+      icon: lookOf(input.icon),
+      color: lookOf(input.color),
     });
 
-    const after = yield* pathOf(owner, edited);
+    const { path: after, looks } = yield* shownOf(owner, edited);
     const saved = before === after ? `"${after}" is saved` : `"${before}" is now "${after}"`;
 
-    return `${saved}, ${kind} category, ${benchmarkText(edited.benchmark, currency)}.`;
+    return `${saved}, ${kind} category, ${benchmarkText(edited.benchmark, currency)}. Shown with ${looks}.`;
   }).pipe(
     Effect.catchTags({
       ...changeRefusals(

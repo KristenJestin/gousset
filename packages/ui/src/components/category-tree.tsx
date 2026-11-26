@@ -3,9 +3,12 @@ import type { ReactNode } from "react";
 import { usePageLanguage } from "../hooks/use-page-language";
 import { useUiMessages } from "../hooks/use-ui-messages";
 import type { Money } from "../lib/money";
+import type { PaletteColor } from "../lib/palette";
 import { staggerDelay } from "../lib/stagger";
 import { cn } from "../lib/utils";
 import { Amount } from "./amount";
+import { CategoryIcon } from "./category-icon";
+import type { CategoryIconName } from "./icons";
 import { IconButton } from "./icon-button";
 import { Menu } from "./menu";
 import { Skeleton, SkeletonFrame } from "./skeleton";
@@ -20,6 +23,10 @@ export type CategoryTreeRow = {
   name: string;
   /** A child: indented under its parent, which comes just before it. */
   child?: boolean;
+  /** Its icon; none: `other`'s drawing. */
+  icon?: CategoryIconName | null;
+  /** The colour it is shown in: its own, else its parent's (#205); none: a neutral tile. */
+  color?: PaletteColor | null;
   /** Its monthly average over six months, one figure per currency; none when it had no line. */
   average: ReadonlyArray<Money>;
   /** Its benchmark, worded by the page: "automatic · €690", "set · €130", "none". */
@@ -70,8 +77,8 @@ const COLUMN = {
 };
 
 /**
- * A kind's categories on two levels (`child` rows indented under their parent), each with its
- * six-month average (one figure per currency, never converted), its benchmark (one set by the user
+ * A kind's categories on two levels (`child` rows indented under their parent), each with its icon
+ * on a tile of its colour, its six-month average (one figure per currency, never converted), its benchmark (one set by the user
  * in bold), its lines and a ⋮ menu of the page's actions ("Actions on Groceries").
  *
  * Motion: rows fade and slide up on first paint (200 ms, ease-out, staggered); a row
@@ -113,7 +120,8 @@ export function CategoryTree({ label, rows, emptyText, locale }: CategoryTreePro
                 : cn("animate-in slide-in-from-bottom-1 fade-in", staggerDelay(index)),
             )}
           >
-            <span className={cn(COLUMN.name, row.child === true && "ps-6")}>
+            <span className={cn(COLUMN.name, "gap-2", row.child === true && "ps-6")}>
+              <CategoryIcon icon={row.icon ?? "other"} color={row.color ?? null} size="sm" />
               <span
                 className={cn(
                   "truncate text-sm",
@@ -177,7 +185,8 @@ export function CategoryTreeSkeleton({ rows = 8 }: { rows?: number }) {
         <div className="flex flex-col divide-y">
           {Array.from({ length: rows }, (_, row) => (
             <div key={row} className="flex h-12 items-center gap-3">
-              <span className={cn(COLUMN.name, row % 3 !== 0 && "ps-6")}>
+              <span className={cn(COLUMN.name, "gap-2", row % 3 !== 0 && "ps-6")}>
+                <Skeleton className="size-6 rounded-full" />
                 <Skeleton className="h-3.5 w-32" />
               </span>
               <span className={COLUMN.average}>

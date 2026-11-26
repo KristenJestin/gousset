@@ -1,9 +1,10 @@
-import { join } from "node:path";
+import { basename } from "node:path";
 
 import { test as base } from "@playwright/test";
 import type { Page } from "@playwright/test";
 
 import { expectAccessible } from "./accessibility";
+import { appLogFile, appLogSize, appLogWarnings } from "./app-log";
 import { startWorkerEnvironment } from "./app-server";
 import type { AppEnvironment, WorkerEnvironment } from "./app-server";
 import { addUser, hasLiveSession, madeUpUser, signUp } from "./auth";
@@ -39,6 +40,8 @@ type TestFixtures = {
   statements: StatementPaths;
   /** axe on the screen each page ends on, once the test has passed. */
   accessibilityAtTheEnd: void;
+  /** A failed test prints the warnings and errors its worker's app logged meanwhile (#241). */
+  appLogOnFailure: void;
   /**
    * The harness's MCP client, registered with the worker's app, nothing allowed yet: every test
    * goes through the consent page (`registerTestClient`).
@@ -75,11 +78,7 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
   app: [
     async ({ appEnvironment }, provide, workerInfo) => {
       const slot = workerInfo.parallelIndex;
-
-      const logFile = join(
-        workerInfo.project.outputDir,
-        `app-${workerInfo.project.name}-worker-${slot}.log`,
-      );
+      const logFile = appLogFile(workerInfo.project.outputDir, workerInfo.project.name, slot);
 
       // Every MCP client of the worker authorizes from one address, more than the 30 a minute a
       // person's address is allowed; the limit itself is tested on an installation of its own.
@@ -168,6 +167,37 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
       if (testInfo.status === testInfo.expectedStatus) {
         await expectAccessibleIfOpen(page);
       }
+    },
+    { auto: true },
+  ],
+
+  appLogOnFailure: [
+    // oxlint-disable-next-line no-empty-pattern -- Playwright reads a fixture's dependencies from this pattern, even when there are none.
+    async ({}, provide, testInfo) => {
+      // The worker's app's log, as its `app` fixture names it, read from where this test starts.
+      const logFile = appLogFile(
+        testInfo.project.outputDir,
+        testInfo.project.name,
+        testInfo.parallelIndex,
+      );
+
+      const offset = appLogSize(logFile);
+
+      await provide();
+
+      if (testInfo.status === testInfo.expectedStatus) {
+        return;
+      }
+
+      const lines = appLogWarnings(logFile, offset);
+      const name = basename(logFile);
+
+      // On the test's standard error: the job log prints it with the failure, no artifact needed.
+      process.stderr.write(
+        lines.length === 0
+          ? `The worker's app logged no warning or error during this test (${name}).\n`
+          : `${[`The worker's app logged during this test (${name}):`, ...lines].join("\n")}\n`,
+      );
     },
     { auto: true },
   ],
