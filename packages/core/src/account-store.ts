@@ -6,6 +6,7 @@ import type { AccountEnvelope, AccountKind, AccountMode, CreditOrder } from "./a
 import type { DayBalance } from "./balances";
 import type { CountedLine } from "./credits";
 import type { AccountNotFound, BalanceAlreadyNoted, LineNotFound } from "./errors";
+import type { SubjectName } from "./subjects/counting";
 
 /** An account's row, as the logic reads it. */
 export type AccountRecord = {
@@ -93,6 +94,8 @@ export type StoredLine = {
   readonly expiresOn: string | null;
   /** `balance`: the movement a noted balance makes (#31), which has no label of its own. */
   readonly source: "import" | "manual" | "balance" | "counterpart";
+  /** Its entries' subjects (#37), each once, by name: none for most lines. */
+  readonly subjects: ReadonlyArray<SubjectName>;
 };
 
 /** A line of the user's, as a change of its expiry is decided from, with its account. */

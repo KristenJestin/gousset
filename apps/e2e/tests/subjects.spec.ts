@@ -407,6 +407,11 @@ test("a move that would make a cycle is refused, and so are the other wrong subj
   expect(await refusalOf(attachSubject(owner, shed, [spent.entryId]))).toEqual(
     new SubjectRefused({ reason: "archived", subjectId: shed }),
   );
+  // Taking an expense off it adds nothing to it: an archived subject allows that (a line's
+  // detail removes its chip).
+  expect((await run(attachSubject(owner, shed, [spent.entryId], { remove: true }))).changed).toBe(
+    0,
+  );
   expect(await refusalOf(attachSubject(owner, nowhere, [spent.entryId]))).toEqual(
     new SubjectNotFound({ subjectId: nowhere }),
   );

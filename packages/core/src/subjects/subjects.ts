@@ -1358,7 +1358,8 @@ async function attachIn(
   // A split remakes a line's expenses with their subjects in its own turn: the two take turns.
   await takeCategoryTurn(transaction, owner);
 
-  const checked = await attachable(transaction, subjectId, entryIds, true);
+  // Taking an expense off an archived subject adds nothing to it: only an attachment is refused.
+  const checked = await attachable(transaction, subjectId, entryIds, !remove);
 
   if (Result.isFailure(checked)) {
     return Result.fail(checked.failure);
@@ -1510,8 +1511,8 @@ export const editSubject = (owner: string, subjectId: string, edit: SubjectEdit)
 /**
  * Attaches the expenses `entryIds` to a subject, or with `remove` takes them off it; confirming a
  * proposal is attaching it. Repeating it changes nothing. Attaching clears a refusal of the
- * expense for that subject. Refused: a subject missing (`SubjectNotFound`) or archived
- * (`SubjectRefused` `archived`), an entry missing (`EntryNotFound`) or an income (`not_an_expense`),
+ * expense for that subject. Refused: a subject missing (`SubjectNotFound`) or, for an attachment,
+ * archived (`SubjectRefused` `archived`: an expense may still be taken off it), an entry missing (`EntryNotFound`) or an income (`not_an_expense`),
  * more than `MAX_ATTACHED` entries (`entries`); nothing is changed then.
  */
 export const attachSubject = (

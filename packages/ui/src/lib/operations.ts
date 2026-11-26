@@ -13,6 +13,8 @@ export type OperationsFilterValues = {
   search: string;
   /** One account's id; `null` for every account. */
   accountId: string | null;
+  /** One subject's id, its descendants' expenses with its own (#37); `null` for any line. */
+  subjectId: string | null;
   /** The first and last days, as ISO dates ("2026-10-01"); `null` for no bound. */
   from: string | null;
   to: string | null;
@@ -27,6 +29,7 @@ export type OperationsFilterValues = {
 export const NO_OPERATIONS_FILTERS: OperationsFilterValues = {
   search: "",
   accountId: null,
+  subjectId: null,
   from: null,
   to: null,
   min: "",
@@ -36,12 +39,13 @@ export const NO_OPERATIONS_FILTERS: OperationsFilterValues = {
 
 /**
  * How many filters a narrow screen folds behind its Filters button are set, the number on that
- * button: the account, the period (one or both days), the amount (one or both bounds) and the
- * lines to review. The search stays in sight beside the button, so it is not counted.
+ * button: the account, the subject, the period (one or both days), the amount (one or both bounds)
+ * and the lines to review. The search stays in sight beside the button, so it is not counted.
  */
 export function foldedFiltersCount(values: OperationsFilterValues) {
   return [
     values.accountId !== null,
+    values.subjectId !== null,
     values.from !== null || values.to !== null,
     values.min !== "" || values.max !== "",
     values.toReview,
@@ -53,6 +57,7 @@ export function hasOperationsFilters(values: OperationsFilterValues) {
   return (
     values.search !== "" ||
     values.accountId !== null ||
+    values.subjectId !== null ||
     values.from !== null ||
     values.to !== null ||
     values.min !== "" ||

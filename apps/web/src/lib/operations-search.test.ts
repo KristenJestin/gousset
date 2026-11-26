@@ -81,6 +81,20 @@ describe("operations-search", () => {
     });
   });
 
+  test("keeps a subject's filter in the address and sends it to the server (#37)", () => {
+    const van = "0190a1b2-0000-7000-8000-000000000037";
+    const search = decode({ subject: van, from: "2026-10-01", to: "2026-10-31" });
+    const values = filtersOf(search);
+
+    expect(values).toMatchObject({ subjectId: van, from: "2026-10-01", to: "2026-10-31" });
+    expect(searchOf(values, undefined).subject).toBe(van);
+    expect(lineFiltersOf(values)).toMatchObject({ subjectId: van });
+    // Another subject is another list.
+    expect(filtersKey(values)).not.toBe(filtersKey({ ...values, subjectId: null }));
+    // An id the address cannot read opens the page without that filter.
+    expect(filtersOf(decode({ subject: "the van" })).subjectId).toBeNull();
+  });
+
   test("writes an amount that is a plain number as a number, so the address reads ?min=100", () => {
     const search = searchOf({ ...NO_OPERATIONS_FILTERS, min: "100", max: "12.50" }, undefined);
 

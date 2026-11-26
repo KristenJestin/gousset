@@ -205,6 +205,27 @@ export const attachSubjectExpenses = createServerFn({ method: "POST" })
     ),
   );
 
+/**
+ * Attaches one expense to a subject, or with `remove` takes it off (#37): a line's detail, its "+
+ * Add" and its chips. Refused with a code: a subject gone, or archived for an attachment; an
+ * expense gone, or an income.
+ */
+export const setExpenseSubject = createServerFn({ method: "POST" })
+  .middleware([signedIn, slowedInDevelopment])
+  .validator(
+    Schema.toStandardSchemaV1(
+      Schema.Struct({ subjectId: SubjectId, entryId: Id, remove: Schema.Boolean }),
+    ),
+  )
+  .handler(({ data, context }) =>
+    runCore(
+      attachSubject(context.owner, data.subjectId, [data.entryId], { remove: data.remove }).pipe(
+        Effect.map((attachment) => ({ ok: true as const, attachment })),
+        Effect.catchTags(EXPENSE_REFUSALS),
+      ),
+    ),
+  );
+
 /** Declines a dated subject's proposals ("Not for this subject"): never proposed for it again. */
 export const declineSubjectProposals = createServerFn({ method: "POST" })
   .middleware([signedIn, slowedInDevelopment])

@@ -15,6 +15,7 @@ import { useState } from "react";
 import { createSubject, editSubject } from "@/functions/subjects";
 import type { getSubjectMerchantsPreview } from "@/functions/subjects";
 import { subjectRefusalMessage } from "@/i18n/messages";
+import { pathsOf } from "@/lib/subjects";
 import { accountQueries } from "@/queries/accounts";
 import { merchantQueries } from "@/queries/merchants";
 import { invalidateSubjects, subjectQueries } from "@/queries/subjects";
@@ -245,22 +246,6 @@ export function SubjectSheet({
       locale={locale}
     />
   );
-}
-
-/**
- * Each subject's path, its ancestors' names first ("House > Garden shed"), by its id: the list is
- * in tree order, each parent before its children.
- */
-function pathsOf(subjects: SubjectList["subjects"]): ReadonlyMap<string, string> {
-  const paths = new Map<string, string>();
-
-  for (const each of subjects) {
-    const parent = each.parentId === null ? undefined : paths.get(each.parentId);
-
-    paths.set(each.id, parent === undefined ? each.name : `${parent} > ${each.name}`);
-  }
-
-  return paths;
 }
 
 /** What the sheet says of the past expenses of the merchants added. */

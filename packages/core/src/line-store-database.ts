@@ -150,8 +150,8 @@ type LineColumns = {
   readonly source: "import" | "manual" | "balance" | "counterpart";
 };
 
-/** Each line's entries' subjects, each once, by name (#37). */
-async function subjectsOfLines(
+/** Each line's entries' subjects, each once, by name (#37); an account's lines read them too. */
+export async function subjectsOfLines(
   transaction: UserTransaction,
   lineIds: ReadonlyArray<string>,
 ): Promise<ReadonlyMap<string, ReadonlyArray<SubjectName>>> {

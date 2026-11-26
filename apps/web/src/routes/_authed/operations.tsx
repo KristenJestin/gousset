@@ -10,6 +10,7 @@ import type {
   LineRow,
   LineTransfer as Transfer,
   QueuedLine,
+  SubjectList,
   TransferFunding,
   TransferSide,
 } from "@gousset/core";
@@ -37,6 +38,8 @@ import { CategoryPicker } from "@gousset/ui/components/category-picker";
 import { OperationsList, OperationsListSkeleton } from "@gousset/ui/components/operations-list";
 import type { OperationRow } from "@gousset/ui/components/operations-list";
 import { ReviewAnnouncer } from "@gousset/ui/components/review-proposal";
+import { LineSubjects } from "@gousset/ui/components/subject-chips";
+import type { SubjectChipView } from "@gousset/ui/components/subject-chips";
 import { usePageLanguage } from "@gousset/ui/hooks/use-page-language";
 import { formatMoney, minorDigits, toDecimalString } from "@gousset/ui/lib/money";
 import { notify } from "@gousset/ui/lib/notify";
@@ -66,7 +69,12 @@ import {
 } from "@/functions/lines";
 import type { ExpenseRefusalCode, FundRefusalCode, TransferRefusalCode } from "@/functions/lines";
 import { assignLineMerchant } from "@/functions/merchants";
-import { categoryRefusalMessage, merchantRefusalMessage } from "@/i18n/messages";
+import { setExpenseSubject } from "@/functions/subjects";
+import {
+  categoryRefusalMessage,
+  merchantRefusalMessage,
+  subjectRefusalMessage,
+} from "@/i18n/messages";
 import { dayRange, longDay, shortDay, shortDays } from "@/lib/account-day";
 import { categoryPath, choicesOf } from "@/lib/categories";
 import { aDialogIsOpen } from "@/lib/dialog-open";
@@ -78,12 +86,14 @@ import {
   lineFiltersOf,
   searchOf,
 } from "@/lib/operations-search";
+import { subjectChoices } from "@/lib/subjects";
 import { accountQueries } from "@/queries/accounts";
 import { categoryQueries, invalidateCategories } from "@/queries/categories";
 import { invalidateTouched } from "@/queries/invalidate";
 import { lineQueries } from "@/queries/lines";
 import { merchantQueries } from "@/queries/merchants";
 import { reviewQueries } from "@/queries/review";
+import { invalidateSubjects, subjectQueries } from "@/queries/subjects";
 import { appHotkeys } from "@/shortcuts";
 
 /** How long the search's words and the amounts wait for the typing to stop before they apply. */
@@ -107,6 +117,8 @@ export const Route = createFileRoute("/_authed/operations")({
     await loadBlocks([
       queryClient.ensureInfiniteQueryData(lineQueries.search(filters)).then(noop),
       queryClient.ensureQueryData(accountQueries.list()).then(noop),
+      // The subject filter is drawn with the page, among the others (#37).
+      queryClient.ensureQueryData(subjectQueries.list()).then(noop),
       ...(deps.line === undefined
         ? []
         : [
@@ -180,6 +192,7 @@ function useFilterBar(applied: OperationsFilterValues) {
   const change = (values: OperationsFilterValues) => {
     const typed =
       values.accountId === draft.accountId &&
+      values.subjectId === draft.subjectId &&
       values.from === draft.from &&
       values.to === draft.to &&
       values.toReview === draft.toReview &&
@@ -398,6 +411,7 @@ function Operations() {
   const { draft, change } = useFilterBar(applied);
   const { lines, pages, refusal, failed, total, none } = useShownLines(applied);
   const { data: accounts } = useQuery(accountQueries.list());
+  const { data: subjects } = useQuery(subjectQueries.list());
   const nameOf = accountNames(accounts);
   const dayOf = shortDays(locale);
 
@@ -457,6 +471,7 @@ function Operations() {
             onChange={change}
             refusal={refusal}
             accounts={accountChoices(accounts, nameOf)}
+            subjects={filterSubjects(subjects)}
             count={shownTotal}
             locale={locale}
           />
@@ -480,6 +495,7 @@ function Operations() {
               emptyText={m.operationsNoMatch()}
               locale={locale}
               withCategory
+              withSubjects
               foldingId={foldingId}
             />
           )
@@ -547,12 +563,21 @@ type FilterBarProps = {
   /** Why the server refused the applied filters, said under the field it is about. */
   refusal: ReturnType<typeof useShownLines>["refusal"];
   accounts: ReturnType<typeof accountChoices>;
+  subjects: ReturnType<typeof filterSubjects>;
   count: number | undefined;
   locale: string;
 };
 
 /** The filters of the list, a refused amount or period said under its field. */
-function FilterBar({ draft, onChange, refusal, accounts, count, locale }: FilterBarProps) {
+function FilterBar({
+  draft,
+  onChange,
+  refusal,
+  accounts,
+  subjects,
+  count,
+  locale,
+}: FilterBarProps) {
   const amountError = refusal === "AMOUNT_INVALID" ? m.operationsAmountRefused() : undefined;
 
   return (
@@ -561,6 +586,7 @@ function FilterBar({ draft, onChange, refusal, accounts, count, locale }: Filter
         values={draft}
         onChange={onChange}
         accounts={accounts}
+        subjects={subjects}
         minError={draft.min.trim() === "" ? undefined : amountError}
         maxError={draft.max.trim() === "" ? undefined : amountError}
         count={count}
@@ -586,7 +612,13 @@ function toRow(
     amount: line.amount,
     toReview: line.toReview,
     category: line.category === null ? undefined : categoryPath(line.category),
+    subjects: line.subjects,
   };
+}
+
+/** Every subject, archived ones too, to keep one's lines (#37), by its path in tree order. */
+function filterSubjects(list: SubjectList | undefined) {
+  return subjectChoices(list, false).map((each) => ({ value: each.id, label: each.name }));
 }
 
 /** A line's label; the movement a noted balance makes has none of its own: the app names it. */
@@ -776,6 +808,72 @@ function LineMerchantOf({ line, onRuleJob }: { line: Line; onRuleJob: (jobId: st
         />
       )}
     </>
+  );
+}
+
+/** A call that failed outright, as a refusal the detail can say. */
+const SUBJECT_FAILED = { ok: false as const, code: "UNKNOWN", limit: null };
+
+/**
+ * The open line's subjects (#37): an expense of its own only, neither an income, a transfer, a held
+ * line nor a split one (its shares have theirs, changed by its split). A subject added or removed
+ * shows at once; refused, the chips go back and the reason is said under them. Done, the lines,
+ * the subjects and the months are read again: the row's chips follow without reopening.
+ */
+function LineSubjectsOf({ expenses }: { expenses: LineExpenses }) {
+  const queryClient = useQueryClient();
+  const { data: list } = useQuery(subjectQueries.list());
+  const [only, ...others] = expenses.expenses;
+  const [error, setError] = useState<string>();
+  // What a change waiting for the server shows, until the line is read again.
+  const [pending, setPending] = useState<ReadonlyArray<SubjectChipView>>();
+  const [read, setRead] = useState(only?.subjects);
+
+  if (only?.subjects !== read) {
+    setRead(only?.subjects);
+    setPending(undefined);
+  }
+
+  if (only === undefined || others.length > 0 || only.kind !== "expense") {
+    return null;
+  }
+
+  const expense = only;
+  const chosen = pending ?? expense.subjects;
+  const choices = subjectChoices(list, true);
+
+  async function change(subjectId: string, remove: boolean) {
+    const added = choices.find((each) => each.id === subjectId);
+
+    if (remove) {
+      setPending(chosen.filter((each) => each.id !== subjectId));
+    } else if (added !== undefined) {
+      setPending([...chosen, added]);
+    }
+
+    const answer = await setExpenseSubject({
+      data: { subjectId, entryId: expense.id, remove },
+    }).catch(() => SUBJECT_FAILED);
+
+    if (!answer.ok) {
+      setPending(undefined);
+      setError(subjectRefusalMessage(answer.code));
+
+      return;
+    }
+
+    setError(undefined);
+    await invalidateSubjects(queryClient);
+  }
+
+  return (
+    <LineSubjects
+      chosen={chosen}
+      choices={choices}
+      onAdd={(id) => void change(id, false)}
+      onRemove={(id) => void change(id, true)}
+      error={error}
+    />
   );
 }
 
@@ -1421,6 +1519,7 @@ function OpenLine({
         )
       }
       merchant={<LineMerchantOf line={line} onRuleJob={onRuleJob} />}
+      subjects={<LineSubjectsOf expenses={expenses} />}
       label={lineLabel(line)}
       amount={line.amount}
       account={nameOf(line.account)}

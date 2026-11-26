@@ -63,6 +63,8 @@ const Words = Schema.String.check(Schema.isMaxLength(MAX_FILTER_TEXT));
 export const LineSearchInput = Schema.Struct({
   text: Schema.optional(Words),
   accountId: Schema.optional(AccountId),
+  // One the user does not have gives no line (#37).
+  subjectId: Schema.optional(Schema.String.check(Schema.isMaxLength(100))),
   from: Schema.optional(Words),
   to: Schema.optional(Words),
   amountMin: Schema.optional(Words),

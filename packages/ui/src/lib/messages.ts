@@ -211,6 +211,7 @@ function uiMessages(locale: Locale) {
         label: m.uiOperationsColumnLabel({}, options),
         account: m.uiOperationsColumnAccount({}, options),
         category: m.uiOperationsColumnCategory({}, options),
+        subjects: m.uiOperationsColumnSubjects({}, options),
         amount: m.uiOperationsColumnAmount({}, options),
       },
       /** How many lines match, the count already written: "1,234 lines". */
@@ -223,6 +224,9 @@ function uiMessages(locale: Locale) {
       searchPlaceholder: m.uiOperationsSearchPlaceholder({}, options),
       account: m.uiOperationsColumnAccount({}, options),
       allAccounts: m.uiOperationsAllAccounts({}, options),
+      /** The subject filter (#37): one subject's expenses, its descendants' with them. */
+      subject: m.uiOperationsSubject({}, options),
+      allSubjects: m.uiOperationsAllSubjects({}, options),
       from: m.uiOperationsFrom({}, options),
       to: m.uiOperationsTo({}, options),
       min: m.uiOperationsMin({}, options),
@@ -349,6 +353,15 @@ function uiMessages(locale: Locale) {
       merchantPlaceholder: m.uiOperationsMerchantPlaceholder({}, options),
       merchantNew: m.uiOperationsMerchantNew({}, options),
       merchantAssign: m.uiOperationsMerchantAssign({}, options),
+      /** An expense's subjects (#37): its chips, and the field that adds and removes them. */
+      subjects: m.uiOperationsColumnSubjects({}, options),
+      /** The chips a row has no room for: "+2". */
+      moreSubjects: (count: number) => m.uiOperationsMoreSubjects({ count }, options),
+      subjectsNone: m.uiOperationsSubjectsNone({}, options),
+      subjectAdd: m.uiOperationsSubjectAdd({}, options),
+      subjectAddLabel: m.uiOperationsSubjectAddLabel({}, options),
+      subjectToAdd: m.uiOperationsSubjectToAdd({}, options),
+      subjectPlaceholder: m.uiOperationsSubjectPlaceholder({}, options),
     },
     /** `ReviewProposal`: what Gousset proposes for a line to review, accepted or corrected (#35). */
     review: {

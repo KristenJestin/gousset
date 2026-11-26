@@ -5,6 +5,7 @@ import { CategoryPicker } from "./category-picker";
 import { LineDetail, LineDetailSkeleton } from "./line-detail";
 import { LineMerchant } from "./line-merchant";
 import { LineTransfer } from "./line-transfer";
+import { LineSubjects } from "./subject-chips";
 
 const eur = (minor: number) => ({ minor, currency: "EUR" });
 
@@ -15,8 +16,8 @@ const eur = (minor: number) => ({ minor, currency: "EUR" });
  * line, and the import it came from, "Entered by hand" or where the app made it from (`origin`);
  * first, a counted line's category, through
  * the control the page gives (`category`, a `CategoryPicker`), and who it paid (`merchant`, a
- * `LineMerchant`). Every value comes worded from the
- * page; the close button or Escape closes it.
+ * `LineMerchant`), then what its expense is for (`subjects`, a `LineSubjects`, #37). Every value
+ * comes worded from the page; the close button or Escape closes it.
  *
  * Loading: `LineDetailSkeleton`, its title, amount and rows at the same heights, in its sheet.
  *
@@ -130,6 +131,43 @@ export const WithAssignedMerchant: Story = {
         asks={false}
         merchants={["Greenmarket", "Pixelplay", "Streamly"]}
         onAssign={() => Promise.resolve(true)}
+      />
+    ),
+  },
+};
+
+/** An expense's subjects under its category: a chip each, each removable, and "+ Add" (#37). */
+export const WithSubjects: Story = {
+  args: {
+    label: "CB FUELSTOP 1410 RIVERTON",
+    rawLabel: "CB FUELSTOP 1410 RIVERTON CARTE 4971",
+    amount: eur(-6200),
+    memo: undefined,
+    counterparty: undefined,
+    category: (
+      <CategoryPicker
+        label="Category"
+        placeholder="Search a category"
+        size="sm"
+        categories={[{ id: "transport", name: "Transport" }]}
+        value="transport"
+        onValueChange={() => undefined}
+      />
+    ),
+    subjects: (
+      <LineSubjects
+        chosen={[
+          { id: "van", name: "Van" },
+          { id: "alps", name: "Alps 2026" },
+        ]}
+        choices={[
+          { id: "house", name: "House" },
+          { id: "shed", name: "House > Garden shed" },
+          { id: "van", name: "Van" },
+          { id: "alps", name: "Alps 2026" },
+        ]}
+        onAdd={() => undefined}
+        onRemove={() => undefined}
       />
     ),
   },

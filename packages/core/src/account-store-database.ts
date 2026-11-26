@@ -29,6 +29,7 @@ import { takeCategoryTurn } from "./category-turn";
 import { AccountNotFound, BalanceAlreadyNoted, LineNotFound } from "./errors";
 import { topUpsToBalanceCategories } from "./expenses/top-up-categories";
 import { matchTopUpsIn } from "./expenses/top-ups";
+import { subjectsOfLines } from "./line-store-database";
 import { classifyByMerchants } from "./merchants/default-classification";
 
 // The accounts in the database, through `UserData` only (docs/data-model.md, "Ownership and
@@ -295,7 +296,15 @@ export const DatabaseAccountStore = Layer.effect(
             .orderBy(desc(statementLine.bookedOn), desc(statementLine.id))
             .limit(limit + 1);
 
-          const lines = rows.slice(0, limit);
+          const shown = rows.slice(0, limit);
+
+          // What each line's expense is for (#37), as the operations show it.
+          const subjects = await subjectsOfLines(
+            transaction,
+            shown.map((line) => line.id),
+          );
+
+          const lines = shown.map((line) => ({ ...line, subjects: subjects.get(line.id) ?? [] }));
           const oldest = lines.at(-1);
 
           if (oldest === undefined) {
