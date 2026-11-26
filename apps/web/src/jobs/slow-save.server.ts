@@ -21,36 +21,42 @@ const ACTIVITY = `
     and (state is distinct from 'idle' or application_name = $1)`;
 
 /**
+ * How long the reading of the connections may wait: it takes a connection from the app's pool, the
+ * one a save that stalls may be waiting for itself.
+ */
+const READ_WITHIN = "5 seconds";
+
+/**
  * Says, in the app's log, what the import's connections wait on now that its save has run
- * `SLOW_SAVE_MS` (#241). Never fails: a reading that fails says so instead.
+ * `SLOW_SAVE_MS` (#241). Never fails: a reading that fails, or that waits past `READ_WITHIN` (a
+ * pool with no connection left), says so instead, with the pool's counts as they were.
  */
 export const reportSlowSave = (importId: string) => {
   const name = importConnectionName(importId);
 
-  return Effect.tryPromise({
-    try: async () => db.$client.query(ACTIVITY, [name]),
-    catch: () => "unread",
-  }).pipe(
-    Effect.flatMap((result) => Schema.decodeUnknownEffect(Activities)(result.rows)),
-    Effect.matchEffect({
-      onFailure: () =>
-        Effect.logWarning(
-          `import ${importId}: its save has run ${SLOW_SAVE_MS / 1000} s, and its connections could not be read`,
-        ),
-      onSuccess: (activities) =>
-        Effect.logWarning(
-          ...slowSaveLines(
-            importId,
-            name,
-            SLOW_SAVE_MS / 1000,
-            {
-              total: db.$client.totalCount,
-              idle: db.$client.idleCount,
-              waiting: db.$client.waitingCount,
-            },
-            activities,
+  return Effect.gen(function* () {
+    const pool = {
+      total: db.$client.totalCount,
+      idle: db.$client.idleCount,
+      waiting: db.$client.waitingCount,
+    };
+
+    yield* Effect.tryPromise({
+      try: async () => db.$client.query(ACTIVITY, [name]),
+      catch: () => "unread",
+    }).pipe(
+      Effect.timeout(READ_WITHIN),
+      Effect.flatMap((result) => Schema.decodeUnknownEffect(Activities)(result.rows)),
+      Effect.matchEffect({
+        onFailure: () =>
+          Effect.logWarning(
+            `import ${importId}: its save has run ${SLOW_SAVE_MS / 1000} s, and its connections could not be read within ${READ_WITHIN}; pool total=${pool.total} idle=${pool.idle} waiting=${pool.waiting}`,
           ),
-        ),
-    }),
-  );
+        onSuccess: (activities) =>
+          Effect.logWarning(
+            ...slowSaveLines(importId, name, SLOW_SAVE_MS / 1000, pool, activities),
+          ),
+      }),
+    );
+  });
 };
