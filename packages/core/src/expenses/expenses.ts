@@ -1155,8 +1155,10 @@ async function splitIn(
 }
 
 /**
- * Each share's subjects (#37): those it names, each one of the user's and not archived, or, named
- * none, the subjects the line's expenses had before the split. A share of money coming in has none.
+ * Each share's subjects (#37): those it names, each one of the user's and not archived unless the
+ * line's expenses had it before the split (kept, as a rule keeps an archived category: the split
+ * form gives each share the line's subjects), or, named none, the subjects the line's expenses had
+ * before the split. A share of money coming in has none.
  */
 async function shareSubjects(
   transaction: UserTransaction,
@@ -1174,6 +1176,22 @@ async function shareSubjects(
           .from(subject)
           .where(inArray(subject.id, named.filter(isId)));
 
+  const before =
+    expenses.length === 0
+      ? []
+      : await transaction
+          .selectDistinct({ subjectId: entrySubject.subjectId })
+          .from(entrySubject)
+          .where(
+            inArray(
+              entrySubject.entryId,
+              expenses.map((each) => each.id),
+            ),
+          )
+          .orderBy(asc(entrySubject.subjectId));
+
+  const had = new Set(before.map((each) => each.subjectId));
+
   for (const [index, share] of shares.entries()) {
     const ids = share.subjectIds ?? [];
 
@@ -1188,25 +1206,11 @@ async function shareSubjects(
         return splitRefused("subject_unknown", index);
       }
 
-      if (found.archivedAt !== null) {
+      if (found.archivedAt !== null && !had.has(subjectId)) {
         return splitRefused("subject_archived", index);
       }
     }
   }
-
-  const before =
-    expenses.length === 0
-      ? []
-      : await transaction
-          .selectDistinct({ subjectId: entrySubject.subjectId })
-          .from(entrySubject)
-          .where(
-            inArray(
-              entrySubject.entryId,
-              expenses.map((each) => each.id),
-            ),
-          )
-          .orderBy(asc(entrySubject.subjectId));
 
   const kept = kind === "expense" ? before.map((each) => each.subjectId) : [];
 

@@ -18,7 +18,7 @@ import {
   showSubject,
   splitLine,
 } from "@gousset/core";
-import type { Expenses, LineStore, MonthFacts, SubjectInput } from "@gousset/core";
+import type { Expenses, LineExpenses, LineStore, MonthFacts, SubjectInput } from "@gousset/core";
 import {
   account,
   category,
@@ -160,6 +160,10 @@ const attach = (subjectId: string, ...entryIds: ReadonlyArray<string>) =>
   run(attachSubject(owner, subjectId, entryIds));
 
 const eur = (minor: number) => ({ minor, currency: "EUR" });
+
+/** The names of each share's subjects, share by share. */
+const sharesSubjects = (split: LineExpenses) =>
+  split.expenses.map((each) => each.subjects.map((named) => named.name));
 
 test.beforeAll(async ({ app, user }) => {
   const person = await addUser(app.baseURL, user, {
@@ -357,6 +361,51 @@ test("a split keeps the line's subjects, or sets those given", async () => {
       splitLine(owner, bought.lineId, [{ categoryId, amount: "90", subjectIds: [house] }]),
     ),
   ).toEqual(new SplitRefused({ reason: "subject_archived", index: 0 }));
+});
+
+test("a split keeps an archived subject the line already had, and refuses another archived one", async () => {
+  const old = await newSubject({ name: "Old van" });
+  const shed = await newSubject({ name: "Boat shed" });
+  const fuel = await spend(euros, "2026-09-22", 8000, "CB FUELSTOP 2209");
+
+  await attach(old, fuel.entryId);
+
+  const [before] = (await run(lineExpensesOf(owner, fuel.lineId))).expenses;
+  const categoryId = before?.category.id ?? "";
+
+  await run(editSubject(owner, old, { archived: true }));
+  await run(editSubject(owner, shed, { archived: true }));
+
+  // The split form gives each share the line's subjects: one archived since is kept, as a rule keeps
+  // an archived category it had.
+  const kept = await run(
+    splitLine(owner, fuel.lineId, [
+      { categoryId, amount: "50", subjectIds: [old] },
+      { categoryId, amount: "30", subjectIds: [] },
+    ]),
+  );
+
+  expect(sharesSubjects(kept)).toEqual([["Old van"], []]);
+
+  // Split again: one of its expenses still had it.
+  const again = await run(
+    splitLine(owner, fuel.lineId, [
+      { categoryId, amount: "40", subjectIds: [old] },
+      { categoryId, amount: "40", subjectIds: [old] },
+    ]),
+  );
+
+  expect(sharesSubjects(again)).toEqual([["Old van"], ["Old van"]]);
+
+  // An archived subject the line never had is still refused, under its share.
+  expect(
+    await refusalOf(
+      splitLine(owner, fuel.lineId, [
+        { categoryId, amount: "40", subjectIds: [old] },
+        { categoryId, amount: "40", subjectIds: [old, shed] },
+      ]),
+    ),
+  ).toEqual(new SplitRefused({ reason: "subject_archived", index: 1 }));
 });
 
 test("a move that would make a cycle is refused, and so are the other wrong subjects", async () => {
