@@ -662,10 +662,10 @@ if [ -n "$first_import" ]; then
   say "$(basename "$statement"), imported again on $tag, adds nothing: its 15 lines are found."
 fi
 
-# 11b. A merchant's look (#204), which no release before 0.4 had: Camille gives one of her merchants
-# a logo through the app's own route, and a colour as the tables' owner (no plain HTTP route sets
-# it: a server function does); both survive migrate run again, the app serves the logo byte for
-# byte, and her export carries both.
+# 11b. A merchant's look (#204), which no release up to 0.4.0 had: Camille gives one of her
+# merchants a logo through the app's own route, and a colour as the tables' owner (no plain HTTP
+# route sets it: a server function does); both survive migrate run again, the app serves the logo
+# byte for byte, and her export carries both.
 look_merchant=$(sql "select id from merchant where user_id = '$camille' order by id limit 1")
 [ -n "$look_merchant" ] || fail "Camille has no merchant to give a look to."
 printf '\x89PNG\r\n\x1a\n\0\0\0\r' > "$work/logo.png"
