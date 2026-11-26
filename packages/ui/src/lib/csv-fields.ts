@@ -12,4 +12,24 @@ export const CSV_FIELDS = [
   "ignored",
 ] as const;
 
-export type CsvField = (typeof CSV_FIELDS)[number];
+/**
+ * What a column of a broker's export can hold, as a profile of operations reads it (v0.6): the
+ * day, the kind of operation, the security, the quantity and the price, the fees, the cash moved.
+ */
+export const OPERATION_FIELDS = [
+  "bookedOn",
+  "valueOn",
+  "kind",
+  "isin",
+  "securityName",
+  "securityCurrency",
+  "quantity",
+  "unitPrice",
+  "fees",
+  "amount",
+  "label",
+  "reference",
+  "ignored",
+] as const;
+
+export type CsvField = (typeof CSV_FIELDS)[number] | (typeof OPERATION_FIELDS)[number];

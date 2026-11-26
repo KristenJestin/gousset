@@ -1,4 +1,4 @@
-import type { CsvProfile } from "@gousset/import";
+import type { CsvDefinition } from "@gousset/import";
 import { keepPreviousData, queryOptions } from "@tanstack/react-query";
 
 import { getImportProfilesFor, listImportProfiles } from "@/functions/import-profiles";
@@ -21,7 +21,7 @@ export const importKeys = {
   one: (id: string) => [...importKeys.all, "one", id] as const,
   accounts: () => [...importKeys.all, "accounts"] as const,
   csv: (id: string) => [...importKeys.all, "csv", id] as const,
-  preview: (id: string, profile: CsvProfile) =>
+  preview: (id: string, profile: CsvDefinition) =>
     [...importKeys.all, "preview", id, profile] as const,
   profiles: () => [...importKeys.all, "profiles"] as const,
   profilesFor: (id: string) => [...importKeys.profiles(), id] as const,
@@ -54,7 +54,7 @@ export const importQueries = {
    * The file read with the profile being made: the last result stays shown while the next one is
    * read, so that the preview does not blink at each change.
    */
-  preview: (id: string, profile: CsvProfile) =>
+  preview: (id: string, profile: CsvDefinition) =>
     queryOptions({
       queryKey: importKeys.preview(id, profile),
       queryFn: () => getCsvPreview({ data: { importId: id, profile } }),

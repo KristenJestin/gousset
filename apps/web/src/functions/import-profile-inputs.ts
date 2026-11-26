@@ -1,5 +1,5 @@
 import { MAX_PROFILE_FILE, MAX_PROFILE_HEADER, MAX_PROFILE_NAME } from "@gousset/core/imports";
-import { CsvProfile } from "@gousset/import";
+import { CsvDefinition } from "@gousset/import";
 import { Schema } from "effect";
 
 // What the import screen sends to keep a CSV profile. A name or an institution is bounded loosely
@@ -13,7 +13,8 @@ const ProfileName = Schema.String.check(Schema.isMaxLength(MAX_PROFILE_NAME * 10
 export const SaveProfileInput = Schema.Struct({
   name: ProfileName,
   institution: Schema.NullOr(ProfileName),
-  definition: CsvProfile,
+  /** A statement's, or a broker's operations': the profile's kind follows it. */
+  definition: CsvDefinition,
   header: Schema.NullOr(Schema.String.check(Schema.isMaxLength(MAX_PROFILE_HEADER))),
 });
 

@@ -97,6 +97,7 @@ function summary(changes: Partial<ImportSummary> = {}): ImportSummary {
     linesDuplicate: 0,
     linesHeld: 0,
     reads: "statement",
+    profile: null,
     balanceIgnored: false,
     errorCode: null,
     jobId: "job-1",

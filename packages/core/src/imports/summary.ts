@@ -45,6 +45,11 @@ export type ImportSummary = {
    */
   readonly reads: "statement" | "operations";
   /**
+   * The name of the profile that read its CSV file, the user's or a shipped one; `null` for
+   * another format, detection, a definition given by hand, or a profile deleted since.
+   */
+  readonly profile: string | null;
+  /**
    * The file stated a balance of zero that the account's lines contradict on its day: it looked
    * empty and was not recorded, so the account is not checked against it (#130).
    */

@@ -5,9 +5,11 @@ import type {
   ImportSummary as Import,
   ProfileChoice,
 } from "@gousset/core/imports";
+import type { BrokerLayout, OperationKind } from "@gousset/import";
 import { m } from "@gousset/i18n/messages";
 import { getLocale } from "@gousset/i18n/runtime";
 import { Button } from "@gousset/ui/components/button";
+import { CsvKindWords } from "@gousset/ui/components/csv-kind-words";
 import { CsvMapping } from "@gousset/ui/components/csv-mapping";
 import { CsvPreview } from "@gousset/ui/components/csv-preview";
 import { CsvSettings } from "@gousset/ui/components/csv-settings";
@@ -18,6 +20,7 @@ import { FormMessage } from "@gousset/ui/components/form-message";
 import { Select } from "@gousset/ui/components/select";
 import { StatusMessage } from "@gousset/ui/components/status-message";
 import { TextField } from "@gousset/ui/components/text-field";
+import { CSV_FIELDS, OPERATION_FIELDS } from "@gousset/ui/lib/csv-fields";
 import type { CsvField } from "@gousset/ui/lib/csv-fields";
 import { formatMoney } from "@gousset/ui/lib/money";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -29,20 +32,30 @@ import {
   importImportProfile,
   saveImportProfile,
 } from "@/functions/import-profiles";
-import { csvFieldNames, csvRefusalMessage, missingMessage } from "@/i18n/csv-preview";
+import {
+  csvFieldNames,
+  csvRefusalMessage,
+  missingMessage,
+  operationFieldNames,
+  operationKindName,
+} from "@/i18n/csv-preview";
 import { profileRefusalMessage } from "@/i18n/imports";
 import {
   byHand,
   DATE_FORMATS,
   dateExample,
+  kindWordsOf,
   mappingOf,
+  operationsMappingOf,
+  operationsProfileOf,
+  operationsSettingsOf,
   profileOf,
   remap,
   settingsOf,
   splittingProfile,
   withSettings,
 } from "@/lib/csv-mapping";
-import type { CsvFileSettings } from "@/lib/csv-mapping";
+import type { CsvFileSettings, KindWord } from "@/lib/csv-mapping";
 import { downloadText } from "@/lib/download";
 import { importKeys, importQueries } from "@/queries/imports";
 
@@ -62,6 +75,23 @@ const BLANK: CsvFileSettings = {
 
 /** The `Select` value of the profile mapped by hand, beside the profiles' own. */
 const BY_HAND = "hand";
+
+/** What a file holds: an account's lines, or a broker's operations (v0.6). */
+type Holds = "statement" | "operations";
+
+const OFFERED = { statement: CSV_FIELDS, operations: OPERATION_FIELDS } satisfies {
+  readonly [holds in Holds]: ReadonlyArray<CsvField>;
+};
+
+/** The kinds a word of a broker's kind column can name, in the order the list offers them. */
+const KINDS: ReadonlyArray<OperationKind> = [
+  "purchase",
+  "sale",
+  "dividend",
+  "fee",
+  "deposit",
+  "withdrawal",
+];
 
 function choiceOf(entry: ImportProfileEntry): ProfileChoice {
   return entry.source === "stored"
@@ -139,7 +169,8 @@ function testResult(preview: Preview | null | undefined): CsvTestResult | null {
     lines: read.lines.map((line) => ({
       line: line.position,
       date: dayText(line.bookedOn),
-      label: line.label,
+      // A broker's operation says what it is before its text.
+      label: line.kind === null ? line.label : `${operationKindName(line.kind)} · ${line.label}`,
       amount: amountText(line.amountMinor, currency),
     })),
   };
@@ -186,8 +217,16 @@ function ColumnsPreview({
   const [notice, setNotice] = useState<string>();
   const [profileRefused, setProfileRefused] = useState<string>();
   const { resume, refused } = useResume(summary);
+  const [holds, setHolds] = useState<Holds>("statement");
+  const [words, setWords] = useState<ReadonlyArray<KindWord>>([]);
+  // A broker's profile chosen from the list: its columns are found by their names.
+  const [brokerLayout, setBrokerLayout] = useState<BrokerLayout>();
 
-  const draft = profileOf(settings, mapping);
+  const draft =
+    holds === "operations"
+      ? operationsProfileOf(settings, mapping, words, brokerLayout)
+      : profileOf(settings, mapping);
+
   const read = "profile" in draft ? draft.profile : splittingProfile(settings);
   const { data: preview } = useQuery(importQueries.preview(summary.id, read));
   const { data: fitting } = useQuery(importQueries.profilesFor(summary.id));
@@ -205,6 +244,31 @@ function ColumnsPreview({
 
   const lines = settings.headerRow ? rest : rows;
 
+  // The words of the kind column: those mapped, those its first lines write, and one a test read
+  // refused, so that a word further down the file is offered as soon as it is met.
+  const kindAt = mapping.indexOf("kind");
+
+  const refusal =
+    preview !== undefined && preview !== null && "refused" in preview.read
+      ? preview.read.refused
+      : null;
+
+  const refusedWord =
+    refusal?.error === "InvalidField" && refusal.field === "kind" && refusal.text !== null
+      ? [refusal.text]
+      : [];
+
+  const shownWords = kindWordsOf(words, [
+    ...(kindAt === -1 ? [] : lines.map((row) => row[kindAt] ?? "")),
+    ...refusedWord,
+  ]);
+
+  const byHandNow = () => {
+    setSettings(byHand(settings));
+    setBrokerLayout(undefined);
+    setChosen(null);
+  };
+
   // Those that read the file first, then the other profiles that still read.
   const fits = (fitting?.fitting ?? []).map((fit) => fit.profile);
   const fitValues = new Set(fits.map((entry) => valueOf(choiceOf(entry))));
@@ -216,9 +280,19 @@ function ColumnsPreview({
   const listed = [...fits, ...others];
 
   const startFrom = (entry: ImportProfileEntry) => {
-    if (entry.definition !== null && !("reads" in entry.definition)) {
-      setSettings(settingsOf(entry.definition));
-      setMapping(mappingOf(entry.definition, width));
+    const { definition } = entry;
+
+    if (definition !== null && "reads" in definition) {
+      setHolds("operations");
+      setSettings(operationsSettingsOf(definition));
+      setMapping(operationsMappingOf(definition, width));
+      setWords(definition.kinds.map(({ word, kind }) => ({ word, kind })));
+      setBrokerLayout(definition.layout);
+    } else if (definition !== null) {
+      setHolds("statement");
+      setSettings(settingsOf(definition));
+      setMapping(mappingOf(definition, width));
+      setBrokerLayout(undefined);
     }
 
     setChosen(choiceOf(entry));
@@ -295,7 +369,9 @@ function ColumnsPreview({
     await refreshProfiles();
   };
 
-  const readWith = chosen ?? (settings.layout === undefined ? null : startedFrom);
+  const readWith =
+    chosen ?? (settings.layout === undefined && brokerLayout === undefined ? null : startedFrom);
+
   const result = "profile" in draft ? testResult(preview) : null;
   const readable = result !== null && result.kind === "lines";
   const offered = DATE_FORMATS.some((format) => format === settings.dateFormat);
@@ -306,6 +382,24 @@ function ColumnsPreview({
       intro={<StatusMessage message={m.importCsvIntro()} />}
       profile={
         <>
+          <Select
+            label={m.importCsvHolds()}
+            size="sm"
+            value={holds}
+            items={[
+              { value: "statement", label: m.importCsvHoldsStatement() },
+              { value: "operations", label: m.importCsvHoldsOperations() },
+            ]}
+            onValueChange={(value) => {
+              const next: Holds = value === "operations" ? "operations" : "statement";
+              const offered: ReadonlyArray<CsvField> = OFFERED[next];
+
+              setHolds(next);
+              // The fields both read (the days, the label, the amount) stay where they were.
+              setMapping(mapping.map((field) => (offered.includes(field) ? field : "ignored")));
+              byHandNow();
+            }}
+          />
           <Select
             label={m.importCsvProfile()}
             size="sm"
@@ -322,8 +416,7 @@ function ColumnsPreview({
               const entry = listed.find((each) => valueOf(choiceOf(each)) === value);
 
               if (entry === undefined) {
-                setSettings(byHand(settings));
-                setChosen(null);
+                byHandNow();
               } else {
                 startFrom(entry);
               }
@@ -345,16 +438,47 @@ function ColumnsPreview({
             label={m.importCsvPreviewLabel({ file: summary.fileName })}
             columns={columns}
             rows={lines}
-            fields={csvFieldNames()}
+            fields={holds === "operations" ? operationFieldNames() : csvFieldNames()}
+            offered={OFFERED[holds]}
             mapping={mapping}
             onMappingChange={(column, field) => {
               setMapping(remap(mapping, column, field));
-              setSettings(byHand(settings));
-              setChosen(null);
+              byHandNow();
             }}
             chooseLabel={(column) => m.importCsvColumnHolds({ column })}
           />
         )
+      }
+      kinds={
+        holds === "operations"
+          ? {
+              title: m.importCsvKindsTitle({
+                column: columns[kindAt] ?? m.importCsvFieldKind(),
+              }),
+              words: (
+                <CsvKindWords
+                  label={m.importCsvKindsTitle({
+                    column: columns[kindAt] ?? m.importCsvFieldKind(),
+                  })}
+                  words={kindAt === -1 ? [] : shownWords}
+                  kinds={KINDS.map((kind) => ({ value: kind, label: operationKindName(kind) }))}
+                  unmapped={m.importCsvKindUnmapped()}
+                  empty={m.importCsvKindsEmpty()}
+                  onKindChange={(word, kind) => {
+                    setWords(
+                      shownWords.map((each) =>
+                        each.word === word
+                          ? { word, kind: KINDS.find((one) => one === kind) ?? null }
+                          : each,
+                      ),
+                    );
+                    byHandNow();
+                  }}
+                  chooseLabel={(word) => m.importCsvKindChoose({ word })}
+                />
+              ),
+            }
+          : undefined
       }
       settings={
         <CsvSettings

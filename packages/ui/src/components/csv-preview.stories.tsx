@@ -3,6 +3,7 @@ import { useState } from "react";
 
 import type { CsvField } from "../lib/csv-fields";
 import { Button } from "./button";
+import { CsvKindWords } from "./csv-kind-words";
 import { CsvMapping } from "./csv-mapping";
 import { CsvPreview } from "./csv-preview";
 import { CsvSettings } from "./csv-settings";
@@ -41,8 +42,16 @@ const SETTINGS: CsvSettingsValue = {
   decimalMark: ",",
 };
 
-/** The preview as the import screen fills it, its mapping and settings kept by the story. */
-function Preview() {
+/**
+ * The preview as the import screen fills it, its mapping and settings kept by the story; for a
+ * broker's operations, the words of its kind column under the mapping.
+ */
+function Preview({ operations = false }: { readonly operations?: boolean }) {
+  const [words, setWords] = useState<ReadonlyArray<{ word: string; kind: string | null }>>([
+    { word: "CB", kind: "purchase" },
+    { word: "VIR", kind: null },
+  ]);
+
   const [mapping, setMapping] = useState<ReadonlyArray<CsvField>>([
     "bookedOn",
     "label",
@@ -86,6 +95,28 @@ function Preview() {
             }
             chooseLabel={(column) => `What ${column} holds`}
           />
+        }
+        kinds={
+          operations
+            ? {
+                title: "What each word of Type says",
+                words: (
+                  <CsvKindWords
+                    label="What each word of Type says"
+                    words={words}
+                    kinds={[
+                      { value: "purchase", label: "Purchase" },
+                      { value: "deposit", label: "Deposit" },
+                    ]}
+                    unmapped="Not mapped"
+                    onKindChange={(word, kind) =>
+                      setWords(words.map((each) => (each.word === word ? { word, kind } : each)))
+                    }
+                    chooseLabel={(word) => `What ${word} means`}
+                  />
+                ),
+              }
+            : undefined
         }
         settings={
           <CsvSettings
@@ -188,6 +219,12 @@ export const Default: Story = {
     save: null,
     actions: null,
   },
+};
+
+/** A broker's operations: the words of its kind column, each mapped to a kind, under the lines. */
+export const Operations: Story = {
+  ...Default,
+  render: () => <Preview operations />,
 };
 
 /** On a phone everything stacks; the lines scroll sideways. */

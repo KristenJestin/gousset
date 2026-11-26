@@ -67,6 +67,12 @@ export function importFailureMessage(code: string | null): string {
       return m.importFailureUnsupported();
     case "CURRENCY_MISMATCH":
       return m.importFailureCurrency();
+    case "NOT_AN_INVESTMENT_ACCOUNT":
+      return m.importFailureNotInvestment();
+    case "OperationRefused":
+    case "InvalidIsin":
+    case "InvalidQuantity":
+      return m.importFailureOperation();
     case "FILE_TOO_LARGE":
       return m.importFailureTooLarge();
     case "EMPTY_FILE":

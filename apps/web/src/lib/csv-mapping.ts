@@ -1,4 +1,4 @@
-import type { CsvProfile } from "@gousset/import";
+import type { BrokerLayout, CsvProfile, OperationKind, OperationsProfile } from "@gousset/import";
 import type { CsvField } from "@gousset/ui/lib/csv-fields";
 
 // The import screen's CSV preview (#19): a profile as the user makes it there, a list of what each
@@ -161,6 +161,14 @@ function displaced(field: CsvField): ReadonlyArray<CsvField> {
     case "memo":
     case "bankId":
     case "currency":
+    case "kind":
+    case "isin":
+    case "securityName":
+    case "securityCurrency":
+    case "quantity":
+    case "unitPrice":
+    case "fees":
+    case "reference":
       return [field];
   }
 }
@@ -188,7 +196,10 @@ export function remap(
   });
 }
 
-/** A field a profile cannot do without: a booking date, a label, an amount (or debit and credit). */
+/**
+ * A field a profile cannot do without: a booking date, a label, an amount (or debit and credit); a
+ * broker's operations need no label.
+ */
 export type RequiredField = "bookedOn" | "label" | "amount";
 
 /** The profile the settings and the mapping make, or the fields it still lacks. */
@@ -248,4 +259,138 @@ export function profileOf(
       },
     },
   };
+}
+
+/** A word of a broker's kind column, and the kind of operation the user says it names. */
+export type KindWord = { readonly word: string; readonly kind: OperationKind | null };
+
+/** The column, counted from 1, that holds `field` in the mapping; `null` when none does. */
+function placeOf(mapping: ReadonlyArray<CsvField>, field: CsvField): number | null {
+  const index = mapping.indexOf(field);
+
+  return index === -1 ? null : index + 1;
+}
+
+/**
+ * The profile of a broker's operations the settings, the mapping and the kind words make (v0.6), or
+ * the fields it still lacks: a day and an amount. `layout`, for a broker's profile chosen from the
+ * list: its columns are then found by their names, as long as the mapping is left as it came.
+ */
+export function operationsProfileOf(
+  settings: CsvFileSettings,
+  mapping: ReadonlyArray<CsvField>,
+  words: ReadonlyArray<KindWord>,
+  layout: BrokerLayout | undefined,
+): { profile: OperationsProfile } | { missing: Array<RequiredField> } {
+  const bookedOn = placeOf(mapping, "bookedOn");
+  const amount = placeOf(mapping, "amount");
+
+  if (bookedOn === null || amount === null) {
+    const missing: Array<RequiredField> = [];
+
+    if (bookedOn === null) {
+      missing.push("bookedOn");
+    }
+
+    if (amount === null) {
+      missing.push("amount");
+    }
+
+    return { missing };
+  }
+
+  const { layout: _statementLayout, ...table } = settings;
+
+  const profile: OperationsProfile = {
+    version: 1,
+    reads: "operations",
+    ...table,
+    columns: {
+      bookedOn,
+      valueOn: placeOf(mapping, "valueOn"),
+      kind: placeOf(mapping, "kind"),
+      isin: placeOf(mapping, "isin"),
+      securityName: placeOf(mapping, "securityName"),
+      securityCurrency: placeOf(mapping, "securityCurrency"),
+      quantity: placeOf(mapping, "quantity"),
+      unitPrice: placeOf(mapping, "unitPrice"),
+      fees: placeOf(mapping, "fees"),
+      amount,
+      label: placeOf(mapping, "label"),
+      reference: placeOf(mapping, "reference"),
+    },
+    kinds: words.flatMap(({ word, kind }) => (kind === null ? [] : [{ word, kind }])),
+    // Nothing on the screen says a broker's reference is unique to its row: keyed by content.
+    referenceUnique: false,
+  };
+
+  return { profile: layout === undefined ? profile : { ...profile, layout } };
+}
+
+/** A broker's operations profile's settings, as the form shows them. */
+export function operationsSettingsOf(profile: OperationsProfile): CsvFileSettings {
+  return {
+    separator: profile.separator,
+    encoding: profile.encoding,
+    skipRows: profile.skipRows,
+    headerRow: profile.headerRow,
+    dateFormat: profile.dateFormat,
+    decimalMark: profile.decimalMark,
+  };
+}
+
+/** What each column holds under a broker's operations profile, from the first, as `mappingOf`. */
+export function operationsMappingOf(profile: OperationsProfile, width: number): Array<CsvField> {
+  const { columns } = profile;
+
+  const held: Array<[number | null, CsvField]> = [
+    [columns.bookedOn, "bookedOn"],
+    [columns.valueOn, "valueOn"],
+    [columns.kind, "kind"],
+    [columns.isin, "isin"],
+    [columns.securityName, "securityName"],
+    [columns.securityCurrency, "securityCurrency"],
+    [columns.quantity, "quantity"],
+    [columns.unitPrice, "unitPrice"],
+    [columns.fees, "fees"],
+    [columns.amount, "amount"],
+    // A broker's label is often its security's name, in the same column: the name is shown.
+    [columns.label === columns.securityName ? null : columns.label, "label"],
+    [columns.reference, "reference"],
+  ];
+
+  const last = Math.max(width, ...held.map(([column]) => column ?? 0));
+  const mapping = Array.from({ length: last }, (): CsvField => "ignored");
+
+  for (const [column, field] of held) {
+    if (column !== null) {
+      mapping[column - 1] = field;
+    }
+  }
+
+  return mapping;
+}
+
+/**
+ * The words of the kind column the user maps: those the profile maps, then those the file's first
+ * lines write, then one a test read refused, each once, trimmed, as written the first time.
+ */
+export function kindWordsOf(
+  known: ReadonlyArray<KindWord>,
+  seen: ReadonlyArray<string>,
+): Array<KindWord> {
+  const words: Array<KindWord> = [];
+  const met = new Set<string>();
+
+  for (const each of [...known, ...seen.map((word): KindWord => ({ word, kind: null }))]) {
+    const word = each.word.trim();
+    const plain = word.normalize("NFD").replaceAll(/\p{M}/gu, "").toLowerCase();
+
+    if (word !== "" && !met.has(plain)) {
+      met.add(plain);
+      words.push({ word, kind: each.kind });
+    }
+  }
+
+  return words;
 }

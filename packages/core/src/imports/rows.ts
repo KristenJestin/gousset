@@ -1,7 +1,7 @@
 import { investmentOperation } from "@gousset/db/schema/investments";
 import { account, importProfile, statementImport, statementLine } from "@gousset/db/schema/ledger";
 import type { UserTransaction } from "@gousset/db/user-data";
-import { SHIPPED_OPERATIONS_PROFILES } from "@gousset/import";
+import { SHIPPED_OPERATIONS_PROFILES, SHIPPED_PROFILES } from "@gousset/import";
 import { eq, sql } from "drizzle-orm";
 
 import type { ImportSummary } from "./summary";
@@ -13,6 +13,11 @@ export const isId = (id: string) =>
   /^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i.test(id);
 
 const SHIPPED_OPERATIONS_KEYS = SHIPPED_OPERATIONS_PROFILES.map((each) => each.key);
+
+/** Each shipped profile's name, by its key. */
+const SHIPPED_NAMES: ReadonlyMap<string, string> = new Map(
+  [...SHIPPED_PROFILES, ...SHIPPED_OPERATIONS_PROFILES].map((each) => [each.key, each.name]),
+);
 
 /**
  * Whether the import reads a broker's operations (v0.6): its profile is of the kind `operations`,
@@ -41,6 +46,8 @@ const summaryColumns = {
   linesDuplicate: statementImport.linesDuplicate,
   linesHeld: statementImport.linesHeld,
   readsOperations,
+  profileName: importProfile.name,
+  shippedProfile: statementImport.shippedProfile,
   balanceIgnored: statementImport.balanceIgnored,
   errorCode: statementImport.errorCode,
   jobId: statementImport.jobId,
@@ -80,6 +87,9 @@ export function summaryOf(row: SummaryRow): ImportSummary {
     linesDuplicate: row.linesDuplicate,
     linesHeld: row.linesHeld,
     reads: row.readsOperations ? "operations" : "statement",
+    profile:
+      row.profileName ??
+      (row.shippedProfile === null ? null : (SHIPPED_NAMES.get(row.shippedProfile) ?? null)),
     balanceIgnored: row.balanceIgnored,
     errorCode: row.errorCode,
     jobId: row.jobId,

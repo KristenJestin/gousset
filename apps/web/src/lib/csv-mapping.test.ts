@@ -1,7 +1,18 @@
-import type { CsvProfile } from "@gousset/import";
+import type { CsvProfile, OperationsProfile } from "@gousset/import";
 import { describe, expect, test } from "vite-plus/test";
 
-import { byHand, mappingOf, profileOf, remap, settingsOf, withSettings } from "./csv-mapping";
+import {
+  byHand,
+  kindWordsOf,
+  mappingOf,
+  operationsMappingOf,
+  operationsProfileOf,
+  operationsSettingsOf,
+  profileOf,
+  remap,
+  settingsOf,
+  withSettings,
+} from "./csv-mapping";
 
 const profile: CsvProfile = {
   version: 1,
@@ -163,5 +174,94 @@ describe("a CSV profile as the preview maps its columns", () => {
         decimalMark: "'",
       }),
     ).toEqual({ ...settings, skipRows: 100 });
+  });
+});
+
+/** A broker's export mapped by hand: its day, kind, ISIN, quantity, price, fees and cash. */
+const operations: OperationsProfile = {
+  version: 1,
+  reads: "operations",
+  separator: ";",
+  encoding: "utf8",
+  skipRows: 0,
+  headerRow: true,
+  dateFormat: "YYYY-MM-DD",
+  decimalMark: ",",
+  columns: {
+    bookedOn: 1,
+    valueOn: null,
+    kind: 2,
+    isin: 3,
+    securityName: 4,
+    securityCurrency: null,
+    quantity: 5,
+    unitPrice: 6,
+    fees: 7,
+    amount: 8,
+    label: null,
+    reference: 9,
+  },
+  kinds: [
+    { word: "Buy", kind: "purchase" },
+    { word: "Cash in", kind: "deposit" },
+  ],
+  referenceUnique: false,
+};
+
+describe("a broker's operations as the preview maps their columns", () => {
+  test("gives back the profile it was made from, its mapped words only", () => {
+    const mapping = operationsMappingOf(operations, 9);
+
+    expect(mapping).toEqual([
+      "bookedOn",
+      "kind",
+      "isin",
+      "securityName",
+      "quantity",
+      "unitPrice",
+      "fees",
+      "amount",
+      "reference",
+    ]);
+
+    expect(
+      operationsProfileOf(
+        operationsSettingsOf(operations),
+        mapping,
+        [...operations.kinds, { word: "Coupon", kind: null }],
+        undefined,
+      ),
+    ).toEqual({ profile: operations });
+  });
+
+  test("keeps a broker's layout, chosen from the list", () => {
+    expect(
+      operationsProfileOf(
+        operationsSettingsOf(operations),
+        operationsMappingOf(operations, 9),
+        operations.kinds,
+        "fortuneo",
+      ),
+    ).toEqual({ profile: { ...operations, layout: "fortuneo" } });
+  });
+
+  test("names what it still lacks: a day and an amount, no label", () => {
+    expect(
+      operationsProfileOf(operationsSettingsOf(operations), ["ignored", "kind"], [], undefined),
+    ).toEqual({ missing: ["bookedOn", "amount"] });
+  });
+
+  test("offers each word of the kind column once, mapped first, in any case", () => {
+    expect(
+      kindWordsOf(
+        [{ word: "Buy", kind: "purchase" }],
+        ["buy", " Sell ", "Sell", "", "Cash in", "Opération", "OPERATION"],
+      ),
+    ).toEqual([
+      { word: "Buy", kind: "purchase" },
+      { word: "Sell", kind: null },
+      { word: "Cash in", kind: null },
+      { word: "Opération", kind: null },
+    ]);
   });
 });
