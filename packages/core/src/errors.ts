@@ -19,8 +19,9 @@ export class LineSearchRefused extends Schema.TaggedError<LineSearchRefused>()(
  * Two lines cannot be paired as a transfer (#26): the same line twice (`same_line`), two lines of one
  * account (`same_account`), two lines both out or both in (`same_sign`), a line of nothing
  * (`zero_amount`), a line held for review or thrown away (`not_counted`), a line made from a noted
- * balance, which stands for a month's movement (`made_from_balance`), a line that is a side of a
- * transfer already (`already_paired`, `lineId` naming it); with no other side named, a line with no
+ * balance, which stands for a month's movement (`made_from_balance`), a purchase's, sale's,
+ * dividend's or fee's cash, which moves money inside an investment account (`investment_operation`,
+ * v0.6), a line that is a side of a transfer already (`already_paired`, `lineId` naming it); with no other side named, a line with no
  * candidate (`no_candidate`) or with several (`several_candidates`), for the user to choose. Paired
  * with an account kept by its balance (#31), whose side the app makes: an account kept by its lines
  * (`account_kept_by_lines`, which shows its own side), or of another currency than the line's
@@ -34,6 +35,7 @@ export class TransferRefused extends Schema.TaggedError<TransferRefused>()("Tran
     "zero_amount",
     "not_counted",
     "made_from_balance",
+    "investment_operation",
     "already_paired",
     "no_candidate",
     "several_candidates",

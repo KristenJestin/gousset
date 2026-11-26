@@ -5,6 +5,7 @@ import { and, eq, gte, inArray, lt, lte, ne, notInArray, or, sql } from "drizzle
 import type { SQL, SQLWrapper } from "drizzle-orm";
 
 import { dropEntriesOfTransferSides } from "../entries";
+import { notOperationCash } from "../investments/cash";
 import {
   CARD_DAYS,
   LONGEST_TRANSFER_DAYS,
@@ -34,12 +35,14 @@ export const notPaired = sql`not exists (select 1 from ${transfer} where ${trans
 
 /**
  * A line that may be a side of a transfer: counted, of some amount, not made from a noted balance
- * (it stands for a month's movement, #31), and no side of one yet.
+ * (it stands for a month's movement, #31), no purchase's, sale's, dividend's nor fee's cash (money
+ * moving inside an investment account, v0.6), and no side of one yet.
  */
 const pairable = and(
   eq(statementLine.state, "counted"),
   ne(statementLine.source, "balance"),
   ne(statementLine.amountMinor, 0),
+  notOperationCash,
   notPaired,
 );
 

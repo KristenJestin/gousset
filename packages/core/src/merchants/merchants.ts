@@ -17,6 +17,7 @@ import type { LineCategory } from "../category-store";
 import { takeCategoryTurn } from "../category-turn";
 import { LineNotFound } from "../errors";
 import { isId } from "../imports/rows";
+import { notOperationCash } from "../investments/cash";
 import { classifyByMerchants } from "./default-classification";
 import { isKnownIntermediary } from "./intermediaries";
 import { assignLineMerchantIn, lineMerchantIn } from "./line-merchant";
@@ -253,7 +254,8 @@ const summaryColumns = {
 
 /**
  * Recognises, in a transaction of `owner`'s, the merchant of every line (counted or held) whose
- * cleaned label names none yet: an existing merchant when the label matches one of its names, a
+ * cleaned label names none yet, but a purchase's, sale's, dividend's or fee's cash, which pays no
+ * merchant (v0.6): an existing merchant when the label matches one of its names, a
  * new one otherwise (`assignMerchants`). A cleaned label already known is never moved: what the
  * user split or merged stays. The entries of the lines it gave a merchant then go in that
  * merchant's default category (`./default-classification`). Safe to run at once in two
@@ -272,7 +274,7 @@ export async function recogniseIn(
       counterpartyName: statementLine.counterpartyName,
     })
     .from(statementLine)
-    .where(ne(statementLine.state, "discarded"));
+    .where(and(ne(statementLine.state, "discarded"), notOperationCash));
 
   const aliases = await transaction
     .select({ alias: merchantAlias.alias, merchantId: merchantAlias.merchantId })

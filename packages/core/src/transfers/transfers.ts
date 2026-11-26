@@ -11,6 +11,7 @@ import { dropEntriesOfTransferSides, entriesForLines } from "../entries";
 import { AccountNotFound, LineNotFound, NotATransfer, TransferRefused } from "../errors";
 import type { AccountKind } from "../account-values";
 import { isId } from "../imports/rows";
+import { operationCash } from "../investments/cash";
 import type { LineAccount } from "../lines";
 import type { Money } from "../month";
 import { today } from "../today";
@@ -134,6 +135,7 @@ const lineColumns = {
   institution: account.institution,
   kind: account.kind,
   currency: account.currency,
+  operationCash,
 };
 
 type ReadLine = {
@@ -149,6 +151,8 @@ type ReadLine = {
   readonly institution: string | null;
   readonly kind: AccountKind;
   readonly currency: string;
+  /** A purchase's, sale's, dividend's or fee's cash (v0.6): never a transfer's side. */
+  readonly operationCash: boolean;
 };
 
 /** The user's counted or held lines among `lineIds` booked on or before `day`. */
@@ -208,7 +212,12 @@ async function candidatesOfLine(
   line: ReadLine,
   day: string,
 ): Promise<ReadonlyArray<TransferSide>> {
-  if (line.state !== "counted" || line.source === "balance" || line.amountMinor === 0) {
+  if (
+    line.state !== "counted" ||
+    line.source === "balance" ||
+    line.amountMinor === 0 ||
+    line.operationCash
+  ) {
     return [];
   }
 
@@ -293,6 +302,14 @@ function refusalOf(
 
   if (fromBalance !== undefined) {
     return { reason: "made_from_balance", lineId: fromBalance.id };
+  }
+
+  // Money moving inside an investment account (v0.6): cash becoming a position, or the investment
+  // earning or costing, never money between two accounts.
+  const inside = [line, other].find((each) => each.operationCash);
+
+  if (inside !== undefined) {
+    return { reason: "investment_operation", lineId: inside.id };
   }
 
   const held = [line, other].find((each) => each.state !== "counted");
@@ -399,6 +416,10 @@ function accountRefusalOf(
 ): TransferRefused["reason"] | undefined {
   if (line.source === "balance") {
     return "made_from_balance";
+  }
+
+  if (line.operationCash) {
+    return "investment_operation";
   }
 
   if (line.state !== "counted") {

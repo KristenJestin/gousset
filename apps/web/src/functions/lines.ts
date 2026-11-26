@@ -197,6 +197,7 @@ const ACCOUNT_PAIRING_CODES = {
   zero_amount: "ZERO_AMOUNT",
   not_counted: "NOT_COUNTED",
   made_from_balance: "MADE_FROM_BALANCE",
+  investment_operation: "CANNOT_PAIR",
   already_paired: "ALREADY_PAIRED",
   no_candidate: "CANNOT_PAIR",
   several_candidates: "CANNOT_PAIR",

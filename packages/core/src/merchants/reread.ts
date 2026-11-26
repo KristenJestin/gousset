@@ -5,6 +5,7 @@ import { and, eq, inArray, ne, sql } from "drizzle-orm";
 import { Effect } from "effect";
 
 import { takeCategoryTurn } from "../category-turn";
+import { notOperationCash } from "../investments/cash";
 import { formerMerchantKey, merchantKey, merchantName } from "./labels";
 import { recogniseIn } from "./merchants";
 import type { Recognised } from "./merchants";
@@ -29,7 +30,8 @@ function chunked<T>(items: ReadonlyArray<T>): ReadonlyArray<ReadonlyArray<T>> {
 
 /**
  * The cleaned labels that a line (counted or held) gave before the operation prefixes and none
- * gives now: what recognition named a merchant from, which names no line any longer.
+ * gives now: what recognition named a merchant from, which names no line any longer. A purchase's,
+ * sale's, dividend's or fee's cash is read by neither (v0.6).
  */
 async function staleAliases(transaction: UserTransaction): Promise<ReadonlySet<string>> {
   const labels = await transaction
@@ -38,7 +40,7 @@ async function staleAliases(transaction: UserTransaction): Promise<ReadonlySet<s
       counterpartyName: statementLine.counterpartyName,
     })
     .from(statementLine)
-    .where(ne(statementLine.state, "discarded"));
+    .where(and(ne(statementLine.state, "discarded"), notOperationCash));
 
   const given = new Set<string>();
   const former = new Set<string>();
