@@ -21,11 +21,12 @@ import { connectInProcess } from "./test-client";
 
 // The budget of docs/mcp.md ("The budget"). When a guard fails, nobody trims a description to make
 // room: the maintainer decides. The tool listing stays under 52,000 characters (Kris, 2026-11-26),
-// to fit subjects and investments.
+// to fit subjects and investments. The server instructions: Under 750 words (Kris, 2026-11-26), to
+// fit subjects and investments.
 const MAX_TOOLS = 15;
 const MAX_LISTING_CHARACTERS = 52_000;
 const MAX_DESCRIPTION_CHARACTERS = 4000;
-const MAX_INSTRUCTION_WORDS = 600;
+const MAX_INSTRUCTION_WORDS = 750;
 
 const reader = { userId: "guard", canWrite: false, currency: "EUR" };
 
