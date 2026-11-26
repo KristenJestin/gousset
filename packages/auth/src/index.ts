@@ -194,6 +194,16 @@ export function createAuth(env: AuthConfig, database: Database) {
           defaultValue: false,
           input: false,
         },
+        // Whether the merchants made one per town were merged (#193): true for a user made now,
+        // whose merchants never were; the boot's merchants job merges those of a user made before,
+        // once (packages/core, merchants/town-merge.ts).
+        merchantTownsMerged: {
+          type: "boolean",
+          required: false,
+          defaultValue: true,
+          input: false,
+          returned: false,
+        },
       },
     },
     session: {

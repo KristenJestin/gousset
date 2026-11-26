@@ -64,6 +64,15 @@ export class UserData extends Context.Service<
       owner: string,
       work: (transaction: UserTransaction) => Promise<A>,
     ) => Effect.Effect<Option.Option<A>, QueryFailed>;
+    /**
+     * The same, once per user, for the merge of the merchants made one per town (#193): it marks
+     * `auth_user.merchant_towns_merged`, as the app's role, before acting as the user, and runs
+     * `work` only when the mark was not set yet; none otherwise.
+     */
+    readonly mergingTownMerchants: <A>(
+      owner: string,
+      work: (transaction: UserTransaction) => Promise<A>,
+    ) => Effect.Effect<Option.Option<A>, QueryFailed>;
   }
 >()("@gousset/db/UserData") {}
 
@@ -116,6 +125,24 @@ export function userDataLayer(db: Database): Layer.Layer<UserData> {
             .update(authUser)
             .set({ defaultCategoriesSettled: true })
             .where(and(eq(authUser.id, owner), eq(authUser.defaultCategoriesSettled, false)))
+            .returning({ id: authUser.id });
+
+          if (marked.length === 0) {
+            return Option.none();
+          }
+
+          await actAs(transaction, owner);
+
+          return Option.some(await work(transaction));
+        }),
+      ),
+    mergingTownMerchants: (owner, work) =>
+      attempt(() =>
+        db.transaction(async (transaction) => {
+          const marked = await transaction
+            .update(authUser)
+            .set({ merchantTownsMerged: true })
+            .where(and(eq(authUser.id, owner), eq(authUser.merchantTownsMerged, false)))
             .returning({ id: authUser.id });
 
           if (marked.length === 0) {
