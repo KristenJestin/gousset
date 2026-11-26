@@ -297,107 +297,89 @@ top as `testReadCsv` does. Each row is an `OperationRow`, in the file's order:
   `referenceUnique`, whether the profile makes it unique to the row: the import then keys the
   operation by it (`bank:`), else by its content (`operation:`).
 
-An operations profile, version 1, is a statement profile's table (`separator`, `encoding`,
+**No broker's profile is shipped** (#250): Gousset recognises no broker by itself. A broker's
+export is read with a profile of the user's, mapped by hand on the import screen or through the
+MCP door (`imports`: `test_profile`, `save_profile`, `confirm`), or imported from a profile file,
+such as those of the library in this package ([`profiles/`](profiles/README.md)).
+
+An operations profile, version 2, is a statement profile's table (`separator`, `encoding`,
 `skipRows`, `headerRow`, `dateFormat`, `decimalMark`, read as above) with, instead of its
 columns:
 
 - `reads: "operations"`, so that a shared file is never taken for a statement's profile;
   `CsvDefinition` decodes either (`Schema.fromJsonString(CsvDefinition)`), and `readsOperations`
   tells them apart;
-- `columns`, counted from 1, or `null`: `bookedOn` and `amount`, required; `valueOn`, `kind`,
-  `isin`, `securityName`, `securityCurrency`, `quantity`, `unitPrice`, `fees`, `label`,
-  `reference`;
+- `description`, optional, 500 characters at most: where the profile's knowledge comes from, and
+  whether it was checked on a real export (a statement's profile may carry one too);
+- `columns`: `bookedOn` and `amount`, required; `valueOn`, `kind`, `isin`, `securityName`,
+  `securityCurrency`, `quantity`, `unitPrice`, `fees`, `label`, `reference`, and the currencies
+  `amountCurrency`, `feesCurrency` and `priceCurrency` with `value` (what the trade was worth in
+  the account's currency, fees aside), each `null` or left out where the file has none. A column
+  (`ColumnPlace`) is either
+  - its place, counted from 1 (`4`): a header with fewer columns is another file's
+    (`MalformedFile`);
+  - `{ "names": ["Code ISIN", "ISIN"] }`: the first column of the header row with one of these
+    names, compared trimmed, in any case, accents aside, wherever it stands and whatever stands
+    beside it, as PayPal's are; a header without it is another file's (`MalformedFile`, naming
+    it), unless `"optional": true`, when the field is then read as absent;
+  - `{ "after": ["Price"] }`: the column right after the one so named, when it has no name of its
+    own, as a broker writes an amount's currency (Degiro); absent otherwise.
+
+  A profile that finds a column by name reads a header row (`MalformedFile` without one), and,
+  saved with a header, recognises any file whose header row names every column it requires
+  (`headerMatches`, `matchCsvHeader`), rather than that exact header;
+
 - `kinds`: the words of the `kind` column (`[{ "word": "Buy", "kind": "purchase" }]`, 100 at
   most), compared trimmed, in any case, accents aside. **A word the profile does not map is
   refused at its line and column** (`InvalidField`, `kind`), never guessed. With no `kind`
   column, every row is a purchase or a sale, told by its quantity's sign (negative sold);
-- `referenceUnique`: whether the broker makes `reference` unique to each row;
-- `layout`, left out for a table read by its columns' places: a broker's export whose columns are
-  found by their names (`fortuneo`, `degiro-transactions`), wherever they stand, as PayPal's
-  are; its `columns` then say where they stand in the header the profile ships with.
+- `referenceUnique`: whether the broker makes `reference` unique to each row.
 
-The shipped ones (`SHIPPED_OPERATIONS_PROFILES`, `src/csv-shipped.ts`, beside the statements'
-`SHIPPED_PROFILES`; `shippedOperationsProfile(key)` finds one) recognise a file by the names of
-the columns their layout needs (`headerMatches`, `matchCsvHeader`):
-
-| Key                   | Broker   | Layout                |
-| --------------------- | -------- | --------------------- |
-| `fortuneo-operations` | Fortuneo | `fortuneo`            |
-| `degiro-transactions` | Degiro   | `degiro-transactions` |
+A profile of version 1 (#250's first: every column at its place, none of the currencies' nor
+`value`) is read as version 2, the same columns and none of the new ones; Gousset writes version 2.
+A version 1 profile that named one of the brokers' layouts part 2 shipped then (`layout`) reads its
+columns at their places.
 
 Beyond what each row says (`MissingField` for what its kind needs, `InvalidField` for what cannot
-be read), a row in another currency than the account's is refused (`UnsupportedContent`):
-Gousset converts no currency, but where the broker gives the trade's value in the account's
-currency (Degiro, below).
-
-### Fortuneo
-
-`src/brokers/fortuneo.ts`, the history of operations of a securities account or a PEA. **Its
-knowledge is remembered from Fortuneo's public help pages, not re-checked here: every name below
-is guessed**, and the whole of it is the table at the top of that module (`FORTUNEO`: separator,
-encoding, date format, decimal mark, each field's column names, the words of its kinds), so that
-a real export's header changes that table alone. The tests build their invented files from it.
-
-- Guessed: `;`, Windows-1252, `DD/MM/YYYY`, a decimal comma, a header row; the columns `Date`,
-  `Opération` (the kind), `Libellé` (the security's name and the label), `Code ISIN`, `Qté`,
-  `Prix d'exé` (the unit price), `Montant brut` (read past), `Courtage` (the fees), `Montant net`
-  (the amount), `Devise` (the amount's currency, checked against the account's), and their
-  other names (`ISIN`, `Quantité`, `Prix d'exécution`, `Cours`, `Frais`, `Date opération`).
-- Guessed words: `Achat Comptant`, `Achat` (purchase), `Vente Comptant`, `Vente` (sale),
-  `Encaissement dividende`, `Dividende`, `Coupons` (dividend), `Versement espèces`, `Versement`
-  (deposit), `Retrait espèces`, `Retrait` (withdrawal), `Droits de garde`, `Frais`,
-  `Taxe sur les transactions financières` (fee). Any other is refused at its line.
-- No reference: an operation is keyed by its content.
-
-### Degiro
-
-`src/brokers/degiro.ts`, its `Transactions.csv` (purchases and sales; the deposits, dividends
-and fees of its `Account.csv` are not read: that file repeats each trade, writes a dividend's tax
-as a row apart and changes currencies in rows of their own, which would take a layout of their
-own). **Its knowledge is remembered from Degiro's public help pages, not re-checked here.**
-
-- Its columns, in English: `Date` (`DD-MM-YYYY`), `Time`, `Product` (the security's name and the
-  label), `ISIN`, `Reference exchange`, `Venue`, `Quantity` (negative for a sale: no column names
-  the kind), `Price`, `Local value`, `Value` (in the account's currency), `Exchange rate`,
-  `Transaction and/or third` (the fees), `Total` (the amount) and `Order ID` (the reference),
-  each amount followed by a column with no name holding its currency. `,`, UTF-8, every value
-  quoted.
-- Guessed: the decimal point (an export in English), the fees' other names (`Transaction and/or
-  third party fees`, `Transaction costs`), and that the price's currency is the product's
-  quotation currency. An export in another language is not recognised.
-- **A price in another currency** than the account's (a share quoted in dollars in a euro
-  account): the unit price is the trade's `Value` in the account's currency divided by its
-  quantity, to 10 decimals, rounded half up, since an operation's unit price is in the account's
-  currency (`docs/data-model.md`, v0.6). The totals and the fees must be in the account's
-  currency.
-- `Order ID` is not unique to a row: an order executed in several parts gives each part its row
-  with the same id, so an operation is keyed by its content.
+be read), a row in another currency than the account's is refused (`UnsupportedContent`), as the
+profile's `amountCurrency` and `feesCurrency` say it: Gousset converts no currency. **A price in
+another currency** than the account's (a share quoted in dollars in a euro account, as
+`priceCurrency` says) is read from the trade's `value` in the account's currency divided by its
+quantity, to 10 decimals, rounded half up, since an operation's unit price is in the account's
+currency (`docs/data-model.md`, v0.6); such a row without a `value` is refused at its line.
 
 ### Mapped by hand
 
-A broker no layout knows is read by a profile the user maps on the import screen (or through the
-MCP door): which column holds each field, and which words of the kind column name which kind.
-It has no `layout`, recognises the next file by its whole header as a statement's profile does,
-and is the same JSON the user exports and imports (`OperationsProfile`, above).
+A broker's export is read by a profile the user maps on the import screen: which column holds
+each field (the days, the kind, the ISIN, the security's name and currency, the quantity, the
+unit price and its currency, the trade's value, the fees and their currency, the amount and its
+currency, the label, the reference), which words of the kind column name which kind (purchase,
+sale, dividend, fee, deposit, withdrawal), and the file's settings (separator, encoding, lines
+to skip, header row, date format, decimal mark). A test read shows the first operations as the
+profile reads them, or the line and column it refuses, before the profile is saved or the file
+imported. Saved, it is the user's profile of the kind `operations`, kept with the file's header
+so that the next such file is read with it, and it is the JSON the user exports and imports
+(`OperationsProfile`, above). An agent does the same through the MCP door's `imports` tool:
+`test_profile` reads the waiting file with a profile it writes, `save_profile` keeps it once that
+reads the file, `confirm` imports the file with it.
 
-### How to add a broker
+A profile chosen from the screen's list is read as it is, its columns at their places or found
+by their names, until the user changes a column or a word: from then on, it is mapped by hand,
+by the places the preview shows.
 
-1. Write `src/brokers/<broker>.ts` beside `fortuneo.ts`: a table at its top (separator,
-   encoding, date format, decimal mark, the header in its order, each field's column names, the
-   words of its kinds), its `BrokerColumns` (`names`, the fields a header `required`s, the
-   `currencyAfter` columns with no name), and its shipped `OperationsProfile`, its `columns`
-   where its header puts them. Say at its top where the knowledge comes from.
-2. Add its layout's name to `BROKER_LAYOUTS` (`src/operations-profile.ts`) and its columns to
-   `BROKERS` (`src/brokers/index.ts`).
-3. Add its shipped profile to `SHIPPED_OPERATIONS_PROFILES` (`src/csv-shipped.ts`), under a
-   stable key: an import keeps it.
-4. Test it in `src/operations.test.ts` on an invented file built from its table: each kind it
-   writes, its header recognised, a row it cannot tell refused at its line.
-5. Add it to this part: where its knowledge comes from, and which columns and values are
-   guessed.
+### A broker's profile file
 
-A broker whose rows need more than finding columns by name (a kind told by two columns, a row
-that is two operations) adds a field to `OperationField` and its reading to `src/operations.ts`.
+The library (`profiles/`, its [README](profiles/README.md)) holds profile files for brokers'
+exports, to import through the profile import, each exactly the JSON an export writes, its
+`description` saying whether it is checked or guessed: today Fortuneo's history of operations and
+Degiro's `Transactions.csv`, both guessed from their public help pages, never checked on a real
+export. To add one, map a real export by hand, export the profile, and follow the library's
+README: the file, an invented export in `@gousset/fixture`, its case in the library's test
+(`packages/core/src/imports/profile-library.test.ts`), its row in the README's table.
+
+A broker whose rows need more than a profile can say (a kind told by two columns, a row that is
+two operations) adds a field to `OperationsProfile`'s columns, in a new `version` that reads the
+older ones, and its reading to `src/operations.ts`.
 
 ## Errors
 
