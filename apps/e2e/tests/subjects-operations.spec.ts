@@ -345,22 +345,24 @@ test("adding and removing a subject in the detail", async ({ page, app, user }) 
   await expect(page.getByRole("option", { name: "Van", exact: true })).toBeVisible();
   await expect(page.getByRole("option", { name: "Alps 2026", exact: true })).toBeVisible();
   await expect(page.getByRole("option", { name: "Dog", exact: true })).toHaveCount(0);
-  await page.getByRole("option", { name: "Van", exact: true }).click();
+
+  // Refused: Alps archived meanwhile, while the open list still offers it; said under the field,
+  // the chip gone back. Archived before any change of the page: a change reads the subjects again,
+  // and an answer that came after the archive would no longer offer Alps.
+  await archive(owner, alps, true);
+  await page.getByRole("option", { name: "Alps 2026", exact: true }).click();
+  await expect(subjects).toContainText("This subject is archived");
+  await expect(subjects.locator('[data-slot="subject-chip"]')).toHaveCount(0);
+  expect(await subjectsOfLine(owner, fuel.lineId)).toEqual([[]]);
 
   // Its chip, in the detail and on the row, without reopening; the expense has it.
+  await addSubject(page, subjects, "Add a subject", "Subject to add", "Van");
   await expect(subjects.locator('[data-slot="subject-chip"]')).toHaveText(["Van"]);
   await expect.poll(async () => subjectsOfLine(owner, fuel.lineId)).toEqual([[van]]);
 
   if (!onPhone(page)) {
     await expect(rowChips(page, "CB FUELSTOP 1410")).toHaveText(["Van"]);
   }
-
-  // Refused: Alps archived meanwhile; said under the field, the chip gone back.
-  await archive(owner, alps, true);
-  await addSubject(page, subjects, "Add a subject", "Subject to add", "Alps 2026");
-  await expect(subjects).toContainText("This subject is archived");
-  await expect(subjects.locator('[data-slot="subject-chip"]')).toHaveText(["Van"]);
-  expect(await subjectsOfLine(owner, fuel.lineId)).toEqual([[van]]);
 
   // Removed: its chip leaves the detail and the row.
   await subjects.getByRole("button", { name: "Remove Van" }).click();
