@@ -96,6 +96,8 @@ const SHOTS: ReadonlyArray<Shot> = [
   { id: "layout-screen--sign-in" },
   { id: "data-list--loading-beside-loaded" },
   { id: "data-list--links" },
+  // Wherever a merchant is named, its logo or its initials on its colour (#204).
+  { id: "data-list--links-with-avatars" },
   { id: "data-categoryicon--in-rows" },
   // Every palette colour on its tile, on a block and on the page (#205).
   { id: "data-categoryicon--every-colour" },
@@ -119,6 +121,7 @@ const SHOTS: ReadonlyArray<Shot> = [
   { id: "money-breakdown--loading" },
   // An open row's figures against its average and the month before (#32).
   { id: "money-breakdown--detail-figures" },
+  { id: "money-breakdown--merchants-with-avatars" },
   { id: "money-amount--counting" },
   { id: "money-movement-list--default" },
   { id: "money-investment-list--loss" },
@@ -130,13 +133,16 @@ const SHOTS: ReadonlyArray<Shot> = [
   { id: "money-recurringcalendar--agenda-view" },
   { id: "money-recurringcalendar--phone", width: 390 },
   { id: "money-recurringcalendar--phone-agenda", width: 390 },
+  { id: "money-recurringcalendar--agenda-with-avatars" },
   { id: "data-flag-list--default" },
+  { id: "data-flag-list--with-avatars" },
   { id: "layout-folded--default" },
   { id: "layout-review-layout--desktop" },
   { id: "charts-spending-chart--default" },
   { id: "charts-bar-chart--default" },
   { id: "brand-brand--with-wordmark" },
   { id: "layout-app-shell--desktop" },
+  { id: "layout-app-shell--block-with-avatar" },
   // The user's menu opened over the sidebar: a floating surface stands out from it (#104).
   {
     id: "layout-app-shell--desktop",
@@ -159,6 +165,7 @@ const SHOTS: ReadonlyArray<Shot> = [
   { id: "accounts-benefitcredits--default" },
   { id: "accounts-benefitcredits--uncovered" },
   { id: "operations-operationslist--default" },
+  { id: "operations-operationslist--with-avatars" },
   { id: "operations-linedetail--to-review" },
   // "To review only" off, then pressed with the others set (#184).
   { id: "operations-operationsfilters--default" },
@@ -193,6 +200,7 @@ const SHOTS: ReadonlyArray<Shot> = [
   // An intermediary's line that asks who was paid: its notice stands out in the detail (#30).
   { id: "operations-linemerchant--asks" },
   { id: "operations-linemerchant--assigned" },
+  { id: "operations-linemerchant--with-logo" },
   // The dialog the Change button opens, over the page.
   {
     id: "operations-linemerchant--choosing",
