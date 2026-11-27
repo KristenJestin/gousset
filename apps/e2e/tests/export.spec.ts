@@ -258,6 +258,15 @@ test("an MCP client with read access learns what the export holds and where to g
       const count = (await data.asUser(owner, (transaction) => keysOf(transaction, table))).length;
       const exported = EXPORT_TABLES.find((each) => each.table === table.name);
 
+      // The tables carried as files have a folder each: imported files, merchants' logos (#204).
+      if (table.name === "merchant_logo") {
+        expect(answer.text).toContain(
+          `- ${MERCHANT_LOGOS_FOLDER}/: ${count} logo${count === 1 ? "" : "s"} you uploaded`,
+        );
+
+        continue;
+      }
+
       expect(answer.text).toContain(
         exported === undefined
           ? `- import-files/: ${count} files you imported`
