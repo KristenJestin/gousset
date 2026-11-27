@@ -158,7 +158,11 @@ the file once per encoding however many profiles are tried on it. `readCsvHeader
 file's first row only, and looks for it within 64 KiB of text for the lines skipped and 100 lines
 and 64 KiB past them: a header further down is none, so that trying every profile on a large file
 costs what its top costs. `matchCsvHeader(file, candidates)` gives the first of the candidates (a
-definition and its header) whose header the file has, each read with its own profile;
+definition and its header, `null` for a profile imported from a file) whose header the file has,
+each read with its own profile; a profile that finds its columns by their names (PayPal's activity,
+an operations profile of version 2) recognises a file by those names whether or not it keeps a
+header, one of places only by the header it keeps (`recognisesFiles` says whether a candidate can
+recognise any file);
 `testReadCsv(file, profile, currency)` reads the file's first 50 lines (within 200 lines and 64 KiB
 past those skipped, as the header search does) as `readCsv` would, and
 succeeds with them when the profile fits them (with no currency, amounts are read with up to four
@@ -231,9 +235,10 @@ account's country writes them (`MM/DD/YYYY` for the US).
   document its French names publicly: those are a guess, and the invented French export of the
   tests is built on it. A header lacking one of `Date`, `Name`, `Type`, `Status`, `Currency`,
   `Net` or `Transaction ID` is not PayPal's activity (`MalformedFile`, naming the column).
-  `headerMatches` and `matchCsvHeader` recognise a file by those names, never by its whole header:
-  the profile's `header` and `columns` describe the mandatory columns, in their order, for the
-  import screen and the MCP door to show.
+  `headerMatches` and `matchCsvHeader` recognise a file by those names, never by its whole header,
+  and so does a copy of the profile imported from a file with no header: the profile's `header` and
+  `columns` describe the mandatory columns, in their order, for the import screen and the MCP door
+  to show.
 - **A row counts when it moved the balance**: its `Status` is `Completed` (`Terminé`), and its
   `Balance Impact` is not `Memo`. Pending, denied, reversed or voided rows are left out. PayPal's
   report says no more of a memo than "the impact of the transaction on the account balance:
@@ -268,6 +273,130 @@ account's country writes them (`MM/DD/YYYY` for the US).
   The decimal mark is the one an amount ends with before its cents, otherwise a
   point in English and a comma in French. The profile's `dateFormat` and `decimalMark` are not read
   with this layout.
+
+## Brokers' operations
+
+A broker's export (v0.6, `docs/data-model.md`, "Investments") is read into **operations** rather
+than lines (`src/operations.ts`), through a profile of the kind `operations`
+(`OperationsProfile`, `src/operations-profile.ts`): `readOperations(bytes, profile, { currency })`
+reads a whole file in the account's currency, `testReadOperations(file, profile, currency)` its
+top as `testReadCsv` does. Each row is an `OperationRow`, in the file's order:
+
+- `line`: the file's line its row starts on, for the import's errors;
+- `kind`: `deposit`, `withdrawal`, `purchase`, `sale`, `dividend` or `fee`;
+- `bookedOn`, `valueOn`: the day of the trade and its settlement day (or `null`), `YYYY-MM-DD`;
+- `amountMinor`: the cash it moved, fees included, in minor units of the account's currency,
+  **signed by its kind**: a purchase, a fee and a withdrawal negative, the others positive. A
+  broker may write a purchase with its minus or without; a minus on a kind that brings money in
+  contradicts it and is refused, as is an amount of zero. Read from the digits (`readAmount`);
+- `isin`: upper case, its check digit checked (ISO 6166), a purchase's, a sale's and a dividend's,
+  a fee's when it names one; a deposit's and a withdrawal's is read past;
+- `securityName`, `securityCurrency`: the security's name and the ISO 4217 code it is quoted in,
+  when the file gives them, for a security the account does not know yet; a currency that is no
+  such code (`GBX`, pence) leaves it in the account's, never refusing the file;
+- `quantity`, `unitPrice`: a purchase's and a sale's alone (a dividend's count of shares is read
+  past), exact text with a point and no trailing zero (`0.0347`), never a float (`readDecimal`:
+  15 digits before the mark, 10 after, thousands grouped as the profile's amounts are). A
+  quantity's sign is read past, but where it gives the kind (below);
+- `feesMinor`: the fees, or a dividend's withholding tax, whatever their sign, from 0;
+- `label`: the broker's text for the row; `reference`: its own reference for the row, and
+  `referenceUnique`, whether the profile makes it unique to the row: the import then keys the
+  operation by it (`reference:`), else by its content (`operation:`).
+
+**No broker's profile is shipped** (#250): Gousset recognises no broker by itself. A broker's
+export is read with a profile of the user's, mapped by hand on the import screen or through the
+MCP door (`imports`: `test_profile`, `save_profile`, `confirm`), or imported from a profile file,
+such as those of the library in this package ([`profiles/`](profiles/README.md)).
+
+An operations profile, version 2, is a statement profile's table (`separator`, `encoding`,
+`skipRows`, `headerRow`, `dateFormat`, `decimalMark`, read as above) with, instead of its
+columns:
+
+- `reads: "operations"`, so that a shared file is never taken for a statement's profile;
+  `CsvDefinition` decodes either (`Schema.fromJsonString(CsvDefinition)`), and `readsOperations`
+  tells them apart;
+- `description`, optional, 500 characters at most: where the profile's knowledge comes from, and
+  whether it was checked on a real export (a statement's profile may carry one too);
+- `columns`: `bookedOn` and `amount`, required; `valueOn`, `kind`, `isin`, `securityName`,
+  `securityCurrency`, `quantity`, `unitPrice`, `fees`, `label`, `reference`, and the currencies
+  `amountCurrency`, `feesCurrency` and `priceCurrency` with `value` (what the trade was worth in
+  the account's currency, fees aside), each `null` or left out where the file has none. A column
+  (`ColumnPlace`) is either
+  - its place, counted from 1 (`4`): a header with fewer columns is another file's
+    (`MalformedFile`);
+  - `{ "names": ["Code ISIN", "ISIN"] }`: the first column of the header row with one of these
+    names, compared trimmed, in any case, accents aside, wherever it stands and whatever stands
+    beside it, as PayPal's are; a header without it is another file's (`MalformedFile`, naming
+    it), unless `"optional": true`, when the field is then read as absent;
+  - `{ "after": ["Price"] }`: the column right after the one so named, when it has no name of its
+    own, as a broker writes an amount's currency (Degiro); absent otherwise.
+
+  A profile that finds a column by name reads a header row (`MalformedFile` without one), and
+  recognises any file whose header row names every column it requires, its optional ones there or
+  not, and has as many columns as it reads at their places (`headerMatches`, `matchCsvHeader`),
+  rather than one exact header: kept with a header or with none, as a profile file imported is, it
+  reads the next such file on its own; the import tries it on an investment account's file only
+  (`packages/core`, `candidatesFor`), names as common as `Date` and `Amount` being a bank
+  statement's too. A profile whose every column is at its place recognises only the header it was
+  saved with;
+
+- `kinds`: the words of the `kind` column (`[{ "word": "Buy", "kind": "purchase" }]`, 100 at
+  most), compared trimmed, in any case, accents aside. **A word the profile does not map is
+  refused at its line and column** (`InvalidField`, `kind`), never guessed. With no `kind`
+  column, every row is a purchase or a sale, told by its quantity's sign (negative sold);
+- `referenceUnique`: whether the broker makes `reference` unique to each row. The import then keys
+  an operation by `reference:` and its reference rather than by its content: a row whose reference is
+  already known is a duplicate, whatever its other values. Off by default; the import screen offers
+  it once a reference column is mapped.
+
+A profile of version 1 (#250's first: every column at its place, none of the currencies' nor
+`value`) is read as version 2, the same columns and none of the new ones; Gousset writes version 2.
+A version 1 profile that named one of the brokers' layouts part 2 shipped then (`layout`) reads its
+columns at their places.
+
+Beyond what each row says (`MissingField` for what its kind needs, `InvalidField` for what cannot
+be read), a row in another currency than the account's is refused (`UnsupportedContent`), as the
+profile's `amountCurrency` and `feesCurrency` say it: Gousset converts no currency. **A price in
+another currency** than the account's (a share quoted in dollars in a euro account, as
+`priceCurrency` says) is read from the trade's `value` in the account's currency divided by its
+quantity, to 10 decimals, rounded half up, since an operation's unit price is in the account's
+currency (`docs/data-model.md`, v0.6); such a row without a `value` is refused at its line.
+
+### Mapped by hand
+
+A broker's export is read by a profile the user maps on the import screen: which column holds
+each field (the days, the kind, the ISIN, the security's name and currency, the quantity, the
+unit price and its currency, the trade's value, the fees and their currency, the amount and its
+currency, the label, the reference), which words of the kind column name which kind (purchase,
+sale, dividend, fee, deposit, withdrawal), and the file's settings (separator, encoding, lines
+to skip, header row, date format, decimal mark), and, once a reference column is mapped, whether
+each row's reference is unique (`referenceUnique`, off by default). A test read shows the first
+operations as the
+profile reads them, or the line and column it refuses, before the profile is saved or the file
+imported. Saved, it is the user's profile of the kind `operations`, kept with the file's header
+so that the next such file is read with it, and it is the JSON the user exports and imports
+(`OperationsProfile`, above). An agent does the same through the MCP door's `imports` tool:
+`test_profile` reads the waiting file with a profile it writes, `save_profile` keeps it once that
+reads the file, `confirm` imports the file with it.
+
+A profile chosen from the screen's list is read as it is, its columns at their places or found
+by their names, until the user changes a column or a word: from then on, it is mapped by hand,
+by the places the preview shows.
+
+### A broker's profile file
+
+The library (`profiles/`, its [README](profiles/README.md)) holds profile files for brokers'
+exports, to import through the profile import, each exactly the JSON an export writes, its
+`description` saying whether it is checked or guessed; imported, one that finds its columns by
+their names reads the next such export on its own, with nothing to pick: today Fortuneo's history of operations and
+Degiro's `Transactions.csv`, both guessed from their public help pages, never checked on a real
+export. To add one, map a real export by hand, export the profile, and follow the library's
+README: the file, an invented export in `@gousset/fixture`, its case in the library's test
+(`packages/core/src/imports/profile-library.test.ts`), its row in the README's table.
+
+A broker whose rows need more than a profile can say (a kind told by two columns, a row that is
+two operations) adds a field to `OperationsProfile`'s columns, in a new `version` that reads the
+older ones, and its reading to `src/operations.ts`.
 
 ## Errors
 

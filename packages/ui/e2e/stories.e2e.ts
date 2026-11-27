@@ -78,6 +78,16 @@ const SHOTS: ReadonlyArray<Shot> = [
   { id: "import-csv-test-read--default" },
   { id: "import-csv-test-read--refused" },
   { id: "import-csv-preview--default" },
+  // A broker's operations mapped by hand (#250): its kind words, and each row's reference unique.
+  { id: "import-csv-kind-words--default" },
+  { id: "import-csv-preview--operations-reference-unique" },
+  // An investment account (#250): its figures, positions at cost (one incomplete), operations,
+  // and the form of an operation, its amount differing from what its figures give.
+  { id: "investments-investmentfigures--figures" },
+  { id: "investments-investmentfigures--positions-incomplete" },
+  { id: "investments-investmentfigures--operations" },
+  { id: "investments-investmentfigures--form-amount-differs" },
+  { id: "investments-investmentfigures--positions-phone", width: 390 },
   { id: "states-emptystate--in-a-block" },
   { id: "states-errorstate--beside-a-working-block" },
   // The review of a user with no line yet (#32): links to the first import and the accounts.

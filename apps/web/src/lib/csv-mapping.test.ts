@@ -1,7 +1,21 @@
-import type { CsvProfile } from "@gousset/import";
+import type { CsvProfile, OperationsProfile } from "@gousset/import";
+import type { CsvField } from "@gousset/ui/lib/csv-fields";
 import { describe, expect, test } from "vite-plus/test";
 
-import { byHand, mappingOf, profileOf, remap, settingsOf, withSettings } from "./csv-mapping";
+import {
+  byHand,
+  kindWordsOf,
+  labelWithNameOf,
+  mappingOf,
+  operationsMappingOf,
+  operationsProfileOf,
+  operationsSettingsOf,
+  profileOf,
+  remap,
+  settingsOf,
+  startedOperations,
+  withSettings,
+} from "./csv-mapping";
 
 const profile: CsvProfile = {
   version: 1,
@@ -163,5 +177,228 @@ describe("a CSV profile as the preview maps its columns", () => {
         decimalMark: "'",
       }),
     ).toEqual({ ...settings, skipRows: 100 });
+  });
+});
+
+/** A broker's export mapped by hand: its day, kind, ISIN, quantity, price, fees and cash. */
+const operations: OperationsProfile = {
+  version: 2,
+  reads: "operations",
+  separator: ";",
+  encoding: "utf8",
+  skipRows: 0,
+  headerRow: true,
+  dateFormat: "YYYY-MM-DD",
+  decimalMark: ",",
+  columns: {
+    bookedOn: 1,
+    valueOn: null,
+    kind: 2,
+    isin: 3,
+    securityName: 4,
+    securityCurrency: null,
+    quantity: 5,
+    unitPrice: 6,
+    fees: 7,
+    amount: 8,
+    label: null,
+    reference: 9,
+    amountCurrency: null,
+    feesCurrency: null,
+    priceCurrency: null,
+    value: null,
+  },
+  kinds: [
+    { word: "Buy", kind: "purchase" },
+    { word: "Cash in", kind: "deposit" },
+  ],
+  referenceUnique: false,
+};
+
+describe("a broker's operations as the preview maps their columns", () => {
+  test("gives back the profile it was made from, its mapped words only", () => {
+    const mapping = operationsMappingOf(operations, 9, []);
+
+    expect(mapping).toEqual([
+      "bookedOn",
+      "kind",
+      "isin",
+      "securityName",
+      "quantity",
+      "unitPrice",
+      "fees",
+      "amount",
+      "reference",
+    ]);
+
+    expect(
+      operationsProfileOf(operationsSettingsOf(operations), mapping, [
+        ...operations.kinds,
+        { word: "Coupon", kind: null },
+      ]),
+    ).toEqual({ profile: operations });
+  });
+
+  test("maps the currencies and the trade's value to the profile's columns", () => {
+    const mapping: Array<CsvField> = [
+      "bookedOn",
+      "unitPrice",
+      "priceCurrency",
+      "value",
+      "fees",
+      "feesCurrency",
+      "amount",
+      "currency",
+    ];
+
+    const made = operationsProfileOf(operationsSettingsOf(operations), mapping, []);
+
+    expect("profile" in made ? made.profile.columns : made).toMatchObject({
+      priceCurrency: 3,
+      value: 4,
+      fees: 5,
+      feesCurrency: 6,
+      amount: 7,
+      amountCurrency: 8,
+    });
+    expect("profile" in made ? operationsMappingOf(made.profile, 8, []) : []).toEqual(mapping);
+  });
+
+  test("shows a profile's columns found by their names where the file's header puts them", () => {
+    const named: OperationsProfile = {
+      ...operations,
+      columns: {
+        ...operations.columns,
+        bookedOn: { names: ["Day"] },
+        amount: { names: ["Cash"] },
+        amountCurrency: { after: ["Cash"] },
+        kind: null,
+        isin: null,
+        securityName: null,
+        quantity: null,
+        unitPrice: null,
+        fees: null,
+        reference: null,
+      },
+    };
+
+    expect(operationsMappingOf(named, 4, ["Note", "Cash", "", "Day"])).toEqual([
+      "ignored",
+      "amount",
+      "currency",
+      "bookedOn",
+    ]);
+  });
+
+  test("a profile chosen from the list is read as it is, with the settings the form says", () => {
+    const settings = { ...operationsSettingsOf(operations), separator: "," as const, skipRows: 2 };
+
+    expect(startedOperations({ ...operations, description: "Guessed." }, settings)).toEqual({
+      ...operations,
+      description: "Guessed.",
+      separator: ",",
+      skipRows: 2,
+    });
+  });
+
+  test("says each row's reference is unique only when asked, with a reference column mapped", () => {
+    const settings = operationsSettingsOf(operations);
+    const mapping = operationsMappingOf(operations, 9, []);
+    const noReference = mapping.map((field) => (field === "reference" ? "ignored" : field));
+    const unmapped = operationsProfileOf(settings, noReference, operations.kinds, true);
+
+    expect(operationsProfileOf(settings, mapping, operations.kinds, true)).toEqual({
+      profile: { ...operations, referenceUnique: true },
+    });
+    expect(operationsProfileOf(settings, mapping, operations.kinds, false)).toEqual({
+      profile: operations,
+    });
+    expect("profile" in unmapped ? unmapped.profile.referenceUnique : unmapped).toBe(false);
+  });
+
+  test("a profile chosen from the list keeps whether its reference is unique", () => {
+    const unique = { ...operations, referenceUnique: true };
+
+    expect(startedOperations(unique, operationsSettingsOf(operations))).toEqual(unique);
+  });
+
+  test("mapped by hand from a profile whose label is its security's name, keeps that label", () => {
+    // Fortuneo's: the label and the security's name both read the Libellé column.
+    const fortuneo: OperationsProfile = {
+      ...operations,
+      columns: {
+        ...operations.columns,
+        bookedOn: { names: ["Date"] },
+        kind: { names: ["Opération"] },
+        isin: { names: ["Code ISIN"] },
+        securityName: { names: ["Libellé"] },
+        quantity: { names: ["Qté"] },
+        unitPrice: { names: ["Cours"] },
+        fees: null,
+        amount: { names: ["Montant net"] },
+        label: { names: ["Libellé"], optional: true },
+        reference: null,
+      },
+    };
+
+    const header = ["Date", "Opération", "Libellé", "Code ISIN", "Qté", "Cours", "Montant net"];
+    const shown = operationsMappingOf(fortuneo, 7, header);
+
+    // A word the profile does not list, mapped on the screen: the profile is made from what is shown.
+    const made = operationsProfileOf(
+      operationsSettingsOf(fortuneo),
+      shown,
+      [...fortuneo.kinds, { word: "Virement", kind: "deposit" }],
+      false,
+      labelWithNameOf(fortuneo, header),
+    );
+
+    expect("profile" in made ? made.profile.columns : made).toMatchObject({
+      securityName: 3,
+      label: 3,
+    });
+
+    // A profile whose label is a column of its own, or none, does not read the name as its label.
+    expect(labelWithNameOf(operations, [])).toBe(false);
+    expect(
+      labelWithNameOf({ ...operations, columns: { ...operations.columns, label: 9 } }, []),
+    ).toBe(false);
+  });
+
+  test("mapped by hand from a profile whose security's currency is its price's, keeps it", () => {
+    // Degiro's: the unnamed column after the price is both the price's currency and the security's.
+    const degiro: OperationsProfile = {
+      ...operations,
+      columns: { ...operations.columns, priceCurrency: 10, securityCurrency: 10, value: 11 },
+    };
+
+    const shown = operationsMappingOf(degiro, 11, []);
+    const made = operationsProfileOf(operationsSettingsOf(degiro), shown, degiro.kinds);
+
+    expect("profile" in made ? made.profile.columns : made).toMatchObject({
+      priceCurrency: 10,
+      securityCurrency: 10,
+      value: 11,
+    });
+  });
+
+  test("names what it still lacks: a day and an amount, no label", () => {
+    expect(operationsProfileOf(operationsSettingsOf(operations), ["ignored", "kind"], [])).toEqual({
+      missing: ["bookedOn", "amount"],
+    });
+  });
+
+  test("offers each word of the kind column once, mapped first, in any case", () => {
+    expect(
+      kindWordsOf(
+        [{ word: "Buy", kind: "purchase" }],
+        ["buy", " Sell ", "Sell", "", "Cash in", "Opération", "OPERATION"],
+      ),
+    ).toEqual([
+      { word: "Buy", kind: "purchase" },
+      { word: "Sell", kind: null },
+      { word: "Cash in", kind: null },
+      { word: "Opération", kind: null },
+    ]);
   });
 });

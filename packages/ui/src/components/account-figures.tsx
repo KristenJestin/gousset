@@ -8,7 +8,8 @@ import { Chip } from "./chip";
 import { RestrictedAmount } from "./restricted-amount";
 import { Skeleton, SkeletonFrame } from "./skeleton";
 
-function FigureBox({ label, children }: { label: string; children: ReactNode }) {
+/** One headline figure under its label, in a box of its own: a row of them wraps on a phone. */
+export function FigureBox({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="flex flex-col gap-1 rounded-lg border p-3">
       <span className="text-xs text-muted-foreground">{label}</span>

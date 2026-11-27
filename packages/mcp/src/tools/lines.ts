@@ -568,6 +568,8 @@ const TRANSFER_REFUSALS = {
     "The line {line} is held for review as a near duplicate (or thrown away): it is not counted, so it cannot be paired.",
   made_from_balance:
     "The line {line} was made by Gousset from a balance the user noted: it stands for the month's movement of an account kept by its balance, never for one side of a transfer.",
+  investment_operation:
+    "The line {line} is the cash of a purchase, a sale, a dividend or a fee of an investment account: money moving inside that account, never one side of a transfer.",
   already_paired:
     "The line {line} is already a side of a transfer: unpair it first if that pairing is wrong.",
   no_candidate:
@@ -727,6 +729,8 @@ const LINK_REFUSALS = {
   zero_amount: "The line {line} moves no money: it pays and refunds nothing.",
   made_from_balance:
     "The line {line} was made by Gousset from a balance the user noted: it stands for a month's movement, never for one payment.",
+  investment_operation:
+    "The line {line} is the cash of a purchase, a sale, a dividend or a fee of an investment account: money moving inside that account, never part of an expense.",
   transfer:
     "The line {line} is a side of a transfer between two of the user's accounts, never spending: unpair it first if it is no transfer.",
   split:
@@ -898,6 +902,8 @@ const SPLIT_REFUSALS = {
   not_counted:
     "This line is held for review as a near duplicate (or thrown away): it is no expense nor income to split.",
   zero_amount: "This line moves no money: there is nothing to split.",
+  investment_operation:
+    "This line is the cash of a purchase, a sale, a dividend or a fee of an investment account: money moving inside that account, no expense nor income to split.",
   transfer:
     "This line is a side of a transfer, never an expense nor an income: unpair it first if it is no transfer.",
   linked: "This line is part of an expense with other lines: unlink it first, then split it.",

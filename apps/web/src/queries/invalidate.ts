@@ -4,6 +4,7 @@ import type { Touched } from "@/jobs/view";
 
 import { accountKeys } from "./account-keys";
 import { categoryKeys } from "./category-keys";
+import { investmentKeys } from "./investment-keys";
 import { lineKeys } from "./line-keys";
 import { merchantKeys } from "./merchant-keys";
 import { monthKeys } from "./month-keys";
@@ -16,7 +17,8 @@ import { ruleKeys } from "./rule-keys";
  * Whatever touched months touched their lines too, which the operations and the accounts show, and
  * the review counts, and the merchants an import recognises from them (#24), and the rules, which
  * count the lines they classified at import and applied to the past (#25). A rule applied to the
- * past (every month) moved lines between categories: their figures too. Every month is read again,
+ * past (every month) moved lines between categories: their figures too. A broker's operations
+ * imported or undone move an investment account's positions and cash (#250). Every month is read again,
  * not only those touched: a month's figures read the six before it, and its flags the month after;
  * only the months on screen refetch.
  */
@@ -24,6 +26,7 @@ export async function invalidateTouched(queryClient: QueryClient, touched: Touch
   await Promise.all([
     queryClient.invalidateQueries({ queryKey: lineKeys.all }),
     queryClient.invalidateQueries({ queryKey: accountKeys.all }),
+    queryClient.invalidateQueries({ queryKey: investmentKeys.all }),
     queryClient.invalidateQueries({ queryKey: reviewKeys.all }),
     queryClient.invalidateQueries({ queryKey: merchantKeys.all }),
     queryClient.invalidateQueries({ queryKey: ruleKeys.all }),
@@ -39,10 +42,13 @@ export async function invalidateTouched(queryClient: QueryClient, touched: Touch
  * totals and the account's page may all have changed, so every accounts query is read again; the
  * operations name each line's account, so theirs are too, and the review counts the accounts. The
  * months read the accounts (kind, name, closing, how far imported, expiring credits): all of them.
+ * The investments page names its accounts and shows their cash; an operation entered, corrected or
+ * deleted there is a write to its account's lines, read again the same way (#250).
  */
 export async function invalidateAccounts(queryClient: QueryClient): Promise<void> {
   await Promise.all([
     queryClient.invalidateQueries({ queryKey: accountKeys.all }),
+    queryClient.invalidateQueries({ queryKey: investmentKeys.all }),
     queryClient.invalidateQueries({ queryKey: lineKeys.all }),
     queryClient.invalidateQueries({ queryKey: reviewKeys.all }),
     queryClient.invalidateQueries({ queryKey: monthKeys.all }),

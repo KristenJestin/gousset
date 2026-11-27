@@ -4,6 +4,7 @@ import {
   FundRefused,
   ImportProfiles,
   Imports,
+  Investments,
   LinkRefused,
   Merchants,
   MonthFacts,
@@ -234,6 +235,7 @@ function onToday(
     Layer.mock(RuleJobs, {}),
     Layer.mock(Subscriptions, {}),
     Layer.mock(MonthFacts, {}),
+    Layer.mock(Investments, {}),
     transfers,
     expenses,
     TestClock.layer(),
@@ -1104,6 +1106,7 @@ describe("the lines tool", () => {
       "categories",
       "rules",
       "review",
+      "investments",
     ]);
     expect(tool?.title).toBe("Lines");
 

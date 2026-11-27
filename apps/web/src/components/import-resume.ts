@@ -1,5 +1,5 @@
 import type { ImportSummary as Import, ProfileChoice } from "@gousset/core/imports";
-import type { CsvProfile } from "@gousset/import";
+import type { CsvDefinition } from "@gousset/import";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 
@@ -24,7 +24,7 @@ export function useResume(summary: Import) {
 
   const resume = async (
     accountId: string | null,
-    csvProfile: CsvProfile | null,
+    csvProfile: CsvDefinition | null,
     profile: ProfileChoice | null = null,
   ) => {
     const answer = await resumeImport({

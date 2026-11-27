@@ -10,8 +10,13 @@ export type CsvMappingProps = {
   columns: ReadonlyArray<string>;
   /** The file's first lines, a value per column, as written in the file. */
   rows: ReadonlyArray<ReadonlyArray<string>>;
-  /** Each field's name, in the page's words ("Booking date", "Ignored"). */
-  fields: { [Field in CsvField]: string };
+  /** Each field's name, in the page's words ("Booking date", "Ignored"), for those offered. */
+  fields: { readonly [Field in CsvField]?: string };
+  /**
+   * The fields each column's list offers, in order: a statement's (`CSV_FIELDS`, the default), or
+   * a broker's operations' (`OPERATION_FIELDS`).
+   */
+  offered?: ReadonlyArray<CsvField>;
   /** What each column holds, in the columns' order; a column left out is `ignored`. */
   mapping: ReadonlyArray<CsvField>;
   /** A column, counted from 1 as the profile counts it, now holds `field`. */
@@ -23,7 +28,8 @@ export type CsvMappingProps = {
 /**
  * The first lines of a CSV file, where the user says what each column holds (docs/wireframes,
  * screen 6, block 3): above each column, a `Select` of the fields an import profile reads (booking
- * date, value date, label, memo, signed amount, debit, credit, bank id, currency) or "ignored".
+ * date, value date, label, memo, signed amount, debit, credit, bank id, currency, or a broker's
+ * operation's: its kind, ISIN, quantity, unit price, fees…) or "ignored".
  * The values are shown as the file writes them. It draws no block: the page puts it in one. A wide
  * file scrolls sideways inside it.
  *
@@ -36,11 +42,12 @@ export function CsvMapping({
   columns,
   rows,
   fields,
+  offered = CSV_FIELDS,
   mapping,
   onMappingChange,
   chooseLabel,
 }: CsvMappingProps) {
-  const items = CSV_FIELDS.map((field) => ({ value: field, label: fields[field] }));
+  const items = offered.map((field) => ({ value: field, label: fields[field] ?? field }));
 
   // Each column by its number, counted from 1 as the profile and the errors count them.
   const numbered = columns.map((name, index) => {
@@ -73,7 +80,7 @@ export function CsvMapping({
                     items={items}
                     value={column.field}
                     onValueChange={(next) => {
-                      const chosen = CSV_FIELDS.find((field) => field === next);
+                      const chosen = offered.find((field) => field === next);
 
                       if (chosen !== undefined) {
                         onMappingChange(column.number, chosen);

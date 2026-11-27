@@ -225,7 +225,7 @@ const GROUP_TITLES = {
   owed: "Owed",
 } as const satisfies { readonly [Group in AccountGroup]: string };
 
-const CHOICE_NAMES = {
+export const CHOICE_NAMES = {
   current: "current account",
   savings: "savings account",
   livret_a: "Livret A",

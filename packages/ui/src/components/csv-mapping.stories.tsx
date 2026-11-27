@@ -3,6 +3,7 @@ import { useState } from "react";
 import type { ReactNode } from "react";
 
 import { InFrench } from "../stories/in-french";
+import { OPERATION_FIELDS } from "../lib/csv-fields";
 import type { CsvField } from "../lib/csv-fields";
 import { CsvMapping } from "./csv-mapping";
 import type { CsvMappingProps } from "./csv-mapping";
@@ -123,6 +124,57 @@ export const Wide: Story = {
     columns: [...COLUMNS, "Catégorie", "Devise", "Pays", "Commerçant", "Carte"],
     rows: ROWS.map((row) => [...row, "Food", "EUR", "FR", "GREENMARKET", "****0042"]),
     mapping: [...MAPPED, "ignored", "currency", "ignored", "memo", "ignored"],
+  },
+};
+
+/**
+ * A broker's export of operations (v0.6): the lists offer an operation's fields, its kind, its
+ * security, its quantity and price, its fees and the cash it moved.
+ */
+export const Operations: Story = {
+  args: {
+    columns: ["Day", "What", "ISIN", "Name", "Units", "Price", "Fees", "Cash"],
+    rows: [
+      ["2026-10-01", "Cash in", "", "", "", "", "", "500,00"],
+      [
+        "2026-10-02",
+        "Buy",
+        "XX0000000028",
+        "NORTHWIND 2030 BOND",
+        "10",
+        "0,9876",
+        "1,00",
+        "-10,88",
+      ],
+      ["2026-10-20", "Coupon", "XX0000000028", "NORTHWIND 2030 BOND", "", "", "", "12,00"],
+    ],
+    fields: {
+      ...FIELDS,
+      amount: "Amount",
+      kind: "Kind of operation",
+      isin: "ISIN",
+      securityName: "Security's name",
+      securityCurrency: "Security's currency",
+      quantity: "Quantity",
+      unitPrice: "Unit price",
+      priceCurrency: "Price's currency",
+      value: "Value in the account's currency",
+      fees: "Fees",
+      feesCurrency: "Fees' currency",
+      currency: "Amount's currency",
+      reference: "Broker's reference",
+    },
+    offered: OPERATION_FIELDS,
+    mapping: [
+      "bookedOn",
+      "kind",
+      "isin",
+      "securityName",
+      "quantity",
+      "unitPrice",
+      "fees",
+      "amount",
+    ],
   },
 };
 

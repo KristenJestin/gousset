@@ -19,8 +19,9 @@ export class LineSearchRefused extends Schema.TaggedError<LineSearchRefused>()(
  * Two lines cannot be paired as a transfer (#26): the same line twice (`same_line`), two lines of one
  * account (`same_account`), two lines both out or both in (`same_sign`), a line of nothing
  * (`zero_amount`), a line held for review or thrown away (`not_counted`), a line made from a noted
- * balance, which stands for a month's movement (`made_from_balance`), a line that is a side of a
- * transfer already (`already_paired`, `lineId` naming it); with no other side named, a line with no
+ * balance, which stands for a month's movement (`made_from_balance`), a purchase's, sale's,
+ * dividend's or fee's cash, which moves money inside an investment account (`investment_operation`,
+ * v0.6), a line that is a side of a transfer already (`already_paired`, `lineId` naming it); with no other side named, a line with no
  * candidate (`no_candidate`) or with several (`several_candidates`), for the user to choose. Paired
  * with an account kept by its balance (#31), whose side the app makes: an account kept by its lines
  * (`account_kept_by_lines`, which shows its own side), or of another currency than the line's
@@ -34,6 +35,7 @@ export class TransferRefused extends Schema.TaggedError<TransferRefused>()("Tran
     "zero_amount",
     "not_counted",
     "made_from_balance",
+    "investment_operation",
     "already_paired",
     "no_candidate",
     "several_candidates",
@@ -51,8 +53,9 @@ export class NotATransfer extends Schema.TaggedError<NotATransfer>()("NotATransf
 /**
  * A line cannot join another line's expense as a payment or a refund (#27): the same line twice
  * (`same_line`), a line held for review or thrown away (`not_counted`), a line of nothing
- * (`zero_amount`), a line made from a noted balance (`made_from_balance`), a side of a transfer,
- * never an expense (`transfer`), a line split across several categories (`split`), a line that is
+ * (`zero_amount`), a line made from a noted balance (`made_from_balance`), a purchase's, sale's,
+ * dividend's or fee's cash, which moves money inside an investment account and is no expense
+ * (`investment_operation`, v0.6), a side of a transfer, never an expense (`transfer`), a line split across several categories (`split`), a line that is
  * part of an expense with other lines already, to unlink first (`linked`), a line already in that
  * expense (`already_linked`), a line of another currency than the expense's (`currency`), a refund
  * bigger than what the expense still costs (`exceeds`). `lineId` names the line refused.
@@ -63,6 +66,7 @@ export class LinkRefused extends Schema.TaggedError<LinkRefused>()("LinkRefused"
     "not_counted",
     "zero_amount",
     "made_from_balance",
+    "investment_operation",
     "transfer",
     "split",
     "linked",
@@ -109,7 +113,8 @@ export class NotLinked extends Schema.TaggedError<NotLinked>()("NotLinked", {
 
 /**
  * A line cannot be split across these categories (#27): a line held or thrown away
- * (`not_counted`), of nothing (`zero_amount`), a side of a transfer (`transfer`), a line that is
+ * (`not_counted`), of nothing (`zero_amount`), a purchase's, sale's, dividend's or fee's cash
+ * (`investment_operation`, v0.6), a side of a transfer (`transfer`), a line that is
  * part of an expense with other lines (`linked`), the line of an expense a transfer funds, to unfund
  * first (`funded`, #29), no share or more than `MAX_SHARES` (`count`),
  * shares that do not add up to the line (`sum`); the share at `index` has no positive amount of the
@@ -119,6 +124,7 @@ export class SplitRefused extends Schema.TaggedError<SplitRefused>()("SplitRefus
   reason: Schema.Literals([
     "not_counted",
     "zero_amount",
+    "investment_operation",
     "transfer",
     "linked",
     "funded",

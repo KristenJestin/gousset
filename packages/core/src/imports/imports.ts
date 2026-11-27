@@ -16,9 +16,11 @@ import {
   detectFormat,
   previewCsvRows,
   readCsvHeader,
+  readsOperations,
   testReadCsv,
+  testReadOperations,
 } from "@gousset/import";
-import type { CsvFile, CsvProfile, CsvUnsure } from "@gousset/import";
+import type { CsvDefinition, CsvFile, CsvProfile, CsvUnsure, ReadError } from "@gousset/import";
 import { and, asc, desc, eq, gt, inArray, isNull, lt, ne, or, sql } from "drizzle-orm";
 import { Context, Effect, Layer, Option } from "effect";
 
@@ -168,7 +170,8 @@ export type CsvQuestions = {
  */
 export type Answers = {
   readonly accountId: string | null;
-  readonly csvProfile: CsvProfile | null;
+  /** A statement's, or a broker's operations' (v0.6). */
+  readonly csvProfile: CsvDefinition | null;
   readonly profile: ProfileChoice | null;
 };
 
@@ -288,28 +291,46 @@ export class Imports extends Context.Service<
     readonly csvPreview: (
       owner: string,
       importId: string,
-      profile: CsvProfile,
+      profile: CsvDefinition,
     ) => Effect.Effect<CsvPreview, ImportNotFound | Failure>;
   }
 >()("@gousset/core/Imports") {}
 
 const refused = (refusal: CsvReadRefusal) => Effect.succeed({ refused: refusal });
 
+/** The first lines a test read shows: a statement's lines, or a broker's operations. */
+const testLines = (
+  file: CsvFile,
+  profile: CsvDefinition,
+  currency: string | null,
+): Effect.Effect<CsvPreview["read"], ReadError> =>
+  readsOperations(profile)
+    ? Effect.map(testReadOperations(file, profile, currency), (read) => ({
+        lines: read.operations.slice(0, TEST_READ_SHOWN).map((operation, index) => ({
+          position: index + 1,
+          bookedOn: operation.bookedOn,
+          label: operation.label ?? operation.securityName ?? "",
+          amountMinor: operation.amountMinor,
+          kind: operation.kind,
+        })),
+      }))
+    : Effect.map(testReadCsv(file, profile, currency), (statement) => ({
+        lines: statement.lines.slice(0, TEST_READ_SHOWN).map((line, index) => ({
+          position: index + 1,
+          bookedOn: line.bookedOn,
+          label: line.label,
+          amountMinor: line.amountMinor,
+          kind: null,
+        })),
+      }));
+
 /** A test read of a file's top with a profile: its first lines, or why the reader refuses it. */
 const testRead = (
   file: CsvFile,
-  profile: CsvProfile,
+  profile: CsvDefinition,
   currency: string | null,
 ): Effect.Effect<CsvPreview["read"]> =>
-  testReadCsv(file, profile, currency).pipe(
-    Effect.map((statement): CsvPreview["read"] => ({
-      lines: statement.lines.slice(0, TEST_READ_SHOWN).map((line, index) => ({
-        position: index + 1,
-        bookedOn: line.bookedOn,
-        label: line.label,
-        amountMinor: line.amountMinor,
-      })),
-    })),
+  testLines(file, profile, currency).pipe(
     Effect.catchTags({
       NotAStatement: () =>
         refused({ error: "NotAStatement", line: null, column: null, field: null, text: null }),
@@ -448,7 +469,7 @@ export const importsLayer = Layer.effect(
       });
 
     /** Sends the import's job and keeps its id; an import the queue did not take has failed. */
-    const sendJob = (owner: string, importId: string, csvProfile: CsvProfile | null) =>
+    const sendJob = (owner: string, importId: string, csvProfile: CsvDefinition | null) =>
       jobs.send(owner, { importId, csvProfile }).pipe(
         Effect.tapError(() =>
           inTransaction(owner, (transaction) =>

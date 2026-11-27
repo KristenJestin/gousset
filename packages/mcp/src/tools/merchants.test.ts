@@ -4,6 +4,7 @@ import {
   Expenses,
   ImportProfiles,
   Imports,
+  Investments,
   LineMerchantRefused,
   LineNotFound,
   MAX_MERCHANT_NAME,
@@ -447,6 +448,7 @@ function runnerOf(state: Store): Runner<GoussetServices> {
     Layer.mock(RuleJobs, {}),
     Layer.mock(Subscriptions, {}),
     Layer.mock(MonthFacts, {}),
+    Layer.mock(Investments, {}),
     merchantsOf(state),
   );
 
@@ -1398,6 +1400,7 @@ describe("the merchants tool", () => {
       "categories",
       "rules",
       "review",
+      "investments",
     ]);
     expect(tool?.title).toBe("Merchants");
     expect(tool?.annotations).toEqual({

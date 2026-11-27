@@ -1,6 +1,8 @@
-import { account, statementImport } from "@gousset/db/schema/ledger";
+import { investmentOperation } from "@gousset/db/schema/investments";
+import { account, importProfile, statementImport, statementLine } from "@gousset/db/schema/ledger";
 import type { UserTransaction } from "@gousset/db/user-data";
-import { eq } from "drizzle-orm";
+import { SHIPPED_PROFILES } from "@gousset/import";
+import { eq, sql } from "drizzle-orm";
 
 import type { ImportSummary } from "./summary";
 
@@ -9,6 +11,21 @@ import type { ImportSummary } from "./summary";
 /** Gousset's ids are uuids: anything else names no row, rather than a query Postgres refuses. */
 export const isId = (id: string) =>
   /^[\da-f]{8}-[\da-f]{4}-[\da-f]{4}-[\da-f]{4}-[\da-f]{12}$/i.test(id);
+
+/** Each shipped profile's name, by its key. */
+const SHIPPED_NAMES: ReadonlyMap<string, string> = new Map(
+  SHIPPED_PROFILES.map((each) => [each.key, each.name]),
+);
+
+/**
+ * Whether the import reads a broker's operations (v0.6): its profile, the user's, is of the kind
+ * `operations` (none is shipped), or its lines are operations' cash (a definition given by hand,
+ * which the import does not record).
+ */
+const readsOperations =
+  sql<boolean>`(${importProfile.kind} = 'operations' or exists (select 1 from ${statementLine} inner join ${investmentOperation} on ${investmentOperation.lineId} = ${statementLine.id} where ${statementLine.importId} = ${statementImport.id}))`.mapWith(
+    Boolean,
+  );
 
 const summaryColumns = {
   id: statementImport.id,
@@ -23,6 +40,9 @@ const summaryColumns = {
   linesAdded: statementImport.linesAdded,
   linesDuplicate: statementImport.linesDuplicate,
   linesHeld: statementImport.linesHeld,
+  readsOperations,
+  profileName: importProfile.name,
+  shippedProfile: statementImport.shippedProfile,
   balanceIgnored: statementImport.balanceIgnored,
   errorCode: statementImport.errorCode,
   jobId: statementImport.jobId,
@@ -36,7 +56,8 @@ export function selectSummaries(transaction: UserTransaction) {
   return transaction
     .select(summaryColumns)
     .from(statementImport)
-    .leftJoin(account, eq(account.id, statementImport.accountId));
+    .leftJoin(account, eq(account.id, statementImport.accountId))
+    .leftJoin(importProfile, eq(importProfile.id, statementImport.profileId));
 }
 
 type SummaryRow = Awaited<ReturnType<typeof selectSummaries>>[number];
@@ -60,6 +81,10 @@ export function summaryOf(row: SummaryRow): ImportSummary {
     linesAdded: row.linesAdded,
     linesDuplicate: row.linesDuplicate,
     linesHeld: row.linesHeld,
+    reads: row.readsOperations ? "operations" : "statement",
+    profile:
+      row.profileName ??
+      (row.shippedProfile === null ? null : (SHIPPED_NAMES.get(row.shippedProfile) ?? null)),
     balanceIgnored: row.balanceIgnored,
     errorCode: row.errorCode,
     jobId: row.jobId,

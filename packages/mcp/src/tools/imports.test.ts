@@ -12,7 +12,9 @@ import {
   ImportProfiles,
   ImportUnavailable,
   Imports,
+  Investments,
   Merchants,
+  ProfileNameMissing,
   MonthFacts,
   RuleJobs,
   Subscriptions,
@@ -24,11 +26,14 @@ import {
   memoryLineStore,
 } from "@gousset/core";
 import type {
+  Answers,
+  CsvPreview,
   FileUploadRequest,
   FileUploadStatus,
   ImportAccount,
   ImportProfileEntry,
   ImportSummary,
+  ProfileDraft,
   ProfilesForImport,
   Started,
   Undone,
@@ -36,6 +41,7 @@ import type {
   UploadChoices,
 } from "@gousset/core";
 import { UserData } from "@gousset/db/user-data";
+import { CsvDefinition } from "@gousset/import";
 import { Effect, Fiber, Layer, Schema } from "effect";
 import { TestClock } from "effect/testing";
 import { describe, expect, test } from "vite-plus/test";
@@ -43,6 +49,7 @@ import { describe, expect, test } from "vite-plus/test";
 import { goussetServer } from "../gousset";
 import type { GoussetServices } from "../gousset";
 import { ERROR_LIMIT, RESULT_LIMIT } from "../results";
+import { PROFILE_EXAMPLE, STATEMENT_EXAMPLE } from "./imports";
 import { callText, connectInProcess } from "../test-client";
 import type { Caller, Runner } from "../tool";
 
@@ -96,6 +103,8 @@ function summary(changes: Partial<ImportSummary> = {}): ImportSummary {
     linesAdded: 6,
     linesDuplicate: 0,
     linesHeld: 0,
+    reads: "statement",
+    profile: null,
     balanceIgnored: false,
     errorCode: null,
     jobId: "job-1",
@@ -136,6 +145,13 @@ type Fake = {
     | null;
   /** What `uploadStatus` answers, by file upload id. */
   uploadStatuses: { [id: string]: FileUploadStatus };
+  /** What `csvPreview` answers for any import of the list, and each profile it was asked to read. */
+  preview: CsvPreview | null;
+  readWith: Array<CsvDefinition>;
+  /** Each profile `ImportProfiles.save` kept. */
+  saved: Array<ProfileDraft>;
+  /** Each import `resume` ran again, with its answers. */
+  resumed: Array<{ importId: string; answers: Answers }>;
 };
 
 function fake(changes: Partial<Fake> = {}): Fake {
@@ -161,6 +177,10 @@ function fake(changes: Partial<Fake> = {}): Fake {
     uploadStarts: [],
     uploadFailure: null,
     uploadStatuses: {},
+    preview: null,
+    readWith: [],
+    saved: [],
+    resumed: [],
     ...changes,
   };
 }
@@ -176,6 +196,23 @@ const TOKEN =
 function profilesOf(state: Fake) {
   return Layer.mock(ImportProfiles, {
     list: () => Effect.succeed(state.profiles),
+    save: (_owner, draft) => {
+      if (draft.name.trim() === "") {
+        return Effect.fail(new ProfileNameMissing());
+      }
+
+      state.saved.push(draft);
+
+      return Effect.succeed({
+        source: "stored",
+        id: idOf(700),
+        name: draft.name,
+        institution: null,
+        kind: "reads" in draft.definition ? "operations" : "statement",
+        header: draft.header,
+        definition: draft.definition,
+      });
+    },
     forImport: (_owner, importId) => {
       const found = state.profilesFor[importId];
 
@@ -223,7 +260,11 @@ function importsOf(state: Fake) {
           ? Effect.succeed({ undone: { ...found, status: "undone" as const }, ...state.undoCounts })
           : Effect.fail(new ImportBusy({ importId, status: found.status })),
       ),
-    resume: (_owner, importId) => find(importId),
+    resume: (_owner, importId, answers) => {
+      state.resumed.push({ importId, answers });
+
+      return Effect.as(find(importId), state.settled ?? state.started);
+    },
     createUpload: (_owner, request) => {
       state.fileUploads.push(request);
 
@@ -259,7 +300,13 @@ function importsOf(state: Fake) {
     },
     accounts: () => Effect.succeed(state.accounts),
     csvQuestions: (_owner, importId) => Effect.fail(new ImportNotFound({ importId })),
-    csvPreview: (_owner, importId) => Effect.fail(new ImportNotFound({ importId })),
+    csvPreview: (_owner, importId, profile) => {
+      state.readWith.push(profile);
+
+      return state.preview === null
+        ? Effect.fail(new ImportNotFound({ importId }))
+        : Effect.as(find(importId), state.preview);
+    },
   });
 }
 
@@ -283,6 +330,7 @@ function runnerOf(state: Fake): Runner<GoussetServices> {
           Layer.mock(RuleJobs, {}),
           Layer.mock(Subscriptions, {}),
           Layer.mock(MonthFacts, {}),
+          Layer.mock(Investments, {}),
         ),
       ),
     );
@@ -316,6 +364,7 @@ function runnerWithTime(state: Fake): Runner<GoussetServices> {
             Layer.mock(RuleJobs, {}),
             Layer.mock(Subscriptions, {}),
             Layer.mock(MonthFacts, {}),
+            Layer.mock(Investments, {}),
             TestClock.layer(),
           ),
         ),
@@ -353,7 +402,20 @@ function exampleOf(text: string) {
 }
 
 const Example = Schema.Struct({
-  action: Schema.Literals(["upload", "create_upload", "status", "list", "undo", "profiles"]),
+  action: Schema.Literals([
+    "upload",
+    "create_upload",
+    "status",
+    "list",
+    "undo",
+    "profiles",
+    "test_profile",
+    "save_profile",
+    "confirm",
+  ]),
+  profile_json: Schema.optional(Schema.String),
+  profile: Schema.optional(Schema.String),
+  name: Schema.optional(Schema.String),
   account: Schema.optional(Schema.String),
   format: Schema.optional(Schema.String),
   import: Schema.optional(Schema.String),
@@ -444,6 +506,37 @@ describe("imports upload", () => {
 
     expect(text).toContain("failed");
     expect(text).toContain("currency is not its account's");
+  });
+
+  test("a broker's operations are counted as operations, with the profile that read them", async () => {
+    const state = fake({
+      started: summary({
+        fileName: "fortuneo.csv",
+        format: "csv",
+        reads: "operations",
+        profile: "Fortuneo: history of operations",
+        linesRead: 6,
+        linesAdded: 4,
+        linesDuplicate: 2,
+      }),
+    });
+
+    const { text, isError } = await imports(state, upload());
+
+    expect(isError).toBe(false);
+    expect(text).toContain("Read as a broker's operations with Fortuneo: history of operations.");
+    expect(text).toContain("6 operations read: 4 added, 2 already known (duplicates).");
+    expect(text).not.toContain("held for review");
+  });
+
+  test("a broker's file on another account than an investment one says where it goes", async () => {
+    const state = fake({
+      started: summary({ status: "failed", errorCode: "NOT_AN_INVESTMENT_ACCOUNT", linesAdded: 0 }),
+    });
+
+    const { text } = await imports(state, upload());
+
+    expect(text).toContain("go only into an investment account kept by its lines");
   });
 
   test("an import still running after the wait says how to follow it", async () => {
@@ -1066,7 +1159,7 @@ describe("imports profiles", () => {
     // Its user chooses the export's columns: a file is PayPal's by the names of those it always has.
     expect(text).not.toContain("A CSV file whose header row is a profile's is read with it");
     expect(text).toContain(
-      "or, for PayPal activity, whose header row names PayPal's mandatory columns among any others.",
+      "or, for PayPal activity and a profile that finds its columns by their names, whose header row names those columns among any others.",
     );
 
     const fitting = await imports(
@@ -1170,5 +1263,201 @@ describe("imports profiles", () => {
     expect(isError).toBe(false);
     expect(text.length).toBeLessThan(RESULT_LIMIT);
     expect(text).toContain('"cursor"');
+  });
+});
+
+describe("imports profiles written by an agent", () => {
+  const decode = Schema.decodeUnknownSync(Schema.fromJsonString(CsvDefinition));
+
+  /** A broker's file waiting for its columns, in the user's PEA. */
+  const waiting = summary({
+    id: idOf(40),
+    fileName: "harbour.csv",
+    format: "csv",
+    status: "waiting",
+    waitingFor: "profile",
+    account: { id: idOf(902), name: "Harbour PEA" },
+    periodFrom: null,
+    periodTo: null,
+    linesRead: 0,
+    linesAdded: 0,
+  });
+
+  const reading: CsvPreview = {
+    rows: [
+      ["Day", "What", "ISIN", "Name", "Units", "Price", "Cash"],
+      ["01/12/2026", "Versement", "", "", "", "", "500,00"],
+    ],
+    header: "day;what;isin;name;units;price;cash",
+    currency: "EUR",
+    read: {
+      lines: [
+        { position: 1, bookedOn: "2026-12-01", label: "", amountMinor: 50_000, kind: "deposit" },
+      ],
+    },
+  };
+
+  const refusing: CsvPreview = {
+    ...reading,
+    read: {
+      refused: { error: "InvalidField", line: 2, column: 2, field: "kind", text: "Versement" },
+    },
+  };
+
+  const written = { import: idOf(40), profile_json: PROFILE_EXAMPLE };
+
+  test("its examples are profiles Gousset reads: a broker's operations and a statement", () => {
+    expect(decode(PROFILE_EXAMPLE)).toMatchObject({ version: 2, reads: "operations" });
+    expect(decode(STATEMENT_EXAMPLE)).toMatchObject({ version: 1 });
+  });
+
+  test("test_profile reads the waiting file with the profile written, its first row numbered", async () => {
+    const state = fake({ imports: [waiting], preview: reading });
+    const { text, isError } = await imports(state, { action: "test_profile", ...written }, reader);
+
+    expect(isError).toBe(false);
+    expect(text).toContain('First row: 1 "Day", 2 "What", 3 "ISIN"');
+    expect(text).toContain("- 2026-12-01, deposit, , 500.00 EUR");
+    expect(state.readWith).toEqual([decode(PROFILE_EXAMPLE)]);
+  });
+
+  test("test_profile says where the profile fails, and refuses JSON that is no profile", async () => {
+    const refused = await imports(fake({ imports: [waiting], preview: refusing }), {
+      action: "test_profile",
+      ...written,
+    });
+
+    const invalid = await imports(fake({ imports: [waiting], preview: reading }), {
+      action: "test_profile",
+      import: idOf(40),
+      profile_json: '{"version":2,"reads":"operations"}',
+    });
+
+    expect(refused.isError).toBe(false);
+    expect(refused.text).toContain(
+      'The profile does not read this file: InvalidField at line 2, column 2, field kind, value "Versement".',
+    );
+    expect(invalid.isError).toBe(true);
+    expect(invalid.text).toContain("profile_json is no profile Gousset reads");
+    expect(invalid.text.length).toBeLessThan(ERROR_LIMIT);
+    expect(exampleOf(invalid.text).profile_json).toBe(PROFILE_EXAMPLE);
+  });
+
+  test("save_profile keeps it with the file's header once it reads the file, never before", async () => {
+    const before = fake({ imports: [waiting], preview: refusing });
+
+    const refused = await imports(before, {
+      action: "save_profile",
+      name: "Harbour broker",
+      ...written,
+    });
+
+    const state = fake({ imports: [waiting], preview: reading });
+
+    const { text, isError } = await imports(state, {
+      action: "save_profile",
+      name: "Harbour broker",
+      ...written,
+    });
+
+    expect(refused.isError).toBe(true);
+    expect(before.saved).toEqual([]);
+    expect(isError).toBe(false);
+    expect(state.saved).toEqual([
+      {
+        name: "Harbour broker",
+        institution: null,
+        definition: decode(PROFILE_EXAMPLE),
+        header: reading.header,
+      },
+    ]);
+    expect(text).toContain("Saved Harbour broker as the user's profile, for a broker's operations");
+    expect(text).toContain(
+      `imports {"action":"confirm","import":"${idOf(40)}","profile":"Harbour broker"}`,
+    );
+  });
+
+  test("save_profile and confirm need a connection allowed to write; test_profile reads", async () => {
+    const state = fake({ imports: [waiting], preview: reading });
+
+    const save = await imports(state, { action: "save_profile", name: "X", ...written }, reader);
+    const confirmed = await imports(state, { action: "confirm", ...written }, reader);
+
+    expect(save.isError).toBe(true);
+    expect(confirmed.isError).toBe(true);
+    expect(state.saved).toEqual([]);
+    expect(state.resumed).toEqual([]);
+  });
+
+  test("confirm imports the waiting file with a saved profile by its name, or one written", async () => {
+    const done = summary({
+      id: idOf(40),
+      fileName: "harbour.csv",
+      format: "csv",
+      reads: "operations",
+      profile: "Harbour broker",
+      account: { id: idOf(902), name: "Harbour PEA" },
+      linesRead: 1,
+      linesAdded: 1,
+    });
+
+    const stored: ImportProfileEntry = {
+      source: "stored",
+      id: idOf(700),
+      name: "Harbour broker",
+      institution: null,
+      kind: "operations",
+      header: reading.header,
+      definition: decode(PROFILE_EXAMPLE),
+    };
+
+    const byName = fake({
+      imports: [waiting],
+      preview: reading,
+      settled: done,
+      profiles: [stored],
+    });
+
+    const named = await imports(byName, {
+      action: "confirm",
+      import: idOf(40),
+      profile: "harbour BROKER",
+    });
+
+    const byJson = fake({ imports: [waiting], preview: reading, settled: done });
+    const json = await imports(byJson, { action: "confirm", ...written });
+
+    expect(named.isError, named.text).toBe(false);
+    expect(named.text).toContain("Imported harbour.csv into Harbour PEA");
+    expect(named.text).toContain("Read as a broker's operations with Harbour broker.");
+    expect(byName.resumed).toEqual([
+      {
+        importId: idOf(40),
+        answers: { accountId: null, csvProfile: null, profile: { kind: "stored", id: idOf(700) } },
+      },
+    ]);
+    expect(json.isError, json.text).toBe(false);
+    expect(byJson.resumed[0]?.answers).toEqual({
+      accountId: null,
+      csvProfile: decode(PROFILE_EXAMPLE),
+      profile: null,
+    });
+  });
+
+  test("confirm refuses a profile that does not read the file, and an unknown name", async () => {
+    const unread = fake({ imports: [waiting], preview: refusing });
+    const refused = await imports(unread, { action: "confirm", ...written });
+
+    const unknown = await imports(fake({ imports: [waiting], preview: reading }), {
+      action: "confirm",
+      import: idOf(40),
+      profile: "Nobody's",
+    });
+
+    expect(refused.isError).toBe(true);
+    expect(refused.text).toContain("InvalidField at line 2, column 2");
+    expect(unread.resumed).toEqual([]);
+    expect(unknown.isError).toBe(true);
+    expect(unknown.text).toContain("The user has no profile named Nobody's");
   });
 });

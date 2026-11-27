@@ -8,7 +8,7 @@ import { calendarDay, fullYear } from "./dates";
 // is the file a user exports to share a profile. `version` lets a later schema read this shape.
 
 /** A column of the file, counted from 1, as the preview and the errors number them. */
-const Column = Schema.Int.check(Schema.isGreaterThanOrEqualTo(1));
+export const Column = Schema.Int.check(Schema.isGreaterThanOrEqualTo(1));
 
 /**
  * A day as the bank writes it: `DD`, `MM` and `YYYY` or `YY`, in the order day, month, year or
@@ -18,7 +18,7 @@ const Column = Schema.Int.check(Schema.isGreaterThanOrEqualTo(1));
 const DATE_FORMAT =
   /^(?:DD([/. -]?)MM\1(?:YYYY|YY)|MM([/. -]?)DD\2(?:YYYY|YY)|YYYY([/. -]?)MM\3DD)$/;
 
-const DateFormat = Schema.String.check(Schema.isPattern(DATE_FORMAT));
+export const DateFormat = Schema.String.check(Schema.isPattern(DATE_FORMAT));
 
 /**
  * Where the amount is. `signed`: one column, negative for money out. `debit-credit`: money out in
@@ -36,9 +36,14 @@ const AmountColumns = Schema.Union([
  */
 export const MAX_SKIP_ROWS = 100;
 
+/** The longest description a profile carries: where its knowledge comes from, in a few lines. */
+export const MAX_DESCRIPTION = 500;
+
 /** An import profile's definition, version 1. */
 export const CsvProfile = Schema.Struct({
   version: Schema.Literal(1),
+  /** Where its knowledge comes from, whether it was checked on a real export: for a shared file. */
+  description: Schema.optionalKey(Schema.String.check(Schema.isMaxLength(MAX_DESCRIPTION))),
   /** What separates the values of a row. A value holding it is quoted (`"A; B"`). */
   separator: Schema.Literals([";", ",", "\t", "|"]),
   /**

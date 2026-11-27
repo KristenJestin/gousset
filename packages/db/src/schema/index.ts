@@ -27,6 +27,7 @@ import {
   statementImport,
   statementLine,
 } from "./ledger";
+import { investmentOperation, security } from "./investments";
 import { installationSettings } from "./settings";
 import { transfer } from "./transfers";
 
@@ -58,6 +59,8 @@ export const tables = {
   transfer,
   merchant,
   merchantAlias,
+  security,
+  investmentOperation,
 };
 
 export { authRelations };

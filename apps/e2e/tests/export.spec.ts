@@ -49,6 +49,15 @@ async function personWithData(
 
 const Imports = Schema.Array(Schema.Struct({ id: Schema.String, file_sha256: Schema.String }));
 
+/** An operation's exact decimals: text, or nothing for a kind that has none. */
+const Operations = Schema.Array(
+  Schema.Struct({
+    kind: Schema.String,
+    quantity: Schema.NullOr(Schema.String),
+    unit_price: Schema.NullOr(Schema.String),
+  }),
+);
+
 test("an export of the made-up data holds every row", async ({ app, user, page }) => {
   test.setTimeout(90_000);
 
@@ -109,6 +118,21 @@ test("an export of the made-up data holds every row", async ({ app, user, page }
     }
   } finally {
     await data.close();
+  }
+
+  // A quantity and a unit price are exact decimals (v0.6): written as their text, never as a JSON
+  // number a reader would round.
+  const operations = Schema.decodeUnknownSync(Operations)(
+    JSON.parse(archive.text("investment-operations.json")),
+  );
+
+  const bought = operations.filter((row) => row.kind === "purchase");
+
+  expect(bought.length).toBeGreaterThan(0);
+
+  for (const row of bought) {
+    expect(row.quantity).toMatch(/^\d+\.\d+$/);
+    expect(row.unit_price).toMatch(/^\d+\.\d+$/);
   }
 
   // Each file imported comes back byte for byte: its SHA-256 is the one its import recorded.

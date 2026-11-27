@@ -19,8 +19,43 @@ export type Account = {
   currency: string;
 };
 
-/** What a line is (docs/vision.md, "Kinds of money movement"). */
-export type LineKind = "expense" | "income" | "transfer" | "purchase" | "refund";
+/**
+ * What a line is (docs/vision.md, "Kinds of money movement"): a `purchase` of securities, a
+ * `dividend` and a `fee` move money inside an investment account.
+ */
+export type LineKind =
+  | "expense"
+  | "income"
+  | "transfer"
+  | "purchase"
+  | "refund"
+  | "dividend"
+  | "fee";
+
+/** A security the person holds: an invented ISIN, with its check digit, and no real one. */
+export type Security = {
+  /** In the country code `XX`, which no country has. */
+  isin: string;
+  name: string;
+  /** The currency it is quoted in (ISO 4217). */
+  currency: string;
+};
+
+/**
+ * What a line of an investment account was, as its broker says (docs/data-model.md, v0.6): the
+ * line keeps the day and the amount, the operation the rest.
+ */
+export type LineOperation = {
+  kind: "deposit" | "withdrawal" | "purchase" | "sale" | "dividend" | "fee";
+  /** A purchase's, a sale's and a dividend's security; a fee's when it names one. */
+  isin: string | null;
+  /** A purchase's and a sale's, exact decimals as a broker writes them (`2.9800`). */
+  quantity: string | null;
+  /** In the account's currency. */
+  unitPrice: string | null;
+  /** In minor units: its fees, or a dividend's withholding tax. */
+  feesMinor: number;
+};
 
 /** One line of an account's statement, as imported, with what the rules made of it. */
 export type Line = {
@@ -42,6 +77,8 @@ export type Line = {
   counterpartLineId: string | null;
   /** `false`: the rules were not sure, and the line waits in the monthly review. */
   reviewed: boolean;
+  /** A line of an investment account: what its broker says it was; `null` for any other. */
+  operation: LineOperation | null;
 };
 
 /** What happened, at its net cost: its payments, less its refunds. */
@@ -102,12 +139,27 @@ export const madeUpAccounts: ReadonlyArray<Account> = [
   { id: "pea", name: "Northbank PEA", bank: "Northbank", kind: "investment", currency: "EUR" },
 ];
 
+/** The invented ISINs of the two ETFs, with their check digits. */
+const WORLD_INDEX = "XX0000000002";
+const EMERGING_MARKETS = "XX0000000010";
+
+/** The two ETFs the PEA buys a fraction of each month. */
+export const madeUpSecurities: ReadonlyArray<Security> = [
+  { isin: WORLD_INDEX, name: "World Index ETF", currency: "EUR" },
+  { isin: EMERGING_MARKETS, name: "Emerging Markets ETF", currency: "EUR" },
+];
+
 const MONTH = /^(\d{4})-(0[1-9]|1[0-2])$/;
 
 /** The investment's first month: its contributions are counted from there. */
 const FIRST_INVESTED_MONTH = { year: 2025, month: 1 };
 
 const MONTHLY_CONTRIBUTION_MINOR = 35_000;
+
+/** What the PEA spends on the emerging markets each month, its custody fee, its dividend. */
+const EMERGING_MINOR = 1200;
+const CUSTODY_FEE_MINOR = 150;
+const DIVIDEND_MINOR = 412;
 
 /** The subscription's price goes up in October 2026, so that the review has a change to flag. */
 const SUBSCRIPTION_RISE = "2026-10";
@@ -117,6 +169,38 @@ const SUBJECTS_OF_MERCHANT: ReadonlyMap<string, ReadonlyArray<string>> = new Map
   ["Fuelstop", ["Van"]],
   ["Glycine Homes", ["Home"]],
 ]);
+
+/**
+ * A unit's price in a month, in ten-thousandths of a euro: a few euro cents more each month from
+ * January 2025, never below 10 €.
+ */
+function priceIn(year: number, month: number, january2025: number, rise: number): number {
+  return Math.max(january2025 + ((year - 2025) * 12 + (month - 1)) * rise, 100_000);
+}
+
+/** Ten-thousandths as a decimal of four places: 1124519 is `112.4519`. */
+function fourPlaces(tenThousandths: number): string {
+  return `${String(Math.floor(tenThousandths / 10_000))}.${String(tenThousandths % 10_000).padStart(4, "0")}`;
+}
+
+/**
+ * A purchase of what `cashMinor` buys at `price` (ten-thousandths of a euro), its fees taken off
+ * first: a fraction of a unit to four places, as a broker rounds it.
+ */
+function purchaseOf(
+  isin: string,
+  cashMinor: number,
+  price: number,
+  feesMinor: number,
+): LineOperation {
+  return {
+    kind: "purchase",
+    isin,
+    quantity: fourPlaces(Math.round(((cashMinor - feesMinor) * 1_000_000) / price)),
+    unitPrice: fourPlaces(price),
+    feesMinor,
+  };
+}
 
 /** `2026-10` as its year and month, or an error that says the expected form. */
 export function monthParts(month: string) {
@@ -133,7 +217,8 @@ function daysIn(year: number, month: number): number {
   return new Date(Date.UTC(year, month, 0)).getUTCDate();
 }
 
-type Draft = Omit<Line, "id" | "counterpartLineId" | "reviewed"> & {
+type Draft = Omit<Line, "id" | "counterpartLineId" | "reviewed" | "operation"> & {
+  operation?: LineOperation | undefined;
   counterpartIndex?: number;
   /** A refund names the payment it cancels part of, by its index among the drafts. */
   refundsIndex?: number;
@@ -173,7 +258,14 @@ export function madeUpMonth(month: string, seed: number = FIXTURE_SEED): MadeUpM
     return drafts.length - 1;
   };
 
-  const transfer = (from: string, to: string, date: string, label: string, amountMinor: number) => {
+  const transfer = (
+    from: string,
+    to: string,
+    date: string,
+    label: string,
+    amountMinor: number,
+    intoOperation?: LineOperation,
+  ) => {
     const out = drafts.length;
 
     drafts.push(
@@ -196,6 +288,7 @@ export function madeUpMonth(month: string, seed: number = FIXTURE_SEED): MadeUpM
         merchant: null,
         category: null,
         counterpartIndex: out,
+        operation: intoOperation,
       },
     );
   };
@@ -309,16 +402,80 @@ export function madeUpMonth(month: string, seed: number = FIXTURE_SEED): MadeUpM
   const refund = drafts.length - 1;
 
   transfer("current", "livret-a", day(10), "SEPA TRF TO LIVRET A", 25_000);
-  transfer("current", "pea", day(12), "SEPA TRF TO NORTHBANK PEA", MONTHLY_CONTRIBUTION_MINOR);
-  drafts.push({
-    accountId: "pea",
-    bookedOn: day(14),
-    amountMinor: -(33_500 + random.between(0, 10) * 10),
-    label: "BUY WORLD INDEX ETF",
-    kind: "purchase",
-    merchant: null,
-    category: null,
+  transfer("current", "pea", day(12), "SEPA TRF TO NORTHBANK PEA", MONTHLY_CONTRIBUTION_MINOR, {
+    kind: "deposit",
+    isin: null,
+    quantity: null,
+    unitPrice: null,
+    feesMinor: 0,
   });
+
+  // The month's contribution buys a fraction of the world index, fees included, and a little of
+  // the emerging markets; a custody fee is charged at the month's end, and the emerging markets
+  // pay a dividend each quarter. The cash left stays above zero.
+  const worldMinor = 33_500 + random.between(0, 10) * 10;
+
+  drafts.push(
+    {
+      accountId: "pea",
+      bookedOn: day(14),
+      amountMinor: -worldMinor,
+      label: "BUY WORLD INDEX ETF",
+      kind: "purchase",
+      merchant: null,
+      category: null,
+      operation: purchaseOf(
+        WORLD_INDEX,
+        worldMinor,
+        priceIn(year, monthNumber, 1_124_519, 3700),
+        99,
+      ),
+    },
+    {
+      accountId: "pea",
+      bookedOn: day(14),
+      amountMinor: -EMERGING_MINOR,
+      label: "BUY EMERGING MARKETS ETF",
+      kind: "purchase",
+      merchant: null,
+      category: null,
+      operation: purchaseOf(
+        EMERGING_MARKETS,
+        EMERGING_MINOR,
+        priceIn(year, monthNumber, 245_310, 1100),
+        0,
+      ),
+    },
+    {
+      accountId: "pea",
+      bookedOn: day(28),
+      amountMinor: -CUSTODY_FEE_MINOR,
+      label: "CUSTODY FEE",
+      kind: "fee",
+      merchant: null,
+      category: null,
+      operation: { kind: "fee", isin: null, quantity: null, unitPrice: null, feesMinor: 0 },
+    },
+  );
+
+  if (monthNumber % 3 === 0) {
+    drafts.push({
+      accountId: "pea",
+      bookedOn: day(25),
+      amountMinor: DIVIDEND_MINOR,
+      label: "DIVIDEND EMERGING MARKETS ETF",
+      kind: "dividend",
+      merchant: null,
+      category: null,
+      operation: {
+        kind: "dividend",
+        isin: EMERGING_MARKETS,
+        quantity: null,
+        unitPrice: null,
+        feesMinor: 0,
+      },
+    });
+  }
 
   // Six lines the rules were not sure of: the intermediary, the refund, and four others.
   const toReview = new Set([pixelplay, refund]);
@@ -362,6 +519,7 @@ function assemble(
     category: draft.category,
     counterpartLineId: draft.counterpartIndex === undefined ? null : lineId(draft.counterpartIndex),
     reviewed: !toReview.has(index),
+    operation: draft.operation ?? null,
   }));
 
   const refundsOf = new Map<number, Array<number>>();
@@ -444,8 +602,8 @@ function investmentAt(year: number, month: number): Investment {
 
   return {
     accountId: "pea",
-    name: "World index ETF",
-    isin: "XX0000000001",
+    name: "World Index ETF",
+    isin: WORLD_INDEX,
     netContributionsMinor,
     // About 0.5 % a month on what was put in, in whole minor units.
     valueMinor: Math.round(netContributionsMinor * (1 + months * 0.005)),

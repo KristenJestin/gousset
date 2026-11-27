@@ -1,4 +1,4 @@
-import type { CsvProfile } from "@gousset/import";
+import type { CsvDefinition, OperationKind } from "@gousset/import";
 
 // An import as the screen and the MCP door read it. Types and constants only, with no server
 // code: the browser imports this module (`@gousset/core/imports`).
@@ -40,11 +40,25 @@ export type ImportSummary = {
   readonly linesDuplicate: number;
   readonly linesHeld: number;
   /**
+   * What the file holds: an account's lines, or a broker's operations (v0.6), whose counts above
+   * count operations. Operations once its profile reads them or its lines are operations' cash.
+   */
+  readonly reads: "statement" | "operations";
+  /**
+   * The name of the profile that read its CSV file, the user's or a shipped one; `null` for
+   * another format, detection, a definition given by hand, or a profile deleted since.
+   */
+  readonly profile: string | null;
+  /**
    * The file stated a balance of zero that the account's lines contradict on its day: it looked
    * empty and was not recorded, so the account is not checked against it (#130).
    */
   readonly balanceIgnored: boolean;
-  /** Why it failed, as a code: a reader's error (`MalformedFile`), `CURRENCY_MISMATCH`… */
+  /**
+   * Why it failed, as a code: a reader's error (`MalformedFile`), `CURRENCY_MISMATCH`,
+   * `NOT_AN_INVESTMENT_ACCOUNT` (a broker's operations dropped on another account), an operation
+   * refused (`OperationRefused`, `InvalidIsin`, `InvalidQuantity`)…
+   */
   readonly errorCode: string | null;
   /** The job that runs it, for the screen to follow. */
   readonly jobId: string | null;
@@ -87,23 +101,24 @@ export type ImportProfileEntry =
       readonly kind: "statement" | "operations";
       readonly header: string | null;
       /** `null` when the stored definition no longer reads: the profile must be saved again. */
-      readonly definition: CsvProfile | null;
+      readonly definition: CsvDefinition | null;
     }
   | {
       readonly source: "shipped";
       readonly key: string;
       readonly name: string;
       readonly institution: null;
-      readonly kind: "statement";
+      readonly kind: "statement" | "operations";
       readonly header: string;
-      readonly definition: CsvProfile;
+      readonly definition: CsvDefinition;
     };
 
 /** A profile to save: its name, the institution it reads or `null`, how it reads, its header. */
 export type ProfileDraft = {
   readonly name: string;
   readonly institution: string | null;
-  readonly definition: CsvProfile;
+  /** A statement's or a broker's operations': the profile's kind follows it. */
+  readonly definition: CsvDefinition;
   /** The header of the file it was made on, normalised, so that the next one is recognised. */
   readonly header: string | null;
 };
@@ -143,6 +158,8 @@ export type CsvTestLine = {
   readonly label: string;
   /** In the minor units of the preview's `currency`. */
   readonly amountMinor: number;
+  /** A broker's operation's kind; `null` for a statement's line. */
+  readonly kind: OperationKind | null;
 };
 
 /**

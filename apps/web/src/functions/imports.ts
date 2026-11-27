@@ -1,6 +1,6 @@
 import { Imports } from "@gousset/core";
 import type { ImportSummary } from "@gousset/core/imports";
-import { CsvProfile } from "@gousset/import";
+import { CsvDefinition } from "@gousset/import";
 import { createServerFn } from "@tanstack/react-start";
 import { Effect, Schema } from "effect";
 
@@ -61,7 +61,7 @@ export const getCsvQuestions = createServerFn({ method: "GET" })
 export const getCsvPreview = createServerFn({ method: "GET" })
   .middleware([signedIn])
   .validator(
-    Schema.toStandardSchemaV1(Schema.Struct({ importId: Schema.String, profile: CsvProfile })),
+    Schema.toStandardSchemaV1(Schema.Struct({ importId: Schema.String, profile: CsvDefinition })),
   )
   .handler(({ data, context }) =>
     runCore(
@@ -82,7 +82,7 @@ export const resumeImport = createServerFn({ method: "POST" })
       Schema.Struct({
         importId: Schema.String,
         accountId: Schema.NullOr(Schema.String),
-        csvProfile: Schema.NullOr(CsvProfile),
+        csvProfile: Schema.NullOr(CsvDefinition),
         profile: Schema.optional(Schema.NullOr(ProfileChoiceInput)),
       }),
     ),

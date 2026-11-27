@@ -352,6 +352,14 @@ describe("PayPal's activity", () => {
       Effect.runSync(matchCsvHeader(csvFile(paypalActivity.english.bytes), others)),
     ).toBeUndefined();
   });
+
+  test("copied into a profile file and imported with no header, recognises its exports", () => {
+    const imported = { key: "imported", header: null, profile: paypal().profile };
+
+    expect(
+      Effect.runSync(matchCsvHeader(csvFile(paypalActivity.english.bytes), [imported]))?.key,
+    ).toBe("imported");
+  });
 });
 
 // Property tests (AGENTS.md, "Testing"): made-up exports of any rows, in either language, either

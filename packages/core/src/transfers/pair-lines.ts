@@ -5,6 +5,7 @@ import { and, eq, gte, inArray, lt, lte, ne, notInArray, or, sql } from "drizzle
 import type { SQL, SQLWrapper } from "drizzle-orm";
 
 import { dropEntriesOfTransferSides } from "../entries";
+import { notOperationCash } from "../investments/cash";
 import {
   CARD_DAYS,
   LONGEST_TRANSFER_DAYS,
@@ -34,12 +35,14 @@ export const notPaired = sql`not exists (select 1 from ${transfer} where ${trans
 
 /**
  * A line that may be a side of a transfer: counted, of some amount, not made from a noted balance
- * (it stands for a month's movement, #31), and no side of one yet.
+ * (it stands for a month's movement, #31), no purchase's, sale's, dividend's nor fee's cash (money
+ * moving inside an investment account, v0.6), and no side of one yet.
  */
 const pairable = and(
   eq(statementLine.state, "counted"),
   ne(statementLine.source, "balance"),
   ne(statementLine.amountMinor, 0),
+  notOperationCash,
   notPaired,
 );
 
@@ -97,7 +100,9 @@ const bookedBetween = (from: string, to: string) =>
 /**
  * Which lines a pairing looks at: one import's, or every line of the user's; `kept`, every line too,
  * for the pairing at boot of the lines kept before v0.3 (#192), which also leaves alone a line whose
- * entry the user, or a rule of the user's, classified, or which the user split.
+ * entry the user, or a rule of the user's, classified, or which the user split; `lines`, lines of
+ * one account saved by hand (an investment's deposit or withdrawal, v0.6), paired as an import's
+ * would be.
  */
 export type PairingScope =
   | { readonly kind: "kept" }
@@ -108,7 +113,32 @@ export type PairingScope =
       readonly from: string;
       readonly to: string;
     }
+  | {
+      readonly kind: "lines";
+      readonly lineIds: ReadonlyArray<string>;
+      readonly accountId: string;
+      readonly from: string;
+      readonly to: string;
+    }
   | { readonly kind: "all" };
+
+/** The lines a pairing pairs among the pool: the import's, the lines named, or every line. */
+function freshLines(scope: PairingScope): SQL | undefined {
+  switch (scope.kind) {
+    case "import": {
+      return eq(statementLine.importId, scope.importId);
+    }
+
+    case "lines": {
+      return inArray(statementLine.id, [...scope.lineIds]);
+    }
+
+    case "kept":
+    case "all": {
+      return undefined;
+    }
+  }
+}
 
 /** What a pairing wrote. */
 export type PairingWritten = {
@@ -360,12 +390,9 @@ export async function pairTransfers(
   owner: string,
   scope: PairingScope,
 ): Promise<PairingWritten> {
-  const imported = scope.kind === "import";
+  const imported = scope.kind === "import" || scope.kind === "lines";
 
-  const fresh = await pairableLines(
-    transaction,
-    imported ? eq(statementLine.importId, scope.importId) : undefined,
-  );
+  const fresh = await pairableLines(transaction, freshLines(scope));
 
   const made = await madeSides(
     transaction,
@@ -388,12 +415,13 @@ export async function pairTransfers(
   );
 
   // A card's file may make a debit of its current account payable, booked up to a month after.
-  const cardOf = imported
-    ? await transaction
-        .select({ settlesInto: account.settlesIntoAccountId })
-        .from(account)
-        .where(and(eq(account.id, scope.accountId), eq(account.kind, "card")))
-    : [];
+  const cardOf =
+    scope.kind === "import"
+      ? await transaction
+          .select({ settlesInto: account.settlesIntoAccountId })
+          .from(account)
+          .where(and(eq(account.id, scope.accountId), eq(account.kind, "card")))
+      : [];
 
   const settlesInto = cardOf[0]?.settlesInto ?? null;
 

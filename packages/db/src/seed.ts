@@ -5,15 +5,17 @@ import {
   exampleStatement,
   madeUpAccounts,
   madeUpMonth,
+  madeUpSecurities,
   monthParts,
   writeOfx,
 } from "@gousset/fixture";
-import type { Statement } from "@gousset/fixture";
+import type { LineOperation, Statement } from "@gousset/fixture";
 import { Effect } from "effect";
 
 import { eq } from "drizzle-orm";
 
 import { insertDefaultEntries } from "./entries";
+import { investmentOperation, security } from "./schema/investments";
 import {
   account,
   accountBalance,
@@ -31,8 +33,10 @@ import type { QueryFailed, UserTransaction } from "./user-data";
 // database (`pnpm db:seed`) and the end-to-end tests that need rows. Each made-up account gets one
 // OFX import a month, its file, its lines and the statement's closing balance, and its transfers
 // paired as the import pairs them (#26). It goes through `UserData`, as the app's own writes do.
-// Each counted line that is no side of a transfer gets its entry, in its kind's fallback category,
-// as an import gives it: the user's categories are theirs from sign-up (packages/auth) or from the
+// The PEA's lines are its broker's operations (v0.6): each gets its operation, and the ETFs they
+// name their securities. Each counted line that is no side of a transfer, nor a purchase's, a
+// dividend's or a fee's cash, gets its entry, in its kind's fallback category, as an import gives
+// it: the user's categories are theirs from sign-up (packages/auth) or from the
 // migration that brought them. The fixture's sample statements of other formats (#17)
 // are not written yet.
 
@@ -106,6 +110,8 @@ async function writeMadeUpData(
   // The made-up lines' rows, by the made-up id, and the other side of each made-up transfer.
   const lineIds = new Map<string, string>();
   const otherSides = new Map<string, string>();
+  // What the PEA's lines were, as its broker says, by the made-up id.
+  const operations = new Map<string, LineOperation>();
 
   for (const made of madeUpAccounts) {
     const openingBalanceMinor = OPENING_BALANCES.get(made.id) ?? 0;
@@ -137,6 +143,10 @@ async function writeMadeUpData(
     for (const line of lines) {
       if (line.amountMinor < 0 && line.counterpartLineId !== null) {
         otherSides.set(line.id, line.counterpartLineId);
+      }
+
+      if (line.operation !== null) {
+        operations.set(line.id, line.operation);
       }
     }
 
@@ -242,10 +252,50 @@ async function writeMadeUpData(
     await transaction.insert(transfer).values(pairs);
   }
 
-  // After the transfers: their sides get no entry.
+  await writeOperations(transaction, owner, operations, lineIds);
+
+  // After the transfers and the operations: their sides, and the cash of a purchase, a dividend
+  // and a fee, get no entry.
   await insertDefaultEntries(transaction, owner, [...lineIds.values()]);
 
   return summary;
+}
+
+/** The securities of the made-up operations, and an operation beside each line of theirs saved. */
+async function writeOperations(
+  transaction: UserTransaction,
+  owner: string,
+  operations: ReadonlyMap<string, LineOperation>,
+  lineIds: ReadonlyMap<string, string>,
+): Promise<void> {
+  const saved = [...operations].flatMap(([madeUpId, operation]) => {
+    const lineId = lineIds.get(madeUpId);
+
+    return lineId === undefined ? [] : [{ lineId, operation }];
+  });
+
+  if (saved.length === 0) {
+    return;
+  }
+
+  const securities = await transaction
+    .insert(security)
+    .values(madeUpSecurities.map((each) => ({ userId: owner, ...each })))
+    .returning({ id: security.id, isin: security.isin });
+
+  const securityOf = new Map(securities.map((each) => [each.isin, each.id]));
+
+  await transaction.insert(investmentOperation).values(
+    saved.map(({ lineId, operation }) => ({
+      userId: owner,
+      lineId,
+      kind: operation.kind,
+      securityId: operation.isin === null ? null : (securityOf.get(operation.isin) ?? null),
+      quantity: operation.quantity,
+      unitPrice: operation.unitPrice,
+      feesMinor: operation.feesMinor,
+    })),
+  );
 }
 
 /**

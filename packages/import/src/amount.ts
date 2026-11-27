@@ -140,6 +140,46 @@ function splitAmount(unsigned: string, syntax: AmountSyntax, digits: number): Sp
   }
 }
 
+const NUMBER_EXAMPLES = {
+  "decimal-point": "a number such as 12.5 or 1,234.5678",
+  "decimal-comma": "a number such as 12,5 or 1 234,5678",
+};
+
+/** The most digits a quantity or a unit price has before its decimal mark, and after it. */
+const DECIMAL_DIGITS = { whole: 15, fraction: 10 };
+
+/**
+ * A quantity or a unit price a field writes, with a known decimal mark and thousands grouped by
+ * any other (`1 234,5678`): exact, as text with a point and neither leading nor trailing zeros
+ * (`1234.5678`, `0.0347`, `12`), the way Postgres writes a `numeric`, and whether a minus led it.
+ * At most 15 digits before the mark and 10 after, as an operation keeps (docs/data-model.md, v0.6).
+ */
+export const readDecimal = (field: FieldText, syntax: "decimal-point" | "decimal-comma") =>
+  Effect.gen(function* () {
+    const written = field.text.trim();
+    const signed = /^[+-]/.test(written);
+    const unsigned = signed ? written.slice(1).trimStart() : written;
+    const split = splitMarked(unsigned, syntax === "decimal-point" ? "." : ",");
+
+    if ("expected" in split || !/\d/.test(`${split.whole}${split.fraction}`)) {
+      return yield* invalidField(field, NUMBER_EXAMPLES[syntax]);
+    }
+
+    const whole = split.whole.replace(/^0+/, "");
+    const fraction = split.fraction.replace(/0+$/, "");
+
+    if (whole.length > DECIMAL_DIGITS.whole || fraction.length > DECIMAL_DIGITS.fraction) {
+      return yield* invalidField(
+        field,
+        `a number of at most ${String(DECIMAL_DIGITS.whole)} digits before its decimal mark and ${String(DECIMAL_DIGITS.fraction)} after`,
+      );
+    }
+
+    const text = `${whole === "" ? "0" : whole}${fraction === "" ? "" : `.${fraction}`}`;
+
+    return { negative: written.startsWith("-") && text !== "0", text };
+  });
+
 /**
  * The amount a field writes, in minor units of `currency`, read from its digits: exact, never
  * through a float. A sign may lead (`-12.34`, `+12.34`), but never in CAMT.053 and MT940; more decimals than the currency has are refused unless they are zeros (`12.340` is

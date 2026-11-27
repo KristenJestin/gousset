@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vite-plus/test";
 
-import { FIXTURE_SEED, madeUpAccounts, madeUpMonth } from "./ledger";
+import { FIXTURE_SEED, madeUpAccounts, madeUpMonth, madeUpSecurities } from "./ledger";
 
 /** What the made-up subscription cost in a month: negative, money out. */
 const subscriptionPrice = (month: string) =>
@@ -133,6 +133,62 @@ describe("madeUpMonth", () => {
     expect(statements.find((statement) => statement.accountId === "mealcard")?.coveredTo).toBe(
       lastMealCardLine,
     );
+  });
+
+  test("gives every line of the PEA its operation, and no other line one", () => {
+    const { lines } = madeUpMonth("2026-09");
+    const pea = lines.filter((line) => line.accountId === "pea");
+    const isins = new Set(madeUpSecurities.map((security) => security.isin));
+
+    expect(
+      lines.filter((line) => line.accountId !== "pea").every((line) => line.operation === null),
+    ).toBe(true);
+
+    // September ends a quarter: a dividend comes with the deposit, the two purchases and the fee.
+    const kinds = pea.map((line) => line.operation?.kind ?? "");
+
+    expect(kinds.toSorted((a, b) => a.localeCompare(b))).toEqual([
+      "deposit",
+      "dividend",
+      "fee",
+      "purchase",
+      "purchase",
+    ]);
+
+    for (const line of pea) {
+      const kind = line.operation?.kind;
+      const out = kind === "purchase" || kind === "fee" || kind === "withdrawal";
+
+      expect(line.amountMinor < 0, line.label).toBe(out);
+      expect(
+        line.operation?.isin === null || isins.has(line.operation?.isin ?? ""),
+        line.label,
+      ).toBe(true);
+    }
+
+    // The ETFs are bought in fractions of a unit, at a price of four places.
+    for (const line of pea.filter((each) => each.operation?.kind === "purchase")) {
+      expect(line.operation?.quantity, line.label).toMatch(/^0\.\d{4}$|^[1-9]\d*\.\d{4}$/);
+      expect(line.operation?.quantity?.endsWith(".0000"), line.label).toBe(false);
+      expect(line.operation?.unitPrice, line.label).toMatch(/^\d+\.\d{4}$/);
+    }
+
+    // Only a quarter's last month has a dividend.
+    expect(madeUpMonth("2026-10").lines.some((line) => line.operation?.kind === "dividend")).toBe(
+      false,
+    );
+  });
+
+  test("keeps the PEA's cash from going below zero", () => {
+    let cash = 0;
+
+    for (const month of ["2025-01", "2025-02", "2025-03", "2026-09", "2026-10", "2027-06"]) {
+      for (const line of madeUpMonth(month).lines.filter((each) => each.accountId === "pea")) {
+        cash += line.amountMinor;
+
+        expect(cash, `${month} ${line.label}`).toBeGreaterThanOrEqual(0);
+      }
+    }
   });
 
   test("refuses a month that is not YYYY-MM", () => {

@@ -20,10 +20,29 @@ export {
   previewCsvRows,
   readCsv,
   readCsvHeader,
+  recognisesFiles,
   testReadCsv,
 } from "./csv";
 
-export type { CsvCandidate, CsvFile, CsvOptions } from "./csv";
+export type { CsvCandidate, CsvFile, CsvOptions, CsvTable } from "./csv";
+
+export {
+  ColumnPlace,
+  CsvDefinition,
+  OPERATION_KINDS,
+  OperationKind,
+  OperationsProfile,
+  isPlace,
+  readsOperations,
+} from "./operations-profile";
+
+export { findsColumnsByName, placesIn as operationPlaces } from "./operations-columns";
+
+export type { OperationField, OperationPlaces } from "./operations-columns";
+
+export { readOperations, testReadOperations } from "./operations";
+
+export type { OperationRow, Operations } from "./operations";
 
 export { SHIPPED_PROFILES, shippedProfile } from "./csv-shipped";
 
@@ -33,7 +52,7 @@ export { detectCsvProfile } from "./csv-detect";
 
 export type { CsvProposal, CsvUnsure } from "./csv-detect";
 
-export { CsvProfile } from "./csv-profile";
+export { CsvProfile, MAX_DESCRIPTION } from "./csv-profile";
 
 export type { CsvLayout } from "./csv-profile";
 

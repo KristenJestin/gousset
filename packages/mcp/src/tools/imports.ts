@@ -8,22 +8,64 @@ import {
 } from "@gousset/core";
 import type {
   CreatedUpload,
+  CsvPreview,
+  CsvReadRefusal,
   FileUploadStatus,
   ImportAccount,
   ImportFormat,
   ImportPage,
   ImportProfileEntry,
   ImportSummary,
+  ProfileChoice,
   ProfilesForImport,
   Started,
   Undone,
 } from "@gousset/core";
-import { Duration, Effect, Exit, Schema } from "effect";
+import { CsvDefinition, findsColumnsByName, isPlace, minorDigits } from "@gousset/import";
+import { Cause, Duration, Effect, Exit, Schema } from "effect";
 
 import { ToolRefusal, defineTool } from "../tool";
 import type { Caller } from "../tool";
 
 const FORMATS = ["ofx", "qfx", "qif", "camt053", "mt940", "csv"] as const;
+
+/** A broker's operations profile, as an agent writes one (`OperationsProfile`, version 2). */
+export const PROFILE_EXAMPLE = JSON.stringify({
+  version: 2,
+  reads: "operations",
+  separator: ";",
+  encoding: "utf8",
+  skipRows: 0,
+  headerRow: true,
+  dateFormat: "DD/MM/YYYY",
+  decimalMark: ",",
+  columns: { bookedOn: 1, kind: 2, isin: 3, securityName: 4, quantity: 5, unitPrice: 6, amount: 7 },
+  kinds: [
+    { word: "Achat", kind: "purchase" },
+    { word: "Vente", kind: "sale" },
+  ],
+  referenceUnique: false,
+});
+
+/** An account's statement profile (`CsvProfile`, version 1): every column, `null` where none. */
+export const STATEMENT_EXAMPLE = JSON.stringify({
+  version: 1,
+  separator: ";",
+  encoding: "utf8",
+  skipRows: 0,
+  headerRow: true,
+  dateFormat: "DD/MM/YYYY",
+  decimalMark: ",",
+  columns: {
+    bookedOn: 1,
+    valueOn: null,
+    amount: { kind: "signed", column: 3 },
+    label: 2,
+    memo: null,
+    bankId: null,
+    currency: null,
+  },
+});
 
 const ImportsInput = Schema.Struct({
   action: Schema.Literals([
@@ -33,9 +75,12 @@ const ImportsInput = Schema.Struct({
     "list",
     "undo",
     "profiles",
+    "test_profile",
+    "save_profile",
+    "confirm",
   ]).annotate({
     description:
-      "upload: import a statement file. create_upload: an address to send a large file to from a shell, before upload. status: where one import or file upload stands. list: the imports, newest first. undo: remove what one import added. profiles: the CSV import profiles, or those that read one import's file.",
+      "upload: import a statement file. create_upload: an address to send a large file to from a shell, before upload. status: where one import or file upload stands. list: the imports, newest first. undo: remove what one import added. profiles: the CSV import profiles, or those that read one import's file. test_profile: read a waiting CSV import's file with a profile you write. save_profile: keep that profile as the user's. confirm: import the waiting file with a profile.",
   }),
   file_name: Schema.optional(
     Schema.String.annotate({
@@ -81,7 +126,20 @@ const ImportsInput = Schema.Struct({
   import: Schema.optional(
     Schema.String.annotate({
       description:
-        "status, undo: the import's id, as upload and list give it. profiles: a CSV import's id, to see which profiles read its file.",
+        "status, undo: the import's id, as upload and list give it. profiles: a CSV import's id, to see which profiles read its file. test_profile, save_profile, confirm: the CSV import waiting for its columns.",
+    }),
+  ),
+  profile_json: Schema.optional(
+    Schema.String.annotate({
+      description: `test_profile, save_profile, confirm: a profile as the JSON text of a profile file (what Gousset exports). A broker's operations: ${PROFILE_EXAMPLE} Columns count from 1, or are found by the header's names ({"names":["Montant net"]}, "optional":true when a file may lack it; {"after":["Price"]}: the unnamed column after it); leave out those the file lacks. Others: valueOn, label, reference, securityCurrency, amountCurrency, feesCurrency, priceCurrency, value (the trade's worth in the account's currency, for a price in another). kinds: each word of the kind column as purchase, sale, dividend, fee, deposit or withdrawal; kind null: the quantity's sign tells a purchase from a sale. referenceUnique: true when the broker's reference is unique to each row. An account's statement: ${STATEMENT_EXAMPLE}`,
+    }),
+  ),
+  name: Schema.optional(
+    Schema.String.annotate({ description: "save_profile: the profile's name, for the user." }),
+  ),
+  profile: Schema.optional(
+    Schema.String.annotate({
+      description: "confirm, instead of profile_json: a profile's name, as profiles lists it.",
     }),
   ),
   before: Schema.optional(
@@ -93,11 +151,11 @@ const ImportsInput = Schema.Struct({
 
 type ImportsInput = typeof ImportsInput.Type;
 
-const DESCRIPTION = `Imports bank statement files into the user's accounts, without duplicates, and lists, follows and undoes imports. Use it when the user gives a statement file (OFX, QFX, QIF, CAMT.053, MT940, CSV) or asks what was imported.
+const DESCRIPTION = `Imports bank statement files into the user's accounts, without duplicates, and lists, follows and undoes imports. Use it when the user gives a statement file (OFX, QFX, QIF, CAMT.053, MT940, CSV) or asks what was imported. A broker's CSV of operations, read with an operations profile of the user's, goes the same way into an investment account, its summary counting operations.
 
 A file you can reach from a shell, larger than a few tens of kilobytes, goes through a file upload, so that its bytes never pass through the conversation: {"action":"create_upload","file_name":"2024-2026.ofx","size":1048576} (its exact size in bytes), then, from that shell, curl -sS -F 'file=@2024-2026.ofx' <the address it gave>, then {"action":"upload","file_upload":"<the id it gave>"}. A smaller file goes in the call itself: {"action":"upload","file_name":"october.ofx","content":"OFXHEADER:100..."}
 
-Refused: an empty file, a file over 10 MB (through content, a request carries 4 MB at most, about 3 MB of file in base64: send a larger one through create_upload), a format not recognised, an account name matching none or several of the user's accounts (the refusal names them), more than ${MAX_PENDING_UPLOADS} file uploads waiting, a file upload used, expired or not received whole, an import id the user does not have, and undoing an import still running. A CSV file's columns are confirmed on Gousset's import screen. Writes need a connection allowed to read and write.
+Refused: an empty file, a file over 10 MB (through content, a request carries 4 MB at most, about 3 MB of file in base64: send a larger one through create_upload), a format not recognised, an account name matching none or several of the user's accounts (the refusal names them), more than ${MAX_PENDING_UPLOADS} file uploads waiting, a file upload used, expired or not received whole, an import id the user does not have, and undoing an import still running. A CSV file no profile reads waits for its columns: map them with test_profile, save_profile and confirm, or on Gousset's import screen. Writes need a connection allowed to read and write.
 
 Actions:
 - upload (writes): imports one file. Give file_name and exactly one of content (the file's text) or content_base64 (its bytes, for a file not in UTF-8); or file_upload alone, for a file sent to a file upload. The format is told from the file; name it with format when it is not. The account is recognised from the file (IBAN, number); name it with account, the user's name for it, when the file does not say it (QIF and CSV never do). It waits up to 15 seconds and answers the summary: lines read, added, already known (duplicates, never added twice) and held for review as near duplicates. A file imported before adds nothing again, and the answer says so.
@@ -106,6 +164,9 @@ Actions:
 - list (reads): the imports, newest first, 50 a page.
 - undo (writes, destructive): removes exactly the lines one import added; lines of other imports it held count again.
 - profiles (reads): the CSV import profiles, the user's and those shipped with Gousset, and how each reads a file. With import (a CSV import's id): those that read its file, and the one it used.
+- test_profile (reads): import (a CSV import waiting for its columns) and profile_json: the file's first row and lines as the profile reads them, or where it fails.
+- save_profile (writes): name, profile_json and import, once test_profile reads it: the user's profile, recognising the next such file.
+- confirm (writes): imports the waiting file with profile (a name) or profile_json, once it reads it; account if it waits for one.
 
 More examples:
 {"action":"upload","file_name":"export.csv","content":"date;label;amount...","account":"Joint account"}
@@ -141,6 +202,10 @@ function accountName(summary: ImportSummary): string {
 }
 
 function counts(summary: ImportSummary): string {
+  if (summary.reads === "operations") {
+    return `${summary.linesRead} operations read: ${summary.linesAdded} added, ${summary.linesDuplicate} already known (duplicates)`;
+  }
+
   return `${summary.linesRead} lines read: ${summary.linesAdded} added, ${summary.linesDuplicate} already known (duplicates), ${summary.linesHeld} held for review as near duplicates`;
 }
 
@@ -195,6 +260,16 @@ function failureText(code: string | null): string {
       return "The file's currency is not its account's. Upload it again naming, with account, an account in the file's currency.";
     }
 
+    case "NOT_AN_INVESTMENT_ACCOUNT": {
+      return "A broker's operations go only into an investment account kept by its lines. Upload the file again naming, with account, the user's investment account (a PEA, a securities account).";
+    }
+
+    case "OperationRefused":
+    case "InvalidIsin":
+    case "InvalidQuantity": {
+      return `A row of the broker's file is no operation Gousset can keep (${code}): an ISIN whose check digit is wrong, a quantity or an amount it cannot hold. Check the file is the broker's export, unchanged; then upload it again.`;
+    }
+
     case "QUEUE_UNAVAILABLE": {
       return "Gousset could not start the import. Upload the file again in a moment.";
     }
@@ -239,7 +314,7 @@ function waitingText(
   viaFileUpload: boolean,
 ): string {
   if (summary.waitingFor === "profile") {
-    return `${summary.fileName} waits for its CSV columns to be confirmed: the user confirms them on Gousset's import screen (Imports), where this import waits. Then call: ${call({ action: "status", import: summary.id })}`;
+    return `${summary.fileName} waits for its CSV columns to be confirmed: the user confirms them on Gousset's import screen (Imports), where this import waits, then call: ${call({ action: "status", import: summary.id })}. Or map them yourself: ${call({ action: "test_profile", import: summary.id, profile_json: "…" })}, then confirm.`;
   }
 
   const names = accounts.map((each) => each.name);
@@ -258,8 +333,11 @@ function waitingText(
 }
 
 function doneText(summary: ImportSummary): string {
+  const readWith = summary.profile === null ? "" : ` with ${clip(summary.profile, 100)}`;
+
   return [
     `Imported ${summary.fileName} into ${accountName(summary)}, ${period(summary)}.`,
+    summary.reads === "operations" ? `Read as a broker's operations${readWith}.` : "",
     `${counts(summary)}.`,
     summary.linesHeld > 0
       ? "The lines held wait for the user's review: they count only once confirmed."
@@ -769,40 +847,80 @@ function undoText({
     .join("\n");
 }
 
-/** How a profile reads a file: `@gousset/import`'s `CsvProfile`, as core lists it. */
-type CsvProfile = NonNullable<ImportProfileEntry["definition"]>;
+/** How a profile reads a file: `@gousset/import`'s `CsvDefinition`, as core lists it. */
+type Definition = NonNullable<ImportProfileEntry["definition"]>;
+
+/** A broker's operations' profile (`OperationsProfile`). */
+type OperationsProfile = Extract<Definition, { readonly reads: "operations" }>;
 
 const SEPARATORS = {
   ";": "semicolons",
   ",": "commas",
   "\t": "tabs",
   "|": "pipes",
-} satisfies { readonly [separator in CsvProfile["separator"]]: string };
+} satisfies { readonly [separator in Definition["separator"]]: string };
+
+/** How a table is split and its values written, in a few words. */
+function tableText(profile: Definition): ReadonlyArray<string> {
+  const header = profile.headerRow ? "a header row" : "no header row";
+
+  return [
+    `separated by ${SEPARATORS[profile.separator]}`,
+    `encoded ${profile.encoding}`,
+    profile.skipRows === 0 ? header : `${profile.skipRows} lines skipped above ${header}`,
+    `dates ${profile.dateFormat}`,
+    profile.decimalMark === "," ? "decimal comma" : "decimal point",
+  ];
+}
+
+type Place = OperationsProfile["columns"]["amount"];
+
+/** Where a profile finds a column: at its place, or by its name. */
+function placeText(place: Place): string {
+  if (isPlace(place)) {
+    return `column ${place}`;
+  }
+
+  return "names" in place
+    ? `the column named ${clip(place.names[0] ?? "", 40)}`
+    : `the column after ${clip(place.after[0] ?? "", 40)}`;
+}
+
+/** How a broker's operations profile reads a file: into an investment account only. */
+function operationsText(profile: OperationsProfile): string {
+  const { kind, amount } = profile.columns;
+
+  const kinds =
+    kind === null
+      ? "each row a purchase or a sale by its quantity's sign"
+      : `the kind in ${placeText(kind)}, ${profile.kinds.map((each) => `${clip(each.word, 40)} as ${each.kind}`).join(", ")}`;
+
+  return [
+    "a broker's operations, into an investment account",
+    ...tableText(profile),
+    kinds,
+    `the amount in ${placeText(amount)}`,
+  ].join(", ");
+}
 
 /** How a profile reads a file, in a few words: what an agent needs to choose one. */
-function readsText(profile: CsvProfile): string {
+function readsText(profile: Definition): string {
+  if ("reads" in profile) {
+    return operationsText(profile);
+  }
+
   if (profile.layout === "paypal-activity") {
     return "PayPal's activity export, its columns found by their names in English or French, the completed rows that moved the balance in the account's currency, a payment in another currency by its conversion; days and amounts read as the file writes them";
   }
 
   const { amount } = profile.columns;
-  const header = profile.headerRow ? "a header row" : "no header row";
-
-  const top = profile.skipRows === 0 ? header : `${profile.skipRows} lines skipped above ${header}`;
 
   const amounts =
     amount.kind === "signed"
       ? `one signed amount in column ${amount.column}`
       : `debit in column ${amount.debit} and credit in column ${amount.credit}`;
 
-  return [
-    `separated by ${SEPARATORS[profile.separator]}`,
-    `encoded ${profile.encoding}`,
-    top,
-    `dates ${profile.dateFormat}`,
-    profile.decimalMark === "," ? "decimal comma" : "decimal point",
-    amounts,
-  ].join(", ");
+  return [...tableText(profile), amounts].join(", ");
 }
 
 /** A profile by its name: whose it is, and the institution it reads. */
@@ -824,7 +942,7 @@ function profilesText(entries: ReadonlyArray<ImportProfileEntry>): string {
   );
 
   return [
-    "CSV import profiles, the user's first, then those shipped with Gousset. On upload, a CSV file is read with the first profile whose header row it has, or, for PayPal activity, whose header row names PayPal's mandatory columns among any others.",
+    "CSV import profiles, the user's first, then those shipped with Gousset. On upload, a CSV file is read with the first profile whose header row it has, or, for PayPal activity and a profile that finds its columns by their names, whose header row names those columns among any others.",
     ...lines,
     "",
     `Which of them read one CSV import's file: ${PROFILES_OF_IMPORT}`,
@@ -841,14 +959,26 @@ function usedText(found: ProfilesForImport): string {
     : `No profile has read it yet (it is ${found.status}).`;
 }
 
+/** How a profile recognises a file by its header row. */
+function headerText(definition: Definition): string {
+  if ("reads" in definition) {
+    return findsColumnsByName(definition)
+      ? "the file's header row names the profile's columns"
+      : "its header row is the file's";
+  }
+
+  return definition.layout === "paypal-activity"
+    ? "the file's header row names PayPal's mandatory columns"
+    : "its header row is the file's";
+}
+
 function profilesForText(found: ProfilesForImport): string {
   const fileName = clip(found.fileName, 100);
 
   const lines = found.fitting.map(({ profile, by }) => {
-    const header =
-      profile.definition?.layout === "paypal-activity"
-        ? "the file's header row names PayPal's mandatory columns"
-        : "its header row is the file's";
+    const { definition } = profile;
+
+    const header = definition === null ? "its header row is the file's" : headerText(definition);
 
     return `- ${profileName(profile)}: ${by === "header" ? header : "a test read of the file's first lines succeeds"}.`;
   });
@@ -882,6 +1012,277 @@ function profiles(input: ImportsInput, owner: string) {
   );
 }
 
+const decodeProfile = Schema.decodeUnknownExit(Schema.fromJsonString(CsvDefinition));
+
+/** How much of a profile's decoding error a refusal quotes: enough to say what is wrong. */
+const PROBLEM_LENGTH = 900;
+
+const TEST_EXAMPLE = {
+  action: "test_profile",
+  import: "<the waiting import's id>",
+  profile_json: PROFILE_EXAMPLE,
+};
+
+/** The profile `profile_json` writes, decoded as a profile file is, or why it is none. */
+function writtenProfile(
+  input: ImportsInput,
+  action: string,
+): Effect.Effect<CsvDefinition, ToolRefusal> {
+  if (input.profile_json === undefined) {
+    return refuse(
+      `${action} needs profile_json: the profile, as the JSON text of a profile file.`,
+      TEST_EXAMPLE,
+    );
+  }
+
+  const decoded = decodeProfile(input.profile_json);
+
+  if (Exit.isSuccess(decoded)) {
+    return Effect.succeed(decoded.value);
+  }
+
+  const issue = Cause.squash(decoded.cause);
+  const problem = issue instanceof Error ? issue.message : "It holds no profile Gousset reads.";
+
+  return refuse(
+    `profile_json is no profile Gousset reads: ${clip(problem, PROBLEM_LENGTH)} Write it as the example does.`,
+    TEST_EXAMPLE,
+  );
+}
+
+/** The CSV import a profile action reads, by its id, or a refusal saying to give it. */
+function waitingImport(input: ImportsInput, action: string): Effect.Effect<string, ToolRefusal> {
+  return input.import === undefined
+    ? refuse(`${action} needs import: the id of the CSV import waiting for its columns.`, {
+        ...TEST_EXAMPLE,
+        action,
+      })
+    : Effect.succeed(input.import);
+}
+
+/** Minor units as a decimal number in `currency`, or in ten-thousandths before an account. */
+function amountOf(minor: number, currency: string | null): string {
+  const digits = currency === null ? 4 : minorDigits(currency);
+  const text = String(Math.abs(minor)).padStart(digits + 1, "0");
+  const whole = text.slice(0, text.length - digits);
+  const fraction = digits === 0 ? "" : `.${text.slice(text.length - digits)}`;
+
+  return `${minor < 0 ? "-" : ""}${whole}${fraction}${currency === null ? "" : ` ${currency}`}`;
+}
+
+/** Why a test read refused the file, at its line and column. */
+function refusalText(refusal: CsvReadRefusal): string {
+  const where = [
+    refusal.line === null ? "" : `line ${refusal.line}`,
+    refusal.column === null ? "" : `column ${refusal.column}`,
+    refusal.field === null ? "" : `field ${refusal.field}`,
+    refusal.text === null ? "" : `value ${JSON.stringify(clip(refusal.text, 40))}`,
+  ]
+    .filter((part) => part !== "")
+    .join(", ");
+
+  return `The profile does not read this file: ${refusal.error}${where === "" ? "" : ` at ${where}`}. A kind word it does not list, a column at the wrong place or a format (date, decimal mark, separator, encoding, lines to skip) the file does not write gives this. Fix profile_json and test again.`;
+}
+
+/** The file's columns, as the profile splits its header row, numbered as profiles count them. */
+function columnsText(preview: CsvPreview): string {
+  const [first = []] = preview.rows;
+
+  const named = first
+    .slice(0, 40)
+    .map((cell, index) => `${index + 1} ${JSON.stringify(clip(cell, 40))}`)
+    .join(", ");
+
+  return named === "" ? "The file shows no row with these settings." : `First row: ${named}.`;
+}
+
+/** A test read of a waiting import's file with a profile, as the import screen shows it. */
+function testText(preview: CsvPreview): string {
+  if ("refused" in preview.read) {
+    return [columnsText(preview), refusalText(preview.read.refused)].join("\n");
+  }
+
+  const lines = preview.read.lines.map(
+    (line) =>
+      `- ${line.bookedOn}${line.kind === null ? "" : `, ${line.kind}`}, ${clip(line.label, 60)}, ${amountOf(line.amountMinor, preview.currency)}`,
+  );
+
+  return [
+    columnsText(preview),
+    `The profile reads the file's first lines${preview.currency === null ? " (no account yet: amounts in ten-thousandths)" : ""}:`,
+    ...lines,
+    "Keep it with save_profile, or import the file with it with confirm.",
+  ].join("\n");
+}
+
+/** The test read of a waiting CSV import's file with a profile (`Imports.csvPreview`). */
+const previewWith = (owner: string, importId: string, definition: CsvDefinition) =>
+  Effect.gen(function* () {
+    const imports = yield* Imports;
+
+    return yield* imports.csvPreview(owner, importId, definition);
+  }).pipe(
+    Effect.catchTags({
+      ImportNotFound: () =>
+        refuse(
+          `The user has no CSV import with the id ${clip(importId, 60)}, or its file was removed by an undo. List the imports to find the one waiting for its columns.`,
+          { action: "list" },
+        ),
+      QueryFailed: failure,
+    }),
+  );
+
+/** The profile read must succeed before it is kept or imported with, as on the import screen. */
+function readsFile(preview: CsvPreview, importId: string): Effect.Effect<void, ToolRefusal> {
+  return "refused" in preview.read
+    ? refuse(refusalText(preview.read.refused), { ...TEST_EXAMPLE, import: importId })
+    : Effect.void;
+}
+
+function testProfile(input: ImportsInput, owner: string) {
+  return Effect.gen(function* () {
+    const importId = yield* waitingImport(input, "test_profile");
+    const definition = yield* writtenProfile(input, "test_profile");
+
+    return testText(yield* previewWith(owner, importId, definition));
+  });
+}
+
+function saveProfile(input: ImportsInput, owner: string) {
+  return Effect.gen(function* () {
+    const importId = yield* waitingImport(input, "save_profile");
+    const definition = yield* writtenProfile(input, "save_profile");
+    const preview = yield* previewWith(owner, importId, definition);
+
+    yield* readsFile(preview, importId);
+
+    const service = yield* ImportProfiles;
+
+    const saved = yield* service.save(owner, {
+      name: input.name ?? "",
+      institution: null,
+      definition,
+      header: preview.header,
+    });
+
+    return [
+      `Saved ${clip(saved.name, 100)} as the user's profile${saved.kind === "operations" ? ", for a broker's operations" : ""}: a file with the same header row is read with it on upload.`,
+      `Import the waiting file with it: ${call({ action: "confirm", import: importId, profile: saved.name })}`,
+    ].join("\n");
+  }).pipe(
+    Effect.catchTags({
+      ProfileNameMissing: () =>
+        refuse("save_profile needs name: the profile's name, as the user will see it.", {
+          ...TEST_EXAMPLE,
+          action: "save_profile",
+          name: "Broker's operations",
+        }),
+      ProfileTooLong: (tooLong) =>
+        refuse(
+          `The profile's ${tooLong.field} is longer than ${tooLong.limit} characters: give a shorter one.`,
+          { ...TEST_EXAMPLE, action: "save_profile", name: "Broker's operations" },
+        ),
+      TooManyProfiles: (tooMany) =>
+        refuse(
+          `The user keeps ${tooMany.limit} profiles, the most: one must be deleted on Gousset's import screen first. Meanwhile, import the file with profile_json: confirm needs no saved profile.`,
+          { ...TEST_EXAMPLE, action: "confirm" },
+        ),
+      QueryFailed: failure,
+    }),
+  );
+}
+
+/** The profile `confirm` reads with: one the user has, by its name, or one written for it. */
+function confirmedProfile(
+  input: ImportsInput,
+  owner: string,
+): Effect.Effect<
+  { readonly definition: CsvDefinition; readonly choice: ProfileChoice | null },
+  ToolRefusal,
+  ImportProfiles
+> {
+  return Effect.gen(function* () {
+    if (input.profile === undefined) {
+      return { definition: yield* writtenProfile(input, "confirm"), choice: null };
+    }
+
+    if (input.profile_json !== undefined) {
+      return yield* refuse("Give one profile: profile (a profile's name) or profile_json.", {
+        action: "confirm",
+        import: input.import ?? "<the waiting import's id>",
+        profile: input.profile,
+      });
+    }
+
+    const service = yield* ImportProfiles;
+    const entries = yield* service.list(owner).pipe(Effect.catchTag("QueryFailed", failure));
+    const wanted = input.profile.trim().toLowerCase();
+    const found = entries.find((entry) => entry.name.trim().toLowerCase() === wanted);
+
+    if (found === undefined || found.definition === null) {
+      return yield* refuse(
+        `The user has no profile named ${clip(input.profile, 80)} that still reads. Their profiles: ${clip(entries.map((entry) => entry.name).join(", "), 1000)}.`,
+        { action: "profiles" },
+      );
+    }
+
+    return {
+      definition: found.definition,
+      choice:
+        found.source === "stored"
+          ? { kind: "stored", id: found.id }
+          : { kind: "shipped", key: found.key },
+    };
+  });
+}
+
+function confirm(input: ImportsInput, owner: string) {
+  return Effect.gen(function* () {
+    const importId = yield* waitingImport(input, "confirm");
+    const { definition, choice } = yield* confirmedProfile(input, owner);
+
+    yield* readsFile(yield* previewWith(owner, importId, definition), importId);
+
+    const accountId =
+      input.account === undefined
+        ? null
+        : yield* namedAccount(owner, input.account, { action: "confirm", import: importId });
+
+    const imports = yield* Imports;
+
+    const resumed = yield* imports.resume(owner, importId, {
+      accountId,
+      csvProfile: choice === null ? definition : null,
+      profile: choice,
+    });
+
+    const settled = yield* settle(owner, resumed);
+
+    return yield* settledText(owner, { started: resumed, sameFile: null }, settled, false);
+  }).pipe(
+    Effect.catchTags({
+      ImportNotFound: (missing) => IMPORT_NOT_FOUND(missing.importId),
+      ImportBusy: (busy) =>
+        refuse(
+          `This import is ${busy.status}: only one waiting for its columns or its account, or one that failed, is read again. Follow it with status.`,
+          { action: "status", import: busy.importId },
+        ),
+      AccountNotFound: () =>
+        refuse("This account is no longer the user's. List their accounts again and name one.", {
+          action: "confirm",
+          import: input.import ?? "",
+          account: "Current account",
+        }),
+      ProfileNotFound: () =>
+        refuse("This profile is no longer the user's.", { action: "profiles" }),
+      ProfileUnreadable: () =>
+        refuse("This profile no longer reads: write it again with profile_json.", TEST_EXAMPLE),
+      ImportUnavailable: UNAVAILABLE,
+      QueryFailed: failure,
+    }),
+  );
+}
+
 /** The imports family (docs/mcp.md, "Tools"): statements in, without duplicates, and undone. */
 export const importsTool = defineTool<
   ImportsInput,
@@ -901,6 +1302,9 @@ export const importsTool = defineTool<
     list: "read",
     undo: "write",
     profiles: "read",
+    test_profile: "read",
+    save_profile: "write",
+    confirm: "write",
   },
   run: (input, caller) => {
     const owner = caller.userId;
@@ -984,6 +1388,18 @@ export const importsTool = defineTool<
 
       case "profiles": {
         return profiles(input, owner);
+      }
+
+      case "test_profile": {
+        return testProfile(input, owner);
+      }
+
+      case "save_profile": {
+        return saveProfile(input, owner);
+      }
+
+      case "confirm": {
+        return confirm(input, owner);
       }
     }
   },

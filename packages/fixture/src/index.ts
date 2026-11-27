@@ -1,6 +1,12 @@
 // The shared made-up data: one generator for Storybook stories, tests, the development database
 // and the demonstration (docs/architecture.md, "Data loading and skeletons").
-export { FIXTURE_SEED, madeUpAccounts, madeUpMonth, monthParts } from "./ledger/ledger";
+export {
+  FIXTURE_SEED,
+  madeUpAccounts,
+  madeUpMonth,
+  madeUpSecurities,
+  monthParts,
+} from "./ledger/ledger";
 
 export type {
   Account,
@@ -11,6 +17,8 @@ export type {
   Line,
   LineKind,
   MadeUpMonth,
+  LineOperation,
+  Security,
 } from "./ledger/ledger";
 
 export { exampleStatement } from "./statements/example";
@@ -30,6 +38,17 @@ export type { StatementFile, StatementFormat } from "./statements/formats";
 export { csvSamples } from "./statements/csv-samples";
 
 export { paypalActivity } from "./statements/paypal";
+
+export {
+  BROKER_ISINS,
+  DEGIRO_HEADER,
+  DEGIRO_ROWS,
+  FORTUNEO_HEADER,
+  FORTUNEO_ROWS,
+  degiroExport,
+  fortuneoExport,
+  fortuneoRow,
+} from "./statements/brokers";
 
 export { ibanWithCheckDigits } from "./statements/iban";
 

@@ -1,0 +1,137 @@
+{
+  "version": 2,
+  "reads": "operations",
+  "description": "Guessed: Fortuneo's history of operations of a securities account or a PEA, as remembered from Fortuneo's public help pages, never checked on a real export. Its columns are found by their names, wherever they stand; a word of the Opération column it does not list is refused at its line.",
+  "separator": ";",
+  "encoding": "windows-1252",
+  "skipRows": 0,
+  "headerRow": true,
+  "dateFormat": "DD/MM/YYYY",
+  "decimalMark": ",",
+  "columns": {
+    "bookedOn": {
+      "names": [
+        "Date",
+        "Date opération"
+      ]
+    },
+    "valueOn": null,
+    "kind": {
+      "names": [
+        "Opération"
+      ]
+    },
+    "isin": {
+      "names": [
+        "Code ISIN",
+        "ISIN"
+      ]
+    },
+    "securityName": {
+      "names": [
+        "Libellé"
+      ]
+    },
+    "securityCurrency": null,
+    "quantity": {
+      "names": [
+        "Qté",
+        "Quantité"
+      ]
+    },
+    "unitPrice": {
+      "names": [
+        "Prix d'exé",
+        "Prix d'exécution",
+        "Cours"
+      ]
+    },
+    "fees": {
+      "names": [
+        "Courtage",
+        "Frais"
+      ],
+      "optional": true
+    },
+    "amount": {
+      "names": [
+        "Montant net"
+      ]
+    },
+    "label": {
+      "names": [
+        "Libellé"
+      ],
+      "optional": true
+    },
+    "reference": null,
+    "amountCurrency": {
+      "names": [
+        "Devise"
+      ],
+      "optional": true
+    },
+    "feesCurrency": null,
+    "priceCurrency": null,
+    "value": null
+  },
+  "kinds": [
+    {
+      "word": "Achat Comptant",
+      "kind": "purchase"
+    },
+    {
+      "word": "Achat",
+      "kind": "purchase"
+    },
+    {
+      "word": "Vente Comptant",
+      "kind": "sale"
+    },
+    {
+      "word": "Vente",
+      "kind": "sale"
+    },
+    {
+      "word": "Encaissement dividende",
+      "kind": "dividend"
+    },
+    {
+      "word": "Dividende",
+      "kind": "dividend"
+    },
+    {
+      "word": "Coupons",
+      "kind": "dividend"
+    },
+    {
+      "word": "Versement espèces",
+      "kind": "deposit"
+    },
+    {
+      "word": "Versement",
+      "kind": "deposit"
+    },
+    {
+      "word": "Retrait espèces",
+      "kind": "withdrawal"
+    },
+    {
+      "word": "Retrait",
+      "kind": "withdrawal"
+    },
+    {
+      "word": "Droits de garde",
+      "kind": "fee"
+    },
+    {
+      "word": "Frais",
+      "kind": "fee"
+    },
+    {
+      "word": "Taxe sur les transactions financières",
+      "kind": "fee"
+    }
+  ],
+  "referenceUnique": false
+}

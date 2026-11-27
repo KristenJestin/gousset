@@ -161,15 +161,28 @@ function Done({ summary }: { summary: Import }) {
   const undo = useUndo(summary);
   const [busy, setBusy] = useState(false);
   const month = (summary.periodTo ?? summary.createdAt).slice(0, 7);
+  const operations = summary.reads === "operations";
+  const account = summary.account?.name ?? "";
+
+  // A broker's operations say which profile read them, and the investment account they went to.
+  const operationsNote =
+    summary.profile === null
+      ? m.importOperationsNoteByHand({ account })
+      : m.importOperationsNote({ profile: summary.profile, account });
 
   return (
     <ImportSummary
       label={m.importSummaryTitle({ file: summary.fileName })}
-      read={{ label: m.importLinesRead(), count: summary.linesRead }}
+      read={{
+        label: operations ? m.importOperationsRead() : m.importLinesRead(),
+        count: summary.linesRead,
+      }}
       added={{ label: m.importLinesAdded(), count: summary.linesAdded }}
       known={{ label: m.importLinesKnown(), count: summary.linesDuplicate }}
       review={{ label: m.importLinesReview(), count: summary.linesHeld }}
-      note={summary.balanceIgnored ? m.importBalanceIgnored() : undefined}
+      note={
+        operations ? operationsNote : summary.balanceIgnored ? m.importBalanceIgnored() : undefined
+      }
       locale={getLocale()}
       actions={
         <>

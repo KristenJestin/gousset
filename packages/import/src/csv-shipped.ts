@@ -7,9 +7,11 @@ import type { CsvProfile } from "./csv-profile";
 // day first and month first, and columns named "Paid out" and "Paid in" say no direction detection
 // knows. A file in a style detection settles needs no shipped profile. PayPal's activity is the one
 // named by its institution (#201): a payment service, not a bank's style, whose export is no table
-// of one line per row (`layout`, README, "PayPal's activity").
+// of one line per row (`layout`, README, "PayPal's activity"). No broker's export of operations is
+// shipped (#250): the user maps one by hand, or imports a profile file of the library
+// (`profiles/`, README, "Brokers' operations").
 
-/** A profile shipped with Gousset, in the shape a user's own profile has. */
+/** A statement's profile shipped with Gousset, in the shape a user's own profile has. */
 export type ShippedProfile = {
   /** Stable: an import keeps it (`import.shipped_profile`) to say which profile read its file. */
   readonly key: string;
@@ -151,7 +153,10 @@ export const SHIPPED_PROFILES: ReadonlyArray<ShippedProfile> = [
   },
 ];
 
-/** The profile shipped under `key`, or `undefined` when none is (an older release's key, say). */
+/**
+ * The statement profile shipped under `key`, or `undefined` when none is (an older release's key,
+ * say).
+ */
 export function shippedProfile(key: string): ShippedProfile | undefined {
   return SHIPPED_PROFILES.find((each) => each.key === key);
 }
