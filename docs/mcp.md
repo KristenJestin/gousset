@@ -87,7 +87,7 @@ From Anthropic's [Writing effective tools for agents](https://www.anthropic.com/
    | `data` (what an export holds, and where to download it) | v0.2 |
    | `categories`, `merchants`, `rules` (`list`, `show`, `create`, `edit`, `disable`, `delete`, `apply_to_past`) | v0.3 |
    | `review` (`list`, `accept`, `correct`: the lines to review, each with its proposal) | v0.4 |
-   | `subjects` (`list`, `show`, `create`, `edit`, `attach`: the subjects' tree, a subject's costs and a dated one's proposals, attached only once the user says yes) | v0.5 |
+   | `subjects` (`list`, `show`, `create`, `edit`, `attach`: the subjects' tree, a subject's costs and a dated one's proposals, attached only once the user says yes; `attach_payback` (#217): the lines coming in that pay back a subject paid back by someone else (`payback_from`), its state, spent, paid back and difference in `list` and `show`, its candidates in `show`, and `list` with `waiting: true` for what the user still waits for, with how much. `lines` and `month` name a payback line's subject: a payback, never an income) | v0.5 |
    | `investments` | v0.6 |
 
    The administration of users (creating one, a ban, a password reset) has no tool: it stays on the users page, an act of the administrator in person. A tool would let an agent holding the administrator's token reset a user's password and sign in with the temporary one before the user does, unattended.
