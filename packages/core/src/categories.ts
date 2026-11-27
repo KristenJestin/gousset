@@ -264,7 +264,7 @@ function averageRange(day: string) {
   const from = `${addMonths(month, -AVERAGE_MONTHS)}-01`;
   const end = new Date(Date.parse(`${month}-01T00:00:00Z`) - 86_400_000);
 
-  return { from, to: end.toISOString().slice(0, 10) };
+  return { from, to: end.toISOString().slice(0, 10), today: day };
 }
 
 /**
