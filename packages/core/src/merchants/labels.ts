@@ -123,6 +123,26 @@ const PAYMENT_PHRASES: ReadonlyArray<string> = [
 ];
 
 /**
+ * English card forms taught to the cleaning by #243, kept apart from `PAYMENT_PHRASES` so that the
+ * key a label had before them stays readable (`keyBeforeCardForms`): without them, `CARD PURCHASE
+ * WITH PIN 03/12 FRESHMART` kept `WITH PIN`, `POS DEBIT 03/12 GREENMARKET` kept `DEBIT`.
+ */
+const CARD_FORMS: ReadonlyArray<string> = [
+  "CARD PURCHASE WITH PIN",
+  "PURCHASE WITH PIN",
+  "RECURRING CARD PURCHASE",
+  "RECURRING PAYMENT AUTHORIZED ON",
+  "POS DEBIT",
+  "CHECK CARD",
+];
+
+/**
+ * Payment words skipped only when a break follows them (#243): `CARD` in `CARD 12/03 PIZZA NOVA`
+ * or `CARD X1234 FRESHMART`, never in `CARD FACTORY`, a shop's name.
+ */
+const BEFORE_A_BREAK: ReadonlyArray<string> = ["CARD"];
+
+/**
  * The words a card payment's label starts with (#193): its trailing town is no part of its
  * merchant. `ANN CARTE`, a card's cancellation, is one too (`./operations`).
  */
@@ -139,6 +159,9 @@ const CARD_PHRASES: ReadonlyArray<string> = [
   "CARD",
   "DEBIT CARD",
   "CHECKCARD",
+  "CHECK CARD",
+  "PURCHASE WITH PIN",
+  "RECURRING CARD PURCHASE",
   "POS",
   "CONTACTLESS",
   "VISA",
@@ -154,22 +177,44 @@ const CARD_PHRASES: ReadonlyArray<string> = [
 const phrases = (list: ReadonlyArray<string>): ReadonlyArray<ReadonlyArray<string>> =>
   list.map((phrase) => phrase.split(" ")).toSorted((a, b) => b.length - a.length);
 
+/** The operation prefixes whose rest names the merchant (`./operations`). */
+const NAMING_PREFIXES: ReadonlyArray<string> = OPERATION_PREFIXES.flatMap(({ prefix, operation }) =>
+  OPERATION_MERCHANT[operation] === "rest" ? [prefix] : [],
+);
+
 /**
- * What is skipped before a name: the payment words, and the operation prefixes whose rest names the
- * merchant (`./operations`): `ANN CARTE`, a card's cancellation, is skipped as `CARTE` is.
+ * How a label's start is read: the phrases skipped before a name, and those skipped only when a
+ * break follows them.
  */
-const PREFIXES = phrases([
-  ...PAYMENT_PHRASES,
-  ...OPERATION_PREFIXES.flatMap(({ prefix, operation }) =>
-    OPERATION_MERCHANT[operation] === "rest" ? [prefix] : [],
-  ),
-]);
+type Reading = {
+  readonly prefixes: ReadonlyArray<ReadonlyArray<string>>;
+  readonly beforeABreak: ReadonlyArray<ReadonlyArray<string>>;
+};
+
+/**
+ * What is skipped before a name: the payment words, the English card forms, and the operation
+ * prefixes whose rest names the merchant: `ANN CARTE`, a card's cancellation, is skipped as `CARTE`
+ * is; and `CARD` before a break.
+ */
+const LABEL: Reading = {
+  prefixes: phrases([...PAYMENT_PHRASES, ...CARD_FORMS, ...NAMING_PREFIXES]),
+  beforeABreak: phrases(BEFORE_A_BREAK),
+};
 
 /**
  * The payment words alone: what a merchant's name skips (a name is the user's words, not a bank's
  * operation), and what a label skipped before the operation prefixes (#194, `formerMerchantKey`).
  */
-const PAYMENT_PREFIXES = phrases(PAYMENT_PHRASES);
+const PAYMENT: Reading = {
+  prefixes: phrases([...PAYMENT_PHRASES, ...CARD_FORMS]),
+  beforeABreak: phrases(BEFORE_A_BREAK),
+};
+
+/** What a label skipped before the English card forms (#243, `keyBeforeCardForms`). */
+const BEFORE_CARD_FORMS: Reading = {
+  prefixes: phrases([...PAYMENT_PHRASES, ...NAMING_PREFIXES]),
+  beforeABreak: [],
+};
 
 /** Small words that stand before a date ("LE 21/10", "ON 21 OCT", "VOM 21.10.2026"). */
 const CONNECTORS: ReadonlySet<string> = new Set(["ON", "LE", "DU", "AU", "AM", "VOM"]);
@@ -392,12 +437,23 @@ export function operationOf(label: string): Operation | null {
   return found?.operation ?? null;
 }
 
+/** How many tokens a phrase of `phrases` takes at `start` with a break after it, 0 when none. */
+function beforeABreakLength(
+  tokens: ReadonlyArray<Token>,
+  start: number,
+  phrases: ReadonlyArray<ReadonlyArray<string>>,
+): number {
+  const length = prefixLength(tokens, start, phrases);
+
+  return length > 0 && tokens[start + length]?.isBreak === true ? length : 0;
+}
+
 /**
  * The steps of a label's cleaning, in order (the README's rules). Each reads the tokens the one
  * before left: cash gives no key; what stands before the name is skipped; the name runs to the next
  * break; what ends it is trimmed.
  */
-function keyOf(text: string, prefixes = PREFIXES): MerchantKey | null {
+function keyOf(text: string, reading: Reading = LABEL): MerchantKey | null {
   const tokens = tokensOf(text);
 
   if (isCash(tokens)) {
@@ -419,7 +475,8 @@ function keyOf(text: string, prefixes = PREFIXES): MerchantKey | null {
       /^\d+$/.test(token.text) ||
       (CONNECTORS.has(token.text) && tokens[start + 1]?.isBreak === true)
         ? 1
-        : prefixLength(tokens, start, prefixes);
+        : prefixLength(tokens, start, reading.prefixes) ||
+          beforeABreakLength(tokens, start, reading.beforeABreak);
 
     if (skipped === 0) {
       break;
@@ -496,14 +553,14 @@ export function isCardPayment(label: string): boolean {
  * payment phrase, was skipped. A key that would start with a prefix naming no one (`CB F SHOPLY`)
  * is none: read again, it would give none.
  */
-function labelKey(text: string): MerchantKey | null {
+function labelKey(text: string, reading: Reading): MerchantKey | null {
   const operation = operationOf(text);
 
   if (operation !== null && OPERATION_MERCHANT[operation] === "party" && !namesParty(text)) {
     return null;
   }
 
-  const key = keyOf(text);
+  const key = keyOf(text, reading);
 
   return key === null || operationOf(key) === null ? key : null;
 }
@@ -514,15 +571,35 @@ function labelKey(text: string): MerchantKey | null {
  * (CAMT.053/MT940 give it) is preferred when it gives a key, but for an operation that names no one.
  */
 export function merchantKey(label: string, counterpartyName: string | null): MerchantKey | null {
+  return keyRead(label, counterpartyName, LABEL);
+}
+
+function keyRead(
+  label: string,
+  counterpartyName: string | null,
+  reading: Reading,
+): MerchantKey | null {
   const operation = operationOf(label);
 
   if (isCash(tokensOf(label)) || (operation !== null && OPERATION_MERCHANT[operation] === "none")) {
     return null;
   }
 
-  const counterparty = counterpartyName === null ? null : keyOf(counterpartyName);
+  const counterparty = counterpartyName === null ? null : keyOf(counterpartyName, reading);
 
-  return counterparty ?? labelKey(label);
+  return counterparty ?? labelKey(label, reading);
+}
+
+/**
+ * The key a line's label had before the English card forms (#243), `merchantKey` without them: the
+ * boot's re-read (`./reread`) finds by it the cleaned labels, `CARD` of `CARD 12/03 PIZZA NOVA`
+ * first, that no line gives any longer.
+ */
+export function keyBeforeCardForms(
+  label: string,
+  counterpartyName: string | null,
+): MerchantKey | null {
+  return keyRead(label, counterpartyName, BEFORE_CARD_FORMS);
 }
 
 /**
@@ -538,9 +615,9 @@ export function formerMerchantKey(
     return null;
   }
 
-  const counterparty = counterpartyName === null ? null : keyOf(counterpartyName, PAYMENT_PREFIXES);
+  const counterparty = counterpartyName === null ? null : keyOf(counterpartyName, PAYMENT);
 
-  return counterparty ?? keyOf(label, PAYMENT_PREFIXES);
+  return counterparty ?? keyOf(label, PAYMENT);
 }
 
 /**
@@ -586,7 +663,7 @@ export function merchantName(key: MerchantKey): string {
  */
 export function nameKey(name: string): MerchantKey {
   // A name is the user's words, not a bank's: no operation prefix is read in it.
-  const key = keyOf(name, PAYMENT_PREFIXES);
+  const key = keyOf(name, PAYMENT);
 
   if (key !== null) {
     return key;

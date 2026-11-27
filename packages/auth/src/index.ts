@@ -204,6 +204,16 @@ export function createAuth(env: AuthConfig, database: Database) {
           input: false,
           returned: false,
         },
+        // Whether the merchants made from the `CARD` of an English card label were read again
+        // (#243): true for a user made now, who has none; the boot's merchants job reads those of a
+        // user made before again, once (packages/core, merchants/reread.ts).
+        merchantCardLabelsReread: {
+          type: "boolean",
+          required: false,
+          defaultValue: true,
+          input: false,
+          returned: false,
+        },
       },
     },
     session: {

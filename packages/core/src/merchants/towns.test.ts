@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vite-plus/test";
 
-import { shopsOf, sureShopsOf } from "./towns";
+import { shopsOf, shopsOfLines, sureShopsOf } from "./towns";
 
 // Every shop and town here is invented.
 
@@ -206,5 +206,23 @@ describe("a card label's trailing town", () => {
     ];
 
     expect(shops(keys.toReversed())).toEqual(shops(keys));
+  });
+});
+
+describe("the towns of English card labels (#243)", () => {
+  test("`CARD dd/mm` labels show their shops and towns as other card labels do", () => {
+    const lines = [
+      "CARD 03/10 PIZZA NOVA RIVERTON",
+      "CARD 17/10 PIZZA NOVA LAKESIDE",
+      "CARD 04/10 FRESHMART RIVERTON",
+      "CARD 18/10 FRESHMART LAKESIDE",
+    ].map((label) => ({ label, counterpartyName: null }));
+
+    expect(Object.fromEntries(shopsOfLines(lines))).toEqual({
+      "PIZZA NOVA RIVERTON": "PIZZA NOVA",
+      "PIZZA NOVA LAKESIDE": "PIZZA NOVA",
+      "FRESHMART RIVERTON": "FRESHMART",
+      "FRESHMART LAKESIDE": "FRESHMART",
+    });
   });
 });
