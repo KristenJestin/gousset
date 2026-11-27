@@ -70,14 +70,23 @@ export type SheetProps = {
   trigger?: ReactElement;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
-  /** Its width on a wide screen: `md` 440 px, `lg` 512 px for a form of rows (a rule). */
-  size?: "md" | "lg";
+  /**
+   * Its width on a wide screen: `md` 440 px, `lg` 512 px for a form of rows (a rule), `xl` 768 px
+   * for a form around a table of columns side by side (a CSV file's first lines).
+   */
+  size?: "md" | "lg" | "xl";
   /**
    * False: a sheet mounted open shows in its place at once, its backdrop too, instead of sliding
    * in; it still leaves by sliding out. For a sheet the server's page already meant to show (a
    * detail opened from the address), which must not rise on its own once the page runs.
    */
   appear?: boolean;
+  /**
+   * Where focus goes once it closes, instead of back to what opened it: for a form whose answer
+   * takes its opener away (a file's columns confirmed, its card's button gone with the question),
+   * the element that stands for what goes on (the file's row).
+   */
+  finalFocus?: () => HTMLElement | null;
 };
 
 /**
@@ -107,6 +116,7 @@ export function Sheet({
   onOpenChange,
   size = "md",
   appear = true,
+  finalFocus,
 }: SheetProps) {
   const body = (
     <>
@@ -134,6 +144,7 @@ export function Sheet({
       size={size}
       appear={appear}
       sending={sending}
+      finalFocus={finalFocus}
       startsOnField={onSubmit !== undefined}
     >
       <SheetHeader title={title} description={description} sending={sending} />
@@ -154,7 +165,7 @@ export function Sheet({
 
 export type SheetFrameProps = Pick<
   SheetProps,
-  "trigger" | "open" | "onOpenChange" | "size" | "appear" | "sending"
+  "trigger" | "open" | "onOpenChange" | "size" | "appear" | "sending" | "finalFocus"
 > & {
   /** The whole sheet: its `SheetHeader`, then its `SheetBody`. */
   children: ReactNode;
@@ -176,6 +187,7 @@ export function SheetFrame({
   size = "md",
   appear = true,
   sending = false,
+  finalFocus,
   startsOnField = false,
 }: SheetFrameProps) {
   const wide = useWideScreen();
@@ -198,10 +210,12 @@ export function SheetFrame({
       <DialogContent
         ref={content}
         initialFocus={startsOnField ? FIRST_FIELD : startOn}
+        finalFocus={finalFocus}
         data-side={wide ? "right" : "bottom"}
         className={cn(
           sheetClasses,
           size === "lg" && "md:w-lg",
+          size === "xl" && "md:w-3xl",
           !appear && "data-starting-style:translate-none!",
         )}
       >

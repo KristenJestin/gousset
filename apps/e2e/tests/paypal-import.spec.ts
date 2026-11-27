@@ -301,7 +301,16 @@ test("choose PayPal activity on the import screen for an export saved with semic
   });
   await choose(page, `Account of ${file}`, "PayPal");
   await page.getByRole("button", { name: "Import into this account" }).click();
-  await expect(page.getByRole("table", { name: `The first lines of ${file}` })).toBeVisible({
+  await expect(page.getByRole("cell", { name: "Columns to confirm" })).toBeVisible({
+    timeout: 30_000,
+  });
+
+  // The card's action opens the file's columns in the side sheet (#210).
+  await page.getByRole("button", { name: "Confirm the columns" }).click();
+
+  const sheet = page.getByRole("dialog", { name: `The columns of ${file}` });
+
+  await expect(sheet.getByRole("table", { name: `The first lines of ${file}` })).toBeVisible({
     timeout: 30_000,
   });
 
@@ -349,7 +358,8 @@ test("choose PayPal activity on the import screen for an export saved with semic
   await page.getByRole("button", { name: "Save as a profile" }).click();
   await expect(page.getByText("Saved as PayPal, semicolons")).toBeVisible();
 
-  await page.getByRole("button", { name: "Read the file this way" }).click();
+  await sheet.getByRole("button", { name: "Read the file this way" }).click();
+  await expect(sheet).toBeHidden();
 
   const summary = page.getByRole("region", { name: `What ${file} brought` }).first();
 
