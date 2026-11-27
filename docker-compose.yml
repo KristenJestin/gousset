@@ -18,6 +18,11 @@
 #   BETTER_AUTH_URL              the address the app is reached at (http://localhost:3001)
 #   GOUSSET_PORT                 the port it is published on (3001)
 #   OTEL_EXPORTER_OTLP_ENDPOINT  a collector of yours: telemetry is off while it is not set
+#   RECEIPT_MAX_MB               the largest receipt a user may attach, in megabytes (50)
+#   RECEIPT_TYPES                the kinds a receipt may be, among pdf,jpeg,png,heic (all four)
+#
+# The receipts attached to lines are files, in the volume `receipts`: back it up beside the
+# database's dump (docs/releases.md, "Backing up and restoring").
 name: gousset
 
 x-gousset: &gousset
@@ -69,9 +74,15 @@ services:
       BETTER_AUTH_SECRET_FILE: /run/secrets/better_auth_secret
       # Passed on only when set: unset, the app sends no telemetry.
       OTEL_EXPORTER_OTLP_ENDPOINT:
+      # Passed on only when set: unset, a receipt is 50 MB at most, of any of the four kinds.
+      RECEIPT_MAX_MB:
+      RECEIPT_TYPES:
     secrets:
       - better_auth_secret
       - postgres_password
+    volumes:
+      # The image keeps receipts there (RECEIPTS_DIRECTORY).
+      - receipts:/var/lib/gousset/receipts
     ports:
       - "${GOUSSET_PORT:-3001}:3001"
     depends_on:
@@ -87,3 +98,4 @@ secrets:
 
 volumes:
   postgres:
+  receipts:
