@@ -638,6 +638,18 @@ function uiMessages(locale: Locale) {
       paysBack: m.uiOperationsPaysBack({}, options),
       paybackNote: m.uiOperationsPaybackNote({}, options),
     },
+    /** A line's receipts (#217), and a subject's. */
+    receipts: {
+      title: m.uiReceiptsTitle({}, options),
+      none: m.uiReceiptsNone({}, options),
+      attach: m.uiReceiptsAttach({}, options),
+      choose: m.uiReceiptsChoose({}, options),
+      delete: (name: string) => m.uiReceiptsDelete({ name }, options),
+      deleteTitle: m.uiReceiptsDeleteTitle({}, options),
+      deleteDescription: (name: string) => m.uiReceiptsDeleteDescription({ name }, options),
+      deleteConfirm: m.uiReceiptsDeleteConfirm({}, options),
+      downloadAll: m.uiReceiptsDownloadAll({}, options),
+    },
   };
 }
 
