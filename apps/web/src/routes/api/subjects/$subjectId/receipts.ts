@@ -15,7 +15,7 @@ const refused = (refusal: ReceiptRefusal, status: number) =>
 
 /**
  * Every receipt of one of the signed-in user's subjects (#217) in one zip: those of every line its
- * expenses and its children's come from, each named by its line's day and its own name, made as it
+ * expenses and its children's come from and of its payback lines, each named by its line's day and its own name, made as it
  * is downloaded. Another user's subject, or one that does not exist, is `SUBJECT_NOT_FOUND` alike;
  * a subject without a receipt gives an empty zip.
  */
