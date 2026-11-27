@@ -264,6 +264,42 @@ export function subjectRefusalMessage(code: string, limit: number | null = null)
   }
 }
 
+/** A refusal of attaching or detaching a payback line (`PaybackRefusalCode`, #217), by its code. */
+export function paybackRefusalMessage(code: string): string {
+  switch (code) {
+    case "SUBJECT_NOT_FOUND":
+      return m.subjectRefusalNotFound();
+    case "PAYBACK_LINE_NOT_FOUND":
+      return m.paybackRefusalLineNotFound();
+    case "PAYBACK_GOING_OUT":
+      return m.paybackRefusalGoingOut();
+    case "PAYBACK_NOT_COUNTED":
+      return m.paybackRefusalNotCounted();
+    case "PAYBACK_ZERO_AMOUNT":
+      return m.paybackRefusalZeroAmount();
+    case "PAYBACK_MADE_FROM_BALANCE":
+      return m.paybackRefusalMadeFromBalance();
+    case "PAYBACK_SPLIT":
+      return m.paybackRefusalSplit();
+    case "PAYBACK_LINKED":
+      return m.paybackRefusalLinked();
+    case "PAYBACK_TRANSFER":
+      return m.paybackRefusalTransfer();
+    case "PAYBACK_CURRENCY":
+      return m.paybackRefusalCurrency();
+    case "PAYBACK_OTHER_SUBJECT":
+      return m.paybackRefusalOtherSubject();
+    case "PAYBACK_NOT_PAID_BACK":
+      return m.paybackRefusalNotPaidBack();
+    case "PAYBACK_ARCHIVED":
+      return m.paybackRefusalArchived();
+    case "PAYBACK_LINES":
+      return m.paybackRefusalLines();
+    default:
+      return m.errorUnknown();
+  }
+}
+
 /** The message for a refusal of better-auth or of Gousset, by its code. */
 export function errorMessage(code: string | undefined): string {
   switch (code) {

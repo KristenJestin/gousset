@@ -3,6 +3,7 @@ import { m } from "@gousset/i18n/messages";
 import { Page, ScreenBlock } from "@gousset/ui/components/app-shell";
 import { Button } from "@gousset/ui/components/button";
 import { EmptyState } from "@gousset/ui/components/empty-state";
+import { PaybackWaiting } from "@gousset/ui/components/payback-waiting";
 import {
   SUBJECT_TREE_ACTION,
   SubjectTree,
@@ -14,7 +15,7 @@ import { useSuspenseQuery } from "@tanstack/react-query";
 import { Outlet, createFileRoute, useMatchRoute, useNavigate } from "@tanstack/react-router";
 import { useState } from "react";
 
-import { SubjectTreeLink } from "@/components/app-link";
+import { PaybackWaitingLink, SubjectTreeLink } from "@/components/app-link";
 import { SubjectSheet } from "@/components/subject-sheet";
 import { dayRange, shortDay } from "@/lib/account-day";
 import { subjectQueries } from "@/queries/subjects";
@@ -22,11 +23,15 @@ import { subjectQueries } from "@/queries/subjects";
 /**
  * The subjects (#37; docs/wireframes, screen 5): their tree beside the subject shown, "New" opening
  * the sheet that makes one (screen 8); a user with none yet is shown what a subject is for, and the
- * same button.
+ * same button. Under the tree, what the user still waits to be paid back for (#217), each leading
+ * to its subject; left out when nothing is waited for.
  */
 export const Route = createFileRoute("/_authed/subjects")({
   loader: async ({ context: { queryClient } }) => {
-    await queryClient.ensureQueryData(subjectQueries.list());
+    await Promise.all([
+      queryClient.ensureQueryData(subjectQueries.list()),
+      queryClient.ensureQueryData(subjectQueries.waiting()),
+    ]);
   },
   component: Subjects,
 });
@@ -47,6 +52,7 @@ function figureOf(headline: SubjectHeadline, locale: string): string {
 
 function Subjects() {
   const { data: list } = useSuspenseQuery(subjectQueries.list());
+  const { data: waiting } = useSuspenseQuery(subjectQueries.waiting());
   const { currency } = Route.useRouteContext().user;
   const locale = usePageLanguage();
   const navigate = useNavigate();
@@ -95,26 +101,45 @@ function Subjects() {
     <Page title={m.subjectsTitle()}>
       <SubjectsLayout
         tree={
-          <SubjectTree
-            label={m.subjectsTree()}
-            action={
-              <Button size="sm" variant="secondary" icon="add" onClick={openSheet}>
-                {m.subjectsNew()}
-              </Button>
-            }
-          >
-            {list.subjects.map((subject: SubjectListed) => (
-              <SubjectTreeLink
-                key={subject.id}
-                to="/subjects/$subjectId"
-                params={{ subjectId: subject.id }}
-                name={subject.name}
-                depth={subject.depth}
-                figure={figureOf(subject.headline, locale)}
-                archived={subject.archived}
-              />
-            ))}
-          </SubjectTree>
+          <>
+            <SubjectTree
+              label={m.subjectsTree()}
+              action={
+                <Button size="sm" variant="secondary" icon="add" onClick={openSheet}>
+                  {m.subjectsNew()}
+                </Button>
+              }
+            >
+              {list.subjects.map((subject: SubjectListed) => (
+                <SubjectTreeLink
+                  key={subject.id}
+                  to="/subjects/$subjectId"
+                  params={{ subjectId: subject.id }}
+                  name={subject.name}
+                  depth={subject.depth}
+                  figure={figureOf(subject.headline, locale)}
+                  archived={subject.archived}
+                />
+              ))}
+            </SubjectTree>
+            {waiting.length === 0 ? null : (
+              <PaybackWaiting label={m.subjectsWaitingTitle()}>
+                {waiting.map((each) => (
+                  <PaybackWaitingLink
+                    key={each.subjectId}
+                    to="/subjects/$subjectId"
+                    params={{ subjectId: each.subjectId }}
+                    name={each.path}
+                    payer={each.from}
+                    standing={each.state}
+                    askedOn={each.askedOn === null ? undefined : shortDay(each.askedOn, locale)}
+                    waiting={each.waiting}
+                    locale={locale}
+                  />
+                ))}
+              </PaybackWaiting>
+            )}
+          </>
         }
       >
         <Outlet />

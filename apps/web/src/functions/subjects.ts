@@ -1,15 +1,19 @@
 import {
   MAX_ATTACHED,
+  MAX_PAYBACK_FROM,
+  MAX_PAYBACK_LINES,
   MAX_SUBJECT_NAME,
+  attachPayback,
   attachSubject,
   createSubject as createCoreSubject,
   editSubject as editCoreSubject,
   listSubjects,
+  paybacksWaiting,
   refuseProposals,
   showSubject,
   subjectMerchantsPreview,
 } from "@gousset/core";
-import type { SubjectRefused } from "@gousset/core";
+import type { PaybackRefused, SubjectRefused } from "@gousset/core";
 import { AccountId, Day } from "@gousset/core/account-values";
 import { createServerFn } from "@tanstack/react-start";
 import { Effect, Schema } from "effect";
@@ -101,6 +105,10 @@ const SubjectFields = {
   accountIds: Schema.Array(AccountId).check(Schema.isMaxLength(MAX_ATTACHED)),
   merchantIds: Schema.Array(Id).check(Schema.isMaxLength(MAX_ATTACHED)),
   attachPast: Schema.Boolean,
+  // Who pays it back (#217): one the core trims and refuses past its limit, under the field.
+  paybackFrom: Schema.NullOr(Schema.String.check(Schema.isMaxLength(MAX_PAYBACK_FROM * 2))),
+  paybackAskedOn: Schema.NullOr(Day),
+  paybackSettledOn: Schema.NullOr(Day),
 };
 
 /**
@@ -240,6 +248,80 @@ export const setExpenseSubject = createServerFn({ method: "POST" })
       ),
     ),
   );
+
+/** Why attaching or detaching a payback line was refused (#217), as a code to translate. */
+export type PaybackRefusalCode =
+  | "SUBJECT_NOT_FOUND"
+  | "PAYBACK_LINE_NOT_FOUND"
+  | "PAYBACK_GOING_OUT"
+  | "PAYBACK_NOT_COUNTED"
+  | "PAYBACK_ZERO_AMOUNT"
+  | "PAYBACK_MADE_FROM_BALANCE"
+  | "PAYBACK_SPLIT"
+  | "PAYBACK_LINKED"
+  | "PAYBACK_TRANSFER"
+  | "PAYBACK_CURRENCY"
+  | "PAYBACK_OTHER_SUBJECT"
+  | "PAYBACK_NOT_PAID_BACK"
+  | "PAYBACK_ARCHIVED"
+  | "PAYBACK_LINES";
+
+const PAYBACK_CODES = {
+  going_out: "PAYBACK_GOING_OUT",
+  not_counted: "PAYBACK_NOT_COUNTED",
+  zero_amount: "PAYBACK_ZERO_AMOUNT",
+  made_from_balance: "PAYBACK_MADE_FROM_BALANCE",
+  split: "PAYBACK_SPLIT",
+  linked: "PAYBACK_LINKED",
+  transfer: "PAYBACK_TRANSFER",
+  currency: "PAYBACK_CURRENCY",
+  other_subject: "PAYBACK_OTHER_SUBJECT",
+  not_paid_back: "PAYBACK_NOT_PAID_BACK",
+  archived: "PAYBACK_ARCHIVED",
+  lines: "PAYBACK_LINES",
+} as const satisfies { [Reason in PaybackRefused["reason"]]: PaybackRefusalCode };
+
+const paybackRefused = (code: PaybackRefusalCode) => Effect.succeed({ ok: false as const, code });
+
+/**
+ * Attaches lines to a subject as what pays it back, on the user's yes, or with `remove` detaches
+ * them (#217): the candidates' sheet and the payback lines of a subject's page. Refused with a
+ * code: a subject gone, without the option or archived; a line gone, or one that cannot pay back.
+ */
+export const setSubjectPayback = createServerFn({ method: "POST" })
+  .middleware([signedIn, slowedInDevelopment])
+  .validator(
+    Schema.toStandardSchemaV1(
+      Schema.Struct({
+        subjectId: SubjectId,
+        lineIds: Schema.Array(Id).check(Schema.isMaxLength(MAX_PAYBACK_LINES)),
+        remove: Schema.Boolean,
+      }),
+    ),
+  )
+  .handler(({ data, context }) =>
+    runCore(
+      attachPayback(context.owner, data.subjectId, data.lineIds, context.currency, {
+        remove: data.remove,
+      }).pipe(
+        Effect.map((attachment) => ({ ok: true as const, attachment })),
+        Effect.catchTags({
+          SubjectNotFound: () => paybackRefused("SUBJECT_NOT_FOUND"),
+          LineNotFound: () => paybackRefused("PAYBACK_LINE_NOT_FOUND"),
+          PaybackRefused: (refusal: PaybackRefused) =>
+            paybackRefused(PAYBACK_CODES[refusal.reason]),
+        }),
+      ),
+    ),
+  );
+
+/**
+ * What the user still waits for (#217): the paid-back subjects neither archived nor paid back, each
+ * with how much, to ask first, then asked by their day, then partly paid back.
+ */
+export const getPaybacksWaiting = createServerFn({ method: "GET" })
+  .middleware([signedIn, slowedInDevelopment])
+  .handler(({ context }) => runCore(paybacksWaiting(context.owner, context.currency)));
 
 /** Declines a dated subject's proposals ("Not for this subject"): never proposed for it again. */
 export const declineSubjectProposals = createServerFn({ method: "POST" })

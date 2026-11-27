@@ -25,6 +25,7 @@ import type { ExpenseLineView } from "@gousset/ui/components/line-expense";
 import { LineFundedBy, LineFunds } from "@gousset/ui/components/line-funding";
 import type { FundedExpenseView } from "@gousset/ui/components/line-funding";
 import { LineMerchant } from "@gousset/ui/components/line-merchant";
+import { LinePayback } from "@gousset/ui/components/line-payback";
 import {
   LineTransfer,
   LineTransferCandidates,
@@ -52,6 +53,7 @@ import { Schema } from "effect";
 import { useState } from "react";
 import type { ReactNode } from "react";
 
+import { AppLink } from "@/components/app-link";
 import { LineReview, proposalText } from "@/components/line-review";
 import { ProposedRule } from "@/components/proposed-rule";
 import type { ProposedRuleSets } from "@/components/proposed-rule";
@@ -611,7 +613,13 @@ function toRow(
     account: nameOf(line.account),
     amount: line.amount,
     toReview: line.toReview,
-    category: line.category === null ? undefined : categoryPath(line.category),
+    // A payback line is classified by its subject (#217), as a transfer's side by its transfer.
+    category:
+      line.payback !== null
+        ? m.operationsPaysBack({ subject: line.payback.name })
+        : line.category === null
+          ? undefined
+          : categoryPath(line.category),
     subjects: line.subjects,
   };
 }
@@ -1611,15 +1619,25 @@ function OpenLine({
       }
       origin={line.fromBalance ? m.operationsMadeFromBalance() : undefined}
       transfer={
-        <TransferOf
-          line={line}
-          transfer={transfer}
-          funding={expenses.funding}
-          balanceAccounts={transfer.paired === null ? balanceAccounts : []}
-          nameOf={nameOf}
-          locale={locale}
-          onOpen={onOpen}
-        />
+        line.payback === null ? (
+          <TransferOf
+            line={line}
+            transfer={transfer}
+            funding={expenses.funding}
+            balanceAccounts={transfer.paired === null ? balanceAccounts : []}
+            nameOf={nameOf}
+            locale={locale}
+            onOpen={onOpen}
+          />
+        ) : (
+          <LinePayback
+            subject={
+              <AppLink to="/subjects/$subjectId" params={{ subjectId: line.payback.id }}>
+                {line.payback.name}
+              </AppLink>
+            }
+          />
+        )
       }
       expense={
         <ExpenseOf

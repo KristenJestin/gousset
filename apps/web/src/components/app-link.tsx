@@ -2,6 +2,7 @@ import { AccountRow } from "@gousset/ui/components/accounts-overview";
 import { NavLink, SectionLink, TabLink } from "@gousset/ui/components/app-shell";
 import { ButtonLink } from "@gousset/ui/components/button-link";
 import { ListLinkItem } from "@gousset/ui/components/list";
+import { PaybackWaitingItem } from "@gousset/ui/components/payback-waiting";
 import { SubjectTreeItem } from "@gousset/ui/components/subject-tree";
 import { TextLink } from "@gousset/ui/components/text-link";
 import { createLink } from "@tanstack/react-router";
@@ -28,3 +29,6 @@ export const AccountRowLink = createLink(AccountRow);
 
 /** One subject of the subjects' tree, a router link to its page. */
 export const SubjectTreeLink = createLink(SubjectTreeItem);
+
+/** One subject the user still waits to be paid back for (#217), a router link to its page. */
+export const PaybackWaitingLink = createLink(PaybackWaitingItem);

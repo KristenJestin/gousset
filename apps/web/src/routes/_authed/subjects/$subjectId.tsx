@@ -16,6 +16,12 @@ import { Select } from "@gousset/ui/components/select";
 import { SubjectFigures, SubjectFiguresSkeleton } from "@gousset/ui/components/subject-figures";
 import { SubjectMerchants } from "@gousset/ui/components/subject-merchants";
 import {
+  PaybackCandidates,
+  SubjectPayback,
+  SubjectPaybackSkeleton,
+} from "@gousset/ui/components/subject-payback";
+import type { PaybackLineView } from "@gousset/ui/components/subject-payback";
+import {
   SubjectProposals,
   SubjectProposalsSkeleton,
 } from "@gousset/ui/components/subject-proposals";
@@ -35,11 +41,12 @@ import {
   SubjectPeriod,
   attachSubjectExpenses,
   declineSubjectProposals,
+  setSubjectPayback,
 } from "@/functions/subjects";
-import { subjectRefusalMessage } from "@/i18n/messages";
+import { paybackRefusalMessage, subjectRefusalMessage } from "@/i18n/messages";
 import { dayRange, shortDay, shortDays } from "@/lib/account-day";
 import { categoryPath } from "@/lib/categories";
-import { invalidateSubjects, subjectQueries } from "@/queries/subjects";
+import { invalidatePaybacks, invalidateSubjects, subjectQueries } from "@/queries/subjects";
 
 /**
  * A subject's address: the period its page reads, a year (`?period=2025`) or all time
@@ -172,6 +179,7 @@ function SubjectPage() {
   const tags = [
     ...(hasValue ? [m.subjectsHasValue()] : []),
     ...(dates === null ? [] : [dates]),
+    ...(subject.payback === null ? [] : [m.subjectsPaidBack()]),
     ...(subject.archived ? [m.uiSubjectsArchived()] : []),
   ];
 
@@ -222,6 +230,15 @@ function SubjectPage() {
       >
         <Figures subjectId={subjectId} period={period} />
       </DataBlock>
+      {subject.payback === null ? null : (
+        <DataBlock
+          title={m.subjectsBlockPayback()}
+          skeleton={<SubjectPaybackSkeleton rows={subject.payback.lines.length} />}
+          resetKey={subjectId}
+        >
+          <Payback subjectId={subjectId} period={period} />
+        </DataBlock>
+      )}
       {subject.proposals === null ? null : (
         <DataBlock
           title={m.subjectsBlockProposals()}
@@ -313,6 +330,95 @@ function Figures({ subjectId, period }: BlockProps) {
                   : { name: subject.loan.name, balance: subject.loan.balance },
             }
           : undefined
+      }
+      locale={locale}
+    />
+  );
+}
+
+/** A payback line, or one that may be, as the payback block and its sheet show it. */
+function paybackLineOf(
+  line: NonNullable<SubjectDetail["payback"]>["lines"][number],
+  day: (iso: string) => string,
+): PaybackLineView {
+  return {
+    id: line.lineId,
+    day: day(line.bookedOn),
+    label: line.label,
+    account: line.account.name,
+    amount: line.amount,
+  };
+}
+
+/** What a call answers once it failed outright: a refusal the page can say. */
+const failedPayback = { ok: false as const, code: "UNKNOWN" };
+
+/**
+ * A paid-back subject's block (#217): where it stands, what it cost and what came back, its payback
+ * lines, each to detach, and the lines that may pay it back, in a sheet, each attached on the
+ * user's yes. A refusal is said in a toast for a detachment, in the sheet for an attachment.
+ */
+function Payback({ subjectId, period }: BlockProps) {
+  const subject = useSubject(subjectId, period);
+  const queryClient = useQueryClient();
+  const locale = usePageLanguage();
+  const day = shortDays(locale);
+  const [error, setError] = useState<string>();
+
+  if (subject.payback === null) {
+    return null;
+  }
+
+  const { payback } = subject;
+
+  /** Attaches or detaches one line; false when refused, so that its row comes back. */
+  async function settle(lineId: string, remove: boolean): Promise<boolean> {
+    const answer = await setSubjectPayback({ data: { subjectId, lineIds: [lineId], remove } }).then(
+      (done) => done,
+      () => failedPayback,
+    );
+
+    if (!answer.ok) {
+      const message = paybackRefusalMessage(answer.code);
+
+      if (remove) {
+        notify.failed({ description: message });
+      } else {
+        setError(message);
+      }
+
+      return false;
+    }
+
+    setError(undefined);
+    notify.saved({
+      description: remove ? m.subjectsPaybackDetached() : m.subjectsPaybackAttached(),
+    });
+    await invalidatePaybacks(queryClient);
+
+    return true;
+  }
+
+  return (
+    <SubjectPayback
+      from={payback.from}
+      state={payback.state}
+      askedOn={payback.askedOn === null ? undefined : shortDay(payback.askedOn, locale)}
+      spent={payback.spent}
+      paidBack={payback.paidBack}
+      difference={payback.difference}
+      lines={payback.lines.map((line) => paybackLineOf(line, day))}
+      onDetach={(lineId) => settle(lineId, true)}
+      find={
+        subject.archived ? undefined : (
+          <PaybackCandidates
+            from={payback.from}
+            candidates={payback.candidates.map((line) => paybackLineOf(line, day))}
+            onAttach={(lineId) => settle(lineId, false)}
+            error={error}
+            locale={locale}
+          />
+        )
       }
       locale={locale}
     />

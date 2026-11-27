@@ -5,6 +5,7 @@ import type {
   Money,
   MonthFlag,
   MonthReview,
+  Movement,
   SubjectSpending,
   SubscriptionCalendar,
 } from "@gousset/core";
@@ -648,7 +649,7 @@ function Movements({ month }: { month: string }) {
           id: `${movement.day}-${String(index)}`,
           from: movement.from,
           to: movement.to,
-          note: movement.note ?? undefined,
+          note: movementNote(movement),
           amount: movement.amount,
         }))}
         label={m.reviewMovementsTitle()}
@@ -657,6 +658,20 @@ function Movements({ month }: { month: string }) {
       />
     </Folded>
   );
+}
+
+/**
+ * What a movement is, after its accounts: an income's category, the subject a payback pays back
+ * (#217: "pays back Lyon trip", never income), nothing for a transfer.
+ */
+function movementNote(movement: Movement): string | undefined {
+  switch (movement.kind) {
+    case "income":
+    case "transfer":
+      return movement.note ?? undefined;
+    case "payback":
+      return m.reviewMovementPaysBack({ subject: movement.subject?.name ?? movement.note ?? "" });
+  }
 }
 
 /** A flag as the page says it: its key, its icon and its sentence. */

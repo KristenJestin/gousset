@@ -1,11 +1,16 @@
 import { keepPreviousData, queryOptions } from "@tanstack/react-query";
 
-import { getSubject, getSubjectMerchantsPreview, getSubjects } from "@/functions/subjects";
+import {
+  getPaybacksWaiting,
+  getSubject,
+  getSubjectMerchantsPreview,
+  getSubjects,
+} from "@/functions/subjects";
 
 import { subjectKeys } from "./subject-keys";
 
 // Kept in `invalidate`, which loads no server function, so that it can be tested alone.
-export { invalidateSubjects } from "./invalidate";
+export { invalidatePaybacks, invalidateSubjects } from "./invalidate";
 
 /** The queries of the subjects page and of its sheet, for loaders and components alike. */
 export const subjectQueries = {
@@ -33,4 +38,7 @@ export const subjectQueries = {
       enabled: merchantIds.length > 0,
       placeholderData: keepPreviousData,
     }),
+  /** The paid-back subjects the user still waits for (#217), each with how much. */
+  waiting: () =>
+    queryOptions({ queryKey: subjectKeys.waiting(), queryFn: () => getPaybacksWaiting() }),
 };
