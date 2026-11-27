@@ -278,13 +278,15 @@ function placeOf(mapping: ReadonlyArray<CsvField>, field: CsvField): number | nu
 /**
  * The profile of a broker's operations the settings, the mapping and the kind words make (v0.6), or
  * the fields it still lacks: a day and an amount. `referenceUnique`, the user's word that each row's
- * reference is unique, counts only with a reference column mapped.
+ * reference is unique, counts only with a reference column mapped. `labelWithName`: the label is
+ * read from the security's name column when no column of its own holds it (`labelWithNameOf`).
  */
 export function operationsProfileOf(
   settings: CsvFileSettings,
   mapping: ReadonlyArray<CsvField>,
   words: ReadonlyArray<KindWord>,
   referenceUnique = false,
+  labelWithName = false,
 ): { profile: OperationsProfile } | { missing: Array<RequiredField> } {
   const bookedOn = placeOf(mapping, "bookedOn");
   const amount = placeOf(mapping, "amount");
@@ -305,6 +307,8 @@ export function operationsProfileOf(
 
   const { layout: _statementLayout, ...table } = settings;
   const reference = placeOf(mapping, "reference");
+  const securityName = placeOf(mapping, "securityName");
+  const label = placeOf(mapping, "label") ?? (labelWithName ? securityName : null);
 
   const profile: OperationsProfile = {
     version: 2,
@@ -315,13 +319,13 @@ export function operationsProfileOf(
       valueOn: placeOf(mapping, "valueOn"),
       kind: placeOf(mapping, "kind"),
       isin: placeOf(mapping, "isin"),
-      securityName: placeOf(mapping, "securityName"),
+      securityName,
       securityCurrency: placeOf(mapping, "securityCurrency"),
       quantity: placeOf(mapping, "quantity"),
       unitPrice: placeOf(mapping, "unitPrice"),
       fees: placeOf(mapping, "fees"),
       amount,
-      label: placeOf(mapping, "label"),
+      label,
       reference,
       amountCurrency: placeOf(mapping, "currency"),
       feesCurrency: placeOf(mapping, "feesCurrency"),
@@ -365,6 +369,20 @@ export function operationsSettingsOf(profile: OperationsProfile): CsvFileSetting
     dateFormat: profile.dateFormat,
     decimalMark: profile.decimalMark,
   };
+}
+
+/**
+ * Whether a broker's operations profile reads its label from its security's name column, as
+ * Fortuneo's does: the preview shows that column as the name alone, so the profile made from what it
+ * shows is told to keep the label there.
+ */
+export function labelWithNameOf(
+  profile: OperationsProfile,
+  header: ReadonlyArray<string>,
+): boolean {
+  const { places } = operationPlaces(profile, header);
+
+  return places.label !== undefined && places.label === places.securityName;
 }
 
 /** A place found, or `null` for a field the file has no column for. */

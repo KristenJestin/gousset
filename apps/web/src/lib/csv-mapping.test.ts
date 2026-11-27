@@ -5,6 +5,7 @@ import { describe, expect, test } from "vite-plus/test";
 import {
   byHand,
   kindWordsOf,
+  labelWithNameOf,
   mappingOf,
   operationsMappingOf,
   operationsProfileOf,
@@ -319,6 +320,49 @@ describe("a broker's operations as the preview maps their columns", () => {
     const unique = { ...operations, referenceUnique: true };
 
     expect(startedOperations(unique, operationsSettingsOf(operations))).toEqual(unique);
+  });
+
+  test("mapped by hand from a profile whose label is its security's name, keeps that label", () => {
+    // Fortuneo's: the label and the security's name both read the Libellé column.
+    const fortuneo: OperationsProfile = {
+      ...operations,
+      columns: {
+        ...operations.columns,
+        bookedOn: { names: ["Date"] },
+        kind: { names: ["Opération"] },
+        isin: { names: ["Code ISIN"] },
+        securityName: { names: ["Libellé"] },
+        quantity: { names: ["Qté"] },
+        unitPrice: { names: ["Cours"] },
+        fees: null,
+        amount: { names: ["Montant net"] },
+        label: { names: ["Libellé"], optional: true },
+        reference: null,
+      },
+    };
+
+    const header = ["Date", "Opération", "Libellé", "Code ISIN", "Qté", "Cours", "Montant net"];
+    const shown = operationsMappingOf(fortuneo, 7, header);
+
+    // A word the profile does not list, mapped on the screen: the profile is made from what is shown.
+    const made = operationsProfileOf(
+      operationsSettingsOf(fortuneo),
+      shown,
+      [...fortuneo.kinds, { word: "Virement", kind: "deposit" }],
+      false,
+      labelWithNameOf(fortuneo, header),
+    );
+
+    expect("profile" in made ? made.profile.columns : made).toMatchObject({
+      securityName: 3,
+      label: 3,
+    });
+
+    // A profile whose label is a column of its own, or none, does not read the name as its label.
+    expect(labelWithNameOf(operations, [])).toBe(false);
+    expect(
+      labelWithNameOf({ ...operations, columns: { ...operations.columns, label: 9 } }, []),
+    ).toBe(false);
   });
 
   test("names what it still lacks: a day and an amount, no label", () => {

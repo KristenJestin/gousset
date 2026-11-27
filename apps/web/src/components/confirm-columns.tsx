@@ -46,6 +46,7 @@ import {
   DATE_FORMATS,
   dateExample,
   kindWordsOf,
+  labelWithNameOf,
   mappingOf,
   operationsMappingOf,
   operationsProfileOf,
@@ -245,18 +246,29 @@ function useColumns(initialSettings: CsvFileSettings, initialMapping: ReadonlyAr
   const [started, setStarted] = useState<OperationsProfile | null>(null);
   // Whether the user says each row's broker's reference is unique: the import then keys by it.
   const [referenceUnique, setReferenceUnique] = useState(false);
+  // Whether the label is read from the security's name column, as the profile mapped by hand from
+  // says: the preview shows that column as the name alone.
+  const [labelWithName, setLabelWithName] = useState(false);
 
   const draft =
     holds === "statement"
       ? profileOf(settings, mapping)
       : started === null
-        ? operationsProfileOf(settings, mapping, words, referenceUnique)
+        ? operationsProfileOf(settings, mapping, words, referenceUnique, labelWithName)
         : { profile: startedOperations(started, settings) };
 
-  /** Mapped by hand from now on: `shown`, the mapping as the preview shows it, is the user's. */
-  const byHandNow = (shown: ReadonlyArray<CsvField>) => {
+  /**
+   * Mapped by hand from now on: `shown`, the mapping as the preview shows it under the file's
+   * `header`, is the user's.
+   */
+  const byHandNow = (shown: ReadonlyArray<CsvField>, header: ReadonlyArray<string>) => {
     setMapping(shown);
     setSettings(byHand(settings));
+
+    if (started !== null) {
+      setLabelWithName(labelWithNameOf(started, header));
+    }
+
     setStarted(null);
     setChosen(null);
   };
@@ -274,16 +286,23 @@ function useColumns(initialSettings: CsvFileSettings, initialMapping: ReadonlyAr
     shownMapping: (table: Table): ReadonlyArray<CsvField> =>
       started === null ? mapping : operationsMappingOf(started, table.width, table.header),
     byHandNow,
-    changeHolds: (next: Holds, shown: ReadonlyArray<CsvField>) => {
+    changeHolds: (next: Holds, shown: ReadonlyArray<CsvField>, header: ReadonlyArray<string>) => {
       const offered = OFFERED_SETS[next];
 
       setHolds(next);
       // The fields both read (the days, the label, the amount) stay where they were.
-      byHandNow(shown.map((field) => (offered.has(field) ? field : "ignored")));
+      byHandNow(
+        shown.map((field) => (offered.has(field) ? field : "ignored")),
+        header,
+      );
     },
-    changeWords: (next: ReadonlyArray<KindWord>, shown: ReadonlyArray<CsvField>) => {
+    changeWords: (
+      next: ReadonlyArray<KindWord>,
+      shown: ReadonlyArray<CsvField>,
+      header: ReadonlyArray<string>,
+    ) => {
       setWords(next);
-      byHandNow(shown);
+      byHandNow(shown, header);
     },
     changeSettings: (form: CsvSettingsForm) => {
       setSettings(withSettings(settings, form));
@@ -310,6 +329,7 @@ function useColumns(initialSettings: CsvFileSettings, initialMapping: ReadonlyAr
         setSettings(settingsOf(definition));
         setMapping(mappingOf(definition, width));
         setStarted(null);
+        setLabelWithName(false);
       }
 
       setChosen(choiceOf(entry));
@@ -438,7 +458,11 @@ function ProfileChoices({
           { value: "operations", label: m.importCsvHoldsOperations() },
         ]}
         onValueChange={(value) =>
-          columns.changeHolds(value === "operations" ? "operations" : "statement", shown)
+          columns.changeHolds(
+            value === "operations" ? "operations" : "statement",
+            shown,
+            table.header,
+          )
         }
       />
       <Select
@@ -457,7 +481,7 @@ function ProfileChoices({
           const entry = listed.find((each) => valueOf(choiceOf(each)) === value);
 
           if (entry === undefined) {
-            columns.byHandNow(shown);
+            columns.byHandNow(shown, table.header);
           } else {
             columns.startFrom(entry, table.width);
           }
@@ -520,6 +544,7 @@ function KindWordsList({
             each.word === word ? { word, kind: KINDS.find((one) => one === kind) ?? null } : each,
           ),
           shown,
+          table.header,
         )
       }
       chooseLabel={(word) => m.importCsvKindChoose({ word })}
@@ -644,7 +669,9 @@ function ColumnsPreview({
             fields={holds === "operations" ? operationFieldNames() : csvFieldNames()}
             offered={OFFERED[holds]}
             mapping={shown}
-            onMappingChange={(column, field) => columns.byHandNow(remap(shown, column, field))}
+            onMappingChange={(column, field) =>
+              columns.byHandNow(remap(shown, column, field), table.header)
+            }
             chooseLabel={(column) => m.importCsvColumnHolds({ column })}
           />
         )
