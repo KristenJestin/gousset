@@ -1,4 +1,4 @@
-import type { RuleDetail } from "@gousset/core";
+import type { RuleDetail, RuleSubject } from "@gousset/core";
 import { MAX_CONDITIONS, MAX_LABEL_TEXT } from "@gousset/core/rule-values";
 import { m } from "@gousset/i18n/messages";
 import { RuleEditor } from "@gousset/ui/components/rule-editor";
@@ -58,6 +58,8 @@ export type RuleSheetProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   accounts: ReadonlyArray<RuleAccountName>;
+  /** Every subject of the user's, in tree order: the open ones are offered. */
+  subjects: ReadonlyArray<RuleSubject>;
   /** The user's currency: how many decimals an amount is typed with. */
   currency: string;
   /** A new rule was applied to the past: its job, which the page follows once the sheet closes. */
@@ -93,6 +95,7 @@ function RuleSheetEditor({
   open,
   onOpenChange,
   accounts,
+  subjects,
   currency,
   onApplied,
 }: RuleSheetProps & { rule: RuleDetail | null }) {
@@ -119,13 +122,20 @@ function RuleSheetEditor({
 
   const reach = reachOf(rule, edited, reachFor, preview.data);
 
-  // A payment intermediary is never who was paid (#30): none is offered. The rule's merchant stays
-  // offered when it is past the picker's first names, or was marked an intermediary since.
-  const own = rule?.merchant ?? null;
-  const payees = merchants.filter((choice) => !choice.intermediary);
+  // A payment intermediary is never who was paid (#30), nor a line's merchant: none is offered. The
+  // rule's merchant and those its conditions name stay offered when they are past the picker's
+  // first names, or were marked intermediaries since.
+  const kept = [rule?.merchant ?? null, ...(rule?.merchants ?? [])];
 
-  const offered =
-    own === null || payees.some(({ id }) => id === own.id) ? payees : [...payees, own];
+  const offered = merchants.flatMap((choice) =>
+    choice.intermediary ? [] : [{ id: choice.id, name: choice.name }],
+  );
+
+  for (const each of kept) {
+    if (each !== null && !offered.some(({ id }) => id === each.id)) {
+      offered.push(each);
+    }
+  }
 
   const close = () => onOpenChange(false);
 
@@ -138,7 +148,11 @@ function RuleSheetEditor({
       return;
     }
 
-    const sets = { merchantId: draft.merchantId, categoryId: draft.categoryId };
+    const sets = {
+      merchantId: draft.merchantId,
+      categoryId: draft.categoryId,
+      subjectId: draft.subjectId,
+    };
 
     const answer = await answerOf(
       rule === null
@@ -213,6 +227,11 @@ function RuleSheetEditor({
       }
       conditions={rule === null ? null : drawnConditions(rule.conditions)}
       merchantId={rule?.merchant?.id ?? null}
+      subject={
+        rule?.subject === null || rule === null
+          ? null
+          : { id: rule.subject.id, name: rule.subject.path, archived: rule.subject.archived }
+      }
       category={
         rule === null || rule.category === null
           ? null
@@ -229,6 +248,10 @@ function RuleSheetEditor({
       accounts={accounts}
       currency={currency}
       merchants={offered}
+      // An archived subject gets no expense: none is offered, but a rule's own stays shown.
+      subjects={subjects.flatMap((each) =>
+        each.archived ? [] : [{ id: each.id, name: each.path }],
+      )}
       categories={{
         expense: tree === undefined ? [] : choicesOf(tree, "expense"),
         income: tree === undefined ? [] : choicesOf(tree, "income"),
@@ -242,7 +265,12 @@ function RuleSheetEditor({
         typing.maybeExecute(
           conditions === null
             ? null
-            : { conditions, merchantId: draft.merchantId, categoryId: draft.categoryId },
+            : {
+                conditions,
+                merchantId: draft.merchantId,
+                categoryId: draft.categoryId,
+                subjectId: draft.subjectId,
+              },
         );
       }}
       onSave={save}

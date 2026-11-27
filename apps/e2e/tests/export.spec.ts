@@ -96,8 +96,10 @@ test("an export of the made-up data holds every row", async ({ app, user, page }
       const file = exported?.file ?? table.name;
       const rows = archive.rows(file);
 
-      expect(rows.map((row) => row.id).toSorted(), table.name).toEqual([...keys].toSorted());
-      expect(new Set(rows.map((row) => row.user_id)), table.name).toEqual(new Set([owner]));
+      // By the column that names a row: its id, or a key of its own for a table of links (#37).
+      expect(archive.texts(file, table.key).toSorted(), table.name).toEqual([...keys].toSorted());
+      expect(rows, table.name).toHaveLength(keys.length);
+      expect(new Set(archive.texts(file, "user_id")), table.name).toEqual(new Set([owner]));
       expect(
         archive.manifest.files.find((each) => each.path === `${file}.json`)?.rows,
         table.name,

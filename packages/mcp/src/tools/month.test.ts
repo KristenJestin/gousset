@@ -83,6 +83,8 @@ type Month = {
   firstDay: string | null;
   benefitLines: Array<MonthRows["benefitLines"][number]>;
   reach: Array<MonthRows["reach"][number]>;
+  subjects: Array<MonthRows["subjects"][number]>;
+  entrySubjects: Array<MonthRows["entrySubjects"][number]>;
   charges: Array<Charge>;
 };
 
@@ -96,6 +98,8 @@ const empty = (): Month => ({
   firstDay: null,
   benefitLines: [],
   reach: [],
+  subjects: [],
+  entrySubjects: [],
   charges: [],
 });
 
@@ -503,6 +507,63 @@ describe("month spending", () => {
     expect(text).toContain(
       "- no merchant: spent 15.00 EUR; average 0.00 EUR; previous month 0.00 EUR (expenses naming several merchants, or none)",
     );
+  });
+
+  test("by subject: each by its path, a parent counting an expense once, saying the rows never add up", async () => {
+    const { rows } = ada();
+    const house = { id: memoryId(), parentId: null, name: "House", archived: false };
+    const shed = { id: memoryId(), parentId: house.id, name: "Garden shed", archived: false };
+    const van = { id: memoryId(), parentId: null, name: "Van", archived: true };
+
+    rows.subjects.push(house, shed, van);
+
+    const entryOf = (label: string) =>
+      rows.parts.find((part) => part.label === label && part.happenedOn === "2026-10-03")
+        ?.entryId ?? "";
+
+    const groceries = entryOf("GREENMARKET");
+    const leisure = rows.parts.find((part) => part.label === "PAYPAL")?.entryId ?? "";
+
+    // The groceries on the house and on its shed count once in the house.
+    rows.entrySubjects.push(
+      { entryId: groceries, subjectId: house.id },
+      { entryId: groceries, subjectId: shed.id },
+      { entryId: leisure, subjectId: van.id },
+    );
+
+    const { text, isError } = await month(
+      { action: "spending", by: "subject", month: "2026-10" },
+      { month: rows },
+    );
+
+    expect(isError, text).toBe(false);
+    expect(text).toContain(
+      "Where the money went in 2026-10, by subject, in EUR, each at its net cost",
+    );
+    expect(text).toContain("these rows never add up, nor make the month's spending.");
+    expect(text).toContain("\n- House: spent 240.00 EUR;");
+    expect(text).toContain("\n- House > Garden shed: spent 240.00 EUR;");
+    expect(text).toContain("\n- Van (archived): spent 90.00 EUR;");
+    expect(text).not.toMatch(/[\da-f]{8}-[\da-f]{4}-/);
+    expect(text).toContain(
+      'month {"action":"days","by":"subject","name":"House","month":"2026-10"}',
+    );
+
+    const days = await month(
+      { action: "days", by: "subject", month: "2026-10", name: "house > garden shed" },
+      { month: rows },
+    );
+
+    expect(days.isError, days.text).toBe(false);
+    expect(days.text).toContain("House > Garden shed (subject) in 2026-10, in EUR");
+    expect(days.text).toContain("2026-10-03: 240.00 EUR");
+
+    const none = await month(
+      { action: "spending", by: "subject", month: "2026-10" },
+      { month: ada().rows },
+    );
+
+    expect(none.text).toContain("No expense of the month is attached to a subject.");
   });
 
   test("a long list of merchants is cut, saying what the rest holds and how to read it", async () => {

@@ -19,14 +19,15 @@ Gousset's words, used in every result:
 - benchmark: a suggested monthly mark for a category, not a budget.
 
 Which tool answers what:
-- \`month\`: the monthly review of the user's own data: summary (received, spent, set aside, left, movements, lines to review, imports, flags), spending by category or merchant, a row's days, subscriptions and benchmarks. Use it for "how did my month go?" or "am I spending more than usual?".
+- \`month\`: the monthly review of the user's own data: summary (received, spent, set aside, left, movements, lines to review, imports, flags), spending by category, merchant or subject, a row's days, subscriptions and benchmarks. Use it for "how did my month go?" or "am I spending more than usual?".
 - \`imports\`: imports a bank statement file into an account without duplicates, and lists, follows and undoes imports. Use it when the user gives a statement or asks what was imported.
 - \`accounts\`: the user's accounts by group (available, restricted, savings and investments, owed) with balances and totals per currency, and one account's last lines and balance check against its statement; creates, edits, closes and reopens accounts, notes the balance of one kept by its balance and sets a benefit credit's expiry. Use it for "how much do I have?", "does my balance match my bank's?" or to set accounts up before importing statements.
 - \`data\`: what an export of all the user's data holds, and where to download it. Use it to export or back up their data.
-- \`lines\`: searches every line by text, account, period, amount or to review, and shows one with its category, the import it came from and its transfer; classifies a line in a category or as a transfer, or undoes one; links, splits. Use it for "is this a transfer to my savings?".
+- \`lines\`: searches every line by text, account, subject, period, amount or to review, and shows one with its category, the import it came from and its transfer; classifies a line in a category or as a transfer, or undoes one; links, splits. Use it for "is this a transfer to my savings?".
 - \`merchants\`: lists, searches and shows the merchants with the cleaned labels that name them; renames one, merges two, splits one by moving a cleaned label to another merchant, or sets the category its entries go in by default. Use it for "which shop is this?" or to tidy merchants up.
 - \`categories\`: the expense and income categories on two levels, with their benchmarks and six-month averages; creates, renames, moves, merges and archives them. Name a category as listed, "Parent > Child" for a child.
 - \`rules\`: rules that classify lines by themselves; creates, edits, turns off, applies one to past lines. After a \`lines\` correction, propose the rule it writes.
 - \`review\`: what imports left undecided, line by line, each proposal to accept or correct. Any other change to a line: \`lines\`.
+- \`subjects\`: what the money was spent for (Van, House > Garden shed, a trip), nested: each subject's cost this year, per month, by category, with its value, loan and accounts; creates, edits and archives them, attaches expenses or takes them off. A dated subject proposes the expenses of its period: attach one only once the user says yes. Use it for "what did the van cost this year?".
 
 Results are text, with names rather than ids. A long result comes in parts, its last line the next call to make. An error says what to do and gives a valid call. A write needs a connection allowed to write; a refusal says how to get it.`;

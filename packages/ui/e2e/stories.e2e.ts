@@ -172,6 +172,36 @@ const SHOTS: ReadonlyArray<Shot> = [
   // A works council refund and the expense it funds, each on its side's detail (#29).
   { id: "operations-linefunding--funds" },
   { id: "operations-linefunding--funded-by" },
+  // The subjects (#37): their tree, a subject's figures, its proposals, what attaches it, and its
+  // sheet, on a desktop and a phone.
+  { id: "subjects-subjecttree--default" },
+  { id: "subjects-subjecttree--phone", width: 390 },
+  { id: "subjects-subjectfigures--with-loan" },
+  { id: "subjects-subjectproposals--default" },
+  { id: "subjects-subjectmerchants--with-other-rules" },
+  { id: "subjects-subjecteditor--default" },
+  { id: "subjects-subjecteditor--phone", width: 390 },
+  // Where the subjects meet the money (#37): a line's chips and "+ Add", the operations' column and
+  // filter, an account's lines, a split by subject and the review's "by subject".
+  { id: "subjects-subjectchips--in-detail" },
+  { id: "operations-linedetail--with-subjects" },
+  { id: "operations-operationslist--with-subjects" },
+  { id: "operations-operationsfilters--with-subjects" },
+  {
+    id: "operations-operationsfilters--phone-with-subjects",
+    width: 390,
+    open: "click",
+    trigger: "Filters",
+    name: "operations-operationsfilters--phone-with-subjects-sheet",
+  },
+  { id: "accounts-accountlines--with-subjects" },
+  { id: "operations-lineexpense--split-by-subject" },
+  {
+    id: "operations-lineexpense--split-sheet-by-subject",
+    open: "click",
+    trigger: "Split",
+  },
+  { id: "money-breakdown--subjects" },
   { id: "rules-ruleslist--default" },
   { id: "rules-ruleeditor--default" },
   { id: "rules-ruleproposal--default" },

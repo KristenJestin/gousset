@@ -6,6 +6,7 @@ import { useLocation, useNavigate } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 
 import { authClient } from "@/lib/auth-client";
+import { screenOf } from "@/lib/screen";
 import { useShowShortcuts } from "@/shortcuts";
 
 import { AppNavLink, AppTabLink } from "./app-link";
@@ -26,7 +27,7 @@ type FrameProps = {
  */
 export function Frame({ user, children }: FrameProps) {
   const navigate = useNavigate();
-  const pathname = useLocation({ select: (location) => location.pathname });
+  const screen = useLocation({ select: (location) => screenOf(location.pathname) });
   const showShortcuts = useShowShortcuts();
 
   async function signOut() {
@@ -94,7 +95,7 @@ export function Frame({ user, children }: FrameProps) {
         </>
       }
     >
-      <ScreenTransition id={pathname}>{children}</ScreenTransition>
+      <ScreenTransition id={screen}>{children}</ScreenTransition>
     </AppShell>
   );
 }

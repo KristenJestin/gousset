@@ -44,7 +44,10 @@ const ROWS: ReadonlyArray<AccountLineRow> = [
 /**
  * An account's lines (docs/wireframes, screen 7, block 5): day, label, amount and the balance once
  * the line is counted, newest first. A transfer is greyed, as the operations screen shows it.
- * `onShowOlder` adds a button; without it, every line is already shown.
+ * `onShowOlder` adds a button; without it, every line is already shown. With `withSubjects`, what
+ * each expense is for, as chips (#37), from a 576 px wide list.
+ *
+ * Motion: a subject's chip fades in and out in 150 ms, cut under reduced motion.
  *
  * Loading: `AccountLinesSkeleton`, the same number of rows.
  */
@@ -61,6 +64,26 @@ type Story = StoryObj<typeof meta>;
 export const Default: Story = {};
 
 export const WithShowOlder: Story = { args: { onShowOlder: () => undefined } };
+
+/** Each line's subjects, by its place: two chips at most, "+N" for the others. */
+const LINE_SUBJECTS = [
+  [],
+  [{ id: "house", name: "House" }],
+  [],
+  [
+    { id: "van", name: "Van" },
+    { id: "alps", name: "Alps 2026" },
+    { id: "dog", name: "Dog" },
+  ],
+];
+
+/** What each line's expense is for: a column of subject chips (#37), none on most lines. */
+export const WithSubjects: Story = {
+  args: {
+    withSubjects: true,
+    rows: ROWS.map((row, index) => ({ ...row, subjects: LINE_SUBJECTS[index] ?? [] })),
+  },
+};
 
 export const ShowOlderLoading: Story = {
   args: { onShowOlder: () => undefined, loadingOlder: true },

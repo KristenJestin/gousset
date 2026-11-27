@@ -4,6 +4,7 @@ import type { Effect } from "effect";
 
 import type { LineCategory } from "./category-store";
 import type { ImportFormat } from "./imports/summary";
+import type { SubjectName } from "./subjects/counting";
 
 /**
  * The bounds of a line's absolute amount, in minor units of one currency, both included: null for
@@ -18,6 +19,11 @@ export type LineQuery = {
   readonly text: string | null;
   /** Null for every account. */
   readonly accountId: string | null;
+  /**
+   * The lines of an expense attached to this subject or to any of its descendants (#37); null for
+   * any line. An id that names none of the user's subjects gives no line.
+   */
+  readonly subjectId: string | null;
   /** Booked on or after this day; null for no start. */
   readonly from: string | null;
   /** Booked on or before this day: never after today. */
@@ -60,6 +66,8 @@ export type FoundLine = {
   readonly category: LineCategory | null;
   /** The movement a noted balance makes (#31): it has no label, the interface names it. */
   readonly fromBalance: boolean;
+  /** Its entries' subjects (#37), each once, by name: none for most lines. */
+  readonly subjects: ReadonlyArray<SubjectName>;
 };
 
 /** A line with all that its detail shows. */

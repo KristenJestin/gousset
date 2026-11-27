@@ -2,7 +2,8 @@ import type { EntryKind } from "../category-store";
 
 // What a rule makes of an entry (#25), apart from the database so that it is tested alone: the
 // category and merchant it gives, or nothing when it does not apply (docs/data-model.md, v0.3,
-// `rule`).
+// `rule`); and apart, the subject it attaches (#37), which follows no "first rule wins": every rule
+// a line meets attaches its subject.
 
 /** An entry a rule may classify: one whole line's, as it is now. */
 export type RuleEntry = {
@@ -77,9 +78,71 @@ export const changes = (target: RuleEntry, ruleId: string, wanted: RuleTarget) =
     : differs || target.classifiedBy !== "rule" || target.ruleId !== ruleId;
 };
 
+/** An entry as the subject part of a rule reads it. */
+export type SubjectTarget = {
+  readonly kind: EntryKind;
+  /** The subjects it is attached to already. */
+  readonly attached: ReadonlySet<string>;
+  /** The subjects the user declined it for (`subject_entry_refused`). */
+  readonly refused: ReadonlySet<string>;
+};
+
+/**
+ * What a rule's subject does to an entry: `none` when it does not apply (no subject, an income, a
+ * subject archived or that the user declined the entry for), `kept` when the entry has it already,
+ * `attaches` otherwise. `open` holds the subjects not archived.
+ */
+export function subjectPart(
+  subjectId: string | null,
+  target: SubjectTarget,
+  open: ReadonlySet<string>,
+): "none" | "kept" | "attaches" {
+  if (
+    subjectId === null ||
+    target.kind !== "expense" ||
+    !open.has(subjectId) ||
+    target.refused.has(subjectId)
+  ) {
+    return "none";
+  }
+
+  return target.attached.has(subjectId) ? "kept" : "attaches";
+}
+
+/**
+ * The subjects `rules` attach to an entry, whatever the first-applying part does: each rule the
+ * entry's line meets whose subject applies and is not the entry's yet, a subject once, by the first
+ * of them in the rules' order. Attaching never takes a subject off.
+ */
+export function subjectsAttached<Rule extends { readonly attachSubjectId: string | null }>(
+  rules: ReadonlyArray<Rule>,
+  meets: (rule: Rule) => boolean,
+  target: SubjectTarget,
+  open: ReadonlySet<string>,
+): ReadonlyArray<{ readonly rule: Rule; readonly subjectId: string }> {
+  const chosen: Array<{ readonly rule: Rule; readonly subjectId: string }> = [];
+  const taken = new Set(target.attached);
+
+  for (const rule of rules) {
+    const subjectId = rule.attachSubjectId;
+
+    if (
+      subjectId !== null &&
+      !taken.has(subjectId) &&
+      subjectPart(subjectId, target, open) === "attaches" &&
+      meets(rule)
+    ) {
+      taken.add(subjectId);
+      chosen.push({ rule, subjectId });
+    }
+  }
+
+  return chosen;
+}
+
 /**
  * The first of `rules`, in their order, that the entry's line meets and that applies to the entry,
- * with what it makes of it; null when none does.
+ * with what it makes of it; null when none does. A rule that sets only a subject is no candidate.
  */
 export function firstApplying<Rule extends RuleSets>(
   rules: ReadonlyArray<Rule>,

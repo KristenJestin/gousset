@@ -3,8 +3,9 @@ import { useUiMessages } from "../hooks/use-ui-messages";
 import { formatCount } from "../lib/count";
 import { focusRing } from "../lib/form-classes";
 import type { RuleConditions } from "../lib/rule-fields";
+import type { UiMessages } from "../lib/messages";
 import { conditionsSentence } from "../lib/rule-sentence";
-import type { RuleAccountName } from "../lib/rule-sentence";
+import type { RuleAccountName, RuleMerchantName } from "../lib/rule-sentence";
 import { staggerDelay } from "../lib/stagger";
 import { cn } from "../lib/utils";
 import { Chip } from "./chip";
@@ -24,6 +25,10 @@ export type RulesListRow = {
   category: string | null;
   /** Its category is archived: it classifies nothing new, and says so. */
   categoryArchived?: boolean;
+  /** The subject it attaches, by its path ("House > Garden shed"); none for most rules. */
+  subject?: string | null;
+  /** Its subject is archived: it attaches it to nothing new, and says so. */
+  subjectArchived?: boolean;
   /** Off: kept in its place, classifying nothing new. */
   enabled: boolean;
   /** How many lines it classified. */
@@ -41,6 +46,8 @@ export type RulesListProps = {
   rules: ReadonlyArray<RulesListRow>;
   /** The accounts a condition may name, as the page calls them. */
   accounts: ReadonlyArray<RuleAccountName>;
+  /** The merchants the conditions name, by name. */
+  merchants?: ReadonlyArray<RuleMerchantName>;
   /** Opens a rule, to edit it. */
   onOpen: (id: string) => void;
   /** Moves a rule to `place` (from 1); a promise keeps its button busy until it settles. */
@@ -71,15 +78,19 @@ function keepFocus(row: HTMLLIElement | null) {
   }
 }
 
-/** What a rule sets, worded: "Greenmarket · Groceries". */
-function thenOf(row: RulesListRow): string {
-  return [row.merchant, row.category].filter((each) => each !== null).join(" · ");
+/** What a rule sets, worded: "Greenmarket · Groceries", "Fuelstop · for Van". */
+function thenOf(row: RulesListRow, messages: UiMessages["rules"]): string {
+  const subject = row.subject ?? null;
+
+  return [row.merchant, row.category, subject === null ? null : messages.forSubject(subject)]
+    .filter((each) => each !== null)
+    .join(" · ");
 }
 
 /**
  * The user's rules in the order they are tried (the first that applies wins): each as a sentence,
- * "if" its conditions "then" its merchant and category, with how many lines it classified. A rule
- * turned off is drawn faded with "Off"; one whose category was archived says so. Pressing a rule
+ * "if" its conditions "then" its merchant, category and subject, with how many lines it changed. A
+ * rule turned off is drawn faded with "Off"; one whose category or subject was archived says so. Pressing a rule
  * opens it (`onOpen`); its arrows move it one place up or down (`onMove`).
  *
  * Motion: rows fade and slide up on first paint (200 ms, ease-out, staggered); a rule just moved
@@ -89,12 +100,14 @@ export function RulesList({
   label,
   rules,
   accounts,
+  merchants = [],
   onOpen,
   onMove,
   openId,
   locale,
 }: RulesListProps) {
-  const messages = useUiMessages().rules;
+  const ui = useUiMessages();
+  const messages = ui.rules;
   const pageLocale = usePageLanguage();
   const writtenIn = locale ?? pageLocale;
 
@@ -112,8 +125,15 @@ export function RulesList({
       <ol aria-label={label} className="flex flex-col divide-y">
         {rules.map((row, index) => {
           const place = index + 1;
-          const sentence = conditionsSentence(messages, row.conditions, accounts, writtenIn);
-          const then = thenOf(row);
+
+          const sentence = conditionsSentence(
+            messages,
+            row.conditions,
+            { accounts, merchants },
+            writtenIn,
+          );
+
+          const then = thenOf(row, messages);
 
           return (
             <li
@@ -162,7 +182,9 @@ export function RulesList({
                 >
                   {then}
                 </span>
+                {/* Each its own word: "archivée" agrees with a category, "archivé" with a subject. */}
                 {row.categoryArchived === true ? <Chip>{messages.archived}</Chip> : null}
+                {row.subjectArchived === true ? <Chip>{ui.subjects.archived}</Chip> : null}
               </span>
               <span className={cn(COLUMN.used, "text-sm text-muted-foreground")}>
                 {messages.used(row.used, formatCount(row.used, writtenIn))}

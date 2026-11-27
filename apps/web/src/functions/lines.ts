@@ -15,7 +15,7 @@ import {
   unlinkLine as unlinkCoreLine,
   unpairLine as unpairCoreLine,
 } from "@gousset/core";
-import type { FundRefused, LinkRefused, TransferRefused } from "@gousset/core";
+import type { FundRefused, LinkRefused, SplitRefused, TransferRefused } from "@gousset/core";
 import { AccountId } from "@gousset/core/account-values";
 import { MAX_FILTER_TEXT } from "@gousset/ui/lib/operations";
 import { createServerFn } from "@tanstack/react-start";
@@ -63,6 +63,8 @@ const Words = Schema.String.check(Schema.isMaxLength(MAX_FILTER_TEXT));
 export const LineSearchInput = Schema.Struct({
   text: Schema.optional(Words),
   accountId: Schema.optional(AccountId),
+  // One the user does not have gives no line (#37).
+  subjectId: Schema.optional(Schema.String.check(Schema.isMaxLength(100))),
   from: Schema.optional(Words),
   to: Schema.optional(Words),
   amountMin: Schema.optional(Words),
@@ -255,8 +257,9 @@ export const unpairLine = createServerFn({ method: "POST" })
  * Why linking, unlinking or splitting a line was refused, as a code for the interface to translate:
  * the line is gone; a side of a transfer, a split line, a line of another expense, a line in it
  * already, a refund above the net cost or another currency (`LINK_*`); shares that do not make the
- * line, in categories of its kind in use (`SPLIT_REFUSED`); a line that is its expense alone
- * (`NOT_LINKED`).
+ * line, in categories of its kind in use (`SPLIT_REFUSED`); a share's subject gone or archived, or
+ * subjects on a share of money coming in (`SPLIT_SUBJECT_*`, #37); a line that is its expense
+ * alone (`NOT_LINKED`). A refusal about one share names it (`index`, from 0).
  */
 export type ExpenseRefusalCode =
   | "LINE_NOT_FOUND"
@@ -268,9 +271,30 @@ export type ExpenseRefusalCode =
   | "LINK_CURRENCY"
   | "LINK_OTHER"
   | "SPLIT_REFUSED"
+  | "SPLIT_SUBJECT_UNKNOWN"
+  | "SPLIT_SUBJECT_ARCHIVED"
+  | "SPLIT_SUBJECT_INCOME"
   | "NOT_LINKED";
 
-const expenseRefused = (code: ExpenseRefusalCode) => Effect.succeed({ ok: false as const, code });
+const expenseRefused = (code: ExpenseRefusalCode, index: number | null = null) =>
+  Effect.succeed({ ok: false as const, code, index });
+
+/** A refusal to split, by its reason: a share's subject has its own words (#37). */
+const SPLIT_CODES = {
+  not_counted: "SPLIT_REFUSED",
+  zero_amount: "SPLIT_REFUSED",
+  transfer: "SPLIT_REFUSED",
+  linked: "SPLIT_REFUSED",
+  funded: "SPLIT_REFUSED",
+  count: "SPLIT_REFUSED",
+  sum: "SPLIT_REFUSED",
+  amount: "SPLIT_REFUSED",
+  kind: "SPLIT_REFUSED",
+  archived: "SPLIT_REFUSED",
+  subject_unknown: "SPLIT_SUBJECT_UNKNOWN",
+  subject_archived: "SPLIT_SUBJECT_ARCHIVED",
+  subject_income: "SPLIT_SUBJECT_INCOME",
+} as const satisfies { readonly [Reason in SplitRefused["reason"]]: ExpenseRefusalCode };
 
 const LINK_CODES = {
   same_line: "LINK_OTHER",
@@ -323,9 +347,13 @@ export const unlinkLine = createServerFn({ method: "POST" })
 /** A share's amount, typed in major units of the line's currency ("30", "12.50"). */
 const ShareAmount = Schema.String.check(Schema.isMaxLength(32));
 
+/** The most subjects a share names: a user has 200 at most. */
+const MAX_SHARE_SUBJECTS = 200;
+
 /**
  * Splits the line across categories, one share each, as the user's choice; the shares add up to the
- * line. One share puts it back in one category. Refused with a code.
+ * line. One share puts it back in one category. Each share's `subjectIds` (#37), given, are exactly
+ * its subjects; left out, it keeps the line's. Refused with a code, and the share it is about.
  */
 export const splitLine = createServerFn({ method: "POST" })
   .middleware([signedIn, slowedInDevelopment])
@@ -333,9 +361,17 @@ export const splitLine = createServerFn({ method: "POST" })
     Schema.toStandardSchemaV1(
       Schema.Struct({
         lineId: LineId,
-        shares: Schema.Array(Schema.Struct({ categoryId: CategoryId, amount: ShareAmount })).check(
-          Schema.isMaxLength(MAX_SHARES),
-        ),
+        shares: Schema.Array(
+          Schema.Struct({
+            categoryId: CategoryId,
+            amount: ShareAmount,
+            subjectIds: Schema.optional(
+              Schema.Array(Schema.String.check(Schema.isMaxLength(100))).check(
+                Schema.isMaxLength(MAX_SHARE_SUBJECTS),
+              ),
+            ),
+          }),
+        ).check(Schema.isMaxLength(MAX_SHARES)),
       }),
     ),
   )
@@ -345,7 +381,8 @@ export const splitLine = createServerFn({ method: "POST" })
         Effect.map((expenses) => ({ ok: true as const, expenses })),
         Effect.catchTags({
           LineNotFound: () => expenseRefused("LINE_NOT_FOUND"),
-          SplitRefused: () => expenseRefused("SPLIT_REFUSED"),
+          SplitRefused: (refusal) =>
+            expenseRefused(SPLIT_CODES[refusal.reason], refusal.index ?? null),
           CategoryNotFound: () => expenseRefused("SPLIT_REFUSED"),
         }),
       ),

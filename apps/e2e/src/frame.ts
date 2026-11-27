@@ -75,6 +75,20 @@ export async function detailAtRest(detail: Locator): Promise<void> {
     .toBe(true);
 }
 
+/**
+ * Waits until no sheet or dialog is left on the page, its exit over, its backdrop gone with it.
+ * While one leaves (200 ms), ui-sdk drops a press over its backdrop on purpose, though the page
+ * under it is no longer inert (`plan` in `@ui-sdk/core`'s `foundation/platform/layers.js`: an
+ * exiting modal layer consumes a press inside its backdrop's box), so that the second click of a
+ * double-click there reaches nothing: a click on the page waits for this. Found by its attribute,
+ * not its role: a leaving one is out of the accessibility tree.
+ */
+export async function sheetGone(page: Page): Promise<void> {
+  await expect(
+    page.locator('[role="dialog"]:not([hidden]), [role="alertdialog"]:not([hidden])'),
+  ).toHaveCount(0);
+}
+
 /** What the eye gets of a text: whether it is drawn on top, and its contrast with what is under. */
 export type TextSight = { onTop: boolean; contrast: number };
 

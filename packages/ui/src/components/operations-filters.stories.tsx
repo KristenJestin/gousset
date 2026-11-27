@@ -3,15 +3,23 @@ import { useState } from "react";
 
 import { InFrench } from "../stories/in-french";
 import { ACCOUNTS } from "../stories/made-up";
+import { RULE_SUBJECTS } from "../stories/made-up-rules";
 import { NO_OPERATIONS_FILTERS } from "../lib/operations";
 import type { OperationsFilterValues } from "../lib/operations";
 import { ClearFilters, OperationsFilters } from "./operations-filters";
 
 const ACCOUNT_CHOICES = ACCOUNTS.map((account) => ({ value: account.id, label: account.name }));
 
+/** The user's subjects, in tree order, by their paths (#37). */
+const SUBJECT_CHOICES = RULE_SUBJECTS.map((subject) => ({
+  value: subject.id,
+  label: subject.name,
+}));
+
 const SET: OperationsFilterValues = {
   search: "greenmarket",
   accountId: "current",
+  subjectId: null,
   from: "2026-10-01",
   to: "2026-10-31",
   min: "20",
@@ -20,7 +28,13 @@ const SET: OperationsFilterValues = {
 };
 
 /** The bar holding its values, as the page would in its URL, and "Clear filters" under it. */
-function Controlled({ start }: { start: OperationsFilterValues }) {
+function Controlled({
+  start,
+  subjects,
+}: {
+  start: OperationsFilterValues;
+  subjects?: ReadonlyArray<{ value: string; label: string }>;
+}) {
   const [values, setValues] = useState(start);
 
   return (
@@ -29,6 +43,7 @@ function Controlled({ start }: { start: OperationsFilterValues }) {
         values={values}
         onChange={setValues}
         accounts={ACCOUNT_CHOICES}
+        subjects={subjects}
         count={1284}
       />
       <div className="flex h-8">
@@ -40,8 +55,8 @@ function Controlled({ start }: { start: OperationsFilterValues }) {
 
 /**
  * The operations' filters (screen 2, block 1), controlled: words to search in the labels, the
- * account ("All accounts" first), the period (each bound clearable), the amount's bounds as typed
- * decimals (the page reads them, and gives an error to show when it cannot) and "To review only".
+ * account ("All accounts" first), the subject once the user has one ("All subjects" first, each by
+ * its path, #37), the period (each bound clearable), the amount's bounds as typed decimals (the page reads them, and gives an error to show when it cannot) and "To review only".
  * Each change goes to `onChange` at once: the page debounces the search before asking the server.
  * `ClearFilters` ("Clear filters", once any is set) goes on the count's line.
  *
@@ -75,6 +90,22 @@ export const Default: Story = {};
 
 /** Every filter set, "To review only" pressed, and "Clear filters" to undo them. */
 export const Set: Story = { args: { values: SET } };
+
+/**
+ * With subjects (#37): "Subject" beside the account, both narrower so that the search keeps its
+ * room; a parent takes its children's expenses (the page's).
+ */
+export const WithSubjects: Story = {
+  args: { values: { ...SET, subjectId: "garden-shed" } },
+  render: (args) => <Controlled start={args.values} subjects={SUBJECT_CHOICES} />,
+};
+
+/** A phone with subjects: the subject folds into the sheet, and counts on the Filters button. */
+export const PhoneWithSubjects: Story = {
+  globals: { viewport: { value: "mobile1", isRotated: false } },
+  args: { values: { ...SET, subjectId: "van" } },
+  render: (args) => <Controlled start={args.values} subjects={SUBJECT_CHOICES} />,
+};
 
 /** A bound the page could not read, said under the row. */
 export const AmountError: Story = {

@@ -43,8 +43,13 @@ const decodeCount = Schema.decodeUnknownSync(
  * them in JSON: every column, a later one included, by its name.
  */
 async function rowsOf(transaction: UserTransaction, table: ExportTable): Promise<ExportedTable> {
+  const order = sql.join(
+    (table.orderedBy ?? ["id"]).map((column) => sql`t.${sql.identifier(column)}`),
+    sql`, `,
+  );
+
   const result = await transaction.execute(
-    sql`select coalesce(json_agg(t order by t.id), '[]'::json) as rows from ${sql.identifier(table.table)} t`,
+    sql`select coalesce(json_agg(t order by ${order}), '[]'::json) as rows from ${sql.identifier(table.table)} t`,
   );
 
   return { table, rows: decodeRows(result).rows[0]?.rows ?? [] };

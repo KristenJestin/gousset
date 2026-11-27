@@ -94,16 +94,44 @@ const split = (
   />
 );
 
+/** The user's subjects in use, by their paths (#37). */
+const subjects = [
+  { id: "house", name: "House" },
+  { id: "shed", name: "House > Garden shed" },
+  { id: "van", name: "Van" },
+  { id: "alps", name: "Alps 2026" },
+];
+
+const van = { id: "van", name: "Van" };
+
+/** An expense's split, each share with its subjects: the line's to start with. */
+const splitBySubject = (
+  <SplitLine
+    total={eur(8000)}
+    categories={categories}
+    initial={[
+      { categoryId: "other", minor: 5000, subjects: [van] },
+      { categoryId: "other", minor: 3000, subjects: [{ id: "alps", name: "Alps 2026" }] },
+    ]}
+    max={20}
+    subjects={subjects}
+    lineSubjects={[van]}
+    onSplit={saveLater}
+  />
+);
+
 /**
  * A line's expense, in its detail (`LineDetail`'s `expense`): an expense made of several lines,
  * its payments and refunds one click from their lines, and its net cost counted once; "Separate
  * this line" asks before taking the line out. A split line shows its shares; a line coming back
  * that may cancel a purchase shows "Maybe a refund", which asks before linking. Under it, the page
  * puts `LinkLine` ("Link to an expense", a dialog to find the expense's line) and `SplitLine`
- * ("Split", a side sheet of shares that must make the whole line). Every value comes worded.
+ * ("Split", a side sheet of shares that must make the whole line; an expense's shares each with
+ * their subjects, #37, how an expense is shared between subjects). Every value comes worded.
  *
  * Motion: none of its own: the dialogs are `Dialog`'s and `AlertDialog`'s (200 ms), the sheet
- * `Sheet`'s (about 300 ms), a part's hover colour 150 ms. Cut under reduced motion.
+ * `Sheet`'s (about 300 ms), a part's hover colour 150 ms, a share's subject chip fades in and out
+ * in 150 ms. Cut under reduced motion.
  *
  * Don't: link a refund unasked, nor split without the sheet: the user decides what an expense is.
  */
@@ -152,6 +180,53 @@ export const Split: Story = {
       { id: "share-home", category: "Shopping › Home and garden", amount: eur(6000) },
     ],
   },
+};
+
+/** An expense split between the van and the trip: each share with its subject's chip (#37). */
+export const SplitBySubject: Story = {
+  args: {
+    lineId: "line-fuel",
+    expense: undefined,
+    onUnlink: undefined,
+    shares: [
+      { id: "share-van", category: "Other", amount: eur(5000), subjects: [van] },
+      {
+        id: "share-alps",
+        category: "Other",
+        amount: eur(3000),
+        subjects: [{ id: "alps", name: "Alps 2026" }],
+      },
+    ],
+    actions: splitBySubject,
+  },
+};
+
+/**
+ * The split's sheet of an expense: each share's subjects, a hint that splitting is how an expense
+ * is shared between subjects, and a refusal about the second share said under it.
+ */
+export const SplitSheetBySubject: Story = {
+  args: { expense: undefined, onUnlink: undefined },
+  render: () => (
+    <Column>
+      <SplitLine
+        total={eur(8000)}
+        categories={categories}
+        initial={[
+          { categoryId: "other", minor: 5000, subjects: [van] },
+          { categoryId: "other", minor: 3000, subjects: [{ id: "alps", name: "Alps 2026" }] },
+        ]}
+        max={20}
+        subjects={subjects}
+        lineSubjects={[van]}
+        onSplit={saveLater}
+        shareError={{
+          index: 1,
+          message: "An archived subject takes no more expenses: remove it from this share.",
+        }}
+      />
+    </Column>
+  ),
 };
 
 /** A purchase cancelled: the line coming back is proposed as its refund, for the user to confirm. */

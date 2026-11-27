@@ -7,6 +7,8 @@ import { Button } from "./button";
 import { Chip } from "./chip";
 import { FormMessage } from "./form-message";
 import { Skeleton, SkeletonFrame } from "./skeleton";
+import { SubjectChips } from "./subject-chips";
+import type { SubjectChipView } from "./subject-chips";
 
 export type AccountLineRow = {
   id: string;
@@ -20,6 +22,8 @@ export type AccountLineRow = {
   amount: Money;
   /** The account's balance once this line is counted; left out on an account kept by its balance. */
   balanceAfter?: Money;
+  /** What its expense is for (#37), by name; shown with `withSubjects`. */
+  subjects?: ReadonlyArray<SubjectChipView>;
 };
 
 export type AccountLinesProps = {
@@ -33,12 +37,25 @@ export type AccountLinesProps = {
   olderError?: string;
   /** The page's own words for an empty account; a general sentence otherwise. */
   emptyText?: string;
+  /**
+   * A subjects column (docs/wireframes, screen 7, #37), each row's `subjects` as chips, while the
+   * list is at least 576 px wide.
+   */
+  withSubjects?: boolean;
   locale?: string;
 };
 
+/** How many subject chips a line draws before "+N". */
+const LINE_SUBJECTS = 2;
+
 /**
- * An account's lines (docs/wireframes, screen 7, block 5): the day, the label, the amount and the
- * balance once it is counted, newest first. `onShowOlder` adds a button under the list.
+ * An account's lines (docs/wireframes, screen 7, block 5): the day, the label, its subjects
+ * (`withSubjects`), the amount and the balance once it is counted, newest first. `onShowOlder`
+ * adds a button under the list. A narrow list (a phone) gives up the subjects, as the operations
+ * do.
+ *
+ * Motion: none of its own; a subject's chip fades in and out in 150 ms, as `SubjectChips` does,
+ * cut under reduced motion.
  */
 export function AccountLines({
   rows,
@@ -46,6 +63,7 @@ export function AccountLines({
   loadingOlder,
   olderError,
   emptyText,
+  withSubjects = false,
   locale,
 }: AccountLinesProps) {
   const messages = useUiMessages();
@@ -61,7 +79,7 @@ export function AccountLines({
   }
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className={cn("flex flex-col gap-3", withSubjects && "@container")}>
       <ul data-slot="account-lines" className="flex flex-col divide-y">
         {rows.map((row) => (
           <li
@@ -76,6 +94,11 @@ export function AccountLines({
               <span className="truncate">{row.label}</span>
               {row.tag === undefined ? null : <Chip>{row.tag}</Chip>}
             </span>
+            {withSubjects ? (
+              <span className="hidden w-40 shrink-0 @xl:flex">
+                <SubjectChips subjects={row.subjects ?? []} limit={LINE_SUBJECTS} />
+              </span>
+            ) : null}
             <span className="w-24 shrink-0 text-right">
               <Amount value={row.amount} size="sm" locale={writtenIn} />
             </span>

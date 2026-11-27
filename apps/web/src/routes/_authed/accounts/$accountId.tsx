@@ -586,6 +586,7 @@ function toRow(line: AccountLine, today: string, locale: string): AccountLineRow
     amount: line.amount,
     balanceAfter: line.balanceAfter ?? undefined,
     tag: creditExpiryTag(line.expiresOn, today, locale),
+    subjects: line.subjects,
   };
 }
 
@@ -640,6 +641,8 @@ function Lines({ accountId }: { accountId: string }) {
   return (
     <AccountLines
       rows={rows}
+      // A column of subjects (#37) once a line has one: most accounts' lines have none.
+      withSubjects={rows.some((row) => (row.subjects ?? []).length > 0)}
       emptyText={account.mode === "balance" ? m.accountLinesEmptyBalance() : undefined}
       onShowOlder={olderBefore === null ? undefined : () => void showOlder()}
       loadingOlder={loadingOlder}

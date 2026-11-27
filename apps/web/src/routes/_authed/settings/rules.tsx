@@ -22,7 +22,7 @@ import { ruleQueries } from "@/queries/rules";
 
 /**
  * The rules (#25; docs/wireframes, screen 9): each as a sentence, "if… then…", in the order they
- * are tried, with how many lines it classified; one opens in a side sheet to change it, see its
+ * are tried, with how many lines it changed and the subject it attaches (#37); one opens in a side sheet to change it, see its
  * effect on the lines already there, apply it to the past, turn it off or delete it. "Add a rule"
  * opens the same sheet, empty; with no rule at all, the page says what rules are.
  *
@@ -95,6 +95,7 @@ function Rules() {
         open={open}
         onOpenChange={setOpen}
         accounts={accounts}
+        subjects={data.subjects}
         currency={currency}
         onApplied={(jobId) => setJobs([...jobs, jobId])}
       />
@@ -134,6 +135,7 @@ function Rules() {
           label={m.rulesList()}
           rules={data.rules.map((rule) => rowOf(rule, moved))}
           accounts={accounts}
+          merchants={data.merchants}
           onOpen={show}
           onMove={move}
           openId={open ? (opening?.ruleId ?? undefined) : undefined}
@@ -153,6 +155,8 @@ function rowOf(rule: RuleSummary, moved: Moved | undefined): RulesListRow {
     merchant: rule.merchant?.name ?? null,
     category: rule.category === null ? null : categoryPath(rule.category),
     categoryArchived: rule.category?.archived ?? false,
+    subject: rule.subject?.path ?? null,
+    subjectArchived: rule.subject?.archived ?? false,
     enabled: rule.enabled,
     used: rule.appliedCount,
     moved: moved?.id === rule.id ? { direction: moved.direction, turn: moved.turn } : undefined,

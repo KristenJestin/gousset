@@ -124,7 +124,8 @@ function NewSearch() {
 /**
  * Every statement line, newest first (screen 2, block 2): its day, its raw label with a "To
  * review" chip on a held line, its category with `withCategory` (from a laptop's width), its
- * account (from a tablet's width) and its amount, in tabular
+ * subjects' chips with `withSubjects` (wider still, two and "+N", #37), its account (from a
+ * tablet's width) and its amount, in tabular
  * figures. A row opens the line, by press, Enter or Space. Virtualised with ui-sdk: only the rows
  * in view are in the page, 48 px each, in a scroller of its own that fills the block the page
  * gives it; `onEnd` asks for the next page and `loadingMore` says it is coming.
@@ -135,8 +136,9 @@ function NewSearch() {
  * Loading: `OperationsListSkeleton`, its column titles and rows at the same heights.
  *
  * Motion: when the rows change, the rows that stay slide to their new place, new ones fade in and
- * gone ones fade out (200 ms, ease-out); scrolling moves nothing but the scroll. Opening a line,
- * its `LineDetail` grows out of the row (`operationLayoutId`). Cut under reduced motion.
+ * gone ones fade out (200 ms, ease-out); scrolling moves nothing but the scroll. A subject's chip
+ * that comes to a row fades in, one that goes fades out (150 ms). Opening a line, its `LineDetail`
+ * grows out of the row (`operationLayoutId`). Cut under reduced motion.
  *
  * Don't: give it every line at once from the server (page it with `onEnd`), set its height on the
  * list itself (its parent's), or animate the rows a scroll brings.
@@ -169,6 +171,35 @@ export const WithCategory: Story = {
     rows: ROWS.map((row, index) => ({
       ...row,
       category: ["Groceries › Supermarket", "Housing › Rent", "Other"][index % 3],
+    })),
+  },
+};
+
+/** What each line's expense is for (#37): two chips at most, "+N" for the others; most have none. */
+const SUBJECTS = [
+  [{ id: "van", name: "Van" }],
+  [],
+  [
+    { id: "van", name: "Van" },
+    { id: "alps", name: "Alps 2026" },
+  ],
+  [],
+  [
+    { id: "house", name: "House" },
+    { id: "shed", name: "Garden shed" },
+    { id: "van", name: "Van" },
+  ],
+];
+
+/** The subjects, in a column of their own beside the category, from a wide list. */
+export const WithSubjects: Story = {
+  args: {
+    withCategory: true,
+    withSubjects: true,
+    rows: ROWS.map((row, index) => ({
+      ...row,
+      category: ["Groceries › Supermarket", "Housing › Rent", "Other"][index % 3],
+      subjects: SUBJECTS[index % SUBJECTS.length],
     })),
   },
 };

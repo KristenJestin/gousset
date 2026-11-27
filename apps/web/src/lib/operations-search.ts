@@ -37,12 +37,20 @@ const Cut = Schema.String.pipe(
  */
 const Typed = Schema.Union([Cut, Schema.Finite]);
 
+/** A subject's id, as the database makes them. */
+const SubjectId = Schema.String.check(
+  Schema.isUUID(undefined, { message: "A subject is named by its id, a UUID." }),
+);
+
 /**
  * The operations page's address: its filters, and the open line, so that an address opens the
  * same list and the same line. `month` is the older address of a month's operations
  * (`?month=2026-10`, which the review links to), read as that month's first to last day.
+ * `subject` keeps one subject's expenses, its descendants' with them (#37): a subject's page and the
+ * review's "by subject" link to it.
  */
 export const OperationsSearch = Schema.Struct({
+  subject: forgiving(SubjectId),
   q: forgiving(Typed),
   account: forgiving(AccountId),
   from: forgiving(Day),
@@ -76,6 +84,7 @@ export function filtersOf(search: OperationsSearch): OperationsFilterValues {
   return {
     search: textOf(search.q),
     accountId: search.account ?? null,
+    subjectId: search.subject ?? null,
     from: search.from ?? (month === undefined ? null : `${month}-01`),
     to: search.to ?? (month === undefined ? null : lastDayOf(month)),
     min: textOf(search.min),
@@ -108,6 +117,7 @@ export function searchOf(
   line: string | undefined,
 ): OperationsSearch {
   return {
+    subject: values.subjectId ?? undefined,
     q: blankAsNone(values.search),
     account: values.accountId ?? undefined,
     from: values.from ?? undefined,
@@ -124,6 +134,7 @@ export function lineFiltersOf(values: OperationsFilterValues): LineFilters {
   return {
     text: blankAsNone(values.search),
     accountId: values.accountId ?? undefined,
+    subjectId: values.subjectId ?? undefined,
     from: values.from ?? undefined,
     to: values.to ?? undefined,
     amountMin: blankAsNone(values.min),
@@ -137,6 +148,7 @@ export function filtersKey(values: OperationsFilterValues): string {
   return JSON.stringify([
     values.search,
     values.accountId,
+    values.subjectId,
     values.from,
     values.to,
     values.min,

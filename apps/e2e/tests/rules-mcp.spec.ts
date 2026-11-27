@@ -1,8 +1,9 @@
 import type { Page } from "@playwright/test";
-import { account } from "@gousset/db/schema/ledger";
+import { createSubject } from "@gousset/core";
+import { account, entrySubject } from "@gousset/db/schema/ledger";
 import { exampleStatement, writeStatement } from "@gousset/fixture";
 import type { StatementLine } from "@gousset/fixture";
-import { Schema } from "effect";
+import { Effect, Schema } from "effect";
 
 import type { WorkerEnvironment } from "../src/app-server";
 import type { TestUser } from "../src/auth";
@@ -46,10 +47,9 @@ async function rulesUser(setup: Setup, first: string) {
   });
 
   const data = openUserData(setup.app.database);
+  const owner = await data.ownerOf(person.email);
 
   try {
-    const owner = await data.ownerOf(person.email);
-
     await data.asUser(owner, (transaction) =>
       transaction.insert(account).values({
         userId: owner,
@@ -111,7 +111,7 @@ async function rulesUser(setup: Setup, first: string) {
     };
   };
 
-  return { call, upload, rowOf };
+  return { call, upload, rowOf, owner };
 }
 
 /** The ids `list` gives, in order. */
@@ -452,7 +452,7 @@ test("an MCP client lists, shows, edits, moves and turns off rules, and is told 
   const nothingSet = await call("rules", { action: "edit", rule: cinema, category: null });
 
   expect(nothingSet.isError).toBe(true);
-  expect(nothingSet.text).toContain("A rule sets a merchant, a category, or both");
+  expect(nothingSet.text).toContain("A rule sets a merchant, a category or a subject");
   expect(nothingSet.text).toContain('A valid call: rules {"action":"edit"');
 
   const unknownRule = await call("rules", { action: "show", rule: "not-a-rule" });
@@ -467,4 +467,96 @@ test("an MCP client lists, shows, edits, moves and turns off rules, and is told 
   expect(deleted.isError, deleted.text).toBe(false);
   expect(deleted.text).toContain('Deleted: 2. If label contains "SILVERLINE"');
   expect(idsOf((await call("rules", { action: "list" })).text)).toEqual([books]);
+});
+
+test("a rule on a merchant attaches a subject, named by its path", async ({
+  app,
+  user,
+  page,
+  mcpClientId,
+}, testInfo) => {
+  // Two uploads waiting for the app's import job, and a rule applied to the past.
+  test.setTimeout(150_000);
+
+  const { call, upload, owner } = await rulesUser(
+    { app, user, page, mcpClientId, repeat: testInfo.repeatEachIndex },
+    "Quinn",
+  );
+
+  const data = openUserData(app.database);
+
+  try {
+    const subject = (input: Parameters<typeof createSubject>[1]) =>
+      Effect.runPromise(createSubject(owner, input).pipe(Effect.provide(data.layer)));
+
+    const house = await subject({ name: "House" });
+    const shed = await subject({ name: "Garden shed", parentId: house.id });
+
+    await upload([line("2026-10-04", -4500, "CB FUELSTOP 0410", "FS0410")]);
+
+    // The merchant and the subject by name, any case; the subject by its path.
+    const created = await call("rules", {
+      action: "create",
+      conditions: [{ field: "merchant", operator: "eq", value: "fuelstop" }],
+      subject: "house > garden shed",
+    });
+
+    expect(created.isError, created.text).toBe(false);
+    expect(created.text).toMatch(
+      /\n1\. If merchant is Fuelstop, then attach subject House > Garden shed\. On\. Changed 0 lines\. Id: \S+\n/,
+    );
+    expect(created.text).toContain(
+      "It applies to 1 line already there; 1 would change; 0 were classified otherwise by hand",
+    );
+
+    const [rule = ""] = idsOf(created.text);
+    const applied = await call("rules", { action: "apply_to_past", rule });
+
+    expect(applied.isError, applied.text).toBe(false);
+    expect(applied.text).toContain(
+      "1 line changed, each now classified by it or attached to its subject.",
+    );
+
+    // A line imported now gets the subject too.
+    await upload([line("2026-10-18", -5200, "CB FUELSTOP 1810", "FS1810")]);
+
+    const listed = await call("rules", { action: "list" });
+
+    expect(listed.text).toContain(
+      "every rule a line meets attaches its subject. Each ends with its id",
+    );
+    expect(listed.text).toContain(
+      "If merchant is Fuelstop, then attach subject House > Garden shed. On. Changed 2 lines.",
+    );
+
+    const attached = await data.asUser(owner, (transaction) =>
+      transaction.select({ subjectId: entrySubject.subjectId }).from(entrySubject),
+    );
+
+    expect(attached).toEqual([{ subjectId: shed.id }, { subjectId: shed.id }]);
+
+    // Refused, each with what to do and a valid call.
+    const unknownSubject = await call("rules", {
+      action: "edit",
+      rule,
+      subject: "shed",
+    });
+
+    expect(unknownSubject.isError).toBe(true);
+    expect(unknownSubject.text).toContain(
+      'No subject of the user\'s is named "shed". Close: House > Garden shed.',
+    );
+    expect(unknownSubject.text).toContain(`"subject":"House > Garden shed"`);
+
+    const unknownMerchant = await call("rules", {
+      action: "create",
+      conditions: [{ field: "merchant", operator: "eq", value: "Tyrehouse" }],
+      subject: "House",
+    });
+
+    expect(unknownMerchant.isError).toBe(true);
+    expect(unknownMerchant.text).toContain('No merchant of the user\'s is named "Tyrehouse"');
+  } finally {
+    await data.close();
+  }
 });

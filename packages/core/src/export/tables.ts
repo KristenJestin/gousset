@@ -15,6 +15,8 @@ export type ExportTable = {
   readonly holds: string;
   /** In the order the CSV file gives them. */
   readonly columns: ReadonlyArray<ExportColumn>;
+  /** The columns its rows are ordered by: its id when left out, a table of links having none. */
+  readonly orderedBy?: ReadonlyArray<string>;
 };
 
 const ID = { name: "id", holds: "the row's id (a uuid), which other files refer to" };
@@ -361,7 +363,71 @@ export const RULES: ExportTable = {
     },
     CREATED_AT,
     UPDATED_AT,
+    // Added after the others (#37): the database keeps it last.
+    {
+      name: "attach_subject_id",
+      holds: "the subject (subjects.id) it attaches its lines' expenses to; empty for none",
+    },
   ],
+};
+
+export const SUBJECTS: ExportTable = {
+  table: "subject",
+  file: "subjects",
+  holds: "what you spend for (a van, a house, a trip), nested: a subject counts its children's",
+  columns: [
+    ID,
+    OWNER,
+    { name: "parent_id", holds: "the subject it is under (subjects.id); empty at the top" },
+    { name: "name", holds: "the subject's name" },
+    { name: "archived_at", holds: "when it was archived; empty while in use" },
+    {
+      name: "estimated_value_minor",
+      holds: "what it is worth, in minor units of value_currency; empty when it has no value",
+    },
+    { name: "value_currency", holds: "the ISO 4217 code of its estimated value" },
+    { name: "loan_account_id", holds: "the loan (accounts.id) it is bought with; empty for none" },
+    { name: "starts_on", holds: "the first day of its period; empty when it has no dates" },
+    { name: "ends_on", holds: "the last day of its period; empty while it goes on" },
+    CREATED_AT,
+    UPDATED_AT,
+  ],
+};
+
+export const ENTRY_SUBJECTS: ExportTable = {
+  table: "entry_subject",
+  file: "entry-subjects",
+  holds: "which subjects each expense is for: it counts in full in each",
+  columns: [
+    { name: "entry_id", holds: "the expense (entries.id)" },
+    { name: "subject_id", holds: "one of its subjects (subjects.id)" },
+    OWNER,
+  ],
+  orderedBy: ["entry_id", "subject_id"],
+};
+
+export const SUBJECT_ACCOUNTS: ExportTable = {
+  table: "subject_account",
+  file: "subject-accounts",
+  holds: "the accounts linked to each subject (a van's fuel card, say)",
+  columns: [
+    { name: "subject_id", holds: "the subject (subjects.id)" },
+    { name: "account_id", holds: "an account linked to it (accounts.id)" },
+    OWNER,
+  ],
+  orderedBy: ["subject_id", "account_id"],
+};
+
+export const SUBJECT_ENTRIES_REFUSED: ExportTable = {
+  table: "subject_entry_refused",
+  file: "subject-entries-refused",
+  holds: "the expenses of a dated subject's period you said are not its: no longer proposed for it",
+  columns: [
+    { name: "subject_id", holds: "the subject (subjects.id)" },
+    { name: "entry_id", holds: "the expense refused for it (entries.id)" },
+    OWNER,
+  ],
+  orderedBy: ["subject_id", "entry_id"],
 };
 
 /** Every table an export writes, in the manifest's order. */
@@ -378,6 +444,10 @@ export const EXPORT_TABLES: ReadonlyArray<ExportTable> = [
   MERCHANTS,
   MERCHANT_ALIASES,
   RULES,
+  SUBJECTS,
+  ENTRY_SUBJECTS,
+  SUBJECT_ACCOUNTS,
+  SUBJECT_ENTRIES_REFUSED,
 ];
 
 /** Where the files imported go: one folder per import, named by its id. */

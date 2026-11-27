@@ -8,7 +8,9 @@ import {
   MAX_CONDITIONS,
   MAX_LABEL_TEXT,
   RULE_ACCOUNTS,
+  RULE_MERCHANTS,
   labelContains,
+  merchantIs,
 } from "../stories/made-up-rules";
 import { RuleConditionsEditor } from "./rule-conditions";
 
@@ -24,6 +26,7 @@ function Editing({ initial, disabled }: { initial: RuleConditions | null; disabl
         initial={initial}
         onChange={setConditions}
         accounts={RULE_ACCOUNTS}
+        merchants={RULE_MERCHANTS}
         currency="EUR"
         maxConditions={MAX_CONDITIONS}
         maxLabelText={MAX_LABEL_TEXT}
@@ -38,8 +41,9 @@ function Editing({ initial, disabled }: { initial: RuleConditions | null; disabl
 
 /**
  * A rule's conditions, edited on qnot's headless hooks (`@qnot/react`) with packages/ui's controls:
- * one row each, its field (label, account, amount, direction, day of the month, date), its operator
- * and its value, typed with the control its field takes (two for "between"). "+ Condition" adds
+ * one row each, its field (label, merchant, account, amount, direction, day of the month, date),
+ * its operator and its value, typed with the control its field takes (two for "between"; a merchant
+ * found by typing its name). "+ Condition" adds
  * one, up to ten; ✕ removes one. All of them are to be met. The page gets each change as qnot holds
  * it, and reads it with the server's own checks.
  *
@@ -62,6 +66,9 @@ export const Default: Story = {};
 /** A new rule: one condition on the label, to fill in. */
 export const Empty: Story = { args: { initial: null } };
 
+/** A merchant's condition: the line's merchant, found by typing its name. */
+export const Merchant: Story = { args: { initial: merchantIs("fuelstop") } };
+
 /** An amount and a day of the month between two values. */
 export const AmountAndDay: Story = { args: { initial: LOAN_CONDITIONS } };
 
@@ -73,6 +80,7 @@ export const EveryField: Story = {
       combinator: "and",
       children: [
         { kind: "rule", field: "label", operator: "startsWith", value: "CB FUELSTOP" },
+        { kind: "rule", field: "merchant", operator: "eq", value: "fuelstop" },
         { kind: "rule", field: "account", operator: "eq", value: RULE_ACCOUNTS[0].id },
         { kind: "rule", field: "amount", operator: "gte", value: 40 },
         { kind: "rule", field: "direction", operator: "eq", value: "out" },

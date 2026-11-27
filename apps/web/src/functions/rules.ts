@@ -37,11 +37,14 @@ export type RuleRefusalCode =
   | "CONDITIONS_TOO_MANY"
   | "CONDITION_INVALID"
   | "CONDITION_UNKNOWN_ACCOUNT"
+  | "CONDITION_UNKNOWN_MERCHANT"
   | "NOTHING_SET"
   | "CATEGORY_ARCHIVED"
   | "CATEGORY_NOT_FOUND"
   | "MERCHANT_NOT_FOUND"
   | "MERCHANT_INTERMEDIARY"
+  | "SUBJECT_ARCHIVED"
+  | "SUBJECT_NOT_FOUND"
   | "TOO_MANY_RULES"
   | "JOB_UNAVAILABLE"
   | "LINE_NOT_FOUND"
@@ -59,12 +62,14 @@ const CONDITION_CODES = {
   too_many: "CONDITIONS_TOO_MANY",
   invalid: "CONDITION_INVALID",
   unknown_account: "CONDITION_UNKNOWN_ACCOUNT",
+  unknown_merchant: "CONDITION_UNKNOWN_MERCHANT",
 } as const satisfies { [Reason in RuleConditionsRefused["reason"]]: RuleRefusalCode };
 
 const EFFECT_CODES = {
   nothing_set: "NOTHING_SET",
   category_archived: "CATEGORY_ARCHIVED",
   merchant_intermediary: "MERCHANT_INTERMEDIARY",
+  subject_archived: "SUBJECT_ARCHIVED",
 } as const satisfies { [Reason in RuleEffectRefused["reason"]]: RuleRefusalCode };
 
 /** Every refusal a rule's conditions and effect may meet, as its code. */
@@ -78,6 +83,7 @@ const DRAFT_REFUSALS = {
   RuleEffectRefused: (refusal: RuleEffectRefused) => refused(EFFECT_CODES[refusal.reason]),
   CategoryNotFound: () => refused("CATEGORY_NOT_FOUND"),
   MerchantNotFound: () => refused("MERCHANT_NOT_FOUND"),
+  SubjectNotFound: () => refused("SUBJECT_NOT_FOUND"),
 };
 
 /** A rule's id as the page gives it; one that names none is not found. */
@@ -86,13 +92,23 @@ const RuleId = Schema.String.check(Schema.isMaxLength(100));
 /** A merchant's id as the page gives it; one the user does not have is refused with a code. */
 const MerchantId = Schema.String.check(Schema.isMaxLength(100));
 
-/** What a rule sets: a merchant, a category, or both; the core refuses neither. */
+/** A subject's id as the page gives it; one the user does not have is refused with a code. */
+const SubjectId = Schema.String.check(Schema.isMaxLength(100));
+
+/**
+ * What a rule sets: a merchant, a category, a subject to attach (left out: none), any of them; the
+ * core refuses none at all.
+ */
 const Effects = {
   merchantId: Schema.NullOr(MerchantId),
   categoryId: Schema.NullOr(CategoryId),
+  subjectId: Schema.optional(Schema.NullOr(SubjectId)),
 };
 
-/** The user's rules in the order they are tried, and the accounts their conditions may name. */
+/**
+ * The user's rules in the order they are tried, with the accounts their conditions may name, the
+ * merchants they name and the subjects they may attach.
+ */
 export const getRules = createServerFn({ method: "GET" })
   .middleware([signedIn, slowedInDevelopment])
   .handler(({ context }) => runCore(listRules(context.owner)));
@@ -170,6 +186,7 @@ export const editRule = createServerFn({ method: "POST" })
         conditions: Schema.optional(Conditions),
         merchantId: Schema.optional(Effects.merchantId),
         categoryId: Schema.optional(Effects.categoryId),
+        subjectId: Effects.subjectId,
         enabled: Schema.optional(Schema.Boolean),
       }),
     ),
@@ -252,7 +269,15 @@ export const applyRuleToPast = createServerFn({ method: "POST" })
  */
 export const getRuleProposal = createServerFn({ method: "GET" })
   .middleware([signedIn, slowedInDevelopment])
-  .validator(Schema.toStandardSchemaV1(Schema.Struct({ lineId: LineId, ...Effects })))
+  .validator(
+    Schema.toStandardSchemaV1(
+      Schema.Struct({
+        lineId: LineId,
+        merchantId: Effects.merchantId,
+        categoryId: Effects.categoryId,
+      }),
+    ),
+  )
   .handler(({ data, context }) =>
     runCore(
       Effect.gen(function* () {
