@@ -39,6 +39,7 @@ import type {
   LinkRefused,
   Merchants,
   PairingSummary,
+  Receipt,
   SplitRefused,
   SubjectName,
   TransferRefused,
@@ -529,6 +530,47 @@ function expensesText(lineId: string, found: LineExpenses): Array<string> {
   ];
 }
 
+const RECEIPT_TYPES = {
+  "application/pdf": "PDF",
+  "image/jpeg": "JPEG",
+  "image/png": "PNG",
+  "image/heic": "HEIC",
+} as const satisfies { readonly [Type in Receipt["mediaType"]]: string };
+
+/** A file's size as people read it, in decimal units, as the receipts' limit is written. */
+function sizeText(bytes: number): string {
+  if (bytes < 1000) {
+    return `${bytes} bytes`;
+  }
+
+  return bytes < 1_000_000
+    ? `${(bytes / 1000).toFixed(1)} KB`
+    : `${(bytes / 1_000_000).toFixed(1)} MB`;
+}
+
+/**
+ * A line's receipts (#217): name, type, size and day, and where the user gets the file; never its
+ * bytes, which MCP does not carry. `origin`, the app's address, makes each a link.
+ */
+function receiptsText(
+  receipts: ReadonlyArray<Receipt>,
+  origin: string | undefined,
+): ReadonlyArray<string> {
+  if (receipts.length === 0) {
+    return [];
+  }
+
+  const listed = [
+    `Receipts (${receipts.length}), the first attached first. MCP carries no file: the user opens or downloads one in Gousset, signed in, from this line or its subject's page (all of a subject's in one zip), or at its address:`,
+    ...receipts.map(
+      (receipt) =>
+        `- ${receipt.fileName}, ${RECEIPT_TYPES[receipt.mediaType]}, ${sizeText(receipt.size)}, attached on ${receipt.createdAt.slice(0, 10)}: ${origin ?? ""}/api/receipts/${receipt.id}`,
+    ),
+  ];
+
+  return [listed.join("\n")];
+}
+
 /**
  * One line, in Gousset's words: where and when, how much, what the bank said, where it came from;
  * `paidBack`, the path of the subject it pays back, if it does.
@@ -539,6 +581,7 @@ function showText(
   paid: LineMerchant,
   expenses: LineExpenses,
   paidBack: string | null,
+  origin: string | undefined,
 ): string {
   const valueOn = detail.valueOn === null ? "" : `, value on ${detail.valueOn}`;
 
@@ -577,6 +620,7 @@ function showText(
     ...review,
     ...transferText(detail.id, transfer),
     ...expensesText(detail.id, expenses),
+    ...receiptsText(detail.receipts, origin),
     originText(detail),
   ].join("\n");
 }
@@ -1458,7 +1502,7 @@ export const linesTool = defineTool<
               ? null
               : yield* subjectPathOf(caller.userId, benchmarkCurrency(caller), detail.payback);
 
-          return showText(detail, transfer, paid, expenses, paidBack);
+          return showText(detail, transfer, paid, expenses, paidBack, caller.origin);
         }).pipe(
           Effect.catchTags({
             LineNotFound: () => Effect.fail(UNKNOWN_LINE(line)),

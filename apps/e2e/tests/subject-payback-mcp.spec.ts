@@ -509,6 +509,46 @@ test("a refused line gets its error, with the call that helps", async ({
   ).toContain('No line of the user\'s has the handle "00000000-0000-4000-8000-000000000000"');
 });
 
+test("a line with a receipt lists it through a real MCP client", async ({
+  page,
+  app,
+  user,
+  mcpClientId,
+}) => {
+  const { answer, handleOf } = await paybackUser(page, app, user, mcpClientId, "quentin", [
+    [`${LAST_MONTH}-08`, 91_450, "VIR EXAMPLE CONSULTING NOTE DE FRAIS"],
+    [`${LAST_MONTH}-09`, -2500, "CB CORNER CAFE"],
+  ]);
+
+  const line = await handleOf("VIR EXAMPLE CONSULTING NOTE DE FRAIS");
+
+  // Attached in the browser, as the line's page does: MCP carries no bytes.
+  const sent = await page.request.post(
+    `${app.baseURL}/api/lines/${line}/receipts?${new URLSearchParams({ name: "expense-report.pdf" }).toString()}`,
+    {
+      headers: { "Content-Type": "application/octet-stream" },
+      data: Buffer.concat([Buffer.from("%PDF-1.7\n"), Buffer.alloc(2491, 0x20)]),
+    },
+  );
+
+  expect(sent.status(), await sent.text()).toBe(200);
+
+  const shown = await answer("lines", { action: "show", line });
+
+  expect(shown).toContain(
+    "Receipts (1), the first attached first. MCP carries no file: the user opens or downloads one in Gousset, signed in, from this line or its subject's page (all of a subject's in one zip), or at its address:",
+  );
+  expect(shown).toMatch(
+    /\n- expense-report\.pdf, PDF, 2\.5 KB, attached on \d{4}-\d{2}-\d{2}: http\S+\/api\/receipts\/[\da-f-]{36}\n/,
+  );
+  expect(shown).not.toContain("%PDF");
+
+  // A line of none says nothing of them.
+  expect(
+    await answer("lines", { action: "show", line: await handleOf("CB CORNER CAFE") }),
+  ).not.toContain("Receipts");
+});
+
 test("attach_payback refused to a read-only token", async ({ page, app, user, mcpClientId }) => {
   const { call } = await paybackUser(
     page,
