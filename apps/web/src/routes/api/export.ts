@@ -13,7 +13,7 @@ const refused = (code: string, status: number) =>
 
 /**
  * The signed-in user's whole export (#22): a zip of their rows as JSON and CSV, the files they
- * imported, and a manifest. A page of another site can make the browser download it, never read
+ * imported, their receipts' files (#217), and a manifest, sent as it is made. A page of another site can make the browser download it, never read
  * it: it answers no CORS request, and the file lands on the user's own machine.
  */
 export const Route = createFileRoute("/api/export")({
@@ -40,7 +40,6 @@ export const Route = createFileRoute("/api/export")({
             "Cache-Control": "no-store",
             "Content-Type": "application/zip",
             "Content-Disposition": `attachment; filename="${archive.fileName}"`,
-            "Content-Length": String(archive.content.byteLength),
           },
         });
       },

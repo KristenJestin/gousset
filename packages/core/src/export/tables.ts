@@ -430,6 +430,25 @@ export const SUBJECT_ENTRIES_REFUSED: ExportTable = {
   orderedBy: ["subject_id", "entry_id"],
 };
 
+export const LINE_ATTACHMENTS: ExportTable = {
+  table: "line_attachment",
+  file: "line-attachments",
+  holds: "the receipts you attached to lines: each one's file is in receipt-files/<its id>/",
+  columns: [
+    ID,
+    OWNER,
+    { name: "line_id", holds: "the line it is attached to (statement-lines.id)" },
+    { name: "file_name", holds: "the file's name, as you attached it" },
+    {
+      name: "media_type",
+      holds: "what the file is: application/pdf, image/jpeg, image/png or image/heic",
+    },
+    { name: "size", holds: "the file's size, in bytes" },
+    { name: "stored_name", holds: "the file's name on the server, in its receipts directory" },
+    { name: "created_at", holds: "when it was attached" },
+  ],
+};
+
 /** Every table an export writes, in the manifest's order. */
 export const EXPORT_TABLES: ReadonlyArray<ExportTable> = [
   ACCOUNTS,
@@ -448,7 +467,11 @@ export const EXPORT_TABLES: ReadonlyArray<ExportTable> = [
   ENTRY_SUBJECTS,
   SUBJECT_ACCOUNTS,
   SUBJECT_ENTRIES_REFUSED,
+  LINE_ATTACHMENTS,
 ];
 
 /** Where the files imported go: one folder per import, named by its id. */
 export const IMPORT_FILES_FOLDER = "import-files";
+
+/** Where the receipts' files go (#217): one folder per receipt, named by its id. */
+export const RECEIPT_FILES_FOLDER = "receipt-files";

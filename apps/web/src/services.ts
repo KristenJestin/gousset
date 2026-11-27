@@ -23,6 +23,7 @@ import type {
   LineStore,
   Merchants,
   MonthFacts,
+  ReceiptStorage,
   RuleJobs,
   Subscriptions,
   Transfers,
@@ -36,6 +37,7 @@ import { ENV } from "./env.server";
 import { importJobs } from "./jobs/import-jobs.server";
 import { ruleJobs } from "./jobs/rule-jobs.server";
 import { E2E_DAY_COOKIE, today } from "./lib/today";
+import { receiptStorage } from "./receipts.server";
 
 export { db } from "./database.server";
 
@@ -46,7 +48,7 @@ export const auth = createAuth(ENV, db);
  * profiles (#19), the export (#22), every line searched across accounts (#21), the transfers
  * between accounts (#26), the merchants (#24), the categories (#23), the rules' database and job
  * (#25), the expenses made of several lines (#27), the charges subscriptions are detected
- * from (#34), and the rows of a month (#32).
+ * from (#34), the rows of a month (#32), and the receipts' directory (#217).
  */
 export type CoreServices =
   | AccountStore
@@ -61,7 +63,8 @@ export type CoreServices =
   | RuleJobs
   | Expenses
   | Subscriptions
-  | MonthFacts;
+  | MonthFacts
+  | ReceiptStorage;
 
 /**
  * Gousset's logic (`@gousset/core`) runs on one runtime for the whole process, so that the server
@@ -75,7 +78,7 @@ const core = ManagedRuntime.make(
     Layer.provide(DatabaseCategoryStore, userData),
     importsLayer.pipe(Layer.provide(Layer.mergeAll(userData, importJobs))),
     importProfilesLayer.pipe(Layer.provide(userData)),
-    dataExportLayer.pipe(Layer.provide(userData)),
+    dataExportLayer.pipe(Layer.provide(Layer.mergeAll(userData, receiptStorage))),
     transfersLayer.pipe(Layer.provide(userData)),
     merchantsLayer.pipe(Layer.provide(userData)),
     userData,
@@ -83,6 +86,7 @@ const core = ManagedRuntime.make(
     expensesLayer.pipe(Layer.provide(userData)),
     subscriptionsLayer.pipe(Layer.provide(userData)),
     monthFactsLayer.pipe(Layer.provide(userData)),
+    receiptStorage,
   ),
 );
 
