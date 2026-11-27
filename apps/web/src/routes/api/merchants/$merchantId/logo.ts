@@ -23,6 +23,17 @@ const json = (body: LogoAnswer, status = 200) =>
 
 const refused = (code: string, status: number) => json({ refused: code }, status);
 
+/**
+ * A logo refused as too large before its body was read whole: the connection closes with the
+ * answer, so that a client never sends its next request on it under the bytes left unread, where
+ * the server would reset it.
+ */
+const tooLarge = () =>
+  new Response(JSON.stringify({ refused: "LOGO_TOO_LARGE" } satisfies LogoAnswer), {
+    status: 413,
+    headers: { ...NO_STORE, "Content-Type": "application/json", Connection: "close" },
+  });
+
 /** Why a logo is refused, by core's reason, with its status. */
 const LOGO_REFUSALS = {
   empty: ["LOGO_EMPTY", 422],
@@ -111,7 +122,7 @@ export const Route = createFileRoute("/api/merchants/$merchantId/logo")({
         const content = await boundedBody(request, LOGO_MAX_BYTES);
 
         if (content === undefined) {
-          return refused("LOGO_TOO_LARGE", 413);
+          return tooLarge();
         }
 
         return runCore(
