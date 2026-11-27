@@ -65,6 +65,8 @@ const SHOTS: ReadonlyArray<Shot> = [
   { id: "import-import-files--checking" },
   // The import screen's states (#125), on a desktop and at a phone's width.
   { id: "import-import-files--waiting-for-account" },
+  // A CSV's columns to confirm: the card's state and its action, the form in a sheet (#210).
+  { id: "import-import-files--waiting-for-columns" },
   { id: "import-import-files--imported" },
   { id: "import-import-files--failed" },
   {
@@ -81,6 +83,8 @@ const SHOTS: ReadonlyArray<Shot> = [
   { id: "import-csv-test-read--default" },
   { id: "import-csv-test-read--refused" },
   { id: "import-csv-preview--default" },
+  // A CSV file's columns in their wide side sheet, opened from the file's card (#210).
+  { id: "import-csv-preview--in-a-sheet", open: "click" },
   { id: "states-emptystate--in-a-block" },
   { id: "states-errorstate--beside-a-working-block" },
   // The review of a user with no line yet (#32): links to the first import and the accounts.

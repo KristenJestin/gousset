@@ -69,7 +69,13 @@ function Running({ summary }: { summary: Import }) {
         failure={jobFailureMessage(view?.failure ?? null)}
         result={m.importJobDone()}
         locale={getLocale()}
-        onRetry={view?.phase === "failed" ? async () => resume(null, null) : undefined}
+        onRetry={
+          view?.phase === "failed"
+            ? async () => {
+                await resume(null, null);
+              }
+            : undefined
+        }
       />
       <FormMessage message={refused} />
     </>
@@ -231,8 +237,11 @@ function Failed({ summary }: { summary: Import }) {
   );
 }
 
-/** What shows under an import's row, from where it stands. */
-export function ImportContent({ summary }: { summary: Import }) {
+/**
+ * What shows under an import's row, from where it stands. What a waiting import asks for a form
+ * opens over the page (`onAsk`), which the page holds: the card shows the action.
+ */
+export function ImportContent({ summary, onAsk }: { summary: Import; onAsk: () => void }) {
   switch (summary.status) {
     case "queued":
     case "reading":
@@ -240,7 +249,7 @@ export function ImportContent({ summary }: { summary: Import }) {
       return <Running summary={summary} />;
     case "waiting":
       return summary.waitingFor === "profile" ? (
-        <ConfirmColumns summary={summary} />
+        <ConfirmColumns summary={summary} onOpen={onAsk} />
       ) : (
         <ChooseAccount summary={summary} />
       );
