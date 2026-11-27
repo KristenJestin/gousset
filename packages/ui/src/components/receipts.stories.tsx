@@ -7,7 +7,7 @@ import type { ReceiptView } from "./receipts";
 
 /** The made-up receipts of a work trip's hotel line. */
 const RECEIPTS: ReadonlyArray<ReceiptView> = [
-  { id: "invoice", fileName: "hotel-invoice.pdf", href: "#invoice", detail: "PDF · 0.2 MB" },
+  { id: "invoice", fileName: "hotel-invoice.pdf", href: "#invoice", detail: "PDF · 240 KB" },
   { id: "photo", fileName: "receipt-photo.jpg", href: "#photo", detail: "JPEG · 2.4 MB" },
 ];
 
@@ -27,12 +27,12 @@ function Attaching({ refuse = false, empty = false }: { refuse?: boolean; empty?
       hint={HINT}
       onAttach={async (file) => {
         if (refuse || file.name.includes("too-large")) {
-          return "This file is 63 MB: a receipt may be 50 MB at most.";
+          return "This file is 63 MB; a receipt can be at most 50 MB.";
         }
 
         setReceipts([
           ...receipts,
-          { id: file.name, fileName: file.name, href: "#new", detail: "PDF · 0.1 MB" },
+          { id: file.name, fileName: file.name, href: "#new", detail: "PDF · 96 KB" },
         ]);
 
         return undefined;

@@ -200,7 +200,7 @@ test("attaching a receipt shows it on its subject's page", async ({ page, app, u
   // Accepted: the dialog closes, the line lists it with its kind and size, a link that downloads it.
   await expect(dialog).toBeHidden();
   await expect(receipts(detail).locator('[data-slot="line-receipt"]')).toHaveCount(1);
-  await expect(receipts(detail)).toContainText("PDF · 0.2 MB");
+  await expect(receipts(detail)).toContainText("PDF · 200 KB");
   await expect(receipts(detail).getByRole("link", { name: "hotel-invoice.pdf" })).toHaveAttribute(
     "href",
     /^\/api\/receipts\//,
@@ -274,6 +274,8 @@ test("a too-large file and a wrong type are refused in the UI", async ({ page, a
   await expect(dialog).toContainText("PDF, JPEG, PNG, and HEIC, 1 MB at most.");
   await expect(dialog).toContainText("This file is 1.2 MB; a receipt can be at most 1 MB.");
   await expect(dialog).toBeVisible();
+  // Refused, the dialog is usable again: another file may be chosen.
+  await expect(dialog.getByRole("button", { name: "Choose a file" })).toBeEnabled();
 
   // A kind the installation does not take, read from its bytes: refused by the server.
   await dialog.locator('[data-slot="file-button-input"]').setInputFiles({
@@ -283,6 +285,7 @@ test("a too-large file and a wrong type are refused in the UI", async ({ page, a
   });
   await expect(dialog).toContainText("Only PDF, JPEG, PNG, and HEIC files can be attached.");
   await expect(dialog).toBeVisible();
+  await expect(dialog.getByRole("button", { name: "Choose a file" })).toBeEnabled();
   expect(await receiptsOf(owner, hotel.lineId)).toEqual([]);
 });
 

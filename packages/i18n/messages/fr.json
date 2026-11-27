@@ -1187,6 +1187,7 @@
   "receiptRefusalUploadFailed": "Le fichier n’a pas pu être envoyé : réessayez.",
   "receiptsHint": "{types}, {limit} Mo au plus.",
   "receiptsSize": "{type} · {size} Mo",
+  "receiptsSizeKilobytes": "{type} · {size} Ko",
   "receiptsAttached": "{name} joint.",
   "receiptsDeleted": "{name} supprimé."
 }

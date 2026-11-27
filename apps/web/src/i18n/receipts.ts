@@ -1,4 +1,10 @@
-import { MEDIA_TYPES, RECEIPT_TYPES, TYPE_NAMES, megabytes } from "@gousset/core/attachments";
+import {
+  MEDIA_TYPES,
+  MEGABYTE,
+  RECEIPT_TYPES,
+  TYPE_NAMES,
+  megabytes,
+} from "@gousset/core/attachments";
 import type { ReceiptLimits } from "@gousset/core/attachments";
 import { m } from "@gousset/i18n/messages";
 import { getLocale } from "@gousset/i18n/runtime";
@@ -28,14 +34,23 @@ const megabytesText = (bytes: number) => sizes[getLocale()].format(megabytes(byt
 export const receiptHint = (limits: ReceiptLimits) =>
   m.receiptsHint({ types: typesText(limits.types), limit: megabytesText(limits.maxBytes) });
 
-/** What a receipt is, under its name: "PDF · 1.2 MB". */
-export function receiptSize(receipt: { readonly mediaType: string; readonly size: number }) {
-  const type = RECEIPT_TYPES.find((each) => MEDIA_TYPES[each] === receipt.mediaType);
+/** A kilobyte, as a file manager shows it: a thousand bytes, as `MEGABYTE` is a million. */
+const KILOBYTE = 1000;
 
-  return m.receiptsSize({
-    type: type === undefined ? receipt.mediaType : TYPE_NAMES[type],
-    size: megabytesText(receipt.size),
-  });
+/**
+ * What a receipt is, under its name: "PDF · 1.2 MB"; under a megabyte in kilobytes, "PNG · 240
+ * KB", 1 KB at least, never "0 MB".
+ */
+export function receiptSize(receipt: { readonly mediaType: string; readonly size: number }) {
+  const found = RECEIPT_TYPES.find((each) => MEDIA_TYPES[each] === receipt.mediaType);
+  const type = found === undefined ? receipt.mediaType : TYPE_NAMES[found];
+
+  return receipt.size < MEGABYTE
+    ? m.receiptsSizeKilobytes({
+        type,
+        size: sizes[getLocale()].format(Math.max(1, Math.round(receipt.size / KILOBYTE))),
+      })
+    : m.receiptsSize({ type, size: megabytesText(receipt.size) });
 }
 
 /** The receipts' kinds, as a file picker filters them (`<input accept>`). */
