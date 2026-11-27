@@ -2,6 +2,7 @@ import type { Meta, StoryObj } from "@storybook/react-vite";
 import { useState } from "react";
 
 import { InFrench } from "../stories/in-french";
+import { MADE_UP_LOGO } from "../stories/made-up";
 import { RecurringCalendar } from "./recurring-calendar";
 import type { RecurringItem, RecurringView } from "./recurring-calendar";
 
@@ -115,6 +116,32 @@ export const Stopped: Story = { args: { items: [STOPPED], defaultView: "agenda" 
 
 /** The MealCard credit's last day, with what is left on it. */
 export const ExpiringCredit: Story = { args: { items: [EXPIRING] } };
+
+/**
+ * Each merchant's face in the agenda (#204): a logo, or initials on their colour, in place of the
+ * kind's tile, whose mark goes before the kind's word; the expiring credit keeps its tile.
+ */
+const WITH_AVATARS: ReadonlyArray<RecurringItem> = ITEMS.map((each): RecurringItem =>
+  each.kind === "expiring"
+    ? each
+    : {
+        ...each,
+        avatar: {
+          name: each.name,
+          src: each.name === "Pixelplay" ? MADE_UP_LOGO : undefined,
+          color: each.name === "Streamly" ? "red" : null,
+        },
+      },
+);
+
+export const AgendaWithAvatars: Story = {
+  render: () => <Browsing items={WITH_AVATARS} defaultView="agenda" />,
+};
+
+export const PhoneAgendaWithAvatars: Story = {
+  globals: { viewport: { value: "mobile1", isRotated: false } },
+  render: () => <Browsing items={WITH_AVATARS} defaultView="agenda" />,
+};
 
 /** Nothing recurs this month: the grid stays, and says so. */
 export const EmptyMonth: Story = { args: { items: [] } };

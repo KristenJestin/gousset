@@ -192,7 +192,7 @@ const NO_TRANSFER = Layer.mock(Transfers, {
 // A line paid through an intermediary (#30), apart from `ROWS` so that their searches stay as they
 // are; who was paid behind it is tried end to end (intermediaries-mcp.spec).
 const paypal = line(current.id, "2026-11-05", -1999, "CB PAYPAL *PIXELPLAY 05/11");
-const PAYPAL = { id: memoryId(), name: "PayPal" };
+const PAYPAL = { id: memoryId(), name: "PayPal", look: { color: null, logo: null } };
 
 const WITH_PAYPAL: MemoryLineRows = {
   ...ROWS,

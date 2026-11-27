@@ -44,6 +44,39 @@ export class LineMerchantRefused extends Schema.TaggedError<LineMerchantRefused>
   },
 ) {}
 
+/**
+ * A label given to name a merchant (#204) cleans to no key (`merchantKey`): it holds only what never
+ * names anyone (a date, a reference, a withdrawal), so no line would ever be named by it.
+ */
+export class MerchantLabelRefused extends Schema.TaggedError<MerchantLabelRefused>()(
+  "MerchantLabelRefused",
+  { label: Schema.String },
+) {}
+
+/**
+ * A label given to name a merchant (#204) cleans to a key that names another merchant already
+ * (`name`): one cleaned label names one merchant; the user moves it or merges them instead.
+ */
+export class MerchantLabelTaken extends Schema.TaggedError<MerchantLabelTaken>()(
+  "MerchantLabelTaken",
+  { label: Schema.String, alias: Schema.String, name: Schema.String },
+) {}
+
+/**
+ * A logo refused (#204): no byte (`empty`), more than 256 KiB (`too_large`), or neither PNG, JPEG
+ * nor WebP by its bytes (`type`).
+ */
+export class MerchantLogoRefused extends Schema.TaggedError<MerchantLogoRefused>()(
+  "MerchantLogoRefused",
+  { reason: Schema.Literals(["empty", "too_large", "type"]) },
+) {}
+
+/** The merchant has no logo. */
+export class MerchantLogoNotFound extends Schema.TaggedError<MerchantLogoNotFound>()(
+  "MerchantLogoNotFound",
+  { merchantId: Schema.String },
+) {}
+
 /** A merchant is merged into another one, never into itself. */
 export class MerchantMergeRefused extends Schema.TaggedError<MerchantMergeRefused>()(
   "MerchantMergeRefused",

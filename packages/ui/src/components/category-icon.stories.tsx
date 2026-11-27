@@ -12,7 +12,7 @@ import { CATEGORY_ICON_NAMES } from "./icons";
  * category's own, else its parent's, #205), the tile takes its tint and the icon its colour, 4.5:1
  * or more in both schemes (`contrast.test.ts`); without one, a neutral tile. `null` is the
  * uncategorised form: a dashed, empty tile that says "Uncategorised" to screen readers. Sizes
- * match `MerchantLogo` (24, 32, 40 px), so both line up in the same rows.
+ * match `Avatar` (24, 32, 40 px), so both line up in the same rows.
  *
  * Motion: none; it does not move.
  *

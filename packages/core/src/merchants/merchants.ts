@@ -1,9 +1,12 @@
+import { createHash } from "node:crypto";
+
 import {
   account,
   category,
   entry,
   merchant,
   merchantAlias,
+  merchantLogo,
   rule,
   statementLine,
 } from "@gousset/db/schema/ledger";
@@ -11,13 +14,15 @@ import { UserData } from "@gousset/db/user-data";
 import type { QueryFailed, UserTransaction } from "@gousset/db/user-data";
 import { and, asc, count, desc, eq, exists, gt, inArray, lte, ne, or, sql } from "drizzle-orm";
 import { alias as aliasOf } from "drizzle-orm/pg-core";
-import { Context, Effect, Layer, Result } from "effect";
+import { Context, Effect, Layer, Result, Schema } from "effect";
 
 import { lineCategoryOf } from "../category-store";
 import type { LineCategory } from "../category-store";
 import { takeCategoryTurn } from "../category-turn";
-import { LineNotFound } from "../errors";
+import { CategoryNotFound, CategoryRefused, LineNotFound } from "../errors";
 import { isId } from "../imports/rows";
+import { LogoMediaType, checkLogo, logoVersion, lookOf } from "../look";
+import type { Look, LookColor } from "../look";
 import { classifyByMerchants } from "./default-classification";
 import { isKnownIntermediary } from "./intermediaries";
 import { assignLineMerchantIn, lineMerchantIn } from "./line-merchant";
@@ -27,6 +32,10 @@ import { today } from "../today";
 import type { LineMerchantRefused } from "./errors";
 import {
   MerchantAliasNotFound,
+  MerchantLabelRefused,
+  MerchantLabelTaken,
+  MerchantLogoNotFound,
+  MerchantLogoRefused,
   MerchantMergeRefused,
   MerchantNameRefused,
   MerchantNameTaken,
@@ -34,6 +43,7 @@ import {
   MerchantNotFound,
 } from "./errors";
 import { MAX_KEY_LENGTH, assignMerchants, compactOf, merchantKey, nameKey } from "./labels";
+import { logoShaOf } from "./look-columns";
 import type { KnownKey } from "./labels";
 import { shopsOfLines } from "./towns";
 
@@ -69,6 +79,40 @@ export type MerchantSummary = {
   readonly aliases: number;
   /** A payment intermediary (#30): its lines' labels hide who was paid. */
   readonly intermediary: boolean;
+  /** How it is shown (#204): its logo, or its initials on a colour. */
+  readonly look: Look;
+};
+
+/** A merchant the user makes by hand (#204). */
+export type MerchantInput = {
+  readonly name: string;
+  /** The category its entries go in by default; null for none. */
+  readonly defaultCategoryId: string | null;
+  readonly intermediary: boolean;
+  /** A colour of the palette; null for the automatic one. */
+  readonly color: LookColor | null;
+  /** Labels that name it, each cleaned as a bank's (`merchantKey`); repeated ones count once. */
+  readonly aliases: ReadonlyArray<string>;
+};
+
+/** What an edit of a merchant changes (#204); a field left out stays as it is. */
+export type MerchantEdit = {
+  readonly name?: string;
+  /** Null clears it. */
+  readonly defaultCategoryId?: string | null;
+  readonly intermediary?: boolean;
+  /** Null gives back the automatic one. */
+  readonly color?: LookColor | null;
+  /** Labels that name it from now on, as `MerchantInput.aliases`; one never comes off here. */
+  readonly addAliases?: ReadonlyArray<string>;
+};
+
+/** A merchant's logo, as served. */
+export type MerchantLogo = {
+  readonly mediaType: LogoMediaType;
+  readonly content: Uint8Array<ArrayBuffer>;
+  /** What `Look.logo` says of it. */
+  readonly version: string;
 };
 
 /** What a list of the merchants asks for; every field may be left out. */
@@ -112,6 +156,8 @@ export type MerchantDetail = {
   readonly name: string;
   /** A payment intermediary (#30): its lines' labels hide who was paid. */
   readonly intermediary: boolean;
+  /** How it is shown (#204). */
+  readonly look: Look;
   /** The user said its payments are no subscription (#34): none is proposed for it. */
   readonly subscriptionDismissed: boolean;
   /** The category its entries go in by default; null for none. */
@@ -142,6 +188,15 @@ export type Merged = {
 };
 
 type Failure = QueryFailed;
+
+/** Why a merchant made or edited by hand is refused (#204). */
+export type MerchantWriteRefusal =
+  | MerchantNameRefused
+  | MerchantNameTaken
+  | MerchantLabelRefused
+  | MerchantLabelTaken
+  | CategoryNotFound
+  | CategoryRefused;
 
 /** The merchants, for the user `owner` of each call. */
 export class Merchants extends Context.Service<
@@ -198,6 +253,37 @@ export class Merchants extends Context.Service<
     ) => Effect.Effect<Merged, MerchantNotFound | MerchantMergeRefused | Failure>;
     /** Recognises the merchants of every line whose cleaned label names none yet. */
     readonly recognise: (owner: string) => Effect.Effect<Recognised, Failure>;
+    /**
+     * Makes a merchant by hand (#204), with its default category, its mark, its colour and the
+     * labels that name it, in one transaction: refused for a name taken or refused, a category
+     * gone or archived, a label that cleans to nothing or names another merchant.
+     */
+    readonly create: (
+      owner: string,
+      input: MerchantInput,
+    ) => Effect.Effect<MerchantSummary, MerchantWriteRefusal | Failure>;
+    /** Changes what `edit` gives of a merchant, in one transaction, refused as `create` is. */
+    readonly edit: (
+      owner: string,
+      merchantId: string,
+      edit: MerchantEdit,
+    ) => Effect.Effect<MerchantSummary, MerchantNotFound | MerchantWriteRefusal | Failure>;
+    /** Sets its logo (#204), replacing the one it had; refused for no byte, too many, or a type. */
+    readonly setLogo: (
+      owner: string,
+      merchantId: string,
+      content: Uint8Array,
+    ) => Effect.Effect<Look, MerchantNotFound | MerchantLogoRefused | Failure>;
+    /** Removes its logo, when it has one: its avatar is shown again. */
+    readonly removeLogo: (
+      owner: string,
+      merchantId: string,
+    ) => Effect.Effect<Look, MerchantNotFound | Failure>;
+    /** Its logo, to serve. */
+    readonly logo: (
+      owner: string,
+      merchantId: string,
+    ) => Effect.Effect<MerchantLogo, MerchantNotFound | MerchantLogoNotFound | Failure>;
     /** Marks it a payment intermediary, or not (#30). */
     readonly markIntermediary: (
       owner: string,
@@ -251,7 +337,23 @@ const summaryColumns = {
   name: merchant.name,
   aliases: aliasCount,
   intermediary: merchant.isIntermediary,
+  color: merchant.color,
+  logoSha: logoShaOf(merchant.id),
 };
+
+type SummaryRow = {
+  readonly id: string;
+  readonly name: string;
+  readonly aliases: number;
+  readonly intermediary: boolean;
+  readonly color: string | null;
+  readonly logoSha: string | null;
+};
+
+const summaryOf = ({ color, logoSha, ...row }: SummaryRow): MerchantSummary => ({
+  ...row,
+  look: lookOf(color, logoSha),
+});
 
 /**
  * Recognises, in a transaction of `owner`'s, the merchant of every line (counted or held) whose
@@ -423,7 +525,7 @@ async function summaryById(
     .from(merchant)
     .where(eq(merchant.id, merchantId));
 
-  return row;
+  return row === undefined ? undefined : summaryOf(row);
 }
 
 /** The merchant whose name is `name` in any case, but `except`. */
@@ -443,7 +545,7 @@ async function summaryByName(
     )
     .limit(1);
 
-  return row;
+  return row === undefined ? undefined : summaryOf(row);
 }
 
 async function list(
@@ -482,7 +584,7 @@ async function list(
   const last = page.at(-1);
 
   return {
-    merchants: page,
+    merchants: page.map(summaryOf),
     next: rows.length > query.limit && last !== undefined ? last.name : null,
     total: counted?.total ?? 0,
   };
@@ -579,6 +681,7 @@ async function show(
     id: found.id,
     name: found.name,
     intermediary: found.intermediary,
+    look: found.look,
     subscriptionDismissed: marks?.subscriptionDismissed === true,
     defaultCategory,
     aliases: [...names],
@@ -628,6 +731,244 @@ function nameOf(name: string): Result.Result<string, MerchantNameRefused> {
     ? Result.fail(new MerchantNameRefused({ reason: "too_long" }))
     : Result.succeed(trimmed);
 }
+
+type CleanedLabel = { readonly label: string; readonly key: string };
+
+/** The labels given, each cleaned as a bank's label is, once each; or the first that gives none. */
+function cleanedLabels(
+  labels: ReadonlyArray<string>,
+): Result.Result<ReadonlyArray<CleanedLabel>, MerchantLabelRefused> {
+  const keys = new Map<string, string>();
+
+  for (const label of labels) {
+    const key = merchantKey(label, null);
+
+    if (key === null) {
+      return Result.fail(new MerchantLabelRefused({ label }));
+    }
+
+    if (!keys.has(key)) {
+      keys.set(key, label);
+    }
+  }
+
+  return Result.succeed([...keys].map(([key, label]) => ({ key, label })));
+}
+
+/** The category chosen as a default: one of the user's, not archived. */
+async function chosenDefault(
+  transaction: UserTransaction,
+  categoryId: string,
+): Promise<Result.Result<string, CategoryNotFound | CategoryRefused>> {
+  const [row] = isId(categoryId)
+    ? await transaction
+        .select({ id: category.id, archivedAt: category.archivedAt })
+        .from(category)
+        .where(eq(category.id, categoryId))
+    : [];
+
+  if (row === undefined) {
+    return Result.fail(new CategoryNotFound({ categoryId }));
+  }
+
+  return row.archivedAt === null
+    ? Result.succeed(row.id)
+    : Result.fail(new CategoryRefused({ reason: "archived" }));
+}
+
+/**
+ * The cleaned labels that do not name the merchant `merchantId` yet (null: one being made), or the
+ * first that names another merchant: one cleaned label names one merchant.
+ */
+async function newAliases(
+  transaction: UserTransaction,
+  labels: ReadonlyArray<CleanedLabel>,
+  merchantId: string | null,
+): Promise<Result.Result<ReadonlyArray<string>, MerchantLabelTaken>> {
+  if (labels.length === 0) {
+    return Result.succeed([]);
+  }
+
+  const known = await transaction
+    .select({ alias: merchantAlias.alias, merchantId: merchant.id, name: merchant.name })
+    .from(merchantAlias)
+    .innerJoin(merchant, eq(merchant.id, merchantAlias.merchantId))
+    .where(
+      inArray(
+        merchantAlias.alias,
+        labels.map((each) => each.key),
+      ),
+    );
+
+  const owners = new Map(known.map((row) => [row.alias, row]));
+  const added: Array<string> = [];
+
+  for (const { label, key } of labels) {
+    const owner = owners.get(key);
+
+    if (owner === undefined) {
+      added.push(key);
+    } else if (owner.merchantId !== merchantId) {
+      return Result.fail(new MerchantLabelTaken({ label, alias: key, name: owner.name }));
+    }
+  }
+
+  return Result.succeed(added);
+}
+
+/** The merchant just written, read back: it is the user's, in their own transaction. */
+async function written(transaction: UserTransaction, merchantId: string) {
+  const found = await summaryById(transaction, merchantId);
+
+  if (found === undefined) {
+    throw new Error("The merchant just written could not be read back.");
+  }
+
+  return found;
+}
+
+/**
+ * Adds the cleaned labels to the merchant, then puts its entries still classified by default where
+ * its default category says (`./default-classification`): its new lines' among them.
+ */
+async function settle(
+  transaction: UserTransaction,
+  owner: string,
+  merchantId: string,
+  aliases: ReadonlyArray<string>,
+  defaultChanged: boolean,
+) {
+  if (aliases.length > 0) {
+    await transaction
+      .insert(merchantAlias)
+      .values(aliases.map((alias) => ({ userId: owner, merchantId, alias })));
+  }
+
+  if (aliases.length > 0 || defaultChanged) {
+    await classifyByMerchants(transaction, { merchantId });
+  }
+}
+
+/**
+ * Makes a merchant in `owner`'s transaction (#204), after every check, so that a refusal writes
+ * nothing. It takes the user's turn first (`../category-turn`): no recognition, merge or move adds
+ * a cleaned label, and no category is archived, meanwhile.
+ */
+async function createIn(
+  transaction: UserTransaction,
+  owner: string,
+  input: MerchantInput,
+  name: string,
+  labels: ReadonlyArray<CleanedLabel>,
+): Promise<Result.Result<MerchantSummary, Exclude<MerchantWriteRefusal, MerchantNameRefused>>> {
+  await takeCategoryTurn(transaction, owner);
+
+  const taken = await summaryByName(transaction, name);
+
+  if (taken !== undefined) {
+    return Result.fail(new MerchantNameTaken({ name: taken.name }));
+  }
+
+  if (input.defaultCategoryId !== null) {
+    const chosen = await chosenDefault(transaction, input.defaultCategoryId);
+
+    if (Result.isFailure(chosen)) {
+      return Result.fail(chosen.failure);
+    }
+  }
+
+  const aliases = await newAliases(transaction, labels, null);
+
+  if (Result.isFailure(aliases)) {
+    return Result.fail(aliases.failure);
+  }
+
+  const [made] = await transaction
+    .insert(merchant)
+    .values({
+      userId: owner,
+      name,
+      defaultCategoryId: input.defaultCategoryId,
+      isIntermediary: input.intermediary,
+      color: input.color,
+    })
+    .onConflictDoNothing({ target: [merchant.userId, merchant.name] })
+    .returning({ id: merchant.id });
+
+  // Made meanwhile by another transaction (a recognition, a move): nothing written here.
+  if (made === undefined) {
+    return Result.fail(new MerchantNameTaken({ name }));
+  }
+
+  await settle(transaction, owner, made.id, aliases.success, input.defaultCategoryId !== null);
+
+  return Result.succeed(await written(transaction, made.id));
+}
+
+/** Edits a merchant in `owner`'s transaction (#204), after every check, as `createIn` does. */
+async function editIn(
+  transaction: UserTransaction,
+  owner: string,
+  merchantId: string,
+  edit: MerchantEdit,
+  name: string | undefined,
+  labels: ReadonlyArray<CleanedLabel>,
+): Promise<
+  Result.Result<
+    MerchantSummary,
+    MerchantNotFound | Exclude<MerchantWriteRefusal, MerchantNameRefused>
+  >
+> {
+  await takeCategoryTurn(transaction, owner);
+
+  const found = await summaryById(transaction, merchantId);
+
+  if (found === undefined) {
+    return Result.fail(new MerchantNotFound({ merchantId }));
+  }
+
+  const other = name === undefined ? undefined : await summaryByName(transaction, name, found.id);
+
+  if (other !== undefined) {
+    return Result.fail(new MerchantNameTaken({ name: other.name }));
+  }
+
+  const categoryId = edit.defaultCategoryId;
+
+  if (categoryId !== undefined && categoryId !== null) {
+    const chosen = await chosenDefault(transaction, categoryId);
+
+    if (Result.isFailure(chosen)) {
+      return Result.fail(chosen.failure);
+    }
+  }
+
+  const aliases = await newAliases(transaction, labels, found.id);
+
+  if (Result.isFailure(aliases)) {
+    return Result.fail(aliases.failure);
+  }
+
+  const changes = {
+    name,
+    defaultCategoryId: categoryId,
+    isIntermediary: edit.intermediary,
+    color: edit.color,
+  };
+
+  // Drizzle leaves out what is undefined; an edit of labels alone updates no column.
+  if (Object.values(changes).some((value) => value !== undefined)) {
+    await transaction.update(merchant).set(changes).where(eq(merchant.id, found.id));
+  }
+
+  await settle(transaction, owner, found.id, aliases.success, categoryId !== undefined);
+
+  return Result.succeed(await written(transaction, found.id));
+}
+
+const sha256 = (bytes: Uint8Array) => createHash("sha256").update(bytes).digest("hex");
+
+const isLogoMediaType = Schema.is(LogoMediaType);
 
 /** `Merchants` on the database, through `UserData`. */
 export const merchantsLayer = Layer.effect(
@@ -749,7 +1090,7 @@ export const merchantsLayer = Layer.effect(
                       name: merchant.name,
                       intermediary: merchant.isIntermediary,
                     })
-                ).map((made) => ({ ...made, aliases: 0 }))[0];
+                ).map((made) => ({ ...made, aliases: 0, look: lookOf(null, null) }))[0];
 
               if (target === undefined || target.id === from.id) {
                 return Result.succeed({ alias: cleaned, from, to: from, created: false });
@@ -814,14 +1155,40 @@ export const merchantsLayer = Layer.effect(
                 .returning({ id: merchantAlias.id });
 
               // The merchant kept keeps its default category, and takes the merged one's when it
-              // has none; it is an intermediary when either was (#30).
+              // has none; it is an intermediary when either was (#30). Its look the same way
+              // (#204): its colour, else the merged one's; its logo, else the merged one's, copied
+              // before the merged one's deletion takes it away.
               await transaction
                 .update(merchant)
                 .set({
                   defaultCategoryId: sql`coalesce(${merchant.defaultCategoryId}, (select m.default_category_id from ${merchant} m where m.id = ${from.id}))`,
                   isIntermediary: from.intermediary || into.intermediary,
+                  color: sql`coalesce(${merchant.color}, (select m.color from ${merchant} m where m.id = ${from.id}))`,
                 })
                 .where(eq(merchant.id, into.id));
+
+              // Decided as it is written, not from what was read above: a logo is set without the
+              // user's turn (an upload waits for no import), so the kept one may have gained one
+              // meanwhile, and moving the merged one's onto it would break the one logo per
+              // merchant. The conflict waits for such an upload and, once it is in, keeps it.
+              await transaction
+                .insert(merchantLogo)
+                .select(
+                  transaction
+                    .select({
+                      merchantId: sql<string>`${into.id}::uuid`.as("merchant_id"),
+                      userId: merchantLogo.userId,
+                      mediaType: merchantLogo.mediaType,
+                      content: merchantLogo.content,
+                      sha256: merchantLogo.sha256,
+                      createdAt: merchantLogo.createdAt,
+                    })
+                    .from(merchantLogo)
+                    .where(eq(merchantLogo.merchantId, from.id)),
+                )
+                .onConflictDoNothing({ target: merchantLogo.merchantId });
+
+              const kept = await summaryById(transaction, into.id);
 
               // The rules that set the merged one, and the entries they gave it, go to the one kept
               // (#25): its deletion would clear them.
@@ -841,7 +1208,7 @@ export const merchantsLayer = Layer.effect(
               await classifyByMerchants(transaction, { every: true });
 
               return Result.succeed({
-                into: {
+                into: kept ?? {
                   ...into,
                   aliases: into.aliases + moved.length,
                   intermediary: from.intermediary || into.intermediary,
@@ -856,6 +1223,121 @@ export const merchantsLayer = Layer.effect(
         }),
 
       recognise: (owner) => inTransaction(owner, (transaction) => recogniseIn(transaction, owner)),
+
+      create: (owner, input) =>
+        Effect.gen(function* () {
+          const name = yield* Effect.fromResult(nameOf(input.name));
+          const labels = yield* Effect.fromResult(cleanedLabels(input.aliases));
+
+          const made = yield* inTransaction(owner, (transaction) =>
+            createIn(transaction, owner, input, name, labels),
+          );
+
+          return yield* Effect.fromResult(made);
+        }),
+
+      edit: (owner, merchantId, edit) =>
+        Effect.gen(function* () {
+          const name =
+            edit.name === undefined ? undefined : yield* Effect.fromResult(nameOf(edit.name));
+
+          const labels = yield* Effect.fromResult(cleanedLabels(edit.addAliases ?? []));
+
+          const edited = yield* inTransaction(owner, (transaction) =>
+            editIn(transaction, owner, merchantId, edit, name, labels),
+          );
+
+          return yield* Effect.fromResult(edited);
+        }),
+
+      setLogo: (owner, merchantId, content) =>
+        Effect.gen(function* () {
+          const mediaType = yield* Effect.fromResult(checkLogo(content)).pipe(
+            Effect.mapError((reason) => new MerchantLogoRefused({ reason })),
+          );
+
+          const hash = sha256(content);
+
+          const set = yield* inTransaction(owner, async (transaction) => {
+            const found = await summaryById(transaction, merchantId);
+
+            if (found === undefined) {
+              return undefined;
+            }
+
+            const row = { mediaType, content: Buffer.from(content), sha256: hash };
+
+            // A new logo replaces the one it had: one per merchant.
+            await transaction
+              .insert(merchantLogo)
+              .values({ ...row, merchantId: found.id, userId: owner })
+              .onConflictDoUpdate({
+                target: merchantLogo.merchantId,
+                set: { ...row, createdAt: sql`now()` },
+              });
+
+            const look: Look = { color: found.look.color, logo: logoVersion(hash) };
+
+            return look;
+          });
+
+          return set === undefined ? yield* new MerchantNotFound({ merchantId }) : set;
+        }),
+
+      removeLogo: (owner, merchantId) =>
+        inTransaction(owner, async (transaction) => {
+          const found = await summaryById(transaction, merchantId);
+
+          if (found === undefined) {
+            return undefined;
+          }
+
+          await transaction.delete(merchantLogo).where(eq(merchantLogo.merchantId, found.id));
+
+          const look: Look = { color: found.look.color, logo: null };
+
+          return look;
+        }).pipe(
+          Effect.flatMap((look) =>
+            look === undefined
+              ? Effect.fail(new MerchantNotFound({ merchantId }))
+              : Effect.succeed(look),
+          ),
+        ),
+
+      logo: (owner, merchantId) =>
+        inTransaction(
+          owner,
+          async (
+            transaction,
+          ): Promise<Result.Result<MerchantLogo, MerchantNotFound | MerchantLogoNotFound>> => {
+            const found = await summaryById(transaction, merchantId);
+
+            if (found === undefined) {
+              return Result.fail(new MerchantNotFound({ merchantId }));
+            }
+
+            const [row] = await transaction
+              .select({
+                mediaType: merchantLogo.mediaType,
+                content: merchantLogo.content,
+                sha256: merchantLogo.sha256,
+              })
+              .from(merchantLogo)
+              .where(eq(merchantLogo.merchantId, found.id));
+
+            // The database checks the type is one of the three; one it does not is no logo served.
+            if (row === undefined || !isLogoMediaType(row.mediaType)) {
+              return Result.fail(new MerchantLogoNotFound({ merchantId }));
+            }
+
+            return Result.succeed({
+              mediaType: row.mediaType,
+              content: new Uint8Array(row.content),
+              version: logoVersion(row.sha256),
+            });
+          },
+        ).pipe(Effect.flatMap(Effect.fromResult)),
 
       markIntermediary: (owner, merchantId, intermediary) =>
         inTransaction(owner, async (transaction) => {

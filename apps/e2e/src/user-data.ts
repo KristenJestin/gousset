@@ -1,10 +1,16 @@
 import { appConnection } from "@gousset/db/app-role";
 import type { APP_ROLE } from "@gousset/db/app-role";
 import { relations } from "@gousset/db/relations";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 
 import { authOauthClient, authOauthConsent, authUser } from "@gousset/db/schema/auth";
-import { importProfile, importUpload, merchant, rule } from "@gousset/db/schema/ledger";
+import {
+  importProfile,
+  importUpload,
+  merchant,
+  merchantLogo,
+  rule,
+} from "@gousset/db/schema/ledger";
 import { recogniseMerchants } from "@gousset/core";
 import { seedMadeUpData } from "@gousset/db/seed";
 import type { SeedSummary } from "@gousset/db/seed";
@@ -39,6 +45,7 @@ export const USER_TABLES: ReadonlyArray<UserTable> = [
   { name: "transfer", key: "id", rows: "transfers" },
   { name: "merchant", key: "id", rows: "merchants" },
   { name: "merchant_alias", key: "id", rows: "merchants' cleaned labels" },
+  { name: "merchant_logo", key: "merchant_id", rows: "merchants' logos" },
   { name: "rule", key: "id", rows: "rules" },
 ];
 
@@ -47,6 +54,11 @@ export const USER_TABLES: ReadonlyArray<UserTable> = [
  * once imported and within minutes otherwise (#129); its import, once made, is exported.
  */
 export const NOT_EXPORTED: ReadonlySet<string> = new Set(["import_upload"]);
+
+/** A merchant's logo for the seed (#204): a PNG's first bytes, made here, no real picture. */
+export const SEED_LOGO = new Uint8Array([
+  0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d,
+]);
 
 /** The client the seeded file uploads' grant is for: no test authorizes it, none revokes it. */
 const SEED_CLIENT_ID = "gousset-e2e-seed";
@@ -306,10 +318,24 @@ export function openUserData(database: string) {
 
               yield* recogniseMerchants(owner);
 
-              // A rule of the user's (#25), naming one of their merchants, so that every table
-              // holds a row of theirs.
+              // A rule of the user's (#25), naming one of their merchants, and that merchant's
+              // colour and logo (#204), so that every table holds a row of theirs.
               yield* userData.transaction(owner, async (each) => {
                 const [shop] = await each.select({ id: merchant.id }).from(merchant).limit(1);
+
+                if (shop !== undefined) {
+                  await each
+                    .update(merchant)
+                    .set({ color: "teal" })
+                    .where(eq(merchant.id, shop.id));
+                  await each.insert(merchantLogo).values({
+                    merchantId: shop.id,
+                    userId: owner,
+                    mediaType: "image/png",
+                    content: Buffer.from(SEED_LOGO),
+                    sha256: createHash("sha256").update(SEED_LOGO).digest("hex"),
+                  });
+                }
 
                 await each.insert(rule).values({
                   userId: owner,

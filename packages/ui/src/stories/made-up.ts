@@ -115,6 +115,14 @@ export const MERCHANTS = [
 ] as const;
 
 /**
+ * A made-up logo, drawn here as an SVG data address: no image of a real brand, no request to anyone.
+ * Only stories show an SVG; the app takes PNG, JPEG or WebP alone.
+ */
+export const MADE_UP_LOGO = `data:image/svg+xml,${encodeURIComponent(
+  '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 40 40"><rect width="40" height="40" fill="#2f6b4f"/><path d="M12 26c4-10 12-10 16 0" stroke="#fff" stroke-width="3" fill="none" stroke-linecap="round"/></svg>',
+)}`;
+
+/**
  * Money spent so far, day by day, this month (to the 24th) and the month before, for the area
  * chart with the previous period dashed. Cumulative, in cents.
  */

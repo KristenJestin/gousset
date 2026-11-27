@@ -58,6 +58,17 @@ A list of amounts by direction (the operations) colours money in with `--amount-
 
 Restricted money in benefit accounts, credits that expire and the refunded part of an expense are **hatched**, like Bklit's patterns (`--money-restricted`). They read as "yours, but not the same" without adding a colour.
 
+### A colour for a name: the palette
+
+One more use of colour, the user's own: a name's **avatar** (`Avatar` in `packages/ui`), its logo or, without one, its initials in a colour of the palette. It stands beside a merchant's name wherever one is named (the operations list and a line's detail, the merchants list and a merchant's page, the review's breakdown by merchant, the subscriptions), and will beside a category's (#205) and a bank's (#209).
+
+- **One palette, the categories' (#205)**: twelve keys, which core stores and never renames (`packages/core/src/category-looks.ts`), each a `--palette-<key>` token in `globals.css` and the classes of `packages/ui/src/lib/palette.ts`. A name's avatar and a category take the same colours; nothing else, no colour typed by hand.
+- **The initials are the palette's tile** (`paletteTile`): the colour itself on its 15 % tint, which holds 4.5:1 or more in both schemes (`src/lib/contrast.test.ts`; the "Theme/Tokens" story lists the figures).
+- **An automatic colour until one is picked**: a stable hash of the name over the palette (`automaticColorOf`, `src/lib/automatic-color.ts`), so a name keeps its colour on every screen and every visit, never at random.
+- **A logo** is a PNG, JPEG or WebP the user uploads, stored by Gousset (`docs/data-model.md`); Gousset ships and fetches no logo. It is decorative (`alt=""`), the name sits beside it; if it fails to load, the initials take its place.
+
+A palette colour is a name's, never a money role nor a state, and never on an amount.
+
 ## Charts
 
 - Charts have **Bklit's rendering**, as in Pug: thin strokes, a crosshair on hover, sober tooltips, flat fills and hatching. Their layout stays the one of the validated wireframes.
@@ -101,6 +112,8 @@ A page shows things; it does not hold an action's form.
 - The dialog's actions are Cancel (a ghost button), then the submit button. While the form is sent the dialog stays open, its button busy: neither the backdrop, Escape, the close button nor Cancel closes it. A refusal keeps the dialog open and says why under the field at fault; once the form is accepted the dialog closes, focus goes back to the button that opened it, and the page shows the result (the new line in its list, a sentence saying what was done).
 - **Settings that apply at once** (a switch, a choice, a button that turns something on) stay inline in the page: they ask for nothing to fill in.
 - A screen that is itself the task (signing in, the first setup, changing a temporary password, an MCP client's consent, importing a statement) is not a page that shows things: its form is the screen. On the import screen, what an import asks before it goes on (the account a file is for) stays under its row, a step of that import; a CSV file's columns, a long form, open in the side `Sheet` from an action in the file's card, which says where it stands ("Columns to confirm"): confirming saves the profile when it is named, closes the sheet and the import goes on, focus going to the file's row since the action is gone; cancelling leaves the file waiting, focus back on the action (#210).
+
+A name's look and its words are edited in its form with three fields of `packages/ui`, generic so that a category and a bank take them too: **`ColorSwatches`**, a radio group of the palette (one tab stop, the arrows move and choose, each swatch named for screen readers, the chosen one ringed and checked, not marked by its colour alone), with an optional choice of none first, named by the page ("Automatic"); **`LogoField`**, the avatar it gives at 40 px beside "Choose a file", or "Replace" and "Remove", its refusal under it, which shows a picked file at once from a `data:` preview and leaves the upload to the page; **`TextListField`**, texts as removable chips then an input and "Add", where Enter adds and never sends the form. None has motion of its own: what moves is the sheet they sit in.
 
 Motion: the dialog fades and grows from 96 % in 200 ms, ease-out, and leaves in 150 ms, ease-in. The side sheet slides in from beyond its edge in 300 ms, ease-out, and back out in 200 ms, ease-in. On a phone both rise from the bottom edge in 300 ms and go back down in 200 ms. The backdrop fades in and out in 200 ms. Cut under reduced motion: they are there, or not. A form sheet opens on its first field; a dialog on its title.
 
@@ -172,6 +185,7 @@ The role logic shared by shadcn, ui-sdk and Bklit:
 | Charts | Bklit's `--chart-*`, as they are |
 | Money, Gousset's own | `--money-spent`, `--money-saved`, `--money-left`, `--money-income`, `--money-restricted` |
 | Amounts by direction | `--amount-in` |
+| A name's or a category's colour, the palette | `--palette-<key>` |
 
 ## The first screen built
 

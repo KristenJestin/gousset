@@ -4,6 +4,7 @@ import type { Effect } from "effect";
 
 import type { LineCategory } from "./category-store";
 import type { ImportFormat } from "./imports/summary";
+import type { NamedMerchant } from "./merchants/line-merchant";
 
 /**
  * The bounds of a line's absolute amount, in minor units of one currency, both included: null for
@@ -58,6 +59,11 @@ export type FoundLine = {
   };
   /** The category of its one entry; null for a line with none (held, of no amount) or split. */
   readonly category: LineCategory | null;
+  /**
+   * Who it paid, with its look (#204): its one entry's merchant, else its cleaned label's, when
+   * that is no intermediary (`LineMerchant.merchant`); null for none known.
+   */
+  readonly merchant: NamedMerchant | null;
   /** The movement a noted balance makes (#31): it has no label, the interface names it. */
   readonly fromBalance: boolean;
   /**

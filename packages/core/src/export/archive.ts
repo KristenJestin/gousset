@@ -2,7 +2,9 @@ import { Schema } from "effect";
 import { strToU8, zipSync } from "fflate";
 import type { ZippableFile } from "fflate";
 
-import { IMPORT_FILES_FOLDER } from "./tables";
+import { logoExtension } from "../look";
+import type { LogoMediaType } from "../look";
+import { IMPORT_FILES_FOLDER, MERCHANT_LOGOS_FOLDER } from "./tables";
 import type { ExportTable } from "./tables";
 
 // The archive an export gives (#22): one zip of JSON and CSV files and the files imported, with a
@@ -36,10 +38,18 @@ export type ImportedFile = {
   readonly content: Uint8Array;
 };
 
+/** A merchant's logo, as the user uploaded it (#204). */
+export type ExportedLogo = {
+  readonly merchantId: string;
+  readonly mediaType: LogoMediaType;
+  readonly content: Uint8Array;
+};
+
 /** Everything of one user's an export writes. */
 export type ExportData = {
   readonly tables: ReadonlyArray<ExportedTable>;
   readonly files: ReadonlyArray<ImportedFile>;
+  readonly logos: ReadonlyArray<ExportedLogo>;
 };
 
 /** A file of the archive. */
@@ -57,6 +67,7 @@ const ABOUT = [
   "Amounts are whole numbers of minor units of their account's currency: -4217 in euros is -42.17 EUR, 1250 in yen is 1250 JPY.",
   "Days are YYYY-MM-DD; instants are ISO 8601 with their offset. Ids are uuids: a column ending in _id names a row of another file by its id.",
   `Each file you imported is in ${IMPORT_FILES_FOLDER}/<the import's id>/, as you dropped it.`,
+  `Each merchant's logo you uploaded is ${MERCHANT_LOGOS_FOLDER}/<the merchant's id>.png, .jpg or .webp, as you uploaded it.`,
   "In the CSV files only, a text that starts with =, +, -, @, a tab or a carriage return is written after a single quote, so that a spreadsheet does not run it as a formula; the JSON files hold it as it is.",
 ].join(" ");
 
@@ -151,6 +162,17 @@ export function archiveFiles(data: ExportData, exportedAt: Date): ReadonlyArray<
       path,
       holds: `the file of import ${file.importId} (imports.id), as it was dropped`,
       bytes: file.content.byteLength,
+    });
+  }
+
+  for (const logo of data.logos) {
+    const path = `${MERCHANT_LOGOS_FOLDER}/${logo.merchantId}.${logoExtension(logo.mediaType)}`;
+
+    files.push({ path, content: logo.content });
+    described.push({
+      path,
+      holds: `the logo of merchant ${logo.merchantId} (merchants.id), as it was uploaded`,
+      bytes: logo.content.byteLength,
     });
   }
 

@@ -1,5 +1,6 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 
+import { MADE_UP_LOGO } from "../stories/made-up";
 import { FlagList, FlagListSkeleton } from "./flag-list";
 
 /**
@@ -30,6 +31,35 @@ export default meta;
 type Story = StoryObj<typeof meta>;
 
 export const Default: Story = {};
+
+/**
+ * A flag about a subscription shows its merchant's face after the icon (#204): its logo, or its
+ * initials on its colour; a flag about an account has none.
+ */
+export const WithAvatars: Story = {
+  args: {
+    flags: [
+      {
+        id: "streamly",
+        icon: "up",
+        text: "Streamly goes from €8.99 to €9.49",
+        avatar: { name: "Streamly", color: "red" },
+      },
+      {
+        id: "greenmarket",
+        icon: "error",
+        text: "Greenmarket box, due on 12 Oct, did not come (last €24.90 on 12 Sept)",
+        avatar: { name: "Greenmarket", src: MADE_UP_LOGO },
+      },
+      { id: "mealcard", icon: "import", text: "MealCard: imported up to 24 Oct" },
+    ],
+  },
+};
+
+export const WithAvatarsOnPhone: Story = {
+  ...WithAvatars,
+  globals: { viewport: { value: "mobile1", isRotated: false } },
+};
 
 export const Empty: Story = { args: { flags: [] } };
 

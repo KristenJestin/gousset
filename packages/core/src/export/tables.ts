@@ -312,6 +312,12 @@ export const MERCHANTS: ExportTable = {
       name: "subscription_dismissed",
       holds: "true when you said its payments are no subscription: none is proposed for it",
     },
+    // Added after the others (#204): the database keeps it last.
+    {
+      name: "color",
+      holds:
+        "the palette colour its avatar is drawn on (red, orange, amber, olive, green, teal, cyan, blue, indigo, violet, pink, grey); empty for the automatic one",
+    },
   ],
 };
 
@@ -392,3 +398,6 @@ export const EXPORT_TABLES: ReadonlyArray<ExportTable> = [
 
 /** Where the files imported go: one folder per import, named by its id. */
 export const IMPORT_FILES_FOLDER = "import-files";
+
+/** Where the merchants' logos go (#204): one file each, named by its merchant's id. */
+export const MERCHANT_LOGOS_FOLDER = "merchant-logos";

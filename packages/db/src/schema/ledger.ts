@@ -496,6 +496,10 @@ export const merchant = pgTable.withRLS(
     // none of its series is proposed again until the user takes it back. Subscriptions themselves
     // are computed on read, never stored (docs/data-model.md, v0.4).
     subscriptionDismissed: boolean("subscription_dismissed").default(false).notNull(),
+    // Added with the merchants' looks (#204): the key of a colour of the palette its avatar is drawn
+    // on (packages/core, `look.ts`); null for the automatic one, which its name chooses. A key, not
+    // an enum: the palette is Gousset's, and a key it no longer knows reads as automatic.
+    color: text("color"),
   },
   (table) => [
     unique("merchant_user_id_id_key").on(table.userId, table.id),
@@ -529,6 +533,43 @@ export const merchantAlias = pgTable.withRLS(
     // A merchant's aliases, for its page, a merge and the cascade.
     index("merchant_alias_merchant_id_idx").on(table.merchantId),
     ownRowsOnly("merchant_alias"),
+  ],
+);
+
+/**
+ * A logo the user uploaded for a merchant (#204), one per merchant: a new upload replaces it. Kept
+ * in the database, apart from the merchant as `import_file` is from its import, so that row-level
+ * security, the backup and the export carry it; Gousset never fetches one. PNG, JPEG or WebP, as
+ * packages/core recognises them by their bytes, never by a name or a declared type.
+ */
+export const merchantLogo = pgTable.withRLS(
+  "merchant_logo",
+  {
+    merchantId: uuid("merchant_id").primaryKey(),
+    userId: owner(),
+    mediaType: text("media_type").notNull(),
+    content: bytea("content").notNull(),
+    // Its SHA-256 in hexadecimal: the start of it versions the logo's address, so that a browser
+    // keeps it for good and asks again once it changes.
+    sha256: text("sha256").notNull(),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    foreignKey({
+      name: "merchant_logo_merchant_fk",
+      columns: [table.userId, table.merchantId],
+      foreignColumns: [merchant.userId, merchant.id],
+    }).onDelete("cascade"),
+    check(
+      "merchant_logo_media_type",
+      sql`${table.mediaType} in ('image/png', 'image/jpeg', 'image/webp')`,
+    ),
+    check(
+      "merchant_logo_size",
+      // 256 KiB, packages/core's `LOGO_MAX_BYTES`: core refuses a larger one with a reason first.
+      sql`octet_length(${table.content}) between 1 and 262144`,
+    ),
+    ownRowsOnly("merchant_logo"),
   ],
 );
 

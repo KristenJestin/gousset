@@ -9,6 +9,7 @@ import type { CategoryInMonth } from "./benchmarks";
 import type { CategoryRecord, EntryKind, LineCategory, MonthlySpending } from "./category-store";
 import type { CountedLine } from "./credits";
 import type { LineAccount } from "./lines";
+import type { Look } from "./look";
 import { merchantKey } from "./merchants/labels";
 import { monthRowsIn } from "./month-rows";
 import { reviewQueue } from "./review-queue";
@@ -81,6 +82,8 @@ export type MonthMerchant = {
   readonly id: string;
   readonly name: string;
   readonly intermediary: boolean;
+  /** How it is shown (#204). */
+  readonly look: Look;
 };
 
 /** A counted line of a benefit account. */
@@ -237,6 +240,8 @@ export type MerchantSpending = SpendingFigures & {
   readonly name: string | null;
   /** A payment intermediary (#30), kept as what is known of who was paid. */
   readonly intermediary: boolean;
+  /** How the merchant is shown (#204); null for the row of none. */
+  readonly look: Look | null;
 };
 
 type SpendingHeader = Against & { readonly month: string; readonly currency: string };
@@ -361,6 +366,9 @@ export type MonthFlag =
       /** Its subscription's (`subscriptionId`): one merchant may have several. */
       readonly subscriptionId: string;
       readonly merchant: string;
+      readonly merchantId: string;
+      /** How the merchant is shown (#204). */
+      readonly look: Look;
       readonly from: Money;
       readonly to: Money;
     }
@@ -369,6 +377,9 @@ export type MonthFlag =
       /** Its subscription's (`subscriptionId`): one merchant may have several. */
       readonly subscriptionId: string;
       readonly merchant: string;
+      readonly merchantId: string;
+      /** How the merchant is shown (#204). */
+      readonly look: Look;
       /** The day it was due and did not come. */
       readonly expectedOn: string;
       readonly lastOn: string;
@@ -888,6 +899,7 @@ function merchantSpendingOf(reading: Reading): MerchantSpendingRead {
       id,
       name: merchant?.name ?? null,
       intermediary: merchant?.intermediary ?? false,
+      look: merchant?.look ?? null,
       spent: money(sums.get(reading.currency) ?? 0, reading.currency),
       elsewhere: [...sums]
         .filter(([other, minor]) => other !== reading.currency && minor !== 0)
@@ -1112,6 +1124,8 @@ function flagsOf(
             kind: "price-rise",
             subscriptionId: subscriptionId(each),
             merchant: each.merchant,
+            merchantId: each.merchantId,
+            look: each.look,
             from: money(each.priceRise.fromMinor, each.currency),
             to: money(each.priceRise.toMinor, each.currency),
           },
@@ -1122,6 +1136,8 @@ function flagsOf(
     kind: "stopped",
     subscriptionId: subscriptionId(each),
     merchant: each.merchant,
+    merchantId: each.merchantId,
+    look: each.look,
     expectedOn: each.stoppedOn ?? each.nextOn,
     lastOn: each.lastOn,
     last: money(each.lastMinor, each.currency),

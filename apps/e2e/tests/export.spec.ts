@@ -4,17 +4,20 @@ import { readFile } from "node:fs/promises";
 import type { Client } from "@modelcontextprotocol/client";
 import { request } from "@playwright/test";
 import type { Page } from "@playwright/test";
-import { EXPORT_FORMAT, EXPORT_TABLES, EXPORT_VERSION } from "@gousset/core";
+import { EXPORT_FORMAT, EXPORT_TABLES, EXPORT_VERSION, MERCHANT_LOGOS_FOLDER } from "@gousset/core";
 import { Schema } from "effect";
 
 import { addUser, createUser, signIn } from "../src/auth";
 import type { TestUser } from "../src/auth";
 import { readArchive } from "../src/export";
 import { connectMcp, expect, test, visit } from "../src/test";
-import { NOT_EXPORTED, USER_TABLES, keysOf, openUserData } from "../src/user-data";
+import { NOT_EXPORTED, SEED_LOGO, USER_TABLES, keysOf, openUserData } from "../src/user-data";
 
 /** The user tables an export carries, as rows or as files. */
 const EXPORTED = USER_TABLES.filter((table) => !NOT_EXPORTED.has(table.name));
+
+/** The user tables an export carries as files, each in its folder: imported files, logos (#204). */
+const AS_FILES = new Set(["import_file", "merchant_logo"]);
 
 // Issue #22, exporting one's data: from Settings, Data, a user downloads one archive of every row
 // of theirs as JSON and CSV, and every file they imported, with a manifest; the MCP door's `data`
@@ -48,6 +51,10 @@ async function personWithData(
 }
 
 const Imports = Schema.Array(Schema.Struct({ id: Schema.String, file_sha256: Schema.String }));
+
+const Merchants = Schema.Array(
+  Schema.Struct({ id: Schema.String, color: Schema.NullOr(Schema.String) }),
+);
 
 test("an export of the made-up data holds every row", async ({ app, user, page }) => {
   test.setTimeout(90_000);
@@ -89,6 +96,23 @@ test("an export of the made-up data holds every row", async ({ app, user, page }
         continue;
       }
 
+      // Each merchant's logo (#204), named by its merchant, byte for byte as the seed wrote it.
+      if (table.name === "merchant_logo") {
+        const logos = Object.keys(archive.files).filter((path) =>
+          path.startsWith(`${MERCHANT_LOGOS_FOLDER}/`),
+        );
+
+        expect(logos.toSorted(), table.name).toEqual(
+          keys.map((key) => `${MERCHANT_LOGOS_FOLDER}/${key}.png`).toSorted(),
+        );
+
+        for (const path of logos) {
+          expect(archive.files[path], path).toEqual(SEED_LOGO);
+        }
+
+        continue;
+      }
+
       const exported = EXPORT_TABLES.find((each) => each.table === table.name);
 
       expect(exported, `${table.name} is exported`).toBeDefined();
@@ -111,6 +135,12 @@ test("an export of the made-up data holds every row", async ({ app, user, page }
     await data.close();
   }
 
+  // A merchant's colour (#204) is in its row; its logo's merchant is one of the merchants.
+  const merchants = Schema.decodeUnknownSync(Merchants)(JSON.parse(archive.text("merchants.json")));
+
+  expect(merchants.filter((each) => each.color === "teal")).toHaveLength(1);
+  expect(archive.manifest.about).toContain(`${MERCHANT_LOGOS_FOLDER}/`);
+
   // Each file imported comes back byte for byte: its SHA-256 is the one its import recorded.
   const imports = Schema.decodeUnknownSync(Imports)(JSON.parse(archive.text("imports.json")));
 
@@ -132,7 +162,7 @@ test("every column of every user table is described in the export's manifest", a
     // Every table holding a user's rows is exported, but those NOT_EXPORTED says; the imported
     // files go as files.
     expect(EXPORT_TABLES.map((table) => table.table).toSorted()).toEqual(
-      EXPORTED.flatMap((table) => (table.name === "import_file" ? [] : [table.name])).toSorted(),
+      EXPORTED.flatMap((table) => (AS_FILES.has(table.name) ? [] : [table.name])).toSorted(),
     );
 
     for (const table of EXPORT_TABLES) {
@@ -227,6 +257,15 @@ test("an MCP client with read access learns what the export holds and where to g
     for (const table of EXPORTED) {
       const count = (await data.asUser(owner, (transaction) => keysOf(transaction, table))).length;
       const exported = EXPORT_TABLES.find((each) => each.table === table.name);
+
+      // The tables carried as files have a folder each: imported files, merchants' logos (#204).
+      if (table.name === "merchant_logo") {
+        expect(answer.text).toContain(
+          `- ${MERCHANT_LOGOS_FOLDER}/: ${count} logo${count === 1 ? "" : "s"} you uploaded`,
+        );
+
+        continue;
+      }
 
       expect(answer.text).toContain(
         exported === undefined

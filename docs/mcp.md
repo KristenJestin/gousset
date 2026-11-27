@@ -90,6 +90,8 @@ From Anthropic's [Writing effective tools for agents](https://www.anthropic.com/
    | `subjects` | v0.5 |
    | `investments` | v0.6 |
 
+   `merchants` gives `list`, `search`, `show`, `create` (#204: a merchant made by hand, with the labels that name it, its default category, its mark and its colour), `edit` (one change a call: its name, a label moved, its default category, its mark, its subscriptions, and since #204 its colour, labels added, its logo or its logo cleared), `merge` and `assign`. A logo comes as base64 in `edit`'s `logo`: 256 KiB at most, about 350,000 characters, well within the 4 MB a request to the door carries; it is refused, with a valid call, as the logo route refuses it (too large, neither PNG, JPEG nor WebP by its bytes, empty). `show` and `list` say a merchant's colour and whether it has a logo.
+
    A line coming back that may be a refund, not answered yet, is no income (#208, v0.4): `month` `summary` leaves it out of received, says how many such lines wait and how much, and lists each among the movements flagged "maybe a refund" with the call that shows it; `lines` `search` and `show` and `review` `list` flag it the same way. `show` writes both answers: `lines` `link` confirms it as a refund, and `lines` `refuse_refund` (a write) makes it an ordinary income, classified as it was, never proposed again; answering again changes nothing, and a line with no refund proposed is refused with the call that shows it.
 
    The administration of users (creating one, a ban, a password reset) has no tool: it stays on the users page, an act of the administrator in person. A tool would let an agent holding the administrator's token reset a user's password and sign in with the temporary one before the user does, unattended.

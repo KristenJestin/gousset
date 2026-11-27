@@ -2,6 +2,7 @@ import { minorDigits } from "@gousset/import";
 import { Effect, Result } from "effect";
 
 import type { LineCategory } from "./category-store";
+import type { NamedMerchant } from "./merchants/line-merchant";
 import { LineNotFound, LineSearchRefused } from "./errors";
 import { LineStore } from "./line-store";
 import type { AmountBounds, FoundLine, LineQuery } from "./line-store";
@@ -70,6 +71,11 @@ export type LineRow = {
    * (held, of no amount) or split across several.
    */
   readonly category: LineCategory | null;
+  /**
+   * Who it paid, with its look (#204): its one entry's merchant, else its cleaned label's, when
+   * that is no payment intermediary; null for none known.
+   */
+  readonly merchant: NamedMerchant | null;
   /** The movement a noted balance makes (#31): it has no label, the interface names it. */
   readonly fromBalance: boolean;
   /**
@@ -287,6 +293,7 @@ export function rowOf(line: FoundLine, reviewing = false): LineRow {
     },
     toReview: line.state === "held" || reviewing,
     category: line.category,
+    merchant: line.merchant,
     fromBalance: line.fromBalance,
     maybeRefund: line.maybeRefund,
   };

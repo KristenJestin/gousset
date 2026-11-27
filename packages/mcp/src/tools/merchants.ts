@@ -1,4 +1,6 @@
 import {
+  LOGO_MAX_BYTES,
+  LOOK_COLORS,
   MERCHANT_LINES_SCANNED,
   MERCHANT_LINES_SHOWN,
   MAX_MERCHANT_NAME,
@@ -7,6 +9,7 @@ import {
   listMerchants,
   markIntermediary,
   markSubscription,
+  merchantKey,
   ruleWords,
   setMerchantDefaultCategory,
   showLine,
@@ -19,13 +22,15 @@ import type {
   LineMerchantAssigned,
   LineMerchantRefused,
   LineStore,
+  Look,
+  LookColor,
   MerchantDetail,
   MerchantLine,
   MerchantPage,
   MerchantSummary,
   Merged,
 } from "@gousset/core";
-import { Effect, Schema } from "effect";
+import { Effect, Exit, Schema } from "effect";
 
 import { ToolRefusal, defineTool } from "../tool";
 import { amount, named } from "./accounts";
@@ -37,10 +42,12 @@ const DEFAULT_MERCHANTS = 50;
 const MAX_MERCHANTS = 100;
 
 const MerchantsInput = Schema.Struct({
-  action: Schema.Literals(["list", "search", "show", "edit", "merge", "assign"]).annotate({
-    description:
-      "list: every merchant by name. search: those whose name or a cleaned label contains text. show: one merchant, its default category, cleaned labels and latest lines. edit: rename one, move one of its cleaned labels to another merchant, or set its default category. merge: fold one merchant into another. assign: who was paid on an intermediary's line.",
-  }),
+  action: Schema.Literals(["list", "search", "show", "create", "edit", "merge", "assign"]).annotate(
+    {
+      description:
+        "list: every merchant by name. search: those whose name or a cleaned label contains text. show: one merchant, its default category, cleaned labels and latest lines. create: make one by hand. edit: rename one, move one of its cleaned labels to another merchant, or set its default category, colour, labels or logo. merge: fold one merchant into another. assign: who was paid on an intermediary's line.",
+    },
+  ),
   text: Schema.optional(
     Schema.String.annotate({
       description: "search: a piece of a merchant's name or of a cleaned label, any case.",
@@ -63,7 +70,28 @@ const MerchantsInput = Schema.Struct({
         "show, edit, merge, assign: the merchant's name, as list writes it (any case); assign makes it when none has it. merge: the one merged away and deleted.",
     }),
   ),
-  name: Schema.optional(Schema.String.annotate({ description: "edit: the merchant's new name." })),
+  name: Schema.optional(
+    Schema.String.annotate({ description: "create: the new merchant's name. edit: its new name." }),
+  ),
+  labels: Schema.optional(
+    Schema.Array(Schema.String).annotate({
+      description:
+        "create, edit: bank labels that name it, cleaned as imports clean them; edit adds them.",
+    }),
+  ),
+  color: Schema.optional(
+    Schema.Literals([...LOOK_COLORS, "automatic"]).annotate({
+      description: "create, edit: its avatar's colour; automatic: chosen from its name.",
+    }),
+  ),
+  logo: Schema.optional(
+    Schema.String.annotate({
+      description: "edit: its logo in base64, PNG, JPEG or WebP, 256 KiB at most.",
+    }),
+  ),
+  clear_logo: Schema.optional(
+    Schema.Boolean.annotate({ description: "edit: true removes its logo." }),
+  ),
   alias: Schema.optional(
     Schema.String.annotate({
       description: "edit: one of the merchant's cleaned labels, as show lists it, to move with to.",
@@ -81,7 +109,7 @@ const MerchantsInput = Schema.Struct({
   category: Schema.optional(
     Schema.String.annotate({
       description:
-        'edit: the merchant\'s default category, by its name or "Parent > Child" as categories list writes it (any case). Always a name: clear_category clears it.',
+        'create, edit: the merchant\'s default category, by its name or "Parent > Child" as categories list writes it (any case). Always a name: clear_category clears it.',
     }),
   ),
   clear_category: Schema.optional(
@@ -92,7 +120,7 @@ const MerchantsInput = Schema.Struct({
   kind: Schema.optional(
     Schema.Literals(["expense", "income"]).annotate({
       description:
-        'edit, with category: expense or income, when an expense and an income category share the name ("Other").',
+        'create, edit, with category: expense or income, when an expense and an income category share the name ("Other").',
     }),
   ),
   line: Schema.optional(
@@ -101,7 +129,9 @@ const MerchantsInput = Schema.Struct({
     }),
   ),
   intermediary: Schema.optional(
-    Schema.Boolean.annotate({ description: "edit: true marks it a payment intermediary." }),
+    Schema.Boolean.annotate({
+      description: "create, edit: true marks it a payment intermediary.",
+    }),
   ),
   subscription: Schema.optional(
     Schema.Boolean.annotate({
@@ -117,11 +147,18 @@ type Encoded = typeof MerchantsInput.Encoded;
 
 const SCANNED = MERCHANT_LINES_SCANNED.toLocaleString("en-US");
 
+const LOGO_KIB = LOGO_MAX_BYTES / 1024;
+
+/** A logo's most characters in base64: four for every three bytes. */
+const LOGO_CHARACTERS = (Math.ceil(LOGO_MAX_BYTES / 3) * 4).toLocaleString("en-US");
+
 const DESCRIPTION = `Merchants: who was paid, recognised from the bank's labels. A label is cleaned ("CB GREENMARKET 2110 RIVERTON" becomes the cleaned label "GREENMARKET") and each cleaned label names one merchant; each import recognises its new lines' merchants. \`list\` gives them by name; \`search\` finds them by a piece of a name or of a cleaned label (\`text\`, any case); \`show\` gives one with its cleaned labels and latest lines.
 
 Use it for "who is this shop?" or to tidy merchants up. Use \`lines\` instead for lines by label, amount or period, \`accounts\` for balances, \`month\` for where the money went.
 
 Writes (need a connection allowed to read and write):
+- \`create\` with \`name\`, and optionally \`labels\`, \`category\`, \`intermediary\`, \`color\`: makes a merchant by hand; the next imported lines whose labels clean as one of \`labels\` are its. Refused: a name taken, a label that cleans to nothing, or one naming another merchant (move it with edit alias and to).
+- \`edit\` with \`color\` (a key, or automatic), \`labels\` (adds them, refused as create), \`logo\` (base64 of a PNG, JPEG or WebP, ${LOGO_KIB} KiB at most, about ${LOGO_CHARACTERS} characters; it replaces the one it has; the user can also upload it in Gousset) or \`clear_logo: true\` (its initials again).
 - \`edit\` with \`name\`: renames; refused when another merchant has the name (merge instead).
 - \`edit\` with \`alias\` and \`to\`: moves one of the merchant's cleaned labels, and its lines, to the merchant named \`to\`, made when none has it: how a merchant is split.
 - \`edit\` with \`category\`: sets the merchant's default category, the one its entries go in by default, expense or income, named as \`categories\` lists it ("Parent > Child" for a child; add \`kind\` when an expense and an income category share the name). \`clear_category: true\`, alone, clears it. Its entries not classified yet (classified by default) of that kind move to it, and still count as to review; cleared, they go back to the fallback; the user's own choices stay. An archived or unknown category is refused. Merging categories moves it; archiving keeps it, shown archived, and it then classifies nothing new.
@@ -132,7 +169,7 @@ Writes (need a connection allowed to read and write):
 
 Names are any case. An unknown name is refused with close names; a blank name or one over ${MAX_MERCHANT_NAME} characters, a merge into itself, or a cleaned label the merchant lacks is refused with a valid call. \`limit\` is 1 to ${MAX_MERCHANTS}, ${DEFAULT_MERCHANTS} by default; when more remain, the result writes the next call with \`after\`: copy it.
 
-Examples: {"action":"search","text":"greenmarket"} · {"action":"edit","merchant":"Greenmarket","name":"Green Market"} · {"action":"edit","merchant":"Greenmarket","alias":"GREENMARKET FUEL","to":"Greenmarket Fuel"} · {"action":"edit","merchant":"Greenmarket","category":"Groceries > Supermarket"} · {"action":"edit","merchant":"Greenmarket","clear_category":true} · {"action":"merge","merchant":"Green Mkt","into":"Greenmarket"} · {"action":"edit","merchant":"Streamly","subscription":false}`;
+Examples: {"action":"search","text":"greenmarket"} · {"action":"create","name":"Riverside Bakery","labels":["CB RIVERSIDE BAKERY"],"color":"amber"} · {"action":"edit","merchant":"Greenmarket","name":"Green Market"} · {"action":"edit","merchant":"Greenmarket","alias":"GREENMARKET FUEL","to":"Greenmarket Fuel"} · {"action":"edit","merchant":"Greenmarket","category":"Groceries > Supermarket"} · {"action":"edit","merchant":"Greenmarket","clear_category":true} · {"action":"merge","merchant":"Green Mkt","into":"Greenmarket"} · {"action":"edit","merchant":"Streamly","subscription":false}`;
 
 const call = (input: Encoded) => `merchants ${JSON.stringify(input)}`;
 
@@ -159,6 +196,23 @@ function pageArguments(input: MerchantsInput): Encoded {
 const marked = (merchant: { readonly intermediary: boolean }) =>
   merchant.intermediary ? " (payment intermediary)" : "";
 
+/** What a list says of a look (#204): only what the user chose. */
+function lookNote(look: Look): string {
+  const color = look.color === null ? "" : `, colour ${look.color}`;
+
+  return look.logo === null ? color : `${color}, a logo`;
+}
+
+/** How a merchant is shown (#204), as show says it. */
+function lookText(look: Look): string {
+  const color =
+    look.color === null ? "an automatic colour (edit with color picks one)" : look.color;
+
+  return look.logo === null
+    ? `Shown as its initials on ${color}; no logo (edit with logo sets one).`
+    : `Shown with its logo (edit with clear_logo removes it); its initials' colour: ${color}.`;
+}
+
 /** A page of merchants: how many match, the merchants by name, and the call that reads on. */
 function pageText(page: MerchantPage, input: MerchantsInput): string {
   const text = input.text?.trim() ?? "";
@@ -177,7 +231,8 @@ function pageText(page: MerchantPage, input: MerchantsInput): string {
   const rows = [
     `These ${page.merchants.length}, by name (name: how many cleaned labels; show gives them):`,
     ...page.merchants.map(
-      (merchant) => `- ${merchant.name}${marked(merchant)}: ${labels(merchant.aliases)}`,
+      (merchant) =>
+        `- ${merchant.name}${marked(merchant)}: ${labels(merchant.aliases)}${lookNote(merchant.look)}`,
     ),
   ];
 
@@ -249,7 +304,7 @@ function showText(detail: MerchantDetail): string {
     : "";
 
   return [
-    `Merchant: ${detail.name}${intermediary}.\n${defaultText(detail)}${dismissed}`,
+    `Merchant: ${detail.name}${intermediary}.\n${defaultText(detail)}${dismissed}\n${lookText(detail.look)}`,
     aliases.join("\n"),
     [...lines, ...more].join("\n"),
   ].join("\n\n");
@@ -517,6 +572,204 @@ function dismiss(owner: string, merchant: string, subscription: boolean) {
   );
 }
 
+/** The colour asked for: a key of the palette, or null for the automatic one. */
+const colorOf = (color: LookColor | "automatic"): LookColor | null =>
+  color === "automatic" ? null : color;
+
+const gone = (merchant: string) =>
+  refuse(`The merchant "${clip(merchant)}" is gone: it was just merged or split away.`, {
+    action: "list",
+  });
+
+type TakenLabel = { readonly alias: string; readonly name: string };
+
+/** A label refused (#204): it cleans to nothing, or names another merchant already. */
+const labelRefusals = (retry: Encoded) => ({
+  MerchantLabelRefused: (refused: { readonly label: string }) =>
+    refuse(
+      `The label "${clip(refused.label)}" names no one once cleaned (only a date, a reference or a withdrawal): give the words of the bank's label that name the shop.`,
+      { ...retry, labels: ["CB RIVERSIDE BAKERY"] },
+    ),
+  MerchantLabelTaken: (taken: TakenLabel) =>
+    refuse(
+      `The label "${clip(taken.alias)}" names ${taken.name} already: a cleaned label names one merchant. Move it with the call below, or merge the two merchants.`,
+      {
+        action: "edit",
+        merchant: taken.name,
+        alias: taken.alias,
+        to: retry.name ?? retry.merchant,
+      },
+    ),
+});
+
+/**
+ * A label refused to `create` because another merchant has it (#204). Moving it first would make a
+ * bare merchant, and the create retried after would find the name taken: so the merchant is made
+ * first, as asked but for the labels cleaned as that one, and the label moved to it after.
+ */
+function takenOnCreate(input: MerchantsInput, name: string, taken: TakenLabel) {
+  const rest = (input.labels ?? []).filter((label) => merchantKey(label, null) !== taken.alias);
+
+  const move: Encoded = { action: "edit", merchant: taken.name, alias: taken.alias, to: name };
+
+  return refuse(
+    `The label "${clip(taken.alias)}" names ${taken.name} already: a cleaned label names one merchant. Make the merchant without it with the call below, then move the label to it: ${call(move)}\nOr merge the two merchants once it is made.`,
+    {
+      action: "create",
+      name,
+      labels: rest.length === 0 ? undefined : rest,
+      category: input.category,
+      kind: input.kind,
+      intermediary: input.intermediary,
+      color: input.color,
+    },
+  );
+}
+
+function createdText(made: MerchantSummary, input: MerchantsInput): string {
+  const named =
+    made.aliases === 0
+      ? " No cleaned label names it yet: edit with labels adds some, or move one to it."
+      : ` Its ${labels(made.aliases)} name the lines whose bank labels clean the same way, the next imported ones among them.`;
+
+  const category =
+    input.category === undefined ? "" : " Its entries go in its default category by default.";
+
+  return `Made the merchant ${made.name}${marked(made)}.${named}${category}`;
+}
+
+function create(owner: string, input: MerchantsInput) {
+  const { name, category } = input;
+  const example: Encoded = { action: "create", name: "Riverside Bakery" };
+
+  if (name === undefined || blank(name)) {
+    return refuse("create needs name: the new merchant's name.", example);
+  }
+
+  if (category !== undefined && blank(category)) {
+    return refuseWithCategories(
+      "category cannot be blank: name a category as categories list writes it, or leave category out.",
+    );
+  }
+
+  const retry: Encoded = { action: "create", name };
+
+  return Effect.gen(function* () {
+    const chosen =
+      category === undefined
+        ? null
+        : yield* namedCategory(owner, category, input.kind, (path, of) =>
+            call({ ...retry, category: path, kind: of }),
+          );
+
+    const merchants = yield* Merchants;
+
+    const made = yield* merchants.create(owner, {
+      name,
+      defaultCategoryId: chosen?.id ?? null,
+      intermediary: input.intermediary ?? false,
+      color: input.color === undefined ? null : colorOf(input.color),
+      aliases: input.labels ?? [],
+    });
+
+    return createdText(made, input);
+  }).pipe(
+    Effect.catchTags({
+      MerchantNameRefused: (refused) => nameRefusal(refused.reason, "name", example),
+      MerchantNameTaken: (taken) =>
+        refuse(
+          `A merchant is named "${taken.name}" already: change it with edit (its labels, its colour), or choose another name.`,
+          { action: "show", merchant: taken.name },
+        ),
+      ...labelRefusals(retry),
+      MerchantLabelTaken: (taken) => takenOnCreate(input, name, taken),
+      CategoryRefused: () =>
+        refuseWithCategories(
+          `"${clip(category?.trim() ?? "")}" is archived: it can no longer be chosen. Choose a category in use.`,
+        ),
+      CategoryNotFound: () =>
+        refuseWithCategories(
+          `The category "${clip(category ?? "")}" is gone: find the name it goes by now, then call create again.`,
+        ),
+      QueryFailed: Effect.die,
+    }),
+  );
+}
+
+/** Sets a merchant's colour, or adds labels to it (#204). */
+function editLook(
+  owner: string,
+  merchant: string,
+  change: { readonly color?: LookColor | "automatic"; readonly labels?: ReadonlyArray<string> },
+) {
+  return Effect.gen(function* () {
+    const found = yield* merchantNamed(owner, merchant);
+    const merchants = yield* Merchants;
+
+    const edited = yield* merchants.edit(owner, found.id, {
+      color: change.color === undefined ? undefined : colorOf(change.color),
+      addAliases: change.labels,
+    });
+
+    return change.color === undefined
+      ? `${edited.name} now has ${labels(edited.aliases)}: the lines whose bank labels clean the same way are its, the next imported ones among them.`
+      : `${edited.name}'s avatar is now drawn on ${edited.look.color ?? "an automatic colour, chosen from its name"}.`;
+  }).pipe(
+    Effect.catchTags({
+      ...labelRefusals({ action: "edit", merchant }),
+      // Neither a name nor a category is changed here.
+      MerchantNameRefused: Effect.die,
+      MerchantNameTaken: Effect.die,
+      CategoryNotFound: Effect.die,
+      CategoryRefused: Effect.die,
+      MerchantNotFound: () => gone(merchant),
+      QueryFailed: Effect.die,
+    }),
+  );
+}
+
+const decodeBase64 = Schema.decodeUnknownExit(Schema.Uint8ArrayFromBase64);
+
+/** What a refused logo is retried with: another picture, never clear_logo, which deletes its own. */
+const LOGO_RETRY = `<base64 of a PNG, JPEG or WebP, ${LOGO_KIB} KiB at most>`;
+
+const LOGO_REFUSALS = {
+  empty: "logo holds no byte: give the picture's bytes in base64.",
+  too_large: `logo is over ${LOGO_KIB} KiB: give a smaller picture (the user can shrink it).`,
+  type: "logo is neither PNG, JPEG nor WebP, by its bytes (SVG and others are refused): give one of the three, in base64.",
+} as const;
+
+/** Sets a merchant's logo from its base64, or removes it (#204). */
+function setLogo(owner: string, merchant: string, logo: string | null) {
+  const example: Encoded = { action: "edit", merchant, logo: LOGO_RETRY };
+  const decoded = logo === null ? undefined : decodeBase64(logo.replaceAll(/\s/g, ""));
+
+  if (decoded !== undefined && Exit.isFailure(decoded)) {
+    return refuse("logo is not valid base64: give the picture's bytes in base64.", example);
+  }
+
+  return Effect.gen(function* () {
+    const found = yield* merchantNamed(owner, merchant);
+    const merchants = yield* Merchants;
+
+    if (decoded === undefined) {
+      yield* merchants.removeLogo(owner, found.id);
+
+      return `${found.name} has no logo any more: its initials are shown.`;
+    }
+
+    yield* merchants.setLogo(owner, found.id, decoded.value);
+
+    return `${found.name}'s logo is set: Gousset shows it wherever ${found.name} is named.`;
+  }).pipe(
+    Effect.catchTags({
+      MerchantLogoRefused: (refused) => refuse(LOGO_REFUSALS[refused.reason], example),
+      MerchantNotFound: () => gone(merchant),
+      QueryFailed: Effect.die,
+    }),
+  );
+}
+
 function edit(owner: string, input: MerchantsInput) {
   const { merchant, name, alias, to, category, intermediary, subscription } = input;
   const clearing = input.clear_category === true;
@@ -529,18 +782,45 @@ function edit(owner: string, input: MerchantsInput) {
   }
 
   const asked =
-    [name, alias ?? to, category, intermediary, subscription].filter((each) => each !== undefined)
-      .length + (clearing ? 1 : 0);
+    [
+      name,
+      alias ?? to,
+      category,
+      intermediary,
+      subscription,
+      input.color,
+      input.labels,
+      input.logo,
+      input.clear_logo,
+    ].filter((each) => each !== undefined).length + (clearing ? 1 : 0);
 
   if (asked > 1) {
     return refuse(
-      "edit does one thing at a time: either name (a rename), alias and to (a move), category (its default category) or clear_category. Make one call for each.",
+      "edit does one thing at a time: either name (a rename), alias and to (a move), category (its default category), clear_category, intermediary, subscription, color, labels, logo or clear_logo. Make one call for each.",
       { action: "edit", merchant, name: name ?? merchant },
     );
   }
 
   if (clearing) {
     return clearDefault(owner, merchant);
+  }
+
+  if (input.color !== undefined || input.labels !== undefined) {
+    return editLook(owner, merchant, { color: input.color, labels: input.labels });
+  }
+
+  if (input.logo !== undefined) {
+    return setLogo(owner, merchant, input.logo);
+  }
+
+  if (input.clear_logo !== undefined) {
+    return input.clear_logo
+      ? setLogo(owner, merchant, null)
+      : refuse("clear_logo is true or left out: true removes the merchant's logo.", {
+          action: "edit",
+          merchant,
+          clear_logo: true,
+        });
   }
 
   if (intermediary !== undefined) {
@@ -582,7 +862,7 @@ function edit(owner: string, input: MerchantsInput) {
   }
 
   return refuse(
-    "edit needs either name, to rename the merchant, alias and to, to move one of its cleaned labels (show lists them) to another merchant, category, to set its default category, or clear_category: true, to clear it.",
+    "edit needs either name, to rename the merchant, alias and to, to move one of its cleaned labels (show lists them) to another merchant, category, to set its default category, clear_category: true, to clear it, color, labels, logo or clear_logo: true.",
     { action: "show", merchant },
   );
 }
@@ -717,6 +997,7 @@ export const merchantsTool = defineTool<
     list: "read",
     search: "read",
     show: "read",
+    create: "write",
     edit: "write",
     merge: "write",
     assign: "write",
@@ -744,6 +1025,10 @@ export const merchantsTool = defineTool<
 
       case "show": {
         return show(caller.userId, input.merchant);
+      }
+
+      case "create": {
+        return create(caller.userId, input);
       }
 
       case "edit": {

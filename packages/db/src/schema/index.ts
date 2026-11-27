@@ -24,6 +24,7 @@ import {
   importUpload,
   merchant,
   merchantAlias,
+  merchantLogo,
   statementImport,
   statementLine,
 } from "./ledger";
@@ -58,6 +59,7 @@ export const tables = {
   transfer,
   merchant,
   merchantAlias,
+  merchantLogo,
 };
 
 export { authRelations };

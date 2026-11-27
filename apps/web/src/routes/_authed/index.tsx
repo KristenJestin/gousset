@@ -48,6 +48,7 @@ import { MonthSwitch } from "@/components/month-switch";
 import { shortDay } from "@/lib/account-day";
 import { categoryPath } from "@/lib/categories";
 import { loadBlocks } from "@/lib/load-blocks";
+import { merchantAvatar } from "@/lib/merchant-logo";
 import { monthSearch } from "@/lib/month";
 import { otherCurrencyNote } from "@/lib/other-currency";
 import { monthQueries } from "@/queries/month";
@@ -431,7 +432,19 @@ function merchantRow(merchant: MerchantSpending): BreakdownRow {
         ? m.reviewViaIntermediary({ name: merchant.name })
         : merchant.name;
 
-  return { id: merchant.id ?? NO_MERCHANT, name, icon: "merchant", amount: merchant.spent };
+  // The row of none keeps the merchants' icon; a merchant shows its logo or initials (#204).
+  const avatar =
+    merchant.id === null || merchant.name === null || merchant.look === null
+      ? undefined
+      : merchantAvatar({ id: merchant.id, name: merchant.name, look: merchant.look });
+
+  return {
+    id: merchant.id ?? NO_MERCHANT,
+    name,
+    icon: "merchant",
+    avatar,
+    amount: merchant.spent,
+  };
 }
 
 function CategoryRows({ month }: { month: string }) {
@@ -612,6 +625,7 @@ function flagRow(flag: MonthFlag, locale: Locale) {
       return {
         id: `${flag.kind}-${flag.subscriptionId}`,
         icon: FLAG_ICONS[flag.kind],
+        avatar: merchantAvatar({ id: flag.merchantId, name: flag.merchant, look: flag.look }),
         text: m.reviewFlagPriceRise({
           merchant: flag.merchant,
           from: exact(flag.from),
@@ -624,6 +638,7 @@ function flagRow(flag: MonthFlag, locale: Locale) {
       return {
         id: `${flag.kind}-${flag.subscriptionId}`,
         icon: FLAG_ICONS[flag.kind],
+        avatar: merchantAvatar({ id: flag.merchantId, name: flag.merchant, look: flag.look }),
         text: m.reviewFlagStopped({
           merchant: flag.merchant,
           day: day(flag.expectedOn),
@@ -676,7 +691,7 @@ function Flags({ month }: { month: string }) {
   );
 }
 
-/** A day of the calendar as the component draws it. */
+/** A day of the calendar as the component draws it: a subscription with its merchant's face. */
 function calendarItem(item: SubscriptionCalendar["items"][number]): RecurringItem {
   return {
     id: item.id,
@@ -685,6 +700,10 @@ function calendarItem(item: SubscriptionCalendar["items"][number]): RecurringIte
     name: item.name,
     amount: item.amount,
     priceRise: item.kind === "expiring" ? null : item.priceRise,
+    avatar:
+      item.kind === "expiring"
+        ? undefined
+        : merchantAvatar({ id: item.merchantId, name: item.name, look: item.look }),
   };
 }
 

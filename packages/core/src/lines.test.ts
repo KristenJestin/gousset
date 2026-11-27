@@ -414,6 +414,7 @@ describe("showLine", () => {
       toReview: true,
       // Held, it has no entry yet: no category.
       category: null,
+      merchant: null,
       fromBalance: false,
       maybeRefund: false,
       originalAmount: { minor: -4500, currency: "USD" },
@@ -461,6 +462,22 @@ describe("showLine", () => {
         color: null,
       },
     ]);
+  });
+
+  test("gives who a line paid, with the merchant's look (#204)", async () => {
+    const merchant = {
+      id: "le-fournil",
+      name: "Le Fournil",
+      look: { color: "amber" as const, logo: "0123456789abcdef" },
+    };
+
+    const paid = line(euro.id, "2026-11-04", -380, "CB LE FOURNIL", { merchant });
+    const page = await inOrder({ ...rows, lines: [paid] }, searchLines(ADA, {}));
+
+    expect(page.lines.map((each) => each.merchant)).toEqual([merchant]);
+    expect((await inOrder({ ...rows, lines: [paid] }, showLine(ADA, paid.id))).merchant).toEqual(
+      merchant,
+    );
   });
 
   const tagOf = (owner: string, lineId: string) =>

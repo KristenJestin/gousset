@@ -101,6 +101,17 @@ function uiMessages(locale: Locale) {
       nextMonth: m.uiNextMonth({}, options),
       remove: (name: string) => m.uiRemove({ name }, options),
     },
+    /** `LogoField`'s buttons. */
+    logo: {
+      choose: m.uiLogoChoose({}, options),
+      replace: m.uiLogoReplace({}, options),
+      remove: m.uiLogoRemove({}, options),
+    },
+    /** `TextListField`'s button. */
+    list: {
+      add: m.uiListAdd({}, options),
+      remove: (value: string) => m.uiRemove({ name: value }, options),
+    },
     forms: {
       noMatch: m.uiNoMatch({}, options),
       results: (count: number) =>

@@ -1,6 +1,8 @@
 import { useState } from "react";
 
 import { useUiMessages } from "../hooks/use-ui-messages";
+import { Avatar } from "./avatar";
+import type { AvatarFace } from "./avatar";
 import { Button } from "./button";
 import { Dialog } from "./dialog";
 import { Icon } from "./icon";
@@ -10,6 +12,8 @@ import { NameField } from "./name-field";
 export type LineMerchantProps = {
   /** Who was paid, by name; `null` while nobody is known (an intermediary's line that asks). */
   merchant: string | null;
+  /** Who was paid, by logo or initials (#204), 24 px before its name; none while it asks. */
+  avatar?: AvatarFace;
   /** The payment service the money went through ("PayPal"), by name; `null` for a direct payment. */
   intermediary: string | null;
   /** The line went through an intermediary and nobody says who was paid: it asks the user. */
@@ -42,12 +46,15 @@ export type LineMerchantProps = {
  * merchant is assigned, the button that opened the dialog is still there, now "Change", and focus
  * lands on it.
  *
+ * With `avatar`, the merchant's logo or initials stand before its name, hidden from screen readers.
+ *
  * Motion: none of its own; the row does not animate. The dialog is `Dialog`'s: it fades and grows
  * in 200 ms, ease-out (on a phone it slides up from the bottom edge), and leaves the same way. Cut
  * under reduced motion.
  */
 export function LineMerchant({
   merchant,
+  avatar,
   intermediary,
   asks,
   merchants,
@@ -103,13 +110,18 @@ export function LineMerchant({
   ) : (
     <dl className="flex min-w-0 flex-1 items-center justify-between gap-4">
       <dt className="shrink-0 text-muted-foreground">{words.merchant}</dt>
-      <dd className="flex min-w-0 flex-col text-right">
-        <span className="font-medium break-words text-foreground">{merchant}</span>
-        {intermediary === null ? null : (
-          <span className="text-xs text-muted-foreground">
-            {words.merchantThrough(intermediary)}
-          </span>
+      <dd className="flex min-w-0 items-center gap-2">
+        {avatar === undefined ? null : (
+          <Avatar name={avatar.name} src={avatar.src} color={avatar.color} size="sm" />
         )}
+        <span className="flex min-w-0 flex-col text-right">
+          <span className="font-medium break-words text-foreground">{merchant}</span>
+          {intermediary === null ? null : (
+            <span className="text-xs text-muted-foreground">
+              {words.merchantThrough(intermediary)}
+            </span>
+          )}
+        </span>
       </dd>
     </dl>
   );

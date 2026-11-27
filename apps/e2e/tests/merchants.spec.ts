@@ -166,7 +166,7 @@ test("the same shop under several labels becomes one merchant", async ({ page, a
   await animationsDone(page);
 });
 
-test("renaming a merchant shows its new name; a name another merchant has says to merge", async ({
+test("renaming a merchant in its sheet shows its new name; a name another merchant has says to merge", async ({
   page,
   app,
   user,
@@ -175,30 +175,31 @@ test("renaming a merchant shows its new name; a name another merchant has says t
 
   await signedInAs(page, romy);
   await openMerchant(page, "Quillbrook");
-  await page.getByRole("button", { name: "Rename", exact: true }).click();
+  await page.getByRole("button", { name: "Edit", exact: true }).click();
 
-  const dialog = page.getByRole("dialog", { name: "Rename Quillbrook" });
-  const name = dialog.getByRole("textbox", { name: "Name" });
+  const sheet = page.getByRole("dialog", { name: "Edit Quillbrook" });
+  const name = sheet.getByRole("textbox", { name: "Name" });
+  const save = sheet.getByRole("button", { name: "Save", exact: true });
+
+  await expect(name).toHaveValue("Quillbrook");
 
   // The other shop's name, in another case: refused in the form, which stays open.
   await name.fill("lanternfield");
-  await dialog.getByRole("button", { name: "Rename", exact: true }).click();
+  await save.click();
   await expect(name).toHaveAccessibleDescription(
     "Lanternfield already has this name: merge this merchant into it instead.",
   );
-  await expect(dialog).toBeVisible();
+  await expect(sheet).toBeVisible();
 
   await name.fill("   ");
-  await dialog.getByRole("button", { name: "Rename", exact: true }).click();
+  await save.click();
   await expect(name).toHaveAccessibleDescription("Give the merchant a name.");
 
   await name.fill("Quillbrook Grocer");
-  await dialog.getByRole("button", { name: "Rename", exact: true }).click();
-  await expect(dialog).toBeHidden();
+  await save.click();
+  await expect(sheet).toBeHidden();
   // The toast's own text; the announcer repeats it after "Saved." for screen readers.
-  await expect(
-    page.getByText("Quillbrook is now Quillbrook Grocer.", { exact: true }),
-  ).toBeVisible();
+  await expect(page.getByText("Quillbrook Grocer is saved.", { exact: true })).toBeVisible();
   await expect(
     page.getByRole("heading", { level: 2, name: "Quillbrook Grocer", exact: true }),
   ).toBeVisible();
@@ -325,7 +326,7 @@ test("with no import yet, the merchants section says they come from imports", as
   await animationsDone(page);
 });
 
-test("choosing a merchant's default category in its page shows it there; None clears it", async ({
+test("choosing a merchant's default category in its sheet shows it on its page; None clears it", async ({
   page,
   app,
   user,
@@ -339,41 +340,52 @@ test("choosing a merchant's default category in its page shows it there; None cl
 
   await expect(chosen).toContainText("None");
 
-  const change = page.getByRole("button", { name: "Change the default category of Quillbrook" });
+  const edit = page.getByRole("button", { name: "Edit", exact: true });
+  const sheet = page.getByRole("dialog", { name: "Edit Quillbrook" });
 
-  await change.click();
+  await edit.click();
 
-  const dialog = page.getByRole("dialog", { name: "Default category of Quillbrook" });
+  // None at first, as the merchant has none; a kind, then its categories in use, found by typing.
+  await expect(sheet.getByRole("radio", { name: "None" })).toBeChecked();
+  await expect(sheet.getByRole("combobox", { name: "Category" })).toHaveCount(0);
+  await sheet.getByRole("radio", { name: "Expense" }).click();
 
-  // Expense is offered first: its categories in use, found by typing.
-  await expect(dialog.getByRole("radio", { name: "Expense" })).toBeChecked();
-  await dialog.getByRole("combobox", { name: "Category" }).pressSequentially("Bakery");
+  // A kind without its category is not sent: its field is required, and the browser says so under
+  // it, in its own words, as for every required field; the sheet stays open.
+  const category = sheet.getByRole("combobox", { name: "Category" });
+
+  await sheet.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(category).toHaveAttribute("aria-invalid", "true");
+  await expect(category).toHaveAccessibleDescription(/\S/);
+  await expect(sheet).toBeVisible();
+  await expect(chosen).toContainText("None");
+
+  await category.pressSequentially("Bakery");
   await page.getByRole("option", { name: "Groceries › Bakery", exact: true }).click();
-  await dialog.getByRole("button", { name: "Save" }).click();
-  await expect(dialog).toBeHidden();
-  await expect(
-    page.getByText("The default category of Quillbrook is now Groceries › Bakery.").first(),
-  ).toBeVisible();
+  await sheet.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(sheet).toBeHidden();
+  await expect(page.getByText("Quillbrook is saved.").first()).toBeVisible();
   await expect(chosen).toContainText("Groceries › Bakery");
   await expect(chosen).toContainText("Expense");
 
-  // The page read again shows it, from the database.
+  // The page read again shows it, from the database, and the sheet starts from it.
   await page.reload();
   await expect(block(page, "Default category").getByRole("listitem")).toContainText(
     "Groceries › Bakery",
   );
 
-  await change.click();
-  await dialog.getByRole("radio", { name: "None" }).click();
-  await expect(dialog.getByRole("combobox", { name: "Category" })).toHaveCount(0);
-  await dialog.getByRole("button", { name: "Save" }).click();
-  await expect(dialog).toBeHidden();
+  await edit.click();
+  await expect(sheet.getByRole("radio", { name: "Expense" })).toBeChecked();
+  await sheet.getByRole("radio", { name: "None" }).click();
+  await expect(sheet.getByRole("combobox", { name: "Category" })).toHaveCount(0);
+  await sheet.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(sheet).toBeHidden();
   await expect(chosen).toContainText("None");
   await expectAccessible(page);
   await animationsDone(page);
 });
 
-test("a merchant's dialog fades and grows in 200 ms (rises in 300 ms on a phone), and appears at once under reduced motion", async ({
+test("a merchant's sheet slides in from the right (from the bottom on a phone) in 300 ms, and opens and closes at once under reduced motion", async ({
   page,
   app,
   user,
@@ -382,19 +394,25 @@ test("a merchant's dialog fades and grows in 200 ms (rises in 300 ms on a phone)
 
   await signedInAs(page, vera);
   await openMerchant(page, "Lanternfield");
-  await page.getByRole("button", { name: "Rename", exact: true }).click();
 
-  const dialog = page.getByRole("dialog", { name: "Rename Lanternfield" });
+  const edit = page.getByRole("button", { name: "Edit", exact: true });
+  const sheet = page.getByRole("dialog", { name: "Edit Lanternfield" });
 
-  await expect(dialog).toHaveCSS("transition-duration", onPhone(page) ? "0.3s" : "0.2s");
-  await expect(dialog).toHaveCSS("transition-timing-function", "cubic-bezier(0, 0, 0.2, 1)");
+  await edit.click();
+  await expect(sheet).toHaveAttribute("data-side", onPhone(page) ? "bottom" : "right");
+  await expect(sheet).toHaveCSS("transition-duration", "0.3s");
+  await expect(sheet).toHaveCSS("transition-timing-function", "cubic-bezier(0, 0, 0.2, 1)");
   await page.keyboard.press("Escape");
-  await expect(dialog).toBeHidden();
+  await expect(sheet).toBeHidden();
 
   await page.emulateMedia({ reducedMotion: "reduce" });
-  await page.getByRole("button", { name: "Rename", exact: true }).click();
-  await expect(dialog).toBeVisible();
-  await expect(dialog).toHaveCSS("transition-duration", "0s");
+  await edit.click();
+  await expect(sheet).toBeVisible();
+  await expect(sheet).toHaveCSS("transition-duration", "0s");
+  // In its place from the first frame: never stood off its edge, nothing under way.
+  await expect(sheet).toHaveCSS("translate", "none");
+  expect(await sheet.evaluate((node) => node.getAnimations().length)).toBe(0);
   await page.keyboard.press("Escape");
-  await expect(dialog).toBeHidden();
+  await expect(sheet).toBeHidden();
+  await expect(edit).toBeFocused();
 });

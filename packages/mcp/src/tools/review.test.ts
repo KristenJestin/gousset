@@ -204,7 +204,10 @@ const EXPENSES = Layer.mock(Expenses, {
 const MERCHANTS = Layer.mock(Merchants, {
   ofLine: (_owner, lineId) =>
     Effect.succeed({
-      merchant: lineId === market.id ? { id: memoryId(), name: "City Market" } : null,
+      merchant:
+        lineId === market.id
+          ? { id: memoryId(), name: "City Market", look: { color: null, logo: null } }
+          : null,
       intermediary: null,
       asks: false,
     }),

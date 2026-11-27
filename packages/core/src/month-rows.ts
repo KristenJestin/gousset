@@ -15,6 +15,8 @@ import { alias } from "drizzle-orm/pg-core";
 
 import { readAll } from "./category-store-database";
 import { maybeRefundsAmong } from "./expenses/expenses";
+import { lookOf } from "./look";
+import { logoShaOf } from "./merchants/look-columns";
 import type { MonthRows, MonthScope, StatementReach } from "./month";
 import { chargesIn } from "./subscriptions/charges";
 
@@ -86,9 +88,20 @@ export async function monthRowsIn(
       ),
     );
 
-  const merchants = await transaction
-    .select({ id: merchant.id, name: merchant.name, intermediary: merchant.isIntermediary })
+  const merchantRows = await transaction
+    .select({
+      id: merchant.id,
+      name: merchant.name,
+      intermediary: merchant.isIntermediary,
+      color: merchant.color,
+      logoSha: logoShaOf(merchant.id),
+    })
     .from(merchant);
+
+  const merchants = merchantRows.map(({ color, logoSha, ...row }) => ({
+    ...row,
+    look: lookOf(color, logoSha),
+  }));
 
   const aliases = await transaction
     .select({ alias: merchantAlias.alias, merchantId: merchantAlias.merchantId })

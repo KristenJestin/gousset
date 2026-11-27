@@ -12,6 +12,8 @@ import { paletteFill, paletteText } from "../lib/palette";
 import type { PaletteColor } from "../lib/palette";
 import { cn } from "../lib/utils";
 import { Amount } from "./amount";
+import { Avatar } from "./avatar";
+import type { AvatarFace } from "./avatar";
 import { Delta } from "./delta";
 import { Icon } from "./icon";
 import { IconButton } from "./icon-button";
@@ -23,6 +25,11 @@ export type BreakdownRow = {
   /** The user's name for it: a category, a merchant, a subject. */
   name: string;
   icon?: IconName;
+  /**
+   * Who it is, by logo or initials (a merchant's, #204), 24 px in place of the icon; a list where a
+   * row has one gives every row's icon that room.
+   */
+  avatar?: AvatarFace;
   /**
    * Its colour (a category's, #205): its icon and its bar are drawn in it. Without one, the icon
    * is muted and the bar is spent's colour.
@@ -68,14 +75,15 @@ export type BreakdownProps = {
   footnote?: string;
 };
 
-/** A row's icon, in its colour when it has one. */
-function RowIcon({ row }: { row: BreakdownRow }) {
+/** A row's icon, in its colour when it has one; `wide`, the room of an avatar. */
+function RowIcon({ row, wide }: { row: BreakdownRow; wide: boolean }) {
   return (
     <span
       data-slot="breakdown-icon"
       data-color={row.color ?? undefined}
       className={cn(
-        "flex size-4 shrink-0",
+        "flex shrink-0",
+        wide ? "size-6 items-center justify-center" : "size-4",
         row.color === undefined || row.color === null
           ? "text-muted-foreground"
           : paletteText[row.color],
@@ -121,20 +129,33 @@ function RowBar({ bar, color }: { bar: BreakdownBar; color: PaletteColor | null 
   );
 }
 
+/** A row's icon, or its avatar; `wide`, the room of an avatar, which a list with one gives all. */
+function RowMark({ row, wide }: { row: BreakdownRow; wide: boolean }) {
+  if (row.avatar !== undefined) {
+    return (
+      <Avatar name={row.avatar.name} src={row.avatar.src} color={row.avatar.color} size="sm" />
+    );
+  }
+
+  return <RowIcon row={row} wide={wide} />;
+}
+
 function RowContent({
   row,
   bar,
+  wide,
   locale,
 }: {
   row: BreakdownRow;
   bar: BreakdownBar;
+  wide: boolean;
   locale: string;
 }) {
   const messages = useUiMessages().money;
 
   return (
     <>
-      <RowIcon row={row} />
+      <RowMark row={row} wide={wide} />
       <span className="flex w-28 shrink-0 items-center gap-1 text-sm">
         <span className="truncate">{row.name}</span>
         {bar.over ? (
@@ -204,7 +225,7 @@ function DetailPanel({
       onKeyDown={onKeyDown}
     >
       <div className="flex h-8 items-center gap-3">
-        <RowIcon row={row} />
+        <RowMark row={row} wide={row.avatar !== undefined} />
         <span className="min-w-0 flex-1 truncate text-sm font-semibold">{row.name}</span>
         {row.benchmark === undefined || benchmarkLabel === undefined ? null : (
           <Delta
@@ -250,8 +271,9 @@ function More({ count, onMore }: { count: number; onMore: (() => void) | undefin
 
 /**
  * Where the money goes (docs/wireframes, screen 1, block 2): one row per category, merchant or
- * subject, each with its icon, its name, a bar on a scale shared by every row, and its amount. A
- * row with a colour (a category's, #205) draws its icon and its bar in it; spent's colour else.
+ * subject, each with its icon (a merchant's logo or initials, `avatar`), its name, a bar on a scale
+ * shared by every row, and its amount. A row with a colour (a category's, #205) draws its icon and
+ * its bar in it; spent's colour else.
  * A dark mark on the bar is its benchmark (the 6-month average, or an amount the user set, read as
  * such); ⚠ once it is passed by any amount; no mark without one. Cut after
  * `limit` rows with "+ N more"; a sentence when there is nothing.
@@ -306,6 +328,7 @@ export function Breakdown({
   }
 
   const bars = breakdownBars(rows);
+  const wide = rows.some((row) => row.avatar !== undefined);
   // An open row stays in the list, even past the limit, so that it has a place to go back to.
   const selectedIndex = selected === undefined ? -1 : rows.indexOf(selected);
   const limited = limit === undefined ? rows.length : Math.max(0, limit);
@@ -327,7 +350,7 @@ export function Breakdown({
           <li key={row.id} className="h-10">
             {onSelect === undefined ? (
               <div className={ROW_CLASSES}>
-                <RowContent row={row} bar={bar} locale={writtenIn} />
+                <RowContent row={row} bar={bar} wide={wide} locale={writtenIn} />
               </div>
             ) : (
               <motion.div
@@ -351,7 +374,7 @@ export function Breakdown({
                   )}
                   onClick={() => onSelect(row.id)}
                 >
-                  <RowContent row={row} bar={bar} locale={writtenIn} />
+                  <RowContent row={row} bar={bar} wide={wide} locale={writtenIn} />
                 </button>
               </motion.div>
             )}

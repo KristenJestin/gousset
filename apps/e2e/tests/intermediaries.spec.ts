@@ -25,7 +25,7 @@ import { openUserData } from "../src/user-data";
 // Issue #30's screens, one test per scenario of "How to verify": a line paid through a payment
 // intermediary asks, on the operations page, who was really paid; the merchant chosen proposes a
 // rule, which gives the next such line its merchant; and a merchant the user marks as an
-// intermediary on its page makes its lines ask. The MCP scenarios are intermediaries-mcp.spec.ts.
+// intermediary in its sheet, on its page (#204), makes its lines ask. The MCP scenarios are intermediaries-mcp.spec.ts.
 // Statements are imported as the app's import job runs them, recognising their merchants. Each test
 // has a user of its own. Every line and shop here is invented but PayPal's name, which Gousset
 // knows.
@@ -136,14 +136,15 @@ const notifications = (page: Page) => page.getByRole("region", { name: "Notifica
 
 const FIRST = "CB PAYPAL *PIXELPLAY 21/10";
 
-const intermediarySwitch = (page: Page) =>
-  page.getByRole("switch", { name: "Payment intermediary" });
+/** Paylink's sheet, where it is edited (#204). */
+const paylinkSheet = (page: Page) => page.getByRole("dialog", { name: "Edit Paylink" });
 
-/** The switch shows its value saved: no save of it is pending any more (#224). */
-async function expectSaved(control: Locator, checked: boolean) {
-  await expect(control).not.toHaveAttribute("aria-busy", "true");
-  await expect(control).toBeChecked({ checked });
-}
+const editPaylink = (page: Page) => page.getByRole("button", { name: "Edit", exact: true }).click();
+
+const intermediarySwitch = (sheet: Locator) =>
+  sheet.getByRole("switch", { name: "Payment intermediary" });
+
+const saveButton = (sheet: Locator) => sheet.getByRole("button", { name: "Save", exact: true });
 
 /** A user of the test's own with the merchant Paylink, made from an imported line, on its page. */
 async function onPaylinkPage(
@@ -275,19 +276,26 @@ test("a merchant marked as an intermediary makes its lines ask", async ({ page, 
   await expect(lineMerchant(page)).toContainText("Paylink");
   await expect(lineMerchant(page).getByRole("button")).toHaveCount(0);
 
-  // Marked on its page: the switch applies at once, and stays so.
+  // Marked on its page, in its sheet (#204): saved, and so it stays.
   const paylink = await merchantId(owner, "Paylink");
 
   await visit(page, `/settings/merchants/${paylink}`);
+  await page.getByRole("button", { name: "Edit", exact: true }).click();
 
-  const marked = intermediarySwitch(page);
+  const sheet = paylinkSheet(page);
+  const marked = intermediarySwitch(sheet);
 
   await expect(marked).not.toBeChecked();
-  await expect(page.getByText("Its labels hide who was paid")).toBeVisible();
+  await expect(sheet.getByText("Its labels hide who was paid")).toBeVisible();
   await marked.click();
-  await expectSaved(marked, true);
+  await expect(marked).toBeChecked();
+  await saveButton(sheet).click();
+  await expect(sheet).toBeHidden();
+  await expect(page.getByText("1 label · payment intermediary")).toBeVisible();
   await page.reload();
-  await expect(intermediarySwitch(page)).toBeChecked();
+  await editPaylink(page);
+  await expect(intermediarySwitch(paylinkSheet(page))).toBeChecked();
+  await page.keyboard.press("Escape");
 
   // The merchants' list says so under its name.
   await visit(page, "/settings/merchants");
@@ -305,27 +313,35 @@ test("a merchant marked as an intermediary makes its lines ask", async ({ page, 
 });
 
 // Issue #224: the switch showed the mark saved as soon as it was clicked; a reload before the save
-// ended lost it.
-test("the intermediary switch keeps its mark through a reload as soon as it shows saved", async ({
+// ended lost it. Since #204 the mark is saved with the merchant's sheet, which stays open, its
+// button busy, until the save ends.
+test("the intermediary mark is kept through a reload as soon as its sheet closes", async ({
   page,
   app,
   user,
 }) => {
   const { owner, paylink } = await onPaylinkPage(page, app, user, "intermediary-reload");
-  const marked = intermediarySwitch(page);
+
+  await editPaylink(page);
+
+  const sheet = paylinkSheet(page);
+  const marked = intermediarySwitch(sheet);
 
   // A slow save: the browser holds it a second before it leaves; what it then reads again goes at
-  // once, so the switch shows it saved about a second after the click.
+  // once, so the sheet closes about a second after the click.
   const unslow = await slowServerWrites(page, 1000);
 
   await marked.click();
+  await saveButton(sheet).click();
 
-  // It moves at once; a reload once it shows the mark saved keeps it.
-  await expect(marked).toBeChecked();
-  await expectSaved(marked, true);
+  // The sheet stays open while it is sent; a reload once it closed keeps the mark.
+  await expect(saveButton(sheet)).toHaveAttribute("aria-busy", "true");
+  await expect(sheet).toBeVisible();
+  await expect(sheet).toBeHidden();
   await unslow();
   await page.reload();
-  await expectSaved(intermediarySwitch(page), true);
+  await editPaylink(page);
+  await expect(intermediarySwitch(paylinkSheet(page))).toBeChecked();
 
   const [row] = await data.asUser(owner, (transaction) =>
     transaction
@@ -337,13 +353,17 @@ test("the intermediary switch keeps its mark through a reload as soon as it show
   expect(row?.intermediary).toBe(true);
 });
 
-test("a failed save puts the intermediary switch back with its message", async ({
+test("a failed save keeps the intermediary mark unsaved with its message", async ({
   page,
   app,
   user,
 }) => {
   const { paylink } = await onPaylinkPage(page, app, user, "intermediary-fails");
-  const marked = intermediarySwitch(page);
+
+  await editPaylink(page);
+
+  const sheet = paylinkSheet(page);
+  const marked = intermediarySwitch(sheet);
 
   // The save names a merchant the user does not have, invented here: the server refuses it.
   const invented = randomUUID();
@@ -364,17 +384,19 @@ test("a failed save puts the intermediary switch back with its message", async (
 
   await page.route(SERVER_FUNCTIONS, elsewhere);
   await marked.click();
+  await saveButton(sheet).click();
 
-  // Pending while it is sent, then back off, with what went wrong.
-  await expect(marked).toBeChecked();
-  await expect(marked).toHaveAttribute("aria-busy", "true");
-  await expectSaved(marked, false);
+  // Busy while it is sent, then the sheet stays open and says what went wrong.
+  await expect(saveButton(sheet)).toHaveAttribute("aria-busy", "true");
   await expect(
-    notifications(page).getByText("This merchant no longer exists: it may have been merged."),
+    sheet.getByText("This merchant no longer exists: it may have been merged."),
   ).toBeVisible();
+  await expect(saveButton(sheet)).not.toHaveAttribute("aria-busy", "true");
+  await expect(sheet).toBeVisible();
   await page.unroute(SERVER_FUNCTIONS, elsewhere);
 
   // Nothing was saved.
   await page.reload();
-  await expectSaved(intermediarySwitch(page), false);
+  await editPaylink(page);
+  await expect(intermediarySwitch(paylinkSheet(page))).not.toBeChecked();
 });

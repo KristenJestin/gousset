@@ -3,6 +3,8 @@ import { useState, useSyncExternalStore } from "react";
 import type { AnchorHTMLAttributes, ButtonHTMLAttributes, ReactNode, Ref } from "react";
 
 import { transition } from "../lib/motion";
+import { Avatar } from "./avatar";
+import type { AvatarFace } from "./avatar";
 import { Brand } from "./brand";
 import { Icon } from "./icon";
 import type { IconName } from "./icon";
@@ -308,30 +310,45 @@ export function SectionLink({ label, ...props }: AnchorProps & { label: string }
 
 /**
  * A block of a screen under its own heading: a group of settings, say. What it lets the user do
- * sits beside its title (`actions`): a button opening a `Dialog`, never a form inside the block
- * (docs/design.md, "Actions and forms").
+ * sits beside its title (`actions`): a button opening a `Dialog` or a `Sheet`, never a form inside
+ * the block (docs/design.md, "Actions and forms"). A block about someone with a face (a merchant's
+ * page, #204) shows its `avatar` (40 px) before its heading. No motion of its own.
  */
 export function Block({
   title,
   description,
   actions,
+  avatar,
   children,
 }: {
   title: string;
   description?: string;
   /** Beside the title: the block's actions, `Button`s ("Create a user"). */
   actions?: ReactNode;
+  /** Before the title: who the block is about, by its logo or initials; hidden from screen readers. */
+  avatar?: AvatarFace;
   children: ReactNode;
 }) {
+  const heading = (
+    <div className="flex flex-col gap-1">
+      <h2 className="text-base font-semibold">{title}</h2>
+      {description === undefined ? null : (
+        <p className="text-sm text-muted-foreground">{description}</p>
+      )}
+    </div>
+  );
+
   return (
     <section className="flex flex-col gap-4 rounded-lg border bg-card p-5 text-card-foreground">
       <header className="flex flex-wrap items-start justify-between gap-3">
-        <div className="flex flex-col gap-1">
-          <h2 className="text-base font-semibold">{title}</h2>
-          {description === undefined ? null : (
-            <p className="text-sm text-muted-foreground">{description}</p>
-          )}
-        </div>
+        {avatar === undefined ? (
+          heading
+        ) : (
+          <div className="flex min-w-0 items-center gap-3">
+            <Avatar name={avatar.name} src={avatar.src} color={avatar.color} size="lg" />
+            {heading}
+          </div>
+        )}
         {actions === undefined ? null : <div className="flex items-center gap-2">{actions}</div>}
       </header>
       {children}

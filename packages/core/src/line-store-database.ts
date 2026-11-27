@@ -13,6 +13,8 @@ import { alias } from "drizzle-orm/pg-core";
 import { Effect, Layer } from "effect";
 
 import { categoriesOfLines } from "./category-store-database";
+import { merchantsOfLines } from "./merchants/line-merchant";
+import type { NamedMerchant } from "./merchants/line-merchant";
 import type { LineCategory } from "./category-store";
 import { maybeRefundsAmong } from "./expenses/expenses";
 import { LineStore } from "./line-store";
@@ -141,8 +143,13 @@ type LineColumns = {
   readonly source: "import" | "manual" | "balance" | "counterpart";
 };
 
-/** A row of `lineColumns`, with its category; a discarded one is never asked for. */
-function found(row: LineColumns, category: LineCategory | null, maybeRefund: boolean): FoundLine {
+/** A row of `lineColumns`, with its category and merchant; a discarded one is never asked for. */
+function found(
+  row: LineColumns,
+  category: LineCategory | null,
+  merchant: NamedMerchant | null,
+  maybeRefund: boolean,
+): FoundLine {
   return {
     id: row.id,
     bookedOn: row.bookedOn,
@@ -159,6 +166,7 @@ function found(row: LineColumns, category: LineCategory | null, maybeRefund: boo
       currency: row.currency,
     },
     category,
+    merchant,
     fromBalance: row.source === "balance",
     maybeRefund,
   };
@@ -218,6 +226,8 @@ async function search(transaction: UserTransaction, query: LineQuery) {
     rows.map((row) => row.id),
   );
 
+  const merchants = await merchantsOfLines(transaction, rows);
+
   const maybeRefunds = await maybeRefundsAmong(
     transaction,
     rows.flatMap((row) => (row.amountMinor > 0 && row.state === "counted" ? [row.id] : [])),
@@ -238,6 +248,7 @@ async function search(transaction: UserTransaction, query: LineQuery) {
               currency: owned.currency,
             },
             categories.get(row.id) ?? null,
+            merchants.get(row.id) ?? null,
             maybeRefunds.has(row.id),
           ),
         ];
@@ -295,10 +306,16 @@ async function show(
   }
 
   const categories = await categoriesOfLines(transaction, [row.id]);
+  const merchants = await merchantsOfLines(transaction, [row]);
   const maybeRefunds = await maybeRefundsAmong(transaction, [row.id]);
 
   return {
-    ...found(row, categories.get(row.id) ?? null, maybeRefunds.has(row.id)),
+    ...found(
+      row,
+      categories.get(row.id) ?? null,
+      merchants.get(row.id) ?? null,
+      maybeRefunds.has(row.id),
+    ),
     source: row.source,
     originalAmountMinor: row.originalAmountMinor,
     originalCurrency: row.originalCurrency,
