@@ -144,6 +144,27 @@ function resultOf(id: string, outcome: AttemptOutcome): JobResult {
   };
 }
 
+const abortMessage = Schema.decodeUnknownOption(Schema.Struct({ message: Schema.String }));
+
+/**
+ * Why an attempt was stopped from outside, as pg-boss's signal tells it, in words of a closed set
+ * (#241): a claim pg-boss no longer saw as this worker's (a heartbeat it missed, so another attempt
+ * may follow), or the queue's own stop or timeout.
+ */
+function interruption(signal: AbortSignal): string {
+  if (!signal.aborted) {
+    return "from inside the process";
+  }
+
+  const lost = Option.exists(abortMessage(signal.reason), ({ message }) =>
+    message.includes("no longer active"),
+  );
+
+  return lost
+    ? "pg-boss no longer saw its claim (a heartbeat it missed)"
+    : "pg-boss stopped it (a stop, or its timeout)";
+}
+
 /** How an attempt ended, for its span: from a closed set. */
 function outcomeName(view: JobView, interrupted: boolean): string {
   return interrupted ? "interrupted" : view.phase;
@@ -218,6 +239,12 @@ export class JobQueue extends Context.Service<
               telemetry.runFork(Effect.logError("The job queue reported an error", error));
             });
 
+            // What pg-boss warns of (a slow query of its own, a handler past its timeout, a skewed
+            // clock): its own words, never the data it attaches, which may hold a query's values.
+            created.on("warning", (warning) => {
+              telemetry.runFork(Effect.logWarning(`The job queue warned: ${warning.message}`));
+            });
+
             try {
               return await created.start();
             } catch (error) {
@@ -272,6 +299,11 @@ export class JobQueue extends Context.Service<
 
             let view = attemptStarted(claimed);
 
+            // An attempt that ends unfinished says so in the log, with how long it ran (#241).
+            const started = Date.now();
+            const which = `job ${job.name} ${claimed.id}: attempt ${view.attempt} of ${view.attempts}`;
+            const ran = () => `${Math.round((Date.now() - started) / 1000)} s`;
+
             yield* show(claimed.id, owner, view, false);
 
             const progress = {
@@ -291,6 +323,11 @@ export class JobQueue extends Context.Service<
 
                   return show(claimed.id, owner, view, true).pipe(
                     Effect.andThen(annotate({ "gousset.job.outcome": outcomeName(view, true) })),
+                    Effect.andThen(
+                      Effect.logWarning(
+                        `${which} was interrupted after ${ran()}: ${interruption(claimed.signal)}`,
+                      ),
+                    ),
                   );
                 }),
               ),
@@ -299,6 +336,12 @@ export class JobQueue extends Context.Service<
             view = attemptEnded(view, outcome);
             yield* show(claimed.id, owner, view, true);
             yield* annotate({ "gousset.job.outcome": outcomeName(view, false) });
+
+            if ("failure" in outcome) {
+              yield* Effect.logWarning(
+                `${which} failed with ${outcome.failure} after ${ran()}, ${view.phase === "retrying" ? "to be retried" : "for good"}`,
+              );
+            }
 
             // A completed job keeps on its row the count its last step reported, so that a page
             // that reads it once the live view is forgotten still says it.

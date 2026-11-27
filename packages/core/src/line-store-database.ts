@@ -15,7 +15,10 @@ import { alias } from "drizzle-orm/pg-core";
 import { Effect, Layer } from "effect";
 
 import { categoriesOfLines } from "./category-store-database";
+import { merchantsOfLines } from "./merchants/line-merchant";
+import type { NamedMerchant } from "./merchants/line-merchant";
 import type { LineCategory } from "./category-store";
+import { maybeRefundsAmong } from "./expenses/expenses";
 import { LineStore } from "./line-store";
 import { subtreeOf } from "./subjects/counting";
 import type { SubjectName } from "./subjects/counting";
@@ -176,10 +179,15 @@ export async function subjectsOfLines(
   return byLine;
 }
 
-/** A row of `lineColumns`, with its category and subjects; a discarded one is never asked for. */
+/**
+ * A row of `lineColumns`, with its category, merchant and subjects; a discarded one is never asked
+ * for.
+ */
 function found(
   row: LineColumns,
   category: LineCategory | null,
+  merchant: NamedMerchant | null,
+  maybeRefund: boolean,
   subjects: ReadonlyArray<SubjectName>,
 ): FoundLine {
   return {
@@ -198,8 +206,10 @@ function found(
       currency: row.currency,
     },
     category,
+    merchant,
     fromBalance: row.source === "balance",
     subjects,
+    maybeRefund,
   };
 }
 
@@ -271,6 +281,13 @@ async function search(transaction: UserTransaction, query: LineQuery) {
     rows.map((row) => row.id),
   );
 
+  const merchants = await merchantsOfLines(transaction, rows);
+
+  const maybeRefunds = await maybeRefundsAmong(
+    transaction,
+    rows.flatMap((row) => (row.amountMinor > 0 && row.state === "counted" ? [row.id] : [])),
+  );
+
   // Every line's account is the user's (a composite foreign key) and so among those just read.
   const lines = rows.flatMap((row) => {
     const owned = accountOf.get(row.accountId);
@@ -286,6 +303,8 @@ async function search(transaction: UserTransaction, query: LineQuery) {
               currency: owned.currency,
             },
             categories.get(row.id) ?? null,
+            merchants.get(row.id) ?? null,
+            maybeRefunds.has(row.id),
             subjects.get(row.id) ?? [],
           ),
         ];
@@ -344,9 +363,17 @@ async function show(
 
   const categories = await categoriesOfLines(transaction, [row.id]);
   const subjects = await subjectsOfLines(transaction, [row.id]);
+  const merchants = await merchantsOfLines(transaction, [row]);
+  const maybeRefunds = await maybeRefundsAmong(transaction, [row.id]);
 
   return {
-    ...found(row, categories.get(row.id) ?? null, subjects.get(row.id) ?? []),
+    ...found(
+      row,
+      categories.get(row.id) ?? null,
+      merchants.get(row.id) ?? null,
+      maybeRefunds.has(row.id),
+      subjects.get(row.id) ?? [],
+    ),
     source: row.source,
     originalAmountMinor: row.originalAmountMinor,
     originalCurrency: row.originalCurrency,

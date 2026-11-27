@@ -5,6 +5,7 @@ import type { LineCategory } from "./category-store";
 import type { ImportFormat } from "./imports/summary";
 import { LineStore } from "./line-store";
 import type { FoundLine, FoundLineDetail, LineQuery } from "./line-store";
+import type { NamedMerchant } from "./merchants/line-merchant";
 import { subtreeOf } from "./subjects/counting";
 import type { SubjectName, SubjectNode } from "./subjects/counting";
 import { candidateFinder } from "./transfers/pairing";
@@ -23,12 +24,16 @@ export type MemoryLineDetail = MemoryLine & {
   readonly expiresOn?: string;
   /** The category of its one entry. */
   readonly category?: LineCategory;
+  /** Who it paid, as the database reads it (#204). */
+  readonly merchant?: NamedMerchant;
   /** Who put its entry in its category; `default`, the import, waits for the user. */
   readonly classifiedBy?: "default" | "rule" | "user";
   /** Its part in its entry: `refund` when linked to an expense, whose entry it then follows. */
   readonly role?: "payment" | "refund";
   /** Its entries' subjects (#37). */
   readonly subjects?: ReadonlyArray<SubjectName>;
+  /** Maybe a refund the user has not answered (#208): the database computes it on read. */
+  readonly maybeRefund?: boolean;
 };
 
 /** An import of the memory store, as a line's detail names it. */
@@ -116,8 +121,10 @@ function withAccount(own: MemoryLineRows, line: MemoryLineDetail): FoundLine | u
       currency: owned.currency,
     },
     category: line.category ?? null,
+    merchant: line.merchant ?? null,
     fromBalance: sourceOf(line) === "balance",
     subjects: line.subjects ?? [],
+    maybeRefund: line.maybeRefund ?? false,
   };
 }
 

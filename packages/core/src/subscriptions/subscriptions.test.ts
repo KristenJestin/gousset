@@ -17,7 +17,15 @@ const TODAY = "2026-11-24";
 const OWNER = "ada";
 
 function charge(merchant: string, day: string, amountMinor: number): Charge {
-  return { id: memoryId(), merchantId: merchant, merchant, day, amountMinor, currency: "EUR" };
+  return {
+    id: memoryId(),
+    merchantId: merchant,
+    merchant,
+    look: { color: null, logo: null },
+    day,
+    amountMinor,
+    currency: "EUR",
+  };
 }
 
 const CHARGES = [

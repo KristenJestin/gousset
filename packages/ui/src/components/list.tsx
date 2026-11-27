@@ -1,5 +1,7 @@
 import type { AnchorHTMLAttributes, ReactNode, Ref } from "react";
 
+import { Avatar } from "./avatar";
+import type { AvatarFace } from "./avatar";
 import { Icon } from "./icon";
 import { Skeleton, SkeletonFrame } from "./skeleton";
 
@@ -56,25 +58,39 @@ export type ListLinkItemProps = Omit<
   title: string;
   description?: string;
   tags?: Array<string>;
+  /** Its logo or initials (32 px) before its name: a merchant's, say. Hidden from screen readers. */
+  avatar?: AvatarFace;
 };
 
 /**
- * One row of a `List` that opens what it names: the whole row is the link, its name first, then
- * its second line and tags, with a chevron at its end. The app makes it a router link with
- * TanStack Router's `createLink`. Its background shows on hover in 150 ms, cut under reduced motion.
+ * One row of a `List` that opens what it names: the whole row is the link, its avatar first when it
+ * has one, its name, then its second line and tags, with a chevron at its end. The app makes it a
+ * router link with TanStack Router's `createLink`. Its background shows on hover in 150 ms, cut
+ * under reduced motion; the avatar does not move.
  */
-export function ListLinkItem({ title, description, tags = [], ...props }: ListLinkItemProps) {
+export function ListLinkItem({
+  title,
+  description,
+  tags = [],
+  avatar,
+  ...props
+}: ListLinkItemProps) {
   return (
     <li>
       <a
         {...props}
         className="-mx-2 flex items-center justify-between gap-3 rounded-md px-2 py-3 transition-colors duration-150 ease-out hover:bg-muted focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring"
       >
-        <span className="flex min-w-0 flex-col">
-          <span className="truncate text-sm font-medium text-foreground">{title}</span>
-          {description === undefined ? null : (
-            <span className="truncate text-sm text-muted-foreground">{description}</span>
+        <span className="flex min-w-0 items-center gap-3">
+          {avatar === undefined ? null : (
+            <Avatar name={avatar.name} src={avatar.src} color={avatar.color} />
           )}
+          <span className="flex min-w-0 flex-col">
+            <span className="truncate text-sm font-medium text-foreground">{title}</span>
+            {description === undefined ? null : (
+              <span className="truncate text-sm text-muted-foreground">{description}</span>
+            )}
+          </span>
         </span>
         <span className="flex shrink-0 items-center gap-2">
           {tags.map((tag) => (

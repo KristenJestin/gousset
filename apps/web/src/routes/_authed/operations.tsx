@@ -62,6 +62,7 @@ import {
   linkLine,
   pairLine,
   pairLineWithAccount,
+  refuseRefund,
   splitLine,
   unfundLine,
   unlinkLine,
@@ -79,6 +80,7 @@ import { dayRange, longDay, shortDay, shortDays } from "@/lib/account-day";
 import { categoryPath, choicesOf } from "@/lib/categories";
 import { aDialogIsOpen } from "@/lib/dialog-open";
 import { loadBlocks } from "@/lib/load-blocks";
+import { merchantAvatar } from "@/lib/merchant-logo";
 import {
   OperationsSearch,
   filtersKey,
@@ -494,6 +496,7 @@ function Operations() {
               label={m.operationsTitle()}
               emptyText={m.operationsNoMatch()}
               locale={locale}
+              withAvatars
               withCategory
               withSubjects
               foldingId={foldingId}
@@ -613,6 +616,10 @@ function toRow(
     toReview: line.toReview,
     category: line.category === null ? undefined : categoryPath(line.category),
     subjects: line.subjects,
+    avatar: line.merchant === null ? undefined : merchantAvatar(line.merchant),
+    categoryIcon: line.category?.icon ?? null,
+    categoryColor: line.category?.color ?? null,
+    maybeRefund: line.maybeRefund,
   };
 }
 
@@ -689,7 +696,16 @@ function LineCategoryPicker({
 
   const categories = listed
     ? offered
-    : [...offered, { id: current.id, name: categoryPath(current), children: [] }];
+    : [
+        ...offered,
+        {
+          id: current.id,
+          name: categoryPath(current),
+          icon: current.icon,
+          color: current.color,
+          children: [],
+        },
+      ];
 
   async function choose(categoryId: string) {
     if (categoryId === chosen) {
@@ -792,6 +808,7 @@ function LineMerchantOf({ line, onRuleJob }: { line: Line; onRuleJob: (jobId: st
     <>
       <LineMerchant
         merchant={merchant?.name ?? null}
+        avatar={merchant === null || asks ? undefined : merchantAvatar(merchant)}
         intermediary={intermediary?.name ?? null}
         asks={asks}
         // An intermediary is never who was paid: the server refuses it.
@@ -1285,6 +1302,10 @@ function expenseRefusal(code: ExpenseRefusalCode | "FAILED"): string {
       return m.operationsExpenseNotLinked();
     }
 
+    case "REFUND_NOT_PROPOSED": {
+      return m.operationsRefundNotProposed();
+    }
+
     case "FAILED": {
       return m.operationsTransferFailed();
     }
@@ -1324,7 +1345,8 @@ function splitStart(expenses: LineExpenses, whole: { minor: number }) {
 
 /**
  * The open line's expense (#27): the expense of several lines it is part of, with "Separate this
- * line"; its split; the expenses it may refund, each linked once the user confirms; "Link to an
+ * line"; its split; the expenses it may refund, each linked once the user confirms, or "Not a
+ * refund" (#208), which makes it an ordinary income at once; "Link to an
  * expense" for a line alone, and "Split" for a line that is no part of an expense of several lines.
  * Nothing for a line with no entry (held, of no amount, a side of a transfer). Done, the lines, the
  * months and the categories are read again.
@@ -1465,9 +1487,17 @@ function ExpenseOf({
               }
             : undefined
         }
+        maybeRefund={expenses.maybeRefund}
         onConfirmRefund={async (intoId) => {
           await linkTo(intoId);
         }}
+        onRefuseRefund={
+          expenses.proposals.length === 0
+            ? undefined
+            : async () => {
+                await run(() => refuseRefund({ data: { lineId: line.id } }));
+              }
+        }
         actions={
           <>
             {/* A line joins an expense from its own: alone, neither linked nor split. */}

@@ -130,9 +130,10 @@ function quoteIdentifier(name: string): string {
  *
  * Every session on it logs a lock it waits for past a second, with who holds it (#241): Postgres
  * keeps `log_lock_waits` off, and a test that stalls on a lock would otherwise leave nothing in the
- * server's log, which CI prints at the end of each job. A database's settings are not copied with
- * it, so each one gets them; setting them takes the harness's superuser, as CI's and
- * `pnpm db:start`'s are.
+ * server's log, which CI prints at the end of each job. A statement that runs past five seconds is
+ * logged too, with its duration: a save slowed by its own queries rather than by a lock names them
+ * there. A database's settings are not copied with it, so each one gets them; setting them takes
+ * the harness's superuser, as CI's and `pnpm db:start`'s are.
  */
 export async function recreateDatabase(database: string, template?: string): Promise<void> {
   const from = template === undefined ? "" : ` TEMPLATE ${quoteIdentifier(template)}`;
@@ -143,6 +144,7 @@ export async function recreateDatabase(database: string, template?: string): Pro
       `CREATE DATABASE ${quoteIdentifier(database)}${from}`,
       `ALTER DATABASE ${quoteIdentifier(database)} SET log_lock_waits = on`,
       `ALTER DATABASE ${quoteIdentifier(database)} SET deadlock_timeout = '1s'`,
+      `ALTER DATABASE ${quoteIdentifier(database)} SET log_min_duration_statement = '5s'`,
     ],
     template !== undefined,
   );

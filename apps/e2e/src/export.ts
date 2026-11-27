@@ -18,6 +18,7 @@ const isText = Schema.is(Schema.String);
 const Manifest = Schema.Struct({
   format: Schema.String,
   version: Schema.Number,
+  about: Schema.String,
   files: Schema.Array(
     Schema.Struct({
       path: Schema.String,

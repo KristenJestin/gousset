@@ -1,0 +1,37 @@
+{
+  "type": "diff",
+  "version": "10",
+  "dialect": "postgres",
+  "id": "bb77d86c-2a08-4e35-a709-5bad053b58a4",
+  "prevIds": ["6ece8f58-3509-4cd5-abab-5da7dcf6c981", "a81bf5ad-ee72-4dae-a40c-354eb4a16a9a"],
+  "footprints": [
+    {
+      "statementType": "add_column",
+      "statementTarget": ["column", "public", "auth_user", "merchant_towns_merged"],
+      "writes": [
+        "s|col|public.auth_user.merchant_towns_merged",
+        "n|col|public.auth_user.merchant_towns_merged",
+        "e|col|public.auth_user.merchant_towns_merged"
+      ],
+      "reads": ["n|tbl|public.auth_user", "n|sch|public"]
+    }
+  ],
+  "deltas": [
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "auth_user",
+        "name": "merchant_towns_merged",
+        "type": "boolean",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "true",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    }
+  ]
+}

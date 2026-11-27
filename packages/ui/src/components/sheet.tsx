@@ -67,17 +67,22 @@ export type SheetProps = {
    */
   sending?: boolean;
   /**
-   * Where focus goes once it closes, tried before what opened it: a selector, for an opener that may
-   * be gone by then (an empty state's button, replaced by what the form made). Nothing found, focus
-   * goes back to what opened it, as without it.
+   * Where focus goes once it closes, for a form whose answer may take its opener away. A selector,
+   * tried before what opened it (an empty state's button, replaced by what the form made): nothing
+   * found, focus goes back to what opened it, as without it. Or the element that stands for what
+   * goes on, instead of what opened it (a file's columns confirmed, its card's button gone with the
+   * question: the file's row).
    */
-  finalFocus?: string;
+  finalFocus?: string | (() => HTMLElement | null);
   /** The element that opens it, forwarding its props and ref (a `Button`); or control `open`. */
   trigger?: ReactElement;
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
-  /** Its width on a wide screen: `md` 440 px, `lg` 512 px for a form of rows (a rule). */
-  size?: "md" | "lg";
+  /**
+   * Its width on a wide screen: `md` 440 px, `lg` 512 px for a form of rows (a rule), `xl` 768 px
+   * for a form around a table of columns side by side (a CSV file's first lines).
+   */
+  size?: "md" | "lg" | "xl";
   /**
    * False: a sheet mounted open shows in its place at once, its backdrop too, instead of sliding
    * in; it still leaves by sliding out. For a sheet the server's page already meant to show (a
@@ -212,6 +217,7 @@ export function SheetFrame({
         className={cn(
           sheetClasses,
           size === "lg" && "md:w-lg",
+          size === "xl" && "md:w-3xl",
           !appear && "data-starting-style:translate-none!",
         )}
       >

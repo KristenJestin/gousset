@@ -8,7 +8,6 @@ import {
   ComboboxItemIndicator,
   ComboboxList,
   ComboboxTrigger,
-  ComboboxValueIcon,
 } from "@ui-sdk/react/combobox";
 import type { ListAnnouncement } from "@ui-sdk/react/select";
 import { useState } from "react";
@@ -18,6 +17,7 @@ import { controlClasses, groupFocusRing, itemClasses, popupClasses } from "../li
 import type { UiMessages } from "../lib/messages";
 import { cn } from "../lib/utils";
 import { Icon } from "./icon";
+import { ChoiceIcon } from "./select";
 import type { ChoiceItem } from "./select";
 import { FormField } from "./text-field";
 import type { FieldProps } from "./text-field";
@@ -68,6 +68,12 @@ export function Combobox({
 }: ComboboxProps) {
   const messages = useUiMessages().forms;
   const [anchor, setAnchor] = useState<HTMLDivElement | null>(null);
+  // The value chosen while uncontrolled; a controlled one is `value`.
+  const [chosenHere, setChosenHere] = useState(defaultValue ?? null);
+  const chosenValue = value === undefined ? chosenHere : value;
+  // The chosen item's icon, drawn from the items themselves: ui-sdk's value icon copies an
+  // item's, which only exists once the list has been drawn, never on a page opened closed.
+  const chosen = items.find((item) => item.value === chosenValue);
 
   return (
     <FormField
@@ -81,7 +87,10 @@ export function Combobox({
       <ComboboxPart
         value={value}
         defaultValue={defaultValue}
-        onValueChange={onValueChange}
+        onValueChange={(next) => {
+          setChosenHere(next);
+          onValueChange?.(next);
+        }}
         itemToLabel={(chosen) => items.find((item) => item.value === chosen)?.label ?? chosen}
         announcement={(change) => announce(messages, change)}
         // The first match is highlighted while typing, so Enter chooses it.
@@ -92,7 +101,11 @@ export function Combobox({
           ref={setAnchor}
           className={cn(controlClasses(size), groupFocusRing, "pe-1 has-data-disabled:opacity-50")}
         >
-          <ComboboxValueIcon className="flex text-muted-foreground" />
+          {chosen?.icon === undefined ? null : (
+            <span data-slot="combobox-value-icon" className="flex text-muted-foreground">
+              <ChoiceIcon item={{ ...chosen, icon: chosen.icon }} />
+            </span>
+          )}
           <ComboboxInput
             placeholder={placeholder}
             className="h-full min-w-0 flex-1 bg-transparent outline-none placeholder:text-muted-foreground data-disabled:cursor-not-allowed"
@@ -136,7 +149,7 @@ function ChoiceRow({ item }: { item: ChoiceItem }) {
     >
       {item.icon === undefined ? null : (
         <ComboboxItemIcon className="flex text-muted-foreground">
-          <Icon name={item.icon} />
+          <ChoiceIcon item={{ ...item, icon: item.icon }} />
         </ComboboxItemIcon>
       )}
       <span className="flex-1 truncate">{item.label}</span>

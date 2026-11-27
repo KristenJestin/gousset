@@ -68,6 +68,8 @@ const groceries: LineCategory = {
   name: "Groceries",
   parentName: null,
   kind: "expense",
+  icon: null,
+  color: null,
 };
 
 const otherExpense: LineCategory = {
@@ -75,6 +77,8 @@ const otherExpense: LineCategory = {
   name: "Other",
   parentName: null,
   kind: "expense",
+  icon: null,
+  color: null,
 };
 
 const otherIncome: LineCategory = {
@@ -82,6 +86,8 @@ const otherIncome: LineCategory = {
   name: "Other",
   parentName: null,
   kind: "income",
+  icon: null,
+  color: null,
 };
 
 function line(
@@ -127,9 +133,11 @@ const toSavings = line(current.id, "2026-11-10", -5000, "VIR LIVRET", {
 const intoLivret = line(livret.id, "2026-11-10", 5000, "VIR RECU", { classifiedBy: "user" });
 const intoNorth = line(northLivret.id, "2026-11-11", 5000, "VIR RECU", { classifiedBy: "user" });
 
+// Maybe a refund (#208): still classified by default, not answered by the user.
 const returned = line(current.id, "2026-11-14", 3000, "CB CORNER SHOP RETOUR", {
   category: otherIncome,
   classifiedBy: "default",
+  maybeRefund: true,
 });
 
 const shop = line(current.id, "2026-11-01", -3000, "CB CORNER SHOP", {
@@ -188,6 +196,7 @@ const EXPENSES = Layer.mock(Expenses, {
       expenses: [],
       role: null,
       proposals: lineId === returned.id ? [refund] : [],
+      maybeRefund: lineId === returned.id,
       funding: null,
     }),
 });
@@ -195,7 +204,10 @@ const EXPENSES = Layer.mock(Expenses, {
 const MERCHANTS = Layer.mock(Merchants, {
   ofLine: (_owner, lineId) =>
     Effect.succeed({
-      merchant: lineId === market.id ? { id: memoryId(), name: "City Market" } : null,
+      merchant:
+        lineId === market.id
+          ? { id: memoryId(), name: "City Market", look: { color: null, logo: null } }
+          : null,
       intermediary: null,
       asks: false,
     }),
@@ -288,6 +300,27 @@ describe("review list", () => {
     expect(rowOf(text, returned.id)).toContain(`proposal: refund:${shop.id}`);
     expect(rowOf(text, market.id)).toContain("keep it in Groceries (merchant: City Market)");
     expect(rowOf(text, market.id)).toContain(`proposal: category:${groceries.id}`);
+  });
+
+  test("flags a line that may be a refund, and writes the call that refuses it", async () => {
+    const { text, isError } = await review({ action: "list" });
+
+    expect(isError, text).toBe(false);
+    expect(rowOf(text, returned.id)).toContain(
+      '30.00 EUR, "CB CORNER SHOP RETOUR": link it as a refund',
+    );
+    // After the proposal, so that a row still reads `"<label>": <proposal>`.
+    expect(rowOf(text, returned.id)).toContain(
+      "(maybe a refund, not counted as income until the user answers); line: ",
+    );
+    expect(rowOf(text, market.id)).not.toContain("maybe a refund");
+    expect(text).toContain(
+      `A line that may be a refund and is none: lines {"action":"refuse_refund","line":"${returned.id}"} makes it an ordinary income, never proposed again.`,
+    );
+
+    const none = await review({ action: "list" }, reader, { accounts: [current], lines: [market] });
+
+    expect(none.text).not.toContain("refuse_refund");
   });
 
   test("leaves out a line a rule classified: a rule is the user's decision", async () => {

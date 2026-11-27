@@ -23,7 +23,8 @@ function InBlock({ children }: { children: ReactNode }) {
  *
  * Motion: none of its own; it unfolds with its row's content (250 ms), cut under reduced motion.
  *
- * Don't: put more than one question in it, or a long form (a CSV's columns have their own).
+ * Don't: put more than one question in it, or a long form: a CSV's columns open in a side sheet
+ * from its button (`Columns`).
  */
 const meta = {
   title: "Import/Import prompt",
@@ -58,6 +59,15 @@ export const Default: Story = {};
 /** The answer was refused: why, under the line. */
 export const Refused: Story = {
   args: { error: "This account no longer exists: choose another one." },
+};
+
+/** A CSV's columns to confirm: what it waits for, and the button that opens them in a sheet. */
+export const Columns: Story = {
+  args: {
+    message: "Gousset could not tell on its own how to read this file's columns.",
+    control: undefined,
+    actions: <Button size="sm">Confirm the columns</Button>,
+  },
 };
 
 /** A failure: its mark, why, and what to do. */

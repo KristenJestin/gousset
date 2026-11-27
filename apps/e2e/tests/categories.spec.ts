@@ -43,7 +43,10 @@ test.afterAll(async () => {
   await data.close();
 });
 
-/** A user's categories as rows of the default set: kind, parent's name, name, position, fallback. */
+/**
+ * A user's categories as rows of the default set: kind, parent's name, name, position, fallback,
+ * and its icon and colour (#205).
+ */
 async function categoriesOf(of: string) {
   const rows = await data.asUser(of, (transaction) =>
     transaction.select().from(category).orderBy(asc(category.id)),
@@ -58,6 +61,8 @@ async function categoriesOf(of: string) {
       name: row.name,
       position: row.position,
       fallback: row.isFallback,
+      icon: row.icon,
+      color: row.color,
     }))
     .toSorted(
       (a, b) =>

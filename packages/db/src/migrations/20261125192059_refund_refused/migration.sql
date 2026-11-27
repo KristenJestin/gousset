@@ -1,0 +1,1 @@
+ALTER TABLE "statement_line" ADD COLUMN "refund_refused" boolean DEFAULT false NOT NULL;

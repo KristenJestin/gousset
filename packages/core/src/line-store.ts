@@ -4,6 +4,7 @@ import type { Effect } from "effect";
 
 import type { LineCategory } from "./category-store";
 import type { ImportFormat } from "./imports/summary";
+import type { NamedMerchant } from "./merchants/line-merchant";
 import type { SubjectName } from "./subjects/counting";
 
 /**
@@ -64,10 +65,20 @@ export type FoundLine = {
   };
   /** The category of its one entry; null for a line with none (held, of no amount) or split. */
   readonly category: LineCategory | null;
+  /**
+   * Who it paid, with its look (#204): its one entry's merchant, else its cleaned label's, when
+   * that is no intermediary (`LineMerchant.merchant`); null for none known.
+   */
+  readonly merchant: NamedMerchant | null;
   /** The movement a noted balance makes (#31): it has no label, the interface names it. */
   readonly fromBalance: boolean;
   /** Its entries' subjects (#37), each once, by name: none for most lines. */
   readonly subjects: ReadonlyArray<SubjectName>;
+  /**
+   * Maybe a refund (#208): a line coming back that may cancel an expense, still classified by
+   * default, that the user has not answered; no income until answered (`maybeRefundsAmong`).
+   */
+  readonly maybeRefund: boolean;
 };
 
 /** A line with all that its detail shows. */

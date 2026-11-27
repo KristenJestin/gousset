@@ -242,7 +242,17 @@ function madeUpExport(): ExportData {
       name: "Greenmarket",
       created_at: "2026-09-28T10:00:00+00:00",
       updated_at: "2026-09-28T10:00:00+00:00",
+      color: "teal",
     }),
+  ];
+
+  // Its logo (#204): a PNG's first bytes, made here, no real picture.
+  const logos: Array<ExportData["logos"][number]> = [
+    {
+      merchantId,
+      mediaType: "image/png",
+      content: new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0]),
+    },
   ];
 
   const aliases = [
@@ -334,6 +344,7 @@ function madeUpExport(): ExportData {
   return {
     tables: EXPORT_TABLES.map((table) => ({ table, rows: byTable.get(table) ?? [] })),
     files,
+    logos,
   };
 }
 
@@ -475,6 +486,41 @@ describe("the export's archive", () => {
     }
   });
 
+  test("every merchant's logo is in the archive, byte for byte, named by its merchant (#204)", () => {
+    expect(data.logos.length).toBeGreaterThan(0);
+
+    for (const logo of data.logos) {
+      const path = `merchant-logos/${logo.merchantId}.png`;
+      const entry = read.manifest().files.find((each) => each.path === path);
+
+      expect(read.files[path]).toEqual(logo.content);
+      expect(entry?.bytes).toBe(logo.content.byteLength);
+      expect(entry?.holds).toContain(logo.merchantId);
+    }
+
+    expect(read.manifest().about).toContain("merchant-logos/");
+    expect(read.json("merchants.json").map((each) => each["color"])).toEqual(["teal"]);
+  });
+
+  test("a logo's file takes its type's extension", () => {
+    const merchantId = "00000000-0000-7000-8000-0000000000b1";
+    const jpeg = { merchantId, mediaType: "image/jpeg" as const, content: strToU8("jpeg") };
+
+    const webp = {
+      ...jpeg,
+      merchantId: merchantId.replace("b1", "b2"),
+      mediaType: "image/webp" as const,
+    };
+
+    expect(
+      Object.keys(unzipped({ tables: [], files: [], logos: [jpeg, webp] }).files).toSorted(),
+    ).toEqual([
+      MANIFEST,
+      "merchant-logos/00000000-0000-7000-8000-0000000000b1.jpg",
+      "merchant-logos/00000000-0000-7000-8000-0000000000b2.webp",
+    ]);
+  });
+
   test("the manifest says the format's version and what each file of the archive holds", () => {
     const manifest = read.manifest();
     const listed = manifest.files.map((file) => file.path);
@@ -595,6 +641,7 @@ describe("a file imported", () => {
         { importId: "00000000-0000-7000-8000-0000000000a1", fileName: "october.ofx", content },
         { importId: "00000000-0000-7000-8000-0000000000a2", fileName: "october.ofx", content },
       ],
+      logos: [],
     };
 
     expect(Object.keys(unzipped(data).files).toSorted()).toEqual([

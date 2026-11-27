@@ -3,7 +3,13 @@ import { useState } from "react";
 
 import { useHydrated } from "../hooks/use-hydrated";
 import { InFrench } from "../stories/in-french";
-import { CATEGORIES, DAILY_SPENDING, MERCHANTS, PREVIOUS_CATEGORIES } from "../stories/made-up";
+import {
+  CATEGORIES,
+  DAILY_SPENDING,
+  MADE_UP_LOGO,
+  MERCHANTS,
+  PREVIOUS_CATEGORIES,
+} from "../stories/made-up";
 import type { MadeUpCategory } from "../stories/made-up";
 import { Breakdown, BreakdownFigures, BreakdownSkeleton } from "./breakdown";
 import type { BreakdownRow } from "./breakdown";
@@ -15,6 +21,7 @@ function rowsOf(categories: ReadonlyArray<MadeUpCategory>): Array<BreakdownRow> 
     id: category.id,
     name: category.name,
     icon: category.icon,
+    color: category.color,
     amount: category.spent,
     benchmark: category.benchmark,
   }));
@@ -140,6 +147,9 @@ function SwitchingMonths() {
  * tree (`depth`, a subject's, #37) has its name indented under its parent's.
  * Without rows, a sentence (the page's own with `emptyText`).
  *
+ * A category's row draws its icon and its bar in the category's colour (its own, else its
+ * parent's, #205); a row with none (a merchant) has a muted icon and spent's bar.
+ *
  * Loading: `BreakdownSkeleton`, as many rows as the block shows, same heights.
  *
  * Motion: when the month changes, each bar grows or shrinks to its new length and its mark
@@ -165,7 +175,7 @@ export const Default: Story = { render: () => <Choosing limit={5} /> };
 /** Every row, nothing to click. */
 export const ReadOnly: Story = {};
 
-/** Merchants: no benchmark, so no mark. */
+/** Merchants: no benchmark, so no mark; no colour, so their bars are spent's. */
 export const Merchants: Story = {
   args: {
     rows: MERCHANTS.map((merchant) => ({
@@ -200,6 +210,33 @@ export const Subjects: Story = {
       { id: "van", name: "Van", icon: "subjects", amount: { minor: 6200, currency: "EUR" } },
     ],
     footnote: "An expense can count in several subjects: these totals don't add up.",
+  },
+};
+
+/**
+ * Merchants with their faces (#204): a logo, or initials on their colour, in place of the icon; the
+ * row of the expenses with no merchant keeps its icon, in the same room.
+ */
+export const MerchantsWithAvatars: Story = {
+  args: {
+    rows: [
+      ...MERCHANTS.map((merchant): BreakdownRow => ({
+        id: merchant.id,
+        name: merchant.name,
+        avatar: {
+          name: merchant.name,
+          src: merchant.id === "greenmarket" ? MADE_UP_LOGO : undefined,
+          color: merchant.id === "streamly" ? "red" : null,
+        },
+        amount: merchant.spent,
+      })),
+      {
+        id: "no-merchant",
+        name: "No merchant",
+        icon: "merchant",
+        amount: { minor: 2350, currency: "EUR" },
+      },
+    ],
   },
 };
 

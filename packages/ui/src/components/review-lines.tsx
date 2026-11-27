@@ -7,6 +7,7 @@ import type { Money } from "../lib/money";
 import { transition } from "../lib/motion";
 import { Amount, AmountSkeleton } from "./amount";
 import { Button } from "./button";
+import { Chip } from "./chip";
 import { Skeleton, SkeletonFrame } from "./skeleton";
 
 export type ReviewLine = {
@@ -18,6 +19,11 @@ export type ReviewLine = {
   /** What else the rules proposed, short: its category, its account. */
   tags: ReadonlyArray<string>;
   amount: Money;
+  /**
+   * Maybe a refund (#208), no income until the user answers: a "Maybe a refund" chip after the
+   * title, on a phone too. Its title is then no category, which would read as an income of it.
+   */
+  maybeRefund?: boolean;
 };
 
 export type ReviewLinesProps = {
@@ -66,11 +72,13 @@ function More({ count, onMore }: { count: number; onMore: (() => void) | undefin
  * The lines the rules were not sure of (docs/wireframes, screen 1, block 5): each with its raw
  * label, what the rules made of it (merchant, category, account), its amount and the action that
  * approves it; without the action, read only. Cut after `limit` lines with "+ N more"; `footer`
- * ends the list (a link to where the lines are reviewed).
+ * ends the list (a link to where the lines are reviewed). A line that may be a refund (#208) says
+ * so with a "Maybe a refund" chip.
  *
  * Motion: an approved line fades out (200 ms, ease-out) and the lines under it slide up into its
  * place (a layout move, by transform: nothing is laid out again at each frame); a line put back
- * fades in while the others slide down. Cut under reduced motion.
+ * fades in while the others slide down. Cut under reduced motion. The "Maybe a refund" chip has
+ * none of its own: it comes and goes with its line.
  */
 export function ReviewLines({
   lines,
@@ -115,6 +123,7 @@ export function ReviewLines({
                   </span>
                   <span className="flex min-w-0 items-center gap-2 text-sm">
                     <span className="truncate font-medium">{line.title}</span>
+                    {line.maybeRefund === true ? <MaybeRefundChip /> : null}
                     {line.tags.map((tag) => (
                       <span
                         key={tag}
@@ -150,6 +159,17 @@ export function ReviewLines({
         )}
       </ul>
     </LazyMotion>
+  );
+}
+
+/** The mark of a line that may be a refund: the title gives way, never the chip. */
+function MaybeRefundChip() {
+  const messages = useUiMessages().operations;
+
+  return (
+    <span data-slot="maybe-refund" className="flex shrink-0">
+      <Chip>{messages.maybeRefund}</Chip>
+    </span>
   );
 }
 

@@ -16,7 +16,7 @@ import { openUserData } from "../src/user-data";
 const allowReadAndWrite = (page: Page) =>
   page.getByRole("button", { name: "Allow read and write" }).click();
 
-type Arguments = { readonly [key: string]: string | boolean };
+type Arguments = { readonly [key: string]: string | boolean | ReadonlyArray<string> };
 
 /** The text of a tool's answer, and whether it is an error. */
 async function callText(client: Client, name: string, args: Arguments) {
@@ -581,4 +581,184 @@ test("merging merchants and moving a label keep their entries in the right defau
   expect(afterMove(SHOPS.mossgate[0])).toContain("in Groceries > Market;");
   expect(afterMove(SHOPS.lantern[0])).toContain("in Eating out > Cafés and bars;");
   expect(afterMove(SHOPS.kettle[1])).toContain("in Groceries > Supermarket;");
+});
+
+/** An invented hardware shop, unknown until the user makes it, then on two lines of a statement. */
+const JUNIPER = [
+  {
+    bookedOn: "2026-10-09",
+    amountMinor: -2450,
+    label: "CB JUNIPER HARDWARE 0910 RIVERTON",
+    reference: "JH09",
+  },
+  {
+    bookedOn: "2026-10-23",
+    amountMinor: -1290,
+    label: "CB JUNIPER HARDWARE 2310",
+    reference: "JH23",
+  },
+] as const;
+
+/** A PNG's first bytes, in base64, made here: no real picture. */
+const PNG_BASE64 = Buffer.from([
+  0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0x0d,
+]).toString("base64");
+
+test("a merchant made by hand names the next imported lines of its label; its colour and logo are set and cleared; what it cannot be is refused (#204)", async ({
+  app,
+  user,
+  page,
+  baseURL,
+  mcpClientId,
+}, testInfo) => {
+  // One upload waiting for the app's import job, then the calls.
+  test.setTimeout(90_000);
+
+  const maker = await addUser(app.baseURL, user, {
+    name: "Ivo Example",
+    email: `ivo.merchants.worker${app.slot}.${testInfo.repeatEachIndex}@example.com`,
+    password: `e2e-ivo-password-${app.slot}`,
+  });
+
+  const data = openUserData(app.database);
+
+  try {
+    const owner = await data.ownerOf(maker.email);
+
+    await data.asUser(owner, (transaction) =>
+      transaction.insert(account).values({
+        userId: owner,
+        name: ACCOUNT_NAME,
+        kind: "current",
+        currency: "EUR",
+        iban: statement.account.iban,
+      }),
+    );
+  } finally {
+    await data.close();
+  }
+
+  await page.context().addCookies([...maker.cookies]);
+
+  const session = await connectMcp({
+    baseURL: baseURL ?? "",
+    page,
+    consent: allowReadAndWrite,
+    scope: "read write",
+    clientId: mcpClientId,
+  });
+
+  const merchants = (args: Arguments) => callText(session.client, "merchants", args);
+
+  // Made by hand before any of its lines, with its label, its default category and a colour.
+  const made = await merchants({
+    action: "create",
+    name: "Juniper Hardware",
+    labels: ["CB JUNIPER HARDWARE 0910"],
+    category: "Groceries > Bakery",
+    color: "teal",
+  });
+
+  expect(made.isError, made.text).toBe(false);
+  expect(made.text).toContain("Made the merchant Juniper Hardware.");
+  expect(made.text).toContain("Its 1 cleaned label name the lines");
+
+  const file = writeStatement("camt053", { ...exampleStatement, lines: [...JUNIPER] });
+
+  const uploaded = await callText(session.client, "imports", {
+    action: "upload",
+    file_name: file.fileName,
+    content: file.contents,
+  });
+
+  expect(uploaded.isError, uploaded.text).toBe(false);
+  expect(uploaded.text).toContain("2 lines read: 2 added");
+
+  // The import made no merchant of its own: both lines are Juniper Hardware's.
+  const found = await merchants({ action: "search", text: "juniper" });
+
+  expect(found.text).toContain('1 merchant(s) whose name or a cleaned label contains "juniper".');
+  expect(found.text).toContain("- Juniper Hardware: 1 cleaned label, colour teal");
+
+  const shown = await merchants({ action: "show", merchant: "juniper hardware" });
+
+  expect(shown.text).toContain("Merchant: Juniper Hardware.");
+  expect(shown.text).toContain("Default category: Groceries > Bakery (expense).");
+  expect(shown.text).toContain("Shown as its initials on teal; no logo");
+
+  for (const line of JUNIPER) {
+    expect(shown.text).toContain(`"${line.label}"`);
+  }
+
+  // Its lines went in its default category.
+  const lines = (await callText(session.client, "lines", { action: "search", text: "juniper" }))
+    .text;
+
+  for (const line of JUNIPER) {
+    expect(rowOf(lines, line.label).row).toContain("in Groceries > Bakery");
+  }
+
+  // Its logo, set from its base64, then cleared: its initials again.
+  const logo = await merchants({ action: "edit", merchant: "Juniper Hardware", logo: PNG_BASE64 });
+
+  expect(logo.isError, logo.text).toBe(false);
+  expect(logo.text).toContain("Juniper Hardware's logo is set");
+  expect((await merchants({ action: "show", merchant: "Juniper Hardware" })).text).toContain(
+    "Shown with its logo",
+  );
+  expect((await merchants({ action: "search", text: "juniper" })).text).toContain(
+    "- Juniper Hardware: 1 cleaned label, colour teal, a logo",
+  );
+
+  const cleared = await merchants({
+    action: "edit",
+    merchant: "Juniper Hardware",
+    clear_logo: true,
+  });
+
+  expect(cleared.text).toBe("Juniper Hardware has no logo any more: its initials are shown.");
+
+  const automatic = await merchants({
+    action: "edit",
+    merchant: "Juniper Hardware",
+    color: "automatic",
+  });
+
+  expect(automatic.text).toContain("an automatic colour");
+  expect((await merchants({ action: "show", merchant: "Juniper Hardware" })).text).toContain(
+    "Shown as its initials on an automatic colour",
+  );
+
+  // What it cannot be: a name taken, a label naming another merchant or no one, a logo of SVG.
+  const refusals: ReadonlyArray<readonly [Arguments, string]> = [
+    [{ action: "create", name: "juniper hardware" }, 'named "Juniper Hardware" already'],
+    [
+      { action: "create", name: "Juniper Tools", labels: ["CB JUNIPER HARDWARE 0112"] },
+      'The label "JUNIPER HARDWARE" names Juniper Hardware already',
+    ],
+    [
+      { action: "create", name: "Cash", labels: ["RETRAIT DAB 21/10"] },
+      "names no one once cleaned",
+    ],
+    [
+      {
+        action: "edit",
+        merchant: "Juniper Hardware",
+        logo: Buffer.from("<svg xmlns='http://www.w3.org/2000/svg'/>").toString("base64"),
+      },
+      "neither PNG, JPEG nor WebP",
+    ],
+  ];
+
+  for (const [args, says] of refusals) {
+    const refused = await merchants(args);
+
+    expect(refused.isError, says).toBe(true);
+    expect(refused.text).toContain(says);
+    expect(refused.text).toContain("A valid call: ");
+  }
+
+  const after = await merchants({ action: "search", text: "juniper" });
+
+  expect(after.text).toContain('1 merchant(s) whose name or a cleaned label contains "juniper".');
 });

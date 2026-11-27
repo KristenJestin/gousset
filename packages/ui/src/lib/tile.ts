@@ -1,6 +1,6 @@
 import { cn } from "./utils";
 
-/** The sizes a category icon and a merchant logo share, so they line up in the same rows. */
+/** The sizes a category icon and an avatar share, so they line up in the same rows. */
 export type TileSize = "sm" | "md" | "lg";
 
 /** `round`: a circle; `rounded`: a square with rounded corners. */

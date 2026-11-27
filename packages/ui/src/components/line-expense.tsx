@@ -71,12 +71,22 @@ export type LineExpenseProps = {
   shares?: ReadonlyArray<ExpenseShareView>;
   /** The expenses this line coming back may cancel, the likeliest first; none by default. */
   proposals?: ReadonlyArray<RefundProposalView>;
+  /**
+   * Maybe a refund (#208): the line, with `proposals`, counts as no income until the user answers;
+   * the section says so. False for a line a rule classified, which keeps its proposals.
+   */
+  maybeRefund?: boolean;
   /** Goes to another line's detail. */
   onOpenLine: (id: string) => void;
   /** Takes this line out of its expense, once asked; given with `expense`. */
   onUnlink?: () => Promise<void>;
   /** Links this line as a refund of the expense the line `id` paid, once asked. */
   onConfirmRefund?: (id: string) => Promise<void>;
+  /**
+   * "Not a refund", under the proposals: the line is an ordinary income, never proposed again.
+   * Asks nothing: the money stays an income, and linking the line by hand still makes it a refund.
+   */
+  onRefuseRefund?: () => Promise<void>;
   /** The actions under it: `LinkLine` and `SplitLine`, as the page allows them. */
   actions?: ReactNode;
   /** A refusal of the last change, worded by the page. */
@@ -142,21 +152,25 @@ function Part({
  * line, and its net cost, counted once; "Separate this line" asks, then takes the line out. A line
  * split across categories shows its shares, each with its subjects' chips. A line coming back that may cancel a purchase shows
  * "Maybe a refund" with that purchase, and "Link as a refund" asks before linking: nothing is
- * applied unasked. The page puts `LinkLine` and `SplitLine` under it (`actions`). Every value comes
+ * applied unasked. "Not a refund" answers at once (#208): the line is an income, which changes no
+ * money, and linking it by hand still makes it a refund. The page puts `LinkLine` and `SplitLine` under it (`actions`). Every value comes
  * worded from the page.
  *
  * Motion: none of its own. The dialogs are `Dialog`'s and `AlertDialog`'s (200 ms in and out), the
  * split's sheet slides in as `Sheet` does (about 300 ms), going to another line is the detail's own
- * close and open, a part's hover colour moves in 150 ms; all cut under reduced motion.
+ * close and open, a part's hover colour moves in 150 ms; all cut under reduced motion. Answered,
+ * "Maybe a refund" goes at once, with no fade: the page reads the line again and draws it without.
  */
 export function LineExpense({
   lineId,
   expense,
   shares,
   proposals = [],
+  maybeRefund = false,
   onOpenLine,
   onUnlink,
   onConfirmRefund,
+  onRefuseRefund,
   actions,
   error,
   locale,
@@ -262,7 +276,11 @@ export function LineExpense({
             <Icon name="undo" size="sm" />
             {words.maybeRefund}
           </p>
-          <p className="mt-1 text-xs text-muted-foreground">{words.maybeRefundDescription}</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            {maybeRefund
+              ? `${words.maybeRefundDescription} ${words.maybeRefundWaiting}`
+              : words.maybeRefundDescription}
+          </p>
           <ul className="mt-3 flex flex-col gap-3">
             {proposals.map((proposal) => (
               <li
@@ -295,6 +313,13 @@ export function LineExpense({
               </li>
             ))}
           </ul>
+          {onRefuseRefund === undefined ? null : (
+            <div className="mt-3 flex">
+              <Button variant="ghost" size="sm" onClick={onRefuseRefund}>
+                {words.notARefund}
+              </Button>
+            </div>
+          )}
         </section>
       )}
       {actions === undefined ? null : <div className="flex flex-wrap gap-2">{actions}</div>}

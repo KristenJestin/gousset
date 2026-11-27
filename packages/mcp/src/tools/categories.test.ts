@@ -123,7 +123,7 @@ function onToday(rows: Map<string, MemoryCategoryRows>): Runner<GoussetServices>
     );
 }
 
-type Arguments = { readonly [key: string]: string | number | boolean };
+type Arguments = { readonly [key: string]: string | number | boolean | null };
 
 async function categories(
   args: Arguments,
@@ -145,7 +145,7 @@ async function categories(
 
 const Written = Schema.Record(
   Schema.String,
-  Schema.Union([Schema.String, Schema.Number, Schema.Boolean]),
+  Schema.Union([Schema.String, Schema.Number, Schema.Boolean, Schema.Null]),
 );
 
 /** The tool and arguments of the valid call a refusal writes, read back. */
@@ -324,7 +324,7 @@ describe("categories create and edit", () => {
 
     expect(isError, text).toBe(false);
     expect(text).toBe(
-      '"Groceries > Bakery" is now "Housing > Bakeries", expense category, no benchmark.',
+      '"Groceries > Bakery" is now "Housing > Bakeries", expense category, no benchmark. Shown with no icon, no colour.',
     );
     expect(named(rows, "Bakeries")).toMatchObject({
       parentId: housing.id,
@@ -565,6 +565,129 @@ describe("categories merge and archive", () => {
 
     expect(merged.isError, merged.text).toBe(false);
     expect(rowsOf(rows).categories.find((each) => each.id === other.id)?.fallback).toBe(true);
+  });
+});
+
+/** The made-up rows, Housing orange with its icon, Rent with an icon and no colour of its own. */
+function lookedRows() {
+  const fresh = freshRows();
+
+  fresh.categories = fresh.categories.map((each) => {
+    switch (each.id) {
+      case housing.id: {
+        return { ...each, icon: "housing", color: "orange" };
+      }
+
+      case rent.id: {
+        return { ...each, icon: "rent" };
+      }
+
+      case energy.id: {
+        return { ...each, color: "teal" };
+      }
+
+      default: {
+        return each;
+      }
+    }
+  });
+
+  return new Map([[writer.userId, fresh]]);
+}
+
+describe("categories icon and colour", () => {
+  test("list writes each one's icon and colour, and when a child's is its parent's", async () => {
+    const { text, isError } = await categories({ action: "list" }, lookedRows(), reader);
+
+    expect(isError, text).toBe(false);
+    expect(text).toMatch(/\n- Housing: [^\n]*; icon housing, colour orange\n/);
+    expect(text).toMatch(/\n {2}- Rent: [^\n]*; icon rent, colour orange \(its parent's\)\n/);
+    expect(text).toMatch(/\n {2}- Energy: [^\n]*; no icon, colour teal\n/);
+    expect(text).toMatch(/\n- Groceries: [^\n]*; no icon, no colour\n/);
+  });
+
+  test("create sets an icon and a colour, and says how it is shown", async () => {
+    const { text, isError, rows } = await categories({
+      action: "create",
+      name: "Water",
+      parent: "Housing",
+      icon: "energy",
+      color: "blue",
+    });
+
+    expect(isError, text).toBe(false);
+    expect(text).toContain("Shown with icon energy, colour blue.");
+    expect(named(rows, "Water")).toMatchObject({ icon: "energy", color: "blue" });
+
+    const child = await categories(
+      { action: "create", name: "Garden", parent: "Housing" },
+      lookedRows(),
+    );
+
+    expect(child.text).toContain("Shown with no icon, colour orange (its parent's).");
+  });
+
+  test("edit sets an icon or a colour alone, and none or null clears it", async () => {
+    const rows = lookedRows();
+
+    const set = await categories(
+      { action: "edit", category: "Housing > Rent", color: "Violet" },
+      rows,
+    );
+
+    expect(set.isError, set.text).toBe(false);
+    expect(set.text).toBe(
+      '"Housing > Rent" is saved, expense category, benchmark: the six-month average. Shown with icon rent, colour violet.',
+    );
+    expect(named(rows, "Rent")).toMatchObject({ icon: "rent", color: "violet" });
+
+    const cleared = await categories(
+      { action: "edit", category: "Rent", color: "none", icon: null },
+      rows,
+    );
+
+    expect(cleared.isError, cleared.text).toBe(false);
+    expect(cleared.text).toContain("Shown with no icon, colour orange (its parent's).");
+    expect(named(rows, "Rent")).toMatchObject({ icon: null, color: null });
+
+    const icon = await categories({ action: "edit", category: "Housing", icon: "pets" }, rows);
+
+    expect(icon.text).toContain("Shown with icon pets, colour orange.");
+    expect(named(rows, "Housing")).toMatchObject({ icon: "pets", color: "orange" });
+  });
+
+  test("refuses a colour off the palette, with every colour and a valid call", async () => {
+    const { text, isError, rows } = await categories({
+      action: "create",
+      name: "Water",
+      parent: "Housing",
+      color: "gray",
+    });
+
+    expect(isError).toBe(true);
+    expect(text).toContain('"gray" is no colour of Gousset\'s palette');
+    expect(text).toContain(
+      "red, orange, amber, olive, green, teal, cyan, blue, indigo, violet, pink, grey",
+    );
+    expect(example(text)?.args).toMatchObject({ action: "create", name: "Water", color: "blue" });
+    expect(named(rows, "Water")).toBeUndefined();
+    await expectValidExample(text);
+  });
+
+  test("refuses an unknown icon, with every icon and a valid call", async () => {
+    const { text, isError, rows } = await categories({
+      action: "edit",
+      category: "Rent",
+      icon: "house",
+    });
+
+    expect(isError).toBe(true);
+    expect(text).toContain('"house" is no icon of Gousset\'s');
+    expect(text).toContain("housing, rent, energy,");
+    expect(text).toContain("expense-claims, other");
+    expect(example(text)?.args).toMatchObject({ action: "edit", category: "Rent", icon: "other" });
+    expect(named(rows, "Rent")?.icon).toBeNull();
+    await expectValidExample(text);
   });
 });
 

@@ -1,0 +1,1172 @@
+{
+  "type": "diff",
+  "version": "10",
+  "dialect": "postgres",
+  "id": "2363e125-ca50-4e84-a713-6426a783513e",
+  "prevIds": ["b35f3b2c-454b-41a5-ae65-4f73b2e52f21", "2e4f60da-0c4b-4823-994e-af8516a75dba"],
+  "footprints": [
+    {
+      "statementType": "create_table",
+      "statementTarget": ["table", "public", "entry_subject"],
+      "writes": [
+        "s|tbl|public.entry_subject",
+        "n|tbl|public.entry_subject",
+        "e|tbl|public.entry_subject",
+        "n|rel|public.entry_subject",
+        "n|type|public.entry_subject",
+        "n|rel|public.entry_subject_pkey"
+      ],
+      "reads": ["n|sch|public"]
+    },
+    {
+      "statementType": "create_table",
+      "statementTarget": ["table", "public", "subject"],
+      "writes": [
+        "s|tbl|public.subject",
+        "n|tbl|public.subject",
+        "e|tbl|public.subject",
+        "n|rel|public.subject",
+        "n|type|public.subject",
+        "n|rel|public.subject_pkey",
+        "n|rel|public.subject_user_id_id_key",
+        "n|rel|public.subject_user_id_parent_id_name_key"
+      ],
+      "reads": ["n|sch|public"]
+    },
+    {
+      "statementType": "create_table",
+      "statementTarget": ["table", "public", "subject_account"],
+      "writes": [
+        "s|tbl|public.subject_account",
+        "n|tbl|public.subject_account",
+        "e|tbl|public.subject_account",
+        "n|rel|public.subject_account",
+        "n|type|public.subject_account",
+        "n|rel|public.subject_account_pkey"
+      ],
+      "reads": ["n|sch|public"]
+    },
+    {
+      "statementType": "create_table",
+      "statementTarget": ["table", "public", "subject_entry_refused"],
+      "writes": [
+        "s|tbl|public.subject_entry_refused",
+        "n|tbl|public.subject_entry_refused",
+        "e|tbl|public.subject_entry_refused",
+        "n|rel|public.subject_entry_refused",
+        "n|type|public.subject_entry_refused",
+        "n|rel|public.subject_entry_refused_pkey"
+      ],
+      "reads": ["n|sch|public"]
+    },
+    {
+      "statementType": "add_column",
+      "statementTarget": ["column", "public", "rule", "attach_subject_id"],
+      "writes": [
+        "s|col|public.rule.attach_subject_id",
+        "n|col|public.rule.attach_subject_id",
+        "e|col|public.rule.attach_subject_id"
+      ],
+      "reads": ["n|tbl|public.rule", "n|sch|public"]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": ["index", "public", "entry_subject", "entry_subject_subject_id_idx"],
+      "writes": [
+        "s|idx|public.entry_subject_subject_id_idx",
+        "n|idx|public.entry_subject_subject_id_idx",
+        "e|idx|public.entry_subject_subject_id_idx",
+        "n|rel|public.entry_subject_subject_id_idx"
+      ],
+      "reads": [
+        "n|tbl|public.entry_subject",
+        "n|sch|public",
+        "n|col|public.entry_subject.subject_id"
+      ]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": ["index", "public", "rule", "rule_attach_subject_id_idx"],
+      "writes": [
+        "s|idx|public.rule_attach_subject_id_idx",
+        "n|idx|public.rule_attach_subject_id_idx",
+        "e|idx|public.rule_attach_subject_id_idx",
+        "n|rel|public.rule_attach_subject_id_idx"
+      ],
+      "reads": ["n|tbl|public.rule", "n|sch|public", "n|col|public.rule.attach_subject_id"]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": ["index", "public", "subject", "subject_loan_account_id_idx"],
+      "writes": [
+        "s|idx|public.subject_loan_account_id_idx",
+        "n|idx|public.subject_loan_account_id_idx",
+        "e|idx|public.subject_loan_account_id_idx",
+        "n|rel|public.subject_loan_account_id_idx"
+      ],
+      "reads": ["n|tbl|public.subject", "n|sch|public", "n|col|public.subject.loan_account_id"]
+    },
+    {
+      "statementType": "create_index",
+      "statementTarget": [
+        "index",
+        "public",
+        "subject_entry_refused",
+        "subject_entry_refused_entry_id_idx"
+      ],
+      "writes": [
+        "s|idx|public.subject_entry_refused_entry_id_idx",
+        "n|idx|public.subject_entry_refused_entry_id_idx",
+        "e|idx|public.subject_entry_refused_entry_id_idx",
+        "n|rel|public.subject_entry_refused_entry_id_idx"
+      ],
+      "reads": [
+        "n|tbl|public.subject_entry_refused",
+        "n|sch|public",
+        "n|col|public.subject_entry_refused.entry_id"
+      ]
+    },
+    {
+      "statementType": "create_fk",
+      "statementTarget": ["table", "public", "entry_subject"],
+      "writes": [
+        "s|fk|public.entry_subject.entry_subject_user_id_auth_user_id_fkey",
+        "n|fk|public.entry_subject.entry_subject_user_id_auth_user_id_fkey",
+        "e|fk|public.entry_subject.entry_subject_user_id_auth_user_id_fkey",
+        "n|con|public.entry_subject.entry_subject_user_id_auth_user_id_fkey"
+      ],
+      "reads": [
+        "n|tbl|public.entry_subject",
+        "n|sch|public",
+        "n|tbl|public.auth_user",
+        "n|sch|public",
+        "n|col|public.entry_subject.user_id",
+        "n|col|public.auth_user.id",
+        "e|uniqueness|public.auth_user.id"
+      ]
+    },
+    {
+      "statementType": "create_fk",
+      "statementTarget": ["table", "public", "entry_subject"],
+      "writes": [
+        "s|fk|public.entry_subject.entry_subject_entry_fk",
+        "n|fk|public.entry_subject.entry_subject_entry_fk",
+        "e|fk|public.entry_subject.entry_subject_entry_fk",
+        "n|con|public.entry_subject.entry_subject_entry_fk"
+      ],
+      "reads": [
+        "n|tbl|public.entry_subject",
+        "n|sch|public",
+        "n|tbl|public.entry",
+        "n|sch|public",
+        "n|col|public.entry_subject.user_id",
+        "n|col|public.entry_subject.entry_id",
+        "n|col|public.entry.user_id",
+        "n|col|public.entry.id",
+        "e|uniqueness|public.entry.id.user_id"
+      ]
+    },
+    {
+      "statementType": "create_fk",
+      "statementTarget": ["table", "public", "entry_subject"],
+      "writes": [
+        "s|fk|public.entry_subject.entry_subject_subject_fk",
+        "n|fk|public.entry_subject.entry_subject_subject_fk",
+        "e|fk|public.entry_subject.entry_subject_subject_fk",
+        "n|con|public.entry_subject.entry_subject_subject_fk"
+      ],
+      "reads": [
+        "n|tbl|public.entry_subject",
+        "n|sch|public",
+        "n|tbl|public.subject",
+        "n|sch|public",
+        "n|col|public.entry_subject.user_id",
+        "n|col|public.entry_subject.subject_id",
+        "n|col|public.subject.user_id",
+        "n|col|public.subject.id",
+        "e|uniqueness|public.subject.id.user_id"
+      ]
+    },
+    {
+      "statementType": "create_fk",
+      "statementTarget": ["table", "public", "subject"],
+      "writes": [
+        "s|fk|public.subject.subject_user_id_auth_user_id_fkey",
+        "n|fk|public.subject.subject_user_id_auth_user_id_fkey",
+        "e|fk|public.subject.subject_user_id_auth_user_id_fkey",
+        "n|con|public.subject.subject_user_id_auth_user_id_fkey"
+      ],
+      "reads": [
+        "n|tbl|public.subject",
+        "n|sch|public",
+        "n|tbl|public.auth_user",
+        "n|sch|public",
+        "n|col|public.subject.user_id",
+        "n|col|public.auth_user.id",
+        "e|uniqueness|public.auth_user.id"
+      ]
+    },
+    {
+      "statementType": "create_fk",
+      "statementTarget": ["table", "public", "subject_account"],
+      "writes": [
+        "s|fk|public.subject_account.subject_account_user_id_auth_user_id_fkey",
+        "n|fk|public.subject_account.subject_account_user_id_auth_user_id_fkey",
+        "e|fk|public.subject_account.subject_account_user_id_auth_user_id_fkey",
+        "n|con|public.subject_account.subject_account_user_id_auth_user_id_fkey"
+      ],
+      "reads": [
+        "n|tbl|public.subject_account",
+        "n|sch|public",
+        "n|tbl|public.auth_user",
+        "n|sch|public",
+        "n|col|public.subject_account.user_id",
+        "n|col|public.auth_user.id",
+        "e|uniqueness|public.auth_user.id"
+      ]
+    },
+    {
+      "statementType": "create_fk",
+      "statementTarget": ["table", "public", "subject_account"],
+      "writes": [
+        "s|fk|public.subject_account.subject_account_subject_fk",
+        "n|fk|public.subject_account.subject_account_subject_fk",
+        "e|fk|public.subject_account.subject_account_subject_fk",
+        "n|con|public.subject_account.subject_account_subject_fk"
+      ],
+      "reads": [
+        "n|tbl|public.subject_account",
+        "n|sch|public",
+        "n|tbl|public.subject",
+        "n|sch|public",
+        "n|col|public.subject_account.user_id",
+        "n|col|public.subject_account.subject_id",
+        "n|col|public.subject.user_id",
+        "n|col|public.subject.id",
+        "e|uniqueness|public.subject.id.user_id"
+      ]
+    },
+    {
+      "statementType": "create_fk",
+      "statementTarget": ["table", "public", "subject_account"],
+      "writes": [
+        "s|fk|public.subject_account.subject_account_account_fk",
+        "n|fk|public.subject_account.subject_account_account_fk",
+        "e|fk|public.subject_account.subject_account_account_fk",
+        "n|con|public.subject_account.subject_account_account_fk"
+      ],
+      "reads": [
+        "n|tbl|public.subject_account",
+        "n|sch|public",
+        "n|tbl|public.account",
+        "n|sch|public",
+        "n|col|public.subject_account.user_id",
+        "n|col|public.subject_account.account_id",
+        "n|col|public.account.user_id",
+        "n|col|public.account.id",
+        "e|uniqueness|public.account.id.user_id"
+      ]
+    },
+    {
+      "statementType": "create_fk",
+      "statementTarget": ["table", "public", "subject_entry_refused"],
+      "writes": [
+        "s|fk|public.subject_entry_refused.subject_entry_refused_user_id_auth_user_id_fkey",
+        "n|fk|public.subject_entry_refused.subject_entry_refused_user_id_auth_user_id_fkey",
+        "e|fk|public.subject_entry_refused.subject_entry_refused_user_id_auth_user_id_fkey",
+        "n|con|public.subject_entry_refused.subject_entry_refused_user_id_auth_user_id_fkey"
+      ],
+      "reads": [
+        "n|tbl|public.subject_entry_refused",
+        "n|sch|public",
+        "n|tbl|public.auth_user",
+        "n|sch|public",
+        "n|col|public.subject_entry_refused.user_id",
+        "n|col|public.auth_user.id",
+        "e|uniqueness|public.auth_user.id"
+      ]
+    },
+    {
+      "statementType": "create_fk",
+      "statementTarget": ["table", "public", "subject_entry_refused"],
+      "writes": [
+        "s|fk|public.subject_entry_refused.subject_entry_refused_subject_fk",
+        "n|fk|public.subject_entry_refused.subject_entry_refused_subject_fk",
+        "e|fk|public.subject_entry_refused.subject_entry_refused_subject_fk",
+        "n|con|public.subject_entry_refused.subject_entry_refused_subject_fk"
+      ],
+      "reads": [
+        "n|tbl|public.subject_entry_refused",
+        "n|sch|public",
+        "n|tbl|public.subject",
+        "n|sch|public",
+        "n|col|public.subject_entry_refused.user_id",
+        "n|col|public.subject_entry_refused.subject_id",
+        "n|col|public.subject.user_id",
+        "n|col|public.subject.id",
+        "e|uniqueness|public.subject.id.user_id"
+      ]
+    },
+    {
+      "statementType": "create_fk",
+      "statementTarget": ["table", "public", "subject_entry_refused"],
+      "writes": [
+        "s|fk|public.subject_entry_refused.subject_entry_refused_entry_fk",
+        "n|fk|public.subject_entry_refused.subject_entry_refused_entry_fk",
+        "e|fk|public.subject_entry_refused.subject_entry_refused_entry_fk",
+        "n|con|public.subject_entry_refused.subject_entry_refused_entry_fk"
+      ],
+      "reads": [
+        "n|tbl|public.subject_entry_refused",
+        "n|sch|public",
+        "n|tbl|public.entry",
+        "n|sch|public",
+        "n|col|public.subject_entry_refused.user_id",
+        "n|col|public.subject_entry_refused.entry_id",
+        "n|col|public.entry.user_id",
+        "n|col|public.entry.id",
+        "e|uniqueness|public.entry.id.user_id"
+      ]
+    },
+    {
+      "statementType": "create_policy",
+      "statementTarget": ["table", "public", "entry_subject"],
+      "writes": [
+        "s|pol|public.entry_subject.entry_subject_own_rows_only",
+        "n|pol|public.entry_subject.entry_subject_own_rows_only",
+        "e|pol|public.entry_subject.entry_subject_own_rows_only"
+      ],
+      "reads": ["n|tbl|public.entry_subject", "n|sch|public", "e|rls|public.entry_subject"]
+    },
+    {
+      "statementType": "create_policy",
+      "statementTarget": ["table", "public", "subject"],
+      "writes": [
+        "s|pol|public.subject.subject_own_rows_only",
+        "n|pol|public.subject.subject_own_rows_only",
+        "e|pol|public.subject.subject_own_rows_only"
+      ],
+      "reads": ["n|tbl|public.subject", "n|sch|public", "e|rls|public.subject"]
+    },
+    {
+      "statementType": "create_policy",
+      "statementTarget": ["table", "public", "subject_account"],
+      "writes": [
+        "s|pol|public.subject_account.subject_account_own_rows_only",
+        "n|pol|public.subject_account.subject_account_own_rows_only",
+        "e|pol|public.subject_account.subject_account_own_rows_only"
+      ],
+      "reads": ["n|tbl|public.subject_account", "n|sch|public", "e|rls|public.subject_account"]
+    },
+    {
+      "statementType": "create_policy",
+      "statementTarget": ["table", "public", "subject_entry_refused"],
+      "writes": [
+        "s|pol|public.subject_entry_refused.subject_entry_refused_own_rows_only",
+        "n|pol|public.subject_entry_refused.subject_entry_refused_own_rows_only",
+        "e|pol|public.subject_entry_refused.subject_entry_refused_own_rows_only"
+      ],
+      "reads": [
+        "n|tbl|public.subject_entry_refused",
+        "n|sch|public",
+        "e|rls|public.subject_entry_refused"
+      ]
+    }
+  ],
+  "deltas": [
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "name": "entry_subject",
+        "isRlsEnabled": true,
+        "entityType": "tables"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "name": "subject",
+        "isRlsEnabled": true,
+        "entityType": "tables"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "name": "subject_account",
+        "isRlsEnabled": true,
+        "entityType": "tables"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "name": "subject_entry_refused",
+        "isRlsEnabled": true,
+        "entityType": "tables"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "entry_subject",
+        "name": "entry_id",
+        "type": "uuid",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "entry_subject",
+        "name": "subject_id",
+        "type": "uuid",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "entry_subject",
+        "name": "user_id",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "rule",
+        "name": "attach_subject_id",
+        "type": "uuid",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "subject",
+        "name": "id",
+        "type": "uuid",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "uuidv7()",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "subject",
+        "name": "user_id",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "subject",
+        "name": "parent_id",
+        "type": "uuid",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "subject",
+        "name": "name",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "subject",
+        "name": "archived_at",
+        "type": "timestamp with time zone",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "subject",
+        "name": "estimated_value_minor",
+        "type": "bigint",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "subject",
+        "name": "value_currency",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "subject",
+        "name": "loan_account_id",
+        "type": "uuid",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "subject",
+        "name": "starts_on",
+        "type": "date",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "subject",
+        "name": "ends_on",
+        "type": "date",
+        "typeSchema": null,
+        "notNull": false,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "subject",
+        "name": "created_at",
+        "type": "timestamp with time zone",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "now()",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "subject",
+        "name": "updated_at",
+        "type": "timestamp with time zone",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": "now()",
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "subject_account",
+        "name": "subject_id",
+        "type": "uuid",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "subject_account",
+        "name": "account_id",
+        "type": "uuid",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "subject_account",
+        "name": "user_id",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "subject_entry_refused",
+        "name": "subject_id",
+        "type": "uuid",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "subject_entry_refused",
+        "name": "entry_id",
+        "type": "uuid",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "subject_entry_refused",
+        "name": "user_id",
+        "type": "text",
+        "typeSchema": null,
+        "notNull": true,
+        "dimensions": 0,
+        "default": null,
+        "generated": null,
+        "identity": null,
+        "entityType": "columns"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "entry_subject",
+        "name": "entry_subject_subject_id_idx",
+        "nameExplicit": true,
+        "columns": [
+          {
+            "value": "subject_id",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          }
+        ],
+        "isUnique": false,
+        "where": null,
+        "with": "",
+        "method": "btree",
+        "entityType": "indexes"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "rule",
+        "name": "rule_attach_subject_id_idx",
+        "nameExplicit": true,
+        "columns": [
+          {
+            "value": "attach_subject_id",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          }
+        ],
+        "isUnique": false,
+        "where": null,
+        "with": "",
+        "method": "btree",
+        "entityType": "indexes"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "subject",
+        "name": "subject_loan_account_id_idx",
+        "nameExplicit": true,
+        "columns": [
+          {
+            "value": "loan_account_id",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          }
+        ],
+        "isUnique": false,
+        "where": null,
+        "with": "",
+        "method": "btree",
+        "entityType": "indexes"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "subject_entry_refused",
+        "name": "subject_entry_refused_entry_id_idx",
+        "nameExplicit": true,
+        "columns": [
+          {
+            "value": "entry_id",
+            "isExpression": false,
+            "asc": true,
+            "nullsFirst": false,
+            "opclass": null
+          }
+        ],
+        "isUnique": false,
+        "where": null,
+        "with": "",
+        "method": "btree",
+        "entityType": "indexes"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "entry_subject",
+        "name": "entry_subject_user_id_auth_user_id_fkey",
+        "nameExplicit": false,
+        "columns": ["user_id"],
+        "schemaTo": "public",
+        "tableTo": "auth_user",
+        "columnsTo": ["id"],
+        "onUpdate": "NO ACTION",
+        "onDelete": "CASCADE",
+        "entityType": "fks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "entry_subject",
+        "name": "entry_subject_entry_fk",
+        "nameExplicit": true,
+        "columns": ["user_id", "entry_id"],
+        "schemaTo": "public",
+        "tableTo": "entry",
+        "columnsTo": ["user_id", "id"],
+        "onUpdate": "NO ACTION",
+        "onDelete": "CASCADE",
+        "entityType": "fks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "entry_subject",
+        "name": "entry_subject_subject_fk",
+        "nameExplicit": true,
+        "columns": ["user_id", "subject_id"],
+        "schemaTo": "public",
+        "tableTo": "subject",
+        "columnsTo": ["user_id", "id"],
+        "onUpdate": "NO ACTION",
+        "onDelete": "CASCADE",
+        "entityType": "fks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "subject",
+        "name": "subject_user_id_auth_user_id_fkey",
+        "nameExplicit": false,
+        "columns": ["user_id"],
+        "schemaTo": "public",
+        "tableTo": "auth_user",
+        "columnsTo": ["id"],
+        "onUpdate": "NO ACTION",
+        "onDelete": "CASCADE",
+        "entityType": "fks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "subject_account",
+        "name": "subject_account_user_id_auth_user_id_fkey",
+        "nameExplicit": false,
+        "columns": ["user_id"],
+        "schemaTo": "public",
+        "tableTo": "auth_user",
+        "columnsTo": ["id"],
+        "onUpdate": "NO ACTION",
+        "onDelete": "CASCADE",
+        "entityType": "fks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "subject_account",
+        "name": "subject_account_subject_fk",
+        "nameExplicit": true,
+        "columns": ["user_id", "subject_id"],
+        "schemaTo": "public",
+        "tableTo": "subject",
+        "columnsTo": ["user_id", "id"],
+        "onUpdate": "NO ACTION",
+        "onDelete": "CASCADE",
+        "entityType": "fks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "subject_account",
+        "name": "subject_account_account_fk",
+        "nameExplicit": true,
+        "columns": ["user_id", "account_id"],
+        "schemaTo": "public",
+        "tableTo": "account",
+        "columnsTo": ["user_id", "id"],
+        "onUpdate": "NO ACTION",
+        "onDelete": "CASCADE",
+        "entityType": "fks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "subject_entry_refused",
+        "name": "subject_entry_refused_user_id_auth_user_id_fkey",
+        "nameExplicit": false,
+        "columns": ["user_id"],
+        "schemaTo": "public",
+        "tableTo": "auth_user",
+        "columnsTo": ["id"],
+        "onUpdate": "NO ACTION",
+        "onDelete": "CASCADE",
+        "entityType": "fks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "subject_entry_refused",
+        "name": "subject_entry_refused_subject_fk",
+        "nameExplicit": true,
+        "columns": ["user_id", "subject_id"],
+        "schemaTo": "public",
+        "tableTo": "subject",
+        "columnsTo": ["user_id", "id"],
+        "onUpdate": "NO ACTION",
+        "onDelete": "CASCADE",
+        "entityType": "fks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "subject_entry_refused",
+        "name": "subject_entry_refused_entry_fk",
+        "nameExplicit": true,
+        "columns": ["user_id", "entry_id"],
+        "schemaTo": "public",
+        "tableTo": "entry",
+        "columnsTo": ["user_id", "id"],
+        "onUpdate": "NO ACTION",
+        "onDelete": "CASCADE",
+        "entityType": "fks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "entry_subject",
+        "name": "entry_subject_pkey",
+        "columns": ["entry_id", "subject_id"],
+        "nameExplicit": true,
+        "entityType": "pks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "subject_account",
+        "name": "subject_account_pkey",
+        "columns": ["subject_id", "account_id"],
+        "nameExplicit": true,
+        "entityType": "pks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "subject_entry_refused",
+        "name": "subject_entry_refused_pkey",
+        "columns": ["subject_id", "entry_id"],
+        "nameExplicit": true,
+        "entityType": "pks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "subject",
+        "name": "subject_pkey",
+        "columns": ["id"],
+        "nameExplicit": false,
+        "entityType": "pks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "subject",
+        "name": "subject_user_id_id_key",
+        "nameExplicit": true,
+        "columns": ["user_id", "id"],
+        "nullsNotDistinct": false,
+        "entityType": "uniques"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "subject",
+        "name": "subject_user_id_parent_id_name_key",
+        "nameExplicit": true,
+        "columns": ["user_id", "parent_id", "name"],
+        "nullsNotDistinct": true,
+        "entityType": "uniques"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "subject",
+        "name": "subject_value_and_currency",
+        "value": "(\"estimated_value_minor\" is null) = (\"value_currency\" is null)",
+        "entityType": "checks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "subject",
+        "name": "subject_value_currency_iso_4217",
+        "value": "\"value_currency\" ~ '^[A-Z]{3}$'",
+        "entityType": "checks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "subject",
+        "name": "subject_ends_after_start",
+        "value": "\"ends_on\" >= \"starts_on\"",
+        "entityType": "checks"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "entry_subject",
+        "name": "entry_subject_own_rows_only",
+        "as": "PERMISSIVE",
+        "for": "ALL",
+        "roles": ["public"],
+        "using": "\"user_id\" = current_setting('gousset.user_id', true)",
+        "withCheck": "\"user_id\" = current_setting('gousset.user_id', true)",
+        "entityType": "policies"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "subject",
+        "name": "subject_own_rows_only",
+        "as": "PERMISSIVE",
+        "for": "ALL",
+        "roles": ["public"],
+        "using": "\"user_id\" = current_setting('gousset.user_id', true)",
+        "withCheck": "\"user_id\" = current_setting('gousset.user_id', true)",
+        "entityType": "policies"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "subject_account",
+        "name": "subject_account_own_rows_only",
+        "as": "PERMISSIVE",
+        "for": "ALL",
+        "roles": ["public"],
+        "using": "\"user_id\" = current_setting('gousset.user_id', true)",
+        "withCheck": "\"user_id\" = current_setting('gousset.user_id', true)",
+        "entityType": "policies"
+      }
+    },
+    {
+      "op": "create",
+      "row": {
+        "schema": "public",
+        "table": "subject_entry_refused",
+        "name": "subject_entry_refused_own_rows_only",
+        "as": "PERMISSIVE",
+        "for": "ALL",
+        "roles": ["public"],
+        "using": "\"user_id\" = current_setting('gousset.user_id', true)",
+        "withCheck": "\"user_id\" = current_setting('gousset.user_id', true)",
+        "entityType": "policies"
+      }
+    }
+  ]
+}

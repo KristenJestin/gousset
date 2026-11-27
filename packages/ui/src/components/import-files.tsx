@@ -152,7 +152,15 @@ function FileRow({
           !open && "border-b",
         )}
       >
-        <div role="cell" data-column="file" className="flex min-w-0 basis-full flex-col gap-0.5">
+        {/* Focus comes here from code once the file's question is answered (`lib/file-cell`), its
+            ring inside the row, whose neighbours touch it. */}
+        <div
+          role="cell"
+          data-column="file"
+          data-file={row.id}
+          tabIndex={-1}
+          className="flex min-w-0 basis-full flex-col gap-0.5 rounded-sm focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-ring"
+        >
           <FileName name={row.file} />
           <span
             data-slot="import-file-facts"

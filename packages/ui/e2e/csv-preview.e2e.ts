@@ -166,19 +166,29 @@ test.describe("FileButton", () => {
 });
 
 test.describe("CsvPreview", () => {
-  test("lays out the profile, the lines, the settings, the test read, then the import", async ({
+  test("in its sheet: the profile first, the lines, the settings, the test read, then the import", async ({
     page,
   }) => {
-    await page.goto("/iframe.html?id=import-csv-preview--default&viewMode=story");
+    await page.goto("/iframe.html?id=import-csv-preview--in-a-sheet&viewMode=story");
 
-    const preview = page.locator('[data-slot="csv-preview"]');
+    const trigger = page.getByRole("button", { name: "Confirm the columns" });
 
-    await expect(preview.getByRole("combobox", { name: "Read with" })).toBeVisible();
+    await trigger.click();
+
+    const sheet = page.getByRole("dialog", { name: "The columns of mealcard.csv" });
+    const preview = sheet.locator('[data-slot="csv-preview"]');
+
+    // A form sheet opens on its first field: the profile it is read with.
+    await expect(preview.getByRole("combobox", { name: "Read with" })).toBeFocused();
     await expect(
       preview.getByRole("table", { name: "The first lines of mealcard.csv" }),
     ).toBeVisible();
     await expect(preview.getByRole("heading", { name: "Test read" })).toBeVisible();
-    await expect(preview.getByRole("button").last()).toHaveText("Read the file this way");
+    await expect(sheet.getByRole("button").last()).toHaveText("Read the file this way");
+
+    await page.keyboard.press("Escape");
+    await expect(sheet).toBeHidden();
+    await expect(trigger).toBeFocused();
   });
 });
 

@@ -10,12 +10,16 @@ export type MerchantKey = string;
 
 /**
  * What is known already: each alias's key, and each merchant's name key, with the merchant's id;
- * `intermediary` when the merchant is a payment intermediary (#30), whose keys match only exactly.
+ * `intermediary` when the merchant is a payment intermediary (#30), whose keys match only exactly;
+ * `whole` for a merchant's name that is the shop of its own cleaned labels, their town dropped
+ * (#193, `./towns`), which compares only whole: `BOULANGERIE` from `BOULANGERIE RIVERTON` never
+ * takes `BOULANGERIE DUPONT`.
  */
 export type KnownKey = {
   readonly key: MerchantKey;
   readonly merchantId: string;
   readonly intermediary?: boolean;
+  readonly whole?: boolean;
 };
 
 export type Assignment = {
@@ -118,26 +122,99 @@ const PAYMENT_PHRASES: ReadonlyArray<string> = [
   "KARTENNUMMER",
 ];
 
+/**
+ * English card forms taught to the cleaning by #243, kept apart from `PAYMENT_PHRASES` so that the
+ * key a label had before them stays readable (`keyBeforeCardForms`): without them, `CARD PURCHASE
+ * WITH PIN 03/12 FRESHMART` kept `WITH PIN`, `POS DEBIT 03/12 GREENMARKET` kept `DEBIT`.
+ */
+const CARD_FORMS: ReadonlyArray<string> = [
+  "CARD PURCHASE WITH PIN",
+  "PURCHASE WITH PIN",
+  "RECURRING CARD PURCHASE",
+  "RECURRING PAYMENT AUTHORIZED ON",
+  "POS DEBIT",
+  "CHECK CARD",
+];
+
+/**
+ * Payment words skipped only when a break follows them (#243): `CARD` in `CARD 12/03 PIZZA NOVA`
+ * or `CARD X1234 FRESHMART`, never in `CARD FACTORY`, a shop's name.
+ */
+const BEFORE_A_BREAK: ReadonlyArray<string> = ["CARD"];
+
+/**
+ * The words a card payment's label starts with (#193): its trailing town is no part of its
+ * merchant. `ANN CARTE`, a card's cancellation, is one too (`./operations`).
+ */
+const CARD_PHRASES: ReadonlyArray<string> = [
+  "CB",
+  "CARTE",
+  "PAIEMENT CB",
+  "PAIEMENT CARTE",
+  "PAIEMENT PAR CARTE",
+  "PAIEMENT AVEC LA CARTE",
+  "ACHAT CB",
+  "ACHAT CARTE",
+  "FACTURE CARTE",
+  "CARD",
+  "DEBIT CARD",
+  "CHECKCARD",
+  "CHECK CARD",
+  "PURCHASE WITH PIN",
+  "RECURRING CARD PURCHASE",
+  "POS",
+  "CONTACTLESS",
+  "VISA",
+  "MASTERCARD",
+  "MAESTRO",
+  "BANCONTACT",
+  "GIROCARD",
+  "KARTENZAHLUNG",
+  "EC KARTE",
+];
+
 /** Phrases as words, the longest first. */
 const phrases = (list: ReadonlyArray<string>): ReadonlyArray<ReadonlyArray<string>> =>
   list.map((phrase) => phrase.split(" ")).toSorted((a, b) => b.length - a.length);
 
+/** The operation prefixes whose rest names the merchant (`./operations`). */
+const NAMING_PREFIXES: ReadonlyArray<string> = OPERATION_PREFIXES.flatMap(({ prefix, operation }) =>
+  OPERATION_MERCHANT[operation] === "rest" ? [prefix] : [],
+);
+
 /**
- * What is skipped before a name: the payment words, and the operation prefixes whose rest names the
- * merchant (`./operations`): `ANN CARTE`, a card's cancellation, is skipped as `CARTE` is.
+ * How a label's start is read: the phrases skipped before a name, and those skipped only when a
+ * break follows them.
  */
-const PREFIXES = phrases([
-  ...PAYMENT_PHRASES,
-  ...OPERATION_PREFIXES.flatMap(({ prefix, operation }) =>
-    OPERATION_MERCHANT[operation] === "rest" ? [prefix] : [],
-  ),
-]);
+type Reading = {
+  readonly prefixes: ReadonlyArray<ReadonlyArray<string>>;
+  readonly beforeABreak: ReadonlyArray<ReadonlyArray<string>>;
+};
+
+/**
+ * What is skipped before a name: the payment words, the English card forms, and the operation
+ * prefixes whose rest names the merchant: `ANN CARTE`, a card's cancellation, is skipped as `CARTE`
+ * is; and `CARD` before a break.
+ */
+const LABEL: Reading = {
+  prefixes: phrases([...PAYMENT_PHRASES, ...CARD_FORMS, ...NAMING_PREFIXES]),
+  beforeABreak: phrases(BEFORE_A_BREAK),
+};
 
 /**
  * The payment words alone: what a merchant's name skips (a name is the user's words, not a bank's
  * operation), and what a label skipped before the operation prefixes (#194, `formerMerchantKey`).
  */
-const PAYMENT_PREFIXES = phrases(PAYMENT_PHRASES);
+const PAYMENT: Reading = {
+  prefixes: phrases([...PAYMENT_PHRASES, ...CARD_FORMS]),
+  beforeABreak: phrases(BEFORE_A_BREAK),
+};
+
+/** What a label skipped before the English card forms (#243, `keyBeforeCardForms`). */
+const BEFORE_CARD_FORMS: Reading = {
+  prefixes: phrases([...PAYMENT_PHRASES, ...NAMING_PREFIXES]),
+  beforeABreak: [],
+};
 
 /** Small words that stand before a date ("LE 21/10", "ON 21 OCT", "VOM 21.10.2026"). */
 const CONNECTORS: ReadonlySet<string> = new Set(["ON", "LE", "DU", "AU", "AM", "VOM"]);
@@ -360,12 +437,23 @@ export function operationOf(label: string): Operation | null {
   return found?.operation ?? null;
 }
 
+/** How many tokens a phrase of `phrases` takes at `start` with a break after it, 0 when none. */
+function beforeABreakLength(
+  tokens: ReadonlyArray<Token>,
+  start: number,
+  phrases: ReadonlyArray<ReadonlyArray<string>>,
+): number {
+  const length = prefixLength(tokens, start, phrases);
+
+  return length > 0 && tokens[start + length]?.isBreak === true ? length : 0;
+}
+
 /**
  * The steps of a label's cleaning, in order (the README's rules). Each reads the tokens the one
  * before left: cash gives no key; what stands before the name is skipped; the name runs to the next
  * break; what ends it is trimmed.
  */
-function keyOf(text: string, prefixes = PREFIXES): MerchantKey | null {
+function keyOf(text: string, reading: Reading = LABEL): MerchantKey | null {
   const tokens = tokensOf(text);
 
   if (isCash(tokens)) {
@@ -387,7 +475,8 @@ function keyOf(text: string, prefixes = PREFIXES): MerchantKey | null {
       /^\d+$/.test(token.text) ||
       (CONNECTORS.has(token.text) && tokens[start + 1]?.isBreak === true)
         ? 1
-        : prefixLength(tokens, start, prefixes);
+        : prefixLength(tokens, start, reading.prefixes) ||
+          beforeABreakLength(tokens, start, reading.beforeABreak);
 
     if (skipped === 0) {
       break;
@@ -418,11 +507,44 @@ function keyOf(text: string, prefixes = PREFIXES): MerchantKey | null {
     length += 1 + token.text.length;
   }
 
-  while (name.length > 1 && TRAILING.has(name.at(-1) ?? "")) {
-    name.pop();
+  const trimmed = endTrimmed(name);
+
+  return trimmed.length === 0 ? null : trimmed.join(" ");
+}
+
+/**
+ * A name's words with what ends a name trimmed (rule 11), one word at a time while more than one is
+ * left: a country, a US state, a legal form, a card word.
+ */
+export function endTrimmed(words: ReadonlyArray<string>): ReadonlyArray<string> {
+  let end = words.length;
+
+  while (end > 1 && TRAILING.has(words[end - 1] ?? "")) {
+    end -= 1;
   }
 
-  return name.length === 0 ? null : name.join(" ");
+  return words.slice(0, end);
+}
+
+const CARD_WORDS = phrases(CARD_PHRASES);
+
+/**
+ * Whether the label is a card payment's (#193), or its cancellation's: it starts with a card's words
+ * (`CB`, `CARTE`, `PAIEMENT PAR CARTE`, `CARD PAYMENT`, `CONTACTLESS`, `POS`, `KARTENZAHLUNG`…),
+ * whole, or `ANN CARTE`. Only such a label ends with the town where the card was used.
+ */
+export function isCardPayment(label: string): boolean {
+  const operation = operationOf(label);
+
+  if (operation === "card" || operation === "card_cancellation") {
+    return true;
+  }
+
+  const words = normalized(label)
+    .split(/[^A-Z0-9&']+/)
+    .filter((word) => word !== "");
+
+  return CARD_WORDS.some((phrase) => phrase.every((word, index) => words[index] === word));
 }
 
 /**
@@ -431,14 +553,14 @@ function keyOf(text: string, prefixes = PREFIXES): MerchantKey | null {
  * payment phrase, was skipped. A key that would start with a prefix naming no one (`CB F SHOPLY`)
  * is none: read again, it would give none.
  */
-function labelKey(text: string): MerchantKey | null {
+function labelKey(text: string, reading: Reading): MerchantKey | null {
   const operation = operationOf(text);
 
   if (operation !== null && OPERATION_MERCHANT[operation] === "party" && !namesParty(text)) {
     return null;
   }
 
-  const key = keyOf(text);
+  const key = keyOf(text, reading);
 
   return key === null || operationOf(key) === null ? key : null;
 }
@@ -449,15 +571,35 @@ function labelKey(text: string): MerchantKey | null {
  * (CAMT.053/MT940 give it) is preferred when it gives a key, but for an operation that names no one.
  */
 export function merchantKey(label: string, counterpartyName: string | null): MerchantKey | null {
+  return keyRead(label, counterpartyName, LABEL);
+}
+
+function keyRead(
+  label: string,
+  counterpartyName: string | null,
+  reading: Reading,
+): MerchantKey | null {
   const operation = operationOf(label);
 
   if (isCash(tokensOf(label)) || (operation !== null && OPERATION_MERCHANT[operation] === "none")) {
     return null;
   }
 
-  const counterparty = counterpartyName === null ? null : keyOf(counterpartyName);
+  const counterparty = counterpartyName === null ? null : keyOf(counterpartyName, reading);
 
-  return counterparty ?? labelKey(label);
+  return counterparty ?? labelKey(label, reading);
+}
+
+/**
+ * The key a line's label had before the English card forms (#243), `merchantKey` without them: the
+ * boot's re-read (`./reread`) finds by it the cleaned labels, `CARD` of `CARD 12/03 PIZZA NOVA`
+ * first, that no line gives any longer.
+ */
+export function keyBeforeCardForms(
+  label: string,
+  counterpartyName: string | null,
+): MerchantKey | null {
+  return keyRead(label, counterpartyName, BEFORE_CARD_FORMS);
 }
 
 /**
@@ -473,9 +615,9 @@ export function formerMerchantKey(
     return null;
   }
 
-  const counterparty = counterpartyName === null ? null : keyOf(counterpartyName, PAYMENT_PREFIXES);
+  const counterparty = counterpartyName === null ? null : keyOf(counterpartyName, PAYMENT);
 
-  return counterparty ?? keyOf(label, PAYMENT_PREFIXES);
+  return counterparty ?? keyOf(label, PAYMENT);
 }
 
 /**
@@ -521,7 +663,7 @@ export function merchantName(key: MerchantKey): string {
  */
 export function nameKey(name: string): MerchantKey {
   // A name is the user's words, not a bank's: no operation prefix is read in it.
-  const key = keyOf(name, PAYMENT_PREFIXES);
+  const key = keyOf(name, PAYMENT);
 
   if (key !== null) {
     return key;
@@ -539,7 +681,7 @@ export function nameKey(name: string): MerchantKey {
 }
 
 /** A key as keys compare: letters and digits only, so GREEN MARKET is GREENMARKET. */
-function compactOf(key: MerchantKey): string {
+export function compactOf(key: MerchantKey): string {
   return key.replaceAll(/[^A-Z0-9]/g, "");
 }
 
@@ -555,12 +697,14 @@ function prefixesOf(key: MerchantKey): ReadonlyArray<string> {
  * each key's compact form and by each of its word prefixes: a key is matched by lookups, never by
  * reading every known key, so that a recognition of tens of thousands of keys stays linear. An
  * intermediary's keys are only in `exact`: `LYDIA` never takes `LYDIA MARTIN`, a person, nor joins
- * it.
+ * it. A shop, a card label without its town (#193), is only in `shops`, matched whole: `BOULANGERIE`
+ * of `BOULANGERIE RIVERTON` never takes `BOULANGERIE DUPONT`.
  */
 type Known = {
   readonly byCompact: Map<string, Set<string>>;
   readonly byPrefix: Map<string, Set<string>>;
   readonly exact: Map<string, Set<string>>;
+  readonly shops: Map<string, Set<string>>;
 };
 
 function add(index: Map<string, Set<string>>, form: string, owner: string): void {
@@ -595,14 +739,33 @@ function ownersOf(index: Map<string, Set<string>>, form: string): ReadonlyArray<
 const MIN_PREFIX = 4;
 
 /**
+ * The owner whose key or shop is the shop of a card label (#193), its town dropped, compared whole;
+ * the smallest when several are.
+ */
+function ownerOfShop(shop: MerchantKey, known: Known): string | undefined {
+  const compact = compactOf(shop);
+
+  const [same] = [
+    ...new Set([...ownersOf(known.byCompact, compact), ...ownersOf(known.shops, compact)]),
+  ].toSorted();
+
+  return same;
+}
+
+/**
  * The owner a key goes to among the known keys, or undefined for a new merchant; an intermediary's
  * key (`intermediary`) only to the same compact form.
  */
 function ownerOf(key: MerchantKey, known: Known, intermediary: boolean): string | undefined {
   const compact = compactOf(key);
 
+  // A shop counts here (#193): a key equal to it, a town or none, is its merchant's.
   const [equal] = [
-    ...new Set([...ownersOf(known.byCompact, compact), ...ownersOf(known.exact, compact)]),
+    ...new Set([
+      ...ownersOf(known.byCompact, compact),
+      ...ownersOf(known.exact, compact),
+      ...ownersOf(known.shops, compact),
+    ]),
   ].toSorted();
 
   if (equal !== undefined || intermediary) {
@@ -656,25 +819,50 @@ function shortestFirst(a: MerchantKey, b: MerchantKey): number {
  * Which merchant each new key goes to: an existing one, or a new one by name; new keys given in
  * any order, duplicates ignored. One assignment per distinct key, shortest key first.
  * Deterministic. A key of an intermediary (a known one flagged, a new one `isIntermediary` says is
- * one, and every key of the merchant it makes) matches only the same compact form.
+ * one, and every key of the merchant it makes) matches only the same compact form. A card label's
+ * key that `shopOf` gives a shop, its town dropped (#193, `./towns`), goes first to the merchant
+ * whose key or shop is that shop, compared whole, and a new merchant is named after the shop.
  */
 export function assignMerchants(
   keys: ReadonlyArray<MerchantKey>,
   known: ReadonlyArray<KnownKey>,
   isIntermediary: (key: MerchantKey) => boolean = () => false,
+  shopOf: (key: MerchantKey) => MerchantKey | undefined = () => undefined,
 ): ReadonlyArray<Assignment> {
-  const index: Known = { byCompact: new Map(), byPrefix: new Map(), exact: new Map() };
+  const index: Known = {
+    byCompact: new Map(),
+    byPrefix: new Map(),
+    exact: new Map(),
+    shops: new Map(),
+  };
+
   // The owners whose keys match only exactly: intermediaries, known or made in this run.
   const exactOwners = new Set<string>();
 
-  for (const { key, merchantId, intermediary } of known) {
+  /** The shop of a key, but for an intermediary's, which matches only exactly. */
+  const shopOfKey = (key: MerchantKey): MerchantKey | undefined => {
+    const shop = shopOf(key);
+
+    return shop === undefined || isIntermediary(key) || isIntermediary(shop) ? undefined : shop;
+  };
+
+  for (const { key, merchantId, intermediary, whole } of known) {
     const owner = `id:${merchantId}`;
+    const shop = intermediary === true ? undefined : shopOfKey(key);
 
     if (intermediary === true) {
       exactOwners.add(owner);
     }
 
-    learn(index, key, owner, intermediary === true);
+    if (whole === true && intermediary !== true) {
+      add(index.shops, compactOf(key), owner);
+    } else {
+      learn(index, key, owner, intermediary === true);
+    }
+
+    if (shop !== undefined) {
+      add(index.shops, compactOf(shop), owner);
+    }
   }
 
   const merchants = new Map<string, Assignment["merchant"]>(
@@ -684,8 +872,14 @@ export function assignMerchants(
   const assignments: Array<Assignment> = [];
 
   for (const key of [...new Set(keys)].toSorted(shortestFirst)) {
-    const name = merchantName(key);
-    const owner = ownerOf(key, index, isIntermediary(key)) ?? `new:${name}`;
+    const shop = shopOfKey(key);
+    const name = merchantName(shop ?? key);
+
+    const owner =
+      (shop === undefined ? undefined : ownerOfShop(shop, index)) ??
+      ownerOf(key, index, isIntermediary(key)) ??
+      `new:${name}`;
+
     const merchant = merchants.get(owner) ?? { name };
 
     if (isIntermediary(key) && !merchants.has(owner)) {
@@ -695,6 +889,11 @@ export function assignMerchants(
     // Each key assigned is known for the next, as it will be once its alias is written.
     merchants.set(owner, merchant);
     learn(index, key, owner, exactOwners.has(owner));
+
+    if (shop !== undefined && !exactOwners.has(owner)) {
+      add(index.shops, compactOf(shop), owner);
+    }
+
     assignments.push({ alias: key, merchant });
   }
 

@@ -395,7 +395,8 @@ the `image` job and runs `tools/check-upgrade.sh` on it, which, on a fresh proje
    consent and tokens are written as the app would write them;
    and, where the release has its import route (from 0.2.0), a user uploads an invented statement
    (`tools/check-upgrade.ofx`, whose bank encodes entities twice, #132), read as that release
-   reads it;
+   reads it, then a second one of English card labels (`tools/check-upgrade.cards.ofx`, #243),
+   whose merchant "Debit" she renames;
 3. stops the app, as an update does, and reads every row of every table of the `public` schema;
    from a release that has entries, every counted line with an amount must already have its one
    entry: invented data the release could not hold fails here, not as the update's fault;
@@ -418,7 +419,13 @@ the `image` job and runs `tools/check-upgrade.sh` on it, which, on a fresh proje
    line once: the boot makes them from a release older than 0.3.0, and from 0.3.0 the release's
    own import made them, so only the boot's making no second line is checked; the merchants a
    release before #194 made from an operation prefix, which the user never touched, are forgotten,
-   the shop's merchant is there, and the fee's entry is in Bank fees; once every boot job
+   the shop's merchant is there, and the fee's entry is in Bank fees; the merchants a release
+   before #193 made one per town of a shop's card labels (from 0.3.0: Pizza Nova and Freshmart,
+   each in two towns), which the user never touched, are one per shop, once, while Bookmill's,
+   which she split by town, and Cafe Bora Bora, of no sure town, stay as they were; the merchant
+   "Card" a release before #243 made of her English card labels, which she never touched, is
+   forgotten, once, and each of its lines names its shop, while the one she renamed stays as she
+   left it; once every boot job
    has ended, **her transfers kept before v0.3 are paired** (#192: a clear pair and one across her
    savings account's fortnight, never paired by the release, are transfers; an ambiguous one waits
    in the review; from 0.3.0, two whose side she classified, by hand and by a rule of hers, stay
@@ -431,8 +438,13 @@ the `image` job and runs `tools/check-upgrade.sh` on it, which, on a fresh proje
    (`source = balance`) that the release did not hold, which the boot made, left out of the
    export's side;
 8. uploads the statement of step 2 again, through the updated app: **it adds nothing**, every line
-   found as a duplicate under the key the update gave it (`done 0 8`: nothing added, 8 found);
-9. migrates an empty database beside it with the same image: **the updated schema is a fresh
+   found as a duplicate under the key the update gave it (`done 0 15`: nothing added, 15 found);
+9. gives one of the user's merchants **a look** (#204), which no release up to 0.4.0 had: a
+   logo uploaded through the updated app's own route (`/api/merchants/<id>/logo`) and a colour set
+   through the tables' owner (no plain HTTP route sets it: a server function does); runs
+   `migrate` a third time: the merchant keeps both, **the app serves the logo byte for byte**, and
+   the user's export carries the logo and the colour;
+10. migrates an empty database beside it with the same image: **the updated schema is a fresh
    installation's**, to the column order and the grant.
 
 It removes everything it started, whatever happened. To run it on a clone, with the release's tag

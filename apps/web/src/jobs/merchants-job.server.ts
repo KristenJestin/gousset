@@ -16,7 +16,8 @@ const failed = (query: QueryFailed) =>
  * yet. Each import does it at its end; this job does it once at every boot for every user, so that
  * the lines kept before merchants existed (v0.2) get theirs without waiting for an import; first,
  * it forgets the merchants made from a label's operation prefix that the user never touched (#194),
- * whose lines then get theirs again. Then the meal-voucher top-ups are matched (#28), once their
+ * whose lines then get theirs again; before it, once per user, it merges those made one per town of
+ * a shop's card labels that the user never touched (#193). Then the meal-voucher top-ups are matched (#28), once their
  * lines are classified by their merchants, so that the lines kept before v0.3 are matched too. It
  * finds nothing to do once they have them, and a run again adds nothing twice.
  */

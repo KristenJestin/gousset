@@ -6,13 +6,15 @@ import { encodeWindows1252 } from "@gousset/fixture";
 import { and, eq } from "drizzle-orm";
 
 import { addUser } from "../src/auth";
+import { onPhone } from "../src/frame";
 import { animationsDone, expect, test, visit } from "../src/test";
 import { openUserData } from "../src/user-data";
 
-// Issue #19, the import screen's CSV preview: a CSV file detection could not read whole shows its
-// first lines under its row; the user chooses a profile or maps each column, sees a test read,
-// saves the mapping as a profile, shares a profile as a file, and imports. Each test has a user of
-// its own, with one account in euros, so that no other test's profiles or lines meet its own.
+// Issue #19, the import screen's CSV preview: a CSV file detection could not read whole waits, its
+// card saying so with an action that opens its first lines in a side sheet (#210); there the user
+// chooses a profile or maps each column, sees a test read, saves the mapping as a profile, shares a
+// profile as a file, and imports. Each test has a user of its own, with one account in euros, so
+// that no other test's profiles or lines meet its own.
 
 const ACCOUNT = "Everyday account";
 
@@ -86,17 +88,33 @@ async function choose(page: Page, list: string, option: string | RegExp) {
   await expect(page.getByRole("listbox")).toBeHidden();
 }
 
-/** Drops the file, chooses its account, and waits for its preview. */
-async function previewOf(page: Page, path: string, file: string) {
-  await drop(page, path);
+/** Says which account the file just dropped goes to. */
+async function chooseAccount(page: Page, file: string) {
   await expect(page.getByRole("cell", { name: "Account to choose" })).toBeVisible({
     timeout: 30_000,
   });
   await choose(page, `Account of ${file}`, ACCOUNT);
   await page.getByRole("button", { name: "Import into this account" }).click();
-  await expect(page.getByRole("table", { name: `The first lines of ${file}` })).toBeVisible({
+}
+
+/** The card's action that opens the file's columns. */
+const confirmColumns = (page: Page) => page.getByRole("button", { name: "Confirm the columns" });
+
+/** The side sheet that holds a file's columns. */
+const sheetOf = (page: Page, file: string) =>
+  page.getByRole("dialog", { name: `The columns of ${file}` });
+
+/** Drops the file, chooses its account, waits for its columns to confirm, and opens them. */
+async function previewOf(page: Page, path: string, file: string) {
+  await drop(page, path);
+  await chooseAccount(page, file);
+  await expect(page.getByRole("cell", { name: "Columns to confirm" })).toBeVisible({
     timeout: 30_000,
   });
+  await confirmColumns(page).click();
+  await expect(
+    sheetOf(page, file).getByRole("table", { name: `The first lines of ${file}` }),
+  ).toBeVisible({ timeout: 30_000 });
 }
 
 const testRead = (page: Page) => page.getByRole("region", { name: "Test read" });
@@ -154,13 +172,13 @@ test("a profile made from a preview reads the file", async ({ app, user, page },
   await expect(page.getByText("Saved as Market bank")).toBeVisible();
 
   await page.getByRole("button", { name: "Read the file this way" }).click();
+  await expect(sheetOf(page, "december.csv")).toBeHidden();
   await expect(summaryOf(page, "december.csv")).toBeVisible({ timeout: 30_000 });
   await expect(added(page, "december.csv")).toHaveText("2");
 
   // The next file with that header is read with the profile, without a preview.
   await drop(page, await frenchExport(testInfo, "december-again.csv", "05"));
-  await choose(page, "Account of december-again.csv", ACCOUNT);
-  await page.getByRole("button", { name: "Import into this account" }).click();
+  await chooseAccount(page, "december-again.csv");
   await expect(summaryOf(page, "december-again.csv")).toBeVisible({ timeout: 30_000 });
   await expect(added(page, "december-again.csv")).toHaveText("2");
 
@@ -268,6 +286,95 @@ test("a refused test read names the line and the column", async ({ app, user, pa
     "Line 5, column 3: “CB MARCHÉ DES HALLES” cannot be read as Booking date.",
   );
   await expect(page.getByRole("button", { name: "Read the file this way" })).toBeDisabled();
+  await animationsDone(page);
+});
+
+// Issue #210, "How to verify".
+test("a CSV of unknown columns: the card shows its state and action, the sheet holds the form, Escape cancels and the file still waits, confirming imports the lines", async ({
+  app,
+  user,
+  page,
+}, testInfo) => {
+  test.setTimeout(120_000);
+
+  const owner = await importer(app, user, page, "sheet");
+
+  await visit(page, "/import");
+  await drop(page, await frenchExport(testInfo, "sheet.csv", "07"));
+  await chooseAccount(page, "sheet.csv");
+
+  // The card says where the file stands and offers the action; the form is not in the page.
+  await expect(page.getByRole("cell", { name: "Columns to confirm" })).toBeVisible({
+    timeout: 30_000,
+  });
+  await expect(confirmColumns(page)).toBeVisible();
+  await expect(page.getByRole("table", { name: "The first lines of sheet.csv" })).toHaveCount(0);
+  await expect(page.getByRole("combobox", { name: "Read with" })).toHaveCount(0);
+
+  // The sheet holds the whole form, from the right edge, along the bottom on a phone; focus goes
+  // to its first field.
+  await confirmColumns(page).click();
+
+  const sheet = sheetOf(page, "sheet.csv");
+
+  await expect(sheet).toHaveAttribute("data-side", onPhone(page) ? "bottom" : "right");
+  await expect(sheet.getByRole("combobox", { name: "Read with" })).toBeFocused();
+  await expect(sheet.getByRole("table", { name: "The first lines of sheet.csv" })).toBeVisible();
+  await expect(sheet.getByRole("heading", { name: "Test read" })).toBeVisible();
+  await expect(sheet.getByRole("textbox", { name: "Name of the profile" })).toBeVisible();
+  await expect(sheet.getByRole("button", { name: /^(Cancel|Read the file this way)$/ })).toHaveText(
+    ["Cancel", "Read the file this way"],
+  );
+
+  // Escape cancels: the sheet closes, focus goes back to the action, and the file still waits.
+  await page.keyboard.press("Escape");
+  await expect(sheet).toBeHidden();
+  await expect(confirmColumns(page)).toBeFocused();
+  await expect(page.getByRole("cell", { name: "Columns to confirm" })).toBeVisible();
+
+  // Mapped, named and confirmed: the profile is saved, the sheet closes, the lines are imported.
+  // The card's action is gone with the question: focus goes to the file's row.
+  await confirmColumns(page).click();
+  await choose(page, "Date format", "DD/MM/YYYY, as in 03/10/2026");
+  await expect(testRead(page)).toContainText("CB MARCHÉ DES HALLES");
+  await sheet.getByRole("textbox", { name: "Name of the profile" }).fill("Halles bank");
+  await sheet.getByRole("button", { name: "Read the file this way" }).click();
+  await expect(sheet).toBeHidden();
+  await expect(
+    page.locator('[role="cell"][data-column="file"]').filter({ hasText: "sheet.csv" }),
+  ).toBeFocused();
+  await expect(summaryOf(page, "sheet.csv")).toBeVisible({ timeout: 30_000 });
+  await expect(added(page, "sheet.csv")).toHaveText("2");
+
+  expect(await profileOfImport(app.database, owner, "sheet.csv")).toEqual({
+    profile: "Halles bank",
+    shipped: null,
+  });
+
+  await animationsDone(page);
+});
+
+test("the columns' sheet slides in from its edge in 300 ms, and is there at once under reduced motion", async ({
+  app,
+  user,
+  page,
+}, testInfo) => {
+  test.setTimeout(90_000);
+
+  await importer(app, user, page, "sheet-motion");
+  await visit(page, "/import");
+  await previewOf(page, await frenchExport(testInfo, "sliding.csv", "08"), "sliding.csv");
+
+  const sheet = sheetOf(page, "sliding.csv");
+
+  await expect(sheet).toHaveCSS("transition-duration", "0.3s");
+  await page.keyboard.press("Escape");
+  await expect(sheet).toBeHidden();
+
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await confirmColumns(page).click();
+  await expect(sheet).toHaveCSS("transition-duration", "0s");
+  await expect(sheet).toHaveCSS("transform", "none");
   await animationsDone(page);
 });
 
