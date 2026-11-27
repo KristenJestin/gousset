@@ -97,16 +97,30 @@ Variables, from the shell or a `.env` file beside `docker-compose.yml`:
 | `BETTER_AUTH_URL`             | the address the app is reached at                          | `http://localhost:3001` |
 | `GOUSSET_PORT`                | the port it is published on (`127.0.0.1:3001` for loopback) | `3001`                 |
 | `OTEL_EXPORTER_OTLP_ENDPOINT` | a collector of yours                                       | unset: no telemetry     |
+| `RECEIPT_MAX_MB`              | the largest receipt a user may attach, in megabytes (a million bytes) | `50`         |
+| `RECEIPT_TYPES`               | the kinds a receipt may be, among `pdf,jpeg,png,heic`      | all four                |
+
+**Receipts are files** (#217): the photos and PDFs users attach to lines are kept on disk, in the
+image's `/var/lib/gousset/receipts` (`RECEIPTS_DIRECTORY`), which `docker-compose.yml` mounts as
+the volume `gousset_receipts`; never in the database, so a dump alone does not hold them
+([Backing up and restoring](#backing-up-and-restoring)). The limits are read when the app starts:
+change one, then `docker compose up -d` again. A file's kind is read from its first bytes, never
+from its name; a word of `RECEIPT_TYPES` that is none of the four stops the app at its start.
 
 **Telemetry is off unless `OTEL_EXPORTER_OTLP_ENDPOINT` is set** (`docs/architecture.md`,
 "Telemetry"): Compose passes it to the app only when it is set. The image also turns off the usage
 statistics of Varlock's command line (`VARLOCK_TELEMETRY_DISABLED`): nothing leaves an
 installation unless its owner wants it to.
 
-**Updating**: back up first ([Backing up and restoring](#backing-up-and-restoring): a dump and
-`secrets/`), then `docker compose pull && docker compose up -d`; `migrate` runs again before the
+**Updating**: back up first ([Backing up and restoring](#backing-up-and-restoring): a dump, the
+receipts' volume and `secrets/`), then `docker compose pull && docker compose up -d`; `migrate` runs again before the
 app. Migrations only go forward: an update is undone by restoring that dump under the previous
 image ([Going back](#going-back)), never by running the previous image on the updated database.
+**The release that brings receipts (#217) asks for the new `docker-compose.yml` once**, which
+mounts the volume `receipts`: fetch it again before `up` (`curl -fsSLO …/docker-compose.yml`, as
+when installing, keeping your `.env`). With the older file, the image declares the directory a
+volume of its own, which Docker keeps when `up` recreates the container, but not past a
+`docker compose down`: receipts attached then would be left in a volume no container uses.
 An installation made before the app had a role of its own (#66) needs nothing more: its next
 `migrate` makes `gousset_app`, hands
 pg-boss's schema over to it and lets it log in, and the app then logs in as it, with the same
@@ -153,7 +167,7 @@ so a password, with an installation.
 
 ## Backing up and restoring
 
-An installation is its database and its two secrets. Each user takes their own data away from
+An installation is its database, its receipts' files and its two secrets. Each user takes their own data away from
 Settings, Data: an archive of JSON and CSV files, readable without Gousset, which a backup does
 not replace and which Gousset does not import back. The administrator backs up the whole
 installation, every user's data, password and connected MCP clients, from the folder of
@@ -174,6 +188,21 @@ docker compose exec -T postgres pg_dump -U gousset -d gousset --format=custom > 
 `-T` gives no terminal, so that the binary dump comes out whole. A dump holds the tables, their
 rows, pg-boss's jobs and the grants, never the roles: `gousset_app` and `gousset_user` belong to
 the Postgres server, not to one database, and the restore makes them first.
+
+**The receipts' files** (#217), in the volume `gousset_receipts`, copied right after the dump,
+while the app serves, with Postgres's image, which is already there:
+
+```sh
+docker run --rm -v gousset_receipts:/data:ro -v "$PWD":/backup postgres:18.7 tar -czf /backup/gousset-receipts-$(date +%F).tgz -C /data .
+```
+
+A file is written whole before its row, so a copy made after the dump holds every receipt the
+dump names; one attached in between is a file no row names, which the hourly sweep deletes once
+restored. A restore puts them back into the volume before the app starts (after `pg_restore`
+below): `docker run --rm -v gousset_receipts:/data -v "$PWD":/backup postgres:18.7 tar -xzf
+/backup/gousset-receipts-2026-11-23.tgz -C /data`. Restoring the dump without them leaves every
+receipt's row without its file: its download answers that it no longer exists. This copy is not
+tested.
 
 **Restoring a dump** into an empty installation (a new machine, or a lost volume): the same
 `docker-compose.yml`, the same `secrets/`, and the `GOUSSET_VERSION` the dump was made with
