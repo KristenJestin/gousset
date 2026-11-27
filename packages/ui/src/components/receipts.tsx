@@ -86,14 +86,17 @@ export function LineReceipts({ receipts, accept, hint, onAttach, onDelete }: Lin
     setSending(true);
     setError(undefined);
 
-    const refusal = await onAttach(file);
+    try {
+      const refusal = await onAttach(file);
 
-    setSending(false);
-
-    if (refusal === undefined) {
-      setOpen(false);
-    } else {
-      setError(refusal);
+      if (refusal === undefined) {
+        setOpen(false);
+      } else {
+        setError(refusal);
+      }
+    } finally {
+      // A rejected attachment leaves the dialog usable: the user may choose another file.
+      setSending(false);
     }
   }
 
