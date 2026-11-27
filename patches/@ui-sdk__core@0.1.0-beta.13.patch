@@ -1,0 +1,66 @@
+diff --git a/dist/foundation/platform/layers.js b/dist/foundation/platform/layers.js
+index a615ec6776ed11da0c1a3426e1ad5d347aa80beb..fa74a5b2ce6e664b16c0a1d26eb5afab21fc743b 100644
+--- a/dist/foundation/platform/layers.js
++++ b/dist/foundation/platform/layers.js
+@@ -102,6 +102,30 @@ function activeLayers() {
+ function lastEscape() {
+   return realm.escapeAt ?? -Infinity;
+ }
++/**
++ * Gousset's patch (KristenJestin/gousset#259): a layer that exits eats a press
++ * over the place its backdrop covered only when a press on that backdrop
++ * closed it, less than a double click's interval ago: the second press of a
++ * double click on the backdrop reaches nothing underneath. A layer closed
++ * otherwise (Escape, its close button, the page) lets the next press through,
++ * where ui-sdk ate every press until the exit ended (about 200 ms).
++ */
++var DOUBLE_PRESS_MS = 500;
++function backdropPresses() {
++  return realm.backdropPresses ??= /* @__PURE__ */ new WeakMap();
++}
++function pressOutside(layers, event, point) {
++  for (const layer of layers) {
++    if (layer.overBackdrop?.(point.x, point.y)) {
++      backdropPresses().set(layer, performance.now());
++    }
++    layer.onOutsidePress?.(event);
++  }
++}
++function closedFromBackdrop(layer) {
++  const at = backdropPresses().get(layer);
++  return at !== void 0 && performance.now() - at < DOUBLE_PRESS_MS;
++}
+ function insideTree(layer, target, event) {
+   return insideTreeAt(layer, composedHops(target), event);
+ }
+@@ -142,7 +166,7 @@ function listen(doc, win) {
+         if (layer.modal === false) {
+           continue;
+         }
+-        if (layer.overBackdrop?.(point.x, point.y)) {
++        if (closedFromBackdrop(layer) && layer.overBackdrop?.(point.x, point.y)) {
+           consume = true;
+         }
+         break;
+@@ -152,9 +176,7 @@ function listen(doc, win) {
+   }
+   function dismiss(event, target, point) {
+     const { dismissed, consume } = plan(event, target, point);
+-    for (const layer of dismissed) {
+-      layer.onOutsidePress?.(event);
+-    }
++    pressOutside(dismissed, event, point);
+     return consume;
+   }
+   const offPointerDown = on(
+@@ -189,9 +211,7 @@ function listen(doc, win) {
+         event.preventDefault();
+         swallowClick = true;
+       }
+-      for (const layer of dismissed) {
+-        layer.onOutsidePress?.(event);
+-      }
++      pressOutside(dismissed, event, point);
+     },
+     { capture: true }
+   );

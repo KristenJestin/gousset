@@ -33,5 +33,9 @@ minimumReleaseAgeExclude:
 # timeline, which in Firefox can trail performance.now() by seconds and delay every fade (#167).
 # A Renovate bump of motion or motion-dom must re-apply this patch to the new version, or drop it
 # once upstream fixes it; until then it applies to 14.14.0 alone.
+# @ui-sdk/core@0.1.0-beta.13: while a sheet or a dialog closes, a press where its backdrop was is
+# eaten only when a press on that backdrop closed it, less than a double click ago (#259); a bump
+# of @ui-sdk/core or @ui-sdk/react must re-apply it the same way, or drop it once upstream fixes it.
 patchedDependencies:
+  "@ui-sdk/core@0.1.0-beta.13": patches/@ui-sdk__core@0.1.0-beta.13.patch
   motion-dom@14.14.0: patches/motion-dom@14.14.0.patch

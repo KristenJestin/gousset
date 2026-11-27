@@ -628,6 +628,92 @@ test("over a line's detail, Escape closes the shortcuts list alone, then the det
   await expect(row(page, GREENMARKET).getByRole("button")).toBeFocused();
 });
 
+/**
+ * A point of `target` clear of the open `sheet`, where only the sheet's backdrop covers it: a press
+ * there, once the sheet closes, would reach `target`.
+ */
+async function besideSheet(target: Locator, sheet: Locator) {
+  const [box, panel] = await Promise.all([target.boundingBox(), sheet.boundingBox()]);
+
+  if (box === null || panel === null) {
+    throw new Error("The row or the sheet is not on the screen.");
+  }
+
+  const point = { x: box.x + 8, y: box.y + box.height / 2 };
+
+  // On a wide screen the sheet is at the right, on a phone at the bottom.
+  expect(point.x < panel.x || point.y < panel.y, "the row shows beside the sheet").toBe(true);
+
+  return point;
+}
+
+/**
+ * Waits for the sheet to start sliding out (ui-sdk's `data-ending-style`), checked at each frame: its
+ * close goes through the address, and the exit lasts 200 ms, shorter than `expect`'s retries.
+ */
+async function sheetLeaving(page: Page) {
+  await page.waitForFunction(
+    () => document.querySelector('[role="dialog"][data-ending-style]') !== null,
+    undefined,
+    { polling: "raf" },
+  );
+}
+
+// Issue #259: while a sheet slides out, a press where its backdrop was reaches the page, as soon as
+// Escape closed it; no wait for it to be gone.
+test("a row clicked at once after Escape closed a line's detail opens", async ({ page }) => {
+  await signedInAs(page, oriane);
+  await visit(page, "/operations");
+  await hydrated(page);
+
+  await row(page, GREENMARKET).getByRole("button").click();
+
+  const panel = detail(page, GREENMARKET);
+
+  await expect(panel).toBeFocused();
+  await animationsDone(page);
+
+  const point = await besideSheet(row(page, STREAMLY).getByRole("button"), panel);
+
+  await page.keyboard.press("Escape");
+  await sheetLeaving(page);
+  // The mouse at once, with none of `click`'s waits for the row to be free.
+  await page.mouse.click(point.x, point.y);
+
+  await expect(detail(page, STREAMLY)).toBeVisible();
+  await expect(panel).toHaveCount(0);
+});
+
+// Issue #259: the double click's second press, which comes while the sheet its first press closed
+// slides out, still reaches nothing under the backdrop.
+test("a double click on a line's detail's backdrop closes it and opens nothing under it", async ({
+  page,
+}) => {
+  await signedInAs(page, oriane);
+  await visit(page, "/operations");
+  await hydrated(page);
+
+  await row(page, GREENMARKET).getByRole("button").click();
+
+  const panel = detail(page, GREENMARKET);
+
+  await expect(panel).toBeFocused();
+  await animationsDone(page);
+
+  const point = await besideSheet(row(page, STREAMLY).getByRole("button"), panel);
+
+  // The second press once the first closed the sheet, as a person's comes; Playwright's own
+  // `dblclick` sends it before the close reaches the sheet, still open, where it is eaten anyway.
+  await page.mouse.click(point.x, point.y);
+  await sheetLeaving(page);
+  await page.mouse.click(point.x, point.y, { clickCount: 2 });
+
+  await expect(panel).toHaveCount(0);
+  await animationsDone(page);
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(page).not.toHaveURL(/[?&]line=/);
+});
+
 test("a line opened from its address leaves the list whole under its sheet, which does not slide in", async ({
   browser,
   page,
