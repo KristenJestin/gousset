@@ -18,7 +18,8 @@ function listFormat(locale: string): Intl.ListFormat {
   return known;
 }
 
-function FigureBox({
+/** One of a subject's figures: its label over its amount, in a bordered box. */
+export function FigureBox({
   label,
   slot,
   children,

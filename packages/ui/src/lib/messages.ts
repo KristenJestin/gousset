@@ -602,6 +602,41 @@ function uiMessages(locale: Locale) {
       archivedDescription: m.uiSubjectsArchivedDescription({}, options),
       create: m.uiSubjectsCreate({}, options),
       save: m.uiSubjectsSave({}, options),
+      /** A subject paid back by someone else (#217): its option, its figures and its lines. */
+      paidBack: m.uiSubjectsPaidBack({}, options),
+      paidBackDescription: m.uiSubjectsPaidBackDescription({}, options),
+      paybackFrom: m.uiSubjectsPaybackFrom({}, options),
+      paybackAskedOn: m.uiSubjectsPaybackAskedOn({}, options),
+      paybackAskedOnDescription: m.uiSubjectsPaybackAskedOnDescription({}, options),
+      paybackSettled: m.uiSubjectsPaybackSettled({}, options),
+      paybackSettledDescription: m.uiSubjectsPaybackSettledDescription({}, options),
+      paybackSettledOn: m.uiSubjectsPaybackSettledOn({}, options),
+      paybackBy: (from: string) => m.uiSubjectsPaybackBy({ from }, options),
+      paybackSpent: m.uiSubjectsPaybackSpent({}, options),
+      paybackPaidBack: m.uiSubjectsPaybackPaidBack({}, options),
+      paybackDifference: m.uiSubjectsPaybackDifference({}, options),
+      paybackStates: {
+        paid_back: m.uiSubjectsPaybackStatePaidBack({}, options),
+        partly: m.uiSubjectsPaybackStatePartly({}, options),
+        asked: m.uiSubjectsPaybackStateAsked({}, options),
+        to_ask: m.uiSubjectsPaybackStateToAsk({}, options),
+      },
+      /** "Asked on 4 May", the day already worded. */
+      paybackAskedDay: (day: string) => m.uiSubjectsPaybackStateAskedOn({ day }, options),
+      paybackLines: m.uiSubjectsPaybackLines({}, options),
+      paybackLinesNone: m.uiSubjectsPaybackLinesNone({}, options),
+      /** A payback line's names, which say the line: "Detach VIR NORTHWIND, 20 Oct.". */
+      paybackDetach: (line: string) => m.uiSubjectsPaybackDetach({ line }, options),
+      paybackFind: m.uiSubjectsPaybackFind({}, options),
+      paybackCandidatesTitle: m.uiSubjectsPaybackCandidatesTitle({}, options),
+      paybackCandidatesHelp: (from: string) => m.uiSubjectsPaybackCandidatesHelp({ from }, options),
+      paybackCandidatesNone: m.uiSubjectsPaybackCandidatesNone({}, options),
+      paybackAttach: m.uiSubjectsPaybackAttach({}, options),
+      paybackAttachOne: (line: string) => m.uiSubjectsPaybackAttachOne({ line }, options),
+      paybackWaiting: m.uiSubjectsPaybackWaiting({}, options),
+      /** In a line's detail: the subject it pays back. */
+      paysBack: m.uiOperationsPaysBack({}, options),
+      paybackNote: m.uiOperationsPaybackNote({}, options),
     },
   };
 }

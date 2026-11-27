@@ -38,6 +38,14 @@ export type SubjectDraft = {
   /** Once a merchant is added, the merchants' past expenses are attached once saved. */
   attachPast: boolean;
   archived: boolean;
+  /** Paid back by someone else (#217). */
+  hasPayback: boolean;
+  /** With `hasPayback`: who pays it back, free text. */
+  paybackFrom: string;
+  /** With `hasPayback`: the ISO day the user asked; none until then. */
+  paybackAskedOn: string | null;
+  /** With `hasPayback`: the ISO day the user marked it paid back by hand; none otherwise. */
+  paybackSettledOn: string | null;
 };
 
 /** A refusal said under the field at fault, or under the form. */
@@ -47,6 +55,10 @@ export type SubjectEditorErrors = {
   value?: string;
   loan?: string;
   dates?: string;
+  /** Under who pays it back: a payer or a day refused. */
+  payback?: string;
+  /** Under "Paid back": the option turned off while lines pay it back. */
+  paybackOff?: string;
   accounts?: string;
   merchants?: string;
   form?: string;
@@ -89,6 +101,8 @@ export type SubjectEditorProps = {
   locale?: string;
   /** Where focus goes once it closes, before what opened it (`Sheet`'s `finalFocus`). */
   finalFocus?: string;
+  /** Today, an ISO day: the day "Mark as paid back" proposes. */
+  today?: string;
 };
 
 const TOP = "top";
@@ -100,8 +114,9 @@ const CURRENCY_ITEMS = CURRENCY_CODES.map((code) => ({ value: code, label: code 
  * A subject, new or saved, in a side sheet (docs/wireframes, screen 8; docs/design.md, "A long
  * form"): its name and the subject it is inside, "Has a value" (an estimated value in a currency,
  * the loan it is bought with), "Has dates" (its start and end), the accounts linked to it, the
- * merchants that attach their expenses automatically (each a rule), and their past expenses, which
- * it offers to attach at once; a saved one may be archived or restored. It opens on its name. While
+ * "Paid back" (#217: who pays it back, the day it was asked, and "Mark as paid back" with its day,
+ * today unless changed), the merchants that attach their expenses automatically (each a rule), and
+ * their past expenses, which it offers to attach at once; a saved one may be archived or restored. It opens on its name. While
  * it is sent it stays open, its button busy; a refusal is said under the field at fault.
  *
  * Motion: the sheet slides in from the right in 300 ms, ease-out, and out in 200 ms, ease-in; from
@@ -171,7 +186,13 @@ export function SubjectEditor(props: SubjectEditorProps) {
             error={errors.parent}
           />
         </div>
-        <Options draft={draft} loans={props.loans} errors={errors} onChange={change} />
+        <Options
+          draft={draft}
+          loans={props.loans}
+          errors={errors}
+          today={props.today}
+          onChange={change}
+        />
         <Section title={messages.accounts}>
           {props.accounts.length === 0 ? (
             <p className="text-sm text-muted-foreground">{messages.accountsNone}</p>
@@ -225,16 +246,18 @@ export function SubjectEditor(props: SubjectEditorProps) {
   );
 }
 
-/** "Has a value" and "Has dates", each with its fields once ticked. */
+/** "Has a value", "Has dates" and "Paid back", each with its fields once ticked. */
 function Options({
   draft,
   loans,
   errors,
+  today,
   onChange,
 }: {
   draft: SubjectDraft;
   loans: ReadonlyArray<Named>;
   errors: SubjectEditorErrors;
+  today: string | undefined;
   onChange: (patch: Partial<SubjectDraft>) => void;
 }) {
   const messages = useUiMessages().subjects;
@@ -305,8 +328,56 @@ function Options({
           />
         </div>
       ) : null}
+      <Checkbox
+        label={messages.paidBack}
+        description={messages.paidBackDescription}
+        checked={draft.hasPayback}
+        onCheckedChange={(hasPayback) => onChange({ hasPayback })}
+        error={errors.paybackOff}
+      />
+      {draft.hasPayback ? (
+        <div className="flex flex-col gap-3 ps-7">
+          <TextField
+            label={messages.paybackFrom}
+            value={draft.paybackFrom}
+            onChange={(event) => onChange({ paybackFrom: event.target.value })}
+            error={errors.payback}
+            autoComplete="off"
+          />
+          <DatePicker
+            label={messages.paybackAskedOn}
+            description={messages.paybackAskedOnDescription}
+            value={draft.paybackAskedOn}
+            onValueChange={(paybackAskedOn) => onChange({ paybackAskedOn })}
+          />
+          <Checkbox
+            label={messages.paybackSettled}
+            description={messages.paybackSettledDescription}
+            checked={draft.paybackSettledOn !== null}
+            onCheckedChange={(settled) =>
+              onChange({ paybackSettledOn: settled ? (today ?? localToday()) : null })
+            }
+          />
+          {draft.paybackSettledOn === null ? null : (
+            <DatePicker
+              label={messages.paybackSettledOn}
+              value={draft.paybackSettledOn}
+              onValueChange={(paybackSettledOn) => onChange({ paybackSettledOn })}
+            />
+          )}
+        </div>
+      ) : null}
     </div>
   );
+}
+
+/** Today in the browser's clock, an ISO day: where the page gives no day of its own. */
+function localToday(): string {
+  const now = new Date();
+
+  return [now.getFullYear(), now.getMonth() + 1, now.getDate()]
+    .map((part, index) => String(part).padStart(index === 0 ? 4 : 2, "0"))
+    .join("-");
 }
 
 /** The merchants chosen, as chips each with its remove button, and "+ Merchant" to add one. */
