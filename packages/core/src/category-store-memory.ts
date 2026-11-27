@@ -98,7 +98,13 @@ export type MemoryCategoryRows = {
   categories: Array<CategoryRecord>;
   entries: Array<MemoryEntry>;
   /** The lines that exist, by id, with their amount, and whether each is a side of a transfer. */
-  lines: Array<{ readonly id: string; readonly amountMinor: number; readonly paired?: boolean }>;
+  lines: Array<{
+    readonly id: string;
+    readonly amountMinor: number;
+    readonly paired?: boolean;
+    /** It pays back a subject (#217). */
+    readonly paidBack?: boolean;
+  }>;
   /** The merchants; none when left out. */
   merchants?: Array<MemoryMerchant>;
 };
@@ -288,6 +294,7 @@ export function memoryCategoryStore(rows: Map<string, MemoryCategoryRows> = new 
             amountMinor: line.amountMinor,
             entries,
             paired: line.paired === true,
+            paidBack: line.paidBack === true,
             categories: own.categories,
           }),
         );
