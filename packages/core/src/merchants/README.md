@@ -75,8 +75,13 @@ A key is upper-case ASCII words separated by one space, made only of `A`–`Z`, 
    `PRLV SEPA`, `PRELEVEMENT EUROPEEN`, `VIR`, `VIREMENT INSTANTANE EMIS`, `CARD PAYMENT TO`,
    `DIRECT DEBIT`, `POS`, `CONTACTLESS`, `VISA DEBIT`, `BANCONTACT`, `KARTENZAHLUNG`,
    `SEPA-LASTSCHRIFT`, `UEBERWEISUNG`, `KAUF/DIENSTLEISTUNG`, `DOMICILIATION`…, the full list is
-   `PAYMENT_PHRASES`, with rule 3's prefixes that let the rest name the merchant), breaks, numbers, and a small word standing just before a break (`DU 211026`,
-   `VOM 21.10.2026`, `ON 21-10-2026`). So when the date comes first, the name is after it:
+   `PAYMENT_PHRASES`, with rule 3's prefixes that let the rest name the merchant), the English card
+   forms of #243 (`CARD PURCHASE WITH PIN`, `PURCHASE WITH PIN`, `RECURRING CARD PURCHASE`,
+   `RECURRING PAYMENT AUTHORIZED ON`, `POS DEBIT`, `CHECK CARD`: `CARD_FORMS`), breaks, numbers,
+   and a small word standing just before a break (`DU 211026`, `VOM 21.10.2026`, `ON 21-10-2026`).
+   `CARD` alone is skipped only before a break (`BEFORE_A_BREAK`): `CARD 12/03 PIZZA NOVA` →
+   `PIZZA NOVA`, `CARD X1234 FRESHMART` → `FRESHMART`, but `CARD FACTORY` and `CARDINAL BOOKS`
+   are shops and keep their name. So when the date comes first, the name is after it:
    `CARTE 21/10/26 GREENMARKET` → `GREENMARKET`.
 10. **The name runs to the next break.** What follows a date, a store number or a card number is the
     place, and is dropped: `CB GREENMARKET 2110 RIVERTON` → `GREENMARKET`. It stops at
@@ -210,6 +215,12 @@ that the merchant "Boulangerie" a town made does not take it either.
 
 A name seen before more than 64 distinct last words shows no town (`MAX_PLACES`): it is the start
 of other names or of references, and leaving it out keeps the reading linear in the keys.
+
+The merchant "Card" a release before #243 made of English card labels (`CARD 12/03 PIZZA NOVA`
+was `CARD`), which the user never touched, is forgotten once per user at boot (`reread.ts`,
+`forgetCardMerchantsIn`; docs/data-model.md, v0.3, "The merchants made from an English card label's
+start are forgotten"): `keyBeforeCardForms` gives the cleaned label a line had before, and a
+merchant whose every cleaned label no line gives any longer goes; its lines then find their shops.
 
 The merchants a release made one per town, which the user never touched, are merged once per user
 at boot (`town-merge.ts`; docs/data-model.md, v0.3, "The merchants made one per town are merged once

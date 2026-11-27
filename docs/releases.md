@@ -395,7 +395,8 @@ the `image` job and runs `tools/check-upgrade.sh` on it, which, on a fresh proje
    consent and tokens are written as the app would write them;
    and, where the release has its import route (from 0.2.0), a user uploads an invented statement
    (`tools/check-upgrade.ofx`, whose bank encodes entities twice, #132), read as that release
-   reads it;
+   reads it, then a second one of English card labels (`tools/check-upgrade.cards.ofx`, #243),
+   whose merchant "Debit" she renames;
 3. stops the app, as an update does, and reads every row of every table of the `public` schema;
    from a release that has entries, every counted line with an amount must already have its one
    entry: invented data the release could not hold fails here, not as the update's fault;
@@ -421,7 +422,10 @@ the `image` job and runs `tools/check-upgrade.sh` on it, which, on a fresh proje
    the shop's merchant is there, and the fee's entry is in Bank fees; the merchants a release
    before #193 made one per town of a shop's card labels (from 0.3.0: Pizza Nova and Freshmart,
    each in two towns), which the user never touched, are one per shop, once, while Bookmill's,
-   which she split by town, and Cafe Bora Bora, of no sure town, stay as they were; once every boot job
+   which she split by town, and Cafe Bora Bora, of no sure town, stay as they were; the merchant
+   "Card" a release before #243 made of her English card labels, which she never touched, is
+   forgotten, once, and each of its lines names its shop, while the one she renamed stays as she
+   left it; once every boot job
    has ended, **her transfers kept before v0.3 are paired** (#192: a clear pair and one across her
    savings account's fortnight, never paired by the release, are transfers; an ambiguous one waits
    in the review; from 0.3.0, two whose side she classified, by hand and by a rule of hers, stay

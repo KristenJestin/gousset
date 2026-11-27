@@ -7,6 +7,7 @@ import {
   assignMerchants,
   formerMerchantKey,
   isCardPayment,
+  keyBeforeCardForms,
   merchantKey,
   merchantName,
   nameKey,
@@ -109,6 +110,16 @@ const LABELS: ReadonlyArray<readonly [string, string, string | null]> = [
   ["UK Visa debit", "VISA DEBIT GREENMARKET 21/10 RIVERTON", "GREENMARKET"],
   ["English transfer", "SEPA TRF ACME CONSULTING SALARY", "ACME CONSULTING SALARY"],
   ["UK standing order", "STANDING ORDER CAMILLE EXEMPLE", "CAMILLE EXEMPLE"],
+  // English card labels that start with `CARD` and a date or a card number (#243).
+  ["English card, the date first", "CARD 12/03 PIZZA NOVA", "PIZZA NOVA"],
+  ["English card, the date first, a town", "CARD 12/03 PIZZA NOVA RIVERTON", "PIZZA NOVA RIVERTON"],
+  ["English card, DDMM first", "CARD 1203 FRESHMART RIVERTON", "FRESHMART RIVERTON"],
+  ["English card, a masked card first", "CARD X1234 12/03 FRESHMART", "FRESHMART"],
+  ["English card, a shop named Card...", "CARD 12/03 CARDINAL BOOKS", "CARDINAL BOOKS"],
+  ["a shop whose name starts with Card", "CARDINAL BOOKS", "CARDINAL BOOKS"],
+  ["a shop whose first word is Card", "CARD FACTORY 12/03 RIVERTON", "CARD FACTORY"],
+  ["a shop whose first word is Card, after CB", "CB CARD FACTORY 12/03", "CARD FACTORY"],
+  ["a label of only CARD and a date", "CARD 12/03", null],
   ["cash withdrawal", "CASH WITHDRAWAL RIVERTON 21OCT", null],
   ["ATM withdrawal", "ATM WITHDRAWAL - RIVERTON", null],
   // United States.
@@ -123,6 +134,20 @@ const LABELS: ReadonlyArray<readonly [string, string, string | null]> = [
   ],
   ["US debit card purchase", "DEBIT CARD PURCHASE - FUELSTOP 0412 RIVERTON TX", "FUELSTOP"],
   ["US check card", "CHECKCARD 1021 RIVERSIDE GYM RIVERTON NY", "RIVERSIDE GYM RIVERTON"],
+  ["US check card, two words", "CHECK CARD 1021 RIVERSIDE GYM", "RIVERSIDE GYM"],
+  [
+    "US card purchase with PIN",
+    "CARD PURCHASE WITH PIN 03/12 FRESHMART RIVERTON TX",
+    "FRESHMART RIVERTON",
+  ],
+  ["US purchase with PIN", "PURCHASE WITH PIN 03/12 FRESHMART", "FRESHMART"],
+  ["US recurring card purchase", "RECURRING CARD PURCHASE 03/12 STREAMFLIX", "STREAMFLIX"],
+  [
+    "US recurring payment authorised",
+    "RECURRING PAYMENT AUTHORIZED ON 03/12 STREAMFLIX CARD 1234",
+    "STREAMFLIX",
+  ],
+  ["US point of sale debit", "POS DEBIT 03/12 GREENMARKET RIVERTON CA", "GREENMARKET RIVERTON"],
   ["US ACH debit", "ACH DEBIT NORTHWIND ENERGY INC", "NORTHWIND ENERGY"],
   // German.
   [
@@ -298,6 +323,9 @@ describe("merchant key of a label", () => {
     "REMISE CHEQUE",
     "RETRAIT",
     "VIR SEPA",
+    "CARD",
+    "CARDINAL",
+    "PURCHASE WITH PIN",
   );
 
   const labels = fc.oneof(
@@ -350,6 +378,11 @@ describe("a card payment's label", () => {
     "POS 21OCT GREENMARKET RIVERTON GB",
     "VISA DEBIT GREENMARKET 21/10 RIVERTON",
     "KARTENZAHLUNG BAECKEREI MUSTER RIVERTON",
+    "CARD 12/03 PIZZA NOVA RIVERTON",
+    "CARD PURCHASE WITH PIN 03/12 FRESHMART RIVERTON",
+    "PURCHASE WITH PIN 03/12 FRESHMART RIVERTON",
+    "RECURRING CARD PURCHASE 03/12 STREAMFLIX",
+    "CHECK CARD 1021 RIVERSIDE GYM RIVERTON",
   ])("%s is a card payment", (label) => {
     expect(isCardPayment(label)).toBe(true);
   });
@@ -360,6 +393,7 @@ describe("a card payment's label", () => {
     "COTISATION CARTE VISA CLASSIC",
     "CORNER CAFE RIVERTON",
     "CBX MARKET",
+    "CARDINAL BOOKS RIVERTON",
   ])("%s is no card payment", (label) => {
     expect(isCardPayment(label)).toBe(false);
   });
@@ -408,6 +442,33 @@ describe("former key of a label, before the operation prefixes", () => {
     ["RETRAIT DAB 21/10", null, null],
   ])("%s (counterparty %s) was %s", (label, counterparty, key) => {
     expect(formerMerchantKey(label, counterparty)).toBe(key);
+  });
+});
+
+describe("key of a label before the English card forms (#243)", () => {
+  test.each([
+    ["CARD 12/03 PIZZA NOVA RIVERTON", null, "CARD"],
+    ["CARD X1234 12/03 FRESHMART", null, "CARD"],
+    ["CARD PURCHASE WITH PIN 03/12 FRESHMART", null, "WITH PIN"],
+    ["POS DEBIT 03/12 GREENMARKET", null, "DEBIT"],
+    ["RECURRING PAYMENT AUTHORIZED ON 03/12 STREAMFLIX", null, "AUTHORIZED"],
+    ["CARD 12/03", null, "CARD"],
+    ["CARD FACTORY 12/03", null, "CARD FACTORY"],
+    ["CB GREENMARKET 2110 RIVERTON", null, "GREENMARKET"],
+    ["ANN CARTE SHOPLY 12/10", null, "SHOPLY"],
+    ["VIR DE EPARGNE", null, null],
+    ["VIR SEPA RECU REF 12345", "Acme Conseil SAS", "ACME CONSEIL"],
+    ["RETRAIT DAB 21/10", null, null],
+  ])("%s (counterparty %s) was %s", (label, counterparty, key) => {
+    expect(keyBeforeCardForms(label, counterparty)).toBe(key);
+  });
+
+  test("is the key now of every label with no English card form", () => {
+    for (const [, label] of LABELS) {
+      if (!/^(?:CARD|CHECK CARD|PURCHASE WITH PIN|RECURRING|POS DEBIT)\b/.test(label)) {
+        expect(keyBeforeCardForms(label, null)).toBe(merchantKey(label, null));
+      }
+    }
   });
 });
 

@@ -259,6 +259,30 @@ if [ -n "$first_import" ]; then
       ;;
   esac
   say "$from made $per_town merchant(s) of a shop in a town."
+  # A release before #243 cleaned an English card label that starts with `CARD` and a date to `CARD`,
+  # and `POS DEBIT` to `DEBIT`: Noodle Bar and Hillside Pharmacy, paid by card, made one merchant
+  # "Card", and Greenmarket one "Debit", which Camille renamed. The update reads them again once, at
+  # boot, below. Their statement comes apart, after the first one's recognition: the first's
+  # `CARD PIXELPLAY STORE` and `CARD BRICOBOX EXEMPLE` have their merchants then, so that "Card" is
+  # made by the cut alone.
+  cards=$root/tools/check-upgrade.cards.ofx
+  ended=$(settled "$(upload camille "$cards")")
+  [ "$ended" = "done 3 0" ] ||
+    fail "$from did not import $(basename "$cards") whole: $ended, not \"done 3 0\"."
+  case $from in
+    0.1.* | 0.2.*) ;;
+    *)
+      english_cut=$(sql "select coalesce(string_agg(m.name || ':' || a.alias, ',' order by m.name, a.alias), '')
+        from merchant m join merchant_alias a on a.merchant_id = m.id
+        where m.user_id = '$camille' and m.name in ('Card', 'Debit')")
+      [ "$english_cut" = "Card:CARD,Debit:DEBIT" ] ||
+        fail "$from made the merchants \"$english_cut\" of its English card labels, not \"Card:CARD,Debit:DEBIT\"."
+      # Her rename, as the release does it: the merchant is changed.
+      sql "update merchant set name = 'Market Stall', updated_at = clock_timestamp()
+        where user_id = '$camille' and name = 'Debit'" > /dev/null
+      ;;
+  esac
+  say "Camille imported $(basename "$cards"): $from cleaned its English card labels to CARD and DEBIT."
 else
   say "$from has no import route: $(basename "$statement") is not imported."
 fi
@@ -436,6 +460,7 @@ done
 # the free text of her `VIR` transfers between her own accounts (tools/check-upgrade.sql), which
 # names no one; only an update from before merchants shows that it makes them.
 held_aliases=$(held_rows merchant_alias '.alias != "ANN CARTE CAFE EXEMPLE" and .alias != "F COTISATION"
+  and .alias != "CARD"
   and (.alias | (startswith("VERS LIVRET") or startswith("DEPUIS COMPTE") or startswith("EPARGNE PROJET")) | not)')
 recognised=$(sql "select count(*) from merchant_alias where user_id = '$camille'")
 [ "$recognised" != 0 ] || fail "Camille's lines got no merchant at the app's start."
@@ -512,6 +537,29 @@ if [ -n "$first_import" ]; then
     fail "Camille is not marked as having had her merchants of a shop in a town merged."
   say "the $per_town merchant(s) $from made per town are one per shop after the boot, once: Pizza Nova and"
   say "  Freshmart; Bookmill's, which Camille split, and Cafe Bora Bora, of no sure town, stay as they were."
+
+  # The merchants the release made from the start of an English card label (#243): "Card", which
+  # Camille never touched, is forgotten at boot, once, and each of its lines names its shop; "Debit",
+  # which she renamed Market Stall, stays as she left it, with its cleaned label, while its line
+  # names its shop too. From a release before merchants, the boot names each shop at once.
+  case $from in
+    0.1.* | 0.2.*) english_cards="Greenmarket:GREENMARKET,Hillside Pharmacy:HILLSIDE PHARMACY,Noodle Bar:NOODLE BAR" ;;
+    *) english_cards="Greenmarket:GREENMARKET,Hillside Pharmacy:HILLSIDE PHARMACY,Market Stall:DEBIT,Noodle Bar:NOODLE BAR" ;;
+  esac
+  for _ in $(seq 60); do
+    cards_after=$(sql "select coalesce(string_agg(m.name || ':' || a.alias, ',' order by m.name, a.alias), '')
+      from merchant m join merchant_alias a on a.merchant_id = m.id
+      where m.user_id = '$camille' and (m.name in ('Card', 'Debit', 'Market Stall')
+        or a.alias in ('CARD', 'DEBIT', 'NOODLE BAR', 'HILLSIDE PHARMACY', 'GREENMARKET'))")
+    [ "$cards_after" != "$english_cards" ] || break
+    sleep 1
+  done
+  [ "$cards_after" = "$english_cards" ] ||
+    fail "Camille's merchants of her English card labels are \"$cards_after\" a minute after the app's start, not \"$english_cards\"."
+  [ "$(sql "select merchant_card_labels_reread from auth_user where id = '$camille'")" = t ] ||
+    fail "Camille is not marked as having had her merchants of an English card label read again."
+  say "the merchant Card $from made of English card labels is forgotten at boot, once, and each line names"
+  say "  its shop; Market Stall, which Camille renamed, stays as she left it."
 fi
 
 # The boot jobs of <n> starts of the app, for every user, ended: none waits or runs any more, and

@@ -280,6 +280,18 @@ export function openUserData(database: string) {
     },
 
     /**
+     * Marks `owner` as a user made before #243, whose merchants made from the start of an English
+     * card label the next boot's merchants job reads again, once
+     * (`auth_user.merchant_card_labels_reread`).
+     */
+    async madeBeforeCardLabels(owner: string): Promise<void> {
+      await db
+        .update(authUser)
+        .set({ merchantCardLabelsReread: false })
+        .where(eq(authUser.id, owner));
+    },
+
+    /**
      * The made-up data of two months, and a CSV profile, as `owner`'s rows, with the merchants of its
      * lines recognised as the app does at boot (the seed writes lines, not merchants). A user who
      * already has accounts is left as they are, profile included.
