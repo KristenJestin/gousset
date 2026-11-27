@@ -10,6 +10,7 @@ import {
   entrySubject,
   importProfile,
   importUpload,
+  lineAttachment,
   merchant,
   rule,
   subject,
@@ -58,6 +59,7 @@ export const USER_TABLES: ReadonlyArray<UserTable> = [
   { name: "subject_account", key: "account_id", rows: "subjects' accounts" },
   { name: "subject_entry_refused", key: "entry_id", rows: "proposals refused for a subject" },
   { name: "subject_payback", key: "line_id", rows: "subjects' payback lines" },
+  { name: "line_attachment", key: "id", rows: "lines' receipts" },
 ];
 
 /**
@@ -391,6 +393,29 @@ export function openUserData(database: string) {
                 await each
                   .insert(subjectPayback)
                   .values({ userId: owner, subjectId: trip.id, lineId: payback.id });
+              });
+
+              // A receipt's row on a line (#217): its row alone, no file on disk; the receipts'
+              // spec attaches real files through the app.
+              yield* userData.transaction(owner, async (each) => {
+                const [line] = await each
+                  .select({ id: statementLine.id })
+                  .from(statementLine)
+                  .orderBy(statementLine.id)
+                  .limit(1);
+
+                if (line === undefined) {
+                  throw new Error("The seed wrote no line.");
+                }
+
+                await each.insert(lineAttachment).values({
+                  userId: owner,
+                  lineId: line.id,
+                  fileName: "seeded-receipt.pdf",
+                  mediaType: "application/pdf",
+                  size: 1024,
+                  storedName: randomUUID(),
+                });
               });
             }),
           ),
