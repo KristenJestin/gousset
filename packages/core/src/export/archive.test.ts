@@ -11,8 +11,10 @@ import {
   archiveName,
   csvOf,
   exportArchive,
+  exportArchiveStream,
   safeFileName,
 } from "./archive";
+import { bytesOf } from "../zip-stream";
 import type { ExportData, ExportRow } from "./archive";
 import {
   ACCOUNTS,
@@ -24,6 +26,7 @@ import {
   EXPORT_TABLES,
   IMPORTS,
   IMPORT_PROFILES,
+  LINE_ATTACHMENTS,
   MERCHANTS,
   MERCHANT_ALIASES,
   RULES,
@@ -39,6 +42,14 @@ import type { ExportTable } from "./tables";
 const OWNER = "made-up-user";
 const EXPORTED_AT = new Date("2026-11-23T09:30:00.000Z");
 const MONTHS = ["2026-09", "2026-10"];
+
+const RECEIPT_ID = "00000000-0000-7000-8000-0000000000f1";
+
+/** A made-up receipt's bytes: a PDF's signature and a few bytes of nothing in particular. */
+const RECEIPT = Uint8Array.from([
+  ...strToU8("%PDF-1.7\n"),
+  ...Array.from({ length: 300 }, (_, at) => at % 251),
+]);
 
 let made = 0;
 
@@ -325,6 +336,20 @@ function madeUpExport(): ExportData {
     }),
   ];
 
+  // A receipt (#217) on the first line: its file is on disk, the archive's stream reads it.
+  const receipts = [
+    row(LINE_ATTACHMENTS, {
+      id: RECEIPT_ID,
+      user_id: OWNER,
+      line_id: lines[0]?.id ?? null,
+      file_name: "fuel.pdf",
+      media_type: "application/pdf",
+      size: RECEIPT.byteLength,
+      stored_name: "0b7c1d9e-3f2a-4c5b-8d6e-7f8091a2b3c4",
+      created_at: "2026-10-03T10:00:00+00:00",
+    }),
+  ];
+
   const byTable = new Map<ExportTable, ReadonlyArray<ExportRow>>([
     [ACCOUNTS, accounts],
     [ACCOUNT_BALANCES, balances],
@@ -343,6 +368,7 @@ function madeUpExport(): ExportData {
     [SUBJECT_ACCOUNTS, subjectAccounts],
     [SUBJECT_ENTRIES_REFUSED, refusals],
     [SUBJECT_PAYBACKS, paybacks],
+    [LINE_ATTACHMENTS, receipts],
   ]);
 
   return {
@@ -524,6 +550,56 @@ describe("the export's archive", () => {
   test("is named after the day it was made", () => {
     expect(read.archive.fileName).toBe("gousset-export-2026-11-23.zip");
     expect(archiveName(new Date("2027-01-02T23:59:00Z"))).toBe("gousset-export-2027-01-02.zip");
+  });
+});
+
+describe("the export's archive with its receipts (#217)", () => {
+  test("each receipt's file is in its receipt's folder, byte for byte, read as the download comes to it", async () => {
+    const data = madeUpExport();
+    let opened = 0;
+
+    const archive = exportArchiveStream(
+      data,
+      [
+        {
+          receiptId: RECEIPT_ID,
+          fileName: "fuel.pdf",
+          bytes: RECEIPT.byteLength,
+          open: () => {
+            opened += 1;
+
+            return Promise.resolve(new Blob([RECEIPT]).stream());
+          },
+        },
+      ],
+      EXPORTED_AT,
+    );
+
+    // Nothing is read before the download starts.
+    expect(opened).toBe(0);
+
+    const files = unzipSync(await bytesOf(archive.content));
+
+    const manifest = Schema.decodeUnknownSync(Manifest)(
+      JSON.parse(strFromU8(files[MANIFEST] ?? new Uint8Array())),
+    );
+
+    const path = `receipt-files/${RECEIPT_ID}/fuel.pdf`;
+
+    expect(opened).toBe(1);
+    expect(archive.fileName).toBe("gousset-export-2026-11-23.zip");
+    expect(files[path]).toEqual(RECEIPT);
+    expect(manifest.about).toContain("receipt-files/<the receipt's id>/");
+    expect(manifest.files.find((file) => file.path === path)).toMatchObject({
+      bytes: RECEIPT.byteLength,
+    });
+    expect(Object.keys(files).toSorted()).toEqual(
+      [MANIFEST, ...manifest.files.map((file) => file.path)].toSorted(),
+    );
+    // The rows are as the archive in memory has them.
+    expect(strFromU8(files["line-attachments.json"] ?? new Uint8Array())).toBe(
+      strFromU8(unzipped(data).files["line-attachments.json"] ?? new Uint8Array([1])),
+    );
   });
 });
 

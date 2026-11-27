@@ -39,9 +39,12 @@ import { Route as AuthedSubjectsIndexRouteImport } from './routes/_authed/subjec
 import { Route as AuthedSubjectsSubjectIdRouteImport } from './routes/_authed/subjects/$subjectId'
 import { Route as ApiAuthSplatRouteImport } from './routes/api/auth/$'
 import { Route as ApiImportUploadsTokenRouteImport } from './routes/api/import-uploads/$token'
+import { Route as ApiReceiptsReceiptIdRouteImport } from './routes/api/receipts/$receiptId'
 import { Route as AuthedSettingsMerchantsIndexRouteImport } from './routes/_authed/settings/merchants/index'
 import { Route as AuthedSettingsMerchantsMerchantIdRouteImport } from './routes/_authed/settings/merchants/$merchantId'
 import { Route as ApiJobsJobIdEventsRouteImport } from './routes/api/jobs/$jobId/events'
+import { Route as ApiLinesLineIdReceiptsRouteImport } from './routes/api/lines/$lineId/receipts'
+import { Route as ApiSubjectsSubjectIdReceiptsRouteImport } from './routes/api/subjects/$subjectId/receipts'
 
 const AuthedRoute = AuthedRouteImport.update({
   id: '/_authed',
@@ -193,6 +196,11 @@ const ApiImportUploadsTokenRoute = ApiImportUploadsTokenRouteImport.update({
   path: '/api/import-uploads/$token',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiReceiptsReceiptIdRoute = ApiReceiptsReceiptIdRouteImport.update({
+  id: '/api/receipts/$receiptId',
+  path: '/api/receipts/$receiptId',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AuthedSettingsMerchantsIndexRoute =
   AuthedSettingsMerchantsIndexRouteImport.update({
     id: '/merchants/',
@@ -210,6 +218,17 @@ const ApiJobsJobIdEventsRoute = ApiJobsJobIdEventsRouteImport.update({
   path: '/api/jobs/$jobId/events',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiLinesLineIdReceiptsRoute = ApiLinesLineIdReceiptsRouteImport.update({
+  id: '/api/lines/$lineId/receipts',
+  path: '/api/lines/$lineId/receipts',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiSubjectsSubjectIdReceiptsRoute =
+  ApiSubjectsSubjectIdReceiptsRouteImport.update({
+    id: '/api/subjects/$subjectId/receipts',
+    path: '/api/subjects/$subjectId/receipts',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AuthedIndexRoute
@@ -238,11 +257,14 @@ export interface FileRoutesByFullPath {
   '/subjects/$subjectId': typeof AuthedSubjectsSubjectIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/import-uploads/$token': typeof ApiImportUploadsTokenRoute
+  '/api/receipts/$receiptId': typeof ApiReceiptsReceiptIdRoute
   '/accounts/': typeof AuthedAccountsIndexRoute
   '/settings/': typeof AuthedSettingsIndexRoute
   '/subjects/': typeof AuthedSubjectsIndexRoute
   '/settings/merchants/$merchantId': typeof AuthedSettingsMerchantsMerchantIdRoute
   '/api/jobs/$jobId/events': typeof ApiJobsJobIdEventsRoute
+  '/api/lines/$lineId/receipts': typeof ApiLinesLineIdReceiptsRoute
+  '/api/subjects/$subjectId/receipts': typeof ApiSubjectsSubjectIdReceiptsRoute
   '/settings/merchants/': typeof AuthedSettingsMerchantsIndexRoute
 }
 export interface FileRoutesByTo {
@@ -270,11 +292,14 @@ export interface FileRoutesByTo {
   '/subjects/$subjectId': typeof AuthedSubjectsSubjectIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/import-uploads/$token': typeof ApiImportUploadsTokenRoute
+  '/api/receipts/$receiptId': typeof ApiReceiptsReceiptIdRoute
   '/accounts': typeof AuthedAccountsIndexRoute
   '/settings': typeof AuthedSettingsIndexRoute
   '/subjects': typeof AuthedSubjectsIndexRoute
   '/settings/merchants/$merchantId': typeof AuthedSettingsMerchantsMerchantIdRoute
   '/api/jobs/$jobId/events': typeof ApiJobsJobIdEventsRoute
+  '/api/lines/$lineId/receipts': typeof ApiLinesLineIdReceiptsRoute
+  '/api/subjects/$subjectId/receipts': typeof ApiSubjectsSubjectIdReceiptsRoute
   '/settings/merchants': typeof AuthedSettingsMerchantsIndexRoute
 }
 export interface FileRoutesById {
@@ -306,11 +331,14 @@ export interface FileRoutesById {
   '/_authed/subjects/$subjectId': typeof AuthedSubjectsSubjectIdRoute
   '/api/auth/$': typeof ApiAuthSplatRoute
   '/api/import-uploads/$token': typeof ApiImportUploadsTokenRoute
+  '/api/receipts/$receiptId': typeof ApiReceiptsReceiptIdRoute
   '/_authed/accounts/': typeof AuthedAccountsIndexRoute
   '/_authed/settings/': typeof AuthedSettingsIndexRoute
   '/_authed/subjects/': typeof AuthedSubjectsIndexRoute
   '/_authed/settings/merchants/$merchantId': typeof AuthedSettingsMerchantsMerchantIdRoute
   '/api/jobs/$jobId/events': typeof ApiJobsJobIdEventsRoute
+  '/api/lines/$lineId/receipts': typeof ApiLinesLineIdReceiptsRoute
+  '/api/subjects/$subjectId/receipts': typeof ApiSubjectsSubjectIdReceiptsRoute
   '/_authed/settings/merchants/': typeof AuthedSettingsMerchantsIndexRoute
 }
 export interface FileRouteTypes {
@@ -342,11 +370,14 @@ export interface FileRouteTypes {
     | '/subjects/$subjectId'
     | '/api/auth/$'
     | '/api/import-uploads/$token'
+    | '/api/receipts/$receiptId'
     | '/accounts/'
     | '/settings/'
     | '/subjects/'
     | '/settings/merchants/$merchantId'
     | '/api/jobs/$jobId/events'
+    | '/api/lines/$lineId/receipts'
+    | '/api/subjects/$subjectId/receipts'
     | '/settings/merchants/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -374,11 +405,14 @@ export interface FileRouteTypes {
     | '/subjects/$subjectId'
     | '/api/auth/$'
     | '/api/import-uploads/$token'
+    | '/api/receipts/$receiptId'
     | '/accounts'
     | '/settings'
     | '/subjects'
     | '/settings/merchants/$merchantId'
     | '/api/jobs/$jobId/events'
+    | '/api/lines/$lineId/receipts'
+    | '/api/subjects/$subjectId/receipts'
     | '/settings/merchants'
   id:
     | '__root__'
@@ -409,11 +443,14 @@ export interface FileRouteTypes {
     | '/_authed/subjects/$subjectId'
     | '/api/auth/$'
     | '/api/import-uploads/$token'
+    | '/api/receipts/$receiptId'
     | '/_authed/accounts/'
     | '/_authed/settings/'
     | '/_authed/subjects/'
     | '/_authed/settings/merchants/$merchantId'
     | '/api/jobs/$jobId/events'
+    | '/api/lines/$lineId/receipts'
+    | '/api/subjects/$subjectId/receipts'
     | '/_authed/settings/merchants/'
   fileRoutesById: FileRoutesById
 }
@@ -429,7 +466,10 @@ export interface RootRouteChildren {
   E2eTodayRoute: typeof E2eTodayRoute
   ApiAuthSplatRoute: typeof ApiAuthSplatRoute
   ApiImportUploadsTokenRoute: typeof ApiImportUploadsTokenRoute
+  ApiReceiptsReceiptIdRoute: typeof ApiReceiptsReceiptIdRoute
   ApiJobsJobIdEventsRoute: typeof ApiJobsJobIdEventsRoute
+  ApiLinesLineIdReceiptsRoute: typeof ApiLinesLineIdReceiptsRoute
+  ApiSubjectsSubjectIdReceiptsRoute: typeof ApiSubjectsSubjectIdReceiptsRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -644,6 +684,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiImportUploadsTokenRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/receipts/$receiptId': {
+      id: '/api/receipts/$receiptId'
+      path: '/api/receipts/$receiptId'
+      fullPath: '/api/receipts/$receiptId'
+      preLoaderRoute: typeof ApiReceiptsReceiptIdRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/_authed/settings/merchants/': {
       id: '/_authed/settings/merchants/'
       path: '/merchants'
@@ -663,6 +710,20 @@ declare module '@tanstack/react-router' {
       path: '/api/jobs/$jobId/events'
       fullPath: '/api/jobs/$jobId/events'
       preLoaderRoute: typeof ApiJobsJobIdEventsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/lines/$lineId/receipts': {
+      id: '/api/lines/$lineId/receipts'
+      path: '/api/lines/$lineId/receipts'
+      fullPath: '/api/lines/$lineId/receipts'
+      preLoaderRoute: typeof ApiLinesLineIdReceiptsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/subjects/$subjectId/receipts': {
+      id: '/api/subjects/$subjectId/receipts'
+      path: '/api/subjects/$subjectId/receipts'
+      fullPath: '/api/subjects/$subjectId/receipts'
+      preLoaderRoute: typeof ApiSubjectsSubjectIdReceiptsRouteImport
       parentRoute: typeof rootRouteImport
     }
   }
@@ -750,7 +811,10 @@ const rootRouteChildren: RootRouteChildren = {
   E2eTodayRoute: E2eTodayRoute,
   ApiAuthSplatRoute: ApiAuthSplatRoute,
   ApiImportUploadsTokenRoute: ApiImportUploadsTokenRoute,
+  ApiReceiptsReceiptIdRoute: ApiReceiptsReceiptIdRoute,
   ApiJobsJobIdEventsRoute: ApiJobsJobIdEventsRoute,
+  ApiLinesLineIdReceiptsRoute: ApiLinesLineIdReceiptsRoute,
+  ApiSubjectsSubjectIdReceiptsRoute: ApiSubjectsSubjectIdReceiptsRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

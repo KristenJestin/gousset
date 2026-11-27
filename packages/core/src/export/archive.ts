@@ -2,7 +2,9 @@ import { Schema } from "effect";
 import { strToU8, zipSync } from "fflate";
 import type { ZippableFile } from "fflate";
 
-import { IMPORT_FILES_FOLDER } from "./tables";
+import { zipStream } from "../zip-stream";
+import type { ZipEntry } from "../zip-stream";
+import { IMPORT_FILES_FOLDER, RECEIPT_FILES_FOLDER } from "./tables";
 import type { ExportTable } from "./tables";
 
 // The archive an export gives (#22): one zip of JSON and CSV files and the files imported, with a
@@ -42,6 +44,17 @@ export type ExportData = {
   readonly files: ReadonlyArray<ImportedFile>;
 };
 
+/**
+ * A receipt's file (#217), kept on disk rather than in a row: read when the archive comes to it,
+ * so that an export of many never holds them all in memory.
+ */
+export type ExportedReceipt = {
+  readonly receiptId: string;
+  readonly fileName: string;
+  readonly bytes: number;
+  readonly open: () => Promise<ReadableStream<Uint8Array>>;
+};
+
 /** A file of the archive. */
 export type ArchiveFile = { readonly path: string; readonly content: Uint8Array };
 
@@ -51,12 +64,19 @@ export type ExportArchive = {
   readonly content: Uint8Array<ArrayBuffer>;
 };
 
+/** The archive with its receipts, made as it is downloaded. */
+export type ExportStream = {
+  readonly fileName: string;
+  readonly content: ReadableStream<Uint8Array>;
+};
+
 const ABOUT = [
   "Everything you keep in Gousset, as JSON and CSV files any program reads.",
   "Each table comes twice: <name>.json holds its rows as they are, <name>.csv the same rows for a spreadsheet (UTF-8, comma-separated, a header row).",
   "Amounts are whole numbers of minor units of their account's currency: -4217 in euros is -42.17 EUR, 1250 in yen is 1250 JPY.",
   "Days are YYYY-MM-DD; instants are ISO 8601 with their offset. Ids are uuids: a column ending in _id names a row of another file by its id.",
   `Each file you imported is in ${IMPORT_FILES_FOLDER}/<the import's id>/, as you dropped it.`,
+  `Each receipt you attached to a line is in ${RECEIPT_FILES_FOLDER}/<the receipt's id>/, as you attached it.`,
   "In the CSV files only, a text that starts with =, +, -, @, a tab or a carriage return is written after a single quote, so that a spreadsheet does not run it as a formula; the JSON files hold it as it is.",
 ].join(" ");
 
@@ -121,8 +141,16 @@ export function safeFileName(name: string): string {
 
 const json = (value: Schema.Json) => strToU8(`${JSON.stringify(value, null, 2)}\n`);
 
-/** The archive's files, the manifest first. */
-export function archiveFiles(data: ExportData, exportedAt: Date): ReadonlyArray<ArchiveFile> {
+/** Where a receipt's file goes in the archive. */
+export const receiptPath = (receipt: Pick<ExportedReceipt, "receiptId" | "fileName">) =>
+  `${RECEIPT_FILES_FOLDER}/${receipt.receiptId}/${safeFileName(receipt.fileName)}`;
+
+/** The archive's files, the manifest first; the receipts' are only described in it. */
+export function archiveFiles(
+  data: ExportData,
+  exportedAt: Date,
+  receipts: ReadonlyArray<ExportedReceipt> = [],
+): ReadonlyArray<ArchiveFile> {
   const files: Array<ArchiveFile> = [];
   const described: Array<Schema.JsonObject> = [];
 
@@ -154,6 +182,14 @@ export function archiveFiles(data: ExportData, exportedAt: Date): ReadonlyArray<
     });
   }
 
+  for (const receipt of receipts) {
+    described.push({
+      path: receiptPath(receipt),
+      holds: `the file of receipt ${receipt.receiptId} (line-attachments.id), as it was attached`,
+      bytes: receipt.bytes,
+    });
+  }
+
   const manifest = {
     format: EXPORT_FORMAT,
     version: EXPORT_VERSION,
@@ -182,4 +218,21 @@ export function exportArchive(data: ExportData, exportedAt: Date): ExportArchive
     // Its own buffer, as a response's body takes it.
     content: new Uint8Array(zipSync(Object.fromEntries(entries), { level: 6 })),
   };
+}
+
+/**
+ * The archive with the receipts' files after the others, each read from its stream when the
+ * download comes to it.
+ */
+export function exportArchiveStream(
+  data: ExportData,
+  receipts: ReadonlyArray<ExportedReceipt>,
+  exportedAt: Date,
+): ExportStream {
+  const entries: Array<ZipEntry> = [
+    ...archiveFiles(data, exportedAt, receipts),
+    ...receipts.map((receipt) => ({ path: receiptPath(receipt), open: receipt.open })),
+  ];
+
+  return { fileName: archiveName(exportedAt), content: zipStream(entries, exportedAt) };
 }

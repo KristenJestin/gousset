@@ -855,3 +855,51 @@ export const subjectPayback = pgTable.withRLS(
     ownRowsOnly("subject_payback"),
   ],
 );
+
+/** What a receipt is, read from its first bytes, never from its name or the browser's word. */
+export const lineAttachmentMediaType = pgEnum("line_attachment_media_type", [
+  "application/pdf",
+  "image/jpeg",
+  "image/png",
+  "image/heic",
+]);
+
+/**
+ * A receipt attached to a line (#217): a photo or a PDF, any line's. The file itself is on disk, in
+ * the receipts directory, under the user's folder and `stored_name`, never under the user's own
+ * name (packages/core's `attachments/`); this row says what it is. Deleting the line deletes the row
+ * (an undone import, a deleted account or user); the file goes with the row, or with the sweep that
+ * deletes the files no row names.
+ */
+export const lineAttachment = pgTable.withRLS(
+  "line_attachment",
+  {
+    id: id(),
+    userId: owner(),
+    lineId: uuid("line_id").notNull(),
+    // As the user named it, for the user only: never a path, never in a log nor in telemetry.
+    fileName: text("file_name").notNull(),
+    mediaType: lineAttachmentMediaType("media_type").notNull(),
+    // In bytes.
+    size: bigint("size", { mode: "number" }).notNull(),
+    // The file's name on disk, in the user's folder: a uuid drawn by the app.
+    storedName: text("stored_name").notNull(),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    foreignKey({
+      name: "line_attachment_line_fk",
+      columns: [table.userId, table.lineId],
+      foreignColumns: [statementLine.userId, statementLine.id],
+    }).onDelete("cascade"),
+    unique("line_attachment_user_id_stored_name_key").on(table.userId, table.storedName),
+    // A line's receipts.
+    index("line_attachment_line_id_idx").on(table.lineId),
+    check("line_attachment_size", sql`${table.size} > 0`),
+    check(
+      "line_attachment_stored_name",
+      sql`${table.storedName} ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'`,
+    ),
+    ownRowsOnly("line_attachment"),
+  ],
+);

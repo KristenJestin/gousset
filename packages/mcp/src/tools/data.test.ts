@@ -31,6 +31,7 @@ const CONTENTS: ExportContents = {
     rows: table.file === "import-profiles" ? 1 : 10 * (index + 1),
   })),
   files: 12,
+  receipts: 3,
 };
 
 /**
