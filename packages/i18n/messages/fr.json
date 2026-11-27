@@ -1110,5 +1110,14 @@
   "ruleRefusalSubjectNotFound": "Ce sujet n’existe plus.",
   "ruleRefusalTooMany": "Vous avez déjà {max} règles : supprimez-en une d’abord.",
   "ruleRefusalJobUnavailable": "La règle n’a pas pu être appliquée maintenant : réessayez dans un instant.",
-  "ruleRefusalLineNotFound": "Cette ligne n’existe plus."
+  "ruleRefusalLineNotFound": "Cette ligne n’existe plus.",
+  "receiptRefusalTooLarge": "Ce fichier fait {size} Mo ; un justificatif peut faire au plus {limit} Mo.",
+  "receiptRefusalTooLargeUnsized": "Ce fichier est trop lourd : un justificatif peut faire au plus {limit} Mo.",
+  "receiptRefusalType": "Seuls les fichiers {types} peuvent être joints.",
+  "receiptRefusalEmpty": "Ce fichier est vide : choisissez le justificatif lui-même.",
+  "receiptRefusalLineNotFound": "Cette ligne n’existe plus.",
+  "receiptRefusalSubjectNotFound": "Ce sujet n’existe plus.",
+  "receiptRefusalNotFound": "Ce justificatif n’existe plus.",
+  "receiptRefusalUnavailable": "Gousset n’a pas pu garder ou lire le justificatif pour l’instant : réessayez dans un instant.",
+  "receiptRefusalUploadFailed": "Le fichier n’a pas pu être envoyé : réessayez."
 }

@@ -1,8 +1,9 @@
 import { spawn } from "node:child_process";
 import type { ChildProcess } from "node:child_process";
-import { createWriteStream, existsSync, mkdirSync } from "node:fs";
+import { createWriteStream, existsSync, mkdirSync, rmSync } from "node:fs";
 import { createServer } from "node:net";
-import { dirname } from "node:path";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { setTimeout as sleep } from "node:timers/promises";
 
@@ -63,6 +64,15 @@ async function freePort(): Promise<number> {
   return port;
 }
 
+/**
+ * The receipts' directory of the app on `database` (#217): outside the clone, one per database, so
+ * that two workers' files never meet; removed when the app stops. An image under test keeps its
+ * own, inside its container.
+ */
+export function receiptsDirectory(database: string): string {
+  return join(tmpdir(), "gousset-e2e-receipts", database);
+}
+
 /** Variables a test adds to its worker's app (`appEnvironment` in `src/test.ts`). */
 export type AppEnvironment = Readonly<Record<string, string>>;
 
@@ -81,6 +91,8 @@ function appEnvironment(port: number, database: string, extra: AppEnvironment) {
     GOUSSET_E2E_PROBE: "on",
     // The test job and its page, `/e2e/jobs` (apps/web/src/jobs/test-job.ts).
     GOUSSET_E2E_JOBS: "on",
+    // Empty for an image under test: its own directory, inside its container.
+    RECEIPTS_DIRECTORY: harness.appImage === undefined ? receiptsDirectory(database) : "",
   };
 }
 
@@ -96,7 +108,10 @@ function launch(
   if (harness.appImage !== undefined) {
     // Each variable by name only: docker takes its value from its own environment, so that the
     // database password never sits on a command line any local user can read.
-    const variables = Object.keys(environment).flatMap((name) => ["--env", name]);
+    // The receipts' directory left empty is the image's own.
+    const variables = Object.entries(environment).flatMap(([name, value]) =>
+      name === "RECEIPTS_DIRECTORY" && value === "" ? [] : ["--env", name],
+    );
 
     return spawn(
       "docker",
@@ -260,6 +275,7 @@ async function startAppOnFreePort(
     await stopProcess(app.launched, app.container);
     log.end();
     await dropDatabase(database);
+    rmSync(receiptsDirectory(database), { recursive: true, force: true });
   };
 
   // The port is free between the stop and the start: held, so that no other app is given it.

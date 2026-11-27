@@ -1110,5 +1110,14 @@
   "ruleRefusalSubjectNotFound": "This subject no longer exists.",
   "ruleRefusalTooMany": "You have {max} rules already: delete one first.",
   "ruleRefusalJobUnavailable": "The rule could not be applied now: try again in a moment.",
-  "ruleRefusalLineNotFound": "This line no longer exists."
+  "ruleRefusalLineNotFound": "This line no longer exists.",
+  "receiptRefusalTooLarge": "This file is {size} MB; a receipt can be at most {limit} MB.",
+  "receiptRefusalTooLargeUnsized": "This file is too large: a receipt can be at most {limit} MB.",
+  "receiptRefusalType": "Only {types} files can be attached.",
+  "receiptRefusalEmpty": "This file is empty: choose the receipt itself.",
+  "receiptRefusalLineNotFound": "This line no longer exists.",
+  "receiptRefusalSubjectNotFound": "This subject no longer exists.",
+  "receiptRefusalNotFound": "This receipt no longer exists.",
+  "receiptRefusalUnavailable": "Gousset could not keep or read the receipt just now: try again in a moment.",
+  "receiptRefusalUploadFailed": "The file could not be sent: try again."
 }
