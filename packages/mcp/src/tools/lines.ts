@@ -51,8 +51,9 @@ import { Effect, Match, Schema } from "effect";
 
 import { ToolRefusal, defineTool } from "../tool";
 import { MOVEMENT, accountToWrite, amount, named } from "./accounts";
-import { namedCategory, pathText } from "./categories";
+import { benchmarkCurrency, namedCategory, pathText } from "./categories";
 import { proposedRule } from "./rules";
+import { detachPaybackCall, subjectPathOf } from "./subjects";
 
 /** The lines `search` gives when none are asked for, and the most: 100 fit the result's budget. */
 const DEFAULT_LINES = 50;
@@ -273,8 +274,9 @@ const subjectsText = (subjects: ReadonlyArray<SubjectName>) =>
 function rowText(line: LineRow): string {
   const held = line.toReview ? ", to review" : "";
   const category = line.category === null ? "" : `, in ${pathText(line.category)}`;
+  const payback = line.payback === null ? "" : `, pays back ${line.payback.name}`;
 
-  return `- ${line.bookedOn}, ${named(line.account)}: ${amount(line.amount)}, ${labelOf(line)}${category}${held}${subjectsText(line.subjects)}; line: ${line.id}`;
+  return `- ${line.bookedOn}, ${named(line.account)}: ${amount(line.amount)}, ${labelOf(line)}${category}${payback}${held}${subjectsText(line.subjects)}; line: ${line.id}`;
 }
 
 /** A page of the search: how many match, the filters, the lines, and the call that reads on. */
@@ -527,12 +529,16 @@ function expensesText(lineId: string, found: LineExpenses): Array<string> {
   ];
 }
 
-/** One line, in Gousset's words: where and when, how much, what the bank said, where it came from. */
+/**
+ * One line, in Gousset's words: where and when, how much, what the bank said, where it came from;
+ * `paidBack`, the path of the subject it pays back, if it does.
+ */
 function showText(
   detail: LineDetail,
   transfer: LineTransfer,
   paid: LineMerchant,
   expenses: LineExpenses,
+  paidBack: string | null,
 ): string {
   const valueOn = detail.valueOn === null ? "" : `, value on ${detail.valueOn}`;
 
@@ -563,6 +569,11 @@ function showText(
     ...(detail.subjects.length === 0
       ? []
       : [`Subjects: ${detail.subjects.map((each) => each.name).join(", ")}.`]),
+    ...(paidBack === null
+      ? []
+      : [
+          `Pays back the subject ${paidBack}, which classifies it: no income. If it does not: ${detachPaybackCall(paidBack, [detail.id])}`,
+        ]),
     ...review,
     ...transferText(detail.id, transfer),
     ...expensesText(detail.id, expenses),
@@ -592,6 +603,38 @@ const lineRefused = (line: string, message: string) =>
 
 const NOT_FOUND = "No line of the user's has the handle {line}.";
 
+/**
+ * A refusal of what would touch a line that pays back a subject (#217): `message`, then the exact
+ * call that detaches it from that subject.
+ */
+function paybackRefused(owner: string, currency: string, lineId: string, message: string) {
+  return showLine(owner, lineId).pipe(
+    Effect.flatMap((detail) =>
+      detail.payback === null
+        ? Effect.succeed(null)
+        : subjectPathOf(owner, currency, detail.payback),
+    ),
+    Effect.flatMap((path) =>
+      Effect.fail(
+        new ToolRefusal({
+          message:
+            path === null
+              ? message
+              : `${message} To detach it from "${path.slice(0, 80)}" first, if it pays that subject back by mistake, make the call below.`,
+          example:
+            path === null
+              ? call({ action: "show", line: lineId })
+              : detachPaybackCall(path, [lineId]),
+        }),
+      ),
+    ),
+    Effect.catchTags({
+      LineNotFound: (missing) => lineRefused(missing.lineId, NOT_FOUND),
+      QueryFailed: Effect.die,
+    }),
+  );
+}
+
 const TRANSFER_REFUSALS = {
   same_line: "A transfer has two sides: name two different lines.",
   same_account:
@@ -613,12 +656,25 @@ const TRANSFER_REFUSALS = {
     "That account is kept by its lines: its own side of the transfer is one of its lines. Pair the line {line} with that line, named with other.",
   other_currency:
     "That account is in another currency than the line {line}: Gousset makes its side only in the line's currency. Pair it with a line of that account, named with other.",
-  payback:
-    "The line {line} pays back a subject, which classifies it: no transfer's side. Detach it from that subject first (subjects, its payback lines; lines show names the subject), if it pays back nothing.",
+  payback: "The line {line} pays back a subject, which classifies it: no transfer's side.",
 } as const satisfies { readonly [Reason in TransferRefused["reason"]]: string };
 
-function transferRefused(input: LinesInput, refused: TransferRefused) {
+function transferRefused(
+  input: LinesInput,
+  owner: string,
+  currency: string,
+  refused: TransferRefused,
+) {
   const line = input.line ?? "";
+
+  if (refused.reason === "payback") {
+    return paybackRefused(
+      owner,
+      currency,
+      refused.lineId,
+      TRANSFER_REFUSALS.payback.replace("{line}", refused.lineId),
+    );
+  }
 
   const example =
     refused.reason === "already_paired"
@@ -639,7 +695,13 @@ function transferRefused(input: LinesInput, refused: TransferRefused) {
  * `pair` with an account kept by its balance (#31): Gousset makes that account's side, and its
  * movements are made again around it.
  */
-function pairWithAccountRun(input: LinesInput, owner: string, line: string, name: string) {
+function pairWithAccountRun(
+  input: LinesInput,
+  owner: string,
+  currency: string,
+  line: string,
+  name: string,
+) {
   return Effect.gen(function* () {
     const found = yield* accountToWrite(owner, name, input.institution, (each) =>
       call({
@@ -668,7 +730,7 @@ function pairWithAccountRun(input: LinesInput, owner: string, line: string, name
             example: `accounts ${JSON.stringify({ action: "list" })}`,
           }),
         ),
-      TransferRefused: (refused) => transferRefused(input, refused),
+      TransferRefused: (refused) => transferRefused(input, owner, currency, refused),
       QueryFailed: Effect.die,
     }),
   );
@@ -678,7 +740,7 @@ function pairWithAccountRun(input: LinesInput, owner: string, line: string, name
  * `pair` and `classify` as a transfer: two lines, one line and its only candidate, every line, or
  * one line and an account kept by its balance.
  */
-function pairRun(input: LinesInput, owner: string) {
+function pairRun(input: LinesInput, owner: string, currency: string) {
   const line = input.line?.trim() ?? "";
   const other = input.other?.trim() ?? "";
   const account = input.account?.trim() ?? "";
@@ -694,7 +756,7 @@ function pairRun(input: LinesInput, owner: string) {
       );
     }
 
-    return pairWithAccountRun(input, owner, line, account);
+    return pairWithAccountRun(input, owner, currency, line, account);
   }
 
   if (line === "") {
@@ -715,7 +777,7 @@ function pairRun(input: LinesInput, owner: string) {
     Effect.map((transfer) => [`Paired as a transfer.`, ...transferText(line, transfer)].join("\n")),
     Effect.catchTags({
       LineNotFound: (missing) => lineRefused(missing.lineId, NOT_FOUND),
-      TransferRefused: (refused) => transferRefused(input, refused),
+      TransferRefused: (refused) => transferRefused(input, owner, currency, refused),
       QueryFailed: Effect.die,
     }),
   );
@@ -775,8 +837,7 @@ const LINK_REFUSALS = {
     "The line {line} is in another currency than the expense: an expense's parts share one currency.",
   exceeds:
     "The line {line} would refund more than the expense still costs: an expense never costs less than nothing. Link it to the expense it refunds, or leave it as it is.",
-  payback:
-    "The line {line} pays back a subject, which classifies it: it joins no expense. Detach it from that subject first (subjects, its payback lines; lines show names the subject).",
+  payback: "The line {line} pays back a subject, which classifies it: it joins no expense.",
 } as const satisfies { readonly [Reason in LinkRefused["reason"]]: string };
 
 const FUND_REFUSALS = {
@@ -840,7 +901,7 @@ const helpingCall = (reason: string, line: string, otherwise: string) =>
     Match.orElse(() => otherwise),
   );
 
-function linkRun(input: LinesInput, owner: string) {
+function linkRun(input: LinesInput, owner: string, currency: string) {
   const line = input.line?.trim() ?? "";
   const into = input.into?.trim() ?? "";
 
@@ -869,16 +930,23 @@ function linkRun(input: LinesInput, owner: string) {
       LinkRefused: (refused) =>
         refused.reason === "transfer" && refused.lineId === line
           ? fundRun(owner, line, into)
-          : Effect.fail(
-              new ToolRefusal({
-                message: LINK_REFUSALS[refused.reason].replace("{line}", refused.lineId),
-                example: helpingCall(
-                  refused.reason,
-                  refused.lineId,
-                  call({ action: "show", line: refused.lineId }),
-                ),
-              }),
-            ),
+          : refused.reason === "payback"
+            ? paybackRefused(
+                owner,
+                currency,
+                refused.lineId,
+                LINK_REFUSALS.payback.replace("{line}", refused.lineId),
+              )
+            : Effect.fail(
+                new ToolRefusal({
+                  message: LINK_REFUSALS[refused.reason].replace("{line}", refused.lineId),
+                  example: helpingCall(
+                    refused.reason,
+                    refused.lineId,
+                    call({ action: "show", line: refused.lineId }),
+                  ),
+                }),
+              ),
       QueryFailed: Effect.die,
     }),
   );
@@ -951,11 +1019,10 @@ const SPLIT_REFUSALS = {
   subject_unknown: "A share names a subject that is none of yours.",
   subject_archived: "A share's subject is archived: it can no longer be chosen.",
   subject_income: "Only an expense has subjects: a share of money coming in takes none.",
-  payback:
-    "This line pays back a subject, which classifies it: it has no category to split. Detach it from that subject first (subjects, its payback lines; lines show names the subject).",
+  payback: "This line pays back a subject, which classifies it: it has no category to split.",
 } as const satisfies { readonly [Reason in SplitRefused["reason"]]: string };
 
-function splitRun(input: LinesInput, owner: string) {
+function splitRun(input: LinesInput, owner: string, currency: string) {
   const line = input.line?.trim() ?? "";
   const shares = input.shares ?? [];
 
@@ -1031,12 +1098,14 @@ function splitRun(input: LinesInput, owner: string) {
     Effect.catchTags({
       LineNotFound: () => Effect.fail(UNKNOWN_LINE(line)),
       SplitRefused: (refused) =>
-        Effect.fail(
-          new ToolRefusal({
-            message: `${refused.index === undefined ? "" : `Share ${refused.index + 1}: `}${SPLIT_REFUSALS[refused.reason]}`,
-            example: helpingCall(refused.reason, line, example),
-          }),
-        ),
+        refused.reason === "payback"
+          ? paybackRefused(owner, currency, line, SPLIT_REFUSALS.payback)
+          : Effect.fail(
+              new ToolRefusal({
+                message: `${refused.index === undefined ? "" : `Share ${refused.index + 1}: `}${SPLIT_REFUSALS[refused.reason]}`,
+                example: helpingCall(refused.reason, line, example),
+              }),
+            ),
       // Found by name a moment before: changed in between.
       CategoryNotFound: () =>
         Effect.fail(
@@ -1376,15 +1445,21 @@ export const linesTool = defineTool<
           );
         }
 
-        return Effect.all([
-          showLine(caller.userId, line.trim()),
-          lineTransferOf(caller.userId, line.trim()),
-          lineMerchant(caller.userId, line.trim()),
-          lineExpensesOf(caller.userId, line.trim()),
-        ]).pipe(
-          Effect.map(([detail, transfer, paid, expenses]) =>
-            showText(detail, transfer, paid, expenses),
-          ),
+        return Effect.gen(function* () {
+          const [detail, transfer, paid, expenses] = yield* Effect.all([
+            showLine(caller.userId, line.trim()),
+            lineTransferOf(caller.userId, line.trim()),
+            lineMerchant(caller.userId, line.trim()),
+            lineExpensesOf(caller.userId, line.trim()),
+          ]);
+
+          const paidBack =
+            detail.payback === null
+              ? null
+              : yield* subjectPathOf(caller.userId, benchmarkCurrency(caller), detail.payback);
+
+          return showText(detail, transfer, paid, expenses, paidBack);
+        }).pipe(
           Effect.catchTags({
             LineNotFound: () => Effect.fail(UNKNOWN_LINE(line)),
             QueryFailed: Effect.die,
@@ -1393,7 +1468,7 @@ export const linesTool = defineTool<
       }
 
       case "pair": {
-        return pairRun(input, caller.userId);
+        return pairRun(input, caller.userId, benchmarkCurrency(caller));
       }
 
       case "classify": {
@@ -1425,7 +1500,7 @@ export const linesTool = defineTool<
           );
         }
 
-        return pairRun(input, caller.userId);
+        return pairRun(input, caller.userId, benchmarkCurrency(caller));
       }
 
       case "unpair": {
@@ -1433,7 +1508,7 @@ export const linesTool = defineTool<
       }
 
       case "link": {
-        return linkRun(input, caller.userId);
+        return linkRun(input, caller.userId, benchmarkCurrency(caller));
       }
 
       case "unlink": {
@@ -1441,7 +1516,7 @@ export const linesTool = defineTool<
       }
 
       case "split": {
-        return splitRun(input, caller.userId);
+        return splitRun(input, caller.userId, benchmarkCurrency(caller));
       }
     }
   },

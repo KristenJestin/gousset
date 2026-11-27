@@ -357,11 +357,17 @@ function movementsOf(review: MonthReview): string {
       : [];
 
   return [
-    `Incomes and transfers in (${movements.length}, oldest first):`,
+    `Incomes, transfers and paybacks in (${movements.length}, oldest first):`,
     ...shown.map((each) => {
-      const note = each.note === null ? "" : ` (${each.note})`;
+      // A payback (#217) is no income: it pays back its subject, which it names in place of a note.
+      const kind =
+        each.kind === "payback"
+          ? `payback of ${each.subject?.name ?? each.note ?? "a subject"}, not income`
+          : each.kind;
 
-      return `- ${each.day}, ${each.kind}: ${each.from} → ${each.to}, ${amount(each.amount)}${note}`;
+      const note = each.note === null || each.kind === "payback" ? "" : ` (${each.note})`;
+
+      return `- ${each.day}, ${kind}: ${each.from} → ${each.to}, ${amount(each.amount)}${note}`;
     }),
     ...more,
   ].join("\n");
