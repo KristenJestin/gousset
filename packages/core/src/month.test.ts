@@ -27,11 +27,13 @@ import type {
   MonthAccount,
   MonthMerchant,
   MonthPart,
+  MonthPayback,
   MonthScope,
   MonthSubject,
   MonthTransfer,
   StatementReach,
 } from "./month";
+import type { PaidBackSubject } from "./subjects/payback-share";
 import type { Charge } from "./subscriptions/detection";
 import { Today } from "./today";
 import { Transfers } from "./transfers/transfers";
@@ -54,6 +56,8 @@ type Draft = {
   subjects: Array<MonthSubject>;
   entrySubjects: Array<{ readonly entryId: string; readonly subjectId: string }>;
   charges: Array<Charge>;
+  paidBack: Array<PaidBackSubject>;
+  paybacks: Array<MonthPayback>;
 };
 
 let made = 0;
@@ -78,6 +82,8 @@ function draft(): Draft {
     subjects: [],
     entrySubjects: [],
     charges: [],
+    paidBack: [],
+    paybacks: [],
   };
 }
 
@@ -1045,5 +1051,91 @@ describe("monthSubjectSpending", () => {
     expect(read.days[2]).toEqual({ date: "2026-10-03", current: 4000, previous: 0 });
     expect(read.days[8]).toEqual({ date: "2026-10-09", current: 6000, previous: 0 });
     expect(read.days[14]).toEqual({ date: "2026-10-15", current: 6000, previous: 1200 });
+  });
+});
+
+/**
+ * A work trip of 251.85, its train in September and its hotel in October, that the employer paid
+ * back 100.00 of in October (#217); `paidBackMinor` what came back.
+ */
+function workTrip(paidBackMinor = 10_000) {
+  const { rows, current } = household();
+  const travel = category(rows, "expense", "Travel");
+  const trip = subject(rows, "Lyon trip");
+  const hotels = subject(rows, "Hotels", trip);
+
+  attach(
+    rows,
+    entry(rows, { category: travel, account: current, day: "2026-09-28", minor: 12_000 }),
+    trip,
+  );
+  attach(
+    rows,
+    entry(rows, { category: travel, account: current, day: "2026-10-02", minor: 13_185 }),
+    hotels,
+  );
+
+  rows.paidBack.push({ subjectId: trip.id, currency: "EUR", spentMinor: 25_185, paidBackMinor });
+  rows.paybacks.push({
+    lineId: "payback-line",
+    bookedOn: "2026-10-15",
+    amountMinor: paidBackMinor,
+    accountId: current.id,
+    subjectId: trip.id,
+    subject: "Lyon trip",
+    from: "Example Corp",
+  });
+
+  return { rows, trip, travel };
+}
+
+describe("a subject paid back by someone else (#217)", () => {
+  test("each month counts its own expenses at the share left, adding up to spent less paid back", async () => {
+    const { rows } = workTrip();
+    const september = await run(monthSummary("ada", "2026-09", "EUR"), rows);
+    const october = await run(monthSummary("ada", "2026-10", "EUR"), rows);
+
+    // 120.00 × 151.85 / 251.85 and 131.85 × 151.85 / 251.85, each rounded half away from zero.
+    expect(september.spent).toEqual(eur(7235));
+    expect(october.spent).toEqual(eur(7950));
+    expect(
+      Math.abs(september.spent.minor + october.spent.minor - (25_185 - 10_000)),
+    ).toBeLessThanOrEqual(2);
+
+    // What came back is no income.
+    expect(october.received).toEqual(eur(0));
+  });
+
+  test("the categories and the subjects of the month count the share left", async () => {
+    const { rows, travel, trip } = workTrip();
+    const read = await run(monthSpending("ada", "2026-10", "EUR", "category"), rows);
+    const bySubject = await run(monthSubjectSpending("ada", "2026-10", "EUR"), rows);
+
+    expect(read.rows.find((row) => row.id === travel.id)?.spent).toEqual(eur(7950));
+    expect(bySubject.rows.find((row) => row.id === trip.id)?.spent).toEqual(eur(7950));
+  });
+
+  test("paid back in full or beyond, it counts nothing", async () => {
+    const { rows } = workTrip(91_450);
+
+    expect((await run(monthSummary("ada", "2026-10", "EUR"), rows)).spent).toEqual(eur(0));
+    expect((await run(monthSummary("ada", "2026-09", "EUR"), rows)).spent).toEqual(eur(0));
+  });
+
+  test("the payback is among the month's movements, with its subject", async () => {
+    const { rows, trip } = workTrip();
+    const { movements } = await run(monthMovements("ada", "2026-10", "EUR"), rows);
+
+    expect(movements).toEqual([
+      {
+        kind: "payback",
+        day: "2026-10-15",
+        from: "Example Corp",
+        to: "Current account",
+        note: "Lyon trip",
+        amount: eur(10_000),
+        subject: { id: trip.id, name: "Lyon trip" },
+      },
+    ]);
   });
 });

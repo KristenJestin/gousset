@@ -2,6 +2,7 @@ import type { QueryFailed } from "@gousset/db/user-data";
 import { Context } from "effect";
 import type { Effect } from "effect";
 
+import type { Receipt } from "./attachments/attachments";
 import type { LineCategory } from "./category-store";
 import type { ImportFormat } from "./imports/summary";
 import type { SubjectName } from "./subjects/counting";
@@ -68,6 +69,8 @@ export type FoundLine = {
   readonly fromBalance: boolean;
   /** Its entries' subjects (#37), each once, by name: none for most lines. */
   readonly subjects: ReadonlyArray<SubjectName>;
+  /** The subject it pays back (#217), which classifies it: it has no entry then; null for most. */
+  readonly payback: SubjectName | null;
 };
 
 /** A line with all that its detail shows. */
@@ -77,6 +80,8 @@ export type FoundLineDetail = FoundLine & {
   readonly originalCurrency: string | null;
   readonly counterpartyIban: string | null;
   readonly expiresOn: string | null;
+  /** Its receipts (#217), the first attached first: none for most lines. */
+  readonly receipts: ReadonlyArray<Receipt>;
   /** A held line: the line it looks like, with its account's currency. */
   readonly duplicateOf: {
     readonly id: string;

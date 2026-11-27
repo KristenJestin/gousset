@@ -9,6 +9,7 @@ import { balancesJob } from "./balances-job.server";
 import { importJob } from "./import-job.server";
 import { merchantsJob } from "./merchants-job.server";
 import { JobQueue, register } from "./queue.server";
+import { receiptSweepJob } from "./receipt-sweep.server";
 import { ruleJob } from "./rule-job.server";
 import { E2E_JOBS_VARIABLE, testJob } from "./test-job";
 import { transfersJob } from "./transfers-job.server";
@@ -25,6 +26,7 @@ const queue = Layer.unwrap(
     const jobs = [
       register(importJob),
       register(uploadSweepJob),
+      register(receiptSweepJob),
       register(merchantsJob),
       register(balancesJob),
       register(transfersJob),

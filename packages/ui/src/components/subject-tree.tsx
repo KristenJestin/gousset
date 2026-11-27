@@ -10,12 +10,13 @@ import { Skeleton, SkeletonFrame } from "./skeleton";
 
 /**
  * The subjects' screen: `tree` in a column of its own beside the subject's page (`children`) from
- * 768 px on, the two one under the other on a phone.
+ * 768 px on, the two one under the other on a phone. The column may hold more than the tree (what
+ * is waited for, #217), each piece apart.
  */
 export function SubjectsLayout({ tree, children }: { tree: ReactNode; children: ReactNode }) {
   return (
     <div data-slot="subjects-layout" className="flex flex-col gap-6 md:flex-row md:items-start">
-      <div className="flex shrink-0 flex-col md:w-64">{tree}</div>
+      <div className="flex shrink-0 flex-col gap-6 md:w-64">{tree}</div>
       <div className="flex min-w-0 flex-1 flex-col gap-6">{children}</div>
     </div>
   );

@@ -56,9 +56,14 @@ export function accountRefusalMessage(code: string): string {
 /**
  * A refusal of a change of the categories (`CategoryRefusalCode`) or of a line's category
  * (`LineRefusalCode`), by its code. An icon or a position the page never sends falls to the
- * general message. `fallback` names the fallback a refusal is about, as the user called it.
+ * general message. `fallback` names the fallback a refusal is about, as the user called it;
+ * `subject`, the subject a line pays back (#217), when the refusal is that.
  */
-export function categoryRefusalMessage(code: string, fallback?: string | null): string {
+export function categoryRefusalMessage(
+  code: string,
+  fallback?: string | null,
+  subject?: string,
+): string {
   switch (code) {
     case "CATEGORY_NOT_FOUND":
       return m.categoryRefusalNotFound();
@@ -86,6 +91,10 @@ export function categoryRefusalMessage(code: string, fallback?: string | null): 
       return m.categoryRefusalKindMismatch();
     case "LINE_NOT_CLASSIFIABLE":
       return m.categoryRefusalNotClassifiable();
+    case "LINE_PAYBACK_NOT_CLASSIFIABLE":
+      return subject === undefined
+        ? m.categoryRefusalPaybackSome()
+        : m.categoryRefusalPayback({ subject });
     case "LINE_NOT_FOUND":
       return m.categoryRefusalLineNotFound();
     default:
@@ -95,9 +104,10 @@ export function categoryRefusalMessage(code: string, fallback?: string | null): 
 
 /**
  * A refusal of the review of a line (`ReviewRefusalCode`, #35), by its code; `FAILED` when the
- * server failed. A refusal of the category chosen says what the operations page says of it.
+ * server failed. A refusal of the category chosen says what the operations page says of it;
+ * `subject`, the subject the line pays back (#217), when it does.
  */
-export function reviewRefusalMessage(code: string): string {
+export function reviewRefusalMessage(code: string, subject?: string): string {
   switch (code) {
     case "LINE_NOT_FOUND":
       return m.operationsTransferLineGone();
@@ -114,10 +124,11 @@ export function reviewRefusalMessage(code: string): string {
     case "CATEGORY_REQUIRED":
       return m.reviewRefusalCategoryRequired();
     case "LINE_NOT_CLASSIFIABLE":
+    case "LINE_PAYBACK_NOT_CLASSIFIABLE":
     case "CATEGORY_NOT_FOUND":
     case "CATEGORY_KIND_MISMATCH":
     case "CATEGORY_ARCHIVED":
-      return categoryRefusalMessage(code);
+      return categoryRefusalMessage(code, null, subject);
     case "FAILED":
       return m.operationsTransferFailed();
     default:
@@ -249,12 +260,52 @@ export function subjectRefusalMessage(code: string, limit: number | null = null)
       return m.subjectRefusalEntries();
     case "SUBJECT_PERIOD":
       return m.subjectRefusalPeriod();
+    case "SUBJECT_PAYBACK":
+      return m.subjectRefusalPayback();
+    case "SUBJECT_PAYBACK_LINES":
+      return m.subjectRefusalPaybackLines();
     case "ENTRY_NOT_FOUND":
       return m.subjectRefusalEntryNotFound();
     case "MERCHANT_NOT_FOUND":
     case "TOO_MANY_RULES":
       // A subject's merchants are rules: their refusals are the rules'.
       return ruleRefusalMessage(code, null, limit);
+    default:
+      return m.errorUnknown();
+  }
+}
+
+/** A refusal of attaching or detaching a payback line (`PaybackRefusalCode`, #217), by its code. */
+export function paybackRefusalMessage(code: string): string {
+  switch (code) {
+    case "SUBJECT_NOT_FOUND":
+      return m.subjectRefusalNotFound();
+    case "PAYBACK_LINE_NOT_FOUND":
+      return m.paybackRefusalLineNotFound();
+    case "PAYBACK_GOING_OUT":
+      return m.paybackRefusalGoingOut();
+    case "PAYBACK_NOT_COUNTED":
+      return m.paybackRefusalNotCounted();
+    case "PAYBACK_ZERO_AMOUNT":
+      return m.paybackRefusalZeroAmount();
+    case "PAYBACK_MADE_FROM_BALANCE":
+      return m.paybackRefusalMadeFromBalance();
+    case "PAYBACK_SPLIT":
+      return m.paybackRefusalSplit();
+    case "PAYBACK_LINKED":
+      return m.paybackRefusalLinked();
+    case "PAYBACK_TRANSFER":
+      return m.paybackRefusalTransfer();
+    case "PAYBACK_CURRENCY":
+      return m.paybackRefusalCurrency();
+    case "PAYBACK_OTHER_SUBJECT":
+      return m.paybackRefusalOtherSubject();
+    case "PAYBACK_NOT_PAID_BACK":
+      return m.paybackRefusalNotPaidBack();
+    case "PAYBACK_ARCHIVED":
+      return m.paybackRefusalArchived();
+    case "PAYBACK_LINES":
+      return m.paybackRefusalLines();
     default:
       return m.errorUnknown();
   }

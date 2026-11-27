@@ -70,6 +70,8 @@ export type LineDetailProps = {
    * refunds proposed, and the actions to link or split it; after its transfer.
    */
   expense?: ReactNode;
+  /** Its receipts (`LineReceipts`, #217), after its expense. */
+  receipts?: ReactNode;
   onClose: () => void;
   /** The page's language (`<html lang>`) unless given. */
   locale?: string;
@@ -121,7 +123,7 @@ function BankWords({
  * day it was booked and its value date, the bank's raw label (fixed-width) with its memo and
  * counterparty, the original amount when it was in another currency, its expiry, "To review:
  * looks like …" on a held line, its transfer (`transfer`, a `LineTransfer`), its expense
- * (`expense`, a `LineExpense`), and the import it came from, "Entered by hand" or where the app
+ * (`expense`, a `LineExpense`), its receipts (`receipts`, a `LineReceipts`), and the import it came from, "Entered by hand" or where the app
  * made it from (`origin`); first, its category, through the control the page gives (`category`),
  * who it paid (`merchant`, a `LineMerchant`) and its subjects (`subjects`). Every text comes worded from the page. The close
  * button or Escape closes it; the focus goes into it when it opens.
@@ -153,6 +155,7 @@ export function LineDetail({
   subjects,
   transfer,
   expense,
+  receipts,
   onClose,
   locale,
 }: LineDetailProps) {
@@ -223,6 +226,7 @@ export function LineDetail({
       </DetailGroup>
       {transfer}
       {expense}
+      {receipts}
       <BankWords rawLabel={rawLabel} memo={memo} counterparty={counterparty} />
       <DetailGroup>
         {importedFrom === undefined ? (

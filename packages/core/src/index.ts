@@ -99,6 +99,7 @@ export type {
   MonthMerchant,
   MonthMovements,
   MonthPart,
+  MonthPayback,
   MonthReview,
   MonthRows,
   MonthScope,
@@ -164,12 +165,33 @@ export type { CostPart, SubjectCost, SubjectName, SubjectNode } from "./subjects
 
 export {
   EntryNotFound,
+  PaybackRefused,
   SubjectNameAmbiguous,
   SubjectNameTaken,
   SubjectNameUnknown,
   SubjectNotFound,
   SubjectRefused,
 } from "./subjects/errors";
+
+export {
+  MAX_PAYBACK_FROM,
+  MAX_PAYBACK_LINES,
+  PAYBACK_CANDIDATES_SHOWN,
+  attachPayback,
+  paybacksWaiting,
+} from "./subjects/payback";
+
+export type {
+  PaybackAttachment,
+  PaybackLine,
+  PaybackSettings,
+  PaybackWaiting,
+  SubjectPayback,
+} from "./subjects/payback";
+
+export { leftToUserOf, paybackStateOf, shareLeft } from "./subjects/payback-share";
+
+export type { PaidBackSubject, PaybackState } from "./subjects/payback-share";
 
 export {
   accountNamed,
@@ -495,9 +517,9 @@ export type { ExportContents } from "./export/export";
 
 export { EXPORT_FORMAT, EXPORT_VERSION, MANIFEST } from "./export/archive";
 
-export type { ExportArchive } from "./export/archive";
+export type { ExportArchive, ExportStream } from "./export/archive";
 
-export { EXPORT_TABLES, IMPORT_FILES_FOLDER } from "./export/tables";
+export { EXPORT_TABLES, IMPORT_FILES_FOLDER, RECEIPT_FILES_FOLDER } from "./export/tables";
 
 export {
   RuleConditionsRefused,
@@ -573,3 +595,33 @@ export type {
   MonthSubscriptionsRead,
   SubscriptionCalendar,
 } from "./subscriptions/subscriptions";
+
+export {
+  SWEEP_AFTER_MINUTES as RECEIPT_SWEEP_AFTER_MINUTES,
+  attachReceipt,
+  deleteReceipt,
+  lineReceipts,
+  openReceipt,
+  readReceipt,
+  subjectReceipts,
+  subjectReceiptsZip,
+  sweepReceipts,
+} from "./attachments/attachments";
+
+export type {
+  Receipt,
+  ReceiptDownload,
+  ReceiptUpload,
+  ReceiptsZip,
+  SubjectReceipt,
+} from "./attachments/attachments";
+
+export {
+  ReceiptEmpty,
+  ReceiptNotFound,
+  ReceiptStorageFailed,
+  ReceiptTooLarge,
+  ReceiptTypeRefused,
+} from "./attachments/errors";
+
+export { ReceiptStorage, receiptStorageLayer } from "./attachments/storage";

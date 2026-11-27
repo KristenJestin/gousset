@@ -13,4 +13,8 @@ export const subjectKeys = {
   /** What the past expenses of some merchants come to, for a subject (null: a new one), by ids. */
   preview: (merchantIds: ReadonlyArray<string>, subjectId: string | null) =>
     [...subjectKeys.all, "preview", subjectId, ...merchantIds] as const,
+  /** What the user still waits for, of the paid-back subjects (#217). */
+  waiting: () => [...subjectKeys.all, "waiting"] as const,
+  /** Every receipt of a subject's lines (#217). */
+  receipts: (subjectId: string) => [...subjectKeys.all, "receipts", subjectId] as const,
 };

@@ -71,6 +71,19 @@ export async function invalidateSubjects(queryClient: QueryClient): Promise<void
 }
 
 /**
+ * After a line is attached to a subject as what pays it back, or detached (#217): its entry goes or
+ * comes back, an income, so the subjects' and the operations' queries, the months, the categories'
+ * figures (it was in an income category) and the review's counts are read again.
+ */
+export async function invalidatePaybacks(queryClient: QueryClient): Promise<void> {
+  await Promise.all([
+    invalidateSubjects(queryClient),
+    queryClient.invalidateQueries({ queryKey: categoryKeys.all }),
+    queryClient.invalidateQueries({ queryKey: reviewKeys.all }),
+  ]);
+}
+
+/**
  * After a change of the categories or of a line's category: the categories' figures and lines,
  * each line's category (the operations name it), the months' spending by category, and the
  * merchants' default categories (a merge moves them, an archive marks them) may all have changed,

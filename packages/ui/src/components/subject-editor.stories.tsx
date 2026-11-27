@@ -41,6 +41,10 @@ const EMPTY: SubjectDraft = {
   merchantIds: [],
   attachPast: true,
   archived: false,
+  hasPayback: false,
+  paybackFrom: "",
+  paybackAskedOn: null,
+  paybackSettledOn: null,
 };
 
 /** The wireframe's bicycle: a value, two merchants, their past expenses found. */
@@ -101,6 +105,7 @@ function Editing({ editing, initial, errors }: EditingProps) {
         merchants={MERCHANTS}
         past={past}
         errors={errors}
+        today="2026-11-15"
         onDraftChange={(draft) => {
           setMerchants(draft.merchantIds.length);
           setArchived(draft.archived);
@@ -159,6 +164,31 @@ export const Saved: Story = {
       startsOn: "2028-07-03",
       endsOn: "2028-07-17",
       accountIds: ["current"],
+    },
+  },
+};
+
+/** A work trip paid back by the employer (#217): who pays it back, the day it was asked. */
+export const PaidBack: Story = {
+  args: {
+    editing: "Lyon trip",
+    initial: {
+      ...EMPTY,
+      name: "Lyon trip",
+      hasPayback: true,
+      paybackFrom: "Northwind Consulting",
+      paybackAskedOn: "2026-11-02",
+    },
+  },
+};
+
+/** Turning "Paid back" off while lines pay it back: refused under the option. */
+export const PaidBackRefused: Story = {
+  args: {
+    editing: "Lyon trip",
+    initial: { ...EMPTY, name: "Lyon trip", paybackFrom: "Northwind Consulting" },
+    errors: {
+      paybackOff: "Lines pay this subject back: detach them before turning “paid back” off.",
     },
   },
 };

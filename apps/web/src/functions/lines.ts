@@ -15,7 +15,13 @@ import {
   unlinkLine as unlinkCoreLine,
   unpairLine as unpairCoreLine,
 } from "@gousset/core";
-import type { FundRefused, LinkRefused, SplitRefused, TransferRefused } from "@gousset/core";
+import type {
+  FundRefused,
+  LineNotClassifiable,
+  LinkRefused,
+  SplitRefused,
+  TransferRefused,
+} from "@gousset/core";
 import { AccountId } from "@gousset/core/account-values";
 import { MAX_FILTER_TEXT } from "@gousset/ui/lib/operations";
 import { createServerFn } from "@tanstack/react-start";
@@ -37,6 +43,7 @@ export type LineRefusalCode =
   | "CURSOR_INVALID"
   | "LINE_NOT_FOUND"
   | "LINE_NOT_CLASSIFIABLE"
+  | "LINE_PAYBACK_NOT_CLASSIFIABLE"
   | "CATEGORY_NOT_FOUND"
   | "CATEGORY_KIND_MISMATCH"
   | "CATEGORY_ARCHIVED";
@@ -138,7 +145,13 @@ export const classifyLine = createServerFn({ method: "POST" })
         Effect.map((category) => ({ ok: true as const, category })),
         Effect.catchTags({
           LineNotFound: () => refused("LINE_NOT_FOUND"),
-          LineNotClassifiable: () => refused("LINE_NOT_CLASSIFIABLE"),
+          // A line that pays back a subject (#217) is classified by it: said apart.
+          LineNotClassifiable: (refusal: LineNotClassifiable) =>
+            refused(
+              refusal.reason === "payback"
+                ? "LINE_PAYBACK_NOT_CLASSIFIABLE"
+                : "LINE_NOT_CLASSIFIABLE",
+            ),
           CategoryNotFound: () => refused("CATEGORY_NOT_FOUND"),
           CategoryKindMismatch: () => refused("CATEGORY_KIND_MISMATCH"),
           // The only refusal classifying meets: the category is archived.
@@ -166,7 +179,8 @@ export type TransferRefusalCode =
   | "NOT_COUNTED"
   | "MADE_FROM_BALANCE"
   | "ACCOUNT_KEPT_BY_LINES"
-  | "OTHER_CURRENCY";
+  | "OTHER_CURRENCY"
+  | "PAYBACK";
 
 const transferRefused = (code: TransferRefusalCode) => Effect.succeed({ ok: false as const, code });
 
@@ -204,6 +218,7 @@ const ACCOUNT_PAIRING_CODES = {
   several_candidates: "CANNOT_PAIR",
   account_kept_by_lines: "ACCOUNT_KEPT_BY_LINES",
   other_currency: "OTHER_CURRENCY",
+  payback: "PAYBACK",
 } as const satisfies { readonly [Reason in TransferRefused["reason"]]: TransferRefusalCode };
 
 /**
@@ -274,6 +289,7 @@ export type ExpenseRefusalCode =
   | "SPLIT_SUBJECT_UNKNOWN"
   | "SPLIT_SUBJECT_ARCHIVED"
   | "SPLIT_SUBJECT_INCOME"
+  | "LINE_PAYBACK"
   | "NOT_LINKED";
 
 const expenseRefused = (code: ExpenseRefusalCode, index: number | null = null) =>
@@ -294,6 +310,7 @@ const SPLIT_CODES = {
   subject_unknown: "SPLIT_SUBJECT_UNKNOWN",
   subject_archived: "SPLIT_SUBJECT_ARCHIVED",
   subject_income: "SPLIT_SUBJECT_INCOME",
+  payback: "LINE_PAYBACK",
 } as const satisfies { readonly [Reason in SplitRefused["reason"]]: ExpenseRefusalCode };
 
 const LINK_CODES = {
@@ -307,6 +324,7 @@ const LINK_CODES = {
   already_linked: "LINK_ALREADY_LINKED",
   currency: "LINK_CURRENCY",
   exceeds: "LINK_EXCEEDS",
+  payback: "LINE_PAYBACK",
 } as const satisfies { readonly [Reason in LinkRefused["reason"]]: ExpenseRefusalCode };
 
 /**

@@ -1,13 +1,16 @@
 import {
   MAX_ATTACHED,
+  MAX_PAYBACK_LINES,
   MAX_SUBJECTS,
   accountNamed,
+  attachPayback,
   attachSubject,
   createSubject,
   editSubject,
   lineExpensesOf,
   listSubjects,
   pathOf,
+  paybacksWaiting,
   refuseProposals,
   showSubject,
   subjectMerchantsPreview,
@@ -18,12 +21,20 @@ import type {
   Expenses,
   Merchants,
   Money,
+  PaybackAttachment,
+  PaybackLine,
+  PaybackRefused,
+  PaybackSettings,
+  PaybackState,
+  PaybackWaiting,
   SubjectAccountBalance,
   SubjectAttachment,
   SubjectDetail,
   SubjectExpense,
   SubjectHeadline,
   SubjectList,
+  SubjectName,
+  SubjectPayback,
   SubjectRecord,
   SubjectRefused,
   SubjectSaved,
@@ -45,11 +56,17 @@ import { merchantNamed } from "./merchants";
 const Names = Schema.Array(Schema.String).check(Schema.isMaxLength(MAX_ATTACHED));
 
 const SubjectsInput = Schema.Struct({
-  action: Schema.Literals(["list", "show", "create", "edit", "attach"]),
+  action: Schema.Literals(["list", "show", "create", "edit", "attach", "attach_payback"]),
   subject: Schema.optional(
     Schema.String.annotate({
       description:
-        'show, edit, attach: the subject, by its path ("House > Garden shed") or its own name, any case.',
+        'show, edit, attach, attach_payback: the subject, by its path ("House > Garden shed") or its own name, any case.',
+    }),
+  ),
+  waiting: Schema.optional(
+    Schema.Boolean.annotate({
+      description:
+        "list: true gives only what the user still waits to be paid back for, with how much.",
     }),
   ),
   period: Schema.optional(
@@ -125,6 +142,30 @@ const SubjectsInput = Schema.Struct({
         "create, edit, with merchants: true attaches the past expenses of each merchant given too, those it had included.",
     }),
   ),
+  payback_from: Schema.optional(
+    Schema.NullOr(
+      Schema.String.annotate({
+        description:
+          'create, edit: who pays it back ("Example Corp", a friend, an insurer), 1 to 100 characters: the option "paid back"; null turns it off and clears its days.',
+      }),
+    ),
+  ),
+  payback_asked_on: Schema.optional(
+    Schema.NullOr(
+      Schema.String.annotate({
+        description:
+          "create, edit, with payback_from: the day the user asked to be paid back, YYYY-MM-DD; null clears it.",
+      }),
+    ),
+  ),
+  payback_settled_on: Schema.optional(
+    Schema.NullOr(
+      Schema.String.annotate({
+        description:
+          "create, edit, with payback_from: the day the user marked it paid back by hand, whatever came back, YYYY-MM-DD; null clears it.",
+      }),
+    ),
+  ),
   archived: Schema.optional(
     Schema.Boolean.annotate({
       description:
@@ -139,11 +180,13 @@ const SubjectsInput = Schema.Struct({
   lines: Schema.optional(
     Names.annotate({
       description:
-        "attach: lines, by the handle lines search gives: each line's expense (every share of a split line).",
+        "attach: lines, by the handle lines search gives: each line's expense (every share of a split line). attach_payback: lines coming in that pay the subject back, by handle.",
     }),
   ),
   remove: Schema.optional(
-    Schema.Boolean.annotate({ description: "attach: true takes them off the subject." }),
+    Schema.Boolean.annotate({
+      description: "attach, attach_payback: true takes them off the subject.",
+    }),
   ),
   decline: Schema.optional(
     Schema.Boolean.annotate({
@@ -173,17 +216,23 @@ const DATED_EXAMPLE = {
   ends_on: "2026-07-14",
 } as const satisfies Encoded;
 
-const DESCRIPTION = `What the user's money is spent for, beside its category: subjects they make (Van, House > Garden shed, Alps 2026), nested at any depth, archived rather than deleted. An expense has zero, one or several; it counts whole in each, and once in a parent, which counts its children's expenses with its own: subjects' totals never add up. A subject may have a value (what it is worth, and the loan it is bought with) and dates (a trip, a renovation).
+const PAYBACK_EXAMPLE = {
+  action: "attach_payback",
+  subject: "Riverton trip",
+  lines: ["<a handle show gave>"],
+} as const satisfies Encoded;
 
-\`list\`: the tree, each subject by its path, with its options and its figure: this year's cost and per month, or with dates its cost in all. \`show\` one (\`subject\`) for \`period\` (a year, the current one by default, or "all"): total, month by month, by category, its accounts and loan with their balances, its value, children, latest expenses; with dates, the proposals: the expenses of its period not attached yet. A proposal is the user's to confirm: never attach one without their yes.
+const DESCRIPTION = `What the user's money is spent for, beside its category: subjects they make (Van, House > Garden shed, Alps 2026), nested at any depth, archived rather than deleted. An expense has zero, one or several; it counts whole in each, and once in a parent, which counts its children's expenses with its own: subjects' totals never add up. A subject may have a value (what it is worth, and the loan it is bought with), dates (a trip, a renovation), and be paid back by someone else (a work trip, a shared holiday, a claim).
+
+\`list\`: the tree, each subject by its path, with its options and its figure: this year's cost and per month, or with dates its cost in all; paid back, where it stands (to ask, asked, partly paid back, paid back), spent, paid back and the difference, all time. \`list\` with \`waiting: true\`: only what the user still waits to be paid back for, with how much. \`show\` one (\`subject\`) for \`period\` (a year, the current one by default, or "all"): total, month by month, by category, its accounts and loan with their balances, its value, children, latest expenses; with dates, the proposals: the expenses of its period not attached yet; paid back, its payback lines and the candidates: lines coming in that may pay it back. A proposal or a candidate is the user's to confirm: never attach one without their yes.
 
 Use it for "what did the van cost this year?" or "what did the Alps trip cost?". For a month by subject, \`month\` \`spending\` with \`by: "subject"\`; for a subject's lines, \`lines\` \`search\` with \`subject\`; to share a line between subjects, \`lines\` \`split\` with each share's \`subjects\`.
 
-Writes (write scope): \`create\` (\`name\`; \`parent\`, \`value\` with \`currency\`, \`loan\`, \`starts_on\`, \`ends_on\`, \`accounts\`, \`merchants\`); \`edit\` one by \`subject\`: only what it is given changes, null clears, \`accounts\` and \`merchants\` replace the whole list, \`archived\` archives or restores it. \`merchants\`: a rule "merchant is" each attaches the subject to their expenses to come; \`attach_past: true\` attaches their past ones too. \`attach\` \`expenses\` (the ids show writes) or \`lines\` (handles lines search gives) to \`subject\`; \`remove: true\` takes them off; \`decline: true\` declines proposals, remembered: never proposed for it again unless attached by hand.
+Writes (write scope): \`create\` (\`name\`; \`parent\`, \`value\` with \`currency\`, \`loan\`, \`starts_on\`, \`ends_on\`, \`accounts\`, \`merchants\`); \`edit\` one by \`subject\`: only what it is given changes, null clears, \`accounts\` and \`merchants\` replace the whole list, \`archived\` archives or restores it. \`merchants\`: a rule "merchant is" each attaches the subject to their expenses to come; \`attach_past: true\` attaches their past ones too. \`attach\` \`expenses\` (the ids show writes) or \`lines\` (handles lines search gives) to \`subject\`; \`remove: true\` takes them off; \`decline: true\` declines proposals, remembered: never proposed for it again unless attached by hand. \`payback_from\` (who pays it back) turns "paid back" on, null off; \`payback_asked_on\`, \`payback_settled_on\` (paid back by hand) are days. \`attach_payback\` \`lines\` (handles of lines coming in, at most ${MAX_PAYBACK_LINES}) to \`subject\`: what pays it back, no income then; \`remove: true\` detaches them, each an income again.
 
-Name subjects by path ("House > Garden shed") or by their own name when only one has it, merchants as \`merchants\` lists them, accounts as \`accounts\` does. Refused, saying what to do: an unknown or ambiguous name, a sibling's name or one holding ">", a subject under itself or one of its descendants, an archived parent, an expense attached to an archived subject, a value with more decimals than its currency, a loan that is no loan account, an end before the start or without one, an income (only expenses have subjects), over ${MAX_ATTACHED} expenses at once, ${MAX_SUBJECTS} subjects.
+Name subjects by path ("House > Garden shed") or by their own name when only one has it, merchants as \`merchants\` lists them, accounts as \`accounts\` does. Refused, saying what to do: an unknown or ambiguous name, a sibling's name or one holding ">", a subject under itself or one of its descendants, an archived parent, an expense attached to an archived subject, a value with more decimals than its currency, a loan that is no loan account, an end before the start or without one, an income (only expenses have subjects), over ${MAX_ATTACHED} expenses at once, ${MAX_SUBJECTS} subjects; as payback, a line going out, held, split, linked, a transfer's side, of another currency or paying back another subject, a subject without the option, "paid back" turned off while lines pay it back.
 
-Examples: ${JSON.stringify(CREATE_EXAMPLE)} · ${JSON.stringify(DATED_EXAMPLE)} · {"action":"show","subject":"House > Garden shed","period":"all"} · {"action":"attach","subject":"Alps 2026","expenses":["<an id show gave>"]} · {"action":"edit","subject":"Garden shed","parent":null}`;
+Examples: ${JSON.stringify(CREATE_EXAMPLE)} · ${JSON.stringify(DATED_EXAMPLE)} · ${JSON.stringify(PAYBACK_EXAMPLE)} · {"action":"show","subject":"House > Garden shed","period":"all"} · {"action":"attach","subject":"Alps 2026","expenses":["<an id show gave>"]} · {"action":"edit","subject":"Garden shed","parent":null}`;
 
 const call = (input: Encoded) => `subjects ${JSON.stringify(input)}`;
 
@@ -243,6 +292,59 @@ function optionsOf(
 
 const archivedText = (archived: boolean) => (archived ? " (archived)" : "");
 
+/** Who pays a subject back, and the days the user asked and settled it. */
+const settingsText = (settings: PaybackSettings) =>
+  `paid back by ${settings.from}${settings.askedOn === null ? "" : `, asked on ${settings.askedOn}`}${settings.settledOn === null ? "" : `, settled by hand on ${settings.settledOn}`}`;
+
+const STATE_WORDS = {
+  paid_back: "paid back",
+  partly: "partly paid back",
+  asked: "asked",
+  to_ask: "to ask",
+} as const satisfies { readonly [State in PaybackState]: string };
+
+/** Where a paid-back subject stands, with its days. */
+function stateText(payback: {
+  readonly state: PaybackState;
+  readonly askedOn: string | null;
+  readonly settledOn?: string | null;
+}): string {
+  const { settledOn = null, askedOn } = payback;
+
+  switch (payback.state) {
+    case "paid_back": {
+      return settledOn === null ? "paid back" : `paid back, settled by hand on ${settledOn}`;
+    }
+
+    case "asked": {
+      return `asked on ${askedOn ?? "a day not given"}, nothing back yet`;
+    }
+
+    case "partly":
+    case "to_ask": {
+      return STATE_WORDS[payback.state];
+    }
+  }
+}
+
+/** Paid back less spent, its sign written: positive when more came back than it cost. */
+const signed = (money: Money) => (money.minor > 0 ? `+${amount(money)}` : amount(money));
+
+const paybackFiguresText = (payback: SubjectPayback) =>
+  `spent ${amount(payback.spent)}, paid back ${amount(payback.paidBack)}, difference ${signed(payback.difference)}`;
+
+/** The call that detaches `lineIds` from the subject at `path`: each an income again. */
+export const detachPaybackCall = (path: string, lineIds: ReadonlyArray<string>) =>
+  call({ action: "attach_payback", subject: path, lines: [...lineIds], remove: true });
+
+/** A subject's path, by its id, as the list reads its parents; its own name once it is gone. */
+export function subjectPathOf(owner: string, currency: string, subject: SubjectName) {
+  return listSubjects(owner, currency).pipe(
+    Effect.map((list) => pathOf(list.subjects, subject.id) || subject.name),
+    Effect.catchTag("QueryFailed", Effect.die),
+  );
+}
+
 /** The tree, each subject by its path, its figure and its options. */
 export function listText(list: SubjectList): string {
   if (list.subjects.length === 0) {
@@ -252,7 +354,14 @@ export function listText(list: SubjectList): string {
   const [first] = list.subjects;
 
   const rows = list.subjects.map((subject) => {
-    const options = optionsOf(subject, false);
+    const options = [
+      ...optionsOf(subject, false),
+      ...(subject.payback === null
+        ? []
+        : [
+            `${settingsText(subject.payback)}: ${STATE_WORDS[subject.payback.state]}, ${paybackFiguresText(subject.payback)}`,
+          ]),
+    ];
 
     return `- ${pathOf(list.subjects, subject.id)}${archivedText(subject.archived)}: ${headlineText(subject.headline)}${options.length === 0 ? "" : `; ${options.join("; ")}`}`;
   });
@@ -304,6 +413,60 @@ function proposalsText(detail: SubjectDetail, path: string): ReadonlyArray<strin
       `Once the user says yes: ${call({ action: "attach", subject: path, expenses: [first.entryId] })}; one the user says is not for it: ${call({ action: "attach", subject: path, expenses: [first.entryId], decline: true })}`,
     ].join("\n"),
   ];
+}
+
+/** A line that pays a subject back, or may, with the handle attach_payback takes. */
+const paybackLineText = (line: PaybackLine) =>
+  `- ${line.bookedOn}, ${named(line.account)}: ${amount(line.amount)}, ${quoted(line.label)}; line: ${line.lineId}`;
+
+/** A paid-back subject's figures, its payback lines and its candidates; nothing without the option. */
+function paybackText(detail: SubjectDetail, path: string): ReadonlyArray<string> {
+  const { payback } = detail;
+
+  if (payback === null) {
+    return [];
+  }
+
+  const [line] = payback.lines;
+  const [candidate] = payback.candidates;
+
+  return [
+    `Paid back by ${payback.from}, all time, in ${detail.currency}: ${paybackFiguresText(payback)} (paid back less spent). State: ${stateText(payback)}.`,
+    line === undefined
+      ? "No line pays it back yet."
+      : [
+          "Its payback lines, oldest first (booked on, account: amount, label; the handle attach_payback takes):",
+          ...payback.lines.map(paybackLineText),
+          `To detach one: ${detachPaybackCall(path, [line.lineId])}`,
+        ].join("\n"),
+    candidate === undefined
+      ? "No line coming in may pay it back: none of the user's currency since its start, or its first expense, that is an income of its own."
+      : [
+          `Candidates: ${payback.candidates.length} line(s) coming in that may pay it back, the payer's words first, then the newest. They are the user's to confirm: never attach one without the user's yes.`,
+          ...payback.candidates.map(paybackLineText),
+          `Once the user says yes: ${call({ action: "attach_payback", subject: path, lines: [candidate.lineId] })}`,
+        ].join("\n"),
+  ];
+}
+
+/** What the user still waits to be paid back for, with how much, in the order the core gives. */
+export function waitingText(waiting: ReadonlyArray<PaybackWaiting>, currency: string): string {
+  const [first] = waiting;
+
+  if (first === undefined) {
+    return `The user waits to be paid back for nothing: no subject paid back by someone else is to ask, asked or partly paid back, archived ones aside. A subject is paid back with: ${call({ action: "edit", subject: "Riverton trip", payback_from: "Example Corp" })}`;
+  }
+
+  return [
+    `The user waits to be paid back for ${waiting.length} subject(s), in ${currency}: those to ask first, then those asked, by the day they were, then those partly paid back.`,
+    waiting
+      .map(
+        (each) =>
+          `- ${each.path}, by ${each.from}: waits for ${amount(each.waiting)} (spent ${amount(each.spent)}, paid back ${amount(each.paidBack)}); ${stateText(each)}`,
+      )
+      .join("\n"),
+    `One subject's payback lines and candidates: ${call({ action: "show", subject: first.path, period: "all" })}`,
+  ].join("\n\n");
 }
 
 /** A subject's page: its costs in the period, its options, its children and expenses. */
@@ -378,6 +541,7 @@ export function showText(detail: SubjectDetail, path: string): string {
       `Cost: ${amount(detail.total)}${elsewhereText(detail.elsewhere)}, its subjects within counted with it, each expense once.`,
       ...options,
     ].join("\n"),
+    ...paybackText(detail, path),
     ...months,
     ...categories,
     ...children,
@@ -642,6 +806,26 @@ function subjectRefusal(
         period: "all",
       });
     }
+
+    case "payback": {
+      return refuse(
+        "payback_from, who pays the subject back, is 1 to 100 characters; payback_asked_on and payback_settled_on are days that exist, YYYY-MM-DD, and need payback_from, given now or before.",
+        {
+          ...encoded,
+          payback_from: "Example Corp",
+          payback_asked_on: undefined,
+          payback_settled_on: undefined,
+        },
+      );
+    }
+
+    case "payback_lines": {
+      // `edit` gives the call that detaches them (`paybackLinesRefusal`); this is the fallback.
+      return refuse(
+        `Lines pay "${clip(subject)}" back: detach them first, then turn "paid back" off; show lists them.`,
+        { action: "show", subject, period: "all" },
+      );
+    }
   }
 }
 
@@ -690,7 +874,11 @@ function savedText(
 ) {
   return Effect.gen(function* () {
     const path = yield* savedPath(owner, caller, saved);
-    const options = optionsOf(saved, true);
+
+    const options = [
+      ...optionsOf(saved, true),
+      ...(saved.payback === null ? [] : [settingsText(saved.payback)]),
+    ];
 
     const described = `${lead} the subject ${path}${archivedText(saved.archived)}${options.length === 0 ? "" : `: ${options.join("; ")}`}.`;
 
@@ -744,6 +932,9 @@ function create(owner: string, input: SubjectsInput, caller: Caller) {
       startsOn: names.startsOn,
       endsOn: names.endsOn,
       accountIds: names.accountIds,
+      paybackFrom: input.payback_from,
+      paybackAskedOn: input.payback_asked_on,
+      paybackSettledOn: input.payback_settled_on,
       merchantIds: names.merchantIds,
       attachPast: names.attachPast,
     });
@@ -771,11 +962,14 @@ function edit(owner: string, input: SubjectsInput, caller: Caller) {
     input.accounts,
     input.merchants,
     input.archived,
+    input.payback_from,
+    input.payback_asked_on,
+    input.payback_settled_on,
   ];
 
   if (changes.every((change) => change === undefined)) {
     return refuse(
-      "edit needs what changes: name, parent, value, loan, starts_on, ends_on, accounts, merchants or archived.",
+      "edit needs what changes: name, parent, value, loan, starts_on, ends_on, accounts, merchants, archived, payback_from, payback_asked_on or payback_settled_on.",
       { action: "edit", subject, archived: true },
     );
   }
@@ -793,6 +987,9 @@ function edit(owner: string, input: SubjectsInput, caller: Caller) {
       startsOn: names.startsOn,
       endsOn: names.endsOn,
       accountIds: names.accountIds,
+      paybackFrom: input.payback_from,
+      paybackAskedOn: input.payback_asked_on,
+      paybackSettledOn: input.payback_settled_on,
       merchantIds: names.merchantIds,
       attachPast: names.attachPast,
       archived: input.archived,
@@ -802,6 +999,10 @@ function edit(owner: string, input: SubjectsInput, caller: Caller) {
   }).pipe(
     Effect.catchTags({
       ...savingRefusals(input, encoded, caller),
+      SubjectRefused: (refused) =>
+        refused.reason === "payback_lines" && refused.subjectId !== undefined
+          ? paybackLinesRefusal(owner, caller, refused.subjectId)
+          : subjectRefusal(refused, input, encoded, caller),
       SubjectNotFound: () => refuse("The subject is gone: list the subjects again.", LIST_CALL),
     }),
   );
@@ -923,9 +1124,213 @@ function attach(owner: string, input: SubjectsInput, caller: Caller) {
   );
 }
 
+/** "Paid back" turned off while lines pay the subject back: the call that detaches them. */
+function paybackLinesRefusal(owner: string, caller: Caller, subjectId: string) {
+  return Effect.gen(function* () {
+    const currency = benchmarkCurrency(caller);
+    const detail = yield* showSubject(owner, subjectId, currency, "all");
+    const path = yield* subjectPathOf(owner, currency, detail);
+    const lines = (detail.payback?.lines ?? []).map((line) => line.lineId);
+    const first = lines.slice(0, MAX_PAYBACK_LINES);
+
+    const parts =
+      lines.length > first.length
+        ? ` ${lines.length} lines do: the call below detaches the first ${first.length}, show lists the others.`
+        : "";
+
+    return yield* Effect.fail(
+      new ToolRefusal({
+        message: `Lines pay "${clip(path)}" back: detach them first, then turn "paid back" off with payback_from null.${parts}`,
+        example: detachPaybackCall(path, first),
+      }),
+    );
+  }).pipe(
+    Effect.catchTags({
+      SubjectRefused: Effect.die,
+      SubjectNotFound: () => refuse("The subject is gone: list the subjects again.", LIST_CALL),
+      QueryFailed: Effect.die,
+    }),
+  );
+}
+
+/** A refusal whose helping call is another tool's. */
+const failWith = (message: string, example: string) =>
+  Effect.fail(new ToolRefusal({ message, example }));
+
+/** Why lines cannot pay back the subject at `path`, what to do, and the call that helps. */
+function paybackRefusal(
+  owner: string,
+  caller: Caller,
+  refused: PaybackRefused,
+  path: string,
+  encoded: Encoded,
+) {
+  const handle = refused.lineId ?? "";
+  const line = `The line "${clip(handle)}"`;
+  const showLineCall = `lines ${JSON.stringify({ action: "show", line: handle })}`;
+  const showCall = { action: "show", subject: path, period: "all" } as const;
+
+  switch (refused.reason) {
+    case "going_out": {
+      return refuse(
+        `${line} is money going out: only money coming in pays a subject back. If it is one of its expenses, attach it with attach.`,
+        { action: "attach", subject: path, lines: [handle] },
+      );
+    }
+
+    case "not_counted": {
+      return failWith(
+        `${line} is held for review as a near duplicate, or discarded: it is not counted, so it pays nothing back. The user decides on it first.`,
+        `review ${JSON.stringify({ action: "list" })}`,
+      );
+    }
+
+    case "zero_amount": {
+      return refuse(
+        `${line} moves no money: it pays nothing back. Show the subject for its candidates.`,
+        showCall,
+      );
+    }
+
+    case "made_from_balance": {
+      return refuse(
+        `${line} was made by Gousset from a balance the user noted: it stands for a month's movement, never for what pays a subject back.`,
+        showCall,
+      );
+    }
+
+    case "split": {
+      return failWith(
+        `${line} is split across several categories: put it back in one first (lines split with one share, as lines show writes it), then attach it.`,
+        showLineCall,
+      );
+    }
+
+    case "linked": {
+      return failWith(
+        `${line} is part of an expense with other lines (a refund, a payment in parts): unlink it first, then attach it.`,
+        `lines ${JSON.stringify({ action: "unlink", line: handle })}`,
+      );
+    }
+
+    case "transfer": {
+      return failWith(
+        `${line} is a side of a transfer between two of the user's accounts: unpair it first if it is no transfer, then attach it.`,
+        `lines ${JSON.stringify({ action: "unpair", line: handle })}`,
+      );
+    }
+
+    case "currency": {
+      return refuse(
+        `${line} is in another currency than the user's own, ${benchmarkCurrency(caller)}: what pays a subject back is counted in it. Show the subject for its candidates.`,
+        showCall,
+      );
+    }
+
+    case "other_subject": {
+      return subjectPathOf(owner, benchmarkCurrency(caller), {
+        id: refused.subjectId ?? "",
+        name: "another subject",
+      }).pipe(
+        Effect.flatMap((other) =>
+          failWith(
+            `${line} pays back "${clip(other)}" already: a line pays back one subject. If it pays back "${clip(path)}" instead, detach it from "${clip(other)}" first, then attach it here.`,
+            detachPaybackCall(other, [handle]),
+          ),
+        ),
+      );
+    }
+
+    case "not_paid_back": {
+      return refuse(
+        `"${clip(path)}" is not paid back by anyone: turn the option on first, payback_from saying who pays it back.`,
+        { action: "edit", subject: path, payback_from: "Example Corp" },
+      );
+    }
+
+    case "archived": {
+      return refuse(
+        `"${clip(path)}" is archived: no line is attached to it any more, though one may still be detached (remove: true). Restore it first.`,
+        { action: "edit", subject: path, archived: false },
+      );
+    }
+
+    case "lines": {
+      return refuse(`At most ${MAX_PAYBACK_LINES} lines in one call: give them in parts.`, {
+        ...encoded,
+        lines: (encoded.lines ?? []).slice(0, MAX_PAYBACK_LINES),
+      });
+    }
+  }
+}
+
+function paybackAttachedText(
+  done: PaybackAttachment,
+  path: string,
+  input: SubjectsInput,
+  payback: SubjectPayback | null,
+): string {
+  const unchanged = done.lines - done.changed;
+
+  const what =
+    input.remove === true
+      ? `Detached ${done.changed} line(s) from ${path}: each is an income of its own again, in its kind's fallback category${unchanged === 0 ? "" : `; ${unchanged} did not pay it back`}.`
+      : `Attached ${done.changed} line(s) to ${path} as what pays it back${unchanged === 0 ? "" : `; ${unchanged} already did`}. Each is no income now: the subject classifies it.`;
+
+  return payback === null
+    ? what
+    : `${what}\n${path} now: ${paybackFiguresText(payback)}; ${stateText(payback)}.`;
+}
+
+function attachPaybackRun(owner: string, input: SubjectsInput, caller: Caller) {
+  const subject = input.subject?.trim() ?? "";
+  const encoded = encodeInput(input);
+  const lines = (input.lines ?? []).map((each) => each.trim());
+
+  if (subject === "" || lines.length === 0) {
+    return refuse(
+      "attach_payback needs subject, by path or name, and lines: the handles of lines coming in that pay it back, as show lists its candidates or lines search gives them.",
+      { ...PAYBACK_EXAMPLE, subject: subject || PAYBACK_EXAMPLE.subject },
+    );
+  }
+
+  return Effect.gen(function* () {
+    const found = yield* subjectOf(owner, subject, (path) => ({ ...encoded, subject: path }));
+    const currency = benchmarkCurrency(caller);
+
+    return yield* attachPayback(owner, found.id, lines, currency, {
+      remove: input.remove === true,
+    }).pipe(
+      Effect.flatMap((done) =>
+        listSubjects(owner, currency).pipe(
+          Effect.map((list) =>
+            paybackAttachedText(
+              done,
+              found.path,
+              input,
+              list.subjects.find((each) => each.id === found.id)?.payback ?? null,
+            ),
+          ),
+        ),
+      ),
+      Effect.catchTags({
+        PaybackRefused: (refused) => paybackRefusal(owner, caller, refused, found.path, encoded),
+        LineNotFound: (missing) =>
+          Effect.fail(
+            new ToolRefusal({
+              message: `No line of the user's has the handle "${clip(missing.lineId)}", or it is booked after today. Handles come from show's candidates or lines search.`,
+              example: call({ action: "show", subject: found.path, period: "all" }),
+            }),
+          ),
+        SubjectNotFound: () => refuse("The subject is gone: list the subjects again.", LIST_CALL),
+      }),
+    );
+  }).pipe(Effect.catchTags({ QueryFailed: Effect.die }));
+}
+
 /**
- * The subjects family (docs/mcp.md, "Tools"; #37): read, made, changed and archived, and expenses
- * attached, taken off or declined, with the write scope.
+ * The subjects family (docs/mcp.md, "Tools"; #37, #217): read, made, changed and archived,
+ * expenses attached, taken off or declined, and the lines that pay one back, with the write scope.
  */
 export const subjectsTool = defineTool<
   SubjectsInput,
@@ -945,16 +1350,24 @@ export const subjectsTool = defineTool<
     create: "write",
     edit: "write",
     attach: "write",
+    attach_payback: "write",
   },
   run: (input, caller) => {
     const owner = caller.userId;
 
     switch (input.action) {
       case "list": {
-        return listSubjects(owner, benchmarkCurrency(caller)).pipe(
-          Effect.map(listText),
-          Effect.catchTags({ QueryFailed: Effect.die }),
-        );
+        const currency = benchmarkCurrency(caller);
+
+        return input.waiting === true
+          ? paybacksWaiting(owner, currency).pipe(
+              Effect.map((waiting) => waitingText(waiting, currency)),
+              Effect.catchTags({ QueryFailed: Effect.die }),
+            )
+          : listSubjects(owner, currency).pipe(
+              Effect.map(listText),
+              Effect.catchTags({ QueryFailed: Effect.die }),
+            );
       }
 
       case "show": {
@@ -971,6 +1384,10 @@ export const subjectsTool = defineTool<
 
       case "attach": {
         return attach(owner, input, caller);
+      }
+
+      case "attach_payback": {
+        return attachPaybackRun(owner, input, caller);
       }
     }
   },

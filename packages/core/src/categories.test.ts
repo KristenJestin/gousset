@@ -621,6 +621,17 @@ describe("classifying a line", () => {
     );
   });
 
+  test("a line that pays back a subject is classified by it: refused, saying why", async () => {
+    const { rows, bakery } = startingRows();
+    const payback = memoryId();
+
+    rows.lines.push({ id: payback, amountMinor: 91_450, paidBack: true });
+
+    expect(await outcome(rows, classifyLine(ADA, payback, { categoryId: bakery.id }))).toBe(
+      "LineNotClassifiable:payback",
+    );
+  });
+
   test("a side of a transfer is no expense nor income: it is not classified", async () => {
     const { rows, bakery } = startingRows();
     const side = memoryId();

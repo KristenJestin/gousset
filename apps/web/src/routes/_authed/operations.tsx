@@ -25,6 +25,7 @@ import type { ExpenseLineView } from "@gousset/ui/components/line-expense";
 import { LineFundedBy, LineFunds } from "@gousset/ui/components/line-funding";
 import type { FundedExpenseView } from "@gousset/ui/components/line-funding";
 import { LineMerchant } from "@gousset/ui/components/line-merchant";
+import { LinePayback } from "@gousset/ui/components/line-payback";
 import {
   LineTransfer,
   LineTransferCandidates,
@@ -52,6 +53,8 @@ import { Schema } from "effect";
 import { useState } from "react";
 import type { ReactNode } from "react";
 
+import { AppLink } from "@/components/app-link";
+import { LineReceiptsOf } from "@/components/line-receipts";
 import { LineReview, proposalText } from "@/components/line-review";
 import { ProposedRule } from "@/components/proposed-rule";
 import type { ProposedRuleSets } from "@/components/proposed-rule";
@@ -611,7 +614,13 @@ function toRow(
     account: nameOf(line.account),
     amount: line.amount,
     toReview: line.toReview,
-    category: line.category === null ? undefined : categoryPath(line.category),
+    // A payback line is classified by its subject (#217), as a transfer's side by its transfer.
+    category:
+      line.payback !== null
+        ? m.operationsPaysBack({ subject: line.payback.name })
+        : line.category === null
+          ? undefined
+          : categoryPath(line.category),
     subjects: line.subjects,
   };
 }
@@ -707,7 +716,9 @@ function LineCategoryPicker({
 
     if (!answer.ok) {
       setChosen(before);
-      notify.failed({ description: categoryRefusalMessage(answer.code) });
+      notify.failed({
+        description: categoryRefusalMessage(answer.code, null, line.payback?.name),
+      });
 
       return;
     }
@@ -933,6 +944,10 @@ function transferRefusal(code: TransferRefusalCode): string {
 
     case "OTHER_CURRENCY": {
       return m.operationsTransferOtherCurrency();
+    }
+
+    case "PAYBACK": {
+      return m.operationsRefusedPayback();
     }
   }
 }
@@ -1263,6 +1278,10 @@ function expenseRefusal(code: ExpenseRefusalCode | "FAILED"): string {
 
     case "LINK_OTHER": {
       return m.operationsLinkRefusedOther();
+    }
+
+    case "LINE_PAYBACK": {
+      return m.operationsRefusedPayback();
     }
 
     case "SPLIT_REFUSED": {
@@ -1603,15 +1622,25 @@ function OpenLine({
       }
       origin={line.fromBalance ? m.operationsMadeFromBalance() : undefined}
       transfer={
-        <TransferOf
-          line={line}
-          transfer={transfer}
-          funding={expenses.funding}
-          balanceAccounts={transfer.paired === null ? balanceAccounts : []}
-          nameOf={nameOf}
-          locale={locale}
-          onOpen={onOpen}
-        />
+        line.payback === null ? (
+          <TransferOf
+            line={line}
+            transfer={transfer}
+            funding={expenses.funding}
+            balanceAccounts={transfer.paired === null ? balanceAccounts : []}
+            nameOf={nameOf}
+            locale={locale}
+            onOpen={onOpen}
+          />
+        ) : (
+          <LinePayback
+            subject={
+              <AppLink to="/subjects/$subjectId" params={{ subjectId: line.payback.id }}>
+                {line.payback.name}
+              </AppLink>
+            }
+          />
+        )
       }
       expense={
         <ExpenseOf
@@ -1622,6 +1651,7 @@ function OpenLine({
           onOpen={onOpen}
         />
       }
+      receipts={<LineReceiptsOf key={line.id} lineId={line.id} receipts={line.receipts} />}
       onClose={onClose}
       locale={locale}
     />

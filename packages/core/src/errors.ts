@@ -24,7 +24,7 @@ export class LineSearchRefused extends Schema.TaggedError<LineSearchRefused>()(
  * candidate (`no_candidate`) or with several (`several_candidates`), for the user to choose. Paired
  * with an account kept by its balance (#31), whose side the app makes: an account kept by its lines
  * (`account_kept_by_lines`, which shows its own side), or of another currency than the line's
- * (`other_currency`).
+ * (`other_currency`). A line that pays back a subject, to detach from it first (`payback`, #217).
  */
 export class TransferRefused extends Schema.TaggedError<TransferRefused>()("TransferRefused", {
   reason: Schema.Literals([
@@ -39,6 +39,7 @@ export class TransferRefused extends Schema.TaggedError<TransferRefused>()("Tran
     "several_candidates",
     "account_kept_by_lines",
     "other_currency",
+    "payback",
   ]),
   lineId: Schema.String,
 }) {}
@@ -55,7 +56,8 @@ export class NotATransfer extends Schema.TaggedError<NotATransfer>()("NotATransf
  * never an expense (`transfer`), a line split across several categories (`split`), a line that is
  * part of an expense with other lines already, to unlink first (`linked`), a line already in that
  * expense (`already_linked`), a line of another currency than the expense's (`currency`), a refund
- * bigger than what the expense still costs (`exceeds`). `lineId` names the line refused.
+ * bigger than what the expense still costs (`exceeds`), a line that pays back a subject, to detach
+ * from it first (`payback`, #217). `lineId` names the line refused.
  */
 export class LinkRefused extends Schema.TaggedError<LinkRefused>()("LinkRefused", {
   reason: Schema.Literals([
@@ -69,6 +71,7 @@ export class LinkRefused extends Schema.TaggedError<LinkRefused>()("LinkRefused"
     "already_linked",
     "currency",
     "exceeds",
+    "payback",
   ]),
   lineId: Schema.String,
 }) {}
@@ -115,7 +118,8 @@ export class NotLinked extends Schema.TaggedError<NotLinked>()("NotLinked", {
  * shares that do not add up to the line (`sum`); the share at `index` has no positive amount of the
  * line's currency (`amount`), a category of the other kind (`kind`) or an archived one (`archived`),
  * a subject that is none of the user's (`subject_unknown`) or an archived one (`subject_archived`),
- * or subjects on a share of money coming in: only expenses have subjects (`subject_income`, #37).
+ * or subjects on a share of money coming in: only expenses have subjects (`subject_income`, #37);
+ * a line that pays back a subject, to detach from it first (`payback`, #217).
  */
 export class SplitRefused extends Schema.TaggedError<SplitRefused>()("SplitRefused", {
   reason: Schema.Literals([
@@ -132,6 +136,7 @@ export class SplitRefused extends Schema.TaggedError<SplitRefused>()("SplitRefus
     "subject_unknown",
     "subject_archived",
     "subject_income",
+    "payback",
   ]),
   index: Schema.optional(Schema.Number),
 }) {}
@@ -323,11 +328,15 @@ export class CategoryNameAmbiguous extends Schema.TaggedError<CategoryNameAmbigu
 /**
  * A line's category is chosen through its one entry: a line held, discarded or of no amount has
  * none (`no_entry`), nor has a side of a transfer, which is the transfer (`transfer`, #26), and a
- * line split across several entries is classified entry by entry (`split`).
+ * line split across several entries is classified entry by entry (`split`); a line that pays back a
+ * subject has none either: its subject classifies it, to detach it from first (`payback`, #217).
  */
 export class LineNotClassifiable extends Schema.TaggedError<LineNotClassifiable>()(
   "LineNotClassifiable",
-  { lineId: Schema.String, reason: Schema.Literals(["no_entry", "transfer", "split"]) },
+  {
+    lineId: Schema.String,
+    reason: Schema.Literals(["no_entry", "transfer", "split", "payback"]),
+  },
 ) {}
 
 /** A line's kind follows its sign: an expense category for money out, an income one for money in. */

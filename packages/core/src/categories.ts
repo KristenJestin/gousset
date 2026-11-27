@@ -264,7 +264,7 @@ function averageRange(day: string) {
   const from = `${addMonths(month, -AVERAGE_MONTHS)}-01`;
   const end = new Date(Date.parse(`${month}-01T00:00:00Z`) - 86_400_000);
 
-  return { from, to: end.toISOString().slice(0, 10) };
+  return { from, to: end.toISOString().slice(0, 10), today: day };
 }
 
 /**
@@ -775,7 +775,7 @@ export type LineClassification =
  * Puts a line in a category: the category of its one entry, or the fallback of the kind named, as
  * the user's choice, which no rule overwrites unasked (`classified_by = user`). The line's kind
  * follows its sign. Fails with `LineNotFound`, `LineNotClassifiable` (held, discarded or of no
- * amount: no entry; a side of a transfer; or split), `CategoryNotFound`, `CategoryKindMismatch` or
+ * amount: no entry; a side of a transfer; a line that pays back a subject; or split), `CategoryNotFound`, `CategoryKindMismatch` or
  * `CategoryRefused` (`archived`).
  */
 export const classifyLine = (owner: string, lineId: string, chosen: LineClassification) =>
@@ -796,7 +796,10 @@ export const classifyLine = (owner: string, lineId: string, chosen: LineClassifi
 
           if (only === undefined) {
             return yield* Result.fail(
-              new LineNotClassifiable({ lineId, reason: facts.paired ? "transfer" : "no_entry" }),
+              new LineNotClassifiable({
+                lineId,
+                reason: facts.paired ? "transfer" : facts.paidBack ? "payback" : "no_entry",
+              }),
             );
           }
 

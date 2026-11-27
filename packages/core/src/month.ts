@@ -13,6 +13,9 @@ import { merchantKey } from "./merchants/labels";
 import { monthRowsIn } from "./month-rows";
 import { reviewQueue } from "./review-queue";
 import { subtreeOf, treeOrder } from "./subjects/counting";
+import type { SubjectName } from "./subjects/counting";
+import { leftToUserOf } from "./subjects/payback-share";
+import type { PaidBackSubject } from "./subjects/payback-share";
 import {
   detectSubscriptions,
   subscriptionId,
@@ -140,6 +143,26 @@ export type MonthRows = {
   readonly entrySubjects: ReadonlyArray<{ readonly entryId: string; readonly subjectId: string }>;
   /** Empty when the scope asked for none. */
   readonly charges: ReadonlyArray<Charge>;
+  /**
+   * The subjects with the option "paid back" (#217), what each cost and got back, all time: the
+   * expenses count at the share left (`./subjects/payback-share`). None when left out.
+   */
+  readonly paidBack?: ReadonlyArray<PaidBackSubject>;
+  /** The payback lines booked in the month (`transfers`'s range). None when left out. */
+  readonly paybacks?: ReadonlyArray<MonthPayback>;
+};
+
+/** A line that pays back a subject (#217), as the month's movements list it. */
+export type MonthPayback = {
+  readonly lineId: string;
+  readonly bookedOn: string;
+  readonly amountMinor: number;
+  readonly accountId: string;
+  readonly subjectId: string;
+  /** The subject's name. */
+  readonly subject: string;
+  /** Who pays it back. */
+  readonly from: string;
 };
 
 /** Where a month's rows are read. The live layer (`monthFactsLayer`) goes through `UserData`. */
@@ -307,16 +330,18 @@ export type SpendingDays = {
 
 /** Money that came in from outside, or moved from one account of the user's to another. */
 export type Movement = {
-  readonly kind: "income" | "transfer";
-  /** An income's day, or the day the side in was booked. */
+  readonly kind: "income" | "transfer" | "payback";
+  /** An income's day, the day the side in was booked, or a payback line's (#217). */
   readonly day: string;
-  /** Who paid (an income), or the account the money left. */
+  /** Who paid (an income, a payback: who pays the subject back), or the account the money left. */
   readonly from: string;
   /** The account it arrived on: the name, the institution too when two share a name. */
   readonly to: string;
-  /** An income's category ("Parent > Child"); null for a transfer. */
+  /** An income's category ("Parent > Child"), a payback's subject; null for a transfer. */
   readonly note: string | null;
   readonly amount: Money;
+  /** A payback's: the subject it pays back, never income. */
+  readonly subject?: SubjectName;
 };
 
 export type MonthMovements = {
@@ -522,6 +547,15 @@ function entriesOf(
 ): ReadonlyArray<EntryNet> {
   const lineMerchant = lineMerchants(rows);
   const byEntry = new Map<string, Array<MonthPart>>();
+  const subjectsOf = new Map<string, Array<string>>();
+
+  for (const link of rows.entrySubjects) {
+    subjectsOf.set(link.entryId, [...(subjectsOf.get(link.entryId) ?? []), link.subjectId]);
+  }
+
+  // A paid-back subject's expense counts at the share left to the user (#217), wherever the
+  // month counts an expense's net cost: every figure below reads these nets.
+  const leftOf = leftToUserOf(rows.subjects, rows.paidBack ?? [], subjectsOf);
 
   for (const part of rows.parts) {
     const known = byEntry.get(part.entryId);
@@ -565,7 +599,7 @@ function entriesOf(
       categoryId: first.categoryId,
       merchantId,
       currency,
-      minor,
+      minor: first.kind === "expense" ? leftOf(first.entryId, currency, minor) : minor,
       accountId: first.accountId,
       label: first.label,
       counterpartyName: first.counterpartyName,
@@ -1090,9 +1124,28 @@ function movementsOf(reading: Reading): MonthMovements {
         ];
   });
 
+  // What pays back a subject comes in apart (#217): no income, with its subject.
+  const paybacks = (reading.rows.paybacks ?? []).flatMap((line): ReadonlyArray<Movement> => {
+    const into = reading.accounts.get(line.accountId);
+
+    return into === undefined || line.bookedOn.slice(0, 7) !== reading.month
+      ? []
+      : [
+          {
+            kind: "payback",
+            day: line.bookedOn,
+            from: line.from,
+            to: accountName(reading, into.id),
+            note: line.subject,
+            amount: money(Math.abs(line.amountMinor), into.currency),
+            subject: { id: line.subjectId, name: line.subject },
+          },
+        ];
+  });
+
   return {
     month: reading.month,
-    movements: [...incomes, ...transfers].toSorted(
+    movements: [...incomes, ...transfers, ...paybacks].toSorted(
       (a, b) =>
         a.day.localeCompare(b.day) || a.kind.localeCompare(b.kind) || a.from.localeCompare(b.from),
     ),

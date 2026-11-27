@@ -23,7 +23,7 @@ import type { GoussetServices } from "../gousset";
 import { ERROR_LIMIT } from "../results";
 import { connectInProcess } from "../test-client";
 import type { Caller, Runner } from "../tool";
-import { listText, showText } from "./subjects";
+import { listText, showText, waitingText } from "./subjects";
 
 // The subjects tool through the official client: its place, title, annotations and description,
 // the refusals that come before any subject is read, and the words it answers with. What it does
@@ -111,6 +111,9 @@ describe("the subjects tool", () => {
       "`decline: true` declines proposals, remembered",
       '{"action":"create","name":"Van","merchants":["Fuelstop"],"attach_past":true}',
       '{"action":"edit","subject":"Garden shed","parent":null}',
+      "`list` with `waiting: true`",
+      "`attach_payback` `lines`",
+      '{"action":"attach_payback","subject":"Riverton trip","lines":["<a handle show gave>"]}',
     ]) {
       expect(description, said).toContain(said);
     }
@@ -121,6 +124,8 @@ describe("the subjects tool", () => {
       ["create", { action: "create", name: "Van" }],
       ["edit", { action: "edit", subject: "Van", archived: true }],
       ["attach", { action: "attach", subject: "Van", expenses: ["an-expense"] }],
+      ["attach_payback", { action: "attach_payback", subject: "Trip", lines: ["a-line"] }],
+      ["create paid back", { action: "create", name: "Trip", payback_from: "Example Corp" }],
     ] as const;
 
     for (const [action, args] of writes) {
@@ -152,6 +157,9 @@ describe("the subjects tool", () => {
         "value is what the subject is worth in EUR",
       ],
       [{ action: "create", name: "Van", currency: "EUR" }, "currency goes with value"],
+      [{ action: "attach_payback", subject: "Trip" }, "attach_payback needs subject"],
+      [{ action: "attach_payback", lines: ["a-line"] }, "attach_payback needs subject"],
+      [{ action: "edit", subject: "Trip" }, "payback_from, payback_asked_on"],
     ] as const;
 
     for (const [args, said] of asked) {
@@ -186,6 +194,50 @@ const fuel: LineCategory = {
   kind: "expense",
 };
 
+describe("what the user waits for, in words", () => {
+  test("gives each subject with how much and where it stands, and the call that shows one", () => {
+    const text = waitingText(
+      [
+        {
+          subjectId: "pool",
+          name: "Gift pool",
+          path: "Gift pool",
+          from: "Friends",
+          askedOn: null,
+          state: "to_ask",
+          spent: EUR(3000),
+          paidBack: EUR(0),
+          waiting: EUR(3000),
+        },
+        {
+          subjectId: "lyon",
+          name: "Lyon",
+          path: "Work > Lyon",
+          from: "Example Corp",
+          askedOn: "2026-10-02",
+          state: "asked",
+          spent: EUR(12_000),
+          paidBack: EUR(0),
+          waiting: EUR(12_000),
+        },
+      ],
+      "EUR",
+    );
+
+    expect(text).toContain("The user waits to be paid back for 2 subject(s), in EUR");
+    expect(text).toContain(
+      "\n- Gift pool, by Friends: waits for 30.00 EUR (spent 30.00 EUR, paid back 0.00 EUR); to ask\n- Work > Lyon, by Example Corp: waits for 120.00 EUR (spent 120.00 EUR, paid back 0.00 EUR); asked on 2026-10-02, nothing back yet",
+    );
+    expect(text).toContain(
+      'One subject\'s payback lines and candidates: subjects {"action":"show","subject":"Gift pool","period":"all"}',
+    );
+  });
+
+  test("says when the user waits for nothing", () => {
+    expect(waitingText([], "EUR")).toContain("The user waits to be paid back for nothing");
+  });
+});
+
 describe("the list in words", () => {
   test("says when the user has no subject, with the call that makes one", () => {
     expect(listText({ currency: "EUR", today: TODAY, subjects: [] })).toBe(
@@ -201,6 +253,7 @@ describe("the list in words", () => {
       startsOn: null,
       endsOn: null,
       accounts: [],
+      payback: null,
     };
 
     const list: SubjectList = {
@@ -277,6 +330,30 @@ describe("the list in words", () => {
     expect(text).toContain(
       "\n- House > Garden shed (archived): 0.00 EUR in 2026; linked to Joint account\n",
     );
+
+    const paidBack = listText({
+      ...list,
+      subjects: list.subjects.map((each) =>
+        each.id === "alps"
+          ? {
+              ...each,
+              payback: {
+                from: "Sam Example",
+                askedOn: "2026-08-01",
+                settledOn: null,
+                spent: EUR(98_000),
+                paidBack: EUR(50_000),
+                difference: EUR(-48_000),
+                state: "partly" as const,
+              },
+            }
+          : each,
+      ),
+    });
+
+    expect(paidBack).toContain(
+      "not converted in all; paid back by Sam Example, asked on 2026-08-01: partly paid back, spent 980.00 EUR, paid back 500.00 EUR, difference -480.00 EUR\n",
+    );
     expect(text).toContain(
       `One subject's costs, month by month and by category: subjects {"action":"show","subject":"Alps 2026","period":"all"}`,
     );
@@ -318,6 +395,7 @@ const detail: SubjectDetail = {
   proposals: { expenses: [expense("e-3", "2026-07-12", 3100)], more: 0 },
   merchants: [{ id: "fuelstop", name: "Fuelstop" }],
   otherRules: 1,
+  payback: null,
 };
 
 describe("a subject's page in words", () => {
@@ -351,6 +429,73 @@ describe("a subject's page in words", () => {
     expect(text).toContain(
       'Once the user says yes: subjects {"action":"attach","subject":"Alps 2026","expenses":["e-3"]}; one the user says is not for it: subjects {"action":"attach","subject":"Alps 2026","expenses":["e-3"],"decline":true}',
     );
+  });
+
+  test("gives a paid-back subject's figures, its payback lines and its candidates", () => {
+    const line = (lineId: string, bookedOn: string, minor: number, label: string) => ({
+      lineId,
+      bookedOn,
+      label,
+      account: { id: "everyday", name: "Everyday account", institution: null },
+      amount: EUR(minor),
+    });
+
+    const text = showText(
+      {
+        ...detail,
+        payback: {
+          from: "Example Corp",
+          askedOn: "2026-08-01",
+          settledOn: null,
+          spent: EUR(25_185),
+          paidBack: EUR(91_450),
+          difference: EUR(66_265),
+          state: "paid_back",
+          lines: [line("l-1", "2026-08-10", 91_450, "VIR EXAMPLE CORP")],
+          candidates: [line("l-2", "2026-08-12", 2500, "VIR EXAMPLE CORP MILEAGE")],
+        },
+      },
+      "Alps 2026",
+    );
+
+    expect(text).toContain(
+      "Paid back by Example Corp, all time, in EUR: spent 251.85 EUR, paid back 914.50 EUR, difference +662.65 EUR (paid back less spent). State: paid back.",
+    );
+    expect(text).toContain(
+      '\n- 2026-08-10, Everyday account: 914.50 EUR, "VIR EXAMPLE CORP"; line: l-1\nTo detach one: subjects {"action":"attach_payback","subject":"Alps 2026","lines":["l-1"],"remove":true}',
+    );
+    expect(text).toContain(
+      "Candidates: 1 line(s) coming in that may pay it back, the payer's words first, then the newest. They are the user's to confirm: never attach one without the user's yes.",
+    );
+    expect(text).toContain(
+      'Once the user says yes: subjects {"action":"attach_payback","subject":"Alps 2026","lines":["l-2"]}',
+    );
+  });
+
+  test("says when no line pays it back, nor may", () => {
+    const text = showText(
+      {
+        ...detail,
+        payback: {
+          from: "Sam Example",
+          askedOn: null,
+          settledOn: "2026-09-01",
+          spent: EUR(46_000),
+          paidBack: EUR(0),
+          difference: EUR(-46_000),
+          state: "paid_back",
+          lines: [],
+          candidates: [],
+        },
+      },
+      "Alps 2026",
+    );
+
+    expect(text).toContain(
+      "difference -460.00 EUR (paid back less spent). State: paid back, settled by hand on 2026-09-01.",
+    );
+    expect(text).toContain("No line pays it back yet.");
+    expect(text).toContain("No line coming in may pay it back");
   });
 
   test("gives no proposal for a subject without dates", () => {

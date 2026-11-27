@@ -118,6 +118,8 @@ function withAccount(own: MemoryLineRows, line: MemoryLineDetail): FoundLine | u
     category: line.category ?? null,
     fromBalance: sourceOf(line) === "balance",
     subjects: line.subjects ?? [],
+    // The memory store keeps no subject's payback lines (#217).
+    payback: null,
   };
 }
 
@@ -204,6 +206,8 @@ export function memoryLineStore(rows: ReadonlyMap<string, MemoryLineRows> = new 
           originalCurrency: line.originalCurrency ?? null,
           counterpartyIban: line.counterpartyIban ?? null,
           expiresOn: line.expiresOn ?? null,
+          // The memory store keeps no receipt (#217): their files are on disk.
+          receipts: [],
           duplicateOf:
             original === undefined
               ? null

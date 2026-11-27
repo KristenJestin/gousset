@@ -14,10 +14,12 @@ import type { SQL } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { Effect, Layer } from "effect";
 
+import { receiptsOfLineIn } from "./attachments/attachments";
 import { categoriesOfLines } from "./category-store-database";
 import type { LineCategory } from "./category-store";
 import { LineStore } from "./line-store";
 import { subtreeOf } from "./subjects/counting";
+import { paybackSubjectsOfLines } from "./subjects/payback";
 import type { SubjectName } from "./subjects/counting";
 import { attachedToAny, subjectNodesIn } from "./subjects/subjects";
 import { linesWithSeveralCandidates } from "./transfers/pair-lines";
@@ -181,6 +183,7 @@ function found(
   row: LineColumns,
   category: LineCategory | null,
   subjects: ReadonlyArray<SubjectName>,
+  payback: SubjectName | null,
 ): FoundLine {
   return {
     id: row.id,
@@ -200,6 +203,7 @@ function found(
     category,
     fromBalance: row.source === "balance",
     subjects,
+    payback,
   };
 }
 
@@ -271,6 +275,11 @@ async function search(transaction: UserTransaction, query: LineQuery) {
     rows.map((row) => row.id),
   );
 
+  const paybacks = await paybackSubjectsOfLines(
+    transaction,
+    rows.map((row) => row.id),
+  );
+
   // Every line's account is the user's (a composite foreign key) and so among those just read.
   const lines = rows.flatMap((row) => {
     const owned = accountOf.get(row.accountId);
@@ -287,6 +296,7 @@ async function search(transaction: UserTransaction, query: LineQuery) {
             },
             categories.get(row.id) ?? null,
             subjects.get(row.id) ?? [],
+            paybacks.get(row.id) ?? null,
           ),
         ];
   });
@@ -344,14 +354,22 @@ async function show(
 
   const categories = await categoriesOfLines(transaction, [row.id]);
   const subjects = await subjectsOfLines(transaction, [row.id]);
+  const paybacks = await paybackSubjectsOfLines(transaction, [row.id]);
+  const receipts = await receiptsOfLineIn(transaction, row.id);
 
   return {
-    ...found(row, categories.get(row.id) ?? null, subjects.get(row.id) ?? []),
+    ...found(
+      row,
+      categories.get(row.id) ?? null,
+      subjects.get(row.id) ?? [],
+      paybacks.get(row.id) ?? null,
+    ),
     source: row.source,
     originalAmountMinor: row.originalAmountMinor,
     originalCurrency: row.originalCurrency,
     counterpartyIban: row.counterpartyIban,
     expiresOn: row.expiresOn,
+    receipts,
     duplicateOf:
       row.duplicateId === null ||
       row.duplicateBookedOn === null ||

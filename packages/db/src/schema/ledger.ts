@@ -714,6 +714,11 @@ export const subject = pgTable.withRLS(
     endsOn: day("ends_on"),
     createdAt: createdAt(),
     updatedAt: updatedAt(),
+    // "Paid back" (#217): who pays it back, free text; the option is on when it is set. The day the
+    // user asked, and the day they marked it paid back by hand.
+    paybackFrom: text("payback_from"),
+    paybackAskedOn: day("payback_asked_on"),
+    paybackSettledOn: day("payback_settled_on"),
   },
   (table) => [
     unique("subject_user_id_id_key").on(table.userId, table.id),
@@ -729,6 +734,10 @@ export const subject = pgTable.withRLS(
     ),
     check("subject_value_currency_iso_4217", sql`${table.valueCurrency} ~ '^[A-Z]{3}$'`),
     check("subject_ends_after_start", sql`${table.endsOn} >= ${table.startsOn}`),
+    check(
+      "subject_payback_days_need_payer",
+      sql`${table.paybackFrom} is not null or (${table.paybackAskedOn} is null and ${table.paybackSettledOn} is null)`,
+    ),
     ownRowsOnly("subject"),
   ],
 );
@@ -813,5 +822,84 @@ export const subjectEntryRefused = pgTable.withRLS(
     // A deleted entry's refusals go with it.
     index("subject_entry_refused_entry_id_idx").on(table.entryId),
     ownRowsOnly("subject_entry_refused"),
+  ],
+);
+
+/**
+ * A line coming in that pays back a subject (#217): a work trip's expense report, a friend settling a
+ * shared holiday. A line pays back one subject at most, whole; it has no entry then, as a transfer's
+ * side has none (packages/core's `subjects/payback.ts` keeps that). An undone import takes its lines'
+ * attachments with them.
+ */
+export const subjectPayback = pgTable.withRLS(
+  "subject_payback",
+  {
+    lineId: uuid("line_id").primaryKey(),
+    subjectId: uuid("subject_id").notNull(),
+    userId: owner(),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    foreignKey({
+      name: "subject_payback_line_fk",
+      columns: [table.userId, table.lineId],
+      foreignColumns: [statementLine.userId, statementLine.id],
+    }).onDelete("cascade"),
+    foreignKey({
+      name: "subject_payback_subject_fk",
+      columns: [table.userId, table.subjectId],
+      foreignColumns: [subject.userId, subject.id],
+    }).onDelete("cascade"),
+    // A subject's payback lines.
+    index("subject_payback_subject_id_idx").on(table.subjectId),
+    ownRowsOnly("subject_payback"),
+  ],
+);
+
+/** What a receipt is, read from its first bytes, never from its name or the browser's word. */
+export const lineAttachmentMediaType = pgEnum("line_attachment_media_type", [
+  "application/pdf",
+  "image/jpeg",
+  "image/png",
+  "image/heic",
+]);
+
+/**
+ * A receipt attached to a line (#217): a photo or a PDF, any line's. The file itself is on disk, in
+ * the receipts directory, under the user's folder and `stored_name`, never under the user's own
+ * name (packages/core's `attachments/`); this row says what it is. Deleting the line deletes the row
+ * (an undone import, a deleted account or user); the file goes with the row, or with the sweep that
+ * deletes the files no row names.
+ */
+export const lineAttachment = pgTable.withRLS(
+  "line_attachment",
+  {
+    id: id(),
+    userId: owner(),
+    lineId: uuid("line_id").notNull(),
+    // As the user named it, for the user only: never a path, never in a log nor in telemetry.
+    fileName: text("file_name").notNull(),
+    mediaType: lineAttachmentMediaType("media_type").notNull(),
+    // In bytes.
+    size: bigint("size", { mode: "number" }).notNull(),
+    // The file's name on disk, in the user's folder: a uuid drawn by the app.
+    storedName: text("stored_name").notNull(),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    foreignKey({
+      name: "line_attachment_line_fk",
+      columns: [table.userId, table.lineId],
+      foreignColumns: [statementLine.userId, statementLine.id],
+    }).onDelete("cascade"),
+    unique("line_attachment_user_id_stored_name_key").on(table.userId, table.storedName),
+    // A line's receipts.
+    index("line_attachment_line_id_idx").on(table.lineId),
+    check("line_attachment_size", sql`${table.size} > 0`),
+    check(
+      "line_attachment_stored_name",
+      sql`${table.storedName} ~ '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$'`,
+    ),
+    ownRowsOnly("line_attachment"),
   ],
 );

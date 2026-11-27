@@ -49,6 +49,10 @@ function fieldOf(code: string): keyof SubjectEditorErrors {
       return "accounts";
     case "SUBJECT_DATES":
       return "dates";
+    case "SUBJECT_PAYBACK":
+      return "payback";
+    case "SUBJECT_PAYBACK_LINES":
+      return "paybackOff";
     // An edit refuses an archived subject only for a merchant added to it.
     case "SUBJECT_ARCHIVED":
     case "MERCHANT_NOT_FOUND":
@@ -86,6 +90,10 @@ function draftOf(subject: SubjectDetail | null, currency: string): SubjectDraft 
       // The user names the merchants: their past expenses are theirs too (docs/wireframes, 8).
       attachPast: true,
       archived: false,
+      hasPayback: false,
+      paybackFrom: "",
+      paybackAskedOn: null,
+      paybackSettledOn: null,
     };
   }
 
@@ -103,11 +111,16 @@ function draftOf(subject: SubjectDetail | null, currency: string): SubjectDraft 
     merchantIds: subject.merchants.map((merchant) => merchant.id),
     attachPast: true,
     archived: subject.archived,
+    hasPayback: subject.payback !== null,
+    paybackFrom: subject.payback?.from ?? "",
+    paybackAskedOn: subject.payback?.askedOn ?? null,
+    paybackSettledOn: subject.payback?.settledOn ?? null,
   };
 }
 
 /**
- * What the sheet sends: what an option left unticked holds is sent as none. The past is attached
+ * What the sheet sends: what an option left unticked holds is sent as none ("paid back" unticked
+ * clears who pays it back and both its days). The past is attached
  * only when a merchant is added to those it `had` and the draft is not archived, where the sheet
  * offers it.
  */
@@ -125,6 +138,9 @@ function inputOf(draft: SubjectDraft, had: ReadonlySet<string>) {
     accountIds: [...draft.accountIds],
     merchantIds: [...draft.merchantIds],
     attachPast: draft.attachPast && !draft.archived && draft.merchantIds.some((id) => !had.has(id)),
+    paybackFrom: draft.hasPayback ? draft.paybackFrom : null,
+    paybackAskedOn: draft.hasPayback ? draft.paybackAskedOn : null,
+    paybackSettledOn: draft.hasPayback ? draft.paybackSettledOn : null,
   };
 }
 
@@ -141,6 +157,8 @@ export type SubjectSheetProps = {
   onSaved?: (saved: SubjectSaved) => void;
   /** Where focus goes once it closes, before what opened it (`Sheet`'s `finalFocus`). */
   finalFocus?: string;
+  /** Today, an ISO day: what "Mark as paid back" proposes. */
+  today?: string;
 };
 
 /**
@@ -159,6 +177,7 @@ export function SubjectSheet({
   currency,
   onSaved,
   finalFocus,
+  today,
 }: SubjectSheetProps) {
   const queryClient = useQueryClient();
   const locale = usePageLanguage();
@@ -260,6 +279,7 @@ export function SubjectSheet({
       onSave={save}
       locale={locale}
       finalFocus={finalFocus}
+      today={today ?? subject?.today}
     />
   );
 }

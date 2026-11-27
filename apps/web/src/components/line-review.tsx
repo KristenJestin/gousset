@@ -108,6 +108,8 @@ const STALE: ReadonlySet<ReviewRefusalCode | "FAILED"> = new Set([
   "NOT_HELD",
   "CANNOT_PAIR",
   "CANNOT_LINK",
+  // Attached to a subject as what pays it back meanwhile (#217): it left the review.
+  "LINE_PAYBACK_NOT_CLASSIFIABLE",
 ]);
 
 const FAILED = { ok: false as const, code: "FAILED" as const };
@@ -154,10 +156,12 @@ export function LineReview({
 
   /** Says a refusal where it belongs, and reads the line again when it changed meanwhile. */
   const refused = async (code: ReviewRefusalCode | "FAILED", inDialog: boolean) => {
+    const message = reviewRefusalMessage(code, line.payback?.name);
+
     if (inDialog) {
-      setError(reviewRefusalMessage(code));
+      setError(message);
     } else {
-      setNotice(reviewRefusalMessage(code));
+      setNotice(message);
     }
 
     if (STALE.has(code)) {

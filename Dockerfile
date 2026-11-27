@@ -39,6 +39,12 @@ ENV NODE_ENV=production HOST=0.0.0.0 PORT=3001 \
 WORKDIR /app
 COPY --from=build /out /app
 COPY --chmod=755 tools/docker-entrypoint.sh /usr/local/bin/gousset
+# Receipts (#217) are files, never rows: kept here, the app's user's, where docker-compose.yml mounts
+# the volume `receipts`. Declared a volume too, so that a container recreated from an older compose
+# file keeps them (docs/releases.md, "Updating").
+RUN mkdir -p /var/lib/gousset/receipts && chown -R node:node /var/lib/gousset
+ENV RECEIPTS_DIRECTORY=/var/lib/gousset/receipts
+VOLUME /var/lib/gousset/receipts
 USER node
 EXPOSE 3001
 HEALTHCHECK --interval=10s --timeout=5s --start-period=10s --retries=5 \
