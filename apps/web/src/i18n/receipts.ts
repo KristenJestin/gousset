@@ -1,20 +1,27 @@
 import { TYPE_NAMES, megabytes } from "@gousset/core/attachments";
 import { m } from "@gousset/i18n/messages";
 import { getLocale } from "@gousset/i18n/runtime";
+import type { Locale } from "@gousset/i18n/runtime";
 
 import type { ReceiptRefusal } from "../lib/receipts";
 import { errorMessage } from "./messages";
 
-/** "PDF, JPEG, PNG and HEIC", in the interface's language. */
-function typesText(types: ReadonlyArray<keyof typeof TYPE_NAMES>): string {
-  return new Intl.ListFormat(getLocale(), { type: "conjunction" }).format(
-    types.map((type) => TYPE_NAMES[type]),
-  );
-}
+const lists = {
+  en: new Intl.ListFormat("en", { type: "conjunction" }),
+  fr: new Intl.ListFormat("fr", { type: "conjunction" }),
+} satisfies { [Language in Locale]: Intl.ListFormat };
+
+const sizes = {
+  en: new Intl.NumberFormat("en", { maximumFractionDigits: 1 }),
+  fr: new Intl.NumberFormat("fr", { maximumFractionDigits: 1 }),
+} satisfies { [Language in Locale]: Intl.NumberFormat };
+
+/** "PDF, JPEG, PNG, and HEIC", in the interface's language. */
+const typesText = (types: ReadonlyArray<keyof typeof TYPE_NAMES>) =>
+  lists[getLocale()].format(types.map((type) => TYPE_NAMES[type]));
 
 /** A size in megabytes, as the interface writes numbers: "63", "50.1" or "50,1". */
-const megabytesText = (bytes: number) =>
-  new Intl.NumberFormat(getLocale(), { maximumFractionDigits: 1 }).format(megabytes(bytes));
+const megabytesText = (bytes: number) => sizes[getLocale()].format(megabytes(bytes));
 
 /** Why a receipt was refused (`ReceiptRefusalCode`), naming the limit it passed. */
 export function receiptRefusalMessage(refusal: ReceiptRefusal): string {
