@@ -332,15 +332,26 @@ async function correctIn(
 
   const named = await securityOf(transaction, owner, checked, target.account.currency);
 
+  // With none given, the line keeps its settlement day while its day stays (neither the page nor
+  // the MCP door has a field for it), and loses it with a new day, which it no longer follows. A
+  // label given is the line's; with none, it keeps its own, unless its security changes: it is then
+  // the new security's name (or empty for none), as an operation entered with no label is named.
+  const valueOn =
+    checked.valueOn ?? (checked.bookedOn === current.bookedOn ? current.valueOn : null);
+
+  const label =
+    checked.label ??
+    ((named?.id ?? null) === (current.security?.id ?? null) ? current.label : (named?.name ?? ""));
+
   // An imported line keeps its dedup key: importing its file again does not bring the broker's
   // version back.
   await transaction
     .update(statementLine)
     .set({
       bookedOn: checked.bookedOn,
-      valueOn: checked.valueOn,
+      valueOn,
       amountMinor: checked.amountMinor,
-      label: checked.label ?? current.label,
+      label,
     })
     .where(eq(statementLine.id, current.lineId));
 
@@ -667,8 +678,9 @@ export const enterInvestmentOperation = (owner: string, accountId: string, input
   });
 
 /**
- * Corrects an operation and its line together, as `input` gives it whole (a label of null keeps
- * the line's). An imported line keeps its dedup key. A deposit or a withdrawal paired as a transfer
+ * Corrects an operation and its line together, as `input` gives it whole: a label of null keeps
+ * the line's, or names it after its new security when that changes; a settlement day of null keeps
+ * the line's on the same day, and clears it on another. An imported line keeps its dedup key. A deposit or a withdrawal paired as a transfer
  * whose day or amount changes, or that becomes another kind, is unpaired first, its other side back
  * to review and still pairable, and paired again at once with a clear candidate; a kind moved between a deposit or a withdrawal and the others gives the line its
  * default entry or takes it away, and a deposit or a withdrawal moved gets its default entry anew.

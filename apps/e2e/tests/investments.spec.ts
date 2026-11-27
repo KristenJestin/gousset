@@ -775,6 +775,62 @@ test('a deposit corrected in its day is paired again: a correction is no "not a 
   expect(await refusedOf([out, again.lineId])).toEqual([true, true]);
 });
 
+test("a correction keeps the line's settlement day on its day, and names it after a new security", async () => {
+  const pea = await newAccount("Settled PEA", "investment");
+  const first = isin("SET000001");
+  const second = isin("SET000002");
+
+  const bought = await enter(pea, {
+    bookedOn: "2026-10-14",
+    valueOn: "2026-10-16",
+    amountMinor: -10_053,
+    isin: first,
+    securityName: "First Settled Fund",
+    quantity: "1",
+    unitPrice: "100.53",
+  });
+
+  expect(bought).toMatchObject({ valueOn: "2026-10-16", label: "First Settled Fund" });
+
+  const correct = (values: Partial<OperationInput>) =>
+    run(
+      correctInvestmentOperation(
+        owner,
+        bought.id,
+        operation({
+          bookedOn: "2026-10-14",
+          amountMinor: -10_053,
+          isin: second,
+          securityName: "Second Settled Fund",
+          quantity: "1",
+          unitPrice: "100.53",
+          ...values,
+        }),
+      ),
+    );
+
+  // Corrected with no settlement day nor label, as the page and the MCP door correct one: its
+  // settlement day kept, its line named after its new security rather than the old one.
+  expect(await correct({})).toMatchObject({
+    valueOn: "2026-10-16",
+    label: "Second Settled Fund",
+    security: { isin: second, name: "Second Settled Fund" },
+  });
+
+  // A label given is the line's; the same security and none given, the line keeps its own.
+  expect((await correct({ label: "ACHAT SECOND SETTLED" })).label).toBe("ACHAT SECOND SETTLED");
+  expect(await correct({})).toMatchObject({
+    valueOn: "2026-10-16",
+    label: "ACHAT SECOND SETTLED",
+  });
+
+  // Moved to another day, the settlement day no longer follows it; one given is the line's.
+  expect((await correct({ bookedOn: "2026-10-15" })).valueOn).toBeNull();
+  expect((await correct({ bookedOn: "2026-10-15", valueOn: "2026-10-19" })).valueOn).toBe(
+    "2026-10-19",
+  );
+});
+
 test("deleting an operation deletes its line, unpairs a deposit, and keeps its security", async () => {
   const current = await newAccount("Delete current", "current");
   const pea = await newAccount("Delete PEA", "investment");
