@@ -50,6 +50,7 @@ function charge(merchant: string, day: string, amountMinor: number): Charge {
     id: `00000000-0000-4000-8000-${String(made).padStart(12, "0")}`,
     merchantId: `merchant-${merchant}`,
     merchant,
+    look: { color: null, logo: null },
     day,
     amountMinor,
     currency: "EUR",
@@ -86,6 +87,7 @@ type Month = {
   subjects: Array<MonthRows["subjects"][number]>;
   entrySubjects: Array<MonthRows["entrySubjects"][number]>;
   charges: Array<Charge>;
+  maybeRefunds: Array<string>;
 };
 
 const empty = (): Month => ({
@@ -101,6 +103,7 @@ const empty = (): Month => ({
   subjects: [],
   entrySubjects: [],
   charges: [],
+  maybeRefunds: [],
 });
 
 type Connection = {
@@ -279,7 +282,7 @@ function category(rows: Month, kind: "expense" | "income", name: string, change 
 }
 
 function merchant(rows: Month, name: string, intermediary = false) {
-  const known = { id: memoryId(), name, intermediary };
+  const known = { id: memoryId(), name, intermediary, look: { color: null, logo: null } };
 
   rows.merchants.push(known);
   rows.aliases.push({ alias: merchantKey(name.toUpperCase(), null) ?? name, merchantId: known.id });
@@ -385,7 +388,14 @@ function toReview(current: MonthAccount): MemoryLineRows {
         memo: null,
         counterpartyName: null,
         classifiedBy: "default",
-        category: { id: "other", name: "Other", parentName: null, kind: "expense" },
+        category: {
+          id: "other",
+          name: "Other",
+          parentName: null,
+          kind: "expense",
+          icon: null,
+          color: null,
+        },
       },
     ],
   };
@@ -427,6 +437,52 @@ describe("month summary", () => {
     expect(text).toContain("- Savings book: its statements reach 2026-10-15 only.");
     expect(text).not.toMatch(/[\da-f]{8}-[\da-f]{4}-/);
     expect(text.length).toBeLessThan(RESULT_LIMIT);
+  });
+
+  test("a line coming back that may be a refund is not received: counted apart, and flagged among the movements", async () => {
+    const { rows, current } = ada();
+    const other = category(rows, "income", "Other");
+    const back = memoryId();
+
+    rows.parts.push({
+      entryId: memoryId(),
+      kind: "income",
+      happenedOn: "2026-10-04",
+      categoryId: other.id,
+      entryMerchantId: null,
+      role: "payment",
+      amountMinor: 3000,
+      lineId: back,
+      label: "CARD PIXELPLAY STORE",
+      counterpartyName: null,
+      accountId: current.id,
+    });
+    rows.maybeRefunds.push(back);
+
+    const { text, isError } = await month({ action: "summary", month: "2026-10" }, { month: rows });
+
+    expect(isError, text).toBe(false);
+    expect(text).toContain("Received 2,500.00 EUR, from Salary 2,500.00 EUR.");
+    expect(text).toContain(
+      "Not in received: 1 line(s) coming back that may be refunds, 30.00 EUR in all, waiting for the user's answer (each among the movements below). Show one with lines, then link it as a refund or refuse_refund.",
+    );
+    expect(text).toContain("Left 1,655.00 EUR.");
+    expect(text).toContain(
+      "Incomes and transfers in, and lines that may be refunds (3, oldest first):",
+    );
+    expect(text).toContain(
+      `- 2026-10-04, maybe a refund, not counted as income until the user answers: CARD PIXELPLAY STORE → Current account, 30.00 EUR; lines {"action":"show","line":"${back}"}`,
+    );
+    expect(text).not.toContain("income: CARD PIXELPLAY STORE");
+  });
+
+  test("without a maybe refund, the summary says nothing of them", async () => {
+    const { rows } = ada();
+    const { text } = await month({ action: "summary", month: "2026-10" }, { month: rows });
+
+    expect(text).toContain("Incomes and transfers in (2, oldest first):");
+    expect(text).not.toContain("may be refunds");
+    expect(text).not.toContain("maybe a refund");
   });
 
   // Issue #235: a benefit account kept by lines entered by hand, never imported, expects no file.

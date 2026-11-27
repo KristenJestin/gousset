@@ -92,6 +92,46 @@ function NewAccount() {
   );
 }
 
+/** A form around a table of columns side by side, as a CSV file's first lines: the wide sheet. */
+function Columns() {
+  const columns = ["Date", "Valeur", "Libellé", "Débit", "Crédit"];
+
+  return (
+    <Sheet
+      trigger={<Button variant="secondary">Map the columns</Button>}
+      title="The columns of export.csv"
+      description="Say what each column holds."
+      size="xl"
+      onSubmit={(event) => event.preventDefault()}
+      actions={<Button type="submit">Read the file this way</Button>}
+    >
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr>
+              {columns.map((column) => (
+                <th key={column} scope="col" className="min-w-32 border-b p-2 text-left">
+                  {column}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              {["01/12/2026", "01/12/2026", "CB GREENMARKET", "18,40", ""].map((value, at) => (
+                <td key={columns[at]} className="border-b p-2">
+                  {value}
+                </td>
+              ))}
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <TextField label="Name of the profile" name="name" />
+    </Sheet>
+  );
+}
+
 /**
  * A panel over the page, on ui-sdk's `Dialog`: from the right on a wide screen (from 768 px), from
  * the bottom on a phone. For a line's detail, the filters, or a long form (`onSubmit`: the body and
@@ -101,7 +141,8 @@ function NewAccount() {
  * closes it, but not while its form is `sending`, and focus returns to what opened it.
  *
  * Its body scrolls between the header and the actions, its padding inside the scroller: a focused
- * field's ring is never clipped.
+ * field's ring is never clipped. Its width on a wide screen: 440 px, 512 px for a form of rows (a
+ * rule, `lg`), 768 px for a form around a table of columns (a CSV file's, `xl`).
  *
  * Motion: it slides in from its edge in 300 ms, ease-out, and out in 200 ms, ease-in, while the
  * backdrop fades in and out in 200 ms; cut under reduced motion.
@@ -130,6 +171,9 @@ export const Phone: Story = {
  * under its field, and while the form is sent nothing closes the sheet.
  */
 export const WithForm: Story = { render: () => <NewAccount /> };
+
+/** A form around a table of columns (a CSV file's first lines): 768 px wide from the right. */
+export const Wide: Story = { render: () => <Columns /> };
 
 /** A long form on a phone: a bottom sheet, its actions stacked, the main one on top. */
 export const WithFormOnPhone: Story = {

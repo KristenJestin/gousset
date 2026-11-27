@@ -8,6 +8,7 @@ import {
   linkLine as linkCoreLine,
   pairLineWithAccount as pairCoreLineWithAccount,
   pairLines,
+  refuseRefund as refuseCoreRefund,
   searchLines,
   showLine,
   splitLine as splitCoreLine,
@@ -259,7 +260,8 @@ export const unpairLine = createServerFn({ method: "POST" })
  * already, a refund above the net cost or another currency (`LINK_*`); shares that do not make the
  * line, in categories of its kind in use (`SPLIT_REFUSED`); a share's subject gone or archived, or
  * subjects on a share of money coming in (`SPLIT_SUBJECT_*`, #37); a line that is its expense
- * alone (`NOT_LINKED`). A refusal about one share names it (`index`, from 0).
+ * alone (`NOT_LINKED`); a line no refund is proposed for (`REFUND_NOT_PROPOSED`). A refusal about
+ * one share names it (`index`, from 0).
  */
 export type ExpenseRefusalCode =
   | "LINE_NOT_FOUND"
@@ -274,7 +276,8 @@ export type ExpenseRefusalCode =
   | "SPLIT_SUBJECT_UNKNOWN"
   | "SPLIT_SUBJECT_ARCHIVED"
   | "SPLIT_SUBJECT_INCOME"
-  | "NOT_LINKED";
+  | "NOT_LINKED"
+  | "REFUND_NOT_PROPOSED";
 
 const expenseRefused = (code: ExpenseRefusalCode, index: number | null = null) =>
   Effect.succeed({ ok: false as const, code, index });
@@ -339,6 +342,26 @@ export const unlinkLine = createServerFn({ method: "POST" })
         Effect.catchTags({
           LineNotFound: () => expenseRefused("LINE_NOT_FOUND"),
           NotLinked: () => expenseRefused("NOT_LINKED"),
+        }),
+      ),
+    ),
+  );
+
+/**
+ * The user's answer that a line coming back is no refund (#208): an ordinary income, its entry as
+ * it was, never proposed as a refund again (linking it by hand still can). Answers the line's
+ * expenses as they are now; a line no refund is proposed for comes back as a code.
+ */
+export const refuseRefund = createServerFn({ method: "POST" })
+  .middleware([signedIn, slowedInDevelopment])
+  .validator(Schema.toStandardSchemaV1(Schema.Struct({ lineId: LineId })))
+  .handler(({ data, context }) =>
+    runCore(
+      refuseCoreRefund(context.owner, data.lineId).pipe(
+        Effect.map((expenses) => ({ ok: true as const, expenses })),
+        Effect.catchTags({
+          LineNotFound: () => expenseRefused("LINE_NOT_FOUND"),
+          RefundNotProposed: () => expenseRefused("REFUND_NOT_PROPOSED"),
         }),
       ),
     ),

@@ -18,6 +18,7 @@ import type { SQL } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { Context, Effect, Option, Result, Schema } from "effect";
 
+import { lineCategoryOf } from "../category-store";
 import type { LineCategory } from "../category-store";
 import { takeCategoryTurn } from "../category-turn";
 import { CategoryNotFound } from "../errors";
@@ -257,7 +258,10 @@ async function summaries(
       categoryName: category.name,
       categoryKind: category.kind,
       categoryArchivedAt: category.archivedAt,
+      categoryIcon: category.icon,
+      categoryColor: category.color,
       parentName: parent.name,
+      parentColor: parent.color,
     })
     .from(rule)
     .leftJoin(merchant, eq(merchant.id, rule.setMerchantId))
@@ -290,10 +294,15 @@ async function summaries(
           each.categoryKind === null
             ? null
             : {
-                id: each.row.setCategoryId,
-                name: each.categoryName,
-                parentName: each.parentName,
-                kind: each.categoryKind,
+                ...lineCategoryOf({
+                  id: each.row.setCategoryId,
+                  name: each.categoryName,
+                  kind: each.categoryKind,
+                  icon: each.categoryIcon,
+                  color: each.categoryColor,
+                  parentName: each.parentName,
+                  parentColor: each.parentColor,
+                }),
                 archived: each.categoryArchivedAt !== null,
               },
         subject:

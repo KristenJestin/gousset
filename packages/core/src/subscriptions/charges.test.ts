@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vite-plus/test";
 
+import type { Look } from "../look";
 import { chargesOf } from "./charges";
 import type { ChargeMerchant, ChargePart } from "./charges";
 import { detectSubscriptions } from "./detection";
@@ -8,11 +9,16 @@ import { detectSubscriptions } from "./detection";
 // of one merchant and one currency, a dismissed merchant, an intermediary and a balance's movement
 // left out.
 
+const AUTOMATIC: Look = { color: null, logo: null };
+
+/** Streamly with a colour and a logo (#204): a charge carries its merchant's look. */
+const STREAMLY_LOOK: Look = { color: "red", logo: "0123456789abcdef" };
+
 const MERCHANTS = new Map<string, ChargeMerchant>([
-  ["streamly", { name: "Streamly", intermediary: false, dismissed: false }],
-  ["fitclub", { name: "Fitclub", intermediary: false, dismissed: true }],
-  ["paypal", { name: "PayPal", intermediary: true, dismissed: false }],
-  ["pixelplay", { name: "Pixelplay", intermediary: false, dismissed: false }],
+  ["streamly", { name: "Streamly", intermediary: false, dismissed: false, look: STREAMLY_LOOK }],
+  ["fitclub", { name: "Fitclub", intermediary: false, dismissed: true, look: AUTOMATIC }],
+  ["paypal", { name: "PayPal", intermediary: true, dismissed: false, look: AUTOMATIC }],
+  ["pixelplay", { name: "Pixelplay", intermediary: false, dismissed: false, look: AUTOMATIC }],
 ]);
 
 const ALIASES = new Map([
@@ -52,6 +58,7 @@ describe("chargesOf", () => {
         id: "a",
         merchantId: "streamly",
         merchant: "Streamly",
+        look: STREAMLY_LOOK,
         day: "2026-11-08",
         amountMinor: 949,
         currency: "EUR",

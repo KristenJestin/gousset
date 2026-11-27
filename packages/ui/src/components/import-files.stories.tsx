@@ -51,6 +51,16 @@ function ChooseAccount({ file }: { file: string }) {
   );
 }
 
+/** A CSV file whose columns Gousset could not tell: the button opens them in a side sheet. */
+function ConfirmColumns() {
+  return (
+    <ImportPrompt
+      message="Gousset could not tell on its own how to read this file's columns."
+      actions={<Button size="sm">Confirm the columns</Button>}
+    />
+  );
+}
+
 /** Why a file failed, and what to do: undo, quietly, or try again. */
 function Failure() {
   return (
@@ -126,6 +136,19 @@ const WAITING: ImportFileRow = {
   state: "Account to choose",
   tone: "action",
   content: <ChooseAccount file={WAITING_FILE} />,
+};
+
+const COLUMNS_TO_CONFIRM: ImportFileRow = {
+  id: "export",
+  file: "greenmarket-card-export-2026-11.csv",
+  format: "CSV",
+  account: "Current account",
+  period: null,
+  added: null,
+  known: null,
+  state: "Columns to confirm",
+  tone: "action",
+  content: <ConfirmColumns />,
 };
 
 const RUNNING: ImportFileRow = {
@@ -269,6 +292,9 @@ export const Checking: Story = {};
 
 /** A file that names no account: the question on one inset line under it. */
 export const WaitingForAccount: Story = { args: { rows: [WAITING, OLDER] } };
+
+/** A CSV file whose columns to confirm: its card says so, its button opens them in a sheet. */
+export const WaitingForColumns: Story = { args: { rows: [COLUMNS_TO_CONFIRM, OLDER] } };
 
 /** The newest import done: its summary under it, undo set back, the way forward last. */
 export const Imported: Story = { args: { rows: [IMPORTED, OLDER] } };

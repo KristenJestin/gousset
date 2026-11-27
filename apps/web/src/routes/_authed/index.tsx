@@ -21,7 +21,6 @@ import type { DeltaListItem } from "@gousset/ui/components/delta";
 import { EmptyState } from "@gousset/ui/components/empty-state";
 import { FlagList, FlagListSkeleton } from "@gousset/ui/components/flag-list";
 import { Folded } from "@gousset/ui/components/folded";
-import { isIconName } from "@gousset/ui/components/icons";
 import type { IconName } from "@gousset/ui/components/icons";
 import { MonthBar, MonthBarSkeleton } from "@gousset/ui/components/month-bar";
 import { MovementList, MovementListSkeleton } from "@gousset/ui/components/movement-list";
@@ -50,7 +49,9 @@ import { MonthSwitch } from "@/components/month-switch";
 import { shortDay } from "@/lib/account-day";
 import { categoryPath } from "@/lib/categories";
 import { loadBlocks } from "@/lib/load-blocks";
+import { merchantAvatar } from "@/lib/merchant-logo";
 import { monthSearch } from "@/lib/month";
+import { otherCurrencyNote } from "@/lib/other-currency";
 import { monthQueries } from "@/queries/month";
 import { reviewQueries } from "@/queries/review";
 import { subjectQueries } from "@/queries/subjects";
@@ -324,7 +325,6 @@ function ImportStatus({ month }: { month: string }) {
 function Summary({ month }: { month: string }) {
   const locale = getLocale();
   const { summary } = useMonthReview(month);
-  const whole = (money: Money) => formatMoney(money, { locale, whole: true });
   const comparisons: Array<DeltaListItem> = [];
 
   if (summary.averageSpent !== null) {
@@ -361,20 +361,13 @@ function Summary({ month }: { month: string }) {
           ? undefined
           : lists[locale].format(summary.receivedFrom.map((from) => from.name))
       }
+      maybeRefunds={summary.maybeRefunds}
       comparison={
         comparisons.length === 0 ? undefined : (
           <DeltaList lead={m.reviewSpendingWord()} items={comparisons} />
         )
       }
-      notes={summary.elsewhere.map((other) =>
-        m.reviewOtherCurrency({
-          currency: other.currency,
-          received: whole(other.received),
-          spent: whole(other.spent),
-          setAside: whole(other.setAside),
-          left: whole(other.left),
-        }),
-      )}
+      notes={summary.elsewhere.map((other) => otherCurrencyNote(other, locale))}
       locale={locale}
     />
   );
@@ -428,7 +421,9 @@ function categoryRow(category: CategorySpending): BreakdownRow {
   return {
     id: category.id,
     name: category.name,
-    icon: category.icon !== null && isIconName(category.icon) ? category.icon : undefined,
+    icon: category.icon ?? "other",
+    // Its colour, else its parent's (#205): its icon and its bar are drawn in it.
+    color: category.color,
     amount: category.spent,
     benchmark:
       benchmark.mode === "none" || benchmark.amount === null ? undefined : benchmark.amount,
@@ -445,7 +440,19 @@ function merchantRow(merchant: MerchantSpending): BreakdownRow {
         ? m.reviewViaIntermediary({ name: merchant.name })
         : merchant.name;
 
-  return { id: merchant.id ?? NO_MERCHANT, name, icon: "merchant", amount: merchant.spent };
+  // The row of none keeps the merchants' icon; a merchant shows its logo or initials (#204).
+  const avatar =
+    merchant.id === null || merchant.name === null || merchant.look === null
+      ? undefined
+      : merchantAvatar({ id: merchant.id, name: merchant.name, look: merchant.look });
+
+  return {
+    id: merchant.id ?? NO_MERCHANT,
+    name,
+    icon: "merchant",
+    avatar,
+    amount: merchant.spent,
+  };
 }
 
 /** A subject as a row (#37): indented under its parent, with no benchmark. */
@@ -650,6 +657,7 @@ function Movements({ month }: { month: string }) {
           to: movement.to,
           note: movement.note ?? undefined,
           amount: movement.amount,
+          maybeRefund: movement.kind === "maybe-refund",
         }))}
         label={m.reviewMovementsTitle()}
         emptyText={m.reviewMovementsEmpty()}
@@ -682,6 +690,7 @@ function flagRow(flag: MonthFlag, locale: Locale) {
       return {
         id: `${flag.kind}-${flag.subscriptionId}`,
         icon: FLAG_ICONS[flag.kind],
+        avatar: merchantAvatar({ id: flag.merchantId, name: flag.merchant, look: flag.look }),
         text: m.reviewFlagPriceRise({
           merchant: flag.merchant,
           from: exact(flag.from),
@@ -694,6 +703,7 @@ function flagRow(flag: MonthFlag, locale: Locale) {
       return {
         id: `${flag.kind}-${flag.subscriptionId}`,
         icon: FLAG_ICONS[flag.kind],
+        avatar: merchantAvatar({ id: flag.merchantId, name: flag.merchant, look: flag.look }),
         text: m.reviewFlagStopped({
           merchant: flag.merchant,
           day: day(flag.expectedOn),
@@ -746,7 +756,7 @@ function Flags({ month }: { month: string }) {
   );
 }
 
-/** A day of the calendar as the component draws it. */
+/** A day of the calendar as the component draws it: a subscription with its merchant's face. */
 function calendarItem(item: SubscriptionCalendar["items"][number]): RecurringItem {
   return {
     id: item.id,
@@ -755,6 +765,10 @@ function calendarItem(item: SubscriptionCalendar["items"][number]): RecurringIte
     name: item.name,
     amount: item.amount,
     priceRise: item.kind === "expiring" ? null : item.priceRise,
+    avatar:
+      item.kind === "expiring"
+        ? undefined
+        : merchantAvatar({ id: item.merchantId, name: item.name, look: item.look }),
   };
 }
 
@@ -801,9 +815,12 @@ function ToReview({ month }: { month: string }) {
         lines={linesToReview.lines.map((line) => ({
           id: line.id,
           label: line.label,
-          title: line.category === null ? line.label : categoryPath(line.category),
+          // Maybe a refund (#208) is no income of its category until answered.
+          title:
+            line.category === null || line.maybeRefund ? line.label : categoryPath(line.category),
           tags: [line.account.name, shortDay(line.day, locale)],
           amount: line.amount,
+          maybeRefund: line.maybeRefund,
         }))}
         footer={
           <AppLink to="/operations" search={{ review: true, month }}>

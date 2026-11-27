@@ -15,6 +15,9 @@ import { and, asc, eq, gte, lte, min, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 
 import { readAll } from "./category-store-database";
+import { maybeRefundsAmong } from "./expenses/expenses";
+import { lookOf } from "./look";
+import { logoShaOf } from "./merchants/look-columns";
 import type { MonthRows, MonthScope, StatementReach } from "./month";
 import { subjectNodesIn } from "./subjects/subjects";
 import { chargesIn } from "./subscriptions/charges";
@@ -87,9 +90,20 @@ export async function monthRowsIn(
       ),
     );
 
-  const merchants = await transaction
-    .select({ id: merchant.id, name: merchant.name, intermediary: merchant.isIntermediary })
+  const merchantRows = await transaction
+    .select({
+      id: merchant.id,
+      name: merchant.name,
+      intermediary: merchant.isIntermediary,
+      color: merchant.color,
+      logoSha: logoShaOf(merchant.id),
+    })
     .from(merchant);
+
+  const merchants = merchantRows.map(({ color, logoSha, ...row }) => ({
+    ...row,
+    look: lookOf(color, logoSha),
+  }));
 
   const aliases = await transaction
     .select({ alias: merchantAlias.alias, merchantId: merchantAlias.merchantId })
@@ -136,6 +150,19 @@ export async function monthRowsIn(
     .where(and(eq(accountBalance.source, "statement"), lte(accountBalance.day, scope.statementsTo)))
     .groupBy(accountBalance.accountId);
 
+  // The month's incomes of one line each: those that may be refunds are no income until answered.
+  const maybeRefunds = await maybeRefundsAmong(
+    transaction,
+    parts.flatMap((part) =>
+      part.kind === "income" &&
+      part.role === "payment" &&
+      part.happenedOn >= scope.maybeRefunds.from &&
+      part.happenedOn <= scope.maybeRefunds.to
+        ? [part.lineId]
+        : [],
+    ),
+  );
+
   // The accounts with lines entered by hand: those never imported are kept by hand (#235).
   const manual = await transaction
     .selectDistinct({ accountId: statementLine.accountId })
@@ -175,5 +202,6 @@ export async function monthRowsIn(
     subjects,
     entrySubjects,
     charges: scope.charges === null ? [] : await chargesIn(transaction, scope.charges),
+    maybeRefunds: [...maybeRefunds],
   };
 }

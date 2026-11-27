@@ -52,6 +52,12 @@ two', null, null, null, 'k-2026-10-12--1999-1', null, null, '2026-11-01 10:00:03
   ('019a0000-0000-7000-8000-000000000405', :'camille', '019a0000-0000-7000-8000-000000000101', null, 'manual', 'discarded', '2026-10-20', null, -123456789012, null, null, 'Ligne saisie à la main', null, null, null, null, null, null, null, '2026-11-02 18:00:00+00', '2026-11-03 07:15:00.123456+00'),
   ('019a0000-0000-7000-8000-000000000406', :'camille', '019a0000-0000-7000-8000-000000000104', null, 'manual', 'counted', '2026-10-01', null, 18000, null, null, 'Crédit de titres-restaurant', null, null, null, null, null, null, '2027-12-31', '2026-11-02 18:01:00+00', '2026-11-02 18:01:00+00'),
   ('019a0000-0000-7000-8000-000000000407', :'admin', '019a0000-0000-7000-8000-000000000201', null, 'manual', 'counted', '2026-10-03', null, -5000, null, null, 'Ligne d''un autre utilisateur', null, null, null, null, null, null, null, '2026-11-02 18:02:00+00', '2026-11-02 18:02:00+00'),
+  -- Two purchases, each with money coming back from the same shop a day later (#208): a refund
+  -- Camille never answered, and one she classified by hand (below, from 0.3.0).
+  ('019a0000-0000-7000-8000-000000000408', :'camille', '019a0000-0000-7000-8000-000000000101', null, 'manual', 'counted', '2026-10-03', null, -9000, null, null, 'CARD PIXELPLAY STORE', null, null, null, null, null, null, null, '2026-11-02 18:03:00+00', '2026-11-02 18:03:00+00'),
+  ('019a0000-0000-7000-8000-000000000409', :'camille', '019a0000-0000-7000-8000-000000000101', null, 'manual', 'counted', '2026-10-04', null, 3000, null, null, 'CARD PIXELPLAY STORE', null, null, null, null, null, null, null, '2026-11-02 18:04:00+00', '2026-11-02 18:04:00+00'),
+  ('019a0000-0000-7000-8000-000000000410', :'camille', '019a0000-0000-7000-8000-000000000101', null, 'manual', 'counted', '2026-10-06', null, -4500, null, null, 'CARD BRICOBOX EXEMPLE', null, null, null, null, null, null, null, '2026-11-02 18:05:00+00', '2026-11-02 18:05:00+00'),
+  ('019a0000-0000-7000-8000-000000000416', :'camille', '019a0000-0000-7000-8000-000000000101', null, 'manual', 'counted', '2026-10-07', null, 1500, null, null, 'CARD BRICOBOX EXEMPLE', null, null, null, null, null, null, null, '2026-11-02 18:06:00+00', '2026-11-02 18:06:00+00'),
   -- Transfers between Camille's current account and her savings account, as 0.2 kept them: never
   -- paired, each line an expense or an income (#192). A clear pair, a day apart, each the other's
   -- only candidate; an ambiguous one, the money out with two candidates in; one across the
@@ -73,38 +79,44 @@ two', null, null, null, 'k-2026-10-12--1999-1', null, null, '2026-11-01 10:00:03
 -- docs/data-model.md, "Every counted line with an amount has exactly one entry"): an expense when
 -- money leaves, an income when it comes in, the day it was booked, in its kind's fallback category,
 -- `classified_by = default`, with one payment part of the whole line. Before 0.3.0 there is no
--- entry, and the update's migration gives each line its own.
+-- entry, and the update's migration gives each line its own. The money BRICOBOX sent back, Camille
+-- put in its category by hand (`classified_by = user`), as she could from 0.3.0; the money
+-- PIXELPLAY sent back she never answered, still where the import put it.
 DO $$
 BEGIN
   IF to_regclass('public.entry_part') IS NOT NULL THEN
-    WITH given (entry_id, part_id, line_id) AS (
+    WITH given (entry_id, part_id, line_id, classified_by) AS (
       VALUES
-        ('019a0000-0000-7000-8000-000000000601'::uuid, '019a0000-0000-7000-8000-000000000701'::uuid, '019a0000-0000-7000-8000-000000000401'::uuid),
-        ('019a0000-0000-7000-8000-000000000602', '019a0000-0000-7000-8000-000000000702', '019a0000-0000-7000-8000-000000000402'),
-        ('019a0000-0000-7000-8000-000000000603', '019a0000-0000-7000-8000-000000000703', '019a0000-0000-7000-8000-000000000403'),
-        ('019a0000-0000-7000-8000-000000000606', '019a0000-0000-7000-8000-000000000706', '019a0000-0000-7000-8000-000000000406'),
-        ('019a0000-0000-7000-8000-000000000607', '019a0000-0000-7000-8000-000000000707', '019a0000-0000-7000-8000-000000000407'),
-        ('019a0000-0000-7000-8000-000000000611', '019a0000-0000-7000-8000-000000000711', '019a0000-0000-7000-8000-000000000411'),
-        ('019a0000-0000-7000-8000-000000000612', '019a0000-0000-7000-8000-000000000712', '019a0000-0000-7000-8000-000000000412'),
-        ('019a0000-0000-7000-8000-000000000613', '019a0000-0000-7000-8000-000000000713', '019a0000-0000-7000-8000-000000000413'),
-        ('019a0000-0000-7000-8000-000000000614', '019a0000-0000-7000-8000-000000000714', '019a0000-0000-7000-8000-000000000414'),
-        ('019a0000-0000-7000-8000-000000000615', '019a0000-0000-7000-8000-000000000715', '019a0000-0000-7000-8000-000000000415'),
-        ('019a0000-0000-7000-8000-000000000621', '019a0000-0000-7000-8000-000000000721', '019a0000-0000-7000-8000-000000000421'),
-        ('019a0000-0000-7000-8000-000000000622', '019a0000-0000-7000-8000-000000000722', '019a0000-0000-7000-8000-000000000422'),
-        ('019a0000-0000-7000-8000-000000000623', '019a0000-0000-7000-8000-000000000723', '019a0000-0000-7000-8000-000000000423'),
-        ('019a0000-0000-7000-8000-000000000624', '019a0000-0000-7000-8000-000000000724', '019a0000-0000-7000-8000-000000000424'),
-        ('019a0000-0000-7000-8000-000000000625', '019a0000-0000-7000-8000-000000000725', '019a0000-0000-7000-8000-000000000425'),
-        ('019a0000-0000-7000-8000-000000000626', '019a0000-0000-7000-8000-000000000726', '019a0000-0000-7000-8000-000000000426')
+        ('019a0000-0000-7000-8000-000000000601'::uuid, '019a0000-0000-7000-8000-000000000701'::uuid, '019a0000-0000-7000-8000-000000000401'::uuid, 'default'::classified_by),
+        ('019a0000-0000-7000-8000-000000000602', '019a0000-0000-7000-8000-000000000702', '019a0000-0000-7000-8000-000000000402', 'default'),
+        ('019a0000-0000-7000-8000-000000000603', '019a0000-0000-7000-8000-000000000703', '019a0000-0000-7000-8000-000000000403', 'default'),
+        ('019a0000-0000-7000-8000-000000000606', '019a0000-0000-7000-8000-000000000706', '019a0000-0000-7000-8000-000000000406', 'default'),
+        ('019a0000-0000-7000-8000-000000000607', '019a0000-0000-7000-8000-000000000707', '019a0000-0000-7000-8000-000000000407', 'default'),
+        ('019a0000-0000-7000-8000-000000000608', '019a0000-0000-7000-8000-000000000708', '019a0000-0000-7000-8000-000000000408', 'default'),
+        ('019a0000-0000-7000-8000-000000000609', '019a0000-0000-7000-8000-000000000709', '019a0000-0000-7000-8000-000000000409', 'default'),
+        ('019a0000-0000-7000-8000-000000000610', '019a0000-0000-7000-8000-000000000710', '019a0000-0000-7000-8000-000000000410', 'default'),
+        ('019a0000-0000-7000-8000-000000000616', '019a0000-0000-7000-8000-000000000716', '019a0000-0000-7000-8000-000000000416', 'user'),
+        ('019a0000-0000-7000-8000-000000000611', '019a0000-0000-7000-8000-000000000711', '019a0000-0000-7000-8000-000000000411', 'default'),
+        ('019a0000-0000-7000-8000-000000000612', '019a0000-0000-7000-8000-000000000712', '019a0000-0000-7000-8000-000000000412', 'default'),
+        ('019a0000-0000-7000-8000-000000000613', '019a0000-0000-7000-8000-000000000713', '019a0000-0000-7000-8000-000000000413', 'default'),
+        ('019a0000-0000-7000-8000-000000000614', '019a0000-0000-7000-8000-000000000714', '019a0000-0000-7000-8000-000000000414', 'default'),
+        ('019a0000-0000-7000-8000-000000000615', '019a0000-0000-7000-8000-000000000715', '019a0000-0000-7000-8000-000000000415', 'default'),
+        ('019a0000-0000-7000-8000-000000000621', '019a0000-0000-7000-8000-000000000721', '019a0000-0000-7000-8000-000000000421', 'default'),
+        ('019a0000-0000-7000-8000-000000000622', '019a0000-0000-7000-8000-000000000722', '019a0000-0000-7000-8000-000000000422', 'default'),
+        ('019a0000-0000-7000-8000-000000000623', '019a0000-0000-7000-8000-000000000723', '019a0000-0000-7000-8000-000000000423', 'default'),
+        ('019a0000-0000-7000-8000-000000000624', '019a0000-0000-7000-8000-000000000724', '019a0000-0000-7000-8000-000000000424', 'default'),
+        ('019a0000-0000-7000-8000-000000000625', '019a0000-0000-7000-8000-000000000725', '019a0000-0000-7000-8000-000000000425', 'default'),
+        ('019a0000-0000-7000-8000-000000000626', '019a0000-0000-7000-8000-000000000726', '019a0000-0000-7000-8000-000000000426', 'default')
     ), pending AS MATERIALIZED (
-      SELECT g.entry_id, g.part_id, l.id AS line_id, l.user_id, l.booked_on, abs(l.amount_minor) AS amount,
-        l.created_at, c.id AS category_id, c.kind
+      SELECT g.entry_id, g.part_id, g.classified_by, l.id AS line_id, l.user_id, l.booked_on,
+        abs(l.amount_minor) AS amount, l.created_at, c.id AS category_id, c.kind
       FROM given g
       JOIN statement_line l ON l.id = g.line_id
       JOIN category c ON c.user_id = l.user_id AND c.is_fallback
         AND c.kind = (CASE WHEN l.amount_minor < 0 THEN 'expense' ELSE 'income' END)::entry_kind
     ), made AS (
       INSERT INTO entry (id, user_id, kind, happened_on, category_id, classified_by, created_at, updated_at)
-      SELECT p.entry_id, p.user_id, p.kind, p.booked_on, p.category_id, 'default', p.created_at, p.created_at
+      SELECT p.entry_id, p.user_id, p.kind, p.booked_on, p.category_id, p.classified_by, p.created_at, p.created_at
       FROM pending p
       RETURNING id
     )
@@ -169,6 +181,28 @@ begin
     $by_rule$;
   end if;
 end
+$$;
+
+-- From 0.3.0 on, every user has the default categories (#23). Camille made two of them hers: an icon
+-- of her choosing on "Housing", and "Gifts received" renamed "Presents". The update gives the set's
+-- icons and colours (#205) only to categories still the set's, never over a choice:
+-- tools/check-upgrade.changes.json declares the set's rows with no icon, so these two must stay as
+-- she left them. psql does not fill a variable inside $$, so Camille goes through a setting, the
+-- one row-level security reads (docs/data-model.md, "Ownership and isolation").
+select set_config('gousset.user_id', :'camille', true);
+
+DO $$
+BEGIN
+  IF to_regclass('public.category') IS NOT NULL THEN
+    UPDATE category SET icon = 'pets'
+    WHERE user_id = current_setting('gousset.user_id') AND kind = 'expense' AND name = 'Housing'
+      AND parent_id IS NULL;
+
+    UPDATE category SET name = 'Presents'
+    WHERE user_id = current_setting('gousset.user_id') AND kind = 'income' AND name = 'Gifts received'
+      AND parent_id IS NULL;
+  END IF;
+END
 $$;
 
 commit;

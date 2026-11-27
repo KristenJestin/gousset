@@ -38,6 +38,7 @@ import { Effect, Schema } from "effect";
 import { ToolRefusal, defineTool } from "../tool";
 import { amount } from "./accounts";
 import { benchmarkCurrency } from "./categories";
+import { MAYBE_REFUND } from "./lines";
 
 const MonthInput = Schema.Struct({
   action: Schema.Literals(["summary", "spending", "days", "subscriptions", "benchmarks"]).annotate({
@@ -77,7 +78,7 @@ const MOVEMENTS_LISTED = 60;
 
 const DESCRIPTION = `The user's own monthly review, in their currency (others apart, never converted). Read only. month: YYYY-MM, the current one if left out; summary, spending, days and subscriptions refuse a month to come.
 
-\`summary\`, for "how did my month go?" or "what is left?": received, spent against the average and the previous month, set aside (net transfers onto savings and investments), left (received less spent and set aside) and its part restricted to benefit accounts, incomes and transfers, lines to review (review settles them), imports, flags.
+\`summary\`, for "how did my month go?" or "what is left?": received (a line coming back that may be a refund is left out and counted apart until the user answers), spent against the average and the previous month, set aside (net transfers onto savings and investments), left (received less spent and set aside) and its part restricted to benefit accounts, incomes and transfers, lines to review (review settles them), imports, flags.
 
 \`spending\`, by category (default) or merchant: each row at net cost, on the day it happened, against its average and the previous month; a transfer is never spending. Categories with children, benchmark and drift. A merchant is who was paid, else a payment intermediary (PayPal) when nothing better is known; "${NO_MERCHANT}" holds expenses naming several or none, last. By subject: each subject with an expense in the month, by path, a parent with its children's expenses, each once; an expense counts whole in each of its subjects, so rows never add up.
 
@@ -328,10 +329,19 @@ function figuresOf(summary: MonthReview["summary"]): string {
   const elsewhere =
     summary.elsewhere.length === 0
       ? ""
-      : `In other currencies, never converted: ${summary.elsewhere.map((each) => `${each.currency}: received ${amount(each.received)}, spent ${amount(each.spent)}, set aside ${amount(each.setAside)}, left ${amount(each.left)}`).join("; ")}.`;
+      : `In other currencies, never converted: ${summary.elsewhere.map((each) => `${each.currency}: received ${amount(each.received)}${each.maybeRefunds.minor === 0 ? "" : ` (and ${amount(each.maybeRefunds)} that may be refunds, apart)`}, spent ${amount(each.spent)}, set aside ${amount(each.setAside)}, left ${amount(each.left)}`).join("; ")}.`;
+
+  const waiting = summary.maybeRefunds;
+
+  // Lines coming back that may be refunds are no income until the user answers (#208).
+  const apart =
+    waiting.count === 0
+      ? ""
+      : `Not in received: ${waiting.count} line(s) coming back that may be refunds, ${amount(waiting.amount)} in all, waiting for the user's answer (each among the movements below). Show one with lines, then link it as a refund or refuse_refund.`;
 
   return nonEmpty([
     `Received ${amount(summary.received)}${from}.`,
+    apart,
     `Spent ${amount(summary.spent)}; ${average}; ${previous}.`,
     `Set aside ${amount(summary.setAside)} (net, onto savings and investment accounts).`,
     `Left ${amount(summary.left)}${restricted}.`,
@@ -356,12 +366,19 @@ function movementsOf(review: MonthReview): string {
         ]
       : [];
 
+  const maybe = movements.some((each) => each.kind === "maybe-refund")
+    ? ", and lines that may be refunds"
+    : "";
+
   return [
-    `Incomes and transfers in (${movements.length}, oldest first):`,
+    `Incomes and transfers in${maybe} (${movements.length}, oldest first):`,
     ...shown.map((each) => {
       const note = each.note === null ? "" : ` (${each.note})`;
 
-      return `- ${each.day}, ${each.kind}: ${each.from} → ${each.to}, ${amount(each.amount)}${note}`;
+      // A maybe refund is no income: flagged, with the call that shows both answers (#208).
+      return each.kind === "maybe-refund"
+        ? `- ${each.day}, ${MAYBE_REFUND}: ${each.from} → ${each.to}, ${amount(each.amount)}; lines ${JSON.stringify({ action: "show", line: each.lineId ?? "" })}`
+        : `- ${each.day}, ${each.kind}: ${each.from} → ${each.to}, ${amount(each.amount)}${note}`;
     }),
     ...more,
   ].join("\n");

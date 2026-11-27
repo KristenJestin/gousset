@@ -4,6 +4,7 @@ import {
   entrySubject,
   merchant,
   merchantAlias,
+  merchantLogo,
   rule,
   statementImport,
   statementLine,
@@ -11,12 +12,13 @@ import {
   subjectAccount,
   subjectEntryRefused,
 } from "@gousset/db/schema/ledger";
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 
 import { expect, test } from "../src/test";
 import {
   ACCOUNTS,
   JOBS_SCHEMA,
+  SEED_LOGO,
   SHARED_TABLES,
   USER_TABLES,
   keyArray,
@@ -279,6 +281,29 @@ test("a user never attaches a row to another user's row", async () => {
         userId: alex,
         merchantId: samsMerchant?.id ?? "",
         alias: "NOT THEIR SHOP",
+      }),
+    ),
+  ).toBe("23503");
+
+  // A logo of one's own on the other user's merchant (#204), one with no logo yet.
+  const samsMerchants = await data.asUser(sam, (transaction) =>
+    transaction
+      .select({ id: merchant.id, logo: merchantLogo.merchantId })
+      .from(merchant)
+      .leftJoin(merchantLogo, eq(merchantLogo.merchantId, merchant.id)),
+  );
+
+  const bare = samsMerchants.find((each) => each.logo === null);
+
+  expect(bare).toBeDefined();
+  expect(
+    await data.refusal(alex, (transaction) =>
+      transaction.insert(merchantLogo).values({
+        merchantId: bare?.id ?? "",
+        userId: alex,
+        mediaType: "image/png",
+        content: Buffer.from(SEED_LOGO),
+        sha256: "0".repeat(64),
       }),
     ),
   ).toBe("23503");

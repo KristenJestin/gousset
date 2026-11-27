@@ -7,7 +7,9 @@
     ".": "./src/index.ts",
     "./values": "./src/values.ts",
     "./account-values": "./src/account-values.ts",
+    "./look": "./src/look.ts",
     "./default-categories": "./src/default-categories.ts",
+    "./category-looks": "./src/category-looks.ts",
     "./imports": "./src/imports/summary.ts",
     "./read": "./src/imports/read.ts",
     "./rule-values": "./src/rules/conditions.ts"

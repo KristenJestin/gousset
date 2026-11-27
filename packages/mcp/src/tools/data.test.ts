@@ -31,6 +31,7 @@ const CONTENTS: ExportContents = {
     rows: table.file === "import-profiles" ? 1 : 10 * (index + 1),
   })),
   files: 12,
+  logos: 3,
 };
 
 /**
@@ -91,6 +92,7 @@ describe("data export", () => {
     expect(text).toContain("- statement-lines.json and statement-lines.csv: 30 rows");
     expect(text).toContain("- import-profiles.json and import-profiles.csv: 1 row,");
     expect(text).toContain("- import-files/: 12 files you imported");
+    expect(text).toContain("- merchant-logos/: 3 logos you uploaded for your merchants");
     expect(text).toContain("manifest.json: what each file and column holds");
     expect(text).toContain("Settings, Data (/settings/data)");
   });

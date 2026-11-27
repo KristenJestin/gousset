@@ -4,7 +4,7 @@ import type { ReactNode } from "react";
 
 import { InFrench } from "../stories/in-french";
 import { LineExpense, LinkLine, SplitLine } from "./line-expense";
-import type { ExpenseLineView } from "./line-expense";
+import type { ExpenseLineView, LineExpenseProps } from "./line-expense";
 
 // Every label, account and amount here is invented.
 
@@ -121,17 +121,41 @@ const splitBySubject = (
 );
 
 /**
+ * A line answered "Not a refund" after a second: the page reads it again, with no proposal, and
+ * "Maybe a refund" goes at once.
+ */
+function Refusable(props: LineExpenseProps) {
+  const [refused, setRefused] = useState(false);
+
+  return (
+    <LineExpense
+      {...props}
+      proposals={refused ? [] : props.proposals}
+      maybeRefund={!refused && props.maybeRefund === true}
+      onRefuseRefund={async () => {
+        await wait(1000);
+        setRefused(true);
+      }}
+    />
+  );
+}
+
+/**
  * A line's expense, in its detail (`LineDetail`'s `expense`): an expense made of several lines,
  * its payments and refunds one click from their lines, and its net cost counted once; "Separate
  * this line" asks before taking the line out. A split line shows its shares; a line coming back
- * that may cancel a purchase shows "Maybe a refund", which asks before linking. Under it, the page
+ * that may cancel a purchase shows "Maybe a refund", which asks before linking; still classified
+ * by default, it counts as no income until answered, and "Not a refund" answers at once (#208): the
+ * money stays an income, and linking the line by hand still makes it a refund. Under it, the page
  * puts `LinkLine` ("Link to an expense", a dialog to find the expense's line) and `SplitLine`
  * ("Split", a side sheet of shares that must make the whole line; an expense's shares each with
  * their subjects, #37, how an expense is shared between subjects). Every value comes worded.
  *
  * Motion: none of its own: the dialogs are `Dialog`'s and `AlertDialog`'s (200 ms), the sheet
  * `Sheet`'s (about 300 ms), a part's hover colour 150 ms, a share's subject chip fades in and out
- * in 150 ms. Cut under reduced motion.
+ * in 150 ms, "Not a refund" is `Button`'s (its colour in 150 ms, pressed in and back). Cut under
+ * reduced motion. Answered, "Maybe a refund" goes at once, with no fade nor fold, under any
+ * setting.
  *
  * Don't: link a refund unasked, nor split without the sheet: the user decides what an expense is.
  */
@@ -238,6 +262,41 @@ export const Proposed: Story = {
     proposals: [{ ...bistro, category: "Eating out › Restaurants", net: eur(5600) }],
     onConfirmRefund: () => wait(1000),
   },
+};
+
+/**
+ * Maybe a refund (#208): the line coming back, still classified by default, counts as no income
+ * until the user answers. "Link as a refund" asks; "Not a refund" answers at once, and the section
+ * goes.
+ */
+export const MaybeRefund: Story = {
+  args: {
+    lineId: "line-cancelled",
+    expense: undefined,
+    onUnlink: undefined,
+    proposals: [{ ...bistro, category: "Eating out › Restaurants", net: eur(5600) }],
+    maybeRefund: true,
+    onConfirmRefund: () => wait(1000),
+  },
+  render: (args) => (
+    <Column>
+      <Refusable {...args} />
+    </Column>
+  ),
+};
+
+export const MaybeRefundFrench: Story = {
+  args: {
+    ...MaybeRefund.args,
+    proposals: [{ ...bistro, day: "3 oct.", category: "Sorties › Restaurants", net: eur(5600) }],
+  },
+  render: (args) => (
+    <InFrench>
+      <Column>
+        <Refusable {...args} />
+      </Column>
+    </InFrench>
+  ),
 };
 
 /** The last change was refused: the reason under the actions. */

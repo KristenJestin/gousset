@@ -22,14 +22,15 @@ import { Effect, Result } from "effect";
 import type { AccountKind, AccountMode } from "../account-values";
 import { balanceAt } from "../balances";
 import { takeCategoryTurn } from "../category-turn";
+import { lineCategoryOf } from "../category-store";
 import type { LineCategory } from "../category-store";
 import { isId } from "../imports/rows";
 import type { LineAccount } from "../lines";
 import type { MerchantNotFound } from "../merchants/errors";
 import { merchantKey } from "../merchants/labels";
-import type { NamedMerchant } from "../merchants/line-merchant";
 import type { Money } from "../month";
 import type { TooManyRules } from "../rules/errors";
+import type { RuleMerchant } from "../rules/rules";
 import {
   merchantPastIn,
   setSubjectMerchantsIn,
@@ -208,7 +209,7 @@ export type SubjectDetail = Omit<SubjectRecord, "accounts" | "loan"> & {
     readonly more: number;
   } | null;
   /** The merchants whose rule ("merchant is", and nothing else) attaches it, by name. */
-  readonly merchants: ReadonlyArray<NamedMerchant>;
+  readonly merchants: ReadonlyArray<RuleMerchant>;
   /** How many other rules attach it. */
   readonly otherRules: number;
 };
@@ -626,7 +627,10 @@ async function expensesOf(
       categoryId: category.id,
       categoryName: category.name,
       categoryKind: category.kind,
+      categoryIcon: category.icon,
+      categoryColor: category.color,
       parentName: parent.name,
+      parentColor: parent.color,
     })
     .from(entry)
     .innerJoin(category, eq(category.id, entry.categoryId))
@@ -707,12 +711,15 @@ async function expensesOf(
         happenedOn: row.happenedOn,
         merchant: chosen?.name ?? null,
         label: firstPayment.get(entryId)?.label ?? "",
-        category: {
+        category: lineCategoryOf({
           id: row.categoryId,
           name: row.categoryName,
-          parentName: row.parentName,
           kind: row.categoryKind,
-        },
+          icon: row.categoryIcon,
+          color: row.categoryColor,
+          parentName: row.parentName,
+          parentColor: row.parentColor,
+        }),
         net: netOf(entryId),
       },
     ];
@@ -864,14 +871,20 @@ async function showIn(
             id: category.id,
             name: category.name,
             kind: category.kind,
+            icon: category.icon,
+            color: category.color,
             parentName: parent.name,
+            parentColor: parent.color,
           })
           .from(category)
           .leftJoin(parent, eq(parent.id, category.parentId))
           .where(inArray(category.id, categoryIds));
 
   const categories = categoryRows
-    .map((each) => ({ category: each, spent: money(byCategory.get(each.id) ?? 0, currency) }))
+    .map((each) => ({
+      category: lineCategoryOf(each),
+      spent: money(byCategory.get(each.id) ?? 0, currency),
+    }))
     .filter((each) => each.spent.minor !== 0)
     .toSorted(
       (a, b) => b.spent.minor - a.spent.minor || a.category.name.localeCompare(b.category.name),

@@ -11,6 +11,8 @@ import { formatMoney } from "../lib/money";
 import type { Money } from "../lib/money";
 import { cn } from "../lib/utils";
 import { Amount } from "./amount";
+import { Avatar } from "./avatar";
+import type { AvatarFace } from "./avatar";
 import { Chip } from "./chip";
 import { Icon } from "./icon";
 import type { IconName } from "./icon";
@@ -36,6 +38,11 @@ export type RecurringItem = {
   amount: Money;
   /** It costs more than before: what it cost then, in the same currency. */
   priceRise: { beforeMinor: number } | null;
+  /**
+   * The merchant's face (#204): in the agenda, its logo or initials take the place of the kind's
+   * tile, whose mark then goes before the kind's word. The month's grid keeps the marks alone.
+   */
+  avatar?: AvatarFace;
 };
 
 export type RecurringView = "month" | "agenda";
@@ -370,22 +377,36 @@ function Agenda({
                   data-kind={item.kind}
                   className="flex min-h-12 items-center gap-3 py-2"
                 >
-                  <span
-                    className={cn(
-                      "grid size-8 shrink-0 place-items-center rounded-md bg-muted",
-                      mark.tone,
-                    )}
-                  >
-                    <Icon name={mark.icon} />
-                  </span>
+                  {item.avatar === undefined ? (
+                    <span
+                      className={cn(
+                        "grid size-8 shrink-0 place-items-center rounded-md bg-muted",
+                        mark.tone,
+                      )}
+                    >
+                      <Icon name={mark.icon} />
+                    </span>
+                  ) : (
+                    <Avatar
+                      name={item.avatar.name}
+                      src={item.avatar.src}
+                      color={item.avatar.color}
+                    />
+                  )}
                   <span className="flex min-w-0 flex-1 flex-col">
                     <span className="truncate text-sm font-medium">{item.name}</span>
                     <span
                       className={cn(
                         "text-xs",
+                        item.avatar !== undefined && "flex items-center gap-1",
                         item.kind === "stopped" ? "text-destructive" : "text-muted-foreground",
                       )}
                     >
+                      {item.avatar === undefined ? null : (
+                        <span className={cn("flex", mark.tone)}>
+                          <Icon name={mark.icon} size="sm" />
+                        </span>
+                      )}
                       {kindWord(messages, item.kind)}
                     </span>
                     {rise === null ? null : (
@@ -411,8 +432,9 @@ function Agenda({
  * its day with its amount, paid or due; an expected payment that did not come, and a price rise,
  * marked; a benefit credit's last day with what is left on it and its account. Two views: the
  * month as a grid (on a phone, each payment as its mark alone, its words said to screen readers
- * and named in the legend) and the agenda, a list of the days that hold something. With
- * `onMonthChange`, it moves between today's month and the next.
+ * and named in the legend) and the agenda, a list of the days that hold something, where a
+ * subscription's merchant shows its logo or initials (`avatar`, 32 px, hidden from screen readers).
+ * With `onMonthChange`, it moves between today's month and the next.
  *
  * Motion: switching the view, the tab's background slides (200 ms, `Tabs`) and the new view fades
  * in (200 ms, ease-out); changing the month, the label slides (`MonthSwitcher`) and the content

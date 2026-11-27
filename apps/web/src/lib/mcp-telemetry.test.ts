@@ -84,6 +84,7 @@ describe("a call to the MCP door", () => {
                         subjects: [],
                         entrySubjects: [],
                         charges: [],
+                        maybeRefunds: [],
                       }),
                   }),
                 ),

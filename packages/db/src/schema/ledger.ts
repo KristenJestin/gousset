@@ -415,6 +415,9 @@ export const statementLine = pgTable.withRLS(
     // The user took this line out of an expense of several lines (#28): the automatic matching of
     // top-ups leaves it alone until the user links it by hand.
     linkRefused: boolean("link_refused").default(false).notNull(),
+    // The user said this line coming back is no refund (#208): it is an ordinary income, never
+    // proposed as a refund again, until the user links it by hand.
+    refundRefused: boolean("refund_refused").default(false).notNull(),
   },
   (table) => [
     unique("statement_line_user_id_id_key").on(table.userId, table.id),
@@ -493,6 +496,10 @@ export const merchant = pgTable.withRLS(
     // none of its series is proposed again until the user takes it back. Subscriptions themselves
     // are computed on read, never stored (docs/data-model.md, v0.4).
     subscriptionDismissed: boolean("subscription_dismissed").default(false).notNull(),
+    // Added with the merchants' looks (#204): the key of a colour of the palette its avatar is drawn
+    // on (packages/core, `look.ts`); null for the automatic one, which its name chooses. A key, not
+    // an enum: the palette is Gousset's, and a key it no longer knows reads as automatic.
+    color: text("color"),
   },
   (table) => [
     unique("merchant_user_id_id_key").on(table.userId, table.id),
@@ -530,6 +537,43 @@ export const merchantAlias = pgTable.withRLS(
 );
 
 /**
+ * A logo the user uploaded for a merchant (#204), one per merchant: a new upload replaces it. Kept
+ * in the database, apart from the merchant as `import_file` is from its import, so that row-level
+ * security, the backup and the export carry it; Gousset never fetches one. PNG, JPEG or WebP, as
+ * packages/core recognises them by their bytes, never by a name or a declared type.
+ */
+export const merchantLogo = pgTable.withRLS(
+  "merchant_logo",
+  {
+    merchantId: uuid("merchant_id").primaryKey(),
+    userId: owner(),
+    mediaType: text("media_type").notNull(),
+    content: bytea("content").notNull(),
+    // Its SHA-256 in hexadecimal: the start of it versions the logo's address, so that a browser
+    // keeps it for good and asks again once it changes.
+    sha256: text("sha256").notNull(),
+    createdAt: createdAt(),
+  },
+  (table) => [
+    foreignKey({
+      name: "merchant_logo_merchant_fk",
+      columns: [table.userId, table.merchantId],
+      foreignColumns: [merchant.userId, merchant.id],
+    }).onDelete("cascade"),
+    check(
+      "merchant_logo_media_type",
+      sql`${table.mediaType} in ('image/png', 'image/jpeg', 'image/webp')`,
+    ),
+    check(
+      "merchant_logo_size",
+      // 256 KiB, packages/core's `LOGO_MAX_BYTES`: core refuses a larger one with a reason first.
+      sql`octet_length(${table.content}) between 1 and 262144`,
+    ),
+    ownRowsOnly("merchant_logo"),
+  ],
+);
+
+/**
  * An expense or income category, on two levels (#23). Its parent, and an entry's category, are
  * kept references (`on delete no action deferrable initially deferred`, which Drizzle cannot
  * write): they are in the custom migration `*_categories_isolation`.
@@ -543,7 +587,7 @@ export const category = pgTable.withRLS(
     parentId: uuid("parent_id"),
     kind: entryKind("kind").notNull(),
     name: text("name").notNull(),
-    // A key of the icons shipped with packages/ui.
+    // A key of the category icons (packages/core, `category-looks.ts`), drawn by packages/ui.
     icon: text("icon"),
     // Siblings are ordered by (position, id); not unique, so a move writes the moved row only.
     position: integer("position").default(0).notNull(),
@@ -558,6 +602,10 @@ export const category = pgTable.withRLS(
     // Added with the operation prefixes (#194), after the others: the lines of this operation, which
     // name no merchant, go in it by default, when it is of their entry's kind.
     operation: categoryOperation("operation"),
+    // Added with the category's look (#205), after the operation: a key of the palette
+    // (packages/core, `category-looks.ts`), drawn by packages/ui. Null: its parent's, or none at
+    // the top.
+    color: text("color"),
   },
   (table) => [
     unique("category_user_id_id_key").on(table.userId, table.id),

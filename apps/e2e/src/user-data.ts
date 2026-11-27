@@ -1,7 +1,7 @@
 import { appConnection } from "@gousset/db/app-role";
 import type { APP_ROLE } from "@gousset/db/app-role";
 import { relations } from "@gousset/db/relations";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 
 import { authOauthClient, authOauthConsent, authUser } from "@gousset/db/schema/auth";
 import {
@@ -11,6 +11,7 @@ import {
   importProfile,
   importUpload,
   merchant,
+  merchantLogo,
   rule,
   subject,
   subjectAccount,
@@ -50,6 +51,7 @@ export const USER_TABLES: ReadonlyArray<UserTable> = [
   { name: "transfer", key: "id", rows: "transfers" },
   { name: "merchant", key: "id", rows: "merchants" },
   { name: "merchant_alias", key: "id", rows: "merchants' cleaned labels" },
+  { name: "merchant_logo", key: "merchant_id", rows: "merchants' logos" },
   { name: "rule", key: "id", rows: "rules" },
   { name: "subject", key: "id", rows: "subjects" },
   { name: "entry_subject", key: "entry_id", rows: "expenses' subjects" },
@@ -62,6 +64,11 @@ export const USER_TABLES: ReadonlyArray<UserTable> = [
  * once imported and within minutes otherwise (#129); its import, once made, is exported.
  */
 export const NOT_EXPORTED: ReadonlySet<string> = new Set(["import_upload"]);
+
+/** A merchant's logo for the seed (#204): a PNG's first bytes, made here, no real picture. */
+export const SEED_LOGO = new Uint8Array([
+  0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d,
+]);
 
 /** The client the seeded file uploads' grant is for: no test authorizes it, none revokes it. */
 const SEED_CLIENT_ID = "gousset-e2e-seed";
@@ -275,6 +282,26 @@ export function openUserData(database: string) {
     },
 
     /**
+     * Marks `owner` as a user made before #193, whose merchants made one per town the next boot's
+     * merchants job merges, once (`auth_user.merchant_towns_merged`).
+     */
+    async madeBeforeTowns(owner: string): Promise<void> {
+      await db.update(authUser).set({ merchantTownsMerged: false }).where(eq(authUser.id, owner));
+    },
+
+    /**
+     * Marks `owner` as a user made before #243, whose merchants made from the start of an English
+     * card label the next boot's merchants job reads again, once
+     * (`auth_user.merchant_card_labels_reread`).
+     */
+    async madeBeforeCardLabels(owner: string): Promise<void> {
+      await db
+        .update(authUser)
+        .set({ merchantCardLabelsReread: false })
+        .where(eq(authUser.id, owner));
+    },
+
+    /**
      * The made-up data of two months, and a CSV profile, as `owner`'s rows, with the merchants of its
      * lines recognised as the app does at boot (the seed writes lines, not merchants). A user who
      * already has accounts is left as they are, profile included.
@@ -301,10 +328,24 @@ export function openUserData(database: string) {
 
               yield* recogniseMerchants(owner);
 
-              // A rule of the user's (#25), naming one of their merchants, so that every table
-              // holds a row of theirs.
+              // A rule of the user's (#25), naming one of their merchants, and that merchant's
+              // colour and logo (#204), so that every table holds a row of theirs.
               yield* userData.transaction(owner, async (each) => {
                 const [shop] = await each.select({ id: merchant.id }).from(merchant).limit(1);
+
+                if (shop !== undefined) {
+                  await each
+                    .update(merchant)
+                    .set({ color: "teal" })
+                    .where(eq(merchant.id, shop.id));
+                  await each.insert(merchantLogo).values({
+                    merchantId: shop.id,
+                    userId: owner,
+                    mediaType: "image/png",
+                    content: Buffer.from(SEED_LOGO),
+                    sha256: createHash("sha256").update(SEED_LOGO).digest("hex"),
+                  });
+                }
 
                 await each.insert(rule).values({
                   userId: owner,

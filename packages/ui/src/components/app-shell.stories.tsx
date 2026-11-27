@@ -18,6 +18,7 @@ import { ColorSchemePicker } from "./color-scheme-picker";
 import { Dialog } from "./dialog";
 import { EmptyState } from "./empty-state";
 import type { IconName } from "./icon";
+import { MADE_UP_LOGO } from "../stories/made-up";
 import { List, ListItem } from "./list";
 import { MenuItem } from "./menu";
 import { MonthSwitcher } from "./month-switcher";
@@ -277,6 +278,36 @@ export const AccountSection: Story = {
         </Block>
       </SectionLayout>
     </Page>
+  ),
+};
+
+/**
+ * A block about someone with a face (a merchant's page, #204): its logo or initials (40 px) before
+ * its heading, its actions beside it; on a phone the actions go under the heading.
+ */
+export const BlockWithAvatar: Story = {
+  render: () => (
+    <div className="flex flex-col gap-6">
+      <Block
+        title="Greenmarket"
+        description="3 labels"
+        avatar={{ name: "Greenmarket", src: MADE_UP_LOGO }}
+        actions={
+          <Button variant="secondary" icon="edit">
+            Edit
+          </Button>
+        }
+      >
+        <StatusMessage message="Greenmarket is saved." />
+      </Block>
+      <Block
+        title="Harbor Books"
+        description="1 label"
+        avatar={{ name: "Harbor Books", color: "teal" }}
+      >
+        <StatusMessage message="No logo: its initials on the colour picked." />
+      </Block>
+    </div>
   ),
 };
 

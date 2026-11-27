@@ -38,12 +38,18 @@ const SHOTS: ReadonlyArray<Shot> = [
   { id: "forms-select--in-a-card", open: "click" },
   { id: "forms-combobox--chosen" },
   { id: "forms-namefield--typed" },
+  // A category's colour and icon (#205): the palette with its choice of none, the icons' grid.
+  { id: "forms-colorswatches--parents-colour" },
+  { id: "forms-categoryiconchoice--default" },
   { id: "forms-checkbox--checked" },
   { id: "forms-switch--on" },
   { id: "forms-datepicker--chosen" },
   { id: "forms-statusmessage--shown" },
   { id: "forms-formmessage--shown" },
   { id: "forms-file-button--default" },
+  // A merchant's logo and labels, in its form (#204).
+  { id: "forms-logofield--with-logo" },
+  { id: "forms-textlistfield--default" },
   { id: "navigation-tabs--with-icons" },
   { id: "overlays-tooltip--default", open: "focus" },
   { id: "overlays-menu--default", open: "click" },
@@ -62,6 +68,8 @@ const SHOTS: ReadonlyArray<Shot> = [
   { id: "import-import-files--checking" },
   // The import screen's states (#125), on a desktop and at a phone's width.
   { id: "import-import-files--waiting-for-account" },
+  // A CSV's columns to confirm: the card's state and its action, the form in a sheet (#210).
+  { id: "import-import-files--waiting-for-columns" },
   { id: "import-import-files--imported" },
   { id: "import-import-files--failed" },
   {
@@ -78,6 +86,8 @@ const SHOTS: ReadonlyArray<Shot> = [
   { id: "import-csv-test-read--default" },
   { id: "import-csv-test-read--refused" },
   { id: "import-csv-preview--default" },
+  // A CSV file's columns in their wide side sheet, opened from the file's card (#210).
+  { id: "import-csv-preview--in-a-sheet", open: "click" },
   { id: "states-emptystate--in-a-block" },
   { id: "states-errorstate--beside-a-working-block" },
   // The review of a user with no line yet (#32): links to the first import and the accounts.
@@ -86,8 +96,14 @@ const SHOTS: ReadonlyArray<Shot> = [
   { id: "layout-screen--sign-in" },
   { id: "data-list--loading-beside-loaded" },
   { id: "data-list--links" },
+  // Wherever a merchant is named, its logo or its initials on its colour (#204).
+  { id: "data-list--links-with-avatars" },
   { id: "data-categoryicon--in-rows" },
-  { id: "data-merchantlogo--in-rows" },
+  // Every palette colour on its tile, on a block and on the page (#205).
+  { id: "data-categoryicon--every-colour" },
+  { id: "data-avatar--in-rows" },
+  // Every colour of the palette, initials on their tile, in both schemes (#204).
+  { id: "data-avatar--palette" },
   { id: "data-accountchip--kinds" },
   { id: "data-monthswitcher--default" },
   { id: "help-shortcutlist--default" },
@@ -105,6 +121,7 @@ const SHOTS: ReadonlyArray<Shot> = [
   { id: "money-breakdown--loading" },
   // An open row's figures against its average and the month before (#32).
   { id: "money-breakdown--detail-figures" },
+  { id: "money-breakdown--merchants-with-avatars" },
   { id: "money-amount--counting" },
   { id: "money-movement-list--default" },
   { id: "money-investment-list--loss" },
@@ -116,13 +133,16 @@ const SHOTS: ReadonlyArray<Shot> = [
   { id: "money-recurringcalendar--agenda-view" },
   { id: "money-recurringcalendar--phone", width: 390 },
   { id: "money-recurringcalendar--phone-agenda", width: 390 },
+  { id: "money-recurringcalendar--agenda-with-avatars" },
   { id: "data-flag-list--default" },
+  { id: "data-flag-list--with-avatars" },
   { id: "layout-folded--default" },
   { id: "layout-review-layout--desktop" },
   { id: "charts-spending-chart--default" },
   { id: "charts-bar-chart--default" },
   { id: "brand-brand--with-wordmark" },
   { id: "layout-app-shell--desktop" },
+  { id: "layout-app-shell--block-with-avatar" },
   // The user's menu opened over the sidebar: a floating surface stands out from it (#104).
   {
     id: "layout-app-shell--desktop",
@@ -145,6 +165,7 @@ const SHOTS: ReadonlyArray<Shot> = [
   { id: "accounts-benefitcredits--default" },
   { id: "accounts-benefitcredits--uncovered" },
   { id: "operations-operationslist--default" },
+  { id: "operations-operationslist--with-avatars" },
   { id: "operations-linedetail--to-review" },
   // "To review only" off, then pressed with the others set (#184).
   { id: "operations-operationsfilters--default" },
@@ -209,6 +230,7 @@ const SHOTS: ReadonlyArray<Shot> = [
   // An intermediary's line that asks who was paid: its notice stands out in the detail (#30).
   { id: "operations-linemerchant--asks" },
   { id: "operations-linemerchant--assigned" },
+  { id: "operations-linemerchant--with-logo" },
   // The dialog the Change button opens, over the page.
   {
     id: "operations-linemerchant--choosing",

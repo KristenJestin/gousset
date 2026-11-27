@@ -26,6 +26,7 @@ function charge(day: string, amountMinor: number, merchant = "Streamly", currenc
     id: `charge-${String(made).padStart(6, "0")}`,
     merchantId: `merchant-${merchant.toLowerCase().replaceAll(" ", "-")}`,
     merchant,
+    look: { color: null, logo: null },
     day,
     amountMinor,
     currency,
@@ -65,6 +66,7 @@ describe("detectSubscriptions", () => {
       {
         merchantId: "merchant-streamly",
         merchant: "Streamly",
+        look: { color: null, logo: null },
         currency: "EUR",
         cadence: "monthly",
         charges,

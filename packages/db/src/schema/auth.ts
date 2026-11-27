@@ -59,6 +59,16 @@ export const authUser = pgTable("auth_user", {
   // makes them so; false for a user made before, or by the administrator, until their first
   // signed-in page renames the defaults they never touched (packages/core, default-categories.ts).
   defaultCategoriesSettled: boolean("default_categories_settled").default(false).notNull(),
+  // Whether the merchants made one per town of a shop's card labels were merged (#193): true for a
+  // user made since; its migration (migrations/*_merchant_towns_merged) leaves it false for a user
+  // made before, until the next boot's merchants job merges theirs, once (packages/core,
+  // merchants/town-merge.ts).
+  merchantTownsMerged: boolean("merchant_towns_merged").default(true).notNull(),
+  // Whether the merchants made from the `CARD` of an English card label (`CARD 12/03 PIZZA NOVA`)
+  // were read again (#243): true for a user made since; its migration
+  // (migrations/*_merchant_card_labels_reread) leaves it false for a user made before, until the next
+  // boot's merchants job reads theirs again, once (packages/core, merchants/reread.ts).
+  merchantCardLabelsReread: boolean("merchant_card_labels_reread").default(true).notNull(),
 });
 
 export const authSession = pgTable(

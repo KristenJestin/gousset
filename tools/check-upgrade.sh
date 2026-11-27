@@ -8,7 +8,8 @@
 # the one a fresh installation gets; that the app answers, that every user signs in with the same
 # password (a banned one still cannot), that a session made before still works, that a user's
 # export holds their rows as they were, and that a statement the release imported adds nothing
-# when imported again. Removes everything it started, whatever happened.
+# when imported again, and that a merchant's colour and logo (#204) set after the update survive
+# migrate run again and come out in the export. Removes everything it started, whatever happened.
 #   tools/check-upgrade.sh <tag>                   from the last release (the highest tag vX.Y.Z)
 #   tools/check-upgrade.sh --from 0.1.1 <tag>
 #   docker build -t ghcr.io/kristenjestin/gousset:local . && tools/check-upgrade.sh local
@@ -224,14 +225,64 @@ statement=$root/tools/check-upgrade.ofx
 first_import=$(upload camille "$statement")
 if [ -n "$first_import" ]; then
   ended=$(settled "$first_import")
-  [ "$ended" = "done 8 0" ] ||
-    fail "$from did not import $(basename "$statement") whole: $ended, not \"done 8 0\"."
+  [ "$ended" = "done 15 0" ] ||
+    fail "$from did not import $(basename "$statement") whole: $ended, not \"done 15 0\"."
   say "Camille imported $(basename "$statement") through $from's own route."
   # A release before #194 named merchants from a label's operation prefix: the update reads them
   # again at boot, below.
   prefixed=$(sql "select count(*) from merchant where user_id = '$camille'
     and name in ('Ann Carte Cafe Exemple', 'F Cotisation')")
   say "$from made $prefixed merchant(s) of an operation prefix."
+  # A release before #193 made a merchant per town of a shop's card labels: the update merges those
+  # Camille never touched, once, at boot, below. Pizza Nova, Freshmart and Bookmill, each paid in
+  # Riverton and in Lakeside, show the towns. Camille split Bookmill's by town herself (after
+  # merging them): the boot leaves it so. Cafe Bora Bora ends with a doubled word, which is no sure
+  # town: the boot leaves it whole.
+  per_town=$(sql "select count(*) from merchant where user_id = '$camille' and name in
+    ('Pizza Nova Riverton', 'Pizza Nova Lakeside', 'Freshmart Riverton', 'Freshmart Lakeside',
+     'Bookmill Riverton', 'Bookmill Lakeside', 'Cafe Bora Bora')")
+  case $from in
+    0.1.* | 0.2.*) ;;
+    *)
+      [ "$per_town" = 7 ] || fail "$from made $per_town merchant(s) of a shop in a town, not 7."
+      # Her merge of Bookmill's two merchants, as the release does it: the labels move, the merged
+      # one goes, the one kept is changed. Then her split: a new merchant, named as recognition
+      # names it, takes the Lakeside label.
+      sql "update merchant_alias set merchant_id = (select id from merchant where user_id = '$camille'
+        and name = 'Bookmill Riverton') where user_id = '$camille' and alias = 'BOOKMILL LAKESIDE';
+        delete from merchant where user_id = '$camille' and name = 'Bookmill Lakeside';
+        update merchant set updated_at = clock_timestamp() where user_id = '$camille'
+          and name = 'Bookmill Riverton'" > /dev/null
+      sql "insert into merchant (user_id, name) values ('$camille', 'Bookmill Lakeside');
+        update merchant_alias set merchant_id = (select id from merchant where user_id = '$camille'
+        and name = 'Bookmill Lakeside') where user_id = '$camille' and alias = 'BOOKMILL LAKESIDE'" > /dev/null
+      ;;
+  esac
+  say "$from made $per_town merchant(s) of a shop in a town."
+  # A release before #243 cleaned an English card label that starts with `CARD` and a date to `CARD`,
+  # and `POS DEBIT` to `DEBIT`: Noodle Bar and Hillside Pharmacy, paid by card, made one merchant
+  # "Card", and Greenmarket one "Debit", which Camille renamed. The update reads them again once, at
+  # boot, below. Their statement comes apart, after the first one's recognition: the first's
+  # `CARD PIXELPLAY STORE` and `CARD BRICOBOX EXEMPLE` have their merchants then, so that "Card" is
+  # made by the cut alone.
+  cards=$root/tools/check-upgrade.cards.ofx
+  ended=$(settled "$(upload camille "$cards")")
+  [ "$ended" = "done 3 0" ] ||
+    fail "$from did not import $(basename "$cards") whole: $ended, not \"done 3 0\"."
+  case $from in
+    0.1.* | 0.2.*) ;;
+    *)
+      english_cut=$(sql "select coalesce(string_agg(m.name || ':' || a.alias, ',' order by m.name, a.alias), '')
+        from merchant m join merchant_alias a on a.merchant_id = m.id
+        where m.user_id = '$camille' and m.name in ('Card', 'Debit')")
+      [ "$english_cut" = "Card:CARD,Debit:DEBIT" ] ||
+        fail "$from made the merchants \"$english_cut\" of its English card labels, not \"Card:CARD,Debit:DEBIT\"."
+      # Her rename, as the release does it: the merchant is changed.
+      sql "update merchant set name = 'Market Stall', updated_at = clock_timestamp()
+        where user_id = '$camille' and name = 'Debit'" > /dev/null
+      ;;
+  esac
+  say "Camille imported $(basename "$cards"): $from cleaned its English card labels to CARD and DEBIT."
 else
   say "$from has no import route: $(basename "$statement") is not imported."
 fi
@@ -336,7 +387,8 @@ say "Camille's Bank fees and Interest take the fees and the interest."
 
 # Two of Camille's old transfer lines, classified where the release could (from 0.3.0,
 # tools/check-upgrade.sql), one by hand, one by a rule of hers: their expenses before the app
-# starts, which the boot must leave as they are.
+# starts, which the boot must leave as they are. Beside them she classified only the refund of
+# BRICOBOX by hand (#208, below).
 line() { printf '019a0000-0000-7000-8000-000000000%s' "$1"; }
 decided() {
   sql "select coalesce(string_agg(to_jsonb(e)::text, ' ' order by p.line_id), '') from entry e
@@ -345,8 +397,39 @@ decided() {
       or (p.line_id = '$(line 415)' and e.classified_by = 'rule' and e.rule_id is not null)"
 }
 hand=$(decided)
-[ -z "$hand" ] || [ "$(sql "select count(*) from entry where classified_by <> 'default' and user_id = '$camille'")" = 2 ] ||
+[ -z "$hand" ] || [ "$(sql "select count(*) from entry e where e.classified_by <> 'default' and e.user_id = '$camille'
+  and not exists (select 1 from entry_part p where p.entry_id = e.id and p.line_id = '$(line 416)')")" = 2 ] ||
   fail "Camille's two old transfer lines are not classified, one by hand and one by a rule, before the boot."
+
+# Camille's rows of the release (the dump of step 4) that a table names, kept by a jq filter.
+held_rows() { # <table> <jq filter>
+  awk -F '\t' -v t="$1" '$1 == t { print $2 }' "$work/before" |
+    jq -s --arg u "$camille" "[.[] | select(.user_id == \$u) | select($2)] | length"
+}
+
+# Money coming back that may be a refund is no income until the user answers (#208), read from
+# the lines and only the user's answer stored (statement_line.refund_refused): the refund Camille
+# left unanswered on the release (tools/check-upgrade.sql, from 0.3.0) is answered by nothing after
+# the update, still the only line of its income classified by default, with the purchase it may
+# cancel, so the app shows it apart; the one she classified by hand stays hers, an income.
+if [ "$(held_rows entry_part '.line_id == "019a0000-0000-7000-8000-000000000409"')" = 1 ]; then
+  waiting=$(sql "select count(*) from statement_line l
+    join entry_part p on p.line_id = l.id join entry e on e.id = p.entry_id
+    where l.id = '019a0000-0000-7000-8000-000000000409' and not l.refund_refused
+      and e.kind = 'income' and e.classified_by = 'default'
+      and (select count(*) from entry_part q where q.entry_id = e.id) = 1
+      and exists (select 1 from statement_line b join entry_part bp on bp.line_id = b.id
+        where b.id = '019a0000-0000-7000-8000-000000000408' and bp.role = 'payment'
+          and b.label = l.label and b.booked_on <= l.booked_on and -b.amount_minor >= l.amount_minor)")
+  [ "$waiting" = 1 ] ||
+    fail "the refund Camille left unanswered on $from is no longer one that waits for her answer."
+  kept=$(sql "select e.kind || ' ' || e.classified_by || ' ' || l.refund_refused from statement_line l
+    join entry_part p on p.line_id = l.id join entry e on e.id = p.entry_id
+    where l.id = '019a0000-0000-7000-8000-000000000416'")
+  [ "$kept" = "income user false" ] ||
+    fail "the refund Camille classified by hand on $from reads \"$kept\", not \"income user false\"."
+  say "Camille's unanswered refund waits apart for her answer; the one she classified stays an income."
+fi
 
 # 8. The installation as `docker compose up` brings it back: migrate, then the app.
 booted=$(sql "select now()")
@@ -357,12 +440,6 @@ migrated=$("${compose[@]}" ps --all --format '{{.ExitCode}}' migrate)
 code=$(health)
 [ "$code" = 200 ] || fail "/health of $tag answered $code."
 say "$tag serves: /health answers 200."
-
-# Camille's rows of the release (the dump of step 4) that a table names, kept by a jq filter.
-held_rows() { # <table> <jq filter>
-  awk -F '\t' -v t="$1" '$1 == t { print $2 }' "$work/before" |
-    jq -s --arg u "$camille" "[.[] | select(.user_id == \$u) | select($2)] | length"
-}
 
 # At boot the app sends each user's merchants job and balances job (apps/web, jobs/runtime.server.ts):
 # the checks below read Camille's rows once both have completed, as pg-boss records them.
@@ -383,6 +460,7 @@ done
 # the free text of her `VIR` transfers between her own accounts (tools/check-upgrade.sql), which
 # names no one; only an update from before merchants shows that it makes them.
 held_aliases=$(held_rows merchant_alias '.alias != "ANN CARTE CAFE EXEMPLE" and .alias != "F COTISATION"
+  and .alias != "CARD"
   and (.alias | (startswith("VERS LIVRET") or startswith("DEPUIS COMPTE") or startswith("EPARGNE PROJET")) | not)')
 recognised=$(sql "select count(*) from merchant_alias where user_id = '$camille'")
 [ "$recognised" != 0 ] || fail "Camille's lines got no merchant at the app's start."
@@ -431,6 +509,57 @@ if [ -n "$first_import" ]; then
   [ -n "$reread" ] ||
     fail "the merchants $from made from an operation prefix were not read again, or its fee not put in Bank fees, within a minute of the app's start."
   say "the $prefixed merchant(s) $from made from an operation prefix were read again at boot, and its fee went to Bank fees."
+
+  # The merchants the release made one per town (#193), which Camille never touched, are one per
+  # shop after the boot, named after it, each with both its cleaned labels; Bookmill's, which she
+  # split, and Cafe Bora Bora stay as they were. From a release before merchants, the boot's
+  # recognition names each shop without its town, and Cafe Bora Bora after its doubled word.
+  case $from in
+    0.1.* | 0.2.*)
+      one_per_shop="Bookmill:BOOKMILL LAKESIDE,Bookmill:BOOKMILL RIVERTON,Cafe:CAFE BORA BORA" ;;
+    *)
+      one_per_shop="Bookmill Lakeside:BOOKMILL LAKESIDE,Bookmill Riverton:BOOKMILL RIVERTON,Cafe Bora Bora:CAFE BORA BORA" ;;
+  esac
+  one_per_shop="$one_per_shop,Freshmart:FRESHMART LAKESIDE,Freshmart:FRESHMART RIVERTON,Pizza Nova:PIZZA NOVA LAKESIDE,Pizza Nova:PIZZA NOVA RIVERTON"
+  shops=
+  for _ in $(seq 60); do
+    shops=$(sql "select coalesce(string_agg(m.name || ':' || a.alias, ',' order by m.name, a.alias), '')
+      from merchant m join merchant_alias a on a.merchant_id = m.id
+      where m.user_id = '$camille' and a.alias in ('PIZZA NOVA RIVERTON', 'PIZZA NOVA LAKESIDE',
+        'FRESHMART RIVERTON', 'FRESHMART LAKESIDE', 'BOOKMILL RIVERTON', 'BOOKMILL LAKESIDE',
+        'CAFE BORA BORA')")
+    [ "$shops" != "$one_per_shop" ] || break
+    sleep 1
+  done
+  [ "$shops" = "$one_per_shop" ] ||
+    fail "Camille's merchants of a shop in two towns are \"$shops\" a minute after the app's start, not \"$one_per_shop\"."
+  [ "$(sql "select merchant_towns_merged from auth_user where id = '$camille'")" = t ] ||
+    fail "Camille is not marked as having had her merchants of a shop in a town merged."
+  say "the $per_town merchant(s) $from made per town are one per shop after the boot, once: Pizza Nova and"
+  say "  Freshmart; Bookmill's, which Camille split, and Cafe Bora Bora, of no sure town, stay as they were."
+
+  # The merchants the release made from the start of an English card label (#243): "Card", which
+  # Camille never touched, is forgotten at boot, once, and each of its lines names its shop; "Debit",
+  # which she renamed Market Stall, stays as she left it, with its cleaned label, while its line
+  # names its shop too. From a release before merchants, the boot names each shop at once.
+  case $from in
+    0.1.* | 0.2.*) english_cards="Greenmarket:GREENMARKET,Hillside Pharmacy:HILLSIDE PHARMACY,Noodle Bar:NOODLE BAR" ;;
+    *) english_cards="Greenmarket:GREENMARKET,Hillside Pharmacy:HILLSIDE PHARMACY,Market Stall:DEBIT,Noodle Bar:NOODLE BAR" ;;
+  esac
+  for _ in $(seq 60); do
+    cards_after=$(sql "select coalesce(string_agg(m.name || ':' || a.alias, ',' order by m.name, a.alias), '')
+      from merchant m join merchant_alias a on a.merchant_id = m.id
+      where m.user_id = '$camille' and (m.name in ('Card', 'Debit', 'Market Stall')
+        or a.alias in ('CARD', 'DEBIT', 'NOODLE BAR', 'HILLSIDE PHARMACY', 'GREENMARKET'))")
+    [ "$cards_after" != "$english_cards" ] || break
+    sleep 1
+  done
+  [ "$cards_after" = "$english_cards" ] ||
+    fail "Camille's merchants of her English card labels are \"$cards_after\" a minute after the app's start, not \"$english_cards\"."
+  [ "$(sql "select merchant_card_labels_reread from auth_user where id = '$camille'")" = t ] ||
+    fail "Camille is not marked as having had her merchants of an English card label read again."
+  say "the merchant Card $from made of English card labels is forgotten at boot, once, and each line names"
+  say "  its shop; Market Stall, which Camille renamed, stays as she left it."
 fi
 
 # The boot jobs of <n> starts of the app, for every user, ended: none waits or runs any more, and
@@ -576,10 +705,44 @@ if [ -n "$first_import" ]; then
   second_import=$(upload camille-after "$statement")
   [ -n "$second_import" ] || fail "$tag has no import route."
   ended=$(settled "$second_import")
-  [ "$ended" = "done 0 8" ] ||
-    fail "$(basename "$statement") imported again after the update: $ended, not \"done 0 8\" (nothing added, 8 found)."
-  say "$(basename "$statement"), imported again on $tag, adds nothing: its 8 lines are found."
+  [ "$ended" = "done 0 15" ] ||
+    fail "$(basename "$statement") imported again after the update: $ended, not \"done 0 15\" (nothing added, 15 found)."
+  say "$(basename "$statement"), imported again on $tag, adds nothing: its 15 lines are found."
 fi
+
+# 11b. A merchant's look (#204), which no release up to 0.4.0 had: Camille gives one of her
+# merchants a logo through the app's own route, and a colour as the tables' owner (no plain HTTP
+# route sets it: a server function does); both survive migrate run again, the app serves the logo
+# byte for byte, and her export carries both.
+look_merchant=$(sql "select id from merchant where user_id = '$camille' order by id limit 1")
+[ -n "$look_merchant" ] || fail "Camille has no merchant to give a look to."
+printf '\x89PNG\r\n\x1a\n\0\0\0\r' > "$work/logo.png"
+logo_answer=$(curl --silent --show-error --max-time 20 --cookie "$work/camille-after" \
+  --cookie-jar "$work/camille-after" --header "Origin: $origin" \
+  --header 'Content-Type: application/octet-stream' --data-binary "@$work/logo.png" \
+  --write-out '\n%{http_code}' "$base/api/merchants/$look_merchant/logo") ||
+  fail "the upload of Camille's logo did not answer."
+[ "${logo_answer##*$'\n'}" = 200 ] ||
+  fail "the upload of Camille's logo answered ${logo_answer##*$'\n'}: ${logo_answer%$'\n'*}"
+logo_version=$(printf '%s\n' "${logo_answer%$'\n'*}" | jq -r .version)
+sql "update merchant set color = 'teal' where id = '$look_merchant'" > /dev/null
+migrate "$work/migrate-3"
+[ "$(sql "select coalesce(color, '') from merchant where id = '$look_merchant'")" = teal ] ||
+  fail "Camille's merchant lost its colour when migrate ran again."
+[ "$(sql "select left(sha256, 16) from merchant_logo where merchant_id = '$look_merchant'")" = "$logo_version" ] ||
+  fail "Camille's merchant lost its logo when migrate ran again."
+logo_bytes=$(od -An -tx1 -v "$work/logo.png" | tr -d ' \n')
+served=$(curl --silent --show-error --fail --max-time 20 --cookie "$work/camille-after" \
+  "$base/api/merchants/$look_merchant/logo?v=$logo_version" | od -An -tx1 -v | tr -d ' \n') ||
+  fail "Camille's logo is not served."
+[ "$served" = "$logo_bytes" ] || fail "Camille's logo is not served as she uploaded it."
+curl --silent --show-error --fail --max-time 30 --cookie "$work/camille-after" \
+  --output "$work/export-look.zip" "$base/api/export" || fail "Camille's export failed."
+exported_logo=$(unzip -p "$work/export-look.zip" "merchant-logos/$look_merchant.png" | od -An -tx1 -v | tr -d ' \n')
+[ "$exported_logo" = "$logo_bytes" ] || fail "Camille's export does not carry her merchant's logo."
+[ "$(unzip -p "$work/export-look.zip" merchants.json | jq -r --arg id "$look_merchant" '.[] | select(.id == $id) | .color')" = teal ] ||
+  fail "Camille's export does not carry her merchant's colour."
+say "Camille's merchant keeps its colour and logo when migrate runs again, and her export carries them."
 
 # 12. The upgraded schema is a fresh installation's.
 sql "create database gousset_fresh" > /dev/null

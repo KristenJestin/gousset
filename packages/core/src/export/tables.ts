@@ -136,6 +136,11 @@ export const STATEMENT_LINES: ExportTable = {
       name: "link_refused",
       holds: "true once you took the line out of an expense: Gousset no longer links it by itself",
     },
+    {
+      name: "refund_refused",
+      holds:
+        "true once you said money coming back is no refund: it is an income, never proposed again",
+    },
   ],
 };
 
@@ -229,6 +234,11 @@ export const CATEGORIES: ExportTable = {
       holds:
         "loan, fee or interest: the lines of that operation, which name no merchant, go in it by default; empty for none",
     },
+    // Added after the operation (#205).
+    {
+      name: "color",
+      holds: "the key of the colour it is shown in; empty: its parent's, or none at the top",
+    },
   ],
 };
 
@@ -303,6 +313,12 @@ export const MERCHANTS: ExportTable = {
     {
       name: "subscription_dismissed",
       holds: "true when you said its payments are no subscription: none is proposed for it",
+    },
+    // Added after the others (#204): the database keeps it last.
+    {
+      name: "color",
+      holds:
+        "the palette colour its avatar is drawn on (red, orange, amber, olive, green, teal, cyan, blue, indigo, violet, pink, grey); empty for the automatic one",
     },
   ],
 };
@@ -452,3 +468,6 @@ export const EXPORT_TABLES: ReadonlyArray<ExportTable> = [
 
 /** Where the files imported go: one folder per import, named by its id. */
 export const IMPORT_FILES_FOLDER = "import-files";
+
+/** Where the merchants' logos go (#204): one file each, named by its merchant's id. */
+export const MERCHANT_LOGOS_FOLDER = "merchant-logos";

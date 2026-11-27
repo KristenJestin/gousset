@@ -184,6 +184,8 @@ const fuel: LineCategory = {
   name: "Fuel",
   parentName: "Transport",
   kind: "expense",
+  icon: null,
+  color: null,
 };
 
 describe("the list in words", () => {

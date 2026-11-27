@@ -16,7 +16,8 @@ export function useRefreshImports() {
 
 /**
  * Runs the import again with the user's answers: its account, how to read its CSV (a definition
- * made on the screen, or a profile chosen, which the import then records).
+ * made on the screen, or a profile chosen, which the import then records). Whether it was
+ * accepted: a refusal is kept in `refused`.
  */
 export function useResume(summary: Import) {
   const refresh = useRefreshImports();
@@ -26,7 +27,7 @@ export function useResume(summary: Import) {
     accountId: string | null,
     csvProfile: CsvProfile | null,
     profile: ProfileChoice | null = null,
-  ) => {
+  ): Promise<boolean> => {
     const answer = await resumeImport({
       data: { importId: summary.id, accountId, csvProfile, profile },
     });
@@ -38,6 +39,8 @@ export function useResume(summary: Import) {
     }
 
     await refresh();
+
+    return !("refused" in answer);
   };
 
   return { resume, refused };

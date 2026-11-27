@@ -1,6 +1,7 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { useState } from "react";
 
+import { InFrench } from "../stories/in-french";
 import { ReviewLines, ReviewLinesSkeleton } from "./review-lines";
 import type { ReviewLine } from "./review-lines";
 import { TextLink } from "./text-link";
@@ -79,7 +80,8 @@ function Approving() {
  * `readOnly` leaves out the action's place.
  *
  * Motion: an approved line fades out (200 ms, ease-out) and the lines under it slide up into its
- * place, by transform; cut under reduced motion.
+ * place, by transform; cut under reduced motion. The "Maybe a refund" chip has none of its own: it
+ * comes and goes with its line.
  *
  * Don't: approve without the page's optimistic mutation, or name a button "More" (the frame's
  * menu is).
@@ -119,6 +121,44 @@ export const ReadOnly: Story = {
         footer={<TextLink href="#review">Review the month&rsquo;s lines</TextLink>}
       />
     </div>
+  ),
+};
+
+/** A line coming back that may cancel a purchase (#208): flagged, no category as its title. */
+const MAYBE_REFUND: ReviewLine = {
+  id: "pixelplay-back",
+  label: "CARD PIXELPLAY STORE",
+  title: "CARD PIXELPLAY STORE",
+  tags: ["Current account", "Oct 4"],
+  amount: eur(3000),
+  maybeRefund: true,
+};
+
+/** The review's first lines, read only, one of them maybe a refund (#208). */
+export const MaybeRefund: Story = {
+  render: () => (
+    <div className="max-w-2xl">
+      <ReviewLines
+        lines={[MAYBE_REFUND, ...LINES.slice(0, 2)]}
+        label="To review"
+        locale="en"
+        footer={<TextLink href="#review">Review the month&rsquo;s lines</TextLink>}
+      />
+    </div>
+  ),
+};
+
+export const MaybeRefundFrench: Story = {
+  render: () => (
+    <InFrench>
+      <div className="max-w-2xl">
+        <ReviewLines
+          lines={[{ ...MAYBE_REFUND, tags: ["Compte courant", "4 oct."] }, ...LINES.slice(0, 2)]}
+          label="À vérifier"
+          locale="fr"
+        />
+      </div>
+    </InFrench>
   ),
 };
 

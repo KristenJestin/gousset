@@ -10,11 +10,10 @@ import {
 import { transfer } from "@gousset/db/schema/transfers";
 import { UserData } from "@gousset/db/user-data";
 import type { UserTransaction } from "@gousset/db/user-data";
-import { and, count, eq, gte, inArray, lte, min, or, sql } from "drizzle-orm";
-import { alias } from "drizzle-orm/pg-core";
+import { and, count, eq, gte, inArray, lte, min, notInArray, or, sql } from "drizzle-orm";
 import { Effect, Layer, Result } from "effect";
 
-import { CategoryStore } from "./category-store";
+import { CategoryStore, lineCategoryOf } from "./category-store";
 import type {
   Benchmark,
   CategoryChange,
@@ -25,7 +24,9 @@ import type {
   LineEntries,
 } from "./category-store";
 import { takeCategoryTurn } from "./category-turn";
+import { categoryParent, shownCategoryColumns } from "./shown-category";
 import { CategoryNotFound, LineNotFound } from "./errors";
+import { maybeRefundsAmong } from "./expenses/expenses";
 import { classifyByMerchants } from "./merchants/default-classification";
 import { MerchantNotFound } from "./merchants/errors";
 
@@ -59,6 +60,7 @@ function record(row: CategoryRow): CategoryRecord {
     kind: row.kind,
     name: row.name,
     icon: row.icon,
+    color: row.color,
     position: row.position,
     archivedAt: row.archivedAt === null ? null : row.archivedAt.toISOString(),
     benchmark: benchmarkOf(row),
@@ -170,25 +172,18 @@ async function apply(
   return inserted;
 }
 
-const parent = alias(category, "parent");
-
 /** A category with its parent's name, as a line's or a merchant's default shows it. */
 async function shownCategory(
   transaction: UserTransaction,
   categoryId: string,
 ): Promise<LineCategory | undefined> {
   const [shown] = await transaction
-    .select({
-      id: category.id,
-      name: category.name,
-      parentName: parent.name,
-      kind: category.kind,
-    })
+    .select(shownCategoryColumns)
     .from(category)
-    .leftJoin(parent, eq(parent.id, category.parentId))
+    .leftJoin(categoryParent, eq(categoryParent.id, category.parentId))
     .where(eq(category.id, categoryId));
 
-  return shown;
+  return shown === undefined ? undefined : lineCategoryOf(shown);
 }
 
 /** `CategoryStore` on the user's tables, through `UserData`. */
@@ -207,6 +202,21 @@ export const DatabaseCategoryStore = Layer.effect(
             .from(entry)
             .groupBy(entry.categoryId);
 
+          const inRange = and(gte(entry.happenedOn, range.from), lte(entry.happenedOn, range.to));
+
+          // Money coming back that may be a refund is no income until the user answers (#208), as
+          // the month reads it: the range's incomes of one line, weighed as `maybeRefundsAmong` does.
+          const incomes = await transaction
+            .select({ lineId: entryPart.lineId })
+            .from(entry)
+            .innerJoin(entryPart, eq(entryPart.entryId, entry.id))
+            .where(and(inRange, eq(entry.kind, "income"), eq(entryPart.role, "payment")));
+
+          const waiting = await maybeRefundsAmong(
+            transaction,
+            incomes.map((each) => each.lineId),
+          );
+
           const nets = await transaction
             .select({
               categoryId: entry.categoryId,
@@ -220,7 +230,12 @@ export const DatabaseCategoryStore = Layer.effect(
             .innerJoin(entryPart, eq(entryPart.entryId, entry.id))
             .innerJoin(statementLine, eq(statementLine.id, entryPart.lineId))
             .innerJoin(account, eq(account.id, statementLine.accountId))
-            .where(and(gte(entry.happenedOn, range.from), lte(entry.happenedOn, range.to)))
+            .where(
+              and(
+                inRange,
+                waiting.size === 0 ? undefined : notInArray(entryPart.lineId, [...waiting]),
+              ),
+            )
             .groupBy(entry.categoryId, account.currency)
             .orderBy(account.currency);
 
@@ -442,15 +457,12 @@ export async function categoriesOfLines(
     .selectDistinct({
       lineId: entryPart.lineId,
       entryId: entry.id,
-      id: category.id,
-      name: category.name,
-      parentName: parent.name,
-      kind: category.kind,
+      ...shownCategoryColumns,
     })
     .from(entryPart)
     .innerJoin(entry, eq(entry.id, entryPart.entryId))
     .innerJoin(category, eq(category.id, entry.categoryId))
-    .leftJoin(parent, eq(parent.id, category.parentId))
+    .leftJoin(categoryParent, eq(categoryParent.id, category.parentId))
     .where(inArray(entryPart.lineId, [...lineIds]));
 
   const byLine = new Map<string, Array<(typeof rows)[number]>>();
@@ -471,12 +483,7 @@ export async function categoriesOfLines(
     const [only, ...others] = each;
 
     if (only !== undefined && others.length === 0) {
-      categories.set(lineId, {
-        id: only.id,
-        name: only.name,
-        parentName: only.parentName,
-        kind: only.kind,
-      });
+      categories.set(lineId, lineCategoryOf(only));
     }
   }
 

@@ -15,6 +15,7 @@ import { useAsyncQueuer } from "@tanstack/react-pacer";
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
 
+import { ColumnsSheet } from "@/components/confirm-columns";
 import { ImportContent } from "@/components/import-content";
 import { formatName, importFailureMessage, stateName } from "@/i18n/imports";
 import { loadBlocks } from "@/lib/load-blocks";
@@ -29,6 +30,12 @@ const UPLOADS_AT_ONCE = 2;
 
 /** A file dropped whose upload has not answered yet. */
 type Uploading = { readonly key: string; readonly file: File };
+
+/**
+ * The waiting import whose question is open over the page, as it was then, and the opening's
+ * count: each opening starts from what detection proposed.
+ */
+type Asking = { readonly key: number; readonly summary: ImportSummary };
 
 export const Route = createFileRoute("/_authed/import")({
   loader: async ({ context: { queryClient } }) => {
@@ -88,7 +95,11 @@ function toneOf(summary: ImportSummary): StatusTone {
   }
 }
 
-function rowOf(summary: ImportSummary, days: Intl.DateTimeFormat): ImportFileRow {
+function rowOf(
+  summary: ImportSummary,
+  days: Intl.DateTimeFormat,
+  ask: (summary: ImportSummary) => void,
+): ImportFileRow {
   const done = summary.status === "done" || summary.status === "undone";
 
   return {
@@ -101,7 +112,7 @@ function rowOf(summary: ImportSummary, days: Intl.DateTimeFormat): ImportFileRow
     known: done ? summary.linesDuplicate : null,
     state: stateName(summary),
     tone: toneOf(summary),
-    content: <ImportContent summary={summary} />,
+    content: <ImportContent summary={summary} onAsk={() => ask(summary)} />,
   };
 }
 
@@ -111,7 +122,15 @@ function Import() {
   const [uploading, setUploading] = useState<ReadonlyArray<Uploading>>([]);
   const [notice, setNotice] = useState<string>();
   const [refusals, setRefusals] = useState<ReadonlyArray<string>>([]);
+  // The last question opened stays drawn while it closes, so that it leaves as it came.
+  const [asking, setAsking] = useState<Asking>();
+  const [open, setOpen] = useState(false);
   const days = dayFormat();
+
+  const ask = (summary: ImportSummary) => {
+    setAsking({ key: (asking?.key ?? 0) + 1, summary });
+    setOpen(true);
+  };
 
   const upload = async (item: Uploading) => {
     const answer = await uploadStatement(item.file, null);
@@ -163,7 +182,7 @@ function Import() {
       state: m.importStateUploading(),
       tone: "busy",
     })),
-    ...imports.map((summary) => rowOf(summary, days)),
+    ...imports.map((summary) => rowOf(summary, days, ask)),
   ];
 
   return (
@@ -203,6 +222,14 @@ function Import() {
             rows={rows}
           />
         </Block>
+      )}
+      {asking === undefined ? null : (
+        <ColumnsSheet
+          key={asking.key}
+          summary={asking.summary}
+          open={open}
+          onOpenChange={setOpen}
+        />
       )}
     </Page>
   );
