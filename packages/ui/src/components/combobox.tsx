@@ -14,10 +14,12 @@ import type { ListAnnouncement } from "@ui-sdk/react/select";
 import { useState } from "react";
 
 import { useUiMessages } from "../hooks/use-ui-messages";
+import { useUnhurried } from "../hooks/use-unhurried";
 import { controlClasses, groupFocusRing, itemClasses, popupClasses } from "../lib/form-classes";
 import type { UiMessages } from "../lib/messages";
 import { cn } from "../lib/utils";
 import { Icon } from "./icon";
+import { Loader } from "./loader";
 import type { ChoiceItem } from "./select";
 import { FormField } from "./text-field";
 import type { FieldProps } from "./text-field";
@@ -34,6 +36,12 @@ export type ComboboxProps = FieldProps & {
   required?: boolean;
   /** `sm` in dense rows and toolbars, the height of a small button. */
   size?: "md" | "sm";
+  /**
+   * While the value it shows is being saved: `aria-busy` on its input, and the loader in place of
+   * its chevron once the save lasts (after about 300 ms, then at least 500 ms, as a button's). It
+   * keeps its focus.
+   */
+  pending?: boolean;
 };
 
 /** What screen readers hear once typing pauses, in the page's language. */
@@ -49,7 +57,8 @@ function announce(messages: UiMessages["forms"], change: ListAnnouncement) {
 /**
  * One choice among a long list, found by typing, on ui-sdk's `Combobox`: the input filters the
  * list as the user types (case and accents ignored), and says so when nothing matches. The
- * value is always one of the items; the text is only the search.
+ * value is always one of the items; the text is only the search. Saved by the page, it shows the
+ * choice at once and says it is `pending` until the save ends: only then is the choice kept.
  */
 export function Combobox({
   label,
@@ -65,9 +74,11 @@ export function Combobox({
   onValueChange,
   required,
   size = "md",
+  pending = false,
 }: ComboboxProps) {
   const messages = useUiMessages().forms;
   const [anchor, setAnchor] = useState<HTMLDivElement | null>(null);
+  const shown = useUnhurried(pending);
 
   return (
     <FormField
@@ -95,13 +106,14 @@ export function Combobox({
           <ComboboxValueIcon className="flex text-muted-foreground" />
           <ComboboxInput
             placeholder={placeholder}
-            className="h-full min-w-0 flex-1 bg-transparent outline-none placeholder:text-muted-foreground data-disabled:cursor-not-allowed"
+            aria-busy={pending || undefined}
+            className="h-full min-w-0 flex-1 bg-transparent outline-none placeholder:text-muted-foreground aria-busy:cursor-progress data-disabled:cursor-not-allowed"
           />
           <ComboboxTrigger
             aria-label={messages.showOptions}
             className="flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-sm text-muted-foreground hover:bg-muted data-disabled:cursor-not-allowed"
           >
-            <Icon name="selector" />
+            {shown ? <Loader size="sm" /> : <Icon name="selector" />}
           </ComboboxTrigger>
         </div>
         <ComboboxContent

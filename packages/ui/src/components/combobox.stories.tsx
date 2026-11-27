@@ -53,6 +53,9 @@ export const Disabled: Story = { args: { disabled: true, defaultValue: "health" 
 
 export const Small: Story = { args: { size: "sm" } };
 
+/** Its choice being saved by the page (#238): busy, the loader in place of its chevron. */
+export const Pending: Story = { args: { defaultValue: "subscriptions", pending: true } };
+
 export const Phone: Story = {
   globals: { viewport: { value: "mobile1", isRotated: false } },
   args: { description: "Type a few letters to find it." },

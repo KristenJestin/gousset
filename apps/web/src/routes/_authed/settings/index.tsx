@@ -131,8 +131,8 @@ const CURRENCY_ITEMS = CURRENCY_CODES.map((code) => ({ value: code, label: code 
 
 /**
  * The user's currency, kept on the account: the one their set benchmarks are written in. As the
- * shortcuts' switch, the choice shows at once and is saved without a button, one save at a time; a
- * refusal puts back what the account holds, and says so.
+ * shortcuts' switch, the choice shows at once, pending until its save ends (#238), and is saved
+ * without a button, one save at a time; a refusal puts back what the account holds, and says so.
  */
 function CurrencySettings() {
   const router = useRouter();
@@ -167,6 +167,7 @@ function CurrencySettings() {
         placeholder={m.fieldCurrencyPlaceholder()}
         items={CURRENCY_ITEMS}
         value={saving ?? user.currency}
+        pending={saving !== undefined}
         onValueChange={(next) => {
           if (next !== null) {
             void choose(next);

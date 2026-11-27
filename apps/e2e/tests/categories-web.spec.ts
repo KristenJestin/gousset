@@ -4,7 +4,15 @@ import { exampleStatement } from "@gousset/fixture";
 import { and, eq, isNull } from "drizzle-orm";
 
 import type { TestUser } from "../src/auth";
-import { addUser, expect, fixDay, personOfItsOwn, test, visit } from "../src/test";
+import {
+  addUser,
+  expect,
+  fixDay,
+  personOfItsOwn,
+  slowServerWrites,
+  test,
+  visit,
+} from "../src/test";
 import { importsOn, statementFile } from "../src/imports";
 import { openUserData } from "../src/user-data";
 
@@ -324,8 +332,16 @@ test("the currency chosen in Settings › General writes a fixed benchmark", asy
   await expect(currency).toHaveValue("EUR");
   await currency.fill("");
   await currency.pressSequentially("USD");
+
+  // A slow save (#238): the field shows the choice at once and says it is pending until the save
+  // ends; only then is it kept, and a reload finds it.
+  const unslow = await slowServerWrites(page, 1000);
+
   await page.getByRole("option", { name: "USD", exact: true }).click();
   await expect(currency).toHaveValue("USD");
+  await expect(currency).toHaveAttribute("aria-busy", "true");
+  await expect(currency).not.toHaveAttribute("aria-busy", "true");
+  await unslow();
 
   // Kept on the account: read back on the next visit.
   await page.reload();
