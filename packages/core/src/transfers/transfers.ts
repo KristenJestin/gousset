@@ -524,16 +524,25 @@ async function pairWithAccountInTransaction(
 }
 
 /**
+ * Why a transfer is undone: `user`, the user saying the two lines are no transfer (`Transfers.unpair`),
+ * which the automatic pairing then remembers; `change`, a side changed or deleted under it (a
+ * correction or a deletion of an investment operation, v0.6), which says nothing of what the lines
+ * are, so that both stay pairable.
+ */
+export type UnpairCause = "user" | "change";
+
+/**
  * Undoes the transfer `lineId` is a side of, in `transaction` (`Transfers.unpair`): its sides no
  * transfer any more and back to review, a side the app made deleted, each line left with its entry.
- * Also what a correction or a deletion of an investment operation runs first (v0.6). Lines booked
- * after `day` are none of the user's.
+ * Also what a correction or a deletion of an investment operation runs first (v0.6), for `cause`
+ * `change`. Lines booked after `day` are none of the user's.
  */
 export async function unpairInTransaction(
   transaction: UserTransaction,
   owner: string,
   lineId: string,
   day: string,
+  cause: UnpairCause,
 ): Promise<Outcome<Unpaired> | { readonly notPaired: string }> {
   // A side the app made on an account kept by its balance goes below: its movements are made again.
   await takeCategoryTurn(transaction, owner);
@@ -563,11 +572,16 @@ export async function unpairInTransaction(
     )
     .returning({ id: statementLine.id });
 
-  // "Not a transfer", remembered on the lines left: the automatic pairing leaves them alone, and
-  // the monthly review lists them again, for what they are instead.
+  // The monthly review lists the lines left again, for what they are instead. The user's "Not a
+  // transfer" is remembered on them: the automatic pairing leaves them alone. A change says no such
+  // thing: they stay pairable, as an import's lines are once it is undone.
   await transaction
     .update(statementLine)
-    .set({ reviewState: "to_review", transferRefused: true })
+    .set(
+      cause === "user"
+        ? { reviewState: "to_review", transferRefused: true }
+        : { reviewState: "to_review" },
+    )
     .where(inArray(statementLine.id, [line.id, otherId]));
 
   // Each line left is an expense or an income again: its entry, in its kind's fallback (#23).
@@ -717,7 +731,7 @@ export const transfersLayer = Layer.effect(
           const day = yield* today;
 
           const outcome = yield* userData.transaction(owner, (transaction) =>
-            unpairInTransaction(transaction, owner, lineId, day),
+            unpairInTransaction(transaction, owner, lineId, day, "user"),
           );
 
           if ("missing" in outcome) {

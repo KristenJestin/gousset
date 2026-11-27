@@ -313,10 +313,11 @@ async function correctIn(
   const nowCash = !movesInside(checked.kind);
 
   // A deposit or a withdrawal paired as a transfer and moved in its day or its amount, or that is
-  // no deposit nor withdrawal any more, is unpaired first: its other side back to review, as
-  // unpairing does (#26).
+  // no deposit nor withdrawal any more, is unpaired first: its other side back to review. A
+  // correction is no "Not a transfer": both sides stay pairable, and a deposit or a withdrawal is
+  // paired again below when it has a clear candidate.
   if ((moved || !nowCash) && (await pairedLine(transaction, current.lineId))) {
-    await unpairInTransaction(transaction, owner, current.lineId, "9999-12-31");
+    await unpairInTransaction(transaction, owner, current.lineId, "9999-12-31", "change");
   }
 
   // Its entry was made of the line as it was: moved, or no money in or out of the account any
@@ -376,9 +377,10 @@ async function removeIn(
     return { gone: operationId };
   }
 
-  // A side of a transfer is unpaired first: the other side goes back to review, with its entry.
+  // A side of a transfer is unpaired first: the other side goes back to review, with its entry,
+  // and stays pairable (a deletion is no "Not a transfer").
   if (await pairedLine(transaction, current.lineId)) {
-    await unpairInTransaction(transaction, owner, current.lineId, "9999-12-31");
+    await unpairInTransaction(transaction, owner, current.lineId, "9999-12-31", "change");
   }
 
   const gone = await paymentsOfLines(transaction, eq(entryPart.lineId, current.lineId));
@@ -668,7 +670,7 @@ export const enterInvestmentOperation = (owner: string, accountId: string, input
  * Corrects an operation and its line together, as `input` gives it whole (a label of null keeps
  * the line's). An imported line keeps its dedup key. A deposit or a withdrawal paired as a transfer
  * whose day or amount changes, or that becomes another kind, is unpaired first, its other side back
- * to review; a kind moved between a deposit or a withdrawal and the others gives the line its
+ * to review and still pairable, and paired again at once with a clear candidate; a kind moved between a deposit or a withdrawal and the others gives the line its
  * default entry or takes it away, and a deposit or a withdrawal moved gets its default entry anew.
  * Fails with `OperationNotFound`, and as `enterInvestmentOperation` refuses.
  */
@@ -685,7 +687,7 @@ export const correctInvestmentOperation = (
 
 /**
  * Deletes an operation's line, and the operation with it; a side of a transfer is unpaired first,
- * its other side back to review. The operation as it was. Fails with `OperationNotFound`.
+ * its other side back to review and still pairable. The operation as it was. Fails with `OperationNotFound`.
  */
 export const deleteInvestmentOperation = (owner: string, operationId: string) =>
   Effect.gen(function* () {

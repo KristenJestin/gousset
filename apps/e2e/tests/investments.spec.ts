@@ -34,6 +34,7 @@ import {
   saveImportedOperations,
   splitLine,
   transfersLayer,
+  unpairLine,
 } from "@gousset/core";
 import type {
   AccountStore,
@@ -193,6 +194,17 @@ const entriesOf = (lineIds: ReadonlyArray<string>) =>
     return lineIds.map((lineId) =>
       parts.flatMap((part) => (part.lineId === lineId ? [part.classifiedBy] : [])),
     );
+  });
+
+/** Whether each line is said to be no transfer (`transfer_refused`); null for none. */
+const refusedOf = (lineIds: ReadonlyArray<string>) =>
+  data.asUser(owner, async (transaction) => {
+    const rows = await transaction
+      .select({ id: statementLine.id, refused: statementLine.transferRefused })
+      .from(statementLine)
+      .where(inArray(statementLine.id, [...lineIds]));
+
+    return lineIds.map((lineId) => rows.find((row) => row.id === lineId)?.refused ?? null);
   });
 
 /** A statement of these lines alone, each with a reference of its own. */
@@ -706,6 +718,61 @@ test("correcting an operation changes its line with it, and unpairs a deposit mo
 
   expect(detail.position).toMatchObject({ quantity: "3", cost: { minor: 30_031 } });
   expect(await entriesOf([purchase.lineId])).toEqual([[]]);
+});
+
+test('a deposit corrected in its day is paired again: a correction is no "not a transfer"', async () => {
+  const current = await newAccount("Repair current", "current");
+  const pea = await newAccount("Repair PEA", "investment");
+
+  const out = await importLine(current, "repair-current", {
+    bookedOn: "2026-10-03",
+    amountMinor: -40_047,
+    label: "SEPA TRF TO MY PEA",
+  });
+
+  const deposit = await enter(pea, {
+    kind: "deposit",
+    bookedOn: "2026-10-03",
+    amountMinor: 40_047,
+  });
+
+  expect(deposit.paired).toBe(true);
+
+  // Its day corrected: unpaired, then paired again at once with its only candidate.
+  const moved = await run(
+    correctInvestmentOperation(
+      owner,
+      deposit.id,
+      operation({ kind: "deposit", bookedOn: "2026-10-04", amountMinor: 40_047 }),
+    ),
+  );
+
+  expect(moved).toMatchObject({ bookedOn: "2026-10-04", paired: true });
+  expect((await run(lineTransferOf(owner, out))).paired).toMatchObject({
+    other: { id: deposit.lineId },
+    setAside: true,
+  });
+  expect(await entriesOf([out, deposit.lineId])).toEqual([[], []]);
+  expect(await refusedOf([out, deposit.lineId])).toEqual([false, false]);
+
+  // Deleted: its other side stays pairable, and the next deposit of its amount pairs with it.
+  await run(deleteInvestmentOperation(owner, deposit.id));
+
+  expect(await refusedOf([out])).toEqual([false]);
+
+  const again = await enter(pea, {
+    kind: "deposit",
+    bookedOn: "2026-10-03",
+    amountMinor: 40_047,
+  });
+
+  expect(again.paired).toBe(true);
+  expect((await run(lineTransferOf(owner, out))).paired?.other.id).toBe(again.lineId);
+
+  // The user's own unpairing is still a "not a transfer" on both sides.
+  await run(unpairLine(owner, out));
+
+  expect(await refusedOf([out, again.lineId])).toEqual([true, true]);
 });
 
 test("deleting an operation deletes its line, unpairs a deposit, and keeps its security", async () => {
