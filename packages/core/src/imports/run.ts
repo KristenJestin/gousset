@@ -29,6 +29,7 @@ import { balanceAt, looksEmpty } from "../balances";
 import { takeCategoryTurn } from "../category-turn";
 import { entriesForLines } from "../entries";
 import { matchTopUpsIn } from "../expenses/top-ups";
+import { listsNewestFirst } from "../investments/file-order";
 import { saveImportedOperations } from "../investments/import-operations";
 import type { ImportedOperation } from "../investments/import-operations";
 import { checkOperation } from "../investments/operation-input";
@@ -338,11 +339,11 @@ export function runImport(
           dedupKey: keys[index] ?? "",
         }));
 
-        // A file whose days go down from its first row to its last lists its rows newest first: its
-        // rows are saved in reverse, so that the lines keep the order the operations happened in,
-        // which a day's positions replay (a purchase before the sale of what it bought). Their keys
-        // stay the file's own. A file of one day keeps its order.
-        const newestFirst = (inFileOrder[0]?.bookedOn ?? "") > (inFileOrder.at(-1)?.bookedOn ?? "");
+        // A file whose days mostly go down from row to row lists its rows newest first
+        // (`listsNewestFirst`): its rows are saved in reverse, so that the lines keep the order the
+        // operations happened in, which a day's positions replay (a purchase before the sale of
+        // what it bought). Their keys stay the file's own. A file of one day keeps its order.
+        const newestFirst = listsNewestFirst(inFileOrder.map((each) => each.bookedOn));
 
         const keyed = newestFirst ? inFileOrder.toReversed() : inFileOrder;
 
