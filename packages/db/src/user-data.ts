@@ -73,6 +73,15 @@ export class UserData extends Context.Service<
       owner: string,
       work: (transaction: UserTransaction) => Promise<A>,
     ) => Effect.Effect<Option.Option<A>, QueryFailed>;
+    /**
+     * The same, once per user, for the re-read of the merchants made from the `CARD` of an English
+     * card label (#243): it marks `auth_user.merchant_card_labels_reread`, as the app's role, before
+     * acting as the user, and runs `work` only when the mark was not set yet; none otherwise.
+     */
+    readonly rereadingCardLabels: <A>(
+      owner: string,
+      work: (transaction: UserTransaction) => Promise<A>,
+    ) => Effect.Effect<Option.Option<A>, QueryFailed>;
   }
 >()("@gousset/db/UserData") {}
 
@@ -143,6 +152,24 @@ export function userDataLayer(db: Database): Layer.Layer<UserData> {
             .update(authUser)
             .set({ merchantTownsMerged: true })
             .where(and(eq(authUser.id, owner), eq(authUser.merchantTownsMerged, false)))
+            .returning({ id: authUser.id });
+
+          if (marked.length === 0) {
+            return Option.none();
+          }
+
+          await actAs(transaction, owner);
+
+          return Option.some(await work(transaction));
+        }),
+      ),
+    rereadingCardLabels: (owner, work) =>
+      attempt(() =>
+        db.transaction(async (transaction) => {
+          const marked = await transaction
+            .update(authUser)
+            .set({ merchantCardLabelsReread: true })
+            .where(and(eq(authUser.id, owner), eq(authUser.merchantCardLabelsReread, false)))
             .returning({ id: authUser.id });
 
           if (marked.length === 0) {
