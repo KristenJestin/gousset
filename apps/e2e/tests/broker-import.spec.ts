@@ -285,6 +285,68 @@ test("import the same Fortuneo file again with the library's profile: nothing is
   expect(await linesOfImport(owner, again.id)).toEqual([]);
 });
 
+test("a Fortuneo file listing its days newest first replays a day's purchase before its sale", async ({
+  app,
+  user,
+}) => {
+  const { owner, pea, profile } = await personWithPea(app, user, "broker-newest-first");
+  const fund = isin("FOR000002");
+
+  // Newest first, as some brokers list their history: the day's sale above its purchase.
+  const file = {
+    fileName: "fortuneo-newest-first.csv",
+    bytes: fortuneoExport(
+      [
+        [
+          "06/11/2026",
+          "Vente Comptant",
+          "FORTUNE SMALL CAPS",
+          fund,
+          "2",
+          "30,00",
+          "",
+          "0,99",
+          "59,01",
+          "EUR",
+        ],
+        [
+          "06/11/2026",
+          "Achat Comptant",
+          "FORTUNE SMALL CAPS",
+          fund,
+          "3",
+          "29,00",
+          "",
+          "0,99",
+          "-87,99",
+          "EUR",
+        ],
+        ["02/11/2026", "Versement espèces", "VIREMENT", "", "", "", "", "", "200,00", "EUR"],
+      ],
+      FORTUNEO_HEADER,
+    ),
+  };
+
+  expect(await importWith(owner, pea, profile, file)).toMatchObject({
+    status: "done",
+    linesAdded: 3,
+  });
+
+  // Bought before it was sold: one unit left, the sale taking off two thirds of what three cost.
+  const [listed] = (await run(investmentAccounts(owner))).filter((each) => each.id === pea);
+
+  expect(listed?.positions.find((each) => each.security.isin === fund)).toMatchObject({
+    quantity: "1",
+    cost: { minor: 8799 - 5866, currency: "EUR" },
+    incomplete: false,
+  });
+
+  // Its keys are the file's: imported again, it adds nothing.
+  expect(
+    await importWith(owner, pea, profile, { ...file, fileName: "fortuneo-newest-again.csv" }),
+  ).toMatchObject({ status: "done", linesAdded: 0, linesDuplicate: 3 });
+});
+
 test("a library profile imported, then a matching file uploaded, is read with it without picking", async ({
   app,
   user,

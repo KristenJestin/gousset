@@ -65,7 +65,8 @@ export async function saveImportedOperations(
   const named = (each: ImportedOperation) =>
     each.security === null ? undefined : securities.get(each.security.isin);
 
-  // Oldest first, the file's order kept within a day, as the statements' import saves its lines.
+  // Oldest first, the order given kept within a day, as the statements' import saves its lines: the
+  // file's, or its reverse for a file listed newest first (`../imports/run.ts`).
   const ordered = operations
     .map((each, order) => ({ each, order }))
     .toSorted((a, b) => a.each.bookedOn.localeCompare(b.each.bookedOn) || a.order - b.order)

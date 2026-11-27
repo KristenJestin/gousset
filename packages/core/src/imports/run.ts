@@ -333,10 +333,18 @@ export function runImport(
           })),
         );
 
-        const keyed: ReadonlyArray<ImportedOperation> = checked.map((each, index) => ({
+        const inFileOrder: ReadonlyArray<ImportedOperation> = checked.map((each, index) => ({
           ...each,
           dedupKey: keys[index] ?? "",
         }));
+
+        // A file whose days go down from its first row to its last lists its rows newest first: its
+        // rows are saved in reverse, so that the lines keep the order the operations happened in,
+        // which a day's positions replay (a purchase before the sale of what it bought). Their keys
+        // stay the file's own. A file of one day keeps its order.
+        const newestFirst = (inFileOrder[0]?.bookedOn ?? "") > (inFileOrder.at(-1)?.bookedOn ?? "");
+
+        const keyed = newestFirst ? inFileOrder.toReversed() : inFileOrder;
 
         // The key decides at the insert (`on conflict do nothing`): nothing to compare before.
         yield* progress("deduplicate", { done: keyed.length, total: keyed.length });
