@@ -6,6 +6,7 @@ import {
   merchant,
   rule,
   statementLine,
+  subjectPayback,
 } from "@gousset/db/schema/ledger";
 import { transfer } from "@gousset/db/schema/transfers";
 import { UserData } from "@gousset/db/user-data";
@@ -371,11 +372,17 @@ export const DatabaseCategoryStore = Layer.effect(
                 .from(transfer)
                 .where(or(eq(transfer.outLineId, lineId), eq(transfer.inLineId, lineId)));
 
+              const paybacks = await transaction
+                .select({ lineId: subjectPayback.lineId })
+                .from(subjectPayback)
+                .where(eq(subjectPayback.lineId, lineId));
+
               const decided = decide({
                 lineId,
                 amountMinor: line.amountMinor,
                 entries,
                 paired: sides.length > 0,
+                paidBack: paybacks.length > 0,
                 categories: await readAll(transaction),
               });
 

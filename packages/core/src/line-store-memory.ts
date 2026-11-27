@@ -206,6 +206,8 @@ export function memoryLineStore(rows: ReadonlyMap<string, MemoryLineRows> = new 
           originalCurrency: line.originalCurrency ?? null,
           counterpartyIban: line.counterpartyIban ?? null,
           expiresOn: line.expiresOn ?? null,
+          // The memory store keeps no receipt (#217): their files are on disk.
+          receipts: [],
           duplicateOf:
             original === undefined
               ? null

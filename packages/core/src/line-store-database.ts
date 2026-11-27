@@ -14,6 +14,7 @@ import type { SQL } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { Effect, Layer } from "effect";
 
+import { receiptsOfLineIn } from "./attachments/attachments";
 import { categoriesOfLines } from "./category-store-database";
 import type { LineCategory } from "./category-store";
 import { LineStore } from "./line-store";
@@ -354,6 +355,7 @@ async function show(
   const categories = await categoriesOfLines(transaction, [row.id]);
   const subjects = await subjectsOfLines(transaction, [row.id]);
   const paybacks = await paybackSubjectsOfLines(transaction, [row.id]);
+  const receipts = await receiptsOfLineIn(transaction, row.id);
 
   return {
     ...found(
@@ -367,6 +369,7 @@ async function show(
     originalCurrency: row.originalCurrency,
     counterpartyIban: row.counterpartyIban,
     expiresOn: row.expiresOn,
+    receipts,
     duplicateOf:
       row.duplicateId === null ||
       row.duplicateBookedOn === null ||

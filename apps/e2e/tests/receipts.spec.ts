@@ -5,7 +5,13 @@ import { join } from "node:path";
 
 import { request } from "@playwright/test";
 import type { APIRequestContext } from "@playwright/test";
-import { deleteReceipt, lineReceipts, receiptStorageLayer, sweepReceipts } from "@gousset/core";
+import {
+  deleteReceipt,
+  lineReceipts,
+  receiptStorageLayer,
+  subjectReceipts,
+  sweepReceipts,
+} from "@gousset/core";
 import type { ReceiptStorage } from "@gousset/core";
 import {
   account,
@@ -14,6 +20,7 @@ import {
   lineAttachment,
   statementLine,
   subject,
+  subjectPayback,
 } from "@gousset/db/schema/ledger";
 import type { UserData } from "@gousset/db/user-data";
 import { eq, notInArray } from "drizzle-orm";
@@ -386,6 +393,47 @@ test("another user's attachment is unreachable", async ({ app, user }) => {
   } finally {
     await ana.http.dispose();
     await ben.http.dispose();
+  }
+});
+
+test("a paid-back subject's zip holds the receipts of its payback lines", async ({ app, user }) => {
+  const ola = await personWithData(app, user, "ola");
+  const data = openUserData(app.database);
+
+  try {
+    // The seed's work trip, paid back by one line of its own.
+    const [trip] = await data.asUser(ola.owner, (each) =>
+      each
+        .select({ id: subject.id, lineId: subjectPayback.lineId })
+        .from(subject)
+        .innerJoin(subjectPayback, eq(subjectPayback.subjectId, subject.id))
+        .where(eq(subject.name, "Work trip")),
+    );
+
+    if (trip === undefined) {
+      throw new Error("The seed gave no paid-back subject with its line.");
+    }
+
+    const report = madeUpFile(PDF, 9000, 16);
+    const receipt = await attached(ola.http, trip.lineId, "expense-report.pdf", report);
+
+    const listed = await onTheApp(app.database, subjectReceipts(ola.owner, trip.id));
+
+    expect(listed.map((each) => each.id)).toEqual([receipt.id]);
+
+    const answer = await ola.http.get(`/api/subjects/${trip.id}/receipts`);
+
+    expect(answer.status()).toBe(200);
+
+    const zipped = unzipSync(new Uint8Array(await answer.body()));
+
+    expect(Object.keys(zipped)).toEqual(["2026-10-20 expense-report.pdf"]);
+    expect(
+      Buffer.from(zipped["2026-10-20 expense-report.pdf"] ?? new Uint8Array()).equals(report),
+    ).toBe(true);
+  } finally {
+    await data.close();
+    await ola.http.dispose();
   }
 });
 

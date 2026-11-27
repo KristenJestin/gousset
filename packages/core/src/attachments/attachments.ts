@@ -226,26 +226,34 @@ export const attachReceipt = (
     return receiptOf(row);
   });
 
+/** The receipts of the line `lineId`, the first attached first (a line's detail, `../lines`). */
+export async function receiptsOfLineIn(
+  transaction: UserTransaction,
+  lineId: string,
+): Promise<ReadonlyArray<Receipt>> {
+  const rows = await transaction
+    .select(receiptColumns)
+    .from(lineAttachment)
+    .where(eq(lineAttachment.lineId, lineId))
+    .orderBy(asc(lineAttachment.id));
+
+  return rows.map(receiptOf);
+}
+
 /** The receipts of `owner`'s line `lineId`, the first attached first. */
 export const lineReceipts = (owner: string, lineId: string) =>
   Effect.gen(function* () {
     const userData = yield* UserData;
 
-    const rows = yield* userData.transaction(owner, async (each) =>
-      (await lineExists(each, lineId))
-        ? each
-            .select(receiptColumns)
-            .from(lineAttachment)
-            .where(eq(lineAttachment.lineId, lineId))
-            .orderBy(asc(lineAttachment.id))
-        : undefined,
+    const receipts = yield* userData.transaction(owner, async (each) =>
+      (await lineExists(each, lineId)) ? receiptsOfLineIn(each, lineId) : undefined,
     );
 
-    if (rows === undefined) {
+    if (receipts === undefined) {
       return yield* Effect.fail(new LineNotFound({ lineId }));
     }
 
-    return rows.map(receiptOf);
+    return receipts;
   });
 
 const SubjectReceiptRows = Schema.Struct({
@@ -269,7 +277,8 @@ const decodeSubjectReceipts = Schema.decodeUnknownSync(SubjectReceiptRows);
 /**
  * The receipts of every line `subjectId`'s expenses come from, its descendants' included (a
  * subject counts its children's expenses, docs/data-model.md, v0.5): their payments and their
- * refunds. Each once, by its line's day, then as attached.
+ * refunds, and the lines that pay it back (an expense report's statement belongs there). Each
+ * once, by its line's day, then as attached.
  */
 async function subjectReceiptRows(transaction: UserTransaction, subjectId: string) {
   const result = await transaction.execute(sql`
@@ -288,6 +297,9 @@ async function subjectReceiptRows(transaction: UserTransaction, subjectId: strin
       select part.line_id from entry_part part
       join entry_subject attached on attached.entry_id = part.entry_id
       where attached.subject_id in (select id from tree)
+      union
+      select payback.line_id from subject_payback payback
+      where payback.subject_id in (select id from tree)
     )
     order by l.booked_on, a.id`);
 
@@ -330,7 +342,10 @@ const readSubjectReceipts = (owner: string, subjectId: string) =>
     return read;
   });
 
-/** The receipts of `owner`'s subject `subjectId`: those of every line its expenses come from. */
+/**
+ * The receipts of `owner`'s subject `subjectId`: those of every line its expenses come from, and
+ * of its payback lines.
+ */
 export const subjectReceipts = (owner: string, subjectId: string) =>
   readSubjectReceipts(owner, subjectId).pipe(
     Effect.map(({ rows }): ReadonlyArray<SubjectReceipt> =>

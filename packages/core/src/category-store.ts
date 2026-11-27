@@ -108,6 +108,8 @@ export type LineEntries = {
   readonly entries: ReadonlyArray<{ readonly id: string; readonly kind: EntryKind }>;
   /** A side of a transfer (#26): it is the transfer, and has no entry. */
   readonly paired: boolean;
+  /** A line that pays back a subject (#217): its subject classifies it, and it has no entry. */
+  readonly paidBack: boolean;
   readonly categories: ReadonlyArray<CategoryRecord>;
 };
 

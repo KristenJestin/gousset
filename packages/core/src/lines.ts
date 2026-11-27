@@ -1,6 +1,7 @@
 import { minorDigits } from "@gousset/import";
 import { Effect, Result } from "effect";
 
+import type { Receipt } from "./attachments/attachments";
 import type { LineCategory } from "./category-store";
 import { LineNotFound, LineSearchRefused } from "./errors";
 import { LineStore } from "./line-store";
@@ -103,6 +104,8 @@ export type LineDetail = LineRow & {
   readonly counterpartyIban: string | null;
   /** A benefit account's credit: the day it expires. */
   readonly expiresOn: string | null;
+  /** Its receipts (#217), the first attached first: none for most lines. */
+  readonly receipts: ReadonlyArray<Receipt>;
   readonly source: "import" | "manual" | "balance" | "counterpart";
   /** A held line: the line it looks like. */
   readonly duplicateOf: {
@@ -404,6 +407,7 @@ export const showLine = (owner: string, lineId: string) =>
           : money(line.originalAmountMinor, line.originalCurrency),
       counterpartyIban: line.counterpartyIban,
       expiresOn: line.expiresOn,
+      receipts: line.receipts,
       source: line.source,
       duplicateOf:
         line.duplicateOf === null

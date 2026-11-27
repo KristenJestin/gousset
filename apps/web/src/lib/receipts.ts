@@ -75,6 +75,19 @@ export type ReceiptUploadAnswer = typeof ReceiptUploadAnswer.Type;
 
 const decodeAnswer = Schema.decodeUnknownOption(Schema.fromJsonString(ReceiptUploadAnswer));
 
+/** The statuses a refusal comes with, its code in JSON; any other failure says nothing readable. */
+const REFUSAL_STATUSES = new Set([401, 403, 404, 413, 415, 422, 503]);
+
+const answerOf = (body: string): ReceiptUploadAnswer =>
+  Option.getOrElse(decodeAnswer(body), () => ({ refused: "UPLOAD_FAILED" as const }));
+
+/** A refusal's code, read from its JSON; a proxy's page or a crash says nothing the page reads. */
+async function refusalOf(refused: Response): Promise<ReceiptUploadAnswer> {
+  return REFUSAL_STATUSES.has(refused.status)
+    ? answerOf(await refused.text())
+    : { refused: "UPLOAD_FAILED" };
+}
+
 /**
  * Attaches `file` to the line `lineId`. A file over the installation's limit is refused here, before
  * a byte is sent; the server refuses it again, and reads its bytes for its kind.
@@ -95,9 +108,11 @@ export async function uploadReceipt(
       body: file,
     });
 
-    return Option.getOrElse(decodeAnswer(await response.text()), () => ({
-      refused: "UPLOAD_FAILED" as const,
-    }));
+    if (!response.ok) {
+      return await refusalOf(response);
+    }
+
+    return answerOf(await response.text());
   } catch {
     return { refused: "UPLOAD_FAILED" };
   }
