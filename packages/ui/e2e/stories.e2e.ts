@@ -181,6 +181,17 @@ const SHOTS: ReadonlyArray<Shot> = [
   { id: "subjects-subjectmerchants--with-other-rules" },
   { id: "subjects-subjecteditor--default" },
   { id: "subjects-subjecteditor--phone", width: 390 },
+  // A paid-back subject (#217): its figures, its state and its payback lines.
+  { id: "subjects-subjectpayback--default" },
+  { id: "subjects-subjectpayback--phone", width: 390 },
+  // What the user still waits to be paid back for, under the tree (#217).
+  { id: "subjects-paybackwaiting--default" },
+  { id: "subjects-paybackwaiting--phone", width: 390 },
+  // A line's receipts, each to download or delete, and "Attach a receipt" (#217).
+  { id: "operations-receipts--default" },
+  { id: "operations-receipts--phone", width: 390 },
+  // A payback line's detail: the subject it pays back, no income (#217).
+  { id: "operations-linepayback--default" },
   // Where the subjects meet the money (#37): a line's chips and "+ Add", the operations' column and
   // filter, an account's lines, a split by subject and the review's "by subject".
   { id: "subjects-subjectchips--in-detail" },
