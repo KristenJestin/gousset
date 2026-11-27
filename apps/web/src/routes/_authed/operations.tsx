@@ -54,6 +54,7 @@ import { useState } from "react";
 import type { ReactNode } from "react";
 
 import { AppLink } from "@/components/app-link";
+import { LineReceiptsOf } from "@/components/line-receipts";
 import { LineReview, proposalText } from "@/components/line-review";
 import { ProposedRule } from "@/components/proposed-rule";
 import type { ProposedRuleSets } from "@/components/proposed-rule";
@@ -1650,6 +1651,7 @@ function OpenLine({
           onOpen={onOpen}
         />
       }
+      receipts={<LineReceiptsOf key={line.id} lineId={line.id} receipts={line.receipts} />}
       onClose={onClose}
       locale={locale}
     />

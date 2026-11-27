@@ -21,6 +21,7 @@ import {
   SubjectPaybackSkeleton,
 } from "@gousset/ui/components/subject-payback";
 import type { PaybackLineView } from "@gousset/ui/components/subject-payback";
+import { SubjectReceipts, SubjectReceiptsSkeleton } from "@gousset/ui/components/receipts";
 import {
   SubjectProposals,
   SubjectProposalsSkeleton,
@@ -46,6 +47,8 @@ import {
 import { paybackRefusalMessage, subjectRefusalMessage } from "@/i18n/messages";
 import { dayRange, shortDay, shortDays } from "@/lib/account-day";
 import { categoryPath } from "@/lib/categories";
+import { receiptPath, subjectReceiptsPath } from "@/lib/receipts";
+import { receiptQueries } from "@/queries/receipts";
 import { invalidatePaybacks, invalidateSubjects, subjectQueries } from "@/queries/subjects";
 
 /**
@@ -287,6 +290,13 @@ function SubjectPage() {
         resetKey={resetKey}
       >
         <Expenses subjectId={subjectId} period={period} />
+      </DataBlock>
+      <DataBlock
+        title={m.subjectsBlockReceipts()}
+        skeleton={<SubjectReceiptsSkeleton />}
+        resetKey={subjectId}
+      >
+        <Receipts subjectId={subjectId} />
       </DataBlock>
       <SubjectSheet
         key={sheet.key}
@@ -562,6 +572,29 @@ function Children({ subjectId, period }: BlockProps) {
         );
       })}
     </FigureList>
+  );
+}
+
+/**
+ * Every receipt of the subject's lines (#217), its expenses' and its payback lines', each to
+ * download, and the zip of them all.
+ */
+function Receipts({ subjectId }: { subjectId: string }) {
+  const { data } = useSuspenseQuery(receiptQueries.ofSubject(subjectId));
+  const locale = usePageLanguage();
+  const day = shortDays(locale);
+
+  return (
+    <SubjectReceipts
+      receipts={(data.ok ? data.receipts : []).map((receipt) => ({
+        id: receipt.id,
+        fileName: receipt.fileName,
+        href: receiptPath(receipt.id),
+        detail: `${receipt.label} · ${day(receipt.bookedOn)}`,
+      }))}
+      zipHref={subjectReceiptsPath(subjectId)}
+      emptyText={m.subjectsReceiptsNone()}
+    />
   );
 }
 

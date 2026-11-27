@@ -15,4 +15,6 @@ export const subjectKeys = {
     [...subjectKeys.all, "preview", subjectId, ...merchantIds] as const,
   /** What the user still waits for, of the paid-back subjects (#217). */
   waiting: () => [...subjectKeys.all, "waiting"] as const,
+  /** Every receipt of a subject's lines (#217). */
+  receipts: (subjectId: string) => [...subjectKeys.all, "receipts", subjectId] as const,
 };
