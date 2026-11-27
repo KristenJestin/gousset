@@ -10,6 +10,7 @@ import {
   subject,
   subjectAccount,
   subjectEntryRefused,
+  subjectPayback,
 } from "@gousset/db/schema/ledger";
 import { sql } from "drizzle-orm";
 
@@ -392,6 +393,39 @@ test("a user never attaches a row to another user's row", async () => {
       transaction
         .insert(subjectEntryRefused)
         .values({ userId: alex, subjectId: theirSubject, entryId: own.entry }),
+    ),
+  ).toBe("23503");
+
+  // A line of one's own paying back the other user's subject, and the other way (#217); the
+  // oldest line, which is no payback line of the seed's already.
+  const [theirLine] = await data.asUser(sam, (transaction) =>
+    transaction
+      .select({ id: statementLine.id })
+      .from(statementLine)
+      .orderBy(statementLine.id)
+      .limit(1),
+  );
+
+  const [ownLine] = await data.asUser(alex, (transaction) =>
+    transaction
+      .select({ id: statementLine.id })
+      .from(statementLine)
+      .orderBy(statementLine.id)
+      .limit(1),
+  );
+
+  expect(
+    await data.refusal(alex, (transaction) =>
+      transaction
+        .insert(subjectPayback)
+        .values({ userId: alex, subjectId: theirSubject, lineId: ownLine?.id ?? "" }),
+    ),
+  ).toBe("23503");
+  expect(
+    await data.refusal(alex, (transaction) =>
+      transaction
+        .insert(subjectPayback)
+        .values({ userId: alex, subjectId: own.subject, lineId: theirLine?.id ?? "" }),
     ),
   ).toBe("23503");
 

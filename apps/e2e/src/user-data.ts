@@ -14,7 +14,9 @@ import {
   rule,
   subject,
   subjectAccount,
+  statementLine,
   subjectEntryRefused,
+  subjectPayback,
 } from "@gousset/db/schema/ledger";
 import { recogniseMerchants } from "@gousset/core";
 import { seedMadeUpData } from "@gousset/db/seed";
@@ -55,6 +57,7 @@ export const USER_TABLES: ReadonlyArray<UserTable> = [
   { name: "entry_subject", key: "entry_id", rows: "expenses' subjects" },
   { name: "subject_account", key: "account_id", rows: "subjects' accounts" },
   { name: "subject_entry_refused", key: "entry_id", rows: "proposals refused for a subject" },
+  { name: "subject_payback", key: "line_id", rows: "subjects' payback lines" },
 ];
 
 /**
@@ -321,7 +324,8 @@ export function openUserData(database: string) {
               });
 
               // A subject of the user's (#37), linked to an account, with an expense attached and
-              // another refused as a proposal, so that its tables hold rows of theirs too.
+              // another refused as a proposal, paid back by someone (#217) with a line of its own,
+              // so that its tables hold rows of theirs too.
               yield* userData.transaction(owner, async (each) => {
                 const [van] = await each
                   .insert(subject)
@@ -359,6 +363,34 @@ export function openUserData(database: string) {
                 await each
                   .insert(subjectEntryRefused)
                   .values({ userId: owner, subjectId: van.id, entryId: refused.id });
+
+                // A subject of its own, with no expense, and a line of no entry, as a payback line
+                // is: discarded, so that it changes no balance nor figure the seed's specs read.
+                const [trip] = await each
+                  .insert(subject)
+                  .values({ userId: owner, name: "Work trip", paybackFrom: "Example Fleet Ltd" })
+                  .returning({ id: subject.id });
+
+                const [payback] = await each
+                  .insert(statementLine)
+                  .values({
+                    userId: owner,
+                    accountId: linked.id,
+                    source: "manual",
+                    state: "discarded",
+                    bookedOn: "2026-10-20",
+                    amountMinor: 4200,
+                    label: "VIR EXAMPLE FLEET LTD EXPENSES",
+                  })
+                  .returning({ id: statementLine.id });
+
+                if (trip === undefined || payback === undefined) {
+                  throw new Error("The paid-back subject or its line was not made.");
+                }
+
+                await each
+                  .insert(subjectPayback)
+                  .values({ userId: owner, subjectId: trip.id, lineId: payback.id });
               });
             }),
           ),
