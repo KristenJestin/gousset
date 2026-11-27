@@ -226,26 +226,34 @@ export const attachReceipt = (
     return receiptOf(row);
   });
 
+/** The receipts of the line `lineId`, the first attached first (a line's detail, `../lines`). */
+export async function receiptsOfLineIn(
+  transaction: UserTransaction,
+  lineId: string,
+): Promise<ReadonlyArray<Receipt>> {
+  const rows = await transaction
+    .select(receiptColumns)
+    .from(lineAttachment)
+    .where(eq(lineAttachment.lineId, lineId))
+    .orderBy(asc(lineAttachment.id));
+
+  return rows.map(receiptOf);
+}
+
 /** The receipts of `owner`'s line `lineId`, the first attached first. */
 export const lineReceipts = (owner: string, lineId: string) =>
   Effect.gen(function* () {
     const userData = yield* UserData;
 
-    const rows = yield* userData.transaction(owner, async (each) =>
-      (await lineExists(each, lineId))
-        ? each
-            .select(receiptColumns)
-            .from(lineAttachment)
-            .where(eq(lineAttachment.lineId, lineId))
-            .orderBy(asc(lineAttachment.id))
-        : undefined,
+    const receipts = yield* userData.transaction(owner, async (each) =>
+      (await lineExists(each, lineId)) ? receiptsOfLineIn(each, lineId) : undefined,
     );
 
-    if (rows === undefined) {
+    if (receipts === undefined) {
       return yield* Effect.fail(new LineNotFound({ lineId }));
     }
 
-    return rows.map(receiptOf);
+    return receipts;
   });
 
 const SubjectReceiptRows = Schema.Struct({
