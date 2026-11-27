@@ -320,7 +320,9 @@ export function operationsProfileOf(
       kind: placeOf(mapping, "kind"),
       isin: placeOf(mapping, "isin"),
       securityName,
-      securityCurrency: placeOf(mapping, "securityCurrency"),
+      // A price is written in its security's currency: one column may say both (Degiro's), and the
+      // preview shows it as the price's alone.
+      securityCurrency: placeOf(mapping, "securityCurrency") ?? placeOf(mapping, "priceCurrency"),
       quantity: placeOf(mapping, "quantity"),
       unitPrice: placeOf(mapping, "unitPrice"),
       fees: placeOf(mapping, "fees"),

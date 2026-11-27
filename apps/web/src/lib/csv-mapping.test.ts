@@ -365,6 +365,23 @@ describe("a broker's operations as the preview maps their columns", () => {
     ).toBe(false);
   });
 
+  test("mapped by hand from a profile whose security's currency is its price's, keeps it", () => {
+    // Degiro's: the unnamed column after the price is both the price's currency and the security's.
+    const degiro: OperationsProfile = {
+      ...operations,
+      columns: { ...operations.columns, priceCurrency: 10, securityCurrency: 10, value: 11 },
+    };
+
+    const shown = operationsMappingOf(degiro, 11, []);
+    const made = operationsProfileOf(operationsSettingsOf(degiro), shown, degiro.kinds);
+
+    expect("profile" in made ? made.profile.columns : made).toMatchObject({
+      priceCurrency: 10,
+      securityCurrency: 10,
+      value: 11,
+    });
+  });
+
   test("names what it still lacks: a day and an amount, no label", () => {
     expect(operationsProfileOf(operationsSettingsOf(operations), ["ignored", "kind"], [])).toEqual({
       missing: ["bookedOn", "amount"],
