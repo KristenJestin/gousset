@@ -139,8 +139,7 @@ const FIRST = "CB PAYPAL *PIXELPLAY 21/10";
 /** Paylink's sheet, where it is edited (#204). */
 const paylinkSheet = (page: Page) => page.getByRole("dialog", { name: "Edit Paylink" });
 
-const editPaylink = (page: Page) =>
-  page.getByRole("button", { name: "Edit", exact: true }).click();
+const editPaylink = (page: Page) => page.getByRole("button", { name: "Edit", exact: true }).click();
 
 const intermediarySwitch = (sheet: Locator) =>
   sheet.getByRole("switch", { name: "Payment intermediary" });

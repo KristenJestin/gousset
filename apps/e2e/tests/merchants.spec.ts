@@ -350,13 +350,17 @@ test("choosing a merchant's default category in its sheet shows it on its page; 
   await expect(sheet.getByRole("combobox", { name: "Category" })).toHaveCount(0);
   await sheet.getByRole("radio", { name: "Expense" }).click();
 
-  // A kind without its category is not saved.
-  await sheet.getByRole("button", { name: "Save", exact: true }).click();
-  await expect(sheet.getByRole("combobox", { name: "Category" })).toHaveAccessibleDescription(
-    /Choose a category, or None\./,
-  );
+  // A kind without its category is not sent: its field is required, and the browser says so under
+  // it, in its own words, as for every required field; the sheet stays open.
+  const category = sheet.getByRole("combobox", { name: "Category" });
 
-  await sheet.getByRole("combobox", { name: "Category" }).pressSequentially("Bakery");
+  await sheet.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(category).toHaveAttribute("aria-invalid", "true");
+  await expect(category).toHaveAccessibleDescription(/\S/);
+  await expect(sheet).toBeVisible();
+  await expect(chosen).toContainText("None");
+
+  await category.pressSequentially("Bakery");
   await page.getByRole("option", { name: "Groceries › Bakery", exact: true }).click();
   await sheet.getByRole("button", { name: "Save", exact: true }).click();
   await expect(sheet).toBeHidden();

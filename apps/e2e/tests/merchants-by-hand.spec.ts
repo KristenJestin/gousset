@@ -1,4 +1,5 @@
 import type { Locator, Page } from "@playwright/test";
+import { merchant } from "@gousset/db/schema/ledger";
 import { exampleStatement } from "@gousset/fixture";
 import type { StatementLine } from "@gousset/fixture";
 
@@ -28,8 +29,8 @@ import { openUserData } from "../src/user-data";
 
 const TODAY = "2026-11-15";
 
-/** A hardware shop's card payment, as an invented bank writes it. */
-const JUNIPER_LABEL = "CB JUNIPER HARDWARE 0311 RIVERTON";
+/** A hardware shop's card payment, as an invented bank writes it: within OFX's 32 characters. */
+const JUNIPER_LABEL = "CB JUNIPER HARDWARE 0311 ELMS";
 
 /** A logo made here: a 64 px square of one green. */
 const LOGO = { name: "juniper.png", mimeType: "image/png", buffer: solidPng(64, [40, 110, 80]) };
@@ -70,10 +71,11 @@ async function importLines(
   const imported = await imports.importFile(
     owner,
     accountId,
+    // OFX, whose dates read one way: a CSV of days up to the 12th waits to be told which.
     statementFile(
-      "csv",
+      "ofx",
       { ...exampleStatement, from: "2026-11-01", to: "2026-11-14", lines: [...lines] },
-      "everyday-2026-11.csv",
+      "everyday-2026-11.ofx",
     ),
   );
 
@@ -217,9 +219,16 @@ test("an uploaded logo shows in the list and the line's detail; a removed one gi
   const { person, owner, accountId } = await newcomer(app, user, "juniper.logo");
 
   await importLines(owner, accountId, [JUNIPER_LINE]);
-  await signedInAs(page, person);
 
-  // The merchant the import recognised, the only one.
+  // The merchant the import recognised, the only one, by the name recognition wrote.
+  const [recognised] = await data.asUser(owner, (transaction) =>
+    transaction.select({ name: merchant.name }).from(merchant),
+  );
+
+  const name = recognised?.name ?? "";
+
+  expect(name).not.toBe("");
+  await signedInAs(page, person);
   await visit(page, "/settings/merchants");
 
   const row = merchantList(page).getByRole("link").first();
@@ -227,11 +236,6 @@ test("an uploaded logo shows in the list and the line's detail; a removed one gi
   await expect(merchantList(page).getByRole("link")).toHaveCount(1);
   await expectInitials(row.locator('[data-slot="avatar"]'));
   await row.click();
-
-  // Its name, as recognition wrote it: the page's first heading.
-  const name = (await page.getByRole("heading", { level: 2 }).first().textContent()) ?? "";
-
-  expect(name).not.toBe("");
   await page.getByRole("button", { name: "Edit", exact: true }).click();
 
   const sheet = page.getByRole("dialog", { name: `Edit ${name}` });
