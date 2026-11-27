@@ -58,12 +58,21 @@ const TRANSFORMS_MOVING = `(() => {
  * it is still there (a loop, a paused one, one that restarts). A finished one that keeps its last
  * frame (`fill: both`, the accounts' entrances, #181) stays listed, yet moves nothing; one about to
  * play again is pending, and still counts.
+ *
+ * Before them, every element Base UI holds in its starting style (`data-starting-style`): an
+ * entrance by CSS transition (a sheet sliding in) that has not started yet. Base UI mounts the
+ * element in that style and takes it off a frame later, and only then is the transition made and
+ * listed: a wait that read the page in between found nothing moving, and let a test measure a sheet
+ * still on its way in.
  */
 const ANIMATIONS_MOVING = `(() => {
   const named = ${NAMED};
   const meta = new Set(["offset", "computedOffset", "easing", "composite"]);
+  const starting = [...document.querySelectorAll("[data-starting-style]")].map(
+    (element) => named(element) + ": entrance not started yet (data-starting-style)",
+  );
 
-  return document.getAnimations().filter((animation) =>
+  return starting.concat(document.getAnimations().filter((animation) =>
     animation.playState !== "finished" || animation.pending
   ).map((animation) => {
     const effect = animation.effect;
@@ -78,7 +87,7 @@ const ANIMATIONS_MOVING = `(() => {
       (animation.pending ? " (pending)" : "") + ", at " + String(animation.currentTime) + " of " +
       String(timing?.endTime) + " ms, " + String(timing?.iterations) + " iteration(s), fill " +
       String(timing?.fill);
-  });
+  }));
 })()`;
 
 /** What still moves under Motion's layout animations, one line each; empty once all are at rest. */
