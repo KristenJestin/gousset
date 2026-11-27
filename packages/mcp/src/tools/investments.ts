@@ -1,12 +1,13 @@
 import {
-  MAX_OPERATIONS_LISTED,
   accountNamed,
   correctInvestmentOperation,
   deleteInvestmentOperation,
   enterInvestmentOperation,
   investmentAccounts,
+  investmentOperationOn,
   investmentOperations,
   investmentPosition,
+  investmentPositionByIsin,
   parseIsin,
 } from "@gousset/core";
 import type {
@@ -333,25 +334,6 @@ const invalidIsin = (invalid: InvalidIsin, retry: Encoded) =>
     example: call({ ...retry, isin: "XX0000000002" }),
   });
 
-/** The operations of an account, every page read: to find the one a call names in them. */
-const everyOperation = (owner: string, accountId: string) =>
-  Effect.gen(function* () {
-    const all: Array<OperationRead> = [];
-    let after: string | null = null;
-
-    do {
-      const page: OperationPage = yield* investmentOperations(owner, accountId, {
-        after,
-        limit: MAX_OPERATIONS_LISTED,
-      });
-
-      all.push(...page.operations);
-      after = page.next;
-    } while (after !== null);
-
-    return all;
-  });
-
 /** Read a moment before: an account or a security gone in between, or a failure, is Gousset's. */
 const positionOf = (owner: string, accountId: string, securityId: string) =>
   investmentPosition(owner, accountId, securityId).pipe(
@@ -374,20 +356,19 @@ const positionOnAccount = (owner: string, input: InvestmentsInput, name: string,
       isin,
     }));
 
-    const operations = yield* everyOperation(owner, found.id).pipe(
-      Effect.catchTags({ AccountNotFound: () => gone(name), QueryFailed: Effect.die }),
+    const detail = yield* investmentPositionByIsin(owner, found.id, isin).pipe(
+      Effect.catchTags({
+        AccountNotFound: () => gone(name),
+        SecurityNotOnAccount: () =>
+          refuse(
+            `${named(found)} has no operation of ${isin}. Read its operations, or the positions of every account with list.`,
+            { action: "show", ...namedBy(found) },
+          ),
+        QueryFailed: Effect.die,
+      }),
     );
 
-    const security = operations.find((each) => each.security?.isin === isin)?.security;
-
-    if (security === undefined || security === null) {
-      return yield* refuse(
-        `${named(found)} has no operation of ${isin}. Read its operations, or the positions of every account with list.`,
-        { action: "show", ...namedBy(found) },
-      );
-    }
-
-    return positionText(yield* positionOf(owner, found.id, security.id));
+    return positionText(detail);
   });
 
 /** One open position named by ISIN alone: the account that holds it. */
@@ -668,16 +649,17 @@ const edit = (owner: string, input: InvestmentsInput) =>
 
     const retry = retryOf(input, found);
 
-    const operations = yield* everyOperation(owner, found.id).pipe(
-      Effect.catchTags({ AccountNotFound: () => gone(name), QueryFailed: Effect.die }),
+    yield* investmentOperationOn(owner, found.id, handle).pipe(
+      Effect.catchTags({
+        AccountNotFound: () => gone(name),
+        OperationNotFound: () =>
+          refuse(
+            `${named(found)} has no operation with this handle. Read its operations, which give each one's handle.`,
+            { action: "show", ...namedBy(found) },
+          ),
+        QueryFailed: Effect.die,
+      }),
     );
-
-    if (!operations.some((each) => each.id === handle)) {
-      return yield* refuse(
-        `${named(found)} has no operation with this handle. Read its operations, which give each one's handle.`,
-        { action: "show", ...namedBy(found) },
-      );
-    }
 
     const written = yield* operationInputOf(input, found, retry);
 
