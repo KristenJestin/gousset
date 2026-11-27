@@ -9,7 +9,9 @@ import {
   RULE_ACCOUNTS,
   RULE_CATEGORIES,
   RULE_MERCHANTS,
+  RULE_SUBJECTS,
   labelContains,
+  merchantIs,
 } from "../stories/made-up-rules";
 import { InFrench } from "../stories/in-french";
 import { Button } from "./button";
@@ -19,6 +21,7 @@ import type {
   RuleConditionError,
   RuleDraft,
   RuleEditorCategory,
+  RuleEditorSubject,
   RuleReachView,
 } from "./rule-editor";
 
@@ -27,6 +30,7 @@ type EditingProps = {
   conditions: Conditions | null;
   merchantId: string | null;
   category: RuleEditorCategory | null;
+  subject?: RuleEditorSubject | null;
   enabled: boolean;
   reach: RuleReachView;
   apply?: RuleApplyView;
@@ -63,12 +67,14 @@ function Editing(props: EditingProps) {
         conditions={props.conditions}
         merchantId={props.merchantId}
         category={props.category}
+        subject={props.subject ?? null}
         enabled={props.enabled}
         maxConditions={MAX_CONDITIONS}
         maxLabelText={MAX_LABEL_TEXT}
         accounts={RULE_ACCOUNTS}
         currency="EUR"
         merchants={RULE_MERCHANTS}
+        subjects={RULE_SUBJECTS}
         categories={RULE_CATEGORIES}
         reach={props.reach}
         error={props.error}
@@ -100,8 +106,9 @@ const GROCERIES: RuleEditorCategory = {
 /**
  * A rule in a side sheet (docs/wireframes, screen 9, blocks 3 and 4): "If" its conditions (each a
  * field, an operator and a value typed with the control its field takes, "+ Condition" up to ten),
- * "Then" the merchant and the category it sets (the kind follows the category), whether it is on,
- * and its "Effect" on the lines already there before saving: how many it applies to, and how many
+ * "Then" the merchant and the category it sets (the kind follows the category), the subject it
+ * attaches (#37: every rule that applies attaches its own, whichever sets the category), whether it
+ * is on, and its "Effect" on the lines already there before saving: how many it applies to, and how many
  * of those were classified otherwise by hand, changed only when "Reclassify them too" is ticked. A
  * saved rule is applied to the past from here; a new one asks whether to apply it once made.
  *
@@ -162,6 +169,30 @@ export const AmountAndDay: Story = {
     merchantId: "harbor-savings",
     category: { id: "housing", name: "Housing", kind: "expense", archived: false },
     reach: { state: "known", lines: 36, toChange: 0, byHand: 0 },
+  },
+};
+
+/** A rule made from a subject's merchant: "merchant is Fuelstop", attaching Van, no category. */
+export const Subject: Story = {
+  args: {
+    rule: { place: 2, createdFrom: "user", createdAt: "2026-11-20T10:00:00.000Z" },
+    conditions: merchantIs("fuelstop"),
+    merchantId: null,
+    category: null,
+    subject: { id: "van", name: "Van", archived: false },
+    reach: { state: "known", lines: 27, toChange: 4, byHand: 0 },
+  },
+};
+
+/** Its subject archived since: shown and named, never offered for another rule. */
+export const ArchivedSubject: Story = {
+  args: {
+    rule: { place: 2, createdFrom: "user", createdAt: "2026-11-20T10:00:00.000Z" },
+    conditions: merchantIs("greenmarket"),
+    merchantId: null,
+    category: null,
+    subject: { id: "alps-2027", name: "Alps 2027", archived: true },
+    reach: { state: "known", lines: 9, toChange: 0, byHand: 0 },
   },
 };
 

@@ -361,6 +361,27 @@ describe("lines search", () => {
     expect(handlesOf(text)).toEqual([salary.id]);
   });
 
+  test("names each line's subjects, by name, and nothing for a line of none", async () => {
+    const forVan = line(current.id, "2026-10-20", -5200, "CB FUELSTOP 2010 RIVERTON", {
+      subjects: [
+        { id: memoryId(), name: "Van" },
+        { id: memoryId(), name: "Alps 2026" },
+      ],
+    });
+
+    const { text, isError } = await lines(
+      { action: "search", text: "fuelstop" },
+      { ...ROWS, lines: [salary, fuel, cafe, heldCafe, interest, deposit, future, forVan] },
+    );
+
+    expect(isError, text).toBe(false);
+    expect(text).toContain("(booked on, account: amount, label, category, subjects if any;");
+    expect(text).toContain(
+      `"CB FUELSTOP 2010 RIVERTON"; subjects: Van, Alps 2026; line: ${forVan.id}`,
+    );
+    expect(text).toContain(`"CB FUELSTOP 0412 RIVERTON", in Other; line: ${fuel.id}`);
+  });
+
   test("compares amounts with the absolute amount in each account's currency", async () => {
     const { text, isError } = await lines({
       action: "search",
@@ -991,6 +1012,7 @@ const fundedFuel: Expense = {
     },
   ],
   funded: { minor: 3000, currency: "EUR" },
+  subjects: [],
 };
 
 /** A call on `PERKS` as a writer, the logic answering as a works council refund's side would. */
@@ -1141,6 +1163,7 @@ const pixelIncome: Expense = {
   net: { minor: 3000, currency: "EUR" },
   fundings: [],
   funded: { minor: 0, currency: "EUR" },
+  subjects: [],
 };
 
 /** A call on `PIXEL`, the logic answering as for a line that may be a refund; `rule`: a rule's. */
@@ -1314,6 +1337,7 @@ describe("the lines tool", () => {
       "categories",
       "rules",
       "review",
+      "subjects",
     ]);
     expect(tool?.title).toBe("Lines");
 

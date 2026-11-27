@@ -1,10 +1,11 @@
 import type {
   CategorySpending,
+  DaysBy,
   MerchantSpending,
   Money,
   MonthFlag,
   MonthReview,
-  SpendingBy,
+  SubjectSpending,
   SubscriptionCalendar,
 } from "@gousset/core";
 import { addMonths } from "@gousset/core/values";
@@ -53,6 +54,7 @@ import { monthSearch } from "@/lib/month";
 import { otherCurrencyNote } from "@/lib/other-currency";
 import { monthQueries } from "@/queries/month";
 import { reviewQueries } from "@/queries/review";
+import { subjectQueries } from "@/queries/subjects";
 
 /** Rows shown before "+ N more": the skeletons have exactly as many. */
 const SPENDING_ROWS = 5;
@@ -371,12 +373,12 @@ function Summary({ month }: { month: string }) {
   );
 }
 
-function isSpendingBy(value: string): value is SpendingBy {
-  return value === "category" || value === "merchant";
+function isSpendingBy(value: string): value is DaysBy {
+  return value === "category" || value === "merchant" || value === "subject";
 }
 
 function Spending({ month }: { month: string }) {
-  const [by, setBy] = useState<SpendingBy>("category");
+  const [by, setBy] = useState<DaysBy>("category");
 
   return (
     <Tabs
@@ -390,6 +392,7 @@ function Spending({ month }: { month: string }) {
       <TabsList label={m.reviewSpendingTitle()}>
         <Tab value="category">{m.reviewTabCategories()}</Tab>
         <Tab value="merchant">{m.reviewTabMerchants()}</Tab>
+        <Tab value="subject">{m.reviewTabSubjects()}</Tab>
       </TabsList>
       {/* The tabs are there at once; each panel's rows wait in their own skeleton. */}
       <TabsPanel value="category">
@@ -400,6 +403,11 @@ function Spending({ month }: { month: string }) {
       <TabsPanel value="merchant">
         <Suspense fallback={<BreakdownSkeleton rows={SPENDING_ROWS} more />}>
           <MerchantRows month={month} />
+        </Suspense>
+      </TabsPanel>
+      <TabsPanel value="subject">
+        <Suspense fallback={<BreakdownSkeleton rows={SPENDING_ROWS} more footnote />}>
+          <SubjectRows month={month} />
         </Suspense>
       </TabsPanel>
     </Tabs>
@@ -447,6 +455,17 @@ function merchantRow(merchant: MerchantSpending): BreakdownRow {
   };
 }
 
+/** A subject as a row (#37): indented under its parent, with no benchmark. */
+function subjectRow(subject: SubjectSpending): BreakdownRow {
+  return {
+    id: subject.id,
+    name: subject.name,
+    icon: "subjects",
+    amount: subject.spent,
+    depth: subject.depth,
+  };
+}
+
 function CategoryRows({ month }: { month: string }) {
   const { categories } = useMonthReview(month);
 
@@ -471,6 +490,43 @@ function MerchantRows({ month }: { month: string }) {
   );
 }
 
+/**
+ * The month by subject (#37), in tree order: an expense counts whole in each of its subjects and
+ * once in a parent, so the rows never add up, which a line under them says. With none, a way to
+ * the subjects.
+ */
+function SubjectRows({ month }: { month: string }) {
+  const { subjects } = useMonthReview(month);
+  const { data: list } = useSuspenseQuery(subjectQueries.list());
+
+  if (subjects.rows.length === 0) {
+    const none = list.subjects.length === 0;
+
+    return (
+      <EmptyState
+        size="compact"
+        icon="subjects"
+        title={none ? m.reviewSubjectsNoneTitle() : m.reviewSubjectsEmpty()}
+        description={none ? m.reviewSubjectsNoneDescription() : undefined}
+        links={
+          <AppButtonLink to="/subjects" variant="secondary" size="sm">
+            {m.navSubjects()}
+          </AppButtonLink>
+        }
+      />
+    );
+  }
+
+  return (
+    <SpendingRows
+      month={month}
+      by="subject"
+      rows={subjects.rows.map((subject) => ({ row: subjectRow(subject), figures: subject }))}
+      footnote={m.reviewSubjectsNote()}
+    />
+  );
+}
+
 /** A row of "where the money goes", with what its detail holds it against. */
 type SpendingEntry = {
   row: BreakdownRow;
@@ -481,10 +537,13 @@ function SpendingRows({
   month,
   by,
   rows,
+  footnote,
 }: {
   month: string;
-  by: SpendingBy;
+  by: DaysBy;
   rows: ReadonlyArray<SpendingEntry>;
+  /** A last grey line under the rows. */
+  footnote?: string;
 }) {
   const locale = getLocale();
   const [all, setAll] = useState(false);
@@ -540,10 +599,16 @@ function SpendingRows({
                 name={entry.row.name}
               />
             </Suspense>
+            {by === "subject" ? (
+              <AppLink to="/operations" search={{ subject: entry.row.id, month }}>
+                {m.reviewSubjectOperations()}
+              </AppLink>
+            ) : null}
           </BreakdownFigures>
         )
       }
       emptyText={m.reviewSpendingEmpty()}
+      footnote={footnote}
       locale={locale}
     />
   );
@@ -556,7 +621,7 @@ function RowChart({
   name,
 }: {
   month: string;
-  by: SpendingBy;
+  by: DaysBy;
   id: string | null;
   name: string;
 }) {

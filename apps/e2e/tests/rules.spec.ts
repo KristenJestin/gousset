@@ -1,5 +1,5 @@
 import type { Page } from "@playwright/test";
-import { createRule } from "@gousset/core";
+import { createRule, createSubject } from "@gousset/core";
 import { category, statementLine } from "@gousset/db/schema/ledger";
 import { exampleStatement } from "@gousset/fixture";
 import { and, asc, eq, isNull } from "drizzle-orm";
@@ -285,6 +285,56 @@ test("editing, turning off, reordering and deleting rules", async ({ page, app, 
   await expect(question).toBeHidden();
   await expect(rows(page)).toHaveCount(1);
   await expect(ruleNamed(page, "label contains “E2E SECOND”")).toHaveCount(0);
+});
+
+test("the rules page edits a merchant condition and a subject", async ({ page, app, user }) => {
+  const { person, owner } = await personFor(app, user, "rules-subject");
+
+  await expenseLines(owner, ["CB FUELSTOP 02/10", "CB TYREHOUSE 03/10"]);
+  await labelRule(owner, "FUELSTOP", "Groceries");
+
+  const house = await Effect.runPromise(
+    createSubject(owner, { name: "House" }).pipe(Effect.provide(data.layer)),
+  );
+
+  await Effect.runPromise(
+    createSubject(owner, { name: "Garden shed", parentId: house.id }).pipe(
+      Effect.provide(data.layer),
+    ),
+  );
+
+  await as(page, person, "/settings/rules");
+  await ruleNamed(page, "label contains “FUELSTOP”").click();
+
+  const sheet = page.getByRole("dialog", { name: "Rule 1" });
+
+  // The condition on the label becomes one on the merchant, found by typing its name.
+  await sheet.getByRole("combobox", { name: "Field of condition 1" }).click();
+  await page.getByRole("option", { name: "Merchant", exact: true }).click();
+
+  const merchant = sheet.getByRole("combobox", { name: "Value of condition 1" });
+
+  await merchant.pressSequentially("Fuel");
+  await page.getByRole("option", { name: "Fuelstop", exact: true }).click();
+
+  // The subject, among the tree's names.
+  await sheet.getByRole("combobox", { name: "Subject", exact: true }).pressSequentially("shed");
+  await page.getByRole("option", { name: "House > Garden shed", exact: true }).click();
+  await expect(sheet.locator('[data-slot="rule-reach"]')).toHaveText("Applies to 1 existing line.");
+  await sheet.getByRole("button", { name: "Save" }).click();
+  await expect(sheet).toBeHidden();
+
+  await expect(ruleNamed(page, "merchant is Fuelstop")).toBeVisible();
+  await expect(rows(page)).toContainText("Groceries · for House > Garden shed");
+
+  // Opened again, it is as saved.
+  await ruleNamed(page, "merchant is Fuelstop").click();
+  await expect(sheet.getByRole("combobox", { name: "Value of condition 1" })).toHaveValue(
+    "Fuelstop",
+  );
+  await expect(sheet.getByRole("combobox", { name: "Subject", exact: true })).toHaveValue(
+    "House > Garden shed",
+  );
 });
 
 test("the rules move in 200 ms, and not under reduced motion", async ({ page, app, user }) => {

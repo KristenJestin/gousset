@@ -31,6 +31,11 @@ export type OperationsFiltersProps = {
   onChange: (values: OperationsFilterValues) => void;
   /** The accounts to choose from, by id and name; "All accounts" comes first on its own. */
   accounts: ReadonlyArray<ChoiceItem>;
+  /**
+   * The subjects to choose from (#37), in tree order, each by its path ("House > Garden shed");
+   * "All subjects" comes first on its own. None: no subject filter, unless one is set.
+   */
+  subjects?: ReadonlyArray<ChoiceItem>;
   /** A bound the page cannot read ("12.5.0"), said under the filters. */
   minError?: string;
   maxError?: string;
@@ -40,14 +45,15 @@ export type OperationsFiltersProps = {
   locale?: string;
 };
 
-// The select's own value for "All accounts", which the page reads as `null`: no account's id is
-// ever this.
+// The select's own value for "All accounts" ("All subjects"), which the page reads as `null`: no
+// account's or subject's id is ever this.
 const ALL_ACCOUNTS = "*";
+const ALL_SUBJECTS = "*";
 
 /**
  * The operations' filter bar (docs/wireframes, screen 2, block 1), controlled: words to search in
- * the labels, the account ("All accounts" first), the period (from, to: each clearable), the
- * amount's bounds (typed as decimals, read by the page) and "To review only". Each change goes to
+ * the labels, the account ("All accounts" first), the subject ("All subjects" first, once the user
+ * has one, #37), the period (from, to: each clearable), the amount's bounds (typed as decimals, read by the page) and "To review only". Each change goes to
  * `onChange` at once; debouncing the search is the page's. The words and each bound stop at
  * `MAX_FILTER_TEXT` characters, what the server reads. "Clear filters" is `ClearFilters`, which the
  * page puts on the count's line.
@@ -67,6 +73,7 @@ export function OperationsFilters({
   values,
   onChange,
   accounts,
+  subjects = [],
   minError,
   maxError,
   count,
@@ -82,6 +89,17 @@ export function OperationsFilters({
 
   const chooseAccount = (chosen: string | null) =>
     set({ accountId: chosen === null || chosen === ALL_ACCOUNTS ? null : chosen });
+
+  // A subject set by the address stays choosable, even when the user has none any more.
+  const subjectChoice =
+    subjects.length === 0 && values.subjectId === null
+      ? undefined
+      : {
+          items: [{ value: ALL_SUBJECTS, label: words.allSubjects }, ...subjects],
+          value: values.subjectId ?? ALL_SUBJECTS,
+          choose: (chosen: string | null) =>
+            set({ subjectId: chosen === null || chosen === ALL_SUBJECTS ? null : chosen }),
+        };
 
   return (
     <div
@@ -101,7 +119,8 @@ export function OperationsFilters({
         </div>
         {/* The row's own filters: laid out from 1,024 px of bar, gone from the page below. */}
         <div className="hidden @5xl:contents">
-          <div className="w-44 shrink-0">
+          {/* With the subject's beside it, both narrower: the search keeps its room. */}
+          <div className={cn("shrink-0", subjectChoice === undefined ? "w-44" : "w-36")}>
             <Select
               label={words.account}
               hideLabel
@@ -111,6 +130,18 @@ export function OperationsFilters({
               onValueChange={chooseAccount}
             />
           </div>
+          {subjectChoice === undefined ? null : (
+            <div className="w-36 shrink-0">
+              <Select
+                label={words.subject}
+                hideLabel
+                size="sm"
+                items={subjectChoice.items}
+                value={subjectChoice.value}
+                onValueChange={subjectChoice.choose}
+              />
+            </div>
+          )}
           <div className="flex shrink-0 items-center gap-1.5">
             <div className="w-34">
               <DatePicker
@@ -167,6 +198,7 @@ export function OperationsFilters({
           accountItems={accountItems}
           accountValue={accountValue}
           chooseAccount={chooseAccount}
+          subjectChoice={subjectChoice}
           minError={minError}
           maxError={maxError}
           count={count}
@@ -272,6 +304,7 @@ function FiltersSheet({
   accountItems,
   accountValue,
   chooseAccount,
+  subjectChoice,
   minError,
   maxError,
   count,
@@ -283,6 +316,7 @@ function FiltersSheet({
   accountItems: ReadonlyArray<ChoiceItem>;
   accountValue: string;
   chooseAccount: (chosen: string | null) => void;
+  subjectChoice: SubjectChoice | undefined;
 }) {
   const words = useUiMessages().operations;
   const pageLocale = usePageLanguage();
@@ -364,6 +398,14 @@ function FiltersSheet({
             value={accountValue}
             onValueChange={chooseAccount}
           />
+          {subjectChoice === undefined ? null : (
+            <Select
+              label={words.subject}
+              items={subjectChoice.items}
+              value={subjectChoice.value}
+              onValueChange={subjectChoice.choose}
+            />
+          )}
           <div className="grid grid-cols-2 gap-3">
             <DatePicker
               label={words.from}
@@ -410,6 +452,13 @@ function FiltersSheet({
     </div>
   );
 }
+
+/** The subject's choice, as the row and the sheet both draw it. */
+type SubjectChoice = {
+  items: ReadonlyArray<ChoiceItem>;
+  value: string;
+  choose: (chosen: string | null) => void;
+};
 
 /** A text field with a search icon before the words, on the same field as `TextField`. */
 function SearchField({

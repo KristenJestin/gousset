@@ -58,6 +58,11 @@ export type LineDetailProps = {
   category?: ReactNode;
   /** Who the line paid (`LineMerchant`), under its category; left out for a line with none. */
   merchant?: ReactNode;
+  /**
+   * What its expense is for (`LineSubjects`, #37), under who it paid; left out for a line that is
+   * no expense of its own (an income, a transfer, a held or split line).
+   */
+  subjects?: ReactNode;
   /** The line's transfer or its candidates (`LineTransfer`), after its account and days. */
   transfer?: ReactNode;
   /**
@@ -118,7 +123,7 @@ function BankWords({
  * looks like …" on a held line, its transfer (`transfer`, a `LineTransfer`), its expense
  * (`expense`, a `LineExpense`), and the import it came from, "Entered by hand" or where the app
  * made it from (`origin`); first, its category, through the control the page gives (`category`),
- * and who it paid (`merchant`, a `LineMerchant`). Every text comes worded from the page. The close
+ * who it paid (`merchant`, a `LineMerchant`) and its subjects (`subjects`). Every text comes worded from the page. The close
  * button or Escape closes it; the focus goes into it when it opens.
  * On every screen (#182) it is the shared modal side `Sheet` over the list (from the right edge
  * from Tailwind's `md` on, from the bottom on a phone), its label and amount at its top:
@@ -145,6 +150,7 @@ export function LineDetail({
   review,
   category,
   merchant,
+  subjects,
   transfer,
   expense,
   onClose,
@@ -196,6 +202,7 @@ export function LineDetail({
       )}
       {category === undefined ? null : <div data-slot="line-category">{category}</div>}
       {merchant}
+      {subjects}
       {looksLike === undefined ? null : (
         <p className="rounded-md bg-muted px-3 py-2 text-sm text-foreground">
           {words.looksLike(looksLike)}

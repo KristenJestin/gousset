@@ -5,6 +5,7 @@ import type { Effect } from "effect";
 import type { LineCategory } from "./category-store";
 import type { ImportFormat } from "./imports/summary";
 import type { NamedMerchant } from "./merchants/line-merchant";
+import type { SubjectName } from "./subjects/counting";
 
 /**
  * The bounds of a line's absolute amount, in minor units of one currency, both included: null for
@@ -19,6 +20,11 @@ export type LineQuery = {
   readonly text: string | null;
   /** Null for every account. */
   readonly accountId: string | null;
+  /**
+   * The lines of an expense attached to this subject or to any of its descendants (#37); null for
+   * any line. An id that names none of the user's subjects gives no line.
+   */
+  readonly subjectId: string | null;
   /** Booked on or after this day; null for no start. */
   readonly from: string | null;
   /** Booked on or before this day: never after today. */
@@ -66,6 +72,8 @@ export type FoundLine = {
   readonly merchant: NamedMerchant | null;
   /** The movement a noted balance makes (#31): it has no label, the interface names it. */
   readonly fromBalance: boolean;
+  /** Its entries' subjects (#37), each once, by name: none for most lines. */
+  readonly subjects: ReadonlyArray<SubjectName>;
   /**
    * Maybe a refund (#208): a line coming back that may cancel an expense, still classified by
    * default, that the user has not answered; no income until answered (`maybeRefundsAmong`).

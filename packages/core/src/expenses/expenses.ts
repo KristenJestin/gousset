@@ -3,8 +3,10 @@ import {
   category,
   entry,
   entryPart,
+  entrySubject,
   merchantAlias,
   statementLine,
+  subject,
 } from "@gousset/db/schema/ledger";
 import { transfer } from "@gousset/db/schema/transfers";
 import { UserData } from "@gousset/db/user-data";
@@ -36,6 +38,7 @@ import { today } from "../today";
 import { shiftDay } from "../transfers/pairing";
 import { FUND_DAYS, fundDecision, fundingCandidates, fundsFromBenefit } from "./funding";
 import type { FundingTarget, FundingTransfer } from "./funding";
+import type { SubjectName } from "../subjects/counting";
 import { REFUND_DAYS, netOf, refundProposals, roleOf, sameMerchant, sharesOf } from "./parts";
 import type { EntryKind, PartRole, ProposalLine } from "./parts";
 
@@ -95,6 +98,8 @@ export type Expense = {
   readonly fundings: ReadonlyArray<Funding>;
   /** What they fund together; nothing when none does. */
   readonly funded: Money;
+  /** What it is for (#37): its subjects, by name; none for most, and for an income. */
+  readonly subjects: ReadonlyArray<SubjectName>;
 };
 
 /** An expense a transfer funds, or may fund: its day, category and cost, and its first payment. */
@@ -154,8 +159,15 @@ export type LineExpenses = {
 /** A line linked to an expense: its part there, and the expense as it is now. */
 export type Linked = { readonly role: PartRole; readonly expense: Expense };
 
-/** One category's share of a split line, typed in major units of the line's currency ("30.00"). */
-export type Share = { readonly categoryId: string; readonly amount: string };
+/**
+ * One category's share of a split line, typed in major units of the line's currency ("30.00"),
+ * with its subjects (#37): given, exactly those; left out, the subjects the line's expense had.
+ */
+export type Share = {
+  readonly categoryId: string;
+  readonly amount: string;
+  readonly subjectIds?: ReadonlyArray<string>;
+};
 
 type Failure = QueryFailed;
 
@@ -392,6 +404,31 @@ async function fundingsOf(
   return byEntry;
 }
 
+/** Each of the entries' subjects, by name (#37). */
+export async function subjectsOfEntries(
+  transaction: UserTransaction,
+  entryIds: ReadonlyArray<string>,
+): Promise<ReadonlyMap<string, ReadonlyArray<SubjectName>>> {
+  if (entryIds.length === 0) {
+    return new Map();
+  }
+
+  const rows = await transaction
+    .select({ entryId: entrySubject.entryId, id: subject.id, name: subject.name })
+    .from(entrySubject)
+    .innerJoin(subject, eq(subject.id, entrySubject.subjectId))
+    .where(inArray(entrySubject.entryId, [...entryIds]))
+    .orderBy(asc(subject.name), asc(subject.id));
+
+  const byEntry = new Map<string, Array<SubjectName>>();
+
+  for (const row of rows) {
+    byEntry.set(row.entryId, [...(byEntry.get(row.entryId) ?? []), { id: row.id, name: row.name }]);
+  }
+
+  return byEntry;
+}
+
 /** The entries `entryIds` name, each with its category and every part, in that order. */
 async function readExpenses(
   transaction: UserTransaction,
@@ -434,6 +471,7 @@ async function readExpenses(
     .orderBy(asc(statementLine.bookedOn), asc(statementLine.id), asc(entryPart.role));
 
   const fundings = await fundingsOf(transaction, entryIds);
+  const subjects = await subjectsOfEntries(transaction, entryIds);
 
   return entryIds.flatMap((entryId) => {
     const own = rows.filter((row) => row.entryId === entryId);
@@ -478,6 +516,7 @@ async function readExpenses(
         minor: funding.reduce((sum, each) => sum + each.amount.minor, 0),
         currency: head.currency,
       },
+      subjects: subjects.get(entryId) ?? [],
     };
 
     return [expense];
@@ -1146,6 +1185,12 @@ async function splitIn(
     }
   }
 
+  const subjects = await shareSubjects(transaction, shares, kind, expenses);
+
+  if (Result.isFailure(subjects)) {
+    return Result.fail(subjects.failure);
+  }
+
   const happenedOn = expenses.reduce(
     (first, each) => (each.happenedOn < first ? each.happenedOn : first),
     line.bookedOn,
@@ -1183,9 +1228,82 @@ async function splitIn(
       role: "payment",
       amountMinor: minor,
     });
+
+    const own = subjects.success[index] ?? [];
+
+    if (own.length > 0) {
+      await transaction
+        .insert(entrySubject)
+        .values(own.map((subjectId) => ({ userId: owner, entryId: made.id, subjectId })));
+    }
   }
 
   return Result.succeed(await lineExpenses(transaction, line));
+}
+
+/**
+ * Each share's subjects (#37): those it names, each one of the user's and not archived unless the
+ * line's expenses had it before the split (kept, as a rule keeps an archived category: the split
+ * form gives each share the line's subjects), or, named none, the subjects the line's expenses had
+ * before the split. A share of money coming in has none.
+ */
+async function shareSubjects(
+  transaction: UserTransaction,
+  shares: ReadonlyArray<Share>,
+  kind: EntryKind,
+  expenses: ReadonlyArray<Expense>,
+): Promise<Result.Result<ReadonlyArray<ReadonlyArray<string>>, SplitRefused>> {
+  const named = [...new Set(shares.flatMap((share) => share.subjectIds ?? []))];
+
+  const known =
+    named.length === 0
+      ? []
+      : await transaction
+          .select({ id: subject.id, archivedAt: subject.archivedAt })
+          .from(subject)
+          .where(inArray(subject.id, named.filter(isId)));
+
+  const before =
+    expenses.length === 0
+      ? []
+      : await transaction
+          .selectDistinct({ subjectId: entrySubject.subjectId })
+          .from(entrySubject)
+          .where(
+            inArray(
+              entrySubject.entryId,
+              expenses.map((each) => each.id),
+            ),
+          )
+          .orderBy(asc(entrySubject.subjectId));
+
+  const had = new Set(before.map((each) => each.subjectId));
+
+  for (const [index, share] of shares.entries()) {
+    const ids = share.subjectIds ?? [];
+
+    if (ids.length > 0 && kind !== "expense") {
+      return splitRefused("subject_income", index);
+    }
+
+    for (const subjectId of ids) {
+      const found = known.find((each) => each.id === subjectId);
+
+      if (found === undefined) {
+        return splitRefused("subject_unknown", index);
+      }
+
+      if (found.archivedAt !== null && !had.has(subjectId)) {
+        return splitRefused("subject_archived", index);
+      }
+    }
+  }
+
+  const kept = kind === "expense" ? before.map((each) => each.subjectId) : [];
+
+  return Result.succeed(
+    shares.map((share) => (share.subjectIds === undefined ? kept : [...new Set(share.subjectIds)])),
+  );
 }
 
 /** The lines the entries `entryIds` have a part of. */

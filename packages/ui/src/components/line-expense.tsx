@@ -19,6 +19,8 @@ import { IconButton } from "./icon-button";
 import { Side } from "./line-transfer";
 import { MoneyField } from "./money-field";
 import { Sheet } from "./sheet";
+import { SubjectChips, SubjectsField } from "./subject-chips";
+import type { SubjectChipView } from "./subject-chips";
 import { TextField } from "./text-field";
 
 /** A line of an expense, or a line that may be part of one, already worded. */
@@ -41,8 +43,16 @@ export type RefundProposalView = ExpenseLineView & {
   net: Money;
 };
 
-/** A split line's share: its own id, its category, already worded, and its amount. */
-export type ExpenseShareView = { id: string; category: string; amount: Money };
+/**
+ * A split line's share: its own id, its category, already worded, its amount, and what it is for
+ * (#37), by name.
+ */
+export type ExpenseShareView = {
+  id: string;
+  category: string;
+  amount: Money;
+  subjects?: ReadonlyArray<SubjectChipView>;
+};
 
 export type LineExpenseProps = {
   /** The open line: its own part shows, but is no button. */
@@ -140,7 +150,7 @@ function Part({
  * A line's expense, in its detail (`LineDetail`'s `expense`), as docs/wireframes' screen 2 draws it:
  * an expense made of several lines shows its payments and its refunds, each one click from its
  * line, and its net cost, counted once; "Separate this line" asks, then takes the line out. A line
- * split across categories shows its shares. A line coming back that may cancel a purchase shows
+ * split across categories shows its shares, each with its subjects' chips. A line coming back that may cancel a purchase shows
  * "Maybe a refund" with that purchase, and "Link as a refund" asks before linking: nothing is
  * applied unasked. "Not a refund" answers at once (#208): the line is an income, which changes no
  * money, and linking it by hand still makes it a refund. The page puts `LinkLine` and `SplitLine` under it (`actions`). Every value comes
@@ -246,7 +256,12 @@ export function LineExpense({
                 data-slot="expense-share"
                 className="flex items-baseline justify-between gap-4 text-sm"
               >
-                <dt className="text-foreground">{share.category}</dt>
+                <dt className="flex min-w-0 flex-col gap-1 text-foreground">
+                  {share.category}
+                  {share.subjects === undefined || share.subjects.length === 0 ? null : (
+                    <SubjectChips subjects={share.subjects} />
+                  )}
+                </dt>
                 <dd>
                   <Amount value={share.amount} size="sm" roll={false} locale={writtenIn} />
                 </dd>
@@ -445,7 +460,27 @@ export function LinkLine({
 }
 
 /** A share as the sheet holds it: what is typed so far. */
-type ShareDraft = { key: number; categoryId: string | null; minor: number | null };
+type ShareDraft = {
+  key: number;
+  categoryId: string | null;
+  minor: number | null;
+  subjects: ReadonlyArray<SubjectChipView>;
+};
+
+/** A share as the sheet starts from it. */
+export type ShareStart = {
+  categoryId: string | null;
+  minor: number | null;
+  /** Its subjects (#37); none when left out. */
+  subjects?: ReadonlyArray<SubjectChipView>;
+};
+
+/** A share as the sheet saves it: its subjects with `subjects` given, exactly those. */
+export type ShareSaved = {
+  categoryId: string;
+  minor: number;
+  subjectIds?: ReadonlyArray<string>;
+};
 
 export type SplitLineProps = {
   /** The line's whole amount, positive: what the shares add up to. */
@@ -453,13 +488,25 @@ export type SplitLineProps = {
   /** The categories of the line's kind, to choose each share's among. */
   categories: ReadonlyArray<CategoryChoice>;
   /** The shares it starts from: the line's split, or its one category with the whole amount. */
-  initial: ReadonlyArray<{ categoryId: string | null; minor: number | null }>;
+  initial: ReadonlyArray<ShareStart>;
   /** How many shares at most. */
   max: number;
-  /** Saves the shares, each a category and an amount in minor units: true once saved. */
-  onSplit: (shares: ReadonlyArray<{ categoryId: string; minor: number }>) => Promise<boolean>;
+  /**
+   * An expense's subjects to choose each share's among (#37), by their path, none archived. Left
+   * out (an income): the shares have no subject.
+   */
+  subjects?: ReadonlyArray<SubjectChipView>;
+  /** The subjects a share added starts with: the line's. */
+  lineSubjects?: ReadonlyArray<SubjectChipView>;
+  /**
+   * Saves the shares, each a category and an amount in minor units, and with `subjects` its
+   * subjects' ids: true once saved.
+   */
+  onSplit: (shares: ReadonlyArray<ShareSaved>) => Promise<boolean>;
   /** A refusal of the last save, worded by the page, shown in the sheet. */
   error?: string;
+  /** A refusal about one share (from 0), worded by the page, said under that share. */
+  shareError?: { index: number; message: string };
   /** The page's language (`<html lang>`) unless given. */
   locale?: string;
 };
@@ -468,18 +515,23 @@ export type SplitLineProps = {
  * "Split", in a line's detail: a side `Sheet` (a long form) where each share is a category and an
  * amount, a share added or removed, and what is left to place said as it is typed; "Save the
  * split" waits until the shares make the whole line, each in a category. One share puts the whole
- * line back in one category.
+ * line back in one category. An expense's shares each have their subjects too (`subjects`, #37),
+ * a share added starting with the line's: splitting is how an expense is shared between
+ * subjects, which a line under the description says. A refusal about one share is said under it.
  *
- * Motion: none of its own: the sheet slides in as `Sheet` does (about 300 ms), a field's border as
- * the fields' (150 ms). Cut under reduced motion.
+ * Motion: the sheet slides in as `Sheet` does (about 300 ms), a field's border as the fields'
+ * (150 ms), a share's subject chip fades in and out in 150 ms. Cut under reduced motion.
  */
 export function SplitLine({
   total,
   categories,
   initial,
   max,
+  subjects,
+  lineSubjects = [],
   onSplit,
   error,
+  shareError,
   locale,
 }: SplitLineProps) {
   const words = useUiMessages().operations;
@@ -492,7 +544,12 @@ export function SplitLine({
   const [drafts, setDrafts] = useState<ReadonlyArray<ShareDraft>>([]);
 
   const start = () => {
-    const first = initial.map((share, index) => ({ key: index, ...share }));
+    const first = initial.map((share, index) => ({
+      key: index,
+      categoryId: share.categoryId,
+      minor: share.minor,
+      subjects: share.subjects ?? [],
+    }));
 
     setDrafts(first);
     next.current = first.length;
@@ -513,11 +570,19 @@ export function SplitLine({
     );
 
   const save = async () => {
-    const shares = drafts.flatMap((draft) =>
-      draft.categoryId === null || draft.minor === null
-        ? []
-        : [{ categoryId: draft.categoryId, minor: draft.minor }],
-    );
+    const shares = drafts.flatMap((draft): ReadonlyArray<ShareSaved> => {
+      if (draft.categoryId === null || draft.minor === null) {
+        return [];
+      }
+
+      const saved = { categoryId: draft.categoryId, minor: draft.minor };
+
+      return [
+        subjects === undefined
+          ? saved
+          : { ...saved, subjectIds: draft.subjects.map((subject) => subject.id) },
+      ];
+    });
 
     setBusy(true);
 
@@ -557,6 +622,11 @@ export function SplitLine({
           </Button>
         }
       >
+        {subjects === undefined ? null : (
+          <p data-slot="split-subjects-hint" className="text-sm text-muted-foreground">
+            {words.splitSubjectsHint}
+          </p>
+        )}
         <ol className="flex flex-col gap-3">
           {drafts.map((draft, index) => (
             <li
@@ -580,6 +650,31 @@ export function SplitLine({
                   onValueChange={(minor) => change(draft.key, { minor })}
                   locale={writtenIn}
                 />
+                {subjects === undefined ? null : (
+                  <SubjectsField
+                    label={words.shareSubjects(index + 1)}
+                    chosen={draft.subjects}
+                    choices={subjects}
+                    onAdd={(id) => {
+                      const added = subjects.find((subject) => subject.id === id);
+
+                      if (added !== undefined) {
+                        change(draft.key, { subjects: [...draft.subjects, added] });
+                      }
+                    }}
+                    onRemove={(id) =>
+                      change(draft.key, {
+                        subjects: draft.subjects.filter((subject) => subject.id !== id),
+                      })
+                    }
+                    addLabel={words.shareSubjectAdd(index + 1)}
+                    pickerLabel={words.shareSubjectPicker(index + 1)}
+                    error={shareError?.index === index ? shareError.message : undefined}
+                  />
+                )}
+                {subjects === undefined && shareError?.index === index ? (
+                  <FormMessage message={shareError.message} />
+                ) : null}
               </div>
               {drafts.length > 1 ? (
                 <IconButton
@@ -603,7 +698,12 @@ export function SplitLine({
             onClick={() => {
               setDrafts((current) => [
                 ...current,
-                { key: next.current, categoryId: null, minor: left > 0 ? left : null },
+                {
+                  key: next.current,
+                  categoryId: null,
+                  minor: left > 0 ? left : null,
+                  subjects: subjects === undefined ? [] : lineSubjects,
+                },
               ]);
               next.current += 1;
             }}

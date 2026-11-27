@@ -23,6 +23,7 @@ import { CategoryNotFound, CategoryRefused, LineNotFound } from "../errors";
 import { isId } from "../imports/rows";
 import { LogoMediaType, checkLogo, logoVersion, lookOf } from "../look";
 import type { Look, LookColor } from "../look";
+import { moveMerchantConditionsIn } from "../rules/rules";
 import { classifyByMerchants } from "./default-classification";
 import { isKnownIntermediary } from "./intermediaries";
 import { assignLineMerchantIn, lineMerchantIn } from "./line-merchant";
@@ -1191,11 +1192,13 @@ export const merchantsLayer = Layer.effect(
               const kept = await summaryById(transaction, into.id);
 
               // The rules that set the merged one, and the entries they gave it, go to the one kept
-              // (#25): its deletion would clear them.
+              // (#25): its deletion would clear them. So do the conditions that name it (#37).
               await transaction
                 .update(rule)
                 .set({ setMerchantId: into.id })
                 .where(eq(rule.setMerchantId, from.id));
+
+              await moveMerchantConditionsIn(transaction, from.id, into.id);
 
               await transaction
                 .update(entry)

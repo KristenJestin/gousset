@@ -10,14 +10,19 @@ import {
   conditionsProblem,
   conditionsQuery,
   matcherOf,
+  mergedMerchant,
+  merchantsNamed,
 } from "./conditions";
 import type { Condition, ConditionRow } from "./conditions";
 
-// A rule's conditions (#25): decoded, checked against the user's accounts, evaluated on a line as
-// the import does, and written as parameterized SQL for applying a rule to the past.
+// A rule's conditions (#25): decoded, checked against the user's accounts and merchants, evaluated
+// on a line as the import does, and written as parameterized SQL for applying a rule to the past,
+// the merchant's left to JavaScript (#37).
 
 const CURRENT = "019a0000-0000-7000-8000-000000000001";
 const SAVINGS = "019a0000-0000-7000-8000-000000000002";
+const FUELSTOP = "019a0000-0000-7000-8000-000000000003";
+const TYREHOUSE = "019a0000-0000-7000-8000-000000000004";
 
 const decode = Schema.decodeUnknownExit(Conditions);
 
@@ -29,6 +34,7 @@ const all = (...children: ReadonlyArray<Condition>): Conditions => ({
 
 const line = (change: Partial<ConditionRow> = {}): ConditionRow => ({
   label: "CB GREENMARKET 0412",
+  merchant: null,
   account: CURRENT,
   amount: 42.5,
   direction: "out",
@@ -40,6 +46,7 @@ const line = (change: Partial<ConditionRow> = {}): ConditionRow => ({
 const salaryIn = (currency: string) =>
   conditionRow({
     label: "SALARY",
+    merchantId: null,
     accountId: CURRENT,
     amountMinor: 12_345,
     currency,
@@ -74,6 +81,7 @@ describe("a line, as a condition reads it", () => {
     expect(
       conditionRow({
         label: "CB GREENMARKET",
+        merchantId: FUELSTOP,
         accountId: CURRENT,
         amountMinor: -4250,
         currency: "EUR",
@@ -81,6 +89,7 @@ describe("a line, as a condition reads it", () => {
       }),
     ).toEqual({
       label: "CB GREENMARKET",
+      merchant: FUELSTOP,
       account: CURRENT,
       amount: 42.5,
       direction: "out",
@@ -155,13 +164,30 @@ describe("a rule's conditions", () => {
   test("need one condition at least, and at most ten", () => {
     const one: Condition = { kind: "rule", field: "direction", operator: "eq", value: "out" };
 
-    expect(conditionsProblem(all(), [CURRENT])).toEqual({ reason: "empty" });
+    expect(conditionsProblem(all(), [CURRENT], [])).toEqual({ reason: "empty" });
     expect(
-      conditionsProblem(all(...Array.from({ length: MAX_CONDITIONS + 1 }, () => one)), [CURRENT]),
+      conditionsProblem(
+        all(...Array.from({ length: MAX_CONDITIONS + 1 }, () => one)),
+        [CURRENT],
+        [],
+      ),
     ).toEqual({ reason: "too_many" });
     expect(
-      conditionsProblem(all(...Array.from({ length: MAX_CONDITIONS }, () => one)), [CURRENT]),
+      conditionsProblem(all(...Array.from({ length: MAX_CONDITIONS }, () => one)), [CURRENT], []),
     ).toBeNull();
+  });
+
+  test("name only the user's merchants", () => {
+    const conditions = all(
+      { kind: "rule", field: "direction", operator: "eq", value: "out" },
+      { kind: "rule", field: "merchant", operator: "eq", value: TYREHOUSE },
+    );
+
+    expect(conditionsProblem(conditions, [CURRENT], [FUELSTOP])).toEqual({
+      reason: "unknown_merchant",
+      index: 1,
+    });
+    expect(conditionsProblem(conditions, [CURRENT], [FUELSTOP, TYREHOUSE])).toBeNull();
   });
 
   test("name only the user's accounts", () => {
@@ -172,6 +198,7 @@ describe("a rule's conditions", () => {
           { kind: "rule", field: "account", operator: "eq", value: SAVINGS },
         ),
         [CURRENT],
+        [],
       ),
     ).toEqual({ reason: "unknown_account", index: 1 });
   });
@@ -181,12 +208,14 @@ describe("a rule's conditions", () => {
       conditionsProblem(
         all({ kind: "rule", field: "day", operator: "between", value: [7, 3] }),
         [],
+        [],
       ),
     ).toEqual({ reason: "invalid", index: 0 });
 
     expect(
       conditionsProblem(
         all({ kind: "rule", field: "date", operator: "gte", value: "2026-02-30" }),
+        [],
         [],
       ),
     ).toEqual({ reason: "invalid", index: 0 });
@@ -213,6 +242,30 @@ describe("a line meets a rule", () => {
     expect(matches(line({ direction: "in" }))).toBe(false);
     expect(matches(line({ day: 8 }))).toBe(false);
     expect(matches(line({ date: "2026-09-30" }))).toBe(false);
+  });
+
+  test("of a merchant when the line's merchant is that one", () => {
+    const matches = matcherOf(
+      all(
+        { kind: "rule", field: "merchant", operator: "eq", value: FUELSTOP },
+        { kind: "rule", field: "amount", operator: "gte", value: 40 },
+      ),
+    );
+
+    expect(matches(line({ merchant: FUELSTOP }))).toBe(true);
+    expect(matches(line({ merchant: FUELSTOP, amount: 39 }))).toBe(false);
+    expect(matches(line({ merchant: TYREHOUSE }))).toBe(false);
+    // A line of no merchant known meets no merchant's condition.
+    expect(matches(line({ merchant: null }))).toBe(false);
+  });
+
+  test("of a merchant alone, whatever else the line is", () => {
+    const matches = matcherOf(
+      all({ kind: "rule", field: "merchant", operator: "eq", value: FUELSTOP }),
+    );
+
+    expect(matches(line({ merchant: FUELSTOP, direction: "in", label: "ANYTHING" }))).toBe(true);
+    expect(matches(line())).toBe(false);
   });
 
   test("whatever the case of the label, for every text it holds", () => {
@@ -283,5 +336,42 @@ describe("a rule's conditions in SQL", () => {
         expect(query.params).toHaveLength(2);
       }),
     );
+  });
+
+  test("leave the merchant's out, which every line meets there", () => {
+    const merchantIs: Condition = {
+      kind: "rule",
+      field: "merchant",
+      operator: "eq",
+      value: FUELSTOP,
+    };
+
+    const query = conditionsQuery(
+      all(merchantIs, { kind: "rule", field: "day", operator: "eq", value: 4 }),
+    );
+
+    expect(query.sql).toBe(`"day" = $1`);
+    expect(query.params).toEqual([4]);
+    expect(conditionsQuery(all(merchantIs)).sql).toBe("1 = 1");
+    // Conditions of none at all match no line.
+    expect(conditionsQuery(all()).sql).toBe("1 = 0");
+  });
+});
+
+describe("a merge of merchants", () => {
+  test("moves the conditions that name the merged one, and only those", () => {
+    const conditions = all(
+      { kind: "rule", field: "merchant", operator: "eq", value: TYREHOUSE },
+      { kind: "rule", field: "label", operator: "contains", value: "TYRE" },
+    );
+
+    expect(mergedMerchant(conditions, TYREHOUSE, FUELSTOP)).toEqual(
+      all(
+        { kind: "rule", field: "merchant", operator: "eq", value: FUELSTOP },
+        { kind: "rule", field: "label", operator: "contains", value: "TYRE" },
+      ),
+    );
+    expect(mergedMerchant(conditions, CURRENT, FUELSTOP)).toEqual(conditions);
+    expect(merchantsNamed(conditions)).toEqual([TYREHOUSE]);
   });
 });

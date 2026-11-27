@@ -125,7 +125,9 @@ export class NotLinked extends Schema.TaggedError<NotLinked>()("NotLinked", {
  * part of an expense with other lines (`linked`), the line of an expense a transfer funds, to unfund
  * first (`funded`, #29), no share or more than `MAX_SHARES` (`count`),
  * shares that do not add up to the line (`sum`); the share at `index` has no positive amount of the
- * line's currency (`amount`), a category of the other kind (`kind`) or an archived one (`archived`).
+ * line's currency (`amount`), a category of the other kind (`kind`) or an archived one (`archived`),
+ * a subject that is none of the user's (`subject_unknown`) or an archived one (`subject_archived`),
+ * or subjects on a share of money coming in: only expenses have subjects (`subject_income`, #37).
  */
 export class SplitRefused extends Schema.TaggedError<SplitRefused>()("SplitRefused", {
   reason: Schema.Literals([
@@ -139,6 +141,9 @@ export class SplitRefused extends Schema.TaggedError<SplitRefused>()("SplitRefus
     "amount",
     "kind",
     "archived",
+    "subject_unknown",
+    "subject_archived",
+    "subject_income",
   ]),
   index: Schema.optional(Schema.Number),
 }) {}

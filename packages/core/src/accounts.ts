@@ -56,6 +56,7 @@ import {
   SettlementRefused,
 } from "./errors";
 import type { Money } from "./month";
+import type { SubjectName } from "./subjects/counting";
 import { today } from "./today";
 
 // The accounts, read for the web app's server functions and the MCP door alike: every figure is
@@ -113,6 +114,8 @@ export type AccountLine = {
   readonly expiresOn: string | null;
   /** The movement a noted balance makes (#31): it has no label, the interface names it. */
   readonly fromBalance: boolean;
+  /** Its entries' subjects (#37), each once, by name: none for most lines. */
+  readonly subjects: ReadonlyArray<SubjectName>;
 };
 
 /** A credit of a benefit account with something left on it. */
@@ -405,6 +408,7 @@ export const showAccount = (owner: string, accountId: string, view: AccountView 
         balanceAfter: byLines ? money(after[index] ?? 0, account.currency) : null,
         expiresOn: line.expiresOn,
         fromBalance: line.source === "balance",
+        subjects: line.subjects,
       })),
       olderBefore: page.more && last !== undefined ? last.id : null,
       daily: {

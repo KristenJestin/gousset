@@ -1,11 +1,16 @@
 import {
   account,
+  entry,
+  entrySubject,
   merchant,
   merchantAlias,
   merchantLogo,
   rule,
   statementImport,
   statementLine,
+  subject,
+  subjectAccount,
+  subjectEntryRefused,
 } from "@gousset/db/schema/ledger";
 import { eq, sql } from "drizzle-orm";
 
@@ -314,6 +319,118 @@ test("a user never attaches a row to another user's row", async () => {
           children: [{ kind: "rule", field: "label", operator: "contains", value: "THEIRS" }],
         },
         setMerchantId: samsMerchant?.id ?? "",
+        createdFrom: "user",
+      }),
+    ),
+  ).toBe("23503");
+
+  // An expense of one's own attached to the other user's subject (#37).
+  const [samsSubject] = await data.asUser(sam, (transaction) =>
+    transaction.select({ id: subject.id }).from(subject).limit(1),
+  );
+
+  expect(samsSubject).toBeDefined();
+
+  expect(
+    await data.refusal(alex, async (transaction) => {
+      const [own] = await transaction.select({ id: entry.id }).from(entry).limit(1);
+
+      await transaction
+        .insert(entrySubject)
+        .values({ userId: alex, entryId: own?.id ?? "", subjectId: samsSubject?.id ?? "" });
+    }),
+  ).toBe("23503");
+
+  const [samsEntry] = await data.asUser(sam, (transaction) =>
+    transaction.select({ id: entry.id }).from(entry).limit(1),
+  );
+
+  expect(samsEntry).toBeDefined();
+
+  const theirEntry = samsEntry?.id ?? "";
+  const theirSubject = samsSubject?.id ?? "";
+
+  // One's own subject, expense and account, each beside the other user's.
+  const own = await data.asUser(alex, async (transaction) => ({
+    subject: (await transaction.select({ id: subject.id }).from(subject).limit(1))[0]?.id ?? "",
+    entry: (await transaction.select({ id: entry.id }).from(entry).limit(1))[0]?.id ?? "",
+    account: (await transaction.select({ id: account.id }).from(account).limit(1))[0]?.id ?? "",
+  }));
+
+  expect(own.subject).not.toBe("");
+  expect(own.entry).not.toBe("");
+  expect(own.account).not.toBe("");
+
+  // The other user's expense attached to a subject of one's own.
+  expect(
+    await data.refusal(alex, (transaction) =>
+      transaction
+        .insert(entrySubject)
+        .values({ userId: alex, entryId: theirEntry, subjectId: own.subject }),
+    ),
+  ).toBe("23503");
+
+  // A subject of one's own linked to the other user's account, and theirs to one's own account.
+  expect(
+    await data.refusal(alex, (transaction) =>
+      transaction
+        .insert(subjectAccount)
+        .values({ userId: alex, subjectId: own.subject, accountId: theirAccount }),
+    ),
+  ).toBe("23503");
+  expect(
+    await data.refusal(alex, (transaction) =>
+      transaction
+        .insert(subjectAccount)
+        .values({ userId: alex, subjectId: theirSubject, accountId: own.account }),
+    ),
+  ).toBe("23503");
+
+  // A subject of one's own inside the other user's subject (checked as the transaction commits).
+  expect(
+    await data.refusal(alex, (transaction) =>
+      transaction
+        .insert(subject)
+        .values({ userId: alex, name: "Not their shed", parentId: theirSubject }),
+    ),
+  ).toBe("23503");
+
+  // A subject of one's own bought with the other user's loan.
+  expect(
+    await data.refusal(alex, (transaction) =>
+      transaction
+        .insert(subject)
+        .values({ userId: alex, name: "Not their van", loanAccountId: theirAccount }),
+    ),
+  ).toBe("23503");
+
+  // A proposal declined for a subject of one's own on the other user's expense, and the other way.
+  expect(
+    await data.refusal(alex, (transaction) =>
+      transaction
+        .insert(subjectEntryRefused)
+        .values({ userId: alex, subjectId: own.subject, entryId: theirEntry }),
+    ),
+  ).toBe("23503");
+  expect(
+    await data.refusal(alex, (transaction) =>
+      transaction
+        .insert(subjectEntryRefused)
+        .values({ userId: alex, subjectId: theirSubject, entryId: own.entry }),
+    ),
+  ).toBe("23503");
+
+  // A rule of one's own that attaches the other user's subject.
+  expect(
+    await data.refusal(alex, (transaction) =>
+      transaction.insert(rule).values({
+        userId: alex,
+        conditions: {
+          kind: "group",
+          combinator: "and",
+          children: [{ kind: "rule", field: "label", operator: "contains", value: "THEIRS" }],
+        },
+        attachSubjectId: theirSubject,
         createdFrom: "user",
       }),
     ),

@@ -81,6 +81,8 @@ describe("a call to the MCP door", () => {
                         firstDay: null,
                         benefitLines: [],
                         reach: [],
+                        subjects: [],
+                        entrySubjects: [],
                         charges: [],
                         maybeRefunds: [],
                       }),

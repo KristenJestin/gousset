@@ -9,6 +9,7 @@ import {
   moveRule,
   showRule,
   startApplyToPast,
+  subjectNamed,
 } from "@gousset/core";
 import type {
   AccountStore,
@@ -17,6 +18,7 @@ import type {
   RuleAccount,
   RuleDetail,
   RuleJobOutcome,
+  RuleMerchant,
   RuleReach,
   RuleSummary,
 } from "@gousset/core";
@@ -27,7 +29,7 @@ import {
   MAX_LABEL_TEXT,
 } from "@gousset/core/rule-values";
 import type { ConditionField, Conditions, OPERATORS_OF } from "@gousset/core/rule-values";
-import type { UserData } from "@gousset/db/user-data";
+import type { QueryFailed, UserData } from "@gousset/db/user-data";
 import { Duration, Effect, Option, Result, Schema } from "effect";
 
 import { ToolRefusal, defineTool } from "../tool";
@@ -52,9 +54,12 @@ const OPERATORS = [
 
 const Scalar = Schema.Union([Schema.String, Schema.Number]);
 
-/** A condition as a caller writes it: an account by its name, not its id. */
+/** A condition as a caller writes it: an account or a merchant by its name, not its id. */
 const WrittenCondition = Schema.Struct({
-  field: Schema.Literals(CONDITION_FIELDS),
+  field: Schema.Literals(CONDITION_FIELDS).annotate({
+    description:
+      'merchant: the line\'s merchant, eq and its name as merchants lists it: {"field":"merchant","operator":"eq","value":"Fuelstop"}. The others: see the description.',
+  }),
   operator: Schema.Literals(OPERATORS),
   value: Schema.Union([Scalar, Schema.Array(Scalar)]),
   institution: Schema.optional(Schema.String),
@@ -65,7 +70,8 @@ export type WrittenCondition = typeof WrittenCondition.Type;
 const RulesInput = Schema.Struct({
   action: Schema.Literals(["list", "show", "create", "edit", "disable", "delete", "apply_to_past"]),
   // The description says what each field is for; its fields repeat none of it (docs/mcp.md's
-  // listing budget).
+  // listing budget). The subject and the merchant condition (#37) carry their own example call
+  // here: the description is held within 2,048 characters.
   rule: Schema.optional(Schema.String),
   conditions: Schema.optional(
     Schema.Array(WrittenCondition).check(Schema.isMaxLength(MAX_CONDITIONS)),
@@ -73,6 +79,13 @@ const RulesInput = Schema.Struct({
   merchant: Schema.optional(Schema.NullOr(Schema.String)),
   category: Schema.optional(Schema.NullOr(Schema.String)),
   kind: Schema.optional(Schema.Literals(["expense", "income"])),
+  subject: Schema.optional(
+    Schema.NullOr(
+      Schema.String.annotate({
+        description: `create, edit: the subject it attaches, by its path or its own name, not archived; null clears. Example: ${JSON.stringify({ action: "create", conditions: [{ field: "merchant", operator: "eq", value: "Fuelstop" }], subject: "House > Garden shed" })}`,
+      }),
+    ),
+  ),
   enabled: Schema.optional(Schema.Boolean),
   place: Schema.optional(Schema.Int.check(Schema.isBetween({ minimum: 1, maximum: MAX_RULES }))),
   from_correction: Schema.optional(Schema.Boolean),
@@ -97,6 +110,8 @@ const CREATE_EXAMPLE = {
 } as const satisfies Encoded;
 
 const DESCRIPTION = `Rules classify lines by themselves: conditions a line must all meet, and a merchant, a category or both to set; tried in order, the first that applies wins. They classify each new line; lines already there change only with \`apply_to_past\`, which leaves lines classified by hand alone unless \`include_by_hand: true\`. \`list\`: in order, each a sentence ending with its id; \`show\`: one, with its effect on the lines already there.
+
+A rule may also match the line's merchant (a \`merchant\` condition) and attach a \`subject\`, both by name: every rule a line meets attaches its subject.
 
 Use it so lines like one are classified alike from now on: \`lines\` \`classify\` proposes the exact create call.
 
@@ -139,11 +154,21 @@ const COMPARED = {
 
 const ON_DAY = { eq: "is", gte: "is on or after", lte: "is on or before" } as const;
 
-/** One condition in words, its account by name. */
-function conditionText(each: Condition, accounts: ReadonlyArray<RuleAccount>): string {
+/** One condition in words, its account and its merchant by name. */
+function conditionText(
+  each: Condition,
+  accounts: ReadonlyArray<RuleAccount>,
+  merchants: ReadonlyArray<RuleMerchant>,
+): string {
   switch (each.field) {
     case "label": {
       return `label ${LABEL_WORDS[each.operator]} "${each.value}"`;
+    }
+
+    case "merchant": {
+      const found = merchants.find((named) => named.id === each.value);
+
+      return `merchant is ${found === undefined ? "a merchant deleted since" : found.name}`;
     }
 
     case "account": {
@@ -177,9 +202,9 @@ function conditionText(each: Condition, accounts: ReadonlyArray<RuleAccount>): s
   }
 }
 
-/** What a rule sets, in words. */
+/** What a rule sets and attaches, in words. */
 function effectText(rule: RuleSummary): string {
-  const category = rule.category;
+  const { category, subject } = rule;
 
   const set = [
     ...(rule.merchant === null ? [] : [`merchant ${rule.merchant.name}`]),
@@ -188,19 +213,32 @@ function effectText(rule: RuleSummary): string {
       : [
           `category ${pathText(category)}${category.archived ? " (archived: it classifies nothing new)" : ""}`,
         ]),
+    ...(subject === null
+      ? []
+      : [
+          `attach subject ${subject.path}${subject.archived ? " (archived: it gets nothing new)" : ""}`,
+        ]),
   ];
 
-  return set.length === 0 ? "nothing: its merchant and category are gone" : set.join(", ");
+  return set.length === 0 ? "nothing: its merchant, category and subject are gone" : set.join(", ");
 }
 
 /**
  * One rule as a sentence: "1. If label contains "GREENMARKET", then merchant Greenmarket, category
- * Groceries. On. Classified 12 lines. Id: …".
+ * Groceries. On. Classified 12 lines. Id: …"; one that attaches a subject "Changed" its lines.
  */
-export function ruleText(rule: RuleSummary, accounts: ReadonlyArray<RuleAccount>): string {
-  const conditions = rule.conditions.children.map((each) => conditionText(each, accounts));
+export function ruleText(
+  rule: RuleSummary,
+  accounts: ReadonlyArray<RuleAccount>,
+  merchants: ReadonlyArray<RuleMerchant> = [],
+): string {
+  const conditions = rule.conditions.children.map((each) =>
+    conditionText(each, accounts, merchants),
+  );
 
-  return `${rule.place}. If ${conditions.join(" and ")}, then ${effectText(rule)}. ${rule.enabled ? "On" : "Off"}. Classified ${lines(rule.appliedCount)}. Id: ${rule.id}`;
+  const used = `${rule.subject === null ? "Classified" : "Changed"} ${lines(rule.appliedCount)}`;
+
+  return `${rule.place}. If ${conditions.join(" and ")}, then ${effectText(rule)}. ${rule.enabled ? "On" : "Off"}. ${used}. Id: ${rule.id}`;
 }
 
 /** What a rule would do to the lines already there. */
@@ -213,20 +251,24 @@ const applyCall = (rule: string) => call({ action: "apply_to_past", rule });
 /** A rule with what it would do, and the call that applies it to the lines already there. */
 function detailText(detail: RuleDetail): string {
   return [
-    ruleText(detail, detail.accounts),
+    ruleText(detail, detail.accounts, detail.merchants),
     reachText(detail.reach),
     `To apply it to the lines already there: ${applyCall(detail.id)}`,
   ].join("\n");
 }
 
-function listText(rules: ReadonlyArray<RuleSummary>, accounts: ReadonlyArray<RuleAccount>) {
+function listText(
+  rules: ReadonlyArray<RuleSummary>,
+  accounts: ReadonlyArray<RuleAccount>,
+  merchants: ReadonlyArray<RuleMerchant>,
+) {
   if (rules.length === 0) {
     return `The user has no rule yet. A rule classifies lines by itself; make one with: ${call(CREATE_EXAMPLE)}`;
   }
 
   return [
-    `${rules.length} rule(s), in the order they are tried: the first whose conditions a line meets, and which applies to it, classifies it. Each ends with its id, which show, edit, disable, delete and apply_to_past take.`,
-    rules.map((rule) => ruleText(rule, accounts)).join("\n"),
+    `${rules.length} rule(s), in the order they are tried: the first whose conditions a line meets, and which applies to it, classifies it; every rule a line meets attaches its subject. Each ends with its id, which show, edit, disable, delete and apply_to_past take.`,
+    rules.map((rule) => ruleText(rule, accounts, merchants)).join("\n"),
   ].join("\n\n");
 }
 
@@ -235,6 +277,10 @@ const FIELD_HELP = {
   label: {
     text: `label takes contains, startsWith, endsWith, eq or notContains, and a text of 1 to ${MAX_LABEL_TEXT} characters, any case.`,
     example: { field: "label", operator: "contains", value: "GREENMARKET" },
+  },
+  merchant: {
+    text: "merchant takes eq and the merchant's name as merchants lists it (any case): the line's merchant, the one set on it or the one its label names, never a payment intermediary.",
+    example: { field: "merchant", operator: "eq", value: "Fuelstop" },
   },
   account: {
     text: "account takes eq or neq, and the account's name as accounts lists it (any case), with institution when two accounts share the name.",
@@ -292,21 +338,23 @@ function conditionRefusal(
 const decodeCondition = Schema.decodeUnknownOption(Condition);
 
 /**
- * The conditions as qnot's group, each account named by its id (`accountIds`, by index), or the
- * index of the first condition that cannot be read.
+ * The conditions as qnot's group, each account and merchant named by its id (`ids`, by index), or
+ * the index of the first condition that cannot be read.
  */
 export function groupOf(
   written: ReadonlyArray<WrittenCondition>,
-  accountIds: ReadonlyArray<string | undefined>,
+  ids: ReadonlyArray<string | undefined>,
 ): Result.Result<Conditions, number> {
   const children: Array<Condition> = [];
 
   for (const [index, each] of written.entries()) {
+    const byName = each.field === "account" || each.field === "merchant";
+
     const decoded = decodeCondition({
       kind: "rule",
       field: each.field,
       operator: each.operator,
-      value: each.field === "account" ? (accountIds[index] ?? each.value) : each.value,
+      value: byName ? (ids[index] ?? each.value) : each.value,
     });
 
     if (Option.isNone(decoded)) {
@@ -321,47 +369,59 @@ export function groupOf(
 
 const isText = Schema.is(Schema.String);
 
-/** The id of each account a condition names, by index; undefined for other conditions. */
-function accountIdsOf(owner: string, written: ReadonlyArray<WrittenCondition>) {
-  return Effect.forEach(written, (each, index) => {
-    const { value } = each;
+/** The id of each account and merchant a condition names, by index; undefined for the others. */
+function idsOf(owner: string, written: ReadonlyArray<WrittenCondition>) {
+  return Effect.forEach(
+    written,
+    (
+      each,
+      index,
+    ): Effect.Effect<string | undefined, ToolRefusal | QueryFailed, AccountStore | Merchants> => {
+      const { value } = each;
 
-    if (each.field !== "account" || !isText(value)) {
-      return Effect.succeed(undefined);
-    }
+      if (each.field === "merchant" && isText(value)) {
+        return merchantNamed(owner, value.trim()).pipe(
+          Effect.map((found): string | undefined => found.id),
+        );
+      }
 
-    const institution = each.institution?.trim();
+      if (each.field !== "account" || !isText(value)) {
+        return Effect.succeed(undefined);
+      }
 
-    return accountNamed(owner, value.trim(), institution).pipe(
-      Effect.map((found): string | undefined => found.id),
-      Effect.catchTags({
-        AccountNameUnknown: (unknown) =>
-          Effect.fail(
-            new ToolRefusal({
-              message:
-                unknown.accounts.length === 0
-                  ? "The user has no account in Gousset yet: a condition on the account names none."
-                  : `Condition ${index + 1}: no account of the user's is named "${clip(unknown.name)}"${institution === undefined ? "" : ` at "${clip(institution)}"`}. Their accounts: ${unknown.accounts.map(named).join(", ")}. Name one as written here (any case), the bank in brackets as institution.`,
-              example: `accounts ${JSON.stringify({ action: "list" })}`,
-            }),
-          ),
-        AccountNameAmbiguous: (ambiguous) =>
-          Effect.fail(
-            new ToolRefusal({
-              message: `Condition ${index + 1}: several accounts of the user's are named "${clip(ambiguous.name)}": ${ambiguous.matches.map(named).join(", ")}. Add institution, the bank written in brackets, to the condition.`,
-              example: `accounts ${JSON.stringify({ action: "list" })}`,
-            }),
-          ),
-      }),
-    );
-  });
+      const institution = each.institution?.trim();
+
+      return accountNamed(owner, value.trim(), institution).pipe(
+        Effect.map((found): string | undefined => found.id),
+        Effect.catchTags({
+          AccountNameUnknown: (unknown) =>
+            Effect.fail(
+              new ToolRefusal({
+                message:
+                  unknown.accounts.length === 0
+                    ? "The user has no account in Gousset yet: a condition on the account names none."
+                    : `Condition ${index + 1}: no account of the user's is named "${clip(unknown.name)}"${institution === undefined ? "" : ` at "${clip(institution)}"`}. Their accounts: ${unknown.accounts.map(named).join(", ")}. Name one as written here (any case), the bank in brackets as institution.`,
+                example: `accounts ${JSON.stringify({ action: "list" })}`,
+              }),
+            ),
+          AccountNameAmbiguous: (ambiguous) =>
+            Effect.fail(
+              new ToolRefusal({
+                message: `Condition ${index + 1}: several accounts of the user's are named "${clip(ambiguous.name)}": ${ambiguous.matches.map(named).join(", ")}. Add institution, the bank written in brackets, to the condition.`,
+                example: `accounts ${JSON.stringify({ action: "list" })}`,
+              }),
+            ),
+        }),
+      );
+    },
+  );
 }
 
 /** The written conditions as qnot's group, or the refusal to give. */
 function conditionsOf(owner: string, written: ReadonlyArray<WrittenCondition>, retry: Retry) {
   return Effect.gen(function* () {
-    const accountIds = yield* accountIdsOf(owner, written);
-    const group = groupOf(written, accountIds);
+    const ids = yield* idsOf(owner, written);
+    const group = groupOf(written, ids);
 
     return Result.isSuccess(group)
       ? group.success
@@ -369,10 +429,39 @@ function conditionsOf(owner: string, written: ReadonlyArray<WrittenCondition>, r
   });
 }
 
-/** Where a rule's merchant and category come from: the caller's names. */
+/** The subject named `name` (its path, or its name alone), or the refusal to give. */
+function subjectOf(owner: string, name: string, encoded: Encoded) {
+  return subjectNamed(owner, name.trim()).pipe(
+    Effect.catchTags({
+      SubjectNameUnknown: (unknown) => {
+        const [first] = unknown.close;
+
+        return first === undefined
+          ? Effect.fail(
+              new ToolRefusal({
+                message: `No subject of the user's is named "${clip(unknown.name)}". The user makes subjects in Gousset; name one as "Parent > Child" or by its own name, or leave subject out.`,
+                example: call({ ...encoded, subject: undefined }),
+              }),
+            )
+          : refuse(
+              `No subject of the user's is named "${clip(unknown.name)}". Close: ${unknown.close.join(", ")}. Call again with one of them, as it is written.`,
+              { ...encoded, subject: first },
+            );
+      },
+      SubjectNameAmbiguous: (ambiguous) =>
+        refuse(
+          `Several subjects are named "${clip(ambiguous.name)}": ${ambiguous.matches.join(", ")}. Name one by its path, as written here.`,
+          { ...encoded, subject: ambiguous.matches[0] ?? ambiguous.name },
+        ),
+      QueryFailed: Effect.die,
+    }),
+  );
+}
+
+/** Where a rule's merchant, category and subject come from: the caller's names. */
 function effectOf(owner: string, input: RulesInput, encoded: Encoded) {
   return Effect.gen(function* () {
-    const { merchant, category } = input;
+    const { merchant, category, subject } = input;
 
     const merchantId =
       merchant === undefined || merchant === null
@@ -386,7 +475,12 @@ function effectOf(owner: string, input: RulesInput, encoded: Encoded) {
             call({ ...encoded, category: name, kind }),
           )).id;
 
-    return { merchantId, categoryId };
+    const subjectId =
+      subject === undefined || subject === null
+        ? subject
+        : (yield* subjectOf(owner, subject, encoded)).id;
+
+    return { merchantId, categoryId, subjectId };
   });
 }
 
@@ -402,7 +496,7 @@ function refusalsOf(input: RulesInput, encoded: Encoded, retry: Retry) {
 
   return {
     RuleConditionsRefused: (refused: {
-      readonly reason: "empty" | "too_many" | "invalid" | "unknown_account";
+      readonly reason: "empty" | "too_many" | "invalid" | "unknown_account" | "unknown_merchant";
       readonly index: number | null;
     }) => {
       switch (refused.reason) {
@@ -432,16 +526,36 @@ function refusalsOf(input: RulesInput, encoded: Encoded, retry: Retry) {
             }),
           );
         }
+
+        case "unknown_merchant": {
+          return Effect.fail(
+            new ToolRefusal({
+              message: `Condition ${(refused.index ?? 0) + 1} names a merchant the user no longer has: name one as merchants lists it.`,
+              example: `merchants ${JSON.stringify({ action: "list" })}`,
+            }),
+          );
+        }
       }
     },
     RuleEffectRefused: (refused: {
-      readonly reason: "nothing_set" | "category_archived" | "merchant_intermediary";
+      readonly reason:
+        | "nothing_set"
+        | "category_archived"
+        | "merchant_intermediary"
+        | "subject_archived";
     }) => {
       switch (refused.reason) {
         case "nothing_set": {
           return refuse(
-            "A rule sets a merchant, a category, or both: give merchant or category (by name), and never clear both.",
+            "A rule sets a merchant, a category or a subject: give one of them (by name), and never clear them all.",
             { ...encoded, merchant: undefined, category: "Groceries" },
+          );
+        }
+
+        case "subject_archived": {
+          return refuse(
+            `"${clip(input.subject ?? "")}" is archived: it gets no new expense. Choose a subject in use, or restore it in Gousset.`,
+            { ...encoded, subject: "Van" },
           );
         }
 
@@ -478,6 +592,11 @@ function refusalsOf(input: RulesInput, encoded: Encoded, retry: Retry) {
           example: `categories ${JSON.stringify({ action: "list" })}`,
         }),
       ),
+    SubjectNotFound: () =>
+      refuse("The subject is gone. Call again with a subject the user has, or without one.", {
+        ...encoded,
+        subject: undefined,
+      }),
   };
 }
 
@@ -487,7 +606,7 @@ function create(owner: string, input: RulesInput) {
 
   if (written === undefined) {
     return refuse(
-      "create needs conditions, every one a line must meet, and merchant, category or both, by name.",
+      "create needs conditions, every one a line must meet, and merchant, category or subject (one or more), by name.",
       CREATE_EXAMPLE,
     );
   }
@@ -503,6 +622,7 @@ function create(owner: string, input: RulesInput) {
       conditions,
       merchantId: effect.merchantId ?? null,
       categoryId: effect.categoryId ?? null,
+      subjectId: effect.subjectId ?? null,
       createdFrom: input.from_correction === true ? "correction" : "user",
     });
 
@@ -532,11 +652,12 @@ function edit(owner: string, input: RulesInput) {
     input.conditions !== undefined ||
     input.merchant !== undefined ||
     input.category !== undefined ||
+    input.subject !== undefined ||
     input.enabled !== undefined;
 
   if (!changes && input.place === undefined) {
     return refuse(
-      "edit needs what changes: conditions (replaced whole), merchant or category (null clears), enabled, or place.",
+      "edit needs what changes: conditions (replaced whole), merchant, category or subject (null clears), enabled, or place.",
       { action: "edit", rule, place: 1 },
     );
   }
@@ -556,6 +677,7 @@ function edit(owner: string, input: RulesInput) {
         conditions,
         merchantId: effect.merchantId,
         categoryId: effect.categoryId,
+        subjectId: effect.subjectId,
         enabled: input.enabled,
       });
     }
@@ -588,7 +710,7 @@ function disable(owner: string, input: RulesInput) {
   return editRule(owner, rule, { enabled: false }).pipe(
     Effect.map(
       (detail) =>
-        `Turned off: ${ruleText(detail, detail.accounts)}\nIt classifies no new line until it is turned on again (${call({ action: "edit", rule: detail.id, enabled: true })}); the lines it classified keep their category.`,
+        `Turned off: ${ruleText(detail, detail.accounts, detail.merchants)}\nIt classifies no new line until it is turned on again (${call({ action: "edit", rule: detail.id, enabled: true })}); the lines it classified keep their category.`,
     ),
     Effect.catchTags({
       ...refusalsOf(input, encoded, (conditions) => ({ action: "edit", rule, conditions })),
@@ -611,7 +733,7 @@ function remove(owner: string, input: RulesInput) {
 
     yield* deleteRule(owner, detail.id);
 
-    return `Deleted: ${ruleText(detail, detail.accounts)}\nThe lines it classified keep their category and merchant. To only stop it, turn a rule off instead: ${call({ action: "disable", rule: "…" })}`;
+    return `Deleted: ${ruleText(detail, detail.accounts, detail.merchants)}\nThe lines it classified keep their category, merchant and subjects. To only stop it, turn a rule off instead: ${call({ action: "disable", rule: "…" })}`;
   }).pipe(Effect.catchTags({ RuleNotFound: () => NOT_FOUND(rule), QueryFailed: Effect.die }));
 }
 
@@ -641,7 +763,7 @@ function appliedText(
   includeByHand: boolean,
   byHand: number,
 ): string {
-  const done = `Applied rule ${detail.place} to the lines already there: ${lines(changed)} changed, each now classified by the rule.`;
+  const done = `Applied rule ${detail.place} to the lines already there: ${lines(changed)} changed, each now ${detail.subject === null ? "classified by the rule" : "classified by it or attached to its subject"}.`;
 
   if (byHand === 0) {
     return done;
@@ -757,7 +879,7 @@ export const rulesTool = defineTool<
     switch (input.action) {
       case "list": {
         return listRules(owner).pipe(
-          Effect.map((list) => listText(list.rules, list.accounts)),
+          Effect.map((list) => listText(list.rules, list.accounts, list.merchants)),
           Effect.catchTags({ QueryFailed: Effect.die }),
         );
       }

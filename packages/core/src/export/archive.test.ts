@@ -20,6 +20,7 @@ import {
   CATEGORIES,
   ENTRIES,
   ENTRY_PARTS,
+  ENTRY_SUBJECTS,
   EXPORT_TABLES,
   IMPORTS,
   IMPORT_PROFILES,
@@ -27,6 +28,9 @@ import {
   MERCHANT_ALIASES,
   RULES,
   STATEMENT_LINES,
+  SUBJECTS,
+  SUBJECT_ACCOUNTS,
+  SUBJECT_ENTRIES_REFUSED,
   TRANSFERS,
 } from "./tables";
 import type { ExportTable } from "./tables";
@@ -281,6 +285,43 @@ function madeUpExport(): ExportData {
     }),
   ];
 
+  // The van (#37), linked to the first account, one expense attached and another refused.
+  const vanId = nextId();
+  const [attached, refused] = entries;
+
+  const subjects = [
+    row(SUBJECTS, {
+      id: vanId,
+      user_id: OWNER,
+      name: "Van",
+      estimated_value_minor: 1_800_000,
+      value_currency: "EUR",
+      starts_on: "2026-09-01",
+      created_at: "2026-10-02T10:00:00+00:00",
+      updated_at: "2026-10-02T10:00:00+00:00",
+    }),
+  ];
+
+  const entrySubjects = [
+    row(ENTRY_SUBJECTS, { entry_id: attached?.id ?? null, subject_id: vanId, user_id: OWNER }),
+  ];
+
+  const subjectAccounts = [
+    row(SUBJECT_ACCOUNTS, {
+      subject_id: vanId,
+      account_id: accounts[0]?.id ?? null,
+      user_id: OWNER,
+    }),
+  ];
+
+  const refusals = [
+    row(SUBJECT_ENTRIES_REFUSED, {
+      subject_id: vanId,
+      entry_id: refused?.id ?? null,
+      user_id: OWNER,
+    }),
+  ];
+
   const byTable = new Map<ExportTable, ReadonlyArray<ExportRow>>([
     [ACCOUNTS, accounts],
     [ACCOUNT_BALANCES, balances],
@@ -294,6 +335,10 @@ function madeUpExport(): ExportData {
     [MERCHANTS, merchants],
     [MERCHANT_ALIASES, aliases],
     [RULES, rules],
+    [SUBJECTS, subjects],
+    [ENTRY_SUBJECTS, entrySubjects],
+    [SUBJECT_ACCOUNTS, subjectAccounts],
+    [SUBJECT_ENTRIES_REFUSED, refusals],
   ]);
 
   return {
@@ -406,10 +451,13 @@ describe("the export's archive", () => {
       const names = table.columns.map((column) => column.name);
 
       expect(header, table.file).toEqual(names);
+      // The first column names the row: its id, or for a table of links (#37) the row it links.
+      const first = names[0] ?? "id";
+
       expect(
         body.map((cells) => cells[0]),
         table.file,
-      ).toEqual(rows.map((each) => each.id));
+      ).toEqual(rows.map((each) => each[first]));
 
       for (const [index, cells] of body.entries()) {
         const source = rows[index];

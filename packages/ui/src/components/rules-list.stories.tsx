@@ -1,7 +1,14 @@
 import type { Meta, StoryObj } from "@storybook/react-vite";
 import { useState } from "react";
 
-import { LONG_RULES, RULES, RULE_ACCOUNTS, manyRules } from "../stories/made-up-rules";
+import {
+  LONG_RULES,
+  RULES,
+  RULE_ACCOUNTS,
+  RULE_MERCHANTS,
+  SUBJECT_RULES,
+  manyRules,
+} from "../stories/made-up-rules";
 import { InFrench } from "../stories/in-french";
 import { RulesList, RulesListSkeleton } from "./rules-list";
 import type { RulesListRow } from "./rules-list";
@@ -38,6 +45,7 @@ function Reordering({ rules }: { rules: ReadonlyArray<RulesListRow> }) {
         label="Rules, in the order they are tried"
         rules={rows}
         accounts={RULE_ACCOUNTS}
+        merchants={RULE_MERCHANTS}
         onOpen={setOpened}
         onMove={move}
         openId={opened}
@@ -53,7 +61,8 @@ function Reordering({ rules }: { rules: ReadonlyArray<RulesListRow> }) {
  * The rules of the settings (docs/wireframes, screen 9, block 2): rules as sentences, "if…
  * then…", in the order they are tried (the first that applies wins), with how many lines each
  * classified. A rule turned off is faded and says "Off"; a rule whose category was archived says so
- * beside it. Pressing a rule opens it; its arrows move it one place up or down. On a phone, "then"
+ * beside it. A rule that attaches a subject says it last, "for Van" (#37), and a merchant's
+ * condition names the merchant. Pressing a rule opens it; its arrows move it one place up or down. On a phone, "then"
  * goes under the sentence.
  *
  * Loading: `RulesListSkeleton`, the same rows at the same heights.
@@ -94,6 +103,12 @@ export const ArchivedCategory: Story = {
     ),
   },
 };
+
+/**
+ * Rules that attach a subject: on a merchant alone, beside a category, and one whose subject was
+ * archived since, which says so.
+ */
+export const Subjects: Story = { args: { rules: [...SUBJECT_RULES, ...RULES.slice(0, 2)] } };
 
 /** Labels as long as banks write them, and a rule of six conditions: they wrap, never overflow. */
 export const LongLabels: Story = { args: { rules: [...LONG_RULES, ...RULES] } };

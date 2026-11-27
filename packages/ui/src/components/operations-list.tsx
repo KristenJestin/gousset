@@ -23,6 +23,8 @@ import { Icon } from "./icon";
 import type { CategoryIconName } from "./icons";
 import { Loader } from "./loader";
 import { Skeleton, SkeletonFrame } from "./skeleton";
+import { SubjectChips } from "./subject-chips";
+import type { SubjectChipView } from "./subject-chips";
 
 export type OperationRow = {
   id: string;
@@ -37,6 +39,8 @@ export type OperationRow = {
   toReview?: boolean;
   /** Its category's name, already worded ("Food › Groceries"); shown with `withCategory`. */
   category?: string;
+  /** What its expense is for (#37), by name; shown with `withSubjects`. */
+  subjects?: ReadonlyArray<SubjectChipView>;
   /** Who it paid (#204), by logo or initials before its label; shown with `withAvatars`. */
   avatar?: AvatarFace;
   /** Its category's icon (none: `other`'s), shown before its name in its colour (#205). */
@@ -70,6 +74,8 @@ export type OperationsListProps = {
   locale?: string;
   /** A "Category" column, on a wide screen, with each row's `category`. */
   withCategory?: boolean;
+  /** A "Subjects" column (#37), on a wider screen still, with each row's `subjects` as chips. */
+  withSubjects?: boolean;
   /**
    * Each row's `avatar` (24 px) before its label; a row with none keeps the room empty, so that the
    * labels line up.
@@ -84,6 +90,9 @@ export type OperationsListProps = {
 
 /** Every row's height, in pixels: `h-12`. The virtualiser places rows by it. */
 const ROW_HEIGHT = 48;
+
+/** How many subject chips a row draws before "+N": its column is 160 px wide. */
+const ROW_SUBJECTS = 2;
 
 /**
  * How many rows the server writes, in the flow, before the list takes over in the browser: enough
@@ -181,9 +190,10 @@ const COLUMN = {
   day: "w-16 shrink-0",
   line: "flex min-w-0 flex-1 items-center gap-2",
   // Shown while the list has room for them: a narrow list (a phone, a small window) gives them up,
-  // the category first, never the amounts.
+  // the subjects first, then the category, never the amounts.
   account: "hidden w-40 shrink-0 truncate @xl:block",
   category: "hidden w-40 shrink-0 truncate @3xl:flex",
+  subjects: "hidden w-40 shrink-0 @4xl:flex",
   amount: "flex w-28 shrink-0 justify-end",
 };
 
@@ -213,8 +223,13 @@ const COLUMN = {
  * from screen readers (the label names it); it does not move but with its row.
  *
  * The account column shows while the list is at least 576 px wide, the category column while it
- * is at least 768 px wide (container queries): a narrower list gives them up, never the amounts.
- * An open line's detail is a sheet over the list (#182), which keeps its width.
+ * is at least 768 px wide, the subjects' (`withSubjects`, #37) while it is at least 896 px wide
+ * (container queries): a narrower list gives them up, never the amounts. A row's subjects are
+ * chips, two at most and "+N" for the others. An open line's detail is a sheet over the list
+ * (#182), which keeps its width.
+ *
+ * Motion of the subjects: a chip that comes to a row fades in, one that goes fades out, in 150 ms
+ * (ease-out), as `SubjectChips` does; cut under reduced motion.
  */
 export function OperationsList({
   rows,
@@ -227,6 +242,7 @@ export function OperationsList({
   emptyText,
   locale,
   withCategory = false,
+  withSubjects = false,
   withAvatars = false,
   foldingId,
 }: OperationsListProps) {
@@ -289,6 +305,7 @@ export function OperationsList({
       row={row}
       open={row.id === openId}
       withCategory={withCategory}
+      withSubjects={withSubjects}
       withAvatars={withAvatars}
       locale={writtenIn}
       onOpen={onOpen}
@@ -306,7 +323,7 @@ export function OperationsList({
   return (
     <LazyMotion features={domMax}>
       <div data-slot="operations-list" className="@container flex h-full min-h-0 flex-col">
-        <ColumnTitles withCategory={withCategory} />
+        <ColumnTitles withCategory={withCategory} withSubjects={withSubjects} />
         <m.div
           ref={scroller}
           layoutScroll
@@ -429,7 +446,13 @@ function PlacedRow({
 }
 
 /** The columns' names over the rows; the rows say their own text, so it is only drawn. */
-function ColumnTitles({ withCategory }: { withCategory: boolean }) {
+function ColumnTitles({
+  withCategory,
+  withSubjects,
+}: {
+  withCategory: boolean;
+  withSubjects: boolean;
+}) {
   const columns = useUiMessages().operations.columns;
 
   return (
@@ -440,6 +463,7 @@ function ColumnTitles({ withCategory }: { withCategory: boolean }) {
       <span className={COLUMN.day}>{columns.day}</span>
       <span className={COLUMN.line}>{columns.label}</span>
       {withCategory ? <span className={COLUMN.category}>{columns.category}</span> : null}
+      {withSubjects ? <span className={COLUMN.subjects}>{columns.subjects}</span> : null}
       <span className={COLUMN.account}>{columns.account}</span>
       <span className={COLUMN.amount}>{columns.amount}</span>
     </div>
@@ -450,6 +474,7 @@ function RowButton({
   row,
   open,
   withCategory,
+  withSubjects,
   withAvatars,
   locale,
   onOpen,
@@ -459,6 +484,7 @@ function RowButton({
   row: OperationRow;
   open: boolean;
   withCategory: boolean;
+  withSubjects: boolean;
   withAvatars: boolean;
   locale: string;
   onOpen: (id: string) => void;
@@ -527,6 +553,11 @@ function RowButton({
             </span>
           )}
           <span className="truncate">{row.maybeRefund === true ? null : row.category}</span>
+        </span>
+      ) : null}
+      {withSubjects ? (
+        <span className={COLUMN.subjects}>
+          <SubjectChips subjects={row.subjects ?? []} limit={ROW_SUBJECTS} />
         </span>
       ) : null}
       <span className={cn(COLUMN.account, "text-muted-foreground")}>{row.account}</span>

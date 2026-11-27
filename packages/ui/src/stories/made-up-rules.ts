@@ -32,6 +32,60 @@ export const RULE_MERCHANTS = [
   { id: "corner-bistro", name: "Corner Bistro" },
 ] as const;
 
+/** The subjects a rule may attach (#37), by their paths. */
+export const RULE_SUBJECTS = [
+  { id: "house", name: "House" },
+  { id: "garden-shed", name: "House > Garden shed" },
+  { id: "van", name: "Van" },
+  { id: "alps-2028", name: "Alps 2028" },
+] as const;
+
+/** One condition on the merchant: what a subject made from merchants has. */
+export const merchantIs = (id: string): RuleConditions => ({
+  kind: "group",
+  combinator: "and",
+  children: [{ kind: "rule", field: "merchant", operator: "eq", value: id }],
+});
+
+/** Rules that attach a subject (#37): alone, or beside a category. */
+export const SUBJECT_RULES: ReadonlyArray<RulesListRow> = [
+  {
+    id: "rule-fuelstop-van",
+    conditions: merchantIs("fuelstop"),
+    merchant: null,
+    category: null,
+    subject: "Van",
+    enabled: true,
+    used: 27,
+  },
+  {
+    id: "rule-timber-shed",
+    conditions: {
+      kind: "group",
+      combinator: "and",
+      children: [
+        { kind: "rule", field: "label", operator: "contains", value: "TIMBERYARD" },
+        { kind: "rule", field: "amount", operator: "gte", value: 50 },
+      ],
+    },
+    merchant: null,
+    category: "Housing",
+    subject: "House > Garden shed",
+    enabled: true,
+    used: 4,
+  },
+  {
+    id: "rule-greenmarket-alps",
+    conditions: merchantIs("greenmarket"),
+    merchant: null,
+    category: null,
+    subject: "Alps 2028",
+    subjectArchived: true,
+    enabled: true,
+    used: 9,
+  },
+];
+
 export const RULE_CATEGORIES = {
   expense: [
     {

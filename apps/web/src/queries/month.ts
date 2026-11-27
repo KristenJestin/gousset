@@ -1,4 +1,4 @@
-import type { SpendingBy } from "@gousset/core";
+import type { DaysBy } from "@gousset/core";
 import { queryOptions } from "@tanstack/react-query";
 
 import { getMonthReview, getSpendingDays } from "@/functions/review";
@@ -13,8 +13,8 @@ export const monthQueries = {
       queryKey: monthKeys.review(month),
       queryFn: () => getMonthReview({ data: { month } }),
     }),
-  /** A row's spending day by day, read when its detail opens. */
-  spendingDays: (month: string, by: SpendingBy, id: string | null) =>
+  /** A row's spending day by day, read when its detail opens: a subject's too (#37). */
+  spendingDays: (month: string, by: DaysBy, id: string | null) =>
     queryOptions({
       queryKey: monthKeys.spendingDays(month, by, id),
       queryFn: () => getSpendingDays({ data: { month, by, id } }),

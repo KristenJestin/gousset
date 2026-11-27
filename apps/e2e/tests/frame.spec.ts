@@ -1,5 +1,6 @@
 import type { Page } from "@playwright/test";
-import { Schema } from "effect";
+import { createSubject } from "@gousset/core";
+import { Effect, Schema } from "effect";
 
 import { APP_HOST } from "../src/app-server";
 import { colorSchemeOf } from "../src/database";
@@ -14,6 +15,7 @@ import {
   test,
   visit,
 } from "../src/test";
+import { openUserData } from "../src/user-data";
 
 // The scenarios of issue #8 (the app's frame and navigation), "How to verify", one test each,
 // plus the issue's motion and its other points: the month in the URL, the language, the brand.
@@ -106,6 +108,22 @@ async function moveTo(page: Page, name: string) {
 /** The frames where the screen was neither hidden nor fully drawn: its fade. */
 function fading(frames: Array<MoveFrame>) {
   return frames.filter((frame) => frame.opacity > 0.01 && frame.opacity < 0.99);
+}
+
+/**
+ * The frames where the screen grew fainter once its fade had begun: the fade started again, as a
+ * move that changes the address twice (a redirect) would make it.
+ */
+function fadingAgain(frames: Array<MoveFrame>) {
+  const begun = frames.findIndex((frame) => frame.opacity < 0.99);
+
+  if (begun < 0) {
+    return [];
+  }
+
+  return frames
+    .slice(begun + 1)
+    .filter((frame, index) => frame.opacity < (frames[begun + index]?.opacity ?? 0) - 0.01);
 }
 
 /** The frames where the mark stood between the item it left and the item it reached: its slide. */
@@ -265,8 +283,11 @@ test("on a phone, a tab bar holds review, operations, accounts and more", async 
   await expect(menu.getByRole("group")).toContainText(user.email);
 
   await menu.getByRole("menuitem", { name: "Subjects" }).click();
-  await expect(userPage).toHaveURL(/\/subjects$/);
   await expect(userPage.getByRole("heading", { level: 1, name: "Subjects" })).toBeVisible();
+  // Read once the screen is drawn: the address is `/subjects` while it loads, then the screen opens
+  // on the first open subject when there is one (the worker's user has some once another test
+  // seeded them), on the empty state otherwise.
+  await expect(userPage).toHaveURL(/\/subjects(\/[^/?]+)?$/);
   // The menu fades out and the screen in: axe checks the screen once they are drawn.
   await animationsDone(userPage);
 });
@@ -415,36 +436,56 @@ test("the language and the colour scheme are changed from the settings", async (
 });
 
 test("moving between screens fades the screen, the current item slides, empty states fade in", async ({
-  userPage,
+  page,
+  app,
+  user,
 }) => {
-  test.skip(onPhone(userPage), "The sidebar is the desktop's.");
-  await visit(userPage, "/investments");
+  test.skip(onPhone(page), "The sidebar is the desktop's.");
+
+  // A person of the test's own, with no investment and one subject: the subjects' screen opens on
+  // that subject, through a redirect (`/subjects` to `/subjects/<id>`), whatever the worker's
+  // shared user holds by then.
+  const noor = await addUser(app.baseURL, user, personOfItsOwn("noor"));
+  const data = openUserData(app.database);
+
+  try {
+    const owner = await data.ownerOf(noor.email);
+
+    await Effect.runPromise(createSubject(owner, { name: "Van" }).pipe(Effect.provide(data.layer)));
+  } finally {
+    await data.close();
+  }
+
+  await page.context().addCookies([...noor.cookies]);
+  await visit(page, "/investments");
 
   // The empty state fades in through CSS, 200 ms.
-  const block = userPage.locator('[data-slot="screen-block"]');
+  const block = page.locator('[data-slot="screen-block"]');
 
   await expect(block).toHaveCSS("animation-duration", "0.2s");
   await expect(block).toHaveCSS("animation-name", "enter");
 
   // The screen reached fades in, and the current item's mark slides from the item left to it:
   // 200 ms each, so a few frames in between, all within 400 ms of each other.
-  const moved = await moveTo(userPage, "Subjects");
+  const moved = await moveTo(page, "Subjects");
 
-  await expect(userPage.getByRole("link", { name: "Subjects" })).toHaveAttribute(
+  await expect(page.getByRole("link", { name: "Subjects" })).toHaveAttribute(
     "aria-current",
     "page",
   );
+  // One fade, though the address changed twice: the subjects' screen is one screen.
+  expect(fadingAgain(moved)).toEqual([]);
   expect(fading(moved).length).toBeGreaterThan(1);
   expect(spanOf(fading(moved))).toBeLessThan(400);
   expect(sliding(moved).length).toBeGreaterThan(1);
   expect(spanOf(sliding(moved))).toBeLessThan(400);
 
   // Cut under reduced motion: the screen shows at once, the mark is at once on its item.
-  await userPage.emulateMedia({ reducedMotion: "reduce" });
+  await page.emulateMedia({ reducedMotion: "reduce" });
 
-  const cut = await moveTo(userPage, "Investments");
+  const cut = await moveTo(page, "Investments");
 
-  await expect(userPage.getByRole("link", { name: "Investments" })).toHaveAttribute(
+  await expect(page.getByRole("link", { name: "Investments" })).toHaveAttribute(
     "aria-current",
     "page",
   );

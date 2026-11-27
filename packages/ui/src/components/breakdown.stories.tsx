@@ -143,7 +143,8 @@ function SwitchingMonths() {
  * amount or benchmark of the list. The dark mark is the row's benchmark (its 6-month average);
  * once the month passes it, a ⚠ (labelled for screen readers) sits after the name. `limit` cuts
  * the list with "+ N more", or with `onMore` a button "Show the other N" (never "more" in a
- * button's name: the frame's menu is "More"); with `onSelect`, each row is a button.
+ * button's name: the frame's menu is "More"); with `onSelect`, each row is a button. A row of a
+ * tree (`depth`, a subject's, #37) has its name indented under its parent's.
  * Without rows, a sentence (the page's own with `emptyText`).
  *
  * A category's row draws its icon and its bar in the category's colour (its own, else its
@@ -183,6 +184,32 @@ export const Merchants: Story = {
       icon: "merchant",
       amount: merchant.spent,
     })),
+  },
+};
+
+/**
+ * Subjects (#37), in tree order: a child indented under its parent, no benchmark, and a line under
+ * them saying why their totals do not add up (`footnote`). The shed's planks count in House too.
+ */
+export const Subjects: Story = {
+  args: {
+    rows: [
+      {
+        id: "house",
+        name: "House",
+        icon: "subjects",
+        amount: { minor: 31_500, currency: "EUR" },
+      },
+      {
+        id: "shed",
+        name: "Garden shed",
+        icon: "subjects",
+        amount: { minor: 21_500, currency: "EUR" },
+        depth: 1,
+      },
+      { id: "van", name: "Van", icon: "subjects", amount: { minor: 6200, currency: "EUR" } },
+    ],
+    footnote: "An expense can count in several subjects: these totals don't add up.",
   },
 };
 

@@ -13,6 +13,7 @@ import type { Look } from "./look";
 import { merchantKey } from "./merchants/labels";
 import { monthRowsIn } from "./month-rows";
 import { reviewQueue } from "./review-queue";
+import { subtreeOf, treeOrder } from "./subjects/counting";
 import {
   detectSubscriptions,
   subscriptionId,
@@ -86,6 +87,14 @@ export type MonthMerchant = {
   readonly look: Look;
 };
 
+/** A subject (#37), as the month's "by subject" reads it. */
+export type MonthSubject = {
+  readonly id: string;
+  readonly parentId: string | null;
+  readonly name: string;
+  readonly archived: boolean;
+};
+
 /** A counted line of a benefit account. */
 export type BenefitLine = CountedLine & { readonly accountId: string };
 
@@ -130,6 +139,10 @@ export type MonthRows = {
   readonly firstDay: string | null;
   readonly benefitLines: ReadonlyArray<BenefitLine>;
   readonly reach: ReadonlyArray<StatementReach>;
+  /** Every subject of the user's (#37). */
+  readonly subjects: ReadonlyArray<MonthSubject>;
+  /** The subjects of the entries read (`entries`), one row per entry and subject. */
+  readonly entrySubjects: ReadonlyArray<{ readonly entryId: string; readonly subjectId: string }>;
   /** Empty when the scope asked for none. */
   readonly charges: ReadonlyArray<Charge>;
   /**
@@ -244,6 +257,20 @@ export type MerchantSpending = SpendingFigures & {
   readonly look: Look | null;
 };
 
+/**
+ * A subject in the month (#37): its expenses and its descendants', each once, against the average
+ * and the month before. A subject has no benchmark.
+ */
+export type SubjectSpending = SpendingFigures & {
+  readonly id: string;
+  readonly name: string;
+  /** Null for a top-level subject. */
+  readonly parentId: string | null;
+  /** 0 at the top. */
+  readonly depth: number;
+  readonly archived: boolean;
+};
+
 type SpendingHeader = Against & { readonly month: string; readonly currency: string };
 
 /** Where the money went in a month, by category: the top-level ones, the largest first. */
@@ -258,10 +285,23 @@ export type MerchantSpendingRead = SpendingHeader & {
   readonly rows: ReadonlyArray<MerchantSpending>;
 };
 
+/**
+ * Where the money went in a month, by subject (#37): each subject that has an expense in the month,
+ * in tree order (each parent before its children, siblings by name). An expense counts whole in
+ * each of its subjects and once in a parent, so the rows never add up.
+ */
+export type SubjectSpendingRead = SpendingHeader & {
+  readonly by: "subject";
+  readonly rows: ReadonlyArray<SubjectSpending>;
+};
+
 export type MonthSpending = CategorySpendingRead | MerchantSpendingRead;
 
-/** What a row of "where the money goes" groups by. */
+/** What a row of "where the money goes" groups by, as `monthSpending` reads it. */
 export type SpendingBy = MonthSpending["by"];
+
+/** What a row read day by day groups by: a subject's too (#37). */
+export type DaysBy = SpendingBy | SubjectSpendingRead["by"];
 
 /** One day of a row's spending, a running total in minor units of the user's currency. */
 export type SpendingDay = {
@@ -276,7 +316,7 @@ export type SpendingDay = {
 export type SpendingDays = {
   readonly month: string;
   readonly currency: string;
-  readonly by: SpendingBy;
+  readonly by: DaysBy;
   readonly id: string | null;
   /** The row's name; null for the merchants' row of none, or an id that names nothing. */
   readonly name: string | null;
@@ -411,6 +451,7 @@ export type MonthReview = {
   readonly summary: MonthSummary;
   readonly categories: CategorySpendingRead;
   readonly merchants: MerchantSpendingRead;
+  readonly subjects: SubjectSpendingRead;
   readonly movements: MonthMovements;
   readonly linesToReview: MonthLinesToReview;
   readonly importState: ImportState;
@@ -923,6 +964,74 @@ function merchantSpendingOf(reading: Reading): MerchantSpendingRead {
   };
 }
 
+/** Each entry's subjects. */
+function subjectsOfEntries(rows: MonthRows): ReadonlyMap<string, ReadonlyArray<string>> {
+  const subjects = new Map<string, Array<string>>();
+
+  for (const row of rows.entrySubjects) {
+    const known = subjects.get(row.entryId);
+
+    if (known === undefined) {
+      subjects.set(row.entryId, [row.subjectId]);
+    } else {
+      known.push(row.subjectId);
+    }
+  }
+
+  return subjects;
+}
+
+/** Whether an entry counts in the subject `id`: attached to it or to a descendant, once. */
+function countsInSubject(reading: Reading, id: string): (entry: Pick<EntryNet, "id">) => boolean {
+  const subtree = subtreeOf(reading.rows.subjects, id);
+  const subjects = subjectsOfEntries(reading.rows);
+
+  return (entry) => (subjects.get(entry.id) ?? []).some((each) => subtree.has(each));
+}
+
+function subjectSpendingOf(reading: Reading): SubjectSpendingRead {
+  const rows = treeOrder(reading.rows.subjects).flatMap(
+    (subject): ReadonlyArray<SubjectSpending> => {
+      const counts = countsInSubject(reading, subject.id);
+      const sums = new Map<string, number>();
+      let spent = false;
+
+      for (const entry of reading.entries) {
+        if (entry.kind === "expense" && entry.month === reading.month && counts(entry)) {
+          spent = true;
+          add(sums, entry.currency, entry.minor);
+        }
+      }
+
+      return spent
+        ? [
+            {
+              id: subject.id,
+              name: subject.name,
+              parentId: subject.parentId,
+              depth: subject.depth,
+              archived: subject.archived,
+              spent: money(sums.get(reading.currency) ?? 0, reading.currency),
+              elsewhere: [...sums]
+                .filter(([other, minor]) => other !== reading.currency && minor !== 0)
+                .toSorted(([a], [b]) => a.localeCompare(b))
+                .map(([other, minor]) => money(minor, other)),
+              ...againstFigures(reading, counts),
+            },
+          ]
+        : [];
+    },
+  );
+
+  return {
+    month: reading.month,
+    currency: reading.currency,
+    ...againstOf(reading),
+    by: "subject",
+    rows,
+  };
+}
+
 /** How many days a month `YYYY-MM` has. */
 const daysIn = (month: string) => Number(lastDayOf(month).slice(8, 10));
 
@@ -952,21 +1061,40 @@ function runningTotal(
   return byDay.map((minor) => (total += minor));
 }
 
-function daysOf(reading: Reading, by: SpendingBy, id: string | null): SpendingDays {
+/** What a row read day by day counts, and its name; null for an id that names nothing. */
+type DaysRow = { readonly counts: (entry: EntryNet) => boolean; readonly name: string | null };
+
+function rowOfDays(reading: Reading, by: DaysBy, id: string | null): DaysRow {
   const categories = reading.rows.categories;
-  const ids = id === null ? new Set<string>() : idsOf(categories, id);
 
-  const counts =
-    by === "category"
-      ? (entry: EntryNet) => ids.has(entry.categoryId)
-      : (entry: EntryNet) => entry.merchantId === id;
+  switch (by) {
+    case "category": {
+      const ids = id === null ? new Set<string>() : idsOf(categories, id);
 
-  const name =
-    id === null
-      ? null
-      : by === "category"
-        ? categoryPath(categories, id)
-        : (reading.merchants.get(id)?.name ?? null);
+      return {
+        counts: (entry) => ids.has(entry.categoryId),
+        name: id === null ? null : categoryPath(categories, id),
+      };
+    }
+
+    case "merchant": {
+      return {
+        counts: (entry) => entry.merchantId === id,
+        name: id === null ? null : (reading.merchants.get(id)?.name ?? null),
+      };
+    }
+
+    case "subject": {
+      return {
+        counts: id === null ? () => false : countsInSubject(reading, id),
+        name: reading.rows.subjects.find((each) => each.id === id)?.name ?? null,
+      };
+    }
+  }
+}
+
+function daysOf(reading: Reading, by: DaysBy, id: string | null): SpendingDays {
+  const { counts, name } = rowOfDays(reading, by, id);
 
   const current = runningTotal(reading, reading.month, counts);
 
@@ -1216,14 +1344,23 @@ export const monthSpending = (owner: string, month: string, currency: string, by
   );
 
 /**
+ * Where the money went in the month by subject (#37): each subject that has an expense in it, in
+ * tree order, counting its descendants' expenses with its own, each once, against the average and
+ * the month before. A month to come is refused.
+ */
+export const monthSubjectSpending = (owner: string, month: string, currency: string) =>
+  Effect.map(readMonth(owner, month, currency, false), subjectSpendingOf);
+
+/**
  * A row's spending, day by day, against the month before's: a category's id (a top-level one with
- * its children), a merchant's, or null for the merchants' row of none. A month to come is refused.
+ * its children), a merchant's, or null for the merchants' row of none, or a subject's (with its
+ * descendants, #37). A month to come is refused.
  */
 export const spendingDays = (
   owner: string,
   month: string,
   currency: string,
-  by: SpendingBy,
+  by: DaysBy,
   id: string | null,
 ) => Effect.map(readMonth(owner, month, currency, false), (reading) => daysOf(reading, by, id));
 
@@ -1298,6 +1435,7 @@ export const monthReview = (owner: string, month: string, currency: string) =>
       summary: summaryOf(reading),
       categories: categories.read,
       merchants: merchantSpendingOf(reading),
+      subjects: subjectSpendingOf(reading),
       movements: movementsOf(reading),
       linesToReview,
       importState,

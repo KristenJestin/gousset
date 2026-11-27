@@ -217,8 +217,8 @@ test("where the money goes by category against the benchmark", async ({ page, ap
     "aria-selected",
     "true",
   );
-  // No subjects yet (v0.5).
-  await expect(spending.getByRole("tab")).toHaveCount(2);
+  // Categories, merchants and subjects (#37, subjects-operations.spec.ts).
+  await expect(spending.getByRole("tab")).toHaveText(["Categories", "Merchants", "Subjects"]);
 
   // The largest first; Leisure passed the €40 the user set: ⚠, and read as set.
   const rows = spending.getByRole("tabpanel").getByRole("button");

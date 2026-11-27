@@ -10,13 +10,14 @@ import { AccountNotFound, BalanceAlreadyNoted, LineNotFound } from "./errors";
 
 /**
  * A line of the memory store: counted unless said otherwise, with no expiry unless given, imported
- * unless its source is given.
+ * unless its source is given, for no subject unless given.
  */
-export type MemoryLine = Omit<StoredLine, "expiresOn" | "source"> & {
+export type MemoryLine = Omit<StoredLine, "expiresOn" | "source" | "subjects"> & {
   readonly accountId: string;
   readonly state?: "counted" | "held" | "discarded";
   readonly expiresOn?: string | null;
   readonly source?: StoredLine["source"];
+  readonly subjects?: StoredLine["subjects"];
 };
 
 type HeldLine = StoredLine & {
@@ -83,6 +84,7 @@ export function memoryAccountStore(rows: ReadonlyMap<string, MemoryRows> = new M
           state: line.state ?? "counted",
           expiresOn: line.expiresOn ?? null,
           source: line.source ?? "import",
+          subjects: line.subjects ?? [],
         })),
         balances: [...(given.balances ?? [])],
         imports: [...(given.imports ?? [])],

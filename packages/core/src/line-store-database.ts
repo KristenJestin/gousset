@@ -2,12 +2,14 @@ import {
   account,
   entry,
   entryPart,
+  entrySubject,
   statementImport,
   statementLine,
+  subject,
 } from "@gousset/db/schema/ledger";
 import { UserData } from "@gousset/db/user-data";
 import type { UserTransaction } from "@gousset/db/user-data";
-import { and, desc, eq, exists, gte, inArray, lte, or, sql } from "drizzle-orm";
+import { and, asc, desc, eq, exists, gte, inArray, lte, or, sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { Effect, Layer } from "effect";
@@ -18,6 +20,9 @@ import type { NamedMerchant } from "./merchants/line-merchant";
 import type { LineCategory } from "./category-store";
 import { maybeRefundsAmong } from "./expenses/expenses";
 import { LineStore } from "./line-store";
+import { subtreeOf } from "./subjects/counting";
+import type { SubjectName } from "./subjects/counting";
+import { attachedToAny, subjectNodesIn } from "./subjects/subjects";
 import { linesWithSeveralCandidates } from "./transfers/pair-lines";
 import type { FoundLine, FoundLineDetail, LineQuery } from "./line-store";
 
@@ -83,7 +88,11 @@ const byDefault = exists(
   sql`(select 1 from ${entryPart} inner join ${entry} on ${entry.id} = ${entryPart.entryId} where ${entryPart.lineId} = ${statementLine.id} and ${entryPart.role} = 'payment' and ${entry.classifiedBy} = 'default' and not (${statementLine.source} = 'balance' and coalesce(${entry.categoryId} = (select ${account.balanceCategoryId} from ${account} where ${account.id} = ${statementLine.accountId}), false)))`,
 );
 
-function conditions(accounts: ReadonlyArray<AccountColumns>, query: LineQuery) {
+function conditions(
+  accounts: ReadonlyArray<AccountColumns>,
+  query: LineQuery,
+  subtree: ReadonlyArray<string> | null,
+) {
   const ofState = eq(statementLine.state, query.state);
   const ids = query.alsoLineIds.filter(isId);
   const only = query.onlyLineIds?.filter(isId);
@@ -101,6 +110,7 @@ function conditions(accounts: ReadonlyArray<AccountColumns>, query: LineQuery) {
     lte(statementLine.bookedOn, query.to),
     query.from === null ? undefined : gte(statementLine.bookedOn, query.from),
     query.accountId === null ? undefined : eq(statementLine.accountId, query.accountId),
+    subtree === null ? undefined : attachedToAny(sql`${statementLine.id}`, subtree),
     query.text === null ? undefined : sql`${searched} ilike ${substring(query.text)}`,
     query.amount === null ? undefined : amountCondition(accounts, query.amount),
     only === undefined
@@ -143,12 +153,42 @@ type LineColumns = {
   readonly source: "import" | "manual" | "balance" | "counterpart";
 };
 
-/** A row of `lineColumns`, with its category and merchant; a discarded one is never asked for. */
+/** Each line's entries' subjects, each once, by name (#37); an account's lines read them too. */
+export async function subjectsOfLines(
+  transaction: UserTransaction,
+  lineIds: ReadonlyArray<string>,
+): Promise<ReadonlyMap<string, ReadonlyArray<SubjectName>>> {
+  if (lineIds.length === 0) {
+    return new Map();
+  }
+
+  const rows = await transaction
+    .selectDistinct({ lineId: entryPart.lineId, id: subject.id, name: subject.name })
+    .from(entryPart)
+    .innerJoin(entrySubject, eq(entrySubject.entryId, entryPart.entryId))
+    .innerJoin(subject, eq(subject.id, entrySubject.subjectId))
+    .where(inArray(entryPart.lineId, [...lineIds]))
+    .orderBy(asc(subject.name), asc(subject.id));
+
+  const byLine = new Map<string, Array<SubjectName>>();
+
+  for (const row of rows) {
+    byLine.set(row.lineId, [...(byLine.get(row.lineId) ?? []), { id: row.id, name: row.name }]);
+  }
+
+  return byLine;
+}
+
+/**
+ * A row of `lineColumns`, with its category, merchant and subjects; a discarded one is never asked
+ * for.
+ */
 function found(
   row: LineColumns,
   category: LineCategory | null,
   merchant: NamedMerchant | null,
   maybeRefund: boolean,
+  subjects: ReadonlyArray<SubjectName>,
 ): FoundLine {
   return {
     id: row.id,
@@ -168,6 +208,7 @@ function found(
     category,
     merchant,
     fromBalance: row.source === "balance",
+    subjects,
     maybeRefund,
   };
 }
@@ -176,9 +217,18 @@ function found(
 // each account's lines in turn, about three times the pages of reading the user's lines once by
 // `user_id` (measured for #21 on 30,000 lines: 60 ms against 22 ms for a text search).
 async function search(transaction: UserTransaction, query: LineQuery) {
-  if (query.accountId !== null && !isId(query.accountId)) {
+  if (
+    (query.accountId !== null && !isId(query.accountId)) ||
+    (query.subjectId !== null && !isId(query.subjectId))
+  ) {
     return { lines: [], total: 0 };
   }
+
+  // A subject's lines are its descendants' too (#37): the user has 200 subjects at most.
+  const subtree =
+    query.subjectId === null
+      ? null
+      : [...subtreeOf(await subjectNodesIn(transaction), query.subjectId)];
 
   const accounts = await transaction
     .select({
@@ -190,7 +240,7 @@ async function search(transaction: UserTransaction, query: LineQuery) {
     .from(account);
 
   const accountOf = new Map(accounts.map((each) => [each.id, each]));
-  const where = conditions(accounts, query);
+  const where = conditions(accounts, query, subtree);
   const { after } = query;
 
   const older =
@@ -226,6 +276,11 @@ async function search(transaction: UserTransaction, query: LineQuery) {
     rows.map((row) => row.id),
   );
 
+  const subjects = await subjectsOfLines(
+    transaction,
+    rows.map((row) => row.id),
+  );
+
   const merchants = await merchantsOfLines(transaction, rows);
 
   const maybeRefunds = await maybeRefundsAmong(
@@ -250,6 +305,7 @@ async function search(transaction: UserTransaction, query: LineQuery) {
             categories.get(row.id) ?? null,
             merchants.get(row.id) ?? null,
             maybeRefunds.has(row.id),
+            subjects.get(row.id) ?? [],
           ),
         ];
   });
@@ -306,6 +362,7 @@ async function show(
   }
 
   const categories = await categoriesOfLines(transaction, [row.id]);
+  const subjects = await subjectsOfLines(transaction, [row.id]);
   const merchants = await merchantsOfLines(transaction, [row]);
   const maybeRefunds = await maybeRefundsAmong(transaction, [row.id]);
 
@@ -315,6 +372,7 @@ async function show(
       categories.get(row.id) ?? null,
       merchants.get(row.id) ?? null,
       maybeRefunds.has(row.id),
+      subjects.get(row.id) ?? [],
     ),
     source: row.source,
     originalAmountMinor: row.originalAmountMinor,

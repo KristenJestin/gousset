@@ -125,7 +125,7 @@ describe("the rules tool", () => {
     const { tools } = await client.listTools();
     const tool = tools.find((each) => each.name === "rules");
 
-    expect(tools.map((each) => each.name).slice(-2)).toEqual(["rules", "review"]);
+    expect(tools.map((each) => each.name).slice(-3, -1)).toEqual(["rules", "review"]);
     expect(tool?.title).toBe("Rules");
     expect(tool?.annotations).toEqual({
       readOnlyHint: false,
@@ -242,6 +242,14 @@ describe("the conditions a caller writes", () => {
     { field: "date", operator: "between", value: ["2026-01-01", "2026-12-31"] },
   ];
 
+  test("name a merchant by its id", () => {
+    const group = groupOf([{ field: "merchant", operator: "eq", value: "Fuelstop" }], ["fuelstop"]);
+
+    expect(Result.isSuccess(group) ? group.success.children : undefined).toEqual([
+      { kind: "rule", field: "merchant", operator: "eq", value: "fuelstop" },
+    ]);
+  });
+
   test("become qnot's group, the account by its id", () => {
     const group = groupOf(written, [undefined, current.id]);
 
@@ -311,6 +319,7 @@ describe("a rule in words", () => {
       color: null,
       archived: false,
     },
+    subject: null,
     appliedCount: 12,
     createdFrom: "user",
     createdAt: "2026-11-01T09:00:00.000Z",
@@ -352,6 +361,29 @@ describe("a rule in words", () => {
 
     expect(ruleText(other, accounts)).toBe(
       `2. If money leaves the account and day of the month is between 1 and 5 and date is on or after 2026-01-01 and account is not an account deleted since, then category Housing > Rent (archived: it classifies nothing new). Off. Classified 1 line. Id: ${rule.id}`,
+    );
+  });
+
+  test("names the merchant of a condition, and the subject it attaches by its path", () => {
+    const van: RuleSummary = {
+      ...rule,
+      place: 3,
+      conditions: {
+        kind: "group",
+        combinator: "and",
+        children: [
+          { kind: "rule", field: "merchant", operator: "eq", value: "fuelstop" },
+          { kind: "rule", field: "merchant", operator: "eq", value: "merged-away" },
+        ],
+      },
+      merchant: null,
+      category: null,
+      subject: { id: "shed", name: "Garden shed", path: "House > Garden shed", archived: true },
+      appliedCount: 4,
+    };
+
+    expect(ruleText(van, accounts, [{ id: "fuelstop", name: "Fuelstop" }])).toBe(
+      `3. If merchant is Fuelstop and merchant is a merchant deleted since, then attach subject House > Garden shed (archived: it gets nothing new). On. Changed 4 lines. Id: ${rule.id}`,
     );
   });
 

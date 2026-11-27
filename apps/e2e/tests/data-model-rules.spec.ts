@@ -1,4 +1,10 @@
-import { account, accountBalance, statementImport, statementLine } from "@gousset/db/schema/ledger";
+import {
+  account,
+  accountBalance,
+  statementImport,
+  statementLine,
+  subject,
+} from "@gousset/db/schema/ledger";
 import type { UserTransaction } from "@gousset/db/user-data";
 import { exampleStatement } from "@gousset/fixture";
 
@@ -132,6 +138,32 @@ test("every imported line has a dedup key, and no other line has one", async () 
       await each.insert(statementLine).values(line(accountId, null, "content:made-by-hand#1"));
     }),
   ).toBe("23514");
+});
+
+test("a subject's value has its currency, its dates run forwards, and its siblings' names differ", async () => {
+  const subjectOf = (values: Partial<typeof subject.$inferInsert>) => ({
+    userId: alex,
+    name: "Garden shed",
+    ...values,
+  });
+
+  const insert = (values: Partial<typeof subject.$inferInsert>) =>
+    data.attempt(alex, (each) => each.insert(subject).values(subjectOf(values)));
+
+  expect(await insert({ estimatedValueMinor: 250_000 })).toBe("23514");
+  expect(await insert({ valueCurrency: "EUR" })).toBe("23514");
+  expect(await insert({ estimatedValueMinor: 250_000, valueCurrency: "eur" })).toBe("23514");
+  expect(await insert({ estimatedValueMinor: 250_000, valueCurrency: "EUR" })).toBe("accepted");
+  expect(await insert({ startsOn: "2026-05-10", endsOn: "2026-05-01" })).toBe("23514");
+  expect(await insert({ startsOn: "2026-05-01", endsOn: "2026-05-01" })).toBe("accepted");
+
+  // Two top-level subjects of one name are refused too (`nulls not distinct`).
+  expect(
+    await data.attempt(alex, async (each) => {
+      await each.insert(subject).values(subjectOf({}));
+      await each.insert(subject).values(subjectOf({}));
+    }),
+  ).toBe("23505");
 });
 
 test("an account has one noted balance a day, and statements may repeat a day", async () => {

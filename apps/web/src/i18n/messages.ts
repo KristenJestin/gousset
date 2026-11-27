@@ -201,6 +201,8 @@ export function ruleRefusalMessage(
       return m.ruleRefusalConditionInvalid({ index: condition });
     case "CONDITION_UNKNOWN_ACCOUNT":
       return m.ruleRefusalUnknownAccount({ index: condition });
+    case "CONDITION_UNKNOWN_MERCHANT":
+      return m.ruleRefusalUnknownMerchant({ index: condition });
     case "NOTHING_SET":
       return m.ruleRefusalNothingSet();
     case "CATEGORY_ARCHIVED":
@@ -211,12 +213,63 @@ export function ruleRefusalMessage(
       return m.ruleRefusalMerchantNotFound();
     case "MERCHANT_INTERMEDIARY":
       return m.ruleRefusalMerchantIntermediary();
+    case "SUBJECT_ARCHIVED":
+      return m.ruleRefusalSubjectArchived();
+    case "SUBJECT_NOT_FOUND":
+      return m.ruleRefusalSubjectNotFound();
     case "TOO_MANY_RULES":
       return m.ruleRefusalTooMany({ max: limit ?? 0 });
     case "JOB_UNAVAILABLE":
       return m.ruleRefusalJobUnavailable();
     case "LINE_NOT_FOUND":
       return m.ruleRefusalLineNotFound();
+    default:
+      return m.errorUnknown();
+  }
+}
+
+/**
+ * A refusal of a subject's read or change (`SubjectRefusalCode`, #37), by its code; `limit` the most
+ * rules, when a subject's merchants would pass it.
+ */
+export function subjectRefusalMessage(code: string, limit: number | null = null): string {
+  switch (code) {
+    case "SUBJECT_NOT_FOUND":
+      return m.subjectRefusalNotFound();
+    case "SUBJECT_NAME":
+      return m.subjectRefusalName();
+    case "SUBJECT_NAME_TAKEN":
+      return m.subjectRefusalNameTaken();
+    case "SUBJECT_PARENT_MISSING":
+      return m.subjectRefusalParentMissing();
+    case "SUBJECT_PARENT_ARCHIVED":
+      return m.subjectRefusalParentArchived();
+    case "SUBJECT_CYCLE":
+      return m.subjectRefusalCycle();
+    case "SUBJECT_VALUE":
+      return m.subjectRefusalValue();
+    case "SUBJECT_LOAN":
+      return m.subjectRefusalLoan();
+    case "SUBJECT_ACCOUNT":
+      return m.subjectRefusalAccount();
+    case "SUBJECT_DATES":
+      return m.subjectRefusalDates();
+    case "SUBJECT_TOO_MANY":
+      return m.subjectRefusalTooMany();
+    case "SUBJECT_ARCHIVED":
+      return m.subjectRefusalArchived();
+    case "SUBJECT_NOT_AN_EXPENSE":
+      return m.subjectRefusalNotAnExpense();
+    case "SUBJECT_ENTRIES":
+      return m.subjectRefusalEntries();
+    case "SUBJECT_PERIOD":
+      return m.subjectRefusalPeriod();
+    case "ENTRY_NOT_FOUND":
+      return m.subjectRefusalEntryNotFound();
+    case "MERCHANT_NOT_FOUND":
+    case "TOO_MANY_RULES":
+      // A subject's merchants are rules: their refusals are the rules'.
+      return ruleRefusalMessage(code, null, limit);
     default:
       return m.errorUnknown();
   }

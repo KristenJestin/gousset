@@ -66,6 +66,14 @@ export type SheetProps = {
    * backdrop, Escape, the close button, Cancel), so that the answer lands on the form that sent it.
    */
   sending?: boolean;
+  /**
+   * Where focus goes once it closes, for a form whose answer may take its opener away. A selector,
+   * tried before what opened it (an empty state's button, replaced by what the form made): nothing
+   * found, focus goes back to what opened it, as without it. Or the element that stands for what
+   * goes on, instead of what opened it (a file's columns confirmed, its card's button gone with the
+   * question: the file's row).
+   */
+  finalFocus?: string | (() => HTMLElement | null);
   /** The element that opens it, forwarding its props and ref (a `Button`); or control `open`. */
   trigger?: ReactElement;
   open?: boolean;
@@ -81,12 +89,6 @@ export type SheetProps = {
    * detail opened from the address), which must not rise on its own once the page runs.
    */
   appear?: boolean;
-  /**
-   * Where focus goes once it closes, instead of back to what opened it: for a form whose answer
-   * takes its opener away (a file's columns confirmed, its card's button gone with the question),
-   * the element that stands for what goes on (the file's row).
-   */
-  finalFocus?: () => HTMLElement | null;
 };
 
 /**
@@ -111,12 +113,12 @@ export function Sheet({
   onSubmit,
   onInput,
   sending = false,
+  finalFocus,
   trigger,
   open,
   onOpenChange,
   size = "md",
   appear = true,
-  finalFocus,
 }: SheetProps) {
   const body = (
     <>

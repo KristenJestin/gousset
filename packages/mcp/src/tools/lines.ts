@@ -15,6 +15,7 @@ import {
   searchLines,
   showLine,
   splitLine,
+  subjectNamed,
   unfundExpense,
   unlinkLine,
   unpairLine,
@@ -40,10 +41,12 @@ import type {
   Merchants,
   PairingSummary,
   SplitRefused,
+  SubjectName,
   TransferRefused,
   TransferSide,
   Transfers,
 } from "@gousset/core";
+import type { UserData } from "@gousset/db/user-data";
 import { minorDigits } from "@gousset/import";
 import { Effect, Match, Schema } from "effect";
 
@@ -86,6 +89,12 @@ const LinesInput = Schema.Struct({
     Schema.String.annotate({
       description:
         "search, pair, classify: the account's bank or issuer, when two accounts share the name.",
+    }),
+  ),
+  subject: Schema.optional(
+    Schema.String.annotate({
+      description:
+        'search: the lines of the expenses attached to this subject or to one within it, by its path ("House > Garden shed") or its own name, as subjects lists it.',
     }),
   ),
   from: Schema.optional(
@@ -150,6 +159,12 @@ const LinesInput = Schema.Struct({
           description:
             'Its share, a decimal in the account\'s currency, without sign nor currency ("30", "12.50").',
         }),
+        subjects: Schema.optional(
+          Schema.Array(Schema.String).annotate({
+            description:
+              'Its subjects, by path or name, as subjects lists them; [] for none; left out, the subjects the line had. A 75 line for the van and the trip: [{"category":"Transport > Fuel","amount":"40","subjects":["Van"]},{"category":"Transport > Fuel","amount":"35","subjects":["Alps 2026"]}].',
+          }),
+        ),
       }),
     )
       .check(Schema.isMaxLength(MAX_SHARES))
@@ -196,6 +211,7 @@ function searchArguments(input: LinesInput): typeof LinesInput.Encoded {
     text: input.text,
     account: input.account,
     institution: input.institution,
+    subject: input.subject,
     from: input.from,
     to: input.to,
     amount_min: input.amount_min,
@@ -226,12 +242,19 @@ function amountsText(input: LinesInput): Array<string> {
 }
 
 /** The filters the search understood, in words. */
-function filtersText(input: LinesInput, account: string | undefined): string {
+function filtersText(
+  input: LinesInput,
+  account: string | undefined,
+  subject: string | undefined,
+): string {
   const text = input.text?.trim() ?? "";
 
   const filters = [
     ...(text === "" ? [] : [`containing "${text}"`]),
     ...(account === undefined ? [] : [`in ${account}`]),
+    ...(subject === undefined
+      ? []
+      : [`of expenses attached to ${subject} or to a subject within it`]),
     ...(input.from === undefined ? [] : [`booked from ${input.from}`]),
     ...(input.to === undefined ? [] : [`booked until ${input.to}`]),
     ...amountsText(input),
@@ -245,6 +268,10 @@ function filtersText(input: LinesInput, account: string | undefined): string {
   return filters.length === 0 ? `every line ${kind}` : `lines ${kind}, ${filters.join(", ")}`;
 }
 
+/** A line's subjects, by name; nothing for a line of none, as most are. */
+const subjectsText = (subjects: ReadonlyArray<SubjectName>) =>
+  subjects.length === 0 ? "" : `; subjects: ${subjects.map((each) => each.name).join(", ")}`;
+
 /** How a line that may be a refund, not answered yet, is flagged wherever it is listed (#208). */
 export const MAYBE_REFUND = "maybe a refund, not counted as income until the user answers";
 
@@ -253,19 +280,24 @@ function rowText(line: LineRow): string {
   const category = line.category === null ? "" : `, in ${pathText(line.category)}`;
   const maybe = line.maybeRefund ? `, ${MAYBE_REFUND}` : "";
 
-  return `- ${line.bookedOn}, ${named(line.account)}: ${amount(line.amount)}, ${labelOf(line)}${category}${held}${maybe}; line: ${line.id}`;
+  return `- ${line.bookedOn}, ${named(line.account)}: ${amount(line.amount)}, ${labelOf(line)}${category}${held}${maybe}${subjectsText(line.subjects)}; line: ${line.id}`;
 }
 
 /** A page of the search: how many match, the filters, the lines, and the call that reads on. */
-function searchText(page: LinePage, input: LinesInput, account: string | undefined): string {
-  const header = `${page.total} line(s) match: ${filtersText(input, account)}. Lines booked after today are not shown.`;
+function searchText(
+  page: LinePage,
+  input: LinesInput,
+  account: string | undefined,
+  subject: string | undefined,
+): string {
+  const header = `${page.total} line(s) match: ${filtersText(input, account, subject)}. Lines booked after today are not shown.`;
 
   if (page.lines.length === 0) {
     return `${header}\n\nNo line on this page.`;
   }
 
   const lines = [
-    `These ${page.lines.length}, newest first (booked on, account: amount, label, category; the handle show and classify take):`,
+    `These ${page.lines.length}, newest first (booked on, account: amount, label, category, subjects if any; the handle show and classify take):`,
     ...page.lines.map(rowText),
   ];
 
@@ -540,6 +572,9 @@ function showText(
       ? []
       : [`Category: ${pathText(detail.category)} (${detail.category.kind})`]),
     ...(detail.expiresOn === null ? [] : [`Expires on: ${detail.expiresOn}`]),
+    ...(detail.subjects.length === 0
+      ? []
+      : [`Subjects: ${detail.subjects.map((each) => each.name).join(", ")}.`]),
     ...review,
     ...transferText(detail.id, transfer),
     ...expensesText(detail.id, expenses),
@@ -963,6 +998,9 @@ const SPLIT_REFUSALS = {
     'Each share\'s amount is a positive decimal in the account\'s currency, with no more decimals than it has, without sign nor currency ("30", "12.50").',
   kind: "A share's category is of the other kind: money out goes in expense categories, money in in income ones.",
   archived: "A share's category is archived: it can no longer be chosen.",
+  subject_unknown: "A share names a subject that is none of yours.",
+  subject_archived: "A share's subject is archived: it can no longer be chosen.",
+  subject_income: "Only an expense has subjects: a share of money coming in takes none.",
 } as const satisfies { readonly [Reason in SplitRefused["reason"]]: string };
 
 function splitRun(input: LinesInput, owner: string) {
@@ -993,22 +1031,48 @@ function splitRun(input: LinesInput, owner: string) {
     const kind: EntryKind = detail.amount.minor < 0 ? "expense" : "income";
 
     const chosen = yield* Effect.forEach(shares, (share) =>
-      namedCategory(owner, share.category, kind, (other) =>
-        call({
-          ...input,
-          shares: shares.map((each) => (each === share ? { ...each, category: other } : each)),
-        }),
-      ).pipe(Effect.map((category) => ({ categoryId: category.id, amount: share.amount }))),
+      Effect.gen(function* () {
+        const category = yield* namedCategory(owner, share.category, kind, (other) =>
+          call({
+            ...input,
+            shares: shares.map((each) => (each === share ? { ...each, category: other } : each)),
+          }),
+        );
+
+        const subjects =
+          share.subjects === undefined
+            ? undefined
+            : yield* Effect.forEach(share.subjects, (name) =>
+                subjectOf(owner, name, (path) =>
+                  call({
+                    ...input,
+                    shares: shares.map((each) =>
+                      each === share
+                        ? {
+                            ...each,
+                            subjects: (each.subjects ?? []).map((one) =>
+                              one === name ? path : one,
+                            ),
+                          }
+                        : each,
+                    ),
+                  }),
+                ).pipe(Effect.map((found) => found.id)),
+              );
+
+        return { categoryId: category.id, amount: share.amount, subjectIds: subjects };
+      }),
     );
 
     const split = yield* splitLine(owner, detail.id, chosen);
 
     return split.expenses.length === 1
-      ? `The line of ${detail.bookedOn}, ${amount(detail.amount)}, ${quoted(detail.label)}, is now whole in ${split.expenses.map((expense) => pathText(expense.category)).join(", ")}. Kept as the user's choice.`
+      ? `The line of ${detail.bookedOn}, ${amount(detail.amount)}, ${quoted(detail.label)}, is now whole in ${split.expenses.map((expense) => `${pathText(expense.category)}${subjectsText(expense.subjects)}`).join(", ")}. Kept as the user's choice.`
       : [
           `Split the line of ${detail.bookedOn}, ${amount(detail.amount)}, ${quoted(detail.label)}, across ${split.expenses.length} categories, together the whole line. Kept as the user's choice:`,
           ...split.expenses.map(
-            (expense) => `- ${pathText(expense.category)}: ${amount(expense.net)}`,
+            (expense) =>
+              `- ${pathText(expense.category)}: ${amount(expense.net)}${subjectsText(expense.subjects)}`,
           ),
         ].join("\n");
   }).pipe(
@@ -1107,6 +1171,38 @@ function accountOf(caller: string, input: LinesInput) {
           }),
         );
       },
+    }),
+  );
+}
+
+/** The subject a caller names, by path or name, or the refusal to give; `retry` names it so. */
+function subjectOf(owner: string, name: string, retry: (path: string) => string) {
+  const clipped = name.trim().slice(0, 80);
+
+  return subjectNamed(owner, name.trim()).pipe(
+    Effect.catchTags({
+      SubjectNameUnknown: (unknown) => {
+        const [first] = unknown.close;
+
+        return Effect.fail(
+          new ToolRefusal({
+            message:
+              first === undefined
+                ? `No subject of the user's is named "${clipped}". Name one by its path ("House > Garden shed") or its own name, as subjects lists it.`
+                : `No subject of the user's is named "${clipped}". Close: ${unknown.close.join(", ")}. Call again with one of them, as it is written.`,
+            example:
+              first === undefined ? `subjects ${JSON.stringify({ action: "list" })}` : retry(first),
+          }),
+        );
+      },
+      SubjectNameAmbiguous: (ambiguous) =>
+        Effect.fail(
+          new ToolRefusal({
+            message: `Several subjects are named "${clipped}": ${ambiguous.matches.join(", ")}. Name one by its path, as written here.`,
+            example: retry(ambiguous.matches[0] ?? ambiguous.name),
+          }),
+        ),
+      QueryFailed: Effect.die,
     }),
   );
 }
@@ -1230,7 +1326,7 @@ function classifyAction(owner: string, input: LinesInput, kind: EntryKind | unde
 export const linesTool = defineTool<
   LinesInput,
   typeof LinesInput.Encoded,
-  AccountStore | LineStore | CategoryStore | Transfers | Expenses | Merchants
+  AccountStore | LineStore | CategoryStore | Transfers | Expenses | Merchants | UserData
 >({
   name: "lines",
   title: "Lines",
@@ -1269,9 +1365,17 @@ export const linesTool = defineTool<
         return Effect.gen(function* () {
           const found = yield* accountOf(caller.userId, input);
 
+          const subject =
+            input.subject === undefined
+              ? undefined
+              : yield* subjectOf(caller.userId, input.subject, (path) =>
+                  call({ ...searchArguments(input), subject: path }),
+                );
+
           const page = yield* searchLines(caller.userId, {
             text: input.text,
             accountId: found?.id,
+            subjectId: subject?.id,
             from: input.from,
             to: input.to,
             amountMin: input.amount_min,
@@ -1281,7 +1385,12 @@ export const linesTool = defineTool<
             limit: input.limit ?? DEFAULT_LINES,
           });
 
-          return searchText(page, input, found === undefined ? undefined : named(found));
+          return searchText(
+            page,
+            input,
+            found === undefined ? undefined : named(found),
+            subject?.path,
+          );
         }).pipe(
           Effect.catchTags({
             LineSearchRefused: (refused) => {

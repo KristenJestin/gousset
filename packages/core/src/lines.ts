@@ -7,6 +7,7 @@ import { LineNotFound, LineSearchRefused } from "./errors";
 import { LineStore } from "./line-store";
 import type { AmountBounds, FoundLine, LineQuery } from "./line-store";
 import type { Money } from "./month";
+import type { SubjectName } from "./subjects/counting";
 import { today } from "./today";
 
 // Every line of every account, searched and read for the operations page and the MCP door alike
@@ -21,6 +22,11 @@ export type LineSearch = {
   readonly text?: string;
   /** One account's lines; an id that names none of the user's accounts gives no line. */
   readonly accountId?: string;
+  /**
+   * The lines of the expenses attached to this subject or to any of its descendants (#37); an id
+   * that names none of the user's subjects gives no line.
+   */
+  readonly subjectId?: string;
   /** Booked on or after this day, `YYYY-MM-DD`. */
   readonly from?: string;
   /** Booked on or before this day, `YYYY-MM-DD`. */
@@ -78,6 +84,8 @@ export type LineRow = {
   readonly merchant: NamedMerchant | null;
   /** The movement a noted balance makes (#31): it has no label, the interface names it. */
   readonly fromBalance: boolean;
+  /** Its entries' subjects (#37), each once, by name: none for most lines. */
+  readonly subjects: ReadonlyArray<SubjectName>;
   /**
    * Maybe a refund (#208): a line coming back that may cancel an expense, still classified by
    * default, that the user has not answered. It counts as no income until answered: confirmed, it
@@ -262,6 +270,7 @@ function queryOf(search: LineSearch, day: string): Result.Result<LineQuery, Line
   return Result.succeed({
     text: text === "" ? null : text,
     accountId: search.accountId ?? null,
+    subjectId: search.subjectId ?? null,
     from: from ?? null,
     // As on the account page, a line booked after today is not shown: it is not counted in any
     // balance yet either (./accounts, `showAccount`).
@@ -295,6 +304,7 @@ export function rowOf(line: FoundLine, reviewing = false): LineRow {
     category: line.category,
     merchant: line.merchant,
     fromBalance: line.fromBalance,
+    subjects: line.subjects,
     maybeRefund: line.maybeRefund,
   };
 }
@@ -363,6 +373,7 @@ export const lineToReview = (owner: string, lineId: string) =>
     const found = yield* store.search(owner, {
       text: null,
       accountId: null,
+      subjectId: null,
       from: null,
       to: day,
       amount: null,

@@ -19,6 +19,7 @@ import {
   monthMovements,
   monthReview,
   monthSpending,
+  monthSubjectSpending,
   monthSummary,
   spendingDays,
 } from "./month";
@@ -28,6 +29,7 @@ import type {
   MonthMerchant,
   MonthPart,
   MonthScope,
+  MonthSubject,
   MonthTransfer,
   StatementReach,
 } from "./month";
@@ -50,6 +52,8 @@ type Draft = {
   firstDay: string | null;
   benefitLines: Array<BenefitLine>;
   reach: Array<StatementReach>;
+  subjects: Array<MonthSubject>;
+  entrySubjects: Array<{ readonly entryId: string; readonly subjectId: string }>;
   charges: Array<Charge>;
   maybeRefunds: Array<string>;
 };
@@ -73,6 +77,8 @@ function draft(): Draft {
     firstDay: "2025-01-05",
     benefitLines: [],
     reach: [],
+    subjects: [],
+    entrySubjects: [],
     charges: [],
     maybeRefunds: [],
   };
@@ -143,8 +149,11 @@ type EntryDraft = {
   readonly refunds?: ReadonlyArray<number>;
 };
 
-/** An entry of one payment line, and its refunds; the payment's line. */
-function entry(rows: Draft, written: EntryDraft): string {
+/** An entry made by `entry`, and its payment's line. */
+type MadeEntry = { readonly entryId: string; readonly lineId: string };
+
+/** An entry of one payment line, and its refunds; the entry and the payment's line. */
+function entry(rows: Draft, written: EntryDraft): MadeEntry {
   const entryId = nextId("entry");
 
   const part = (role: "payment" | "refund", amountMinor: number): MonthPart => ({
@@ -169,7 +178,7 @@ function entry(rows: Draft, written: EntryDraft): string {
     rows.parts.push(part("refund", refund));
   }
 
-  return payment.lineId;
+  return { entryId, lineId: payment.lineId };
 }
 
 function transfer(
@@ -298,7 +307,7 @@ describe("monthSummary", () => {
         day: "2026-10-04",
         minor: 3000,
         label: "CARD PIXELPLAY STORE",
-      }),
+      }).lineId,
     );
 
     const summary = await run(monthSummary("ada", "2026-10", "EUR"), rows);
@@ -522,7 +531,7 @@ describe("monthSummary", () => {
       day: "2026-10-04",
       minor: 3000,
       label: "CARD BISTRO EXEMPLE",
-    });
+    }).lineId;
 
     rows.maybeRefunds.push(back);
 
@@ -677,7 +686,7 @@ describe("monthMovements", () => {
       day: "2026-10-01",
       minor: 200_000,
       label: "ACME PAYROLL",
-    });
+    }).lineId;
 
     transfer(rows, south, north, 5000, "2026-09-30", "2026-10-01");
 
@@ -1068,5 +1077,139 @@ describe("monthReview", () => {
       },
       expect.objectContaining({ id: "early", day: "2026-10-02", maybeRefund: true }),
     ]);
+  });
+});
+
+function subject(rows: Draft, name: string, parent: MonthSubject | null = null, archived = false) {
+  const made: MonthSubject = {
+    id: nextId("subject"),
+    parentId: parent?.id ?? null,
+    name,
+    archived,
+  };
+
+  rows.subjects.push(made);
+
+  return made;
+}
+
+function attach(rows: Draft, entryId: string, ...subjects: ReadonlyArray<MonthSubject>) {
+  for (const each of subjects) {
+    rows.entrySubjects.push({ entryId, subjectId: each.id });
+  }
+}
+
+const eur = (minor: number) => ({ minor, currency: "EUR" });
+
+/** House with its Garden shed, the Van, a trip, and a dog that spent nothing in October. */
+function subjects() {
+  const { rows, current, groceries } = household();
+  const dollars = account(rows, "Dollar account", "current", { currency: "USD" });
+  const fuel = category(rows, "expense", "Fuel");
+  const house = subject(rows, "House");
+  const shed = subject(rows, "Garden shed", house);
+  const van = subject(rows, "Van");
+  const alps = subject(rows, "Alps 2028");
+  const dog = subject(rows, "Dog", null, true);
+
+  const spend = (day: string, minor: number, refunds: ReadonlyArray<number> = [], on = current) =>
+    entry(rows, {
+      category: on === current ? fuel : groceries,
+      account: on,
+      day,
+      minor,
+      refunds,
+    }).entryId;
+
+  attach(rows, spend("2026-10-03", 4000), house, shed);
+  attach(rows, spend("2026-10-09", 2500, [500]), shed);
+  attach(rows, spend("2026-10-12", 30_000), van);
+  attach(rows, spend("2026-10-20", 6000), van, alps);
+  attach(rows, spend("2026-10-21", 1200, [], dollars), shed);
+  attach(rows, spend("2026-09-14", 1200), shed);
+  attach(rows, spend("2026-09-15", 900), dog);
+  // An expense on no subject counts in none.
+  spend("2026-10-22", 7700);
+
+  return { rows, house, shed, van, alps };
+}
+
+describe("monthSubjectSpending", () => {
+  test("each subject that spent counts its subtree once, in tree order, against the month before and the average", async () => {
+    const { rows, house, shed, van, alps } = subjects();
+    const read = await run(monthSubjectSpending("ada", "2026-10", "EUR"), rows);
+
+    expect(read.by).toBe("subject");
+    expect(read.monthsAveraged).toBe(6);
+    expect(read.rows).toEqual([
+      {
+        id: alps.id,
+        name: "Alps 2028",
+        parentId: null,
+        depth: 0,
+        archived: false,
+        spent: eur(6000),
+        elsewhere: [],
+        previous: eur(0),
+        average: eur(0),
+      },
+      {
+        id: house.id,
+        name: "House",
+        parentId: null,
+        depth: 0,
+        archived: false,
+        // The fuel on House and on Garden shed once, the paint at its net cost.
+        spent: eur(4000 + 2000),
+        elsewhere: [{ minor: 1200, currency: "USD" }],
+        previous: eur(1200),
+        average: eur(200),
+      },
+      {
+        id: shed.id,
+        name: "Garden shed",
+        parentId: house.id,
+        depth: 1,
+        archived: false,
+        spent: eur(4000 + 2000),
+        elsewhere: [{ minor: 1200, currency: "USD" }],
+        previous: eur(1200),
+        average: eur(200),
+      },
+      {
+        id: van.id,
+        name: "Van",
+        parentId: null,
+        depth: 0,
+        archived: false,
+        // The trip's fuel counts whole in the van and in the trip.
+        spent: eur(36_000),
+        elsewhere: [],
+        previous: eur(0),
+        average: eur(0),
+      },
+    ]);
+  });
+
+  test("the review reads the month by subject too", async () => {
+    const { rows } = subjects();
+    const review = await run(monthReview("ada", "2026-10", "EUR"), rows);
+
+    expect(review.subjects.rows.map((row) => row.name)).toEqual([
+      "Alps 2028",
+      "House",
+      "Garden shed",
+      "Van",
+    ]);
+  });
+
+  test("a subject's days are its subtree's running total", async () => {
+    const { rows, house } = subjects();
+    const read = await run(spendingDays("ada", "2026-10", "EUR", "subject", house.id), rows);
+
+    expect(read.name).toBe("House");
+    expect(read.days[2]).toEqual({ date: "2026-10-03", current: 4000, previous: 0 });
+    expect(read.days[8]).toEqual({ date: "2026-10-09", current: 6000, previous: 0 });
+    expect(read.days[14]).toEqual({ date: "2026-10-15", current: 6000, previous: 1200 });
   });
 });

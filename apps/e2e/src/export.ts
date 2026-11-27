@@ -10,7 +10,10 @@ import { databaseUrl } from "./database";
 // The export of #22 as a test reads it, and the backup of an installation as its administrator
 // makes and restores it (docs/releases.md, "Backing up and restoring").
 
-const Rows = Schema.Array(Schema.Struct({ id: Schema.String, user_id: Schema.String }));
+// A row by its columns' names: a table of links (#37) has no `id`.
+const Rows = Schema.Array(Schema.Record(Schema.String, Schema.Json));
+
+const isText = Schema.is(Schema.String);
 
 const Manifest = Schema.Struct({
   format: Schema.String,
@@ -39,12 +42,21 @@ export function readArchive(content: Uint8Array) {
     return strFromU8(file);
   };
 
+  /** The rows of `<file>.json`, each by its columns' names. */
+  const rows = (file: string) => Schema.decodeUnknownSync(Rows)(JSON.parse(text(`${file}.json`)));
+
   return {
     files,
     text,
     manifest: Schema.decodeUnknownSync(Manifest)(JSON.parse(text("manifest.json"))),
-    /** The rows of `<file>.json`: each with its id and its owner. */
-    rows: (file: string) => Schema.decodeUnknownSync(Rows)(JSON.parse(text(`${file}.json`))),
+    rows,
+    /** The text of `column` in each row of `<file>.json`, where it is text: its ids, its owners. */
+    texts: (file: string, column: string) =>
+      rows(file).flatMap((row) => {
+        const value = row[column];
+
+        return isText(value) ? [value] : [];
+      }),
   };
 }
 

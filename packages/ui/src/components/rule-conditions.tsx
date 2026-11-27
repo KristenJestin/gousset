@@ -14,8 +14,9 @@ import type {
   RuleOperator,
 } from "../lib/rule-fields";
 import { dateOperator } from "../lib/rule-sentence";
-import type { RuleAccountName } from "../lib/rule-sentence";
+import type { RuleAccountName, RuleMerchantName } from "../lib/rule-sentence";
 import { Button } from "./button";
+import { Combobox } from "./combobox";
 import { DatePicker } from "./date-picker";
 import { IconButton } from "./icon-button";
 import { MoneyField } from "./money-field";
@@ -41,6 +42,8 @@ export type RuleConditionsEditorProps = {
   onChange: (draft: RuleConditionsDraft) => void;
   /** The accounts a condition may name, as the page calls them. */
   accounts: ReadonlyArray<RuleAccountName>;
+  /** The merchants a condition may name, by name: found by typing among them. */
+  merchants: ReadonlyArray<RuleMerchantName>;
   /** The user's currency: how many decimals an amount is typed with. */
   currency: string;
   /** The most conditions a rule may have, and the longest piece of label: the server's limits. */
@@ -79,6 +82,7 @@ function slotsOf(node: RuleNode<RuleFields>): Slots {
         ? { one: null, pair: node.value ?? [null, null] }
         : { one: node.value ?? null, pair: [null, null] };
     case "label":
+    case "merchant":
     case "account":
     case "direction":
       return { one: node.value ?? null, pair: [null, null] };
@@ -122,8 +126,8 @@ function operatorLabel(
 
 /**
  * The conditions of a rule, one row each: its field, its operator and its value, typed with the
- * control its field takes (a text, an account, an amount or two for "between", money out or in, a
- * day of the month, a date or two). "+ Condition" adds one, up to `maxConditions`; each row's ✕
+ * control its field takes (a text, a merchant found by typing, an account, an amount or two for
+ * "between", money out or in, a day of the month, a date or two). "+ Condition" adds one, up to `maxConditions`; each row's ✕
  * removes it.
  *
  * Motion: a condition added fades and slides down into its place in 150 ms, ease-out; its selects'
@@ -133,6 +137,7 @@ export function RuleConditionsEditor({
   initial,
   onChange,
   accounts,
+  merchants,
   currency,
   maxConditions,
   maxLabelText,
@@ -149,7 +154,10 @@ export function RuleConditionsEditor({
   }
 
   const store = useQueryStore({
-    fields: ruleFields(accounts.map((each) => each.id)),
+    fields: ruleFields(
+      accounts.map((each) => each.id),
+      merchants.map((each) => each.id),
+    ),
     initial: initial ?? FIRST_CONDITION,
     onChange,
     history: false,
@@ -160,6 +168,7 @@ export function RuleConditionsEditor({
     <QueryProvider store={store}>
       <ConditionList
         accounts={accounts}
+        merchants={merchants}
         currency={currency}
         maxConditions={maxConditions}
         maxLabelText={maxLabelText}
@@ -172,6 +181,7 @@ export function RuleConditionsEditor({
 
 type RowOptions = {
   accounts: ReadonlyArray<RuleAccountName>;
+  merchants: ReadonlyArray<RuleMerchantName>;
   currency: string;
   maxLabelText: number;
   disabled: boolean;
@@ -322,6 +332,7 @@ function ConditionValue({
   between,
   place,
   accounts,
+  merchants,
   currency,
   maxLabelText,
   disabled,
@@ -354,6 +365,19 @@ function ConditionValue({
             autoComplete="off"
             value={textOf(current) ?? ""}
             onChange={(event) => set(event.target.value)}
+          />
+        );
+      case "merchant":
+        return (
+          <Combobox
+            label={label}
+            hideLabel
+            size="sm"
+            disabled={disabled}
+            placeholder={messages.chooseMerchant}
+            items={merchants.map((merchant) => ({ value: merchant.id, label: merchant.name }))}
+            value={textOf(current)}
+            onValueChange={set}
           />
         );
       case "account":

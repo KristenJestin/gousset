@@ -302,6 +302,7 @@ function uiMessages(locale: Locale) {
         label: m.uiOperationsColumnLabel({}, options),
         account: m.uiOperationsColumnAccount({}, options),
         category: m.uiOperationsColumnCategory({}, options),
+        subjects: m.uiOperationsColumnSubjects({}, options),
         amount: m.uiOperationsColumnAmount({}, options),
       },
       /** How many lines match, the count already written: "1,234 lines". */
@@ -314,6 +315,9 @@ function uiMessages(locale: Locale) {
       searchPlaceholder: m.uiOperationsSearchPlaceholder({}, options),
       account: m.uiOperationsColumnAccount({}, options),
       allAccounts: m.uiOperationsAllAccounts({}, options),
+      /** The subject filter (#37): one subject's expenses, its descendants' with them. */
+      subject: m.uiOperationsSubject({}, options),
+      allSubjects: m.uiOperationsAllSubjects({}, options),
       from: m.uiOperationsFrom({}, options),
       to: m.uiOperationsTo({}, options),
       min: m.uiOperationsMin({}, options),
@@ -443,6 +447,19 @@ function uiMessages(locale: Locale) {
       merchantPlaceholder: m.uiOperationsMerchantPlaceholder({}, options),
       merchantNew: m.uiOperationsMerchantNew({}, options),
       merchantAssign: m.uiOperationsMerchantAssign({}, options),
+      /** An expense's subjects (#37): its chips, and the field that adds and removes them. */
+      subjects: m.uiOperationsColumnSubjects({}, options),
+      /** The chips a row has no room for: "+2". */
+      moreSubjects: (count: number) => m.uiOperationsMoreSubjects({ count }, options),
+      subjectsNone: m.uiOperationsSubjectsNone({}, options),
+      subjectAdd: m.uiOperationsSubjectAdd({}, options),
+      subjectAddLabel: m.uiOperationsSubjectAddLabel({}, options),
+      subjectToAdd: m.uiOperationsSubjectToAdd({}, options),
+      subjectPlaceholder: m.uiOperationsSubjectPlaceholder({}, options),
+      shareSubjects: (index: number) => m.uiOperationsShareSubjects({ index }, options),
+      shareSubjectAdd: (index: number) => m.uiOperationsShareSubjectAdd({ index }, options),
+      shareSubjectPicker: (index: number) => m.uiOperationsShareSubjectPicker({ index }, options),
+      splitSubjectsHint: m.uiOperationsSplitSubjectsHint({}, options),
     },
     /** `ReviewProposal`: what Gousset proposes for a line to review, accepted or corrected (#35). */
     review: {
@@ -493,6 +510,7 @@ function uiMessages(locale: Locale) {
       /** A condition's field, as the editor offers it. */
       fields: {
         label: m.uiRulesFieldLabel({}, options),
+        merchant: m.uiRulesFieldMerchant({}, options),
         account: m.uiRulesFieldAccount({}, options),
         amount: m.uiRulesFieldAmount({}, options),
         direction: m.uiRulesFieldDirection({}, options),
@@ -502,6 +520,7 @@ function uiMessages(locale: Locale) {
       /** A condition's field, as a sentence says it ("label contains…"). */
       says: {
         label: m.uiRulesSaysLabel({}, options),
+        merchant: m.uiRulesSaysMerchant({}, options),
         account: m.uiRulesSaysAccount({}, options),
         amount: m.uiRulesSaysAmount({}, options),
         day: m.uiRulesSaysDay({}, options),
@@ -544,6 +563,7 @@ function uiMessages(locale: Locale) {
       fromOf: (index: number) => m.uiRulesFromOf({ index }, options),
       toOf: (index: number) => m.uiRulesToOf({ index }, options),
       chooseAccount: m.uiRulesChooseAccount({}, options),
+      chooseMerchant: m.uiRulesChooseMerchant({}, options),
       maxConditions: (max: number) => m.uiRulesMaxConditions({ max }, options),
       noCondition: m.uiRulesNoCondition({}, options),
       if: m.uiRulesIf({}, options),
@@ -558,6 +578,13 @@ function uiMessages(locale: Locale) {
       category: m.uiRulesCategory({}, options),
       categoryPlaceholder: m.uiRulesCategoryPlaceholder({}, options),
       categoryArchived: (category: string) => m.uiRulesCategoryArchived({ category }, options),
+      /** The subject a rule attaches (#37), beside the category. */
+      subject: m.uiRulesSubject({}, options),
+      subjectPlaceholder: m.uiRulesSubjectPlaceholder({}, options),
+      subjectNone: m.uiRulesSubjectNone({}, options),
+      subjectArchived: (subject: string) => m.uiRulesSubjectArchived({ subject }, options),
+      /** In the list's "then": "for Van". */
+      forSubject: (subject: string) => m.uiRulesForSubject({ subject }, options),
       enabled: m.uiRulesEnabled({}, options),
       enabledDescription: m.uiRulesEnabledDescription({}, options),
       effect: m.uiRulesEffect({}, options),
@@ -601,6 +628,74 @@ function uiMessages(locale: Locale) {
             : m.uiRulesProposalApplyOther({ count: written }, options),
         create: m.uiRulesProposalCreate({}, options),
       },
+    },
+    /** The subjects (#37): their tree, a subject's figures and proposals, and their sheet. */
+    subjects: {
+      /** Beside an archived subject: its own word, which agrees with "subject" in French. */
+      archived: m.uiSubjectsArchived({}, options),
+      perMonth: m.uiSubjectsPerMonth({}, options),
+      value: m.uiSubjectsValue({}, options),
+      loan: m.uiSubjectsLoan({}, options),
+      loanNone: m.uiSubjectsLoanNone({}, options),
+      /** Under a loan's balance: the account it is. */
+      loanOwed: (name: string) => m.uiSubjectsLoanOwed({ name }, options),
+      noExpense: m.uiSubjectsNoExpense({}, options),
+      /** Amounts in other currencies, already written and joined. */
+      elsewhere: (amounts: string) => m.uiSubjectsElsewhere({ amounts }, options),
+      toConfirm: m.uiSubjectsToConfirm({}, options),
+      proposalsHelp: m.uiSubjectsProposalsHelp({}, options),
+      selectAll: m.uiSubjectsSelectAll({}, options),
+      /** A proposal's names, which say the expense: "Select Fuelstop, 12 Jul.". */
+      selectOne: (expense: string) => m.uiSubjectsSelectOne({ expense }, options),
+      attachSelected: m.uiSubjectsAttachSelected({}, options),
+      attachAll: m.uiSubjectsAttachAll({}, options),
+      declineSelected: m.uiSubjectsDeclineSelected({}, options),
+      attachOne: (expense: string) => m.uiSubjectsAttachOne({ expense }, options),
+      declineOne: (expense: string) => m.uiSubjectsDeclineOne({ expense }, options),
+      proposalsNone: m.uiSubjectsProposalsNone({}, options),
+      merchantsNone: m.uiSubjectsMerchantsNone({}, options),
+      /** After the merchants: how many other rules attach the subject, the count already written. */
+      otherRules: (count: number, written: string) =>
+        pluralRules[locale].select(count) === "one"
+          ? m.uiSubjectsOtherRulesOne({ count: written }, options)
+          : m.uiSubjectsOtherRulesOther({ count: written }, options),
+      newTitle: m.uiSubjectsNewTitle({}, options),
+      editTitle: (name: string) => m.uiSubjectsEditTitle({ name }, options),
+      name: m.uiSubjectsName({}, options),
+      inside: m.uiSubjectsInside({}, options),
+      none: m.uiSubjectsNone({}, options),
+      hasValue: m.uiSubjectsHasValue({}, options),
+      hasValueDescription: m.uiSubjectsHasValueDescription({}, options),
+      valueField: m.uiSubjectsValueField({}, options),
+      currency: m.uiSubjectsCurrency({}, options),
+      loanField: m.uiSubjectsLoanField({}, options),
+      hasDates: m.uiSubjectsHasDates({}, options),
+      hasDatesDescription: m.uiSubjectsHasDatesDescription({}, options),
+      startsOn: m.uiSubjectsStartsOn({}, options),
+      endsOn: m.uiSubjectsEndsOn({}, options),
+      endsOnDescription: m.uiSubjectsEndsOnDescription({}, options),
+      accounts: m.uiSubjectsAccounts({}, options),
+      accountsNone: m.uiSubjectsAccountsNone({}, options),
+      attachAutomatically: m.uiSubjectsAttachAutomatically({}, options),
+      atMerchants: m.uiSubjectsAtMerchants({}, options),
+      noMerchant: m.uiSubjectsNoMerchant({}, options),
+      addMerchant: m.uiSubjectsAddMerchant({}, options),
+      merchantToAdd: m.uiSubjectsMerchantToAdd({}, options),
+      merchantPlaceholder: m.uiSubjectsMerchantPlaceholder({}, options),
+      past: m.uiSubjectsPast({}, options),
+      pastEmpty: m.uiSubjectsPastEmpty({}, options),
+      pastArchived: m.uiSubjectsPastArchived({}, options),
+      pastNone: m.uiSubjectsPastNone({}, options),
+      /** What the merchants' past expenses come to: the count and the amount already written. */
+      pastMatch: (count: number, written: string, amount: string) =>
+        pluralRules[locale].select(count) === "one"
+          ? m.uiSubjectsPastMatchOne({ count: written, amount }, options)
+          : m.uiSubjectsPastMatchOther({ count: written, amount }, options),
+      attachThem: m.uiSubjectsAttachThem({}, options),
+      archivedSwitch: m.uiSubjectsArchivedSwitch({}, options),
+      archivedDescription: m.uiSubjectsArchivedDescription({}, options),
+      create: m.uiSubjectsCreate({}, options),
+      save: m.uiSubjectsSave({}, options),
     },
   };
 }

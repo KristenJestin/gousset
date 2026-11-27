@@ -1,13 +1,14 @@
 import {
   MIN_CHARGES,
   Month,
-  SpendingGroup,
   currentMonth,
   lastDayOf,
   monthBenchmarks,
   monthReview,
   monthSpending,
+  monthSubjectSpending,
   monthSubscriptions,
+  pathOf as subjectPathOf,
   spendingDays,
 } from "@gousset/core";
 import type {
@@ -27,6 +28,8 @@ import type {
   MonthSpending,
   MonthSubscriptionsRead,
   SpendingDays,
+  SubjectSpending,
+  SubjectSpendingRead,
   Subscriptions,
   Transfers,
 } from "@gousset/core";
@@ -45,8 +48,9 @@ const MonthInput = Schema.Struct({
     Month.annotate({ description: "YYYY-MM; the current month if left out." }),
   ),
   by: Schema.optional(
-    SpendingGroup.annotate({
-      description: "spending, days: category (default) or merchant.",
+    Schema.Literals(["category", "merchant", "subject"]).annotate({
+      description:
+        "spending, days: category (default), merchant or subject. By subject, an expense counts whole in each of its subjects and once in a parent: the rows never add up.",
     }),
   ),
   name: Schema.optional(
@@ -63,6 +67,9 @@ type Encoded = typeof MonthInput.Encoded;
 /** The row of the expenses that name several merchants or none, as `days` takes it. */
 const NO_MERCHANT = "no merchant";
 
+/** The row `days` writes in its example when the month has none to name. */
+const FALLBACK_ROWS = { category: "Groceries", merchant: NO_MERCHANT, subject: "Van" } as const;
+
 /** How many merchants `spending` lists; the others are summed, and read with `lines`. */
 const MERCHANTS_LISTED = 100;
 
@@ -73,7 +80,7 @@ const DESCRIPTION = `The user's own monthly review, in their currency (others ap
 
 \`summary\`, for "how did my month go?" or "what is left?": received (a line coming back that may be a refund is left out and counted apart until the user answers), spent against the average and the previous month, set aside (net transfers onto savings and investments), left (received less spent and set aside) and its part restricted to benefit accounts, incomes and transfers, lines to review (review settles them), imports, flags.
 
-\`spending\`, by category (default) or merchant: each row at net cost, on the day it happened, against its average and the previous month; a transfer is never spending. Categories with children, benchmark and drift. A merchant is who was paid, else a payment intermediary (PayPal) when nothing better is known; "${NO_MERCHANT}" holds expenses naming several or none, last.
+\`spending\`, by category (default) or merchant: each row at net cost, on the day it happened, against its average and the previous month; a transfer is never spending. Categories with children, benchmark and drift. A merchant is who was paid, else a payment intermediary (PayPal) when nothing better is known; "${NO_MERCHANT}" holds expenses naming several or none, last. By subject: each subject with an expense in the month, by path, a parent with its children's expenses, each once; an expense counts whole in each of its subjects, so rows never add up.
 
 \`days\`, with by and name (a row as spending names it): its running total by day against the previous month.
 
@@ -245,7 +252,7 @@ const toCome = (input: MonthInput) => (refused: FutureMonthRefused) =>
   );
 
 /** What a month is held against, in words. */
-function againstText(read: MonthSpending | MonthReview["summary"]): string {
+function againstText(read: MonthSpending | SubjectSpendingRead | MonthReview["summary"]): string {
   const average =
     read.monthsAveraged === 0
       ? `no average yet: no full month of the user's data from ${read.averageFrom} to ${read.averageTo}`
@@ -259,7 +266,7 @@ function againstText(read: MonthSpending | MonthReview["summary"]): string {
 }
 
 /** A row's spending, against its average and the previous month. */
-function figuresText(row: CategorySpending | MerchantSpending): string {
+function figuresText(row: CategorySpending | MerchantSpending | SubjectSpending): string {
   const elsewhere =
     row.elsewhere.length === 0
       ? ""
@@ -531,6 +538,29 @@ function spendingText(read: MonthSpending): string {
   ]).join("\n\n");
 }
 
+/** Each row of `spending` by subject by its path, the name `days` takes. */
+const subjectRows = (read: SubjectSpendingRead) =>
+  read.rows.map((row) => ({ id: row.id, name: subjectPathOf(read.rows, row.id) }));
+
+function subjectSpendingText(read: SubjectSpendingRead): string {
+  const [first] = subjectRows(read);
+
+  const lines = read.rows.map(
+    (row) =>
+      `- ${subjectPathOf(read.rows, row.id)}${row.archived ? " (archived)" : ""}: ${figuresText(row)}`,
+  );
+
+  return nonEmpty([
+    `Where the money went in ${read.month}, by subject, in ${read.currency}, each at its net cost: ${againstText(read)}.`,
+    lines.length === 0
+      ? "No expense of the month is attached to a subject."
+      : `Subjects with an expense in the month, by path, each parent before its children. A parent counts its children's expenses with its own, each once; an expense on several subjects counts whole in each, and most have none: these rows never add up, nor make the month's spending.\n${lines.join("\n")}`,
+    first === undefined
+      ? ""
+      : `One row day by day: month ${JSON.stringify({ action: "days", by: "subject", name: first.name, month: read.month } satisfies Encoded)}.`,
+  ]).join("\n\n");
+}
+
 function daysText(read: SpendingDays, name: string): string {
   const inCurrency = (minor: number) => money(minor, read.currency);
   const lines: Array<string> = [];
@@ -571,7 +601,11 @@ const spending = (input: MonthInput, owner: string, currency: string) =>
   Effect.gen(function* () {
     const month = input.month ?? (yield* currentMonth);
 
-    return spendingText(yield* monthSpending(owner, month, currency, input.by ?? "category"));
+    const by = input.by ?? "category";
+
+    return by === "subject"
+      ? subjectSpendingText(yield* monthSubjectSpending(owner, month, currency))
+      : spendingText(yield* monthSpending(owner, month, currency, by));
   }).pipe(Effect.catchTags({ FutureMonthRefused: toCome(input), QueryFailed: Effect.die }));
 
 const days = (input: MonthInput, owner: string, currency: string) =>
@@ -587,12 +621,16 @@ const days = (input: MonthInput, owner: string, currency: string) =>
       });
     }
 
-    const rows = namedRows(yield* monthSpending(owner, month, currency, by));
+    const rows =
+      by === "subject"
+        ? subjectRows(yield* monthSubjectSpending(owner, month, currency))
+        : namedRows(yield* monthSpending(owner, month, currency, by));
+
     const found = rows.find((row) => comparable(row.name) === wanted);
 
     if (found === undefined) {
       const names = rows.slice(0, 30).map((row) => row.name);
-      const [first = by === "category" ? "Groceries" : NO_MERCHANT] = names;
+      const [first = FALLBACK_ROWS[by]] = names;
 
       return yield* new ToolRefusal({
         message: `No row of ${month} by ${by} is named "${input.name ?? ""}". ${names.length === 0 ? "The month has none." : `Its rows: ${names.join(", ")}${rows.length > names.length ? ", … (month spending lists them all)" : ""}.`}`,

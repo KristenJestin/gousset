@@ -2,6 +2,7 @@ import { entry, merchant, merchantAlias, rule, statementLine } from "@gousset/db
 import type { UserTransaction } from "@gousset/db/user-data";
 import { and, eq, inArray, isNotNull, ne, sql } from "drizzle-orm";
 
+import { conditionMerchantsIn } from "../rules/rules";
 import { compactOf, merchantName } from "./labels";
 import { sureShopsOfLines } from "./towns";
 
@@ -53,7 +54,7 @@ function chunked<T>(items: ReadonlyArray<T>): ReadonlyArray<ReadonlyArray<T>> {
  * it from that label, its town kept (before #193) or dropped (`shopOf`). Any other is the user's: one
  * a split made (its cleaned labels written before it, whatever its name), one renamed, merged into,
  * split from or marked (`updated_at` moved), one with a default category, an intermediary, one a
- * rule or an entry names (`named`), one with no cleaned label.
+ * rule (what it sets or a condition) or an entry names (`named`), one with no cleaned label.
  */
 export function isUntouched(
   row: MerchantRow,
@@ -192,7 +193,10 @@ export async function mergeTownMerchantsIn(transaction: UserTransaction): Promis
     .from(entry)
     .where(isNotNull(entry.merchantId));
 
-  const named = new Set([...ruled, ...paid].map((row) => row.id));
+  // A condition names a merchant by its id inside the rule's JSON, which no foreign key follows
+  // (#37): one a condition names is the user's, never merged away.
+  const conditioned = await conditionMerchantsIn(transaction);
+  const named = new Set([...[...ruled, ...paid].map((row) => row.id), ...conditioned]);
   const aliasesOf = new Map<string, Array<AliasRow>>();
 
   for (const row of aliases) {

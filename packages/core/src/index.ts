@@ -79,6 +79,7 @@ export {
   monthMovements,
   monthReview,
   monthSpending,
+  monthSubjectSpending,
   monthSummary,
   spendingDays,
 } from "./month";
@@ -87,6 +88,7 @@ export type {
   BenefitLine,
   CategorySpending,
   CategorySpendingRead,
+  DaysBy,
   ImportState,
   LineToReview,
   MerchantSpending,
@@ -103,6 +105,7 @@ export type {
   MonthRows,
   MonthScope,
   MonthSpending,
+  MonthSubject,
   MonthSummary,
   MonthTransfer,
   Movement,
@@ -111,7 +114,64 @@ export type {
   SpendingDay,
   SpendingDays,
   StatementReach,
+  SubjectSpending,
+  SubjectSpendingRead,
 } from "./month";
+
+export {
+  MAX_ATTACHED,
+  MAX_SUBJECTS,
+  MAX_SUBJECT_NAME,
+  SUBJECT_EXPENSES_SHOWN,
+  SUBJECT_PROPOSALS_SHOWN,
+  attachSubject,
+  createSubject,
+  editSubject,
+  listSubjects,
+  refuseProposals,
+  showSubject,
+  subjectMerchantsPreview,
+  subjectNamed,
+} from "./subjects/subjects";
+
+export type {
+  SubjectAccountBalance,
+  SubjectAttachment,
+  SubjectDetail,
+  SubjectEdit,
+  SubjectExpense,
+  SubjectHeadline,
+  SubjectInput,
+  SubjectList,
+  SubjectListed,
+  NamedSubject,
+  SubjectMerchantsPreview,
+  SubjectPeriod,
+  SubjectRecord,
+  SubjectSaved,
+} from "./subjects/subjects";
+
+export {
+  costsOf,
+  countedIn,
+  makesCycle,
+  monthsOf,
+  pathOf,
+  subtreeOf,
+  sumsOf,
+  treeOrder,
+} from "./subjects/counting";
+
+export type { CostPart, SubjectCost, SubjectName, SubjectNode } from "./subjects/counting";
+
+export {
+  EntryNotFound,
+  SubjectNameAmbiguous,
+  SubjectNameTaken,
+  SubjectNameUnknown,
+  SubjectNotFound,
+  SubjectRefused,
+} from "./subjects/errors";
 
 export {
   accountNamed,
@@ -508,8 +568,11 @@ export type {
   RuleInput,
   RuleJobOutcome,
   RuleList,
+  RuleMerchant,
+  RuleNames,
   RuleOrigin,
   RuleReach,
+  RuleSubject,
   RuleSummary,
 } from "./rules/rules";
 
