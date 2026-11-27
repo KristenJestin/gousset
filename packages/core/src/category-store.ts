@@ -90,6 +90,16 @@ export type LineCategory = {
   readonly kind: EntryKind;
 };
 
+/**
+ * The days a read of the categories' spending counts, both included; `today`, the day a paid-back
+ * subject's figures are read as of (#217): its expenses count at the share left to the user.
+ */
+export type SpendingRange = {
+  readonly from: string;
+  readonly to: string;
+  readonly today: string;
+};
+
 /** What a line's classification is decided from, read in the transaction that writes it. */
 export type LineEntries = {
   readonly lineId: string;
@@ -118,7 +128,7 @@ export class CategoryStore extends Context.Service<
      */
     readonly use: (
       owner: string,
-      range: { readonly from: string; readonly to: string },
+      range: SpendingRange,
     ) => Effect.Effect<ReadonlyArray<CategoryUse>, QueryFailed>;
     /**
      * The user's expenses that happened from `from` to `to` (both included), at their net cost,
@@ -126,7 +136,7 @@ export class CategoryStore extends Context.Service<
      */
     readonly spending: (
       owner: string,
-      range: { readonly from: string; readonly to: string },
+      range: SpendingRange,
     ) => Effect.Effect<ReadonlyArray<MonthlySpending>, QueryFailed>;
     /**
      * The day the user's first entry happened, expense or income: where their data starts, and

@@ -1,4 +1,10 @@
-import { account, entry, entryPart, statementLine } from "@gousset/db/schema/ledger";
+import {
+  account,
+  entry,
+  entryPart,
+  statementLine,
+  subjectPayback,
+} from "@gousset/db/schema/ledger";
 import { transfer } from "@gousset/db/schema/transfers";
 import type { UserTransaction } from "@gousset/db/user-data";
 import { and, eq, gte, inArray, lt, lte, ne, notInArray, or, sql } from "drizzle-orm";
@@ -32,15 +38,20 @@ export const POOL_DAYS = 2 * LONGEST_TRANSFER_DAYS + 14;
 /** A line that is no side of any transfer yet. */
 export const notPaired = sql`not exists (select 1 from ${transfer} where ${transfer.outLineId} = ${statementLine.id} or ${transfer.inLineId} = ${statementLine.id})`;
 
+/** A line that pays back no subject (#217): one that does is classified by it. */
+export const notPayback = sql`not exists (select 1 from ${subjectPayback} where ${subjectPayback.lineId} = ${statementLine.id})`;
+
 /**
  * A line that may be a side of a transfer: counted, of some amount, not made from a noted balance
- * (it stands for a month's movement, #31), and no side of one yet.
+ * (it stands for a month's movement, #31), no side of one yet, and paying back no subject (#217):
+ * no pairing (the import's, on demand, at boot, the candidates offered) ever meets such a line.
  */
 const pairable = and(
   eq(statementLine.state, "counted"),
   ne(statementLine.source, "balance"),
   ne(statementLine.amountMinor, 0),
   notPaired,
+  notPayback,
 );
 
 /**

@@ -613,6 +613,8 @@ const TRANSFER_REFUSALS = {
     "That account is kept by its lines: its own side of the transfer is one of its lines. Pair the line {line} with that line, named with other.",
   other_currency:
     "That account is in another currency than the line {line}: Gousset makes its side only in the line's currency. Pair it with a line of that account, named with other.",
+  payback:
+    "The line {line} pays back a subject, which classifies it: no transfer's side. Detach it from that subject first (subjects, its payback lines; lines show names the subject), if it pays back nothing.",
 } as const satisfies { readonly [Reason in TransferRefused["reason"]]: string };
 
 function transferRefused(input: LinesInput, refused: TransferRefused) {
@@ -773,6 +775,8 @@ const LINK_REFUSALS = {
     "The line {line} is in another currency than the expense: an expense's parts share one currency.",
   exceeds:
     "The line {line} would refund more than the expense still costs: an expense never costs less than nothing. Link it to the expense it refunds, or leave it as it is.",
+  payback:
+    "The line {line} pays back a subject, which classifies it: it joins no expense. Detach it from that subject first (subjects, its payback lines; lines show names the subject).",
 } as const satisfies { readonly [Reason in LinkRefused["reason"]]: string };
 
 const FUND_REFUSALS = {
@@ -947,6 +951,8 @@ const SPLIT_REFUSALS = {
   subject_unknown: "A share names a subject that is none of yours.",
   subject_archived: "A share's subject is archived: it can no longer be chosen.",
   subject_income: "Only an expense has subjects: a share of money coming in takes none.",
+  payback:
+    "This line pays back a subject, which classifies it: it has no category to split. Detach it from that subject first (subjects, its payback lines; lines show names the subject).",
 } as const satisfies { readonly [Reason in SplitRefused["reason"]]: string };
 
 function splitRun(input: LinesInput, owner: string) {

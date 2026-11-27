@@ -434,6 +434,7 @@ describe("showLine", () => {
         periodTo: "2026-11-19",
       },
       subjects: [],
+      payback: null,
     });
   });
 

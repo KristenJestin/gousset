@@ -99,6 +99,7 @@ export type {
   MonthMerchant,
   MonthMovements,
   MonthPart,
+  MonthPayback,
   MonthReview,
   MonthRows,
   MonthScope,
@@ -164,12 +165,33 @@ export type { CostPart, SubjectCost, SubjectName, SubjectNode } from "./subjects
 
 export {
   EntryNotFound,
+  PaybackRefused,
   SubjectNameAmbiguous,
   SubjectNameTaken,
   SubjectNameUnknown,
   SubjectNotFound,
   SubjectRefused,
 } from "./subjects/errors";
+
+export {
+  MAX_PAYBACK_FROM,
+  MAX_PAYBACK_LINES,
+  PAYBACK_CANDIDATES_SHOWN,
+  attachPayback,
+  paybacksWaiting,
+} from "./subjects/payback";
+
+export type {
+  PaybackAttachment,
+  PaybackLine,
+  PaybackSettings,
+  PaybackWaiting,
+  SubjectPayback,
+} from "./subjects/payback";
+
+export { leftToUserOf, paybackStateOf, shareLeft } from "./subjects/payback-share";
+
+export type { PaidBackSubject, PaybackState } from "./subjects/payback-share";
 
 export {
   accountNamed,

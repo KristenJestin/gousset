@@ -23,11 +23,13 @@ import type {
   CategoryStep,
   LineCategory,
   LineEntries,
+  MonthlySpending,
 } from "./category-store";
 import { takeCategoryTurn } from "./category-turn";
 import { CategoryNotFound, LineNotFound } from "./errors";
 import { classifyByMerchants } from "./merchants/default-classification";
 import { MerchantNotFound } from "./merchants/errors";
+import { leftToUserIn } from "./subjects/payback";
 
 // The categories, through `UserData` only (docs/data-model.md, "Ownership and isolation"). Every
 // value goes in as a parameter, never into the SQL's text.
@@ -191,6 +193,42 @@ async function shownCategory(
   return shown;
 }
 
+/**
+ * Each entry that happened in `range`, of `kind` when given, at its net per currency of its lines'
+ * accounts. Each part once: a split line counts in each of its entries for its own share, a refund
+ * less, a transfer (no entry) and a works council's funding (no part) not at all.
+ */
+function entryNetsIn(
+  transaction: UserTransaction,
+  range: { readonly from: string; readonly to: string },
+  kind: "expense" | undefined,
+) {
+  return transaction
+    .select({
+      entryId: entry.id,
+      kind: entry.kind,
+      categoryId: entry.categoryId,
+      happenedOn: entry.happenedOn,
+      currency: account.currency,
+      minor:
+        sql<number>`sum(case when ${entryPart.role} = 'payment' then ${entryPart.amountMinor} else -${entryPart.amountMinor} end)::bigint`.mapWith(
+          Number,
+        ),
+    })
+    .from(entry)
+    .innerJoin(entryPart, eq(entryPart.entryId, entry.id))
+    .innerJoin(statementLine, eq(statementLine.id, entryPart.lineId))
+    .innerJoin(account, eq(account.id, statementLine.accountId))
+    .where(
+      and(
+        kind === undefined ? undefined : eq(entry.kind, kind),
+        gte(entry.happenedOn, range.from),
+        lte(entry.happenedOn, range.to),
+      ),
+    )
+    .groupBy(entry.id, entry.kind, entry.categoryId, entry.happenedOn, account.currency);
+}
+
 /** `CategoryStore` on the user's tables, through `UserData`. */
 export const DatabaseCategoryStore = Layer.effect(
   CategoryStore,
@@ -207,22 +245,25 @@ export const DatabaseCategoryStore = Layer.effect(
             .from(entry)
             .groupBy(entry.categoryId);
 
-          const nets = await transaction
-            .select({
-              categoryId: entry.categoryId,
-              currency: account.currency,
-              minor:
-                sql<number>`sum(case when ${entryPart.role} = 'payment' then ${entryPart.amountMinor} else -${entryPart.amountMinor} end)::bigint`.mapWith(
-                  Number,
-                ),
-            })
-            .from(entry)
-            .innerJoin(entryPart, eq(entryPart.entryId, entry.id))
-            .innerJoin(statementLine, eq(statementLine.id, entryPart.lineId))
-            .innerJoin(account, eq(account.id, statementLine.accountId))
-            .where(and(gte(entry.happenedOn, range.from), lte(entry.happenedOn, range.to)))
-            .groupBy(entry.categoryId, account.currency)
-            .orderBy(account.currency);
+          const leftOf = await leftToUserIn(transaction, range.today);
+          const sums = new Map<string, { categoryId: string; currency: string; minor: number }>();
+
+          for (const each of await entryNetsIn(transaction, range, undefined)) {
+            const key = JSON.stringify([each.categoryId, each.currency]);
+
+            const minor =
+              each.kind === "expense"
+                ? leftOf(each.entryId, each.currency, each.minor)
+                : each.minor;
+
+            sums.set(key, {
+              categoryId: each.categoryId,
+              currency: each.currency,
+              minor: (sums.get(key)?.minor ?? 0) + minor,
+            });
+          }
+
+          const nets = [...sums.values()].toSorted((a, b) => a.currency.localeCompare(b.currency));
 
           return counts.map((each) => ({
             categoryId: each.categoryId,
@@ -237,32 +278,23 @@ export const DatabaseCategoryStore = Layer.effect(
 
       spending: (owner, range) =>
         userData.transaction(owner, async (transaction) => {
-          const month = sql<string>`to_char(${entry.happenedOn}, 'YYYY-MM')`;
+          // A paid-back subject's expense counts at the share left to the user (#217).
+          const leftOf = await leftToUserIn(transaction, range.today);
+          const sums = new Map<string, MonthlySpending>();
 
-          // Each part once: a split line counts in each of its expenses for its own share, a
-          // refund less, a transfer (no entry) and a works council's funding (no part) not at all.
-          return transaction
-            .select({
-              categoryId: entry.categoryId,
+          for (const each of await entryNetsIn(transaction, range, "expense")) {
+            const month = each.happenedOn.slice(0, 7);
+            const key = JSON.stringify([each.categoryId, month, each.currency]);
+
+            sums.set(key, {
+              categoryId: each.categoryId,
               month,
-              currency: account.currency,
-              minor:
-                sql<number>`sum(case when ${entryPart.role} = 'payment' then ${entryPart.amountMinor} else -${entryPart.amountMinor} end)::bigint`.mapWith(
-                  Number,
-                ),
-            })
-            .from(entry)
-            .innerJoin(entryPart, eq(entryPart.entryId, entry.id))
-            .innerJoin(statementLine, eq(statementLine.id, entryPart.lineId))
-            .innerJoin(account, eq(account.id, statementLine.accountId))
-            .where(
-              and(
-                eq(entry.kind, "expense"),
-                gte(entry.happenedOn, range.from),
-                lte(entry.happenedOn, range.to),
-              ),
-            )
-            .groupBy(entry.categoryId, month, account.currency);
+              currency: each.currency,
+              minor: (sums.get(key)?.minor ?? 0) + leftOf(each.entryId, each.currency, each.minor),
+            });
+          }
+
+          return [...sums.values()];
         }),
 
       firstEntry: (owner) =>

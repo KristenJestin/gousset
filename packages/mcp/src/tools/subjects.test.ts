@@ -201,6 +201,7 @@ describe("the list in words", () => {
       startsOn: null,
       endsOn: null,
       accounts: [],
+      payback: null,
     };
 
     const list: SubjectList = {
@@ -318,6 +319,7 @@ const detail: SubjectDetail = {
   proposals: { expenses: [expense("e-3", "2026-07-12", 3100)], more: 0 },
   merchants: [{ id: "fuelstop", name: "Fuelstop" }],
   otherRules: 1,
+  payback: null,
 };
 
 describe("a subject's page in words", () => {

@@ -934,6 +934,10 @@ function transferRefusal(code: TransferRefusalCode): string {
     case "OTHER_CURRENCY": {
       return m.operationsTransferOtherCurrency();
     }
+
+    case "PAYBACK": {
+      return m.operationsRefusedPayback();
+    }
   }
 }
 
@@ -1263,6 +1267,10 @@ function expenseRefusal(code: ExpenseRefusalCode | "FAILED"): string {
 
     case "LINK_OTHER": {
       return m.operationsLinkRefusedOther();
+    }
+
+    case "LINE_PAYBACK": {
+      return m.operationsRefusedPayback();
     }
 
     case "SPLIT_REFUSED": {

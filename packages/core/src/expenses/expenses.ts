@@ -7,6 +7,7 @@ import {
   merchantAlias,
   statementLine,
   subject,
+  subjectPayback,
 } from "@gousset/db/schema/ledger";
 import { transfer } from "@gousset/db/schema/transfers";
 import { UserData } from "@gousset/db/user-data";
@@ -327,6 +328,16 @@ async function isTransferSide(transaction: UserTransaction, lineId: string): Pro
     .select({ id: transfer.id })
     .from(transfer)
     .where(or(eq(transfer.outLineId, lineId), eq(transfer.inLineId, lineId)));
+
+  return found.length > 0;
+}
+
+/** Whether the line pays back a subject (#217): classified by it, it joins no expense. */
+async function isPaybackLine(transaction: UserTransaction, lineId: string): Promise<boolean> {
+  const found = await transaction
+    .select({ lineId: subjectPayback.lineId })
+    .from(subjectPayback)
+    .where(eq(subjectPayback.lineId, lineId));
 
   return found.length > 0;
 }
@@ -881,6 +892,10 @@ export async function linkIn(
     if (refused !== undefined) {
       return linkRefused(refused, each.id);
     }
+
+    if (await isPaybackLine(transaction, each.id)) {
+      return linkRefused("payback", each.id);
+    }
   }
 
   // The expenses themselves take turns too: two links into one expense through two of its lines,
@@ -1048,6 +1063,10 @@ async function splitIn(
 
   if (refused === "not_counted" || refused === "zero_amount" || refused === "transfer") {
     return splitRefused(refused);
+  }
+
+  if (await isPaybackLine(transaction, line.id)) {
+    return splitRefused("payback");
   }
 
   const expenses = await readExpenses(transaction, await entryIdsOf(transaction, line.id));

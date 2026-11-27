@@ -4,8 +4,8 @@ import type { UserTransaction } from "./user-data";
 
 /**
  * Gives an entry to each line among `lineIds` that is `owner`'s, counted, has an amount, no part
- * yet and is no side of a transfer (docs/data-model.md, v0.3: a line is an entry's or a transfer's,
- * never both): an expense when money leaves, an income when it comes in, the day
+ * yet, is no side of a transfer (docs/data-model.md, v0.3: a line is an entry's or a transfer's,
+ * never both) and pays back no subject (#217: such a line is classified by it): an expense when money leaves, an income when it comes in, the day
  * it was booked, in its kind's fallback category, with one payment part of the whole line,
  * `classified_by = default`. A line that has a part is left as it is, so a second call adds
  * nothing; a user without fallback categories gets none (packages/core copies the default set
@@ -35,6 +35,7 @@ export async function insertDefaultEntries(
         and l.user_id = ${owner} and l.state = 'counted' and l.amount_minor <> 0
         and not exists (select 1 from entry_part p where p.line_id = l.id)
         and not exists (select 1 from transfer t where l.id in (t.out_line_id, t.in_line_id))
+        and not exists (select 1 from subject_payback b where b.line_id = l.id)
       order by l.booked_on, l.id
     ), made as (
       insert into entry (id, user_id, kind, happened_on, category_id, classified_by)

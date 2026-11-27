@@ -68,6 +68,8 @@ export type FoundLine = {
   readonly fromBalance: boolean;
   /** Its entries' subjects (#37), each once, by name: none for most lines. */
   readonly subjects: ReadonlyArray<SubjectName>;
+  /** The subject it pays back (#217), which classifies it: it has no entry then; null for most. */
+  readonly payback: SubjectName | null;
 };
 
 /** A line with all that its detail shows. */

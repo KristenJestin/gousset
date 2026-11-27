@@ -118,6 +118,8 @@ function withAccount(own: MemoryLineRows, line: MemoryLineDetail): FoundLine | u
     category: line.category ?? null,
     fromBalance: sourceOf(line) === "balance",
     subjects: line.subjects ?? [],
+    // The memory store keeps no subject's payback lines (#217).
+    payback: null,
   };
 }
 

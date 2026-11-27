@@ -14,7 +14,7 @@ import {
 } from "@gousset/db/schema/ledger";
 import { UserData } from "@gousset/db/user-data";
 import type { UserTransaction } from "@gousset/db/user-data";
-import { and, asc, count, eq, exists, gte, inArray, lte, notExists, sql } from "drizzle-orm";
+import { and, asc, count, eq, gte, inArray, lte, notExists, sql } from "drizzle-orm";
 import type { SQL } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { Effect, Result } from "effect";
@@ -38,17 +38,20 @@ import {
   unknownMerchantIn,
 } from "../rules/rules";
 import { today } from "../today";
+import { costsIn } from "./costs";
 import {
-  costsOf,
-  countedIn,
-  makesCycle,
-  monthsOf,
-  pathOf,
-  subtreeOf,
-  sumsOf,
-  treeOrder,
-} from "./counting";
-import type { CostPart, SubjectCost } from "./counting";
+  MAX_PAYBACK_FROM,
+  candidatesFromIn,
+  hasPaybackLinesIn,
+  paybackCandidatesIn,
+  paybackLinesIn,
+  paybackSettingsOf,
+  subjectPaybacksIn,
+} from "./payback";
+import type { PaybackLine, PaybackSettings, SubjectPayback } from "./payback";
+import { takeSubjectTurn } from "./turn";
+import { countedIn, makesCycle, monthsOf, pathOf, subtreeOf, sumsOf, treeOrder } from "./counting";
+import type { SubjectCost } from "./counting";
 import {
   EntryNotFound,
   SubjectNameAmbiguous,
@@ -104,6 +107,8 @@ export type SubjectRecord = {
   readonly endsOn: string | null;
   /** The accounts linked to it, by name. */
   readonly accounts: ReadonlyArray<LineAccount>;
+  /** "Paid back" (#217): who pays it back, and the days asked and settled; null without. */
+  readonly payback: PaybackSettings | null;
 };
 
 /**
@@ -130,10 +135,12 @@ export type SubjectHeadline =
     };
 
 /** A subject in the list: its place in the tree and its figure. */
-export type SubjectListed = SubjectRecord & {
+export type SubjectListed = Omit<SubjectRecord, "payback"> & {
   /** 0 at the top. */
   readonly depth: number;
   readonly headline: SubjectHeadline;
+  /** "Paid back" (#217), with what it cost and got back all time, and where it stands. */
+  readonly payback: SubjectPayback | null;
 };
 
 /** The user's subjects in tree order: each parent before its children, siblings by name. */
@@ -168,7 +175,18 @@ export type SubjectAccountBalance = LineAccount & {
 };
 
 /** A subject's page (`showSubject`). */
-export type SubjectDetail = Omit<SubjectRecord, "accounts" | "loan"> & {
+export type SubjectDetail = Omit<SubjectRecord, "accounts" | "loan" | "payback"> & {
+  /**
+   * "Paid back" (#217): its figures all time (its spent at full net cost), the lines that pay it
+   * back, oldest first, and the candidates (`PAYBACK_CANDIDATES_SHOWN` at most, the payer's words
+   * first, then the newest), attached only on the user's yes; null without the option.
+   */
+  readonly payback:
+    | (SubjectPayback & {
+        readonly lines: ReadonlyArray<PaybackLine>;
+        readonly candidates: ReadonlyArray<PaybackLine>;
+      })
+    | null;
   readonly currency: string;
   readonly today: string;
   /** The days counted: `from` null for all time, `to` never after today. */
@@ -227,6 +245,15 @@ export type SubjectInput = {
   readonly endsOn?: string | null;
   /** The accounts linked to it, all of them. */
   readonly accountIds?: ReadonlyArray<string>;
+  /**
+   * "Paid back" (#217): who pays it back, 1 to 100 characters once trimmed; null turns the option
+   * off, refused while lines pay it back, and clears both days.
+   */
+  readonly paybackFrom?: string | null;
+  /** `YYYY-MM-DD`: the day the user asked; needs `paybackFrom`. */
+  readonly paybackAskedOn?: string | null;
+  /** `YYYY-MM-DD`: the day the user marked it paid back by hand; needs `paybackFrom`. */
+  readonly paybackSettledOn?: string | null;
   /** Its merchants: a rule "merchant is" each attaches it (`setSubjectMerchantsIn`). */
   readonly merchantIds?: ReadonlyArray<string>;
   /**
@@ -279,18 +306,6 @@ type AccountRow = {
   readonly openingBalanceMinor: number;
   readonly closedOn: string | null;
 };
-
-/** The first key of the lock a user's changes of the subjects take, the user's the second. */
-const CHANGE_LOCK = "gousset.subject.change";
-
-/**
- * Takes the user's turn among the changes of the subjects until the transaction ends, so that two
- * moves never make a cycle together, nor two creations pass the limit or share a name.
- */
-const takeSubjectTurn = (transaction: UserTransaction, owner: string) =>
-  transaction.execute(
-    sql`select pg_advisory_xact_lock(hashtext(${CHANGE_LOCK}), hashtext(${owner}))`,
-  );
 
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
 const CURRENCY = /^[A-Z]{3}$/;
@@ -390,6 +405,7 @@ function recordOf(
     loan: loan === undefined ? null : lineAccount(loan),
     startsOn: row.startsOn,
     endsOn: row.endsOn,
+    payback: paybackSettingsOf(row),
     accounts: (links.get(row.id) ?? [])
       .flatMap((id) => {
         const found = accounts.get(id);
@@ -404,66 +420,6 @@ function recordOf(
 /** The subjects named, as their tree reads them. */
 const nodesOf = (rows: ReadonlyArray<SubjectRow>) =>
   rows.map((row) => ({ id: row.id, parentId: row.parentId, name: row.name }));
-
-/**
- * The expenses attached to any of `subjectIds` (every subject when null), happened up to `day`,
- * each at its net cost per currency, with the subjects among those it is attached to.
- */
-async function costsIn(
-  transaction: UserTransaction,
-  subjectIds: ReadonlyArray<string> | null,
-  day: string,
-): Promise<ReadonlyArray<SubjectCost>> {
-  const among = subjectIds === null ? undefined : inArray(entrySubject.subjectId, [...subjectIds]);
-
-  if (subjectIds !== null && subjectIds.length === 0) {
-    return [];
-  }
-
-  const links = await transaction
-    .select({ entryId: entrySubject.entryId, subjectId: entrySubject.subjectId })
-    .from(entrySubject)
-    .where(among);
-
-  if (links.length === 0) {
-    return [];
-  }
-
-  const subjectsOf = new Map<string, Array<string>>();
-
-  for (const link of links) {
-    subjectsOf.set(link.entryId, [...(subjectsOf.get(link.entryId) ?? []), link.subjectId]);
-  }
-
-  const parts: ReadonlyArray<CostPart> = await transaction
-    .select({
-      entryId: entry.id,
-      happenedOn: entry.happenedOn,
-      categoryId: entry.categoryId,
-      role: entryPart.role,
-      amountMinor: entryPart.amountMinor,
-      currency: account.currency,
-    })
-    .from(entry)
-    .innerJoin(entryPart, eq(entryPart.entryId, entry.id))
-    .innerJoin(statementLine, eq(statementLine.id, entryPart.lineId))
-    .innerJoin(account, eq(account.id, statementLine.accountId))
-    .where(
-      and(
-        eq(entry.kind, "expense"),
-        lte(entry.happenedOn, day),
-        exists(
-          transaction
-            .select({ one: sql`1` })
-            .from(entrySubject)
-            .where(and(eq(entrySubject.entryId, entry.id), among)),
-        ),
-      ),
-    )
-    .orderBy(asc(entry.happenedOn), asc(entry.id));
-
-  return costsOf(parts, subjectsOf);
-}
 
 /** The first day of the earliest of `costs`, its month `YYYY-MM`; null with none. */
 const firstMonthOf = (costs: ReadonlyArray<SubjectCost>) =>
@@ -523,6 +479,7 @@ async function listIn(
   const accounts = new Map((await accountsOf(transaction)).map((each) => [each.id, each]));
   const links = await linksOf(transaction);
   const costs = await costsIn(transaction, null, day);
+  const paybacks = await subjectPaybacksIn(transaction, currency, day);
   const nodes = nodesOf(rows);
   const byId = new Map(rows.map((row) => [row.id, row]));
 
@@ -543,6 +500,7 @@ async function listIn(
           ...recordOf(row, rows, accounts, links),
           depth: node.depth,
           headline: headlineOf(row, counted, currency, day),
+          payback: paybacks.get(row.id) ?? null,
         },
       ];
     }),
@@ -921,6 +879,22 @@ async function showIn(
 
   const latest = await expensesOf(transaction, newestFirst.slice(0, SUBJECT_EXPENSES_SHOWN), netOf);
   const rules = await subjectRulesIn(transaction, row.id);
+  const figures = (await subjectPaybacksIn(transaction, currency, day)).get(row.id);
+
+  const payback =
+    figures === undefined
+      ? null
+      : {
+          ...figures,
+          lines: await paybackLinesIn(transaction, row.id),
+          candidates: await paybackCandidatesIn(
+            transaction,
+            figures.from,
+            await candidatesFromIn(transaction, row, nodes, day),
+            currency,
+            day,
+          ),
+        };
 
   return Result.succeed({
     ...record,
@@ -941,6 +915,7 @@ async function showIn(
         : await proposalsOf(transaction, { ...row, startsOn: row.startsOn }, subtree, day),
     merchants: rules.merchants.map((each) => ({ id: each.id, name: each.name })),
     otherRules: rules.others,
+    payback,
   });
 }
 
@@ -953,6 +928,9 @@ type Settings = {
   readonly loanAccountId: string | null;
   readonly startsOn: string | null;
   readonly endsOn: string | null;
+  readonly paybackFrom: string | null;
+  readonly paybackAskedOn: string | null;
+  readonly paybackSettledOn: string | null;
 };
 
 type SettingsProblem = SubjectRefused | SubjectNameTaken;
@@ -1040,6 +1018,22 @@ function problemOf(
     }
   }
 
+  if (
+    changed.has("paybackFrom") ||
+    changed.has("paybackAskedOn") ||
+    changed.has("paybackSettledOn")
+  ) {
+    const from = settings.paybackFrom?.trim() ?? null;
+    const days = [settings.paybackAskedOn, settings.paybackSettledOn];
+
+    if (
+      (from !== null && (from === "" || from.length > MAX_PAYBACK_FROM)) ||
+      days.some((each) => each !== null && (!isDay(each) || from === null))
+    ) {
+      return refusal("payback");
+    }
+  }
+
   const foreign = accountIds.find((each) => !accounts.has(each));
 
   if (changed.has("accountIds") && foreign !== undefined) {
@@ -1061,6 +1055,9 @@ function givenOf(edit: SubjectEdit): ReadonlySet<keyof Settings | "accountIds"> 
     "loanAccountId",
     "startsOn",
     "endsOn",
+    "paybackFrom",
+    "paybackAskedOn",
+    "paybackSettledOn",
     "accountIds",
   ] as const) {
     if (edit[field] !== undefined) {
@@ -1133,6 +1130,9 @@ async function createIn(
     loanAccountId: input.loanAccountId ?? null,
     startsOn: input.startsOn ?? null,
     endsOn: input.endsOn ?? null,
+    paybackFrom: input.paybackFrom ?? null,
+    paybackAskedOn: input.paybackAskedOn ?? null,
+    paybackSettledOn: input.paybackSettledOn ?? null,
   };
 
   // Everything is checked for a new subject, the name above all.
@@ -1170,6 +1170,9 @@ async function createIn(
       loanAccountId: settings.loanAccountId,
       startsOn: settings.startsOn,
       endsOn: settings.endsOn,
+      paybackFrom: settings.paybackFrom?.trim() ?? null,
+      paybackAskedOn: settings.paybackAskedOn,
+      paybackSettledOn: settings.paybackSettledOn,
     })
     .returning({ id: subject.id });
 
@@ -1222,6 +1225,20 @@ async function editIn(
     loanAccountId: edit.loanAccountId === undefined ? row.loanAccountId : edit.loanAccountId,
     startsOn: edit.startsOn === undefined ? row.startsOn : edit.startsOn,
     endsOn: edit.endsOn === undefined ? row.endsOn : edit.endsOn,
+    paybackFrom: edit.paybackFrom === undefined ? row.paybackFrom : edit.paybackFrom,
+    // Turning the option off clears both days, unless the edit gives one (refused then).
+    paybackAskedOn:
+      edit.paybackAskedOn === undefined
+        ? edit.paybackFrom === null
+          ? null
+          : row.paybackAskedOn
+        : edit.paybackAskedOn,
+    paybackSettledOn:
+      edit.paybackSettledOn === undefined
+        ? edit.paybackFrom === null
+          ? null
+          : row.paybackSettledOn
+        : edit.paybackSettledOn,
   };
 
   const given = new Set(givenOf(edit));
@@ -1239,6 +1256,15 @@ async function editIn(
 
   if (problem !== null) {
     return Result.fail(problem);
+  }
+
+  // The lines that pay it back are detached first: they would be no income nor anything else.
+  if (
+    row.paybackFrom !== null &&
+    settings.paybackFrom === null &&
+    (await hasPaybackLinesIn(transaction, row.id))
+  ) {
+    return refused("payback_lines", { subjectId: row.id });
   }
 
   // An archived subject gets no expense: no merchant is added to it, though one may go.
@@ -1266,6 +1292,9 @@ async function editIn(
       loanAccountId: settings.loanAccountId,
       startsOn: settings.startsOn,
       endsOn: settings.endsOn,
+      paybackFrom: settings.paybackFrom?.trim() ?? null,
+      paybackAskedOn: settings.paybackAskedOn,
+      paybackSettledOn: settings.paybackSettledOn,
       archivedAt:
         edit.archived === undefined
           ? row.archivedAt

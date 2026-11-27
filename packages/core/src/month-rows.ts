@@ -8,6 +8,8 @@ import {
   merchantAlias,
   statementImport,
   statementLine,
+  subject,
+  subjectPayback,
 } from "@gousset/db/schema/ledger";
 import { transfer } from "@gousset/db/schema/transfers";
 import type { UserTransaction } from "@gousset/db/user-data";
@@ -16,6 +18,7 @@ import { alias } from "drizzle-orm/pg-core";
 
 import { readAll } from "./category-store-database";
 import type { MonthRows, MonthScope, StatementReach } from "./month";
+import { paidBackSubjectsIn } from "./subjects/payback";
 import { subjectNodesIn } from "./subjects/subjects";
 import { chargesIn } from "./subscriptions/charges";
 
@@ -151,6 +154,31 @@ export async function monthRowsIn(
     .innerJoin(entry, eq(entry.id, entrySubject.entryId))
     .where(and(gte(entry.happenedOn, scope.entries.from), lte(entry.happenedOn, scope.entries.to)));
 
+  // The subjects paid back by someone else (#217): what each cost and got back all time, as of
+  // today, and the payback lines booked in the month, which are its movements apart.
+  const { paidBack } = await paidBackSubjectsIn(transaction, scope.statementsTo);
+
+  const paybacks = await transaction
+    .select({
+      lineId: statementLine.id,
+      bookedOn: statementLine.bookedOn,
+      amountMinor: statementLine.amountMinor,
+      accountId: statementLine.accountId,
+      subjectId: subject.id,
+      subject: subject.name,
+      from: sql<string>`coalesce(${subject.paybackFrom}, '')`,
+    })
+    .from(subjectPayback)
+    .innerJoin(statementLine, eq(statementLine.id, subjectPayback.lineId))
+    .innerJoin(subject, eq(subject.id, subjectPayback.subjectId))
+    .where(
+      and(
+        eq(statementLine.state, "counted"),
+        gte(statementLine.bookedOn, scope.transfers.from),
+        lte(statementLine.bookedOn, scope.transfers.to),
+      ),
+    );
+
   const importedOf = new Map(imported.map((row) => [row.accountId, row.to]));
   const statementOf = new Map(statements.map((row) => [row.accountId, row.to]));
   const byHand = new Set(manual.map((row) => row.accountId));
@@ -175,5 +203,7 @@ export async function monthRowsIn(
     subjects,
     entrySubjects,
     charges: scope.charges === null ? [] : await chargesIn(transaction, scope.charges),
+    paidBack,
+    paybacks,
   };
 }

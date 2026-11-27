@@ -3,17 +3,11 @@
   "version": "10",
   "dialect": "postgres",
   "id": "04835ef2-ddfa-4f98-8dfe-c9388b572e2a",
-  "prevIds": [
-    "4fb8153c-f443-4912-9778-abe67e465174"
-  ],
+  "prevIds": ["4fb8153c-f443-4912-9778-abe67e465174"],
   "footprints": [
     {
       "statementType": "create_table",
-      "statementTarget": [
-        "table",
-        "public",
-        "subject_payback"
-      ],
+      "statementTarget": ["table", "public", "subject_payback"],
       "writes": [
         "s|tbl|public.subject_payback",
         "n|tbl|public.subject_payback",
@@ -22,72 +16,41 @@
         "n|type|public.subject_payback",
         "n|rel|public.subject_payback_pkey"
       ],
-      "reads": [
-        "n|sch|public"
-      ]
+      "reads": ["n|sch|public"]
     },
     {
       "statementType": "add_column",
-      "statementTarget": [
-        "column",
-        "public",
-        "subject",
-        "payback_from"
-      ],
+      "statementTarget": ["column", "public", "subject", "payback_from"],
       "writes": [
         "s|col|public.subject.payback_from",
         "n|col|public.subject.payback_from",
         "e|col|public.subject.payback_from"
       ],
-      "reads": [
-        "n|tbl|public.subject",
-        "n|sch|public"
-      ]
+      "reads": ["n|tbl|public.subject", "n|sch|public"]
     },
     {
       "statementType": "add_column",
-      "statementTarget": [
-        "column",
-        "public",
-        "subject",
-        "payback_asked_on"
-      ],
+      "statementTarget": ["column", "public", "subject", "payback_asked_on"],
       "writes": [
         "s|col|public.subject.payback_asked_on",
         "n|col|public.subject.payback_asked_on",
         "e|col|public.subject.payback_asked_on"
       ],
-      "reads": [
-        "n|tbl|public.subject",
-        "n|sch|public"
-      ]
+      "reads": ["n|tbl|public.subject", "n|sch|public"]
     },
     {
       "statementType": "add_column",
-      "statementTarget": [
-        "column",
-        "public",
-        "subject",
-        "payback_settled_on"
-      ],
+      "statementTarget": ["column", "public", "subject", "payback_settled_on"],
       "writes": [
         "s|col|public.subject.payback_settled_on",
         "n|col|public.subject.payback_settled_on",
         "e|col|public.subject.payback_settled_on"
       ],
-      "reads": [
-        "n|tbl|public.subject",
-        "n|sch|public"
-      ]
+      "reads": ["n|tbl|public.subject", "n|sch|public"]
     },
     {
       "statementType": "create_index",
-      "statementTarget": [
-        "index",
-        "public",
-        "subject_payback",
-        "subject_payback_subject_id_idx"
-      ],
+      "statementTarget": ["index", "public", "subject_payback", "subject_payback_subject_id_idx"],
       "writes": [
         "s|idx|public.subject_payback_subject_id_idx",
         "n|idx|public.subject_payback_subject_id_idx",
@@ -102,11 +65,7 @@
     },
     {
       "statementType": "create_fk",
-      "statementTarget": [
-        "table",
-        "public",
-        "subject_payback"
-      ],
+      "statementTarget": ["table", "public", "subject_payback"],
       "writes": [
         "s|fk|public.subject_payback.subject_payback_user_id_auth_user_id_fkey",
         "n|fk|public.subject_payback.subject_payback_user_id_auth_user_id_fkey",
@@ -125,11 +84,7 @@
     },
     {
       "statementType": "create_fk",
-      "statementTarget": [
-        "table",
-        "public",
-        "subject_payback"
-      ],
+      "statementTarget": ["table", "public", "subject_payback"],
       "writes": [
         "s|fk|public.subject_payback.subject_payback_line_fk",
         "n|fk|public.subject_payback.subject_payback_line_fk",
@@ -150,11 +105,7 @@
     },
     {
       "statementType": "create_fk",
-      "statementTarget": [
-        "table",
-        "public",
-        "subject_payback"
-      ],
+      "statementTarget": ["table", "public", "subject_payback"],
       "writes": [
         "s|fk|public.subject_payback.subject_payback_subject_fk",
         "n|fk|public.subject_payback.subject_payback_subject_fk",
@@ -175,11 +126,7 @@
     },
     {
       "statementType": "add_check",
-      "statementTarget": [
-        "table",
-        "public",
-        "subject"
-      ],
+      "statementTarget": ["table", "public", "subject"],
       "writes": [
         "s|ck|public.subject.subject_payback_days_need_payer",
         "n|ck|public.subject.subject_payback_days_need_payer",
@@ -196,21 +143,13 @@
     },
     {
       "statementType": "create_policy",
-      "statementTarget": [
-        "table",
-        "public",
-        "subject_payback"
-      ],
+      "statementTarget": ["table", "public", "subject_payback"],
       "writes": [
         "s|pol|public.subject_payback.subject_payback_own_rows_only",
         "n|pol|public.subject_payback.subject_payback_own_rows_only",
         "e|pol|public.subject_payback.subject_payback_own_rows_only"
       ],
-      "reads": [
-        "n|tbl|public.subject_payback",
-        "n|sch|public",
-        "e|rls|public.subject_payback"
-      ]
+      "reads": ["n|tbl|public.subject_payback", "n|sch|public", "e|rls|public.subject_payback"]
     }
   ],
   "deltas": [
@@ -365,14 +304,10 @@
         "table": "subject_payback",
         "name": "subject_payback_user_id_auth_user_id_fkey",
         "nameExplicit": false,
-        "columns": [
-          "user_id"
-        ],
+        "columns": ["user_id"],
         "schemaTo": "public",
         "tableTo": "auth_user",
-        "columnsTo": [
-          "id"
-        ],
+        "columnsTo": ["id"],
         "onUpdate": "NO ACTION",
         "onDelete": "CASCADE",
         "entityType": "fks"
@@ -385,16 +320,10 @@
         "table": "subject_payback",
         "name": "subject_payback_line_fk",
         "nameExplicit": true,
-        "columns": [
-          "user_id",
-          "line_id"
-        ],
+        "columns": ["user_id", "line_id"],
         "schemaTo": "public",
         "tableTo": "statement_line",
-        "columnsTo": [
-          "user_id",
-          "id"
-        ],
+        "columnsTo": ["user_id", "id"],
         "onUpdate": "NO ACTION",
         "onDelete": "CASCADE",
         "entityType": "fks"
@@ -407,16 +336,10 @@
         "table": "subject_payback",
         "name": "subject_payback_subject_fk",
         "nameExplicit": true,
-        "columns": [
-          "user_id",
-          "subject_id"
-        ],
+        "columns": ["user_id", "subject_id"],
         "schemaTo": "public",
         "tableTo": "subject",
-        "columnsTo": [
-          "user_id",
-          "id"
-        ],
+        "columnsTo": ["user_id", "id"],
         "onUpdate": "NO ACTION",
         "onDelete": "CASCADE",
         "entityType": "fks"
@@ -428,9 +351,7 @@
         "schema": "public",
         "table": "subject_payback",
         "name": "subject_payback_pkey",
-        "columns": [
-          "line_id"
-        ],
+        "columns": ["line_id"],
         "nameExplicit": false,
         "entityType": "pks"
       }
@@ -453,9 +374,7 @@
         "name": "subject_payback_own_rows_only",
         "as": "PERMISSIVE",
         "for": "ALL",
-        "roles": [
-          "public"
-        ],
+        "roles": ["public"],
         "using": "\"user_id\" = current_setting('gousset.user_id', true)",
         "withCheck": "\"user_id\" = current_setting('gousset.user_id', true)",
         "entityType": "policies"

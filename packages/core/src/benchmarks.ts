@@ -1,7 +1,7 @@
 import { Effect } from "effect";
 
 import { CategoryStore } from "./category-store";
-import { currentMonth } from "./today";
+import { today } from "./today";
 import type { CategoryRecord, MonthlySpending } from "./category-store";
 import type { Money } from "./month";
 import { addMonths } from "./values";
@@ -278,13 +278,15 @@ export function benchmarksOf(facts: BenchmarkFacts): MonthBenchmarks {
 export const monthBenchmarks = (owner: string, month: string, currency: string) =>
   Effect.gen(function* () {
     const store = yield* CategoryStore;
-    const current = yield* currentMonth;
+    const day = yield* today;
+    const current = day.slice(0, 7);
     const { averageFrom } = averageWindow(month, current);
     const categories = yield* store.list(owner);
 
     const history = yield* store.spending(owner, {
       from: `${averageFrom}-01`,
       to: lastDayOf(month),
+      today: day,
     });
 
     const firstDay = yield* store.firstEntry(owner);
