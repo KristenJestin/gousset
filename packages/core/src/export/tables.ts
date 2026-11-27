@@ -391,6 +391,16 @@ export const SUBJECTS: ExportTable = {
     { name: "ends_on", holds: "the last day of its period; empty while it goes on" },
     CREATED_AT,
     UPDATED_AT,
+    // Added after the others (#217): the database keeps them last.
+    {
+      name: "payback_from",
+      holds: "who pays it back, when someone else does; empty when it is not paid back",
+    },
+    { name: "payback_asked_on", holds: "the day you asked to be paid back; empty for none" },
+    {
+      name: "payback_settled_on",
+      holds: "the day you marked it paid back by hand; empty for none",
+    },
   ],
 };
 
@@ -430,6 +440,20 @@ export const SUBJECT_ENTRIES_REFUSED: ExportTable = {
   orderedBy: ["subject_id", "entry_id"],
 };
 
+export const SUBJECT_PAYBACKS: ExportTable = {
+  table: "subject_payback",
+  file: "subject-paybacks",
+  holds:
+    "the lines coming in that pay back a subject: each is no income, but what came back for it",
+  columns: [
+    { name: "line_id", holds: "the line that pays it back (statement-lines.id)" },
+    { name: "subject_id", holds: "the subject it pays back (subjects.id)" },
+    OWNER,
+    CREATED_AT,
+  ],
+  orderedBy: ["line_id"],
+};
+
 /** Every table an export writes, in the manifest's order. */
 export const EXPORT_TABLES: ReadonlyArray<ExportTable> = [
   ACCOUNTS,
@@ -448,6 +472,7 @@ export const EXPORT_TABLES: ReadonlyArray<ExportTable> = [
   ENTRY_SUBJECTS,
   SUBJECT_ACCOUNTS,
   SUBJECT_ENTRIES_REFUSED,
+  SUBJECT_PAYBACKS,
 ];
 
 /** Where the files imported go: one folder per import, named by its id. */

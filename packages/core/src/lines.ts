@@ -80,6 +80,11 @@ export type LineRow = {
   readonly fromBalance: boolean;
   /** Its entries' subjects (#37), each once, by name: none for most lines. */
   readonly subjects: ReadonlyArray<SubjectName>;
+  /**
+   * The subject it pays back (#217): such a line is classified by it, as a transfer's side is by its
+   * transfer, and has no category; null for most lines.
+   */
+  readonly payback: SubjectName | null;
 };
 
 export type LinePage = {
@@ -292,6 +297,7 @@ export function rowOf(line: FoundLine, reviewing = false): LineRow {
     category: line.category,
     fromBalance: line.fromBalance,
     subjects: line.subjects,
+    payback: line.payback,
   };
 }
 

@@ -1,4 +1,4 @@
-import { account, statementLine } from "@gousset/db/schema/ledger";
+import { account, statementLine, subjectPayback } from "@gousset/db/schema/ledger";
 import { transfer } from "@gousset/db/schema/transfers";
 import { UserData } from "@gousset/db/user-data";
 import type { QueryFailed, UserTransaction } from "@gousset/db/user-data";
@@ -318,6 +318,19 @@ function refusalOf(
   return undefined;
 }
 
+/** The first of `lineIds` that pays back a subject (#217), if any. */
+async function paybackAmong(
+  transaction: UserTransaction,
+  lineIds: ReadonlyArray<string>,
+): Promise<string | undefined> {
+  const found = await transaction
+    .select({ lineId: subjectPayback.lineId })
+    .from(subjectPayback)
+    .where(inArray(subjectPayback.lineId, [...lineIds]));
+
+  return lineIds.find((id) => found.some((each) => each.lineId === id));
+}
+
 async function pairInTransaction(
   transaction: UserTransaction,
   owner: string,
@@ -358,6 +371,13 @@ async function pairInTransaction(
 
   if (refused !== undefined) {
     return { refused: refused.reason, lineId: refused.lineId };
+  }
+
+  // A line that pays back a subject is classified by it (#217): no transfer's side.
+  const paidBack = await paybackAmong(transaction, [line.id, other.id]);
+
+  if (paidBack !== undefined) {
+    return { refused: "payback", lineId: paidBack };
   }
 
   for (const side of [line, other]) {
@@ -451,6 +471,10 @@ async function pairWithAccountInTransaction(
 
   if (refused !== undefined) {
     return { refused, lineId };
+  }
+
+  if ((await paybackAmong(transaction, [line.id])) !== undefined) {
+    return { refused: "payback", lineId };
   }
 
   if ((await transferOfLine(transaction, line.id)) !== undefined) {

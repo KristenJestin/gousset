@@ -642,6 +642,20 @@ function subjectRefusal(
         period: "all",
       });
     }
+
+    case "payback": {
+      return refuse(
+        "Who pays the subject back is 1 to 100 characters; the days asked and settled are days that exist, YYYY-MM-DD, and need someone who pays it back.",
+        { action: "show", subject },
+      );
+    }
+
+    case "payback_lines": {
+      return refuse(
+        `Lines pay "${clip(subject)}" back: detach them from it before turning "paid back" off; show lists them.`,
+        { action: "show", subject },
+      );
+    }
   }
 }
 

@@ -249,6 +249,10 @@ export function subjectRefusalMessage(code: string, limit: number | null = null)
       return m.subjectRefusalEntries();
     case "SUBJECT_PERIOD":
       return m.subjectRefusalPeriod();
+    case "SUBJECT_PAYBACK":
+      return m.subjectRefusalPayback();
+    case "SUBJECT_PAYBACK_LINES":
+      return m.subjectRefusalPaybackLines();
     case "ENTRY_NOT_FOUND":
       return m.subjectRefusalEntryNotFound();
     case "MERCHANT_NOT_FOUND":

@@ -166,7 +166,8 @@ export type TransferRefusalCode =
   | "NOT_COUNTED"
   | "MADE_FROM_BALANCE"
   | "ACCOUNT_KEPT_BY_LINES"
-  | "OTHER_CURRENCY";
+  | "OTHER_CURRENCY"
+  | "PAYBACK";
 
 const transferRefused = (code: TransferRefusalCode) => Effect.succeed({ ok: false as const, code });
 
@@ -204,6 +205,7 @@ const ACCOUNT_PAIRING_CODES = {
   several_candidates: "CANNOT_PAIR",
   account_kept_by_lines: "ACCOUNT_KEPT_BY_LINES",
   other_currency: "OTHER_CURRENCY",
+  payback: "PAYBACK",
 } as const satisfies { readonly [Reason in TransferRefused["reason"]]: TransferRefusalCode };
 
 /**
@@ -274,6 +276,7 @@ export type ExpenseRefusalCode =
   | "SPLIT_SUBJECT_UNKNOWN"
   | "SPLIT_SUBJECT_ARCHIVED"
   | "SPLIT_SUBJECT_INCOME"
+  | "LINE_PAYBACK"
   | "NOT_LINKED";
 
 const expenseRefused = (code: ExpenseRefusalCode, index: number | null = null) =>
@@ -294,6 +297,7 @@ const SPLIT_CODES = {
   subject_unknown: "SPLIT_SUBJECT_UNKNOWN",
   subject_archived: "SPLIT_SUBJECT_ARCHIVED",
   subject_income: "SPLIT_SUBJECT_INCOME",
+  payback: "LINE_PAYBACK",
 } as const satisfies { readonly [Reason in SplitRefused["reason"]]: ExpenseRefusalCode };
 
 const LINK_CODES = {
@@ -307,6 +311,7 @@ const LINK_CODES = {
   already_linked: "LINK_ALREADY_LINKED",
   currency: "LINK_CURRENCY",
   exceeds: "LINK_EXCEEDS",
+  payback: "LINE_PAYBACK",
 } as const satisfies { readonly [Reason in LinkRefused["reason"]]: ExpenseRefusalCode };
 
 /**

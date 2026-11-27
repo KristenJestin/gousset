@@ -39,6 +39,8 @@ export type SubjectRefusalCode =
   | "SUBJECT_NOT_AN_EXPENSE"
   | "SUBJECT_ENTRIES"
   | "SUBJECT_PERIOD"
+  | "SUBJECT_PAYBACK"
+  | "SUBJECT_PAYBACK_LINES"
   | "ENTRY_NOT_FOUND"
   | "MERCHANT_NOT_FOUND"
   | "TOO_MANY_RULES";
@@ -61,6 +63,8 @@ const REASON_CODES = {
   not_an_expense: "SUBJECT_NOT_AN_EXPENSE",
   entries: "SUBJECT_ENTRIES",
   period: "SUBJECT_PERIOD",
+  payback: "SUBJECT_PAYBACK",
+  payback_lines: "SUBJECT_PAYBACK_LINES",
 } as const satisfies { [Reason in SubjectRefused["reason"]]: SubjectRefusalCode };
 
 /** The refusals every read and change of a subject may meet, as their codes. */

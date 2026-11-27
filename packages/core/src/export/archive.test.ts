@@ -31,6 +31,7 @@ import {
   SUBJECTS,
   SUBJECT_ACCOUNTS,
   SUBJECT_ENTRIES_REFUSED,
+  SUBJECT_PAYBACKS,
   TRANSFERS,
 } from "./tables";
 import type { ExportTable } from "./tables";
@@ -289,6 +290,18 @@ function madeUpExport(): ExportData {
       starts_on: "2026-09-01",
       created_at: "2026-10-02T10:00:00+00:00",
       updated_at: "2026-10-02T10:00:00+00:00",
+      payback_from: "Example Fleet Ltd",
+      payback_asked_on: "2026-10-05",
+    }),
+  ];
+
+  // A line coming in that pays the van back (#217).
+  const paybacks = [
+    row(SUBJECT_PAYBACKS, {
+      line_id: lines.find((each) => Number(each.amount_minor) > 0)?.id ?? null,
+      subject_id: vanId,
+      user_id: OWNER,
+      created_at: "2026-10-06T10:00:00+00:00",
     }),
   ];
 
@@ -329,6 +342,7 @@ function madeUpExport(): ExportData {
     [ENTRY_SUBJECTS, entrySubjects],
     [SUBJECT_ACCOUNTS, subjectAccounts],
     [SUBJECT_ENTRIES_REFUSED, refusals],
+    [SUBJECT_PAYBACKS, paybacks],
   ]);
 
   return {
