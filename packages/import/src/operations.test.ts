@@ -291,6 +291,26 @@ describe("Degiro's Transactions.csv, with the library's profile", () => {
     expect(cause).toContain('"line":2');
   });
 
+  test("reads a price in a currency that is no ISO code (pence) from its value, held in the account's", () => {
+    const pence = [...(DEGIRO_ROWS[1] ?? [])];
+
+    pence[7] = "11000";
+    pence[8] = "GBX";
+    pence[10] = "GBX";
+
+    expect(read(degiroFile([pence]), DEGIRO_PROFILE)).toEqual([
+      operation(2, "purchase", "2026-10-07", -27_603, {
+        isin: SHARE,
+        securityName: "SOUTHWIND HOLDINGS",
+        quantity: "2",
+        unitPrice: "137.515",
+        feesMinor: 100,
+        label: "SOUTHWIND HOLDINGS",
+        reference: "a1b2c3d4-0000-4000-8000-000000000002",
+      }),
+    ]);
+  });
+
   test("refuses a row of no quantity, whose kind nothing tells", () => {
     const row = [...(DEGIRO_ROWS[0] ?? [])];
 

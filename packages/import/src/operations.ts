@@ -292,22 +292,17 @@ const unitPriceOf = (row: CsvRow, quantity: string, reading: Reading) =>
     return price.text;
   });
 
-/** The security's currency, as an ISO 4217 code; `null` for the account's. */
-function securityCurrencyOf(
-  row: CsvRow,
-  reading: Reading,
-): Effect.Effect<string | null, InvalidField> {
+/**
+ * The security's currency, as an ISO 4217 code; `null` for the account's. A text that is no such
+ * code (`GBX`, pence, which a broker writes for a London price) is held in the account's currency,
+ * as a file with no such column is: its price is then read from the trade's value (`unitPriceOf`),
+ * and the whole file is never refused for it.
+ */
+function securityCurrencyOf(row: CsvRow, reading: Reading): Effect.Effect<string | null> {
   const written = fieldAt(row, "securityCurrency", reading);
+  const code = written?.text.toUpperCase() ?? "";
 
-  if (written === undefined || written.text === "") {
-    return Effect.succeed(null);
-  }
-
-  const code = written.text.toUpperCase();
-
-  return isKnownCurrency(code)
-    ? Effect.succeed(code)
-    : Effect.fail(invalidField(written, "a currency's ISO 4217 code, such as EUR"));
+  return Effect.succeed(isKnownCurrency(code) ? code : null);
 }
 
 const readOperation = (row: CsvRow, reading: Reading): Effect.Effect<OperationRow, ReadError> =>

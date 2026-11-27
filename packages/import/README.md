@@ -292,7 +292,8 @@ top as `testReadCsv` does. Each row is an `OperationRow`, in the file's order:
 - `isin`: upper case, its check digit checked (ISO 6166), a purchase's, a sale's and a dividend's,
   a fee's when it names one; a deposit's and a withdrawal's is read past;
 - `securityName`, `securityCurrency`: the security's name and the ISO 4217 code it is quoted in,
-  when the file gives them, for a security the account does not know yet;
+  when the file gives them, for a security the account does not know yet; a currency that is no
+  such code (`GBX`, pence) leaves it in the account's, never refusing the file;
 - `quantity`, `unitPrice`: a purchase's and a sale's alone (a dividend's count of shares is read
   past), exact text with a point and no trailing zero (`0.0347`), never a float (`readDecimal`:
   15 digits before the mark, 10 after, thousands grouped as the profile's amounts are). A
