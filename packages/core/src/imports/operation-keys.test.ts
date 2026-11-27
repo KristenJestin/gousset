@@ -6,8 +6,8 @@ import { operationDedupKeys } from "./operation-keys";
 import type { KeyedOperation } from "./operation-keys";
 
 // The dedup key of an operation read from a broker's file (docs/data-model.md, v0.6): its line's,
-// `bank:` and the broker's reference when the layout makes it unique to the row, `operation:` and
-// the content otherwise. Every reference, ISIN and amount here is invented.
+// `reference:` and the broker's reference when the layout makes it unique to the row, `operation:`
+// and the content otherwise. Every reference, ISIN and amount here is invented.
 
 const purchase: KeyedOperation = {
   bookedOn: "2026-10-14",
@@ -38,7 +38,7 @@ describe("an operation's dedup key", () => {
   test("is the broker's reference when the layout makes it unique to the row", () => {
     expect(
       operationDedupKeys([{ ...purchase, reference: "ORD-20261014-0042", referenceUnique: true }]),
-    ).toEqual(["bank:ORD-20261014-0042"]);
+    ).toEqual(["reference:ORD-20261014-0042"]);
   });
 
   test("is its content otherwise: the day, kind, ISIN, quantity, unit price and amount", () => {
@@ -87,12 +87,14 @@ describe("an operation's dedup key", () => {
     expect(new Set(keys).size).toBe(variants.length);
   });
 
-  test("never meets the content key of a statement line of the same account", () => {
+  test("never meets the key of a statement line of the same account, by content or bank id", () => {
+    // An OFX line of FITID R1 is `bank:R1`: an operation of reference R1 is another line.
     for (const key of operationDedupKeys([
       purchase,
-      { ...purchase, reference: "R", referenceUnique: true },
+      { ...purchase, reference: "R1", referenceUnique: true },
     ])) {
       expect(key.startsWith("content:")).toBe(false);
+      expect(key.startsWith("bank:")).toBe(false);
     }
   });
 });

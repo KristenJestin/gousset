@@ -300,7 +300,7 @@ top as `testReadCsv` does. Each row is an `OperationRow`, in the file's order:
 - `feesMinor`: the fees, or a dividend's withholding tax, whatever their sign, from 0;
 - `label`: the broker's text for the row; `reference`: its own reference for the row, and
   `referenceUnique`, whether the profile makes it unique to the row: the import then keys the
-  operation by it (`bank:`), else by its content (`operation:`).
+  operation by it (`reference:`), else by its content (`operation:`).
 
 **No broker's profile is shipped** (#250): Gousset recognises no broker by itself. A broker's
 export is read with a profile of the user's, mapped by hand on the import screen or through the
@@ -344,7 +344,7 @@ columns:
   refused at its line and column** (`InvalidField`, `kind`), never guessed. With no `kind`
   column, every row is a purchase or a sale, told by its quantity's sign (negative sold);
 - `referenceUnique`: whether the broker makes `reference` unique to each row. The import then keys
-  an operation by `bank:` and its reference rather than by its content: a row whose reference is
+  an operation by `reference:` and its reference rather than by its content: a row whose reference is
   already known is a duplicate, whatever its other values. Off by default; the import screen offers
   it once a reference column is mapped.
 
