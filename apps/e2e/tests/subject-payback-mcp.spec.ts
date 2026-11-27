@@ -499,6 +499,15 @@ test("a refused line gets its error, with the call that helps", async ({
     await refusal("lines", { action: "pair", line: share, other: await handleOf("TO EVERYDAY") }),
   ).toContain(detach);
 
+  const classified = await refusal("lines", {
+    action: "classify",
+    line: share,
+    kind: "income",
+  });
+
+  expect(classified).toContain("This line pays back a subject, which classifies it");
+  expect(classified).toContain(detach);
+
   // An unknown handle.
   expect(
     await refusal("subjects", {

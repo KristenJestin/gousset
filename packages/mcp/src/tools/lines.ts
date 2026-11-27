@@ -1285,13 +1285,20 @@ const NOT_CLASSIFIABLE = {
     "This line is a side of a transfer between two of the user's accounts: never an expense nor an income. If it is no transfer, unpair it first, then classify it.",
   split:
     "This line is split across several expenses, each with its own category: classify them in Gousset, one by one.",
+  payback:
+    "This line pays back a subject, which classifies it: it has no category, and is no income.",
 } as const satisfies { readonly [Reason in LineNotClassifiable["reason"]]: string };
 
 /**
  * Puts a line in the category a person names, or in the fallback of the kind named (expense or
  * income) when none is, as the user's choice.
  */
-function classifyAction(owner: string, input: LinesInput, kind: EntryKind | undefined) {
+function classifyAction(
+  owner: string,
+  currency: string,
+  input: LinesInput,
+  kind: EntryKind | undefined,
+) {
   const { line, category } = input;
 
   if (line === undefined || line.trim() === "" || (category === undefined && kind === undefined)) {
@@ -1342,15 +1349,17 @@ function classifyAction(owner: string, input: LinesInput, kind: EntryKind | unde
     Effect.catchTags({
       LineNotFound: () => Effect.fail(UNKNOWN_LINE(handle)),
       LineNotClassifiable: (refused) =>
-        Effect.fail(
-          new ToolRefusal({
-            message: NOT_CLASSIFIABLE[refused.reason],
-            example: call({
-              action: refused.reason === "transfer" ? "unpair" : "show",
-              line: handle,
-            }),
-          }),
-        ),
+        refused.reason === "payback"
+          ? paybackRefused(owner, currency, handle, NOT_CLASSIFIABLE.payback)
+          : Effect.fail(
+              new ToolRefusal({
+                message: NOT_CLASSIFIABLE[refused.reason],
+                example: call({
+                  action: refused.reason === "transfer" ? "unpair" : "show",
+                  line: handle,
+                }),
+              }),
+            ),
       CategoryKindMismatch: (mismatch) =>
         Effect.fail(
           new ToolRefusal({
@@ -1517,7 +1526,7 @@ export const linesTool = defineTool<
 
       case "classify": {
         if (input.kind !== "transfer") {
-          return classifyAction(caller.userId, input, input.kind);
+          return classifyAction(caller.userId, benchmarkCurrency(caller), input, input.kind);
         }
 
         if (input.category !== undefined) {
