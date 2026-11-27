@@ -595,6 +595,8 @@
   "categoryRefusalBenchmark": "A benchmark is an amount from 0.",
   "categoryRefusalKindMismatch": "An expense goes in an expense category, an income in an income category.",
   "categoryRefusalNotClassifiable": "This line has no category to choose: it is held, discarded, split or of no amount.",
+  "categoryRefusalPayback": "This line pays back {subject}: detach it from the subject to classify it.",
+  "categoryRefusalPaybackSome": "This line pays back a subject: detach it from the subject to classify it.",
   "categoryRefusalLineNotFound": "This line no longer exists.",
   "operationsCategory": "Category",
   "merchantsTitle": "Merchants",

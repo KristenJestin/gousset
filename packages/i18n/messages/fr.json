@@ -595,6 +595,8 @@
   "categoryRefusalBenchmark": "Un repère est un montant à partir de 0.",
   "categoryRefusalKindMismatch": "Une dépense va dans une catégorie de dépenses, un revenu dans une catégorie de revenus.",
   "categoryRefusalNotClassifiable": "Cette ligne n'a pas de catégorie à choisir : elle est mise de côté, écartée, découpée ou sans montant.",
+  "categoryRefusalPayback": "Cette ligne rembourse {subject} : détachez-la du sujet pour la classer.",
+  "categoryRefusalPaybackSome": "Cette ligne rembourse un sujet : détachez-la du sujet pour la classer.",
   "categoryRefusalLineNotFound": "Cette ligne n'existe plus.",
   "operationsCategory": "Catégorie",
   "merchantsTitle": "Commerçants",

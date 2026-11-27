@@ -715,7 +715,9 @@ function LineCategoryPicker({
 
     if (!answer.ok) {
       setChosen(before);
-      notify.failed({ description: categoryRefusalMessage(answer.code) });
+      notify.failed({
+        description: categoryRefusalMessage(answer.code, null, line.payback?.name),
+      });
 
       return;
     }

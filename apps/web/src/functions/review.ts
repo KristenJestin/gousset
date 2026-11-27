@@ -8,6 +8,7 @@ import {
   startingPoints,
   subscriptionCalendar,
 } from "@gousset/core";
+import type { LineNotClassifiable } from "@gousset/core";
 import { createServerFn } from "@tanstack/react-start";
 import { Effect, Schema } from "effect";
 
@@ -80,6 +81,7 @@ export type ReviewRefusalCode =
   | "CANNOT_LINK"
   | "CATEGORY_REQUIRED"
   | "LINE_NOT_CLASSIFIABLE"
+  | "LINE_PAYBACK_NOT_CLASSIFIABLE"
   | "CATEGORY_NOT_FOUND"
   | "CATEGORY_KIND_MISMATCH"
   | "CATEGORY_ARCHIVED";
@@ -91,7 +93,11 @@ const SHARED = {
   LineNotFound: () => refused("LINE_NOT_FOUND"),
   LineAlreadyReviewed: () => refused("ALREADY_REVIEWED"),
   NotHeld: () => refused("NOT_HELD"),
-  LineNotClassifiable: () => refused("LINE_NOT_CLASSIFIABLE"),
+  // A line that pays back a subject (#217) is classified by it: said apart, naming the subject.
+  LineNotClassifiable: (refusal: LineNotClassifiable) =>
+    refused(
+      refusal.reason === "payback" ? "LINE_PAYBACK_NOT_CLASSIFIABLE" : "LINE_NOT_CLASSIFIABLE",
+    ),
   CategoryNotFound: () => refused("CATEGORY_NOT_FOUND"),
   CategoryKindMismatch: () => refused("CATEGORY_KIND_MISMATCH"),
   // The only refusal classifying meets: the category is archived.
