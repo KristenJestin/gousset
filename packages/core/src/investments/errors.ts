@@ -35,10 +35,19 @@ export class SecurityNotFound extends Schema.TaggedError<SecurityNotFound>()("Se
   securityId: Schema.String,
 }) {}
 
-/** No operation of the user's has this id. */
+/**
+ * No operation of the user's has this id; for a read on one account, none of that account's
+ * operations (its discarded lines left out) has it.
+ */
 export class OperationNotFound extends Schema.TaggedError<OperationNotFound>()(
   "OperationNotFound",
   { operationId: Schema.String },
+) {}
+
+/** None of the account's operations (its discarded lines left out) names a security of this ISIN. */
+export class SecurityNotOnAccount extends Schema.TaggedError<SecurityNotOnAccount>()(
+  "SecurityNotOnAccount",
+  { accountId: Schema.String, isin: Schema.String },
 ) {}
 
 /**

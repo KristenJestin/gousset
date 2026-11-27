@@ -16,7 +16,12 @@ import { today } from "../today";
 import { pairTransfers } from "../transfers/pair-lines";
 import { unpairInTransaction } from "../transfers/transfers";
 import { movesInside } from "./cash";
-import { NotAnInvestmentAccount, OperationNotFound, SecurityNotFound } from "./errors";
+import {
+  NotAnInvestmentAccount,
+  OperationNotFound,
+  SecurityNotFound,
+  SecurityNotOnAccount,
+} from "./errors";
 import type { InvalidIsin, InvalidQuantity, OperationRefused } from "./errors";
 import { checkOperation } from "./operation-input";
 import type { CheckedOperation, OperationInput } from "./operation-input";
@@ -116,12 +121,31 @@ export class Investments extends Context.Service<
       accountId: string,
       paging: OperationPaging,
     ) => Effect.Effect<OperationPage, AccountNotFound | Failure>;
+    /**
+     * One operation of an account, as its pages read it. `AccountNotFound` for none of the user's,
+     * `OperationNotFound` for none of the account's operations (its discarded lines left out).
+     */
+    readonly operationOn: (
+      owner: string,
+      accountId: string,
+      operationId: string,
+    ) => Effect.Effect<OperationRead, AccountNotFound | OperationNotFound | Failure>;
     /** One security on one account: its position as of today and its operations there. */
     readonly position: (
       owner: string,
       accountId: string,
       securityId: string,
     ) => Effect.Effect<PositionDetail, AccountNotFound | SecurityNotFound | Failure>;
+    /**
+     * One security on one account by its ISIN, as `position` reads it, open or closed.
+     * `AccountNotFound` for none of the user's, `SecurityNotOnAccount` when none of the account's
+     * operations (its discarded lines left out) names it.
+     */
+    readonly positionByIsin: (
+      owner: string,
+      accountId: string,
+      isin: string,
+    ) => Effect.Effect<PositionDetail, AccountNotFound | SecurityNotOnAccount | Failure>;
     /**
      * Enters an operation by hand: its line (`source = manual`) and the operation, its security
      * found by ISIN or made. A deposit or a withdrawal gets its default entry, as any line does,
@@ -456,6 +480,75 @@ async function pageIn(
   };
 }
 
+/** The id of the user's account, or undefined for none. */
+async function accountIdIn(
+  transaction: UserTransaction,
+  accountId: string,
+): Promise<string | undefined> {
+  const [found] = isId(accountId)
+    ? await transaction.select({ id: account.id }).from(account).where(eq(account.id, accountId))
+    : [];
+
+  return found?.id;
+}
+
+/** One of the account's operations, its discarded lines left out; otherwise what is missing. */
+async function operationOnIn(
+  transaction: UserTransaction,
+  accountId: string,
+  operationId: string,
+): Promise<OperationRead | { readonly noAccount: string } | { readonly noOperation: string }> {
+  const found = await accountIdIn(transaction, accountId);
+
+  if (found === undefined) {
+    return { noAccount: accountId };
+  }
+
+  const [row] = isId(operationId)
+    ? await selectOperations(transaction).where(
+        and(
+          eq(investmentOperation.id, operationId),
+          eq(statementLine.accountId, found),
+          ne(statementLine.state, "discarded"),
+        ),
+      )
+    : [];
+
+  return row === undefined ? { noOperation: operationId } : operationOf(row);
+}
+
+/** The security of this ISIN on the account, as `positionDetailIn` reads it; otherwise what is missing. */
+async function positionByIsinIn(
+  transaction: UserTransaction,
+  accountId: string,
+  isin: string,
+  day: string,
+): Promise<PositionDetail | { readonly noAccount: string } | { readonly noSecurity: string }> {
+  const found = await accountIdIn(transaction, accountId);
+
+  if (found === undefined) {
+    return { noAccount: accountId };
+  }
+
+  const [named] = await transaction
+    .select({ id: security.id })
+    .from(security)
+    .innerJoin(investmentOperation, eq(investmentOperation.securityId, security.id))
+    .innerJoin(statementLine, eq(statementLine.id, investmentOperation.lineId))
+    .where(
+      and(
+        eq(security.isin, isin),
+        eq(statementLine.accountId, found),
+        ne(statementLine.state, "discarded"),
+      ),
+    )
+    .limit(1);
+
+  return named === undefined
+    ? { noSecurity: isin }
+    : positionDetailIn(transaction, found, named.id, day);
+}
+
 async function positionDetailIn(
   transaction: UserTransaction,
   accountId: string,
@@ -550,6 +643,42 @@ export const investmentsLayer = Layer.effect(
           );
 
           return page === undefined ? yield* new AccountNotFound({ accountId }) : page;
+        }),
+
+      operationOn: (owner, accountId, operationId) =>
+        Effect.gen(function* () {
+          const found = yield* userData.transaction(owner, (transaction) =>
+            operationOnIn(transaction, accountId, operationId),
+          );
+
+          if ("noAccount" in found) {
+            return yield* new AccountNotFound({ accountId });
+          }
+
+          if ("noOperation" in found) {
+            return yield* new OperationNotFound({ operationId });
+          }
+
+          return found;
+        }),
+
+      positionByIsin: (owner, accountId, isin) =>
+        Effect.gen(function* () {
+          const day = yield* today;
+
+          const found = yield* userData.transaction(owner, (transaction) =>
+            positionByIsinIn(transaction, accountId, isin, day),
+          );
+
+          if ("noAccount" in found) {
+            return yield* new AccountNotFound({ accountId });
+          }
+
+          if ("noSecurity" in found) {
+            return yield* new SecurityNotOnAccount({ accountId, isin });
+          }
+
+          return found;
         }),
 
       position: (owner, accountId, securityId) =>
@@ -662,6 +791,22 @@ export const investmentPosition = (owner: string, accountId: string, securityId:
     const investments = yield* Investments;
 
     return yield* investments.position(owner, accountId, securityId);
+  });
+
+/** One operation of an account, by its id (`Investments.operationOn`). */
+export const investmentOperationOn = (owner: string, accountId: string, operationId: string) =>
+  Effect.gen(function* () {
+    const investments = yield* Investments;
+
+    return yield* investments.operationOn(owner, accountId, operationId);
+  });
+
+/** One security on one account, by its ISIN, with its operations (`Investments.positionByIsin`). */
+export const investmentPositionByIsin = (owner: string, accountId: string, isin: string) =>
+  Effect.gen(function* () {
+    const investments = yield* Investments;
+
+    return yield* investments.positionByIsin(owner, accountId, isin);
   });
 
 /**

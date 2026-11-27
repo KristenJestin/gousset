@@ -437,8 +437,10 @@ export {
   deleteInvestmentOperation,
   enterInvestmentOperation,
   investmentAccounts,
+  investmentOperationOn,
   investmentOperations,
   investmentPosition,
+  investmentPositionByIsin,
   investmentsLayer,
 } from "./investments/investments";
 
@@ -468,6 +470,7 @@ export {
   OperationNotFound,
   OperationRefused,
   SecurityNotFound,
+  SecurityNotOnAccount,
 } from "./investments/errors";
 
 export { MAX_SECURITY_NAME, checkOperation } from "./investments/operation-input";

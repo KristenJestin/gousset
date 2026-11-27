@@ -1,4 +1,5 @@
 import {
+  AccountNotFound,
   DatabaseAccountStore,
   DatabaseCategoryStore,
   DatabaseLineStore,
@@ -7,6 +8,7 @@ import {
   NotAnInvestmentAccount,
   OperationNotFound,
   OperationRefused,
+  SecurityNotOnAccount,
   SplitRefused,
   Today,
   TransferRefused,
@@ -16,8 +18,10 @@ import {
   enterInvestmentOperation,
   expensesLayer,
   investmentAccounts,
+  investmentOperationOn,
   investmentOperations,
   investmentPosition,
+  investmentPositionByIsin,
   investmentsLayer,
   isinCheckDigit,
   lineTransferOf,
@@ -1046,4 +1050,106 @@ test("an import's operations are saved once, by their keys, a deposit with its e
 
   expect(keyAfter).toEqual(keyBefore);
   expect(await save()).toEqual({ added: 0, duplicate: 3 });
+});
+
+test("one operation is read by its id on its account, and refused on another or once discarded", async () => {
+  const pea = await newAccount("Handle PEA", "investment");
+  const other = await newAccount("Handle other PEA", "investment");
+
+  const bought = await enter(pea, {
+    isin: isin("HAN000001"),
+    amountMinor: -10_059,
+    quantity: "1",
+    unitPrice: "100.59",
+  });
+
+  expect(await run(investmentOperationOn(owner, pea, bought.id))).toEqual(bought);
+
+  // On another account of the user's, or a handle that is no id: none.
+  expect(await failure(investmentOperationOn(owner, other, bought.id))).toEqual(
+    new OperationNotFound({ operationId: bought.id }),
+  );
+  expect(await failure(investmentOperationOn(owner, pea, "not-a-handle"))).toEqual(
+    new OperationNotFound({ operationId: "not-a-handle" }),
+  );
+
+  const missing = crypto.randomUUID();
+
+  expect(await failure(investmentOperationOn(owner, missing, bought.id))).toEqual(
+    new AccountNotFound({ accountId: missing }),
+  );
+
+  // A discarded line's operation is none of the account's operations, as their pages leave it out.
+  await data.asUser(owner, (transaction) =>
+    transaction
+      .update(statementLine)
+      .set({ state: "discarded" })
+      .where(eq(statementLine.id, bought.lineId)),
+  );
+
+  expect(await failure(investmentOperationOn(owner, pea, bought.id))).toEqual(
+    new OperationNotFound({ operationId: bought.id }),
+  );
+});
+
+test("one security's position on an account is read by ISIN, open or sold out, and refused when it has none", async () => {
+  const pea = await newAccount("By ISIN PEA", "investment");
+  const other = await newAccount("By ISIN other PEA", "investment");
+  const sold = isin("BYI000001");
+  const held = isin("BYI000002");
+
+  const purchase = await enter(pea, {
+    bookedOn: "2026-10-05",
+    isin: sold,
+    amountMinor: -20_061,
+    quantity: "2",
+    unitPrice: "100.305",
+  });
+
+  const sale = await enter(pea, {
+    kind: "sale",
+    bookedOn: "2026-10-06",
+    isin: sold,
+    amountMinor: 21_061,
+    quantity: "2",
+    unitPrice: "105.305",
+  });
+
+  const kept = await enter(pea, {
+    bookedOn: "2026-10-07",
+    isin: held,
+    amountMinor: -10_061,
+    quantity: "1",
+    unitPrice: "100.61",
+  });
+
+  // Sold to zero: its position is closed, its operations stay, as by its security's id.
+  const soldOut = await run(investmentPositionByIsin(owner, pea, sold));
+
+  expect(soldOut).toEqual(await run(investmentPosition(owner, pea, purchase.security?.id ?? "")));
+  expect(soldOut.position).toMatchObject({ quantity: "0", open: false });
+  expect(soldOut.operations.map((each) => each.id)).toEqual([sale.id, purchase.id]);
+
+  const open = await run(investmentPositionByIsin(owner, pea, held));
+
+  expect(open.security).toEqual(kept.security);
+  expect(open.position).toMatchObject({ quantity: "1", open: true });
+  expect(open.operations.map((each) => each.id)).toEqual([kept.id]);
+
+  // An account with no operation of it, an ISIN of no security: none.
+  expect(await failure(investmentPositionByIsin(owner, other, sold))).toEqual(
+    new SecurityNotOnAccount({ accountId: other, isin: sold }),
+  );
+
+  const unknown = isin("BYI000003");
+
+  expect(await failure(investmentPositionByIsin(owner, pea, unknown))).toEqual(
+    new SecurityNotOnAccount({ accountId: pea, isin: unknown }),
+  );
+
+  const missing = crypto.randomUUID();
+
+  expect(await failure(investmentPositionByIsin(owner, missing, sold))).toEqual(
+    new AccountNotFound({ accountId: missing }),
+  );
 });

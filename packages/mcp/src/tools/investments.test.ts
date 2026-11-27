@@ -11,6 +11,7 @@ import {
   OperationNotFound,
   RuleJobs,
   SecurityNotFound,
+  SecurityNotOnAccount,
   Subscriptions,
   Transfers,
   checkOperation,
@@ -24,6 +25,7 @@ import type {
   CheckedOperation,
   MemoryRows,
   OperationRead,
+  PositionDetail,
   PositionRead,
   SecurityRead,
 } from "@gousset/core";
@@ -290,6 +292,43 @@ function investmentsOf(state: Fake) {
       : Effect.succeed(index);
   };
 
+  const position = (
+    accountId: string,
+    securityId: string,
+  ): Effect.Effect<PositionDetail, AccountNotFound | SecurityNotFound> => {
+    const found = accounts.find((each) => each.id === accountId);
+
+    const operations = state.operations
+      .filter((each) => each.accountId === accountId && each.security?.id === securityId)
+      .toSorted(newest);
+
+    const security = operations[0]?.security;
+
+    if (found === undefined) {
+      return Effect.fail(new AccountNotFound({ accountId }));
+    }
+
+    if (security === undefined || security === null) {
+      return Effect.fail(new SecurityNotFound({ securityId }));
+    }
+
+    const held = state.positions.find(
+      (each) => each.accountId === accountId && each.position.security.id === securityId,
+    );
+
+    return Effect.succeed({
+      account: {
+        id: found.id,
+        name: found.name,
+        institution: found.institution,
+        currency: found.currency,
+      },
+      security,
+      position: held?.position ?? null,
+      operations,
+    });
+  };
+
   return Layer.succeed(Investments, {
     positions: () => Effect.succeed(state.positions),
     operations: (_owner, accountId, paging) => {
@@ -309,38 +348,36 @@ function investmentsOf(state: Fake) {
         total: all.length,
       });
     },
-    position: (_owner, accountId, securityId) => {
-      const found = accounts.find((each) => each.id === accountId);
-
-      const operations = state.operations
-        .filter((each) => each.accountId === accountId && each.security?.id === securityId)
-        .toSorted(newest);
-
-      const security = operations[0]?.security;
-
-      if (found === undefined) {
+    operationOn: (_owner, accountId, operationId) => {
+      if (!accounts.some((each) => each.id === accountId)) {
         return Effect.fail(new AccountNotFound({ accountId }));
       }
 
-      if (security === undefined || security === null) {
-        return Effect.fail(new SecurityNotFound({ securityId }));
-      }
-
-      const held = state.positions.find(
-        (each) => each.accountId === accountId && each.position.security.id === securityId,
+      const found = state.operations.find(
+        (each) => each.id === operationId && each.accountId === accountId,
       );
 
-      return Effect.succeed({
-        account: {
-          id: found.id,
-          name: found.name,
-          institution: found.institution,
-          currency: found.currency,
-        },
-        security,
-        position: held?.position ?? null,
-        operations,
-      });
+      return found === undefined
+        ? Effect.fail(new OperationNotFound({ operationId }))
+        : Effect.succeed(found);
+    },
+    position: (_owner, accountId, securityId) => position(accountId, securityId),
+    positionByIsin: (_owner, accountId, isin) => {
+      if (!accounts.some((each) => each.id === accountId)) {
+        return Effect.fail(new AccountNotFound({ accountId }));
+      }
+
+      const named = state.operations.find(
+        (each) => each.accountId === accountId && each.security?.isin === isin,
+      )?.security;
+
+      return named === undefined || named === null
+        ? Effect.fail(new SecurityNotOnAccount({ accountId, isin }))
+        : position(accountId, named.id).pipe(
+            Effect.catchTag("SecurityNotFound", () =>
+              Effect.fail(new SecurityNotOnAccount({ accountId, isin })),
+            ),
+          );
     },
     enter: (_owner, accountId, input) =>
       Effect.gen(function* () {
