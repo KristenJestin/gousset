@@ -153,8 +153,7 @@ async function entriesOf(owner: string, lineId: string): Promise<number> {
   return rows.length;
 }
 
-const block = (page: Page, title: string) =>
-  page.getByRole("region", { name: title, exact: true });
+const block = (page: Page, title: string) => page.getByRole("region", { name: title, exact: true });
 
 const heading = (page: Page) => page.locator('[data-slot="subject-heading"]');
 
